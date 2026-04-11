@@ -106,6 +106,7 @@ npm run build                             # build static files for production
 6. No emojis anywhere.
 7. Aim for ~80% test coverage but it is not a hard requirement — only build necessary tests.
 8. When something is ambiguous, ask for clarification instead of guessing.
+9. If implementation diverges from implementation plan, update the plan to reflect the new version.
 
 **Debugging process (always follow these 5 steps):**
 1. Reproduce the problem

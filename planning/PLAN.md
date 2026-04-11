@@ -105,6 +105,8 @@ The Retail Sentiment Department, or RS, monitors social media platforms to analy
 When triggered by the user with a specific question or scope, the Macro Research Department, or MR, applies structured macroeconomic analytical frameworks to current data and produces a deep, framework-driven macro report.
 @planning/specs/pages/departments/MacroResearchPageSpec.md
 
+## Panic Thermometer
+The dashboard acts as a real-time "panic thermometer" — scoring each indicator as green / amber / red and rolling them into a composite threat level by tracking real time data.
 
 # 4. Product Functionalities - Other Pages
 
