@@ -15,14 +15,15 @@ Multi-provider, requirements-first data system for OpenLIA. Allows users to conf
 
 ## Provider Categories
 
-Two categories of data providers, both required:
+Three categories of data providers:
 
-| Category | Purpose | Examples |
-|----------|---------|----------|
-| Financial | Market data, fundamentals, technicals, earnings, options | FMP, EODHD, Finnhub, yfinance |
-| News | Headlines, article search, political events, sector news | NewsAPI.ai, Mediastack, NewsAPI.org |
+| Category | Purpose | Examples | Required |
+|----------|---------|----------|----------|
+| Financial | Market data, fundamentals, technicals, earnings, options | FMP, EODHD, Finnhub, yfinance | Yes |
+| News | Headlines, article search, political events, sector news | NewsAPI.ai, Mediastack, NewsAPI.org | Yes |
+| Social Media | Social posts, trending tickers, retail discussion volume | X (Twitter), Reddit | No |
 
-A third data source — the **X (Twitter) API** — is always required and handled separately. It provides social media data for the Retail Sentiment department and is not part of the provider category system.
+Financial and news providers are required — OpenLIA will not start without at least one of each. Social media providers are optional and primarily serve the Retail Sentiment department.
 
 
 ## Department Data Access Patterns
@@ -38,7 +39,7 @@ Departments fall into two categories based on how they access data:
 
 **Pre-fetch departments** follow a fixed data recipe. Code fetches specific data before the LLM runs — no tool-calling.
 - Panic Thermometer
-- Retail Sentiment (X API + provider sentiment endpoints)
+- Retail Sentiment (social media APIs + provider sentiment endpoints — see Retail Sentiment section below)
 
 
 ## Configuration
@@ -60,11 +61,14 @@ class ProviderEntry(BaseModel):
 class DataProvidersConfig(BaseModel):
     financial: list[ProviderEntry]             # ordered by user priority (first = highest)
     news: list[ProviderEntry]                  # ordered by user priority (first = highest)
-    x_api_bearer_token: SecretStr              # always required
+    social_media: list[ProviderEntry] = []     # optional, ordered by user priority
 
 class ReviewConfig(BaseModel):
     model: str                                 # fast/cheap model for AI review + runtime expansion
     api_key: SecretStr | None = None
+
+class ExpansionConfig(BaseModel):
+    max_expansions_per_report: int = 15        # user-configurable in settings, unlimited for Secretary
 ```
 
 Provider lists are ordered by user priority. When the AI review maps requirements to endpoints, it walks providers in priority order — the first provider that can satisfy a requirement wins. The user controls which provider is preferred for what, not the AI.
@@ -82,10 +86,10 @@ Each provider supports two configuration modes:
 On startup, OpenLIA validates:
 1. At least one financial provider is configured
 2. At least one news provider is configured
-3. X API bearer token is configured
-4. All basic requirements across all departments are satisfiable by the union of configured providers
+3. All basic requirements across all non-disabled departments are satisfiable by the union of configured providers
+4. Retail Sentiment availability check (see Retail Sentiment section)
 
-If basic requirements are unmet, OpenLIA reports which requirements are missing and which departments are affected, and does not start.
+If basic requirements are unmet, OpenLIA reports which requirements are missing and which departments are affected, and does not start. Departments that are disabled due to missing optional providers (e.g. Retail Sentiment) do not block startup.
 
 
 ## Department Requirements Manifest
@@ -197,10 +201,13 @@ packages/core/src/openlia/data/catalog/bundled/
 │   ├── eodhd.yaml        # placeholder — to be filled in
 │   ├── finnhub.yaml      # placeholder — to be filled in
 │   └── yfinance.yaml     # placeholder — to be filled in
-└── news/
-    ├── newsapi_ai.yaml   # placeholder — to be filled in
-    ├── mediastack.yaml   # placeholder — to be filled in
-    └── newsapi_org.yaml  # placeholder — to be filled in
+├── news/
+│   ├── newsapi_ai.yaml   # placeholder — to be filled in
+│   ├── mediastack.yaml   # placeholder — to be filled in
+│   └── newsapi_org.yaml  # placeholder — to be filled in
+└── social_media/
+    ├── x.yaml            # placeholder — to be filled in
+    └── reddit.yaml       # placeholder — to be filled in
 ```
 
 When a user configures a provider, the corresponding bundled template is copied to the **active catalog directory** in user data:
@@ -210,8 +217,10 @@ When a user configures a provider, the corresponding bundled template is copied 
 ├── financial/
 │   ├── fmp.yaml          # copied from bundled when user configures FMP
 │   └── eodhd.yaml        # copied from bundled when user configures EODHD
-└── news/
-    └── newsapi_ai.yaml   # copied from bundled when user configures NewsAPI.ai
+├── news/
+│   └── newsapi_ai.yaml   # copied from bundled when user configures NewsAPI.ai
+└── social_media/
+    └── x.yaml            # copied from bundled when user configures X API
 ```
 
 ### Catalog Installation Paths
@@ -385,8 +394,8 @@ request_additional_tools(
 
 ### Constraints
 
-- **15 expansions per report** for all departments except Secretary
-- **Unlimited** for Secretary (general-purpose chatbot, unpredictable needs)
+- **15 expansions per report** (default) for all departments except Secretary. User-configurable in Settings.
+- **Unlimited** for Secretary (general-purpose chatbot, unpredictable needs). Not affected by the setting.
 - **Session-scoped:** Expanded tools are not persisted to the mapping files automatically
 - **Audit trail:** All expansions logged with timestamp, department, description, reason, matched endpoints
 - **User promotion (v1):** Users can review the audit trail and explicitly promote useful expansions to permanent mappings
@@ -433,12 +442,24 @@ Three typed errors for all data operations:
 `DataNotAvailable` is not an exception — it is a normal tool result. The LLM's system prompt enforces that unavailable data must be stated honestly, never fabricated.
 
 
-## Sentiment Data (X API + Provider)
+## Retail Sentiment and Social Media
 
-The Retail Sentiment department uses a fixed pre-fetch recipe:
+The Retail Sentiment department uses a fixed pre-fetch recipe with two data sources:
 
-1. **X API:** Fetch social media posts for watchlist tickers. Always required, always called.
-2. **Provider sentiment endpoints:** Fetch any sentiment-related data from configured financial providers (e.g. EODHD's `get_sentiment_data`, FMP's social sentiment endpoints). These are mapped through the normal requirements manifest like any other department.
+1. **Social media providers (optional):** Fetch social posts, discussion volume, and trending tickers from configured social media providers (X, Reddit, etc.). These are the primary source of retail sentiment signal.
+2. **Financial provider sentiment endpoints:** Fetch any sentiment-related data from configured financial providers (e.g. EODHD's `get_sentiment_data`, FMP's social sentiment endpoints). Mapped through the normal requirements manifest.
+
+### Availability Rules
+
+The Retail Sentiment department requires at least one source of sentiment data. Its availability depends on what the user has configured:
+
+| Social media providers | Financial provider has sentiment | Retail Sentiment status |
+|------------------------|----------------------------------|------------------------|
+| Configured | Any | Enabled — uses both sources |
+| Not configured | Yes | Enabled — uses financial sentiment only |
+| Not configured | No | Disabled — department hidden from UI, not available |
+
+At startup, the checker evaluates this and either enables or disables the department. If disabled, the user is informed which providers would enable it.
 
 Both data sources are fetched before the LLM runs. How the data is combined and analyzed is a separate concern (deferred to Retail Sentiment department design).
 
@@ -476,10 +497,13 @@ packages/core/src/openlia/data/
 │       │   ├── eodhd.yaml            # placeholder
 │       │   ├── finnhub.yaml          # placeholder
 │       │   └── yfinance.yaml         # placeholder
-│       └── news/
-│           ├── newsapi_ai.yaml       # placeholder
-│           ├── mediastack.yaml       # placeholder
-│           └── newsapi_org.yaml      # placeholder
+│       ├── news/
+│       │   ├── newsapi_ai.yaml       # placeholder
+│       │   ├── mediastack.yaml       # placeholder
+│       │   └── newsapi_org.yaml      # placeholder
+│       └── social_media/
+│           ├── x.yaml                # placeholder
+│           └── reddit.yaml           # placeholder
 ├── manifest/
 │   ├── __init__.py
 │   ├── loader.py
@@ -502,7 +526,7 @@ packages/core/src/openlia/data/
 ├── python_providers/
 │   └── yfinance_impl.py
 ├── sentiment/
-│   └── x_api.py
+│   └── checker.py         # Evaluate Retail Sentiment availability
 └── errors.py
 ```
 
@@ -512,7 +536,8 @@ packages/core/src/openlia/data/
 ~/.openlia/
 ├── providers/                     # Active provider catalogs
 │   ├── financial/
-│   └── news/
+│   ├── news/
+│   └── social_media/
 ├── mappings/                      # AI-generated requirement-to-endpoint mappings
 │   ├── secretary.yaml
 │   ├── stock_research.yaml
@@ -540,6 +565,8 @@ These files need manual authoring before the system is functional:
 | `catalog/bundled/news/newsapi_ai.yaml` | Full endpoint documentation for NewsAPI.ai |
 | `catalog/bundled/news/mediastack.yaml` | Full endpoint documentation for Mediastack |
 | `catalog/bundled/news/newsapi_org.yaml` | Full endpoint documentation for NewsAPI.org |
+| `catalog/bundled/social_media/x.yaml` | Full endpoint documentation for X (Twitter) API |
+| `catalog/bundled/social_media/reddit.yaml` | Full endpoint documentation for Reddit API |
 | `review/prompts.py` | AI review prompts for requirement-to-endpoint matching |
 
 
