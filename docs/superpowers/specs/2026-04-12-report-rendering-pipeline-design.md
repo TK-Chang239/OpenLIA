@@ -451,6 +451,59 @@ Optional `volume` array renders as bars below the candlesticks.
 ```
 
 
+## Additional Block Types
+
+### Key Finding Block
+
+A highlighted callout block for important conclusions or discoveries. Visually distinct from body text — accent left border, slightly larger text, elevated background.
+
+```json
+{
+  "type": "key_finding",
+  "content": "iPhone revenue grew 49.3% YoY, the strongest growth since 2021, driven by iPhone 16 Pro demand in emerging markets."
+}
+```
+
+The LLM places these between sections or within sections to break up text and highlight the most important takeaways.
+
+### Rating Badge Block
+
+Displays analyst-style rating badges and sector tags inline in the report.
+
+```json
+{
+  "type": "rating_badge",
+  "rating": "Overweight",
+  "previous_rating": "Equal Weight",
+  "change_date": "2026-04-11"
+}
+```
+
+Rendered as a colored pill badge: green for positive ratings (Buy, Overweight), yellow for neutral (Hold, Equal Weight), red for negative (Sell, Underweight). Shows the previous rating with a strikethrough if changed.
+
+### Sparkline Table Extension
+
+Tables support an optional sparkline column. When a header has `"sparkline": true`, the cell value is an array of numbers rendered as a tiny inline SVG line chart using ECharts in compact mode.
+
+```json
+{
+  "type": "table",
+  "title": "Revenue by Segment",
+  "headers": [
+    {"key": "segment", "label": "Segment", "align": "left"},
+    {"key": "revenue", "label": "Q1 2026", "align": "right"},
+    {"key": "trend", "label": "5Q Trend", "align": "center", "sparkline": true}
+  ],
+  "rows": [
+    {"segment": "iPhone", "revenue": "$69.1B", "trend": [46.2, 42.3, 48.8, 56.1, 69.1]},
+    {"segment": "Services", "revenue": "$26.3B", "trend": [20.8, 21.2, 22.1, 24.3, 26.3]}
+  ]
+}
+```
+
+Sparklines are tiny (60px wide, 20px tall), no axes, no labels — just the trend shape. Color follows the direction: upward trend uses `--report-positive`, downward uses `--report-negative`.
+
+
 ## Cover Block
 
 The cover renders at the top of every report with two distinct visual zones:
@@ -563,7 +616,7 @@ PDF returned as file download
 - Groups stay together (`break-inside: avoid`)
 - Long tables break between rows with header repeated (`thead { display: table-header-group }`)
 
-**Charts in PDF:** Recharts outputs SVG, which Chromium renders natively as vector graphics — sharp at any zoom level.
+**Charts in PDF:** ECharts in SVG rendering mode outputs vector graphics, which Chromium renders natively to PDF — sharp at any zoom level.
 
 **Dark mode:** PDF always uses light mode regardless of app theme setting.
 
@@ -668,6 +721,66 @@ Dark: `#3b82f6, #8b5cf6, #06b6d4, #f97316, #6366f1, #14b8a6, #ef4444, #eab308`
 - Tooltips: elevated background, subtle shadow, compact (HTML view only)
 
 
+## Visual Polish (v1)
+
+Features that elevate the report from functional to commercial-grade.
+
+### Gradient Fills on Charts
+
+Area charts and the area beneath line charts use a gradient fill that fades from the line color (at the top) to transparent (at the bottom). Configured in the ECharts theme — no schema change needed. Applies to `line_chart`, `area_chart`, and the line series in `combo_chart`.
+
+### Micro-Animations (Framer Motion)
+
+All report elements animate on first render:
+- **Charts:** Bars grow upward from zero, lines draw left-to-right, pie segments sweep in. Powered by ECharts' built-in animation system.
+- **Metric cards:** Numbers count up from 0 to their final value over 600ms.
+- **Sections:** Fade in with subtle upward slide (`opacity 0->1, y 12->0, 300ms`) as they enter the viewport.
+- **Tables:** Rows stagger in (`40ms` apart).
+- **Key findings:** Accent border slides in from the left.
+
+Animations play once on initial render. Scrolling back to an element does not re-trigger. PDF export renders the final state with no animation.
+
+### Smart Number Formatting
+
+All numeric values in metric cards, table cells, and cover stats are formatted using `Intl.NumberFormat`:
+- Large numbers: `$124.3B`, `$3.02T`, `14.2K`
+- Percentages: `+31.1%`, `-2.3%`
+- Multiples: `32.1x`
+- Currency: locale-aware with proper symbol placement
+
+The LLM outputs pre-formatted strings (it decides the format as the analyst), but the renderer validates and normalizes formatting for consistency.
+
+### Inline Colored Numbers in Text
+
+Text blocks support a lightweight extension: numbers within body text that represent financial values are auto-detected and colored using `--report-positive` / `--report-negative` based on sign. For example, "revenue grew +31.1%" renders with "+31.1%" in green.
+
+This is applied by the TextBlock renderer as a post-processing step on the markdown output — no schema change needed.
+
+### Typography Details
+
+- `font-variant-numeric: tabular-nums` on all table cells and metric card values for proper column alignment
+- Proper em-dashes in text (LLM should use these; renderer normalizes `--` to em-dash)
+- Superscript footnote reference numbers in table cells when footnotes are present
+- `letter-spacing: 0.04em` on all uppercase labels (section headers, table group headers)
+
+### Rating Badges
+
+Colored pill badges for analyst ratings:
+- Positive (Buy, Overweight, Strong Buy): green background, white text
+- Neutral (Hold, Equal Weight, Market Perform): yellow background, dark text
+- Negative (Sell, Underweight, Reduce): red background, white text
+
+Used in the cover stats panel and as a standalone `rating_badge` block.
+
+### Report Loading Skeleton
+
+While the LLM generates the report, the FileViewer shows an animated skeleton that mimics the report layout (react-loading-skeleton):
+- Cover area: large title skeleton, subtitle skeleton, metric card placeholders
+- Section skeletons: heading bar, 3-4 text line bars of varying widths, a chart-sized rectangle, a table-sized rectangle
+- Pulsing animation at `1.5s` cycle
+- Section titles from the framework template shown as gray text above each skeleton section
+
+
 ## File Layout
 
 ### Frontend
@@ -682,11 +795,13 @@ frontend/src/
 │       ├── ReportSection.tsx           # Section wrapper with heading + anchor
 │       ├── BlockRenderer.tsx           # Switch on block type, delegates to component
 │       ├── blocks/
-│       │   ├── TextBlock.tsx           # Markdown to styled HTML
+│       │   ├── TextBlock.tsx           # Markdown to styled HTML + inline colored numbers
 │       │   ├── TableBlock.tsx          # Interactive table with sort, search, expand,
-│       │   │                           #   row styles, cell formatting, and footnotes
-│       │   ├── MetricCardsBlock.tsx    # Horizontal stat card row
-│       │   └── GroupBlock.tsx          # N-column layout with height normalization
+│       │   │                           #   row styles, cell formatting, sparklines, footnotes
+│       │   ├── MetricCardsBlock.tsx    # Horizontal stat card row with count-up animation
+│       │   ├── GroupBlock.tsx          # N-column layout with height normalization
+│       │   ├── KeyFindingBlock.tsx     # Highlighted callout with accent border
+│       │   └── RatingBadgeBlock.tsx    # Colored pill badge for analyst ratings
 │       ├── charts/
 │       │   ├── LineChartBlock.tsx
 │       │   ├── BarChartBlock.tsx
@@ -701,7 +816,8 @@ frontend/src/
 │       └── furniture/
 │           ├── ReportHeader.tsx        # Persistent header inside report
 │           ├── ReportFooter.tsx        # Footer with disclaimer
-│           └── ScrollTracker.tsx       # Sidebar section indicator
+│           ├── ScrollTracker.tsx       # Sidebar section indicator
+│           └── ReportSkeleton.tsx      # Loading skeleton during generation
 ├── styles/
 │   └── report/
 │       ├── theme-light.css             # Light mode CSS variables
@@ -738,9 +854,38 @@ packages/core/src/openlia/
 │       └── morning_briefing.json       # Placeholder — to be filled in
 ```
 
-### Charting Library
+### Toolkit
 
-Recharts — React-native, composable, supports all chart types in the full suite, outputs SVG for clean PDF rendering.
+```
+Core:
+  Charting         ECharts (echarts-for-react)
+  Tables           TanStack Table + TanStack Virtual
+  Animations       Framer Motion
+  Markdown         react-markdown + remark-gfm
+  Math             KaTeX
+  Icons            Lucide React
+
+Utilities:
+  Font             @fontsource/inter
+  Numbers          Intl.NumberFormat (built-in)
+  Dates            date-fns
+  Color            chroma.js
+  Tooltips         Floating UI
+  Scroll tracking  react-intersection-observer
+  Skeletons        react-loading-skeleton
+  File download    file-saver
+
+PDF:
+  Generation       Playwright
+  Post-processing  pdf-lib (metadata, bookmarks, clickable TOC)
+
+Deferred:
+  Maps             react-simple-maps
+```
+
+**Why ECharts over Recharts:** ECharts natively supports every chart type in our full suite (including candlestick, waterfall, heatmap, combo) without custom workarounds. It also supports SVG rendering mode for PDF export, has a built-in theming system that maps to our CSS variable approach, and its JSON configuration pattern aligns naturally with our schema — chart blocks map directly to ECharts option objects.
+
+**Additional ECharts chart types available for free** (not in v1 but available if needed later): gauge, sankey, funnel, radar/spider, boxplot.
 
 
 ## Placeholder Files
@@ -758,4 +903,10 @@ Recharts — React-native, composable, supports all chart types in the full suit
 - **DOCX export** — PDF only in v1
 - **Themeable system** — single default theme in v1; user-customizable themes (colors, fonts, logo, branding for company mode) planned for later
 - **Annotated line chart** — overlaying discrete events (earnings dates, rating changes, dividends) onto price series. Can be added later as a new block type or an `annotations` field on `line_chart` without breaking existing schemas
+- **Crosshair synchronization** — hovering a chart in a group shows a vertical crosshair on all charts in that group at the same x-position
+- **Small multiples** — grid of small identical charts, one per series, instead of one busy multi-line chart
+- **Visual density toggle** — summary vs detailed view of the report
+- **Conditional chart zone fills** — background shading in charts for target/danger zones
+- **Geographic maps** — choropleth maps for revenue by country/region (react-simple-maps)
+- **Additional ECharts types** — gauge, sankey, funnel, radar/spider, boxplot
 - **Report framework content** — section definitions and guiding instructions per department. Separate design task.
