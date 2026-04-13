@@ -485,21 +485,41 @@ Accessible from the Settings button in the page header. Collapsible drawer or mo
 | Auto-refresh interval (market data) | Dropdown | 5 min |
 | T4/T5 LLM assessment schedule | Dropdown | Quarterly |
 | T4/T5 news trigger sensitivity | Dropdown | Significant events only |
+| Smart Mode (thresholds) | Toggle | Off |
+
+### Smart Mode
+
+When enabled, the LLM periodically reviews and adjusts thresholds across all dashboards based on evolving macro conditions. The user's manual thresholds serve as the starting baseline; Smart Mode overrides them with AI-recommended values.
+
+**How it works:**
+
+1. On each T4/T5 LLM assessment run (or on a separate schedule if T4/T5 are set to quarterly), the LLM receives the current threshold values, recent indicator data, and macro context.
+2. The LLM evaluates whether any thresholds are stale or misaligned with current conditions -- e.g., a Debt/GDP warning zone of 100% may need tightening to 95% during a late-cycle regime, or credit spread thresholds may need widening during a volatility regime shift.
+3. Adjusted thresholds are applied automatically. Each adjustment is logged with the LLM's rationale.
+4. The user can view the adjustment history and rationale in the settings panel. Each adjusted threshold shows: original value, current AI value, date changed, one-line rationale.
+5. The user can override any individual AI-adjusted threshold (pin it to a manual value), accept all AI recommendations, or disable Smart Mode entirely to revert to manual thresholds.
+
+**Per-dashboard application:**
+- **T1/T2 (formula engine):** Smart Mode adjusts the numeric thresholds in the params table and can reorder or modify rule severity levels.
+- **T3 (computational):** Smart Mode adjusts coverage thresholds (what counts as "partial" vs "strong") and can update volatility estimates when regime changes warrant it.
+- **T4/T5 (LLM assessment):** Smart Mode adjusts the scoring anchors -- what intensity level maps to which score range -- so that the 1-10 scale stays calibrated as baseline conditions drift over time.
+
+**Visual indicator:** When Smart Mode is active, a small "AI" badge appears next to each threshold value that has been AI-adjusted. Hovering or clicking the badge shows the rationale and original value.
 
 ### Per-Dashboard Settings (T1, T2)
 
 Formula engine dashboards share the Panic Thermometer settings pattern:
 
 1. **Data source selector** -- dropdown to change the underlying ticker or event type per indicator
-2. **Params table** -- key-value editor for threshold values. Each row: param name, current value, inline edit field. Values can be numeric literals.
+2. **Params table** -- key-value editor for threshold values. Each row: param name, current value, inline edit field. Values can be numeric literals. When Smart Mode is active, AI-adjusted values show an "AI" badge; the user can pin any value to override the AI recommendation.
 3. **Rule editor** (advanced) -- ordered list of rules per indicator. Each rule: status color, formula, label. Users can reorder, edit formulas, add/delete rules. "Test" button evaluates against current data.
-4. **Preset loader** -- dropdown to load a preset library. Presets: "Dalio defaults" (thresholds from the article), "Conservative" (tighter thresholds), "Relaxed" (wider thresholds).
+4. **Preset loader** -- dropdown to load a preset library. Presets: "Dalio defaults" (thresholds from the article), "Conservative" (tighter thresholds), "Relaxed" (wider thresholds). Loading a preset replaces AI-adjusted values if Smart Mode is active.
 
 ### Per-Dashboard Settings (T3)
 
 1. **Portfolio source** -- "Use Portfolio page" (default) or "Custom benchmark" (enter weights manually)
-2. **Volatility estimates** -- editable table of annualized volatility per asset class (defaults to long-run historicals)
-3. **Coverage thresholds** -- what combined weight counts as "partial" vs "strong" coverage per season
+2. **Volatility estimates** -- editable table of annualized volatility per asset class (defaults to long-run historicals). Smart Mode can update these when volatility regime changes warrant it.
+3. **Coverage thresholds** -- what combined weight counts as "partial" vs "strong" coverage per season. Smart Mode can adjust these based on current macro conditions.
 
 ### Per-Dashboard Settings (T4, T5)
 
@@ -507,6 +527,7 @@ Formula engine dashboards share the Panic Thermometer settings pattern:
 2. **News trigger keywords** -- editable keyword list for detecting significant events that warrant a re-run
 3. **LLM model** -- which configured LLM to use for assessments
 4. **Manual run button** -- "Run assessment now" to trigger an immediate LLM run
+5. **Scoring anchors** -- reference descriptions for what each score range (1-3, 4-6, 7-8, 9-10) means per force. Smart Mode can recalibrate these anchors as baseline conditions drift over time.
 
 
 ## Data Refresh Strategy
