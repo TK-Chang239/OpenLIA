@@ -146,6 +146,29 @@ All configuration is accessed via the Settings panel in the page header. There i
 
 Not applicable. RS is a dashboard department and does not generate text reports.
 
+## Data Requirements
+
+RS is a pre-fetch dashboard department. Data is fetched periodically from financial and social media providers, classified via batch LLM calls, and fed into the metrics computation engine.
+
+**Basic (department disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Stock quote | `stock_quote` | Current price and daily change for ticker display and event sensitivity correlation |
+| Company news | `company_news` | News articles for batch LLM sentiment classification and narrative analysis |
+| Social sentiment | `social_sentiment` | Social media posts and engagement data (tweets, volume, likes, retweets) for buzz and sentiment metrics |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Historical prices | `historical_prices` | Price history for sentiment vs price overlay charts and Event Sensitivity Score | Overview charts lack price overlay; Event Sensitivity Score metric disabled |
+| Options data | `options_data` | Put/call ratio data for sentiment-adjusted options analysis | Put/Call Sentiment Ratio metric disabled |
+| Short interest | `short_interest` | Short interest and days-to-cover data | Short Interest Pressure metric disabled |
+| Institutional holdings | `institutional_holdings` | Institutional flow and positioning data | Institutional-Retail Sentiment Gap metric disabled |
+
+Note: Metrics that lack required data from configured providers are automatically disabled with a note explaining the required provider capability. See the full design spec for detailed per-metric data source mappings.
+
 ## Configurations
 
 - NLP classification: Batch LLM calls with structured prompt template

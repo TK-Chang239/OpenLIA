@@ -324,5 +324,24 @@ The Morning Briefing has a single report mode: `morning_briefing`. The 7 standar
 
 Custom Sections defined by the user are appended after the standard sections. Each custom section's user-provided description is used as the LLM instruction.
 
+## Data Requirements
+
+MB uses pre-fetch to gather news and events before passing to the LLM for report generation.
+
+**Basic (department disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Company news | `company_news` | News articles across all configured topics (macro, country, market, sector, stock) |
+| Economic events | `economic_events` | Economic calendar events for Upcoming Preview section and macro context |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Stock quote | `stock_quote` | Current prices for tickers in Stock News section | Stock News section lacks current price context |
+| Historical prices | `historical_prices` | Recent price data for market and sector trend context | Market News and Sector News sections lack quantitative price trend data |
+| Macro indicators | `macro_indicators` | Macroeconomic data (GDP, CPI, rates) for Global Macro section | Global Macro News section relies solely on news articles without quantitative macro data |
+
 ## Configurations
 - LLM: 

@@ -1,7 +1,7 @@
 # Secretary Department Spec
 
 ## Page Overview
-The Secretary is the home page of LIA and serves as the general-purpose LLM chatbot. It handles general inquiries from the user, including questions about how to use the product, real-time market data lookups, and quick topic summaries. When the user makes a request that is better served by another department, the Secretary identifies the appropriate department and redirects the user there. The Secretary prioritizes concise, fast, and accurate responses.
+The Secretary (The home page) serves as the general-purpose LLM chatbot. It handles general inquiries from the user, including questions about how to use the product, real-time market data lookups, and quick topic summaries. When the user makes a request that is better served by another department, the Secretary identifies the appropriate department and redirects the user there. The Secretary prioritizes concise, fast, and accurate responses.
 
 ## Functions
 1. **General Inquiries**: The Secretary answers open-ended questions from the user, including how-to questions about LIA, quick factual lookups, brief explanations of financial concepts, and general conversation.
@@ -168,6 +168,27 @@ There are no user-configurable settings for the Secretary.
 
 ## Report Framework
 There are no report frameworks for the Secretary.
+
+## Data Requirements
+
+The Secretary is a tool-calling department. The LLM receives mapped tools and the runtime expansion meta-tool, deciding which tools to call based on the user's question.
+
+**Basic (department disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Stock quote | `stock_quote` | Real-time or delayed stock price, volume, daily change for ticker lookups |
+| Company profile | `company_profile` | Basic company information (name, sector, industry, description) for quick summaries |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Company news | `company_news` | Recent news articles for a company or topic | Topic summaries lack current news context |
+| Historical prices | `historical_prices` | Historical stock prices for trend context | Secretary cannot answer questions about price history |
+| Economic events | `economic_events` | Economic calendar and event data | Secretary cannot answer questions about upcoming economic releases |
+
+Note: The Secretary's data needs are minimal since it handles quick lookups and redirects to specialized departments for deep analysis.
 
 ## Configurations
 - LLM Model: `openai/gpt-oss-120b`

@@ -1,0 +1,239 @@
+<h2>Macro Research: Summary Tab</h2>
+<p class="subtitle">The default landing view -- high-level overview of all five frameworks</p>
+
+<div class="mockup" style="margin-top: 16px;">
+  <div class="mockup-header">Summary Tab (default active tab)</div>
+  <div class="mockup-body" style="background: #f8f9fa; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px;">
+
+    <!-- Page Header -->
+    <div style="height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-bottom: 1px solid #e5e7eb; background: white;">
+      <div style="font-size: 18px; font-weight: 600; color: #111;">Macro Research</div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="font-size: 12px; color: #888;">Auto-refresh</div>
+        <select style="font-size: 12px; border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 8px; color: #555;">
+          <option>5 min</option>
+        </select>
+        <div style="border: 1px solid #d1d5db; border-radius: 6px; padding: 4px 10px; font-size: 12px; color: #555; cursor: pointer;">Settings</div>
+      </div>
+    </div>
+
+    <!-- Tab Bar (Summary is active) -->
+    <div style="display: flex; gap: 2px; padding: 0 24px; background: white; border-bottom: 1px solid #e5e7eb;">
+      <div style="padding: 10px 16px; font-size: 13px; font-weight: 500; color: #111; border-bottom: 2px solid #111; cursor: pointer;">Summary</div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;">Debt Cycle</div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;">Four Seasons</div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;">All-Weather</div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;">World Order</div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #666; cursor: pointer;">Five Forces</div>
+    </div>
+
+    <!-- Summary Content -->
+    <div style="padding: 20px 24px; max-width: 960px;">
+
+      <!-- Composite Assessment Banner -->
+      <div style="background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px 20px; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <div style="font-size: 11px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: #999;">Composite Macro Assessment</div>
+            <div style="font-size: 22px; font-weight: 500; color: #A32D2D; margin-top: 4px;">Structural Stress -- Elevated</div>
+            <div style="font-size: 13px; color: #666; margin-top: 4px; line-height: 1.5;">4 of 5 frameworks signal warning conditions. Long-term debt cycle in late plateau, economic season transitioning to autumn, world order at Stage 5, all five forces co-active. Portfolio risk concentrated in equities.</div>
+          </div>
+          <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+            <div style="font-size: 11px; color: #999;">Updated 12 min ago</div>
+            <div style="display: flex; gap: 4px;">
+              <span style="width: 24px; height: 8px; border-radius: 4px; background: #E24B4A;"></span>
+              <span style="width: 24px; height: 8px; border-radius: 4px; background: #E24B4A;"></span>
+              <span style="width: 24px; height: 8px; border-radius: 4px; background: #E24B4A;"></span>
+              <span style="width: 24px; height: 8px; border-radius: 4px; background: #E24B4A;"></span>
+              <span style="width: 24px; height: 8px; border-radius: 4px; background: #EF9F27;"></span>
+            </div>
+            <div style="font-size: 11px; color: #999;">4 critical -- 1 elevated</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Five Framework Cards (clickable, link to respective tabs) -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;">
+
+        <!-- T1 Card -->
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="font-size: 13px; font-weight: 500; color: #111;">T1 -- Debt Cycle</div>
+            <div style="display: flex; align-items: center; gap: 4px; background: #FCEBEB; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: #A32D2D;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #E24B4A;"></span>
+              Late Plateau
+            </div>
+          </div>
+          <!-- Mini scorecard -->
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+              <span style="color: #666;">Debt/GDP</span>
+              <span style="font-weight: 500; color: #A32D2D;">124%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+              <span style="color: #666;">Interest/Revenue</span>
+              <span style="font-weight: 500; color: #A32D2D;">~19%</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+              <span style="color: #666;">Real Rate (TIPS)</span>
+              <span style="font-weight: 500; color: #854F0B;">+1.9%</span>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 8px;">3/3 indicators in warning zone</div>
+        </div>
+
+        <!-- T2 Card -->
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="font-size: 13px; font-weight: 500; color: #111;">T2 -- Four Seasons</div>
+            <div style="display: flex; align-items: center; gap: 4px; background: #FAEEDA; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: #854F0B;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #EF9F27;"></span>
+              Summer to Autumn
+            </div>
+          </div>
+          <!-- Mini quadrant -->
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #e5e7eb; border-radius: 6px; overflow: hidden; height: 80px;">
+            <div style="background: #FAEEDA; padding: 6px 8px; font-size: 10px;">
+              <div style="font-weight: 500; color: #854F0B;">Autumn</div>
+              <div style="color: #854F0B;">Gold, real assets</div>
+            </div>
+            <div style="background: #f8f9fa; padding: 6px 8px; font-size: 10px;">
+              <div style="font-weight: 500; color: #666;">Summer</div>
+              <div style="color: #888;">Commodities</div>
+            </div>
+            <div style="background: #f8f9fa; padding: 6px 8px; font-size: 10px;">
+              <div style="font-weight: 500; color: #666;">Winter</div>
+              <div style="color: #888;">Bonds, cash</div>
+            </div>
+            <div style="background: #f8f9fa; padding: 6px 8px; font-size: 10px;">
+              <div style="font-weight: 500; color: #666;">Spring</div>
+              <div style="color: #888;">Equities</div>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 8px;">Mixed confidence -- GDP falling, inflation re-accelerating</div>
+        </div>
+
+        <!-- T3 Card -->
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="font-size: 13px; font-weight: 500; color: #111;">T3 -- All-Weather Audit</div>
+            <div style="display: flex; align-items: center; gap: 4px; background: #FCEBEB; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: #A32D2D;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #E24B4A;"></span>
+              Risk Concentrated
+            </div>
+          </div>
+          <!-- Mini allocation bars -->
+          <div style="display: flex; flex-direction: column; gap: 5px;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 11px;">
+              <span style="color: #666; width: 60px;">Equities</span>
+              <div style="flex: 1; height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden;">
+                <div style="height: 100%; width: 87%; background: #E24B4A; border-radius: 4px;"></div>
+              </div>
+              <span style="font-weight: 500; color: #A32D2D; width: 32px; text-align: right;">87%</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 11px;">
+              <span style="color: #666; width: 60px;">Bonds</span>
+              <div style="flex: 1; height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden;">
+                <div style="height: 100%; width: 11%; background: #639922; border-radius: 4px;"></div>
+              </div>
+              <span style="font-weight: 500; color: #3B6D11; width: 32px; text-align: right;">11%</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 11px;">
+              <span style="color: #666; width: 60px;">Gold</span>
+              <div style="flex: 1; height: 8px; background: #f0f0f0; border-radius: 4px; overflow: hidden;">
+                <div style="height: 100%; width: 2%; background: #EF9F27; border-radius: 4px;"></div>
+              </div>
+              <span style="font-weight: 500; color: #854F0B; width: 32px; text-align: right;">0%</span>
+            </div>
+          </div>
+          <div style="font-size: 11px; color: #999; margin-top: 8px;">Risk contribution from your Portfolio -- 87% equity exposure</div>
+        </div>
+
+        <!-- T4 Card -->
+        <div style="background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <div style="font-size: 13px; font-weight: 500; color: #111;">T4 -- World Order</div>
+            <div style="display: flex; align-items: center; gap: 4px; background: #FCEBEB; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: #A32D2D;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #E24B4A;"></span>
+              Stage 5
+            </div>
+          </div>
+          <!-- Stage timeline -->
+          <div style="display: flex; gap: 2px; border-radius: 6px; overflow: hidden; height: 28px; margin-bottom: 8px;">
+            <div style="flex: 1; background: #d1d5db; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; color: #666;">1</div>
+            <div style="flex: 1; background: #b8bcc2; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; color: #555;">2</div>
+            <div style="flex: 1; background: #9ca3af; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; color: #444;">3</div>
+            <div style="flex: 1; background: #6b7280; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; color: white;">4</div>
+            <div style="flex: 1; background: #E24B4A; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: white;">5</div>
+            <div style="flex: 1; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 500; color: #bbb;">6</div>
+          </div>
+          <div style="font-size: 12px; color: #666; line-height: 1.4;">Wealth shift: mid-stage. CB gold buying sustained. USD reserve share declining.</div>
+          <div style="font-size: 11px; color: #999; margin-top: 6px;">LLM assessed -- last run: Apr 10, 2026</div>
+        </div>
+      </div>
+
+      <!-- T5 Card (full width) -->
+      <div style="background: white; border: 1px solid #e5e7eb; border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.08)'" onmouseout="this.style.boxShadow='none'">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div style="font-size: 13px; font-weight: 500; color: #111;">T5 -- Five Interlocking Forces</div>
+          <div style="display: flex; gap: 6px;">
+            <div style="display: flex; align-items: center; gap: 4px; background: #FCEBEB; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: #A32D2D;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #E24B4A;"></span>
+              4 Critical
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px; background: #FAEEDA; padding: 3px 9px; border-radius: 12px; font-size: 11px; font-weight: 500; color: #854F0B;">
+              <span style="width: 7px; height: 7px; border-radius: 50%; background: #EF9F27;"></span>
+              1 High
+            </div>
+          </div>
+        </div>
+        <!-- Force bars -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12px;">
+            <span style="color: #666; width: 120px;">Debt & Money</span>
+            <div style="flex: 1; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: 90%; background: #E24B4A; border-radius: 3px;"></div>
+            </div>
+            <span style="font-weight: 500; color: #A32D2D; width: 36px; text-align: right;">9/10</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12px;">
+            <span style="color: #666; width: 120px;">Domestic Political</span>
+            <div style="flex: 1; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: 85%; background: #E24B4A; border-radius: 3px;"></div>
+            </div>
+            <span style="font-weight: 500; color: #A32D2D; width: 36px; text-align: right;">8.5/10</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12px;">
+            <span style="color: #666; width: 120px;">Geopolitical</span>
+            <div style="flex: 1; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: 80%; background: #E24B4A; border-radius: 3px;"></div>
+            </div>
+            <span style="font-weight: 500; color: #A32D2D; width: 36px; text-align: right;">8/10</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12px;">
+            <span style="color: #666; width: 120px;">Technology</span>
+            <div style="flex: 1; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: 72%; background: #EF9F27; border-radius: 3px;"></div>
+            </div>
+            <span style="font-weight: 500; color: #854F0B; width: 36px; text-align: right;">7.2/10</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; font-size: 12px;">
+            <span style="color: #666; width: 120px;">Natural Forces</span>
+            <div style="flex: 1; height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden;">
+              <div style="height: 100%; width: 75%; background: #E24B4A; border-radius: 3px;"></div>
+            </div>
+            <span style="font-weight: 500; color: #A32D2D; width: 36px; text-align: right;">7.5/10</span>
+          </div>
+        </div>
+        <div style="font-size: 11px; color: #999; margin-top: 10px;">Historical turning point zone -- structural hedging required. LLM assessed -- last run: Apr 10, 2026</div>
+      </div>
+
+      <!-- Synthesis / Cross-Framework -->
+      <div style="background: #FAEEDA; border-radius: 10px; padding: 14px 16px; margin-top: 16px;">
+        <div style="font-size: 13px; font-weight: 500; color: #633806; margin-bottom: 6px;">Cross-Framework Synthesis</div>
+        <div style="font-size: 12px; color: #854F0B; line-height: 1.55;">All five frameworks converge on the same structural read: the US is in the late-plateau zone of the long-term debt cycle, the economic season is shifting from summer to autumn, and all five macro forces are co-active at historically elevated levels. Portfolio audit shows 87% risk concentration in equities with zero gold allocation -- materially misaligned with the macro environment identified by T1, T2, and T5. The All-Weather framework suggests structural hedging via gold (10-15% range) and broader season coverage.</div>
+      </div>
+
+    </div>
+  </div>
+</div>

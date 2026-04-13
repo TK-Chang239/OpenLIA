@@ -1,7 +1,7 @@
 # Portfolio Page Spec
 
 ## Page Overview
-The Portfolio Page manages a list of tickers that the user is tracking. Departments reference the Portfolio to obtain the user's tracked tickers and tailor their reports accordingly (e.g., Earnings Reports scans this list daily, Retail Sentiment scores these tickers, Morning Briefings prioritizes news for these companies).
+The Portfolio Page manages a list of tickers that the user is tracking. Departments reference the Portfolio to obtain the user's tracked tickers and tailor their reports accordingly (e.g., Earnings Updates scans this list daily, Retail Sentiment scores these tickers, Morning Briefings prioritizes news for these companies).
 
 ## Page Functionalities
 1. **Ticker Search and Add**: The user can search for tickers via a search bar at the top of the page. Search results show ticker symbol and company name. Adding a ticker places it in the "All" group by default and prompts the user to optionally assign it to additional groups.
@@ -10,7 +10,7 @@ The Portfolio Page manages a list of tickers that the user is tracking. Departme
 4. **View Modes**: The user can switch between two view modes — List View and Card View. The selected view mode persists across sessions.
 5. **Sort Order**: The user can sort tickers within any group by alphabetical order (A→Z or Z→A) or by current price (high→low or low→high). The selected sort order persists per group across sessions.
 6. **Real-Time Price Data**: Each ticker displays its current price, daily change (absolute and percentage), and a sparkline or area chart depending on the view mode. Price data is sourced from EODHD, which covers all markets including US and TWSE. Price data refreshes automatically during market hours.
-7. **Ticker Detail Navigation**: Clicking on a ticker row or card opens a new chat session in the Stock Research Department with that ticker pre-loaded.
+7. **Ticker Detail Navigation**: Clicking on a ticker row or card opens a new chat session in the Equity Research Department with that ticker pre-loaded.
 
 ---
 
@@ -288,6 +288,25 @@ There are no report frameworks for this page.
 
 ---
 
+## Data Requirements
+
+The Portfolio page does not use an LLM. Data is fetched directly for display.
+
+**Basic (page disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Stock quote | `stock_quote` | Real-time or delayed stock price, daily change (absolute and percentage) for ticker display |
+| Company profile | `company_profile` | Company name and exchange for ticker identification in search and display |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Intraday prices | `intraday_prices` | Intraday price data for sparklines (List View) and area charts (Card View) | Sparklines and area charts not rendered; price shown as static value only |
+
+---
+
 ## Non-Goals (v1)
 - Portfolio performance tracking (total value, P&L, allocation percentages)
 - Actual share holdings or cost-basis entry
@@ -299,4 +318,4 @@ There are no report frameworks for this page.
 ---
 
 ## Open Questions
-- Should there be a confirmation prompt before opening a new Stock Research chat session if the user already has an active session for that department?
+- Should there be a confirmation prompt before opening a new Equity Research chat session if the user already has an active session for that department?

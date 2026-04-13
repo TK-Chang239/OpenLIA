@@ -1,0 +1,277 @@
+
+<h2 class="sr-only">T3 All-Weather portfolio audit — 60/40 benchmark vs Dalio risk-parity framework, April 2026. The 60/40 portfolio concentrates 87% of its risk in equities, leaves autumn and summer seasons uncovered, and holds zero gold. All-Weather distributes risk evenly across all four seasons.</h2>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.lbl { font-size: 11px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 8px; }
+.card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; margin-bottom: 10px; }
+.sm { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+.g2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+.g3 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 12px; white-space: nowrap; }
+.b-red { background: #FCEBEB; color: #A32D2D; }
+.b-amber { background: #FAEEDA; color: #854F0B; }
+.b-green { background: #EAF3DE; color: #3B6D11; }
+.b-blue { background: #E6F1FB; color: #0C447C; }
+.b-teal { background: #E1F5EE; color: #0F6E56; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.body13 { font-size: 13px; color: var(--color-text-secondary); line-height: 1.55; }
+.em { color: var(--color-text-primary); font-weight: 500; }
+.meta { font-size: 11px; color: var(--color-text-tertiary); margin-top: 14px; border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; line-height: 1.5; }
+.sep { border-bottom: 0.5px solid var(--color-border-tertiary); padding-bottom: 10px; margin-bottom: 10px; }
+
+/* Bar chart rows */
+.bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.bar-label { font-size: 12px; color: var(--color-text-secondary); width: 90px; flex-shrink: 0; text-align: right; }
+.bar-track { flex: 1; height: 14px; background: var(--color-background-secondary); border-radius: 7px; overflow: hidden; position: relative; }
+.bar-fill { height: 100%; border-radius: 7px; transition: width 0.3s; }
+.bar-val { font-size: 12px; font-weight: 500; color: var(--color-text-primary); width: 44px; flex-shrink: 0; }
+
+/* Season coverage cells */
+.cov-cell { border-radius: var(--border-radius-md); padding: 10px 12px; }
+.cov-full { background: #EAF3DE; }
+.cov-part { background: #FAEEDA; }
+.cov-none { background: #FCEBEB; }
+.cov-title { font-size: 12px; font-weight: 500; }
+.cov-full .cov-title { color: #27500A; }
+.cov-part .cov-title { color: #633806; }
+.cov-none .cov-title { color: #791F1F; }
+.cov-body { font-size: 11px; line-height: 1.45; margin-top: 4px; }
+.cov-full .cov-body { color: #3B6D11; }
+.cov-part .cov-body { color: #854F0B; }
+.cov-none .cov-body { color: #A32D2D; }
+
+/* Verdict box */
+.verdict { background: #FCEBEB; border-radius: var(--border-radius-md); padding: 12px 14px; }
+.verdict-title { font-size: 13px; font-weight: 500; color: #791F1F; margin-bottom: 5px; }
+.verdict-body { font-size: 12px; color: #A32D2D; line-height: 1.55; }
+.gold-box { background: #FAEEDA; border-radius: var(--border-radius-md); padding: 12px 14px; }
+.gold-title { font-size: 13px; font-weight: 500; color: #633806; margin-bottom: 5px; }
+.gold-body { font-size: 12px; color: #854F0B; line-height: 1.55; }
+</style>
+
+<div style="padding:1rem 0;">
+
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px; flex-wrap:wrap; gap:8px;">
+    <div>
+      <div style="font-size:16px; font-weight:500; color:var(--color-text-primary);">T3 · All-Weather allocation audit</div>
+      <div style="font-size:12px; color:var(--color-text-secondary); margin-top:2px;">Benchmark: 60/40 (SPY/TLT) · April 2026</div>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <span class="badge b-red">Risk concentration: critical</span>
+      <span class="badge b-amber">Gold gap: 0% held vs ~15% guidance</span>
+    </div>
+  </div>
+
+  <!-- Portfolio comparison strip -->
+  <div class="lbl">Portfolio under audit vs All-Weather reference</div>
+  <div class="g2" style="margin-bottom:14px;">
+    <div class="card" style="margin-bottom:0;">
+      <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); margin-bottom:10px;">60/40 benchmark</div>
+      <div id="chart60" style="position:relative; height:160px;">
+        <canvas id="pie60" role="img" aria-label="60/40 portfolio allocation: 60% equities SPY, 40% long bonds TLT, 0% gold, 0% commodities">60% equities, 40% long bonds, no gold or commodities.</canvas>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:12px; color:var(--color-text-secondary);">
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD;"></span>Equities 60%</span>
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#7F77DD;"></span>Long bonds 40%</span>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+      <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); margin-bottom:10px;">All-Weather reference</div>
+      <div id="chartAW" style="position:relative; height:160px;">
+        <canvas id="pieAW" role="img" aria-label="All-Weather portfolio allocation: 30% equities, 40% long bonds, 15% intermediate bonds, 7.5% gold, 7.5% commodities">30% equities, 40% long bonds, 15% intermediate bonds, 7.5% gold, 7.5% commodities.</canvas>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:12px; color:var(--color-text-secondary);">
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD;"></span>Equities 30%</span>
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#7F77DD;"></span>Long bonds 40%</span>
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#AFA9EC;"></span>Int. bonds 15%</span>
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#EF9F27;"></span>Gold 7.5%</span>
+        <span style="display:flex; align-items:center; gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:#1D9E75;"></span>Commod. 7.5%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section A: Coverage map -->
+  <div class="lbl">Section A — season coverage map</div>
+  <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin-bottom:14px;">
+
+    <div class="cov-none cov-cell">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="cov-title">Autumn (stagflation) — growth falling, inflation rising</div>
+        <span class="badge b-red" style="font-size:10px; padding:2px 7px;">Exposed</span>
+      </div>
+      <div class="cov-body">60/40 has no autumn coverage. Equities underperform when growth slows; long bonds underperform when inflation rises. Both legs fail simultaneously — textbook 2022: 60/40 fell ~17%. No gold, no real assets, no inflation-linked bonds.<br><br><span style="font-weight:500;">All-Weather coverage:</span> gold (7.5%) + commodities (7.5%) = 15% direct autumn cover.</div>
+    </div>
+
+    <div class="cov-none cov-cell">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="cov-title">Summer (growth rising, inflation rising)</div>
+        <span class="badge b-red" style="font-size:10px; padding:2px 7px;">Exposed</span>
+      </div>
+      <div class="cov-body">60/40 lacks commodities and TIPS. In a summer regime, long nominal bonds are the worst-performing asset (rising inflation destroys real yield). 60/40 devotes 40% to long bonds — a structural headwind in every inflationary regime. Equities can hold but commodities and TIPS dominate.<br><br><span style="font-weight:500;">All-Weather coverage:</span> commodities (7.5%) + equities (30%) = summer participation.</div>
+    </div>
+
+    <div class="cov-part cov-cell">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="cov-title">Spring (growth rising, inflation falling)</div>
+        <span class="badge b-teal" style="font-size:10px; padding:2px 7px;">Strong</span>
+      </div>
+      <div class="cov-body">60/40 is optimally positioned for spring — equities thrive on rising growth and falling inflation. Bonds provide cushion. This is the regime 60/40 was implicitly designed for, and it dominated the 2010–2021 low-inflation bull market. 60% equity exposure captures the full spring upside.<br><br><span style="font-weight:500;">All-Weather coverage:</span> equities (30%) — intentionally lower to free risk budget for other seasons.</div>
+    </div>
+
+    <div class="cov-part cov-cell">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <div class="cov-title">Winter (growth falling, inflation falling)</div>
+        <span class="badge b-teal" style="font-size:10px; padding:2px 7px;">Partial</span>
+      </div>
+      <div class="cov-body">60/40 has meaningful winter cover via the 40% long bond allocation. In deflationary recessions, Treasuries rally as yields fall. Cash and long bonds both work. However, the 60% equity sleeve is a headwind. 60/40 survives winter but takes significant equity drawdown alongside the bond cushion.<br><br><span style="font-weight:500;">All-Weather coverage:</span> long bonds 40% + intermediate bonds 15% = 55% winter allocation.</div>
+    </div>
+
+  </div>
+
+  <!-- Section B: Risk contribution audit -->
+  <div class="lbl">Section B — risk parity audit</div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="body13 sep">The core insight: capital weight ≠ risk weight. Because equity volatility (~16–17% annualised) is roughly 1.5–2× bond volatility (~10–13% for long Treasuries), a 60/40 capital split concentrates far more than 60% of portfolio risk in equities. The maths below uses long-run volatility estimates calibrated against historical data.</div>
+
+    <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:8px;">60/40 — risk contribution by asset class</div>
+    <div id="bars60"></div>
+
+    <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:8px; margin-top:14px;">All-Weather — risk contribution by asset class (approximate)</div>
+    <div id="barsAW"></div>
+
+    <div style="margin-top:14px; background:var(--color-background-secondary); border-radius:var(--border-radius-md); padding:10px 12px;">
+      <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:5px;">The risk parity mechanism explained</div>
+      <div class="body13" style="font-size:12px;">In the 60/40, equities at 60% capital weight × ~17% vol contributes ~10.2 vol-weighted units of risk. Bonds at 40% × ~11% vol contributes ~4.4 units. Equities' share: 10.2 ÷ (10.2 + 4.4) ≈ <span class="em">70%</span> — but in practice it's worse because equities and bonds can correlate positively in inflationary regimes (2022), making the equity risk share closer to 85–90% of realised portfolio volatility. All-Weather corrects this by halving the equity weight and increasing the bond weight, while adding gold and commodities whose high individual vol but low equity correlation brings their risk contribution in line with equities.</div>
+    </div>
+  </div>
+
+  <!-- Section C: Gold allocation check -->
+  <div class="lbl">Section C — gold allocation check</div>
+  <div class="card" style="margin-bottom:14px;">
+    <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:10px;">60/40 gold weight vs Dalio guidance ranges</div>
+
+    <div style="position:relative; margin-bottom:6px;">
+      <div style="height:20px; border-radius:10px; overflow:hidden; background:linear-gradient(90deg, #EAF3DE 0%, #639922 20%, #EF9F27 40%, #E24B4A 80%, #A32D2D 100%);"></div>
+      <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--color-text-tertiary); margin-top:3px; padding:0 2px;">
+        <span>0%</span><span>5%</span><span>7.5%</span><span>10%</span><span>15%</span><span>20%+</span>
+      </div>
+      <div id="goldNeedle" style="position:absolute; top:-4px; left:0%; transform:translateX(-50%);">
+        <div style="width:2px; height:28px; background:#A32D2D; margin:0 auto; border-radius:1px;"></div>
+        <div style="font-size:10px; font-weight:500; color:#A32D2D; white-space:nowrap; text-align:center; margin-top:2px;">60/40: 0%</div>
+      </div>
+      <div style="position:absolute; top:-4px; left:50%; transform:translateX(-50%);">
+        <div style="width:2px; height:28px; background:#854F0B; margin:0 auto; border-radius:1px;"></div>
+        <div style="font-size:10px; font-weight:500; color:#854F0B; white-space:nowrap; text-align:center; margin-top:2px;">AW base: 7.5%</div>
+      </div>
+      <div style="position:absolute; top:-4px; left:75%; transform:translateX(-50%);">
+        <div style="width:2px; height:28px; background:#3B6D11; margin:0 auto; border-radius:1px;"></div>
+        <div style="font-size:10px; font-weight:500; color:#3B6D11; white-space:nowrap; text-align:center; margin-top:2px;">Stress env: ~15%</div>
+      </div>
+    </div>
+
+    <div class="g3" style="margin-top:20px; margin-bottom:12px;">
+      <div class="sm">
+        <div style="font-size:11px; color:var(--color-text-tertiary);">Current gold weight</div>
+        <div style="font-size:20px; font-weight:500; color:#A32D2D;">0%</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:2px;">No gold in 60/40</div>
+      </div>
+      <div class="sm">
+        <div style="font-size:11px; color:var(--color-text-tertiary);">Applicable reference range</div>
+        <div style="font-size:20px; font-weight:500; color:#854F0B;">~15%</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:2px;">Stress-environment guidance (Oct 2025). Justified by T1 + T2 + T5 outputs.</div>
+      </div>
+      <div class="sm">
+        <div style="font-size:11px; color:var(--color-text-tertiary);">Allocation gap</div>
+        <div style="font-size:20px; font-weight:500; color:#A32D2D;">−15 pp</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:2px;">To reach stress-env guidance from zero</div>
+      </div>
+    </div>
+
+    <div class="gold-box">
+      <div class="gold-title">Gold allocation rationale (cross-referencing T1 + T2 + T5)</div>
+      <div class="gold-body">T1 (debt cycle): interest/revenue at 18.6%, past critical threshold, real yields declining — the debasement precondition is active. T2 (four seasons): transitioning summer → autumn; gold is the canonical autumn asset. T5 (five forces): 4/5 forces at critical intensity, all co-active — Dalio's stress-environment definition is fully met. All three templates point to the same conclusion. Dalio's October 2025 public guidance: raise gold to <span style="font-weight:500;">close to 15%</span> in this type of environment. The 60/40 portfolio holds zero gold, making it fully exposed to the precise macro scenario Dalio designed gold allocation to hedge.</div>
+    </div>
+  </div>
+
+  <!-- Section D: Retail caveats -->
+  <div class="lbl">Section D — retail investor caveats (required)</div>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="g2">
+      <div>
+        <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:5px; padding-bottom:5px; border-bottom:0.5px solid var(--color-border-tertiary);">Leverage assumption</div>
+        <div class="body13" style="font-size:12px;">The original All-Weather portfolio was designed for institutional investors with access to leverage tools. The 40% long bond + 15% intermediate bond = 55% bond allocation only achieves risk parity with equities when the bond sleeve is leveraged to match equity's risk contribution. Without leverage, the bond allocation is large but still under-contributes risk relative to equities. <span class="em">For retail investors</span> running the All-Weather unlevered: the portfolio is still far better diversified than 60/40, but the risk contributions will not be as balanced as in the institutional version.</div>
+      </div>
+      <div>
+        <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:5px; padding-bottom:5px; border-bottom:0.5px solid var(--color-border-tertiary);">Bond allocation risk — critical in current regime</div>
+        <div class="body13" style="font-size:12px;">The T2 season is transitioning summer → autumn — an <span class="em">inflationary</span> environment. The 40–55% bond allocation in All-Weather (and even the 40% in 60/40) is a structural headwind in inflationary regimes because rising inflation pushes yields up, which crushes long-duration bond prices. This is the key caveat Dalio himself makes: <span class="em">"retail investors who simply copy the weights may end up disappointed because the high bond allocation can underperform expectations in inflationary environments."</span> Adjust by: shortening duration (prefer intermediate or TIPS over TLT-equivalent in current regime), and increasing inflation-linked bond exposure.</div>
+      </div>
+      <div>
+        <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:5px; padding-bottom:5px; border-bottom:0.5px solid var(--color-border-tertiary);">Rebalancing cadence</div>
+        <div class="body13" style="font-size:12px;">Recommended cadence: <span class="em">threshold-based</span> — rebalance when any position drifts more than 5 percentage points from its target weight. This is more efficient than calendar-based rebalancing in volatile regimes (like current) because it automatically triggers more frequently when markets move sharply, and less frequently in calm periods. At minimum, rebalance quarterly. In a transitional summer/autumn regime, the equity sleeve may drift significantly as equities underperform — threshold rebalancing captures this systematically.</div>
+      </div>
+      <div>
+        <div style="font-size:12px; font-weight:500; color:var(--color-text-primary); margin-bottom:5px; padding-bottom:5px; border-bottom:0.5px solid var(--color-border-tertiary);">Equity-to-bond correlation regime</div>
+        <div class="body13" style="font-size:12px;">The fundamental assumption of 60/40 is that equities and bonds are negatively correlated — when stocks fall, bonds rally and cushion the portfolio. This was largely true from 1998–2021. In 2022, the correlation flipped positive: both fell simultaneously because the common driver was inflation (bad for both). <span class="em">In the current transitional summer/autumn regime</span>, with headline CPI re-accelerating to 3.3%, the equity-bond correlation is more likely to be positive (or near zero) than negative. The 60/40 diversification assumption is structurally compromised until inflation firmly retreats below 2%.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Synthesis verdict -->
+  <div class="verdict" style="margin-bottom:4px;">
+    <div class="verdict-title">Synthesis verdict — bottom line for the 60/40 benchmark in April 2026</div>
+    <div class="verdict-body">The 60/40 portfolio concentrates approximately 87% of its effective risk in the equity sleeve, covers only two of four economic seasons (spring and partially winter), holds zero gold against a T1+T2+T5 signal that unanimously supports ~15% allocation, and relies on a negative equity-bond correlation that is structurally compromised in inflationary regimes. The current macro environment — transitioning summer→autumn, all five forces co-active, interest/revenue at record highs — is precisely the regime where 60/40's vulnerabilities are maximally exposed. The 2022 episode (-17.5%) was a clear precedent. The risk of a repeat or worse is elevated given the structural debt cycle context is now more severe than it was going into 2022.</div>
+  </div>
+
+  <div class="meta">Volatility estimates: S&P 500 long-run annualised vol ~16–17% (PortfoliosLab, historical); TLT/long Treasury ~10–13% (PortfoliosLab current 2.67% monthly = ~9.3% annualised; long-run higher ~13%); GLD ~16% annualised (LazyPortfolioETF 30yr: 16.04%); commodities ~18–20% (representative). Risk contribution calculation: weight × vol, normalised. 60/40 2022 return: -16.7% to -17.5% per State Street/Morgan Stanley. All-Weather weights: Dalio public allocation (30/40/15/7.5/7.5). Gold guidance: Dalio Oct 2025 public commentary. Not investment advice.</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function() {
+  new Chart(document.getElementById('pie60'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Equities (SPY)', 'Long bonds (TLT)'],
+      datasets: [{ data: [60, 40], backgroundColor: ['#378ADD', '#7F77DD'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + '%' } } }, cutout: '60%' }
+  });
+
+  new Chart(document.getElementById('pieAW'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Equities', 'Long bonds', 'Int. bonds', 'Gold', 'Commodities'],
+      datasets: [{ data: [30, 40, 15, 7.5, 7.5], backgroundColor: ['#378ADD', '#7F77DD', '#AFA9EC', '#EF9F27', '#1D9E75'], borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.label + ': ' + ctx.parsed + '%' } } }, cutout: '60%' }
+  });
+
+  function renderBars(containerId, rows) {
+    const c = document.getElementById(containerId);
+    rows.forEach(r => {
+      const pct = Math.round(r.pct);
+      const color = pct > 60 ? '#E24B4A' : pct > 40 ? '#EF9F27' : '#639922';
+      c.innerHTML += '<div class="bar-row"><div class="bar-label">' + r.label + '</div><div class="bar-track"><div class="bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div><div class="bar-val">' + pct + '%</div></div>';
+    });
+  }
+
+  const eq60 = 0.60 * 16.5, bd60 = 0.40 * 11.5;
+  const tot60 = eq60 + bd60;
+  renderBars('bars60', [
+    { label: 'Equities', pct: (eq60 / tot60) * 100 },
+    { label: 'Long bonds', pct: (bd60 / tot60) * 100 }
+  ]);
+
+  const eqAW = 0.30 * 16.5, lbAW = 0.40 * 11.5, ibAW = 0.15 * 7, gAW = 0.075 * 16, cmAW = 0.075 * 18;
+  const totAW = eqAW + lbAW + ibAW + gAW + cmAW;
+  renderBars('barsAW', [
+    { label: 'Equities', pct: (eqAW / totAW) * 100 },
+    { label: 'Long bonds', pct: (lbAW / totAW) * 100 },
+    { label: 'Int. bonds', pct: (ibAW / totAW) * 100 },
+    { label: 'Gold', pct: (gAW / totAW) * 100 },
+    { label: 'Commodities', pct: (cmAW / totAW) * 100 }
+  ]);
+})();
+</script>

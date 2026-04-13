@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "department": "morning_briefing",
+  "report_mode": "morning_briefing",
+  "cover": {
+    "instructions": "Fill in the report cover. Title should be 'Morning Briefing'. Subtitle is the full date (e.g., 'Thursday, April 10, 2026'). Schedule label identifies the report timing (e.g., 'Pre-Market' or 'Post-Market'). Tagline is one sentence capturing the dominant market theme or overnight development (e.g., 'Risk-off overnight as Treasury yields spike to 4.85% on hot CPI; Asia and Europe futures down 1-2%'). Key metrics: show 6-8 headline market levels with overnight or session change — S&P 500, Nasdaq Composite, Dow Jones, US 10Y yield, VIX, DXY (US Dollar Index), WTI crude, gold spot. Each metric shows the level and percentage or basis point change with a directional indicator. Stats panel: report date, schedule label (Pre-Market / Post-Market), timezone, markets covered (e.g., 'US, Asia, Europe'), coverage sections active, generation timestamp.",
+    "title": null,
+    "subtitle": null,
+    "schedule_label": null,
+    "tagline": null,
+    "key_metrics": [],
+    "stats_panel": []
+  },
+  "sections": [
+    {
+      "id": "executive_summary",
+      "title": "Executive Summary",
+      "instructions": "Summarize the entire briefing in 4-6 bullet points, one per major theme. Each bullet is one sentence leading with the conclusion and citing 1-2 key figures. The reader who reads only this section should know: (1) overnight market direction and the primary driver, (2) the most market-moving macro development, (3) the biggest single-name story if any, and (4) the critical event on today's calendar. Order bullets by market impact, not by section order. Use a key finding block for the top-line market call (risk-on/risk-off/mixed), followed by a text block with the summary bullets.",
+      "blocks": []
+    },
+    {
+      "id": "global_macro",
+      "title": "Global Macro",
+      "instructions": "Cover the most significant macroeconomic developments since the prior briefing. For each topic the user has configured (e.g., war, politics, energy, trade policy, central banks), write a concise subsection with a bold topic label. Each subsection is 2-4 sentences: state what happened, cite the data or source, and explain why it matters for markets. If no user-configured topics had material developments, still cover the 2-3 most market-relevant macro events of the day. Prioritize events that moved asset prices or shifted rate expectations. For economic data releases, always compare actual vs consensus vs prior: 'US CPI came in at +0.4% MoM (vs +0.3% expected, +0.3% prior)'. Use metric cards for the 2-3 most impactful data points (e.g., CPI print, jobless claims, PMI), followed by text blocks for narrative coverage of each topic.",
+      "blocks": []
+    },
+    {
+      "id": "country_news",
+      "title": "Country News",
+      "instructions": "For each country the user has configured, write a subsection covering the most market-relevant developments. Each country subsection uses the country name as a bold heading and contains 3-5 bullet points. Each bullet is one sentence: what happened and why it matters for local or global markets. Cover: major policy announcements, central bank actions or commentary, political developments affecting markets, key economic data, and significant corporate news with macro implications. For each country, include a brief market snapshot: local equity index level and change, local currency move vs USD, and bond yield move if relevant. Use text blocks with bullet points for each country. If a country had no material news, state that in one sentence rather than omitting the country entirely.",
+      "blocks": []
+    },
+    {
+      "id": "market_news",
+      "title": "Market News",
+      "instructions": "For each market the user has configured (e.g., bonds/fixed income, gold/precious metals, oil/energy, FX, crypto), write a subsection with a bold market label. Each subsection: (1) state the current level and session change with comparison to the prior session, (2) identify the 1-2 drivers behind the move, (3) note key technical levels if relevant (support/resistance, moving averages). For fixed income, always include: yield levels (2Y, 10Y, 30Y), curve slope (2s10s spread), and credit spreads (IG/HY OAS) if data is available. For FX, show major pairs relevant to the user's configured countries. For commodities, show front-month futures with percentage change. Use metric cards for headline levels at the top of the section, followed by text blocks for each market's narrative. Use a table for multi-asset overnight performance summary if covering 4+ markets.",
+      "blocks": []
+    },
+    {
+      "id": "sector_news",
+      "title": "Sector News",
+      "instructions": "For each sector the user has configured (e.g., semiconductors, banks, energy, healthcare), write a subsection with the sector name as a bold heading. Each subsection covers: (1) the most significant sector-level development (regulatory action, supply chain shift, industry data release, M&A), (2) the performance of the sector ETF or index relative to the broad market, and (3) any notable analyst calls or rating changes affecting the sector. Keep each subsection to 3-5 sentences — lead with the most impactful development. If no material sector-specific news occurred, note the sector's relative performance and any upcoming catalysts. Use text blocks for each sector. If covering 3+ sectors, include a sector performance comparison table showing sector ETF/index, session change, week-to-date change, and the primary driver in one phrase.",
+      "blocks": []
+    },
+    {
+      "id": "stock_news",
+      "title": "Stock News",
+      "instructions": "For each stock the user has configured, write a brief subsection with the ticker and company name as a bold heading. Each subsection covers: (1) material overnight or pre-market developments — earnings releases, guidance changes, analyst rating changes, M&A news, product launches, management changes, regulatory actions, (2) the stock's after-hours or pre-market price move with volume context if notable, and (3) a one-sentence assessment of what the news means for the near-term outlook. If a stock had no material news, state that in one sentence and note the next upcoming catalyst (earnings date, ex-dividend date, product event). Use text blocks for each stock. For stocks with earnings releases, include a small metric card set showing EPS actual vs consensus, revenue actual vs consensus, and the after-hours price move.",
+      "blocks": []
+    },
+    {
+      "id": "upcoming_preview",
+      "title": "Upcoming Preview",
+      "instructions": "Provide a forward-looking calendar of events for the current day and the next 2-3 trading days. Organize into three subsections: (1) Today's Calendar: list all market-moving events with exact times and timezone — economic data releases (with consensus estimates), Fed/ECB/BOJ speaker appearances, earnings releases (with consensus EPS and revenue), and geopolitical events. Use a table with columns: Time, Event, Consensus/Expected, Prior, and Significance (High/Medium/Low). (2) This Week Ahead: bullet points for the 3-5 most important events in the remaining week. (3) Portfolio Watch (if Reference Portfolio is enabled): for each portfolio holding with an upcoming catalyst in the next 5 trading days, list the ticker, event, date, and what to watch for. Use a table for today's calendar, text blocks for the week ahead, and a separate table for portfolio watch items.",
+      "blocks": []
+    }
+  ]
+}

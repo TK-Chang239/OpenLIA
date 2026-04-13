@@ -1,0 +1,5 @@
+{"type":"server-started","port":52691,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:52691","screen_dir":"/Users/tkchang/Projects/OpenLIA/.superpowers/brainstorm/73829-1776114180/content","state_dir":"/Users/tkchang/Projects/OpenLIA/.superpowers/brainstorm/73829-1776114180/state"}
+{"type":"screen-added","file":"/Users/tkchang/Projects/OpenLIA/.superpowers/brainstorm/73829-1776114180/content/waiting.html"}
+{"type":"screen-added","file":"/Users/tkchang/Projects/OpenLIA/.superpowers/brainstorm/73829-1776114180/content/page-structure.html"}
+{"type":"screen-added","file":"/Users/tkchang/Projects/OpenLIA/.superpowers/brainstorm/73829-1776114180/content/writing-spec.html"}
+{"type":"server-stopped","reason":"idle timeout"}

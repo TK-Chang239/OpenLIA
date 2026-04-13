@@ -1,0 +1,326 @@
+
+<h2 class="sr-only">Dalio five interlocking forces dashboard — April 2026. All five forces are elevated; gold allocation signal is maximum structural.</h2>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+
+  .section-label { font-size: 11px; font-weight: 500; letter-spacing: 0.6px; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 10px; }
+  .card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; margin-bottom: 10px; }
+  .card-sm { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; margin-bottom: 8px; }
+
+  /* Force row */
+  .force-row { display: grid; grid-template-columns: 120px 1fr auto; align-items: start; gap: 12px; padding: 12px 0; border-bottom: 0.5px solid var(--color-border-tertiary); }
+  .force-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .force-row:first-child { padding-top: 0; }
+
+  .force-name { font-size: 13px; font-weight: 500; color: var(--color-text-primary); line-height: 1.3; }
+  .force-sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; }
+
+  .force-body { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+  .force-body strong { color: var(--color-text-primary); font-weight: 500; }
+
+  /* Intensity badge */
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 12px; white-space: nowrap; }
+  .badge-critical { background: #FCEBEB; color: #A32D2D; }
+  .badge-high { background: #FAEEDA; color: #854F0B; }
+  .badge-mod { background: #E1F5EE; color: #0F6E56; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  .dot-red { background: #E24B4A; }
+  .dot-amber { background: #EF9F27; }
+  .dot-green { background: #639922; }
+
+  /* Score bar */
+  .score-track { height: 4px; background: var(--color-background-secondary); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 2px; }
+
+  /* Grid */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  /* Loop arrows */
+  .loop-block { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+  .loop-title { font-size: 12px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+  .arrow-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--color-text-secondary); margin-top: 4px; }
+  .arrow-chip { background: var(--color-background-primary); border: 0.5px solid var(--color-border-secondary); border-radius: 6px; padding: 2px 7px; font-size: 11px; font-weight: 500; color: var(--color-text-primary); white-space: nowrap; }
+  .arrow-sym { color: var(--color-text-tertiary); font-size: 13px; }
+
+  /* Signal cards */
+  .sig-card { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+  .sig-label { font-size: 11px; color: var(--color-text-tertiary); margin-bottom: 4px; }
+  .sig-val { font-size: 20px; font-weight: 500; color: var(--color-text-primary); line-height: 1.1; }
+  .sig-unit { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+  .sig-note { font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; line-height: 1.4; }
+
+  /* Allocation meter */
+  .alloc-bar-wrap { background: var(--color-background-secondary); border-radius: 6px; height: 10px; overflow: hidden; margin: 8px 0; }
+  .alloc-bar { height: 100%; border-radius: 6px; background: linear-gradient(90deg, #639922 0%, #EF9F27 45%, #E24B4A 80%); }
+  .alloc-pointer-wrap { position: relative; height: 14px; }
+  .alloc-tick { position: absolute; transform: translateX(-50%); font-size: 10px; color: var(--color-text-tertiary); top: 0; }
+  .alloc-needle { position: absolute; transform: translateX(-50%); top: -18px; }
+  .alloc-needle-line { width: 2px; height: 14px; background: var(--color-text-primary); border-radius: 1px; margin: 0 auto; }
+  .alloc-needle-label { font-size: 11px; font-weight: 500; color: var(--color-text-primary); text-align: center; margin-top: 2px; white-space: nowrap; }
+
+  /* Scenario */
+  .scenario-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .scenario-card { border-radius: var(--border-radius-md); padding: 10px 12px; }
+  .scenario-bull { background: #EAF3DE; }
+  .scenario-bear { background: #FCEBEB; }
+  .scenario-title { font-size: 12px; font-weight: 500; margin-bottom: 6px; }
+  .scenario-bull .scenario-title { color: #3B6D11; }
+  .scenario-bear .scenario-title { color: #A32D2D; }
+  .scenario-body { font-size: 11px; line-height: 1.5; }
+  .scenario-bull .scenario-body { color: #27500A; }
+  .scenario-bear .scenario-body { color: #791F1F; }
+
+  /* Meta */
+  .meta { font-size: 11px; color: var(--color-text-tertiary); line-height: 1.5; margin-top: 14px; border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; }
+</style>
+
+<div style="padding: 1rem 0;">
+
+  <!-- Header -->
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px; flex-wrap:wrap; gap:8px;">
+    <div>
+      <div style="font-size:16px; font-weight:500; color:var(--color-text-primary);">Five interlocking forces — April 2026</div>
+      <div style="font-size:12px; color:var(--color-text-secondary); margin-top:2px;">Dalio framework scored against current data</div>
+    </div>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <span class="badge badge-critical"><span class="dot dot-red"></span>4 Critical</span>
+      <span class="badge badge-high"><span class="dot dot-amber"></span>1 High</span>
+    </div>
+  </div>
+
+  <!-- Section A: Force Scorecard -->
+  <div class="section-label">Section A — force intensity scorecard</div>
+  <div class="card" style="margin-bottom:14px;">
+
+    <!-- F1 -->
+    <div class="force-row">
+      <div>
+        <div class="force-name">Force 1</div>
+        <div class="force-sub">Debt &amp; money cycle</div>
+        <div style="margin-top:6px;"><span class="badge badge-critical"><span class="dot dot-red"></span>Critical</span></div>
+        <div class="score-track" style="margin-top:6px; width:100px;"><div class="score-fill" style="width:92%; background:#E24B4A;"></div></div>
+        <div style="font-size:10px; color:var(--color-text-tertiary); margin-top:3px;">9.2 / 10</div>
+      </div>
+      <div class="force-body">
+        US debt/GDP now <strong>~122.5%</strong> (Q4 2025), trajectory toward 134% by 2035 under alternative scenario. Interest outlays hit <strong>$970B in FY2025</strong> — 18.5% of federal revenue, eclipsing the 1991 record. Moody's downgraded the US from AAA to Aa1 in May 2025, the first downgrade since 1917. CBO projects interest costs rise to <strong>25.8% of revenue by 2036</strong>. In Q1 FY2026 alone, $104B in interest was spent — $11B/week. Conventional monetary policy is structurally constrained.
+      </div>
+      <div></div>
+    </div>
+
+    <!-- F2 -->
+    <div class="force-row">
+      <div>
+        <div class="force-name">Force 2</div>
+        <div class="force-sub">Domestic political cycle</div>
+        <div style="margin-top:6px;"><span class="badge badge-critical"><span class="dot dot-red"></span>Critical</span></div>
+        <div class="score-track" style="margin-top:6px; width:100px;"><div class="score-fill" style="width:85%; background:#E24B4A;"></div></div>
+        <div style="font-size:10px; color:var(--color-text-tertiary); margin-top:3px;">8.5 / 10</div>
+      </div>
+      <div class="force-body">
+        Only <strong>17% of Americans</strong> believe Congress represents their interests; 60% have no confidence the system solves problems. Deep partisan divide expected to persist through 2026 midterms. "No Kings" movement protests active. Populist MAGA agenda vs Democratic disarray creates fiscal policy gridlock — the political conditions that make debt consolidation structurally impossible. Inequality widening: raising a child now costs <strong>$300K+</strong>, housing affordability at historic lows.
+      </div>
+      <div></div>
+    </div>
+
+    <!-- F3 -->
+    <div class="force-row">
+      <div>
+        <div class="force-name">Force 3</div>
+        <div class="force-sub">Geopolitical cycle</div>
+        <div style="margin-top:6px;"><span class="badge badge-critical"><span class="dot dot-red"></span>Critical</span></div>
+        <div class="score-track" style="margin-top:6px; width:100px;"><div class="score-fill" style="width:88%; background:#E24B4A;"></div></div>
+        <div style="font-size:10px; color:var(--color-text-tertiary); margin-top:3px;">8.8 / 10</div>
+      </div>
+      <div class="force-body">
+        US Supreme Court struck down many 2025 tariffs in Feb 2026; new Section 301 investigations launched against China, Vietnam, Taiwan, EU and others in March. China rare-earth export controls nearly halted US auto manufacturing twice in 2025. Trade truce extended one year (Oct 2025) but structural fragmentation deepening. UNCTAD: geopolitical tensions and trade fragility rising. Dollar's reserve share declining — <strong>BRICS+ now hold 17.4% of global gold reserves</strong>, up from 11.2% in 2019. Strait of Hormuz disruptions adding energy inflation.
+      </div>
+      <div></div>
+    </div>
+
+    <!-- F4 -->
+    <div class="force-row">
+      <div>
+        <div class="force-name">Force 4</div>
+        <div class="force-sub">Technology wave</div>
+        <div style="margin-top:6px;"><span class="badge badge-high"><span class="dot dot-amber"></span>High</span></div>
+        <div class="score-track" style="margin-top:6px; width:100px;"><div class="score-fill" style="width:72%; background:#EF9F27;"></div></div>
+        <div style="font-size:10px; color:var(--color-text-tertiary); margin-top:3px;">7.2 / 10</div>
+      </div>
+      <div class="force-body">
+        <strong>35.9% of US workers</strong> used generative AI by Dec 2025. ~60% of jobs in advanced economies have AI exposure; 33% face full automation risk. Youth unemployment in tech-exposed occupations up ~3pp since early 2025. Fed Governor Barr (Feb 2026): adoption speed may be faster than any prior general-purpose technology. Distributional effects are uneven — AI widens the productivity gap between large firms and SMEs, amplifying inequality that feeds back into Force 2.
+      </div>
+      <div></div>
+    </div>
+
+    <!-- F5 -->
+    <div class="force-row">
+      <div>
+        <div class="force-name">Force 5</div>
+        <div class="force-sub">Natural forces</div>
+        <div style="margin-top:6px;"><span class="badge badge-critical"><span class="dot dot-red"></span>Critical</span></div>
+        <div class="score-track" style="margin-top:6px; width:100px;"><div class="score-fill" style="width:80%; background:#E24B4A;"></div></div>
+        <div style="font-size:10px; color:var(--color-text-tertiary); margin-top:3px;">8.0 / 10</div>
+      </div>
+      <div class="force-body">
+        Middle East conflict and Strait of Hormuz disruptions actively intensifying inflationary pressure on energy prices. UNCTAD (April 2026) explicitly flags these as intensifying pressures on an already-strained global economy. Iran-US tensions escalating (threats to warships, April 2026). Combined with post-COVID supply chain fragility still unresolved, this force is acting as an amplifier — particularly to Forces 1 (inflation makes debt harder to service) and 3 (geopolitical weaponization of energy).
+      </div>
+      <div></div>
+    </div>
+
+  </div>
+
+  <!-- Section B: Reinforcement analysis -->
+  <div class="section-label">Section B — reinforcement loop analysis</div>
+
+  <div class="grid2" style="margin-bottom:14px;">
+    <div>
+      <div class="loop-block">
+        <div class="loop-title">Primary loop · debt → politics → more debt</div>
+        <div class="arrow-row"><span class="arrow-chip">F1 · Debt crisis</span><span class="arrow-sym">→</span><span class="arrow-chip">F2 · Populist anger</span></div>
+        <div class="arrow-row"><span class="arrow-chip">F2 · Gridlock</span><span class="arrow-sym">→</span><span class="arrow-chip">F1 · No consolidation</span></div>
+        <div style="margin-top:8px; font-size:11px; color:var(--color-text-secondary); line-height:1.5;">High debt constrains government, raises inequality, fuels populism. Populist gridlock makes deficit reduction politically impossible. The debt grows. The loop is self-reinforcing and currently has no obvious off-ramp.</div>
+      </div>
+    </div>
+    <div>
+      <div class="loop-block">
+        <div class="loop-title">Secondary loop · geopolitics → gold demand</div>
+        <div class="arrow-row"><span class="arrow-chip">F3 · Sanctions risk</span><span class="arrow-sym">→</span><span class="arrow-chip">CB gold buying</span></div>
+        <div class="arrow-row"><span class="arrow-chip">F1 · Dollar risk</span><span class="arrow-sym">→</span><span class="arrow-chip">De-dollarization</span></div>
+        <div style="margin-top:8px; font-size:11px; color:var(--color-text-secondary); line-height:1.5;">Post-Russia sanctions (2022), central banks globally concluded that dollar-denominated reserves carry confiscation risk. This drove the structural shift to gold that is now self-sustaining. 68% of central banks plan to increase gold holdings in 2026.</div>
+      </div>
+    </div>
+    <div>
+      <div class="loop-block">
+        <div class="loop-title">Tertiary loop · tech → inequality → political strain</div>
+        <div class="arrow-row"><span class="arrow-chip">F4 · AI displacement</span><span class="arrow-sym">→</span><span class="arrow-chip">F2 · Inequality</span></div>
+        <div class="arrow-row"><span class="arrow-chip">F2 · Anger</span><span class="arrow-sym">→</span><span class="arrow-chip">F3 · Protectionism</span></div>
+        <div style="margin-top:8px; font-size:11px; color:var(--color-text-secondary); line-height:1.5;">AI-driven productivity gains are accruing to capital and large firms, widening wealth gaps. This feeds directly into political polarization and the protectionist trade policies that are fracturing the geopolitical order.</div>
+      </div>
+    </div>
+    <div>
+      <div class="loop-block">
+        <div class="loop-title">Amplifier · natural forces accelerate all three</div>
+        <div class="arrow-row"><span class="arrow-chip">F5 · Energy shock</span><span class="arrow-sym">→</span><span class="arrow-chip">F1 · Inflation → debt cost</span></div>
+        <div class="arrow-row"><span class="arrow-chip">F5 · Hormuz risk</span><span class="arrow-sym">→</span><span class="arrow-chip">F3 · War premium</span></div>
+        <div style="margin-top:8px; font-size:11px; color:var(--color-text-secondary); line-height:1.5;">Middle East conflict and energy price spikes directly worsen fiscal trajectories (higher CPI → higher nominal interest costs), deepen geopolitical fault lines, and compress central bank rate-cut optionality.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active force count verdict -->
+  <div class="card" style="background:var(--color-background-secondary); border-color:var(--color-border-secondary); margin-bottom:14px;">
+    <div style="display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;">
+      <div style="font-size:28px; font-weight:500; color:#E24B4A;">5 / 5</div>
+      <div>
+        <div style="font-size:13px; font-weight:500; color:var(--color-text-primary);">All forces simultaneously active — historical turning point zone</div>
+        <div style="font-size:12px; color:var(--color-text-secondary); margin-top:2px;">Dalio's key insight: individual forces are manageable in isolation. Co-activation of all five is historically rare and has preceded major monetary system restructurings (1930s, 1971–80).</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section C: Market signals -->
+  <div class="section-label">Section C — current market data</div>
+  <div class="grid3" style="margin-bottom:14px;">
+    <div class="sig-card">
+      <div class="sig-label">Gold spot (XAUUSD)</div>
+      <div class="sig-val">~$3,200</div>
+      <div class="sig-unit">per troy oz, Apr 2026</div>
+      <div class="sig-note">ATH $5,595 hit Jan 2026. Currently correcting. CB buying ~750–850t expected 2026.</div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-label">US debt / GDP</div>
+      <div class="sig-val">122.5%</div>
+      <div class="sig-unit">Q4 2025</div>
+      <div class="sig-note">Dalio warn zone: sustained &gt;100%. On track for 134% by 2035 under alt scenario.</div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-label">Interest / federal revenue</div>
+      <div class="sig-val">18.5%</div>
+      <div class="sig-unit">FY2025 — record high</div>
+      <div class="sig-note">Dalio: pressure escalates steeply above 15%. Projects 25.8% by 2036.</div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-label">CB gold demand 2025</div>
+      <div class="sig-val">863t</div>
+      <div class="sig-unit">net purchases, WGC</div>
+      <div class="sig-note">Below 1,000t+ peak but still 2× the 2015–19 avg. 68% of CBs plan to add more in 2026.</div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-label">BRICS+ gold reserve share</div>
+      <div class="sig-val">17.4%</div>
+      <div class="sig-unit">of global gold reserves</div>
+      <div class="sig-note">Up from 11.2% in 2019. Structural de-dollarization trend confirmed.</div>
+    </div>
+    <div class="sig-card">
+      <div class="sig-label">10yr TIPS real yield</div>
+      <div class="sig-val">~+2%</div>
+      <div class="sig-unit">early 2026</div>
+      <div class="sig-note">Above 0% = gold opportunity cost present. But declining toward 0% = strong gold trigger.</div>
+    </div>
+  </div>
+
+  <!-- Section D: Gold allocation signal -->
+  <div class="section-label">Section D — gold allocation signal</div>
+  <div class="card" style="margin-bottom:14px;">
+    <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); margin-bottom:8px;">Dalio allocation range vs current environment</div>
+
+    <div class="alloc-bar-wrap">
+      <div class="alloc-bar" style="width:100%;"></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--color-text-tertiary); margin-bottom:10px;">
+      <span>0%</span><span>5%</span><span>10%</span><span>15%</span><span>20%+</span>
+    </div>
+
+    <div class="grid3" style="margin-bottom:12px;">
+      <div class="card-sm">
+        <div style="font-size:10px; color:var(--color-text-tertiary);">All-Weather baseline</div>
+        <div style="font-size:16px; font-weight:500; color:var(--color-text-primary);">7.5%</div>
+        <div style="font-size:11px; color:var(--color-text-secondary);">Normal macro regime</div>
+      </div>
+      <div class="card-sm">
+        <div style="font-size:10px; color:var(--color-text-tertiary);">Normal environment</div>
+        <div style="font-size:16px; font-weight:500; color:var(--color-text-primary);">5–10%</div>
+        <div style="font-size:11px; color:var(--color-text-secondary);">Dalio's baseline range</div>
+      </div>
+      <div class="card-sm" style="background:#FAEEDA;">
+        <div style="font-size:10px; color:#854F0B;">Stress environment (Oct 2025)</div>
+        <div style="font-size:16px; font-weight:500; color:#854F0B;">~15%</div>
+        <div style="font-size:11px; color:#633806;">Dalio's explicit guidance</div>
+      </div>
+    </div>
+
+    <div style="font-size:12px; color:var(--color-text-secondary); line-height:1.6;">
+      With all five forces active simultaneously, the current environment satisfies every condition Dalio cited for his October 2025 "close to 15%" recommendation: high debt load, elevated inflation risk, monetary system pressure, geopolitical reserve fragmentation, and multi-force co-activation. The article notes this is the macro backdrop Dalio explicitly compares to the early 1970s — the period preceding gold's 20-fold run from $35 to $850/oz between 1971 and 1980. The one restraining factor is that the 10yr TIPS real yield is still ~+2% (not yet near zero), meaning the opportunity cost of holding gold has not yet fully collapsed — but it is the direction of travel that matters most in Dalio's framework.
+    </div>
+  </div>
+
+  <!-- Section E: Scenarios -->
+  <div class="section-label">Section E — what would change the assessment</div>
+  <div class="scenario-row" style="margin-bottom:14px;">
+    <div class="scenario-card scenario-bull">
+      <div class="scenario-title">Bull case for forces decoupling</div>
+      <div class="scenario-body">
+        US fiscal grand bargain reduces deficit trajectory. US-China trade truce becomes structural. Fed achieves soft landing — real rates stabilize at +1–2%. AI productivity gains broad-based, reducing inequality. One or more forces decouples. Gold allocation: revert toward 7.5–10% baseline.
+      </div>
+    </div>
+    <div class="scenario-card scenario-bear">
+      <div class="scenario-title">Bear case for all five intensifying</div>
+      <div class="scenario-body">
+        Hormuz closure triggers stagflation spike. Moody's downgrade triggers bond market selloff. Political deadlock prevents debt ceiling resolution. China rare-earth embargo expands. All five forces intensify simultaneously — the scenario Dalio called a potential "1971 moment." Gold and real assets become primary wealth preservation vehicles.
+      </div>
+    </div>
+  </div>
+
+  <!-- Synthesis -->
+  <div class="card" style="border-color:var(--color-border-secondary);">
+    <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); margin-bottom:6px;">Synthesis verdict</div>
+    <div style="font-size:12px; color:var(--color-text-secondary); line-height:1.6;">
+      The five-forces framework currently registers its most extreme reading since the framework was developed. Four of five forces are in critical territory; the fifth (technology) is high. The three reinforcing feedback loops — debt/politics, geopolitics/gold, and tech/inequality — are all active and mutually amplifying rather than offsetting. Dalio's core argument is that gold's value in this environment is not about short-term price prediction but about structural protection against monetary and credit-system erosion when multiple forces converge. That condition is present at maximum intensity as of April 2026. The practical allocation implication is a structural position near Dalio's 15% stress-environment guidance — held as a strategic anchor, not a directional trade.
+    </div>
+  </div>
+
+  <div class="meta">Data sources: CRFB, CBO, Wolf Street (Q4 2025 debt/GDP), Peter G. Peterson Foundation (interest/revenue), World Gold Council (CB demand 2025, March 2026 survey), PIIE (US-China trade), McKinsey/UNCTAD (trade fragmentation April 2026), Goldman Sachs / Fed Governor Barr (AI/labor). This is a macro framework exercise, not investment advice.</div>
+</div>

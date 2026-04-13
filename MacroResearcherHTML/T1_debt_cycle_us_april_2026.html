@@ -1,0 +1,222 @@
+
+<h2 class="sr-only">T1 debt cycle position report — United States, April 2026. All three indicators are in warning zone. Cycle phase: late plateau. Monetary policy space severely constrained.</h2>
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+.lbl { font-size: 11px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 8px; }
+.card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; margin-bottom: 10px; }
+.sm { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+.g2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+.g3 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1fr); gap: 10px; }
+
+.badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; padding: 3px 9px; border-radius: 12px; white-space: nowrap; }
+.b-red { background: #FCEBEB; color: #A32D2D; }
+.b-amber { background: #FAEEDA; color: #854F0B; }
+.b-green { background: #EAF3DE; color: #3B6D11; }
+.b-blue { background: #E6F1FB; color: #0C447C; }
+.dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.d-red { background: #E24B4A; }
+.d-amber { background: #EF9F27; }
+.d-green { background: #639922; }
+
+.row-sep { border-bottom: 0.5px solid var(--color-border-tertiary); padding: 11px 0; }
+.row-sep:last-child { border-bottom: none; padding-bottom: 0; }
+.row-sep:first-child { padding-top: 0; }
+
+.big { font-size: 22px; font-weight: 500; color: var(--color-text-primary); line-height: 1; }
+.unit { font-size: 12px; color: var(--color-text-secondary); margin-top: 3px; }
+.note { font-size: 11px; color: var(--color-text-tertiary); margin-top: 4px; line-height: 1.4; }
+
+.track { height: 5px; background: var(--color-background-secondary); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+.fill-r { height: 100%; border-radius: 3px; background: #E24B4A; }
+.fill-a { height: 100%; border-radius: 3px; background: #EF9F27; }
+.fill-g { height: 100%; border-radius: 3px; background: #639922; }
+
+.body14 { font-size: 13px; color: var(--color-text-secondary); line-height: 1.55; }
+.em { color: var(--color-text-primary); font-weight: 500; }
+
+.trig-row { display: flex; align-items: flex-start; gap: 8px; padding: 7px 0; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 12px; }
+.trig-row:last-child { border-bottom: none; }
+.trig-ic { width: 6px; height: 6px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.trig-name { font-weight: 500; color: var(--color-text-primary); min-width: 160px; }
+.trig-body { color: var(--color-text-secondary); line-height: 1.4; }
+
+.phase-box { border-left: 3px solid #EF9F27; border-radius: 0; background: var(--color-background-secondary); padding: 10px 14px; margin-bottom: 10px; }
+
+.verdict { background: #FAEEDA; border-radius: var(--border-radius-md); padding: 12px 14px; }
+.verdict-title { font-size: 13px; font-weight: 500; color: #633806; margin-bottom: 5px; }
+.verdict-body { font-size: 12px; color: #854F0B; line-height: 1.55; }
+
+.meta { font-size: 11px; color: var(--color-text-tertiary); margin-top: 14px; border-top: 0.5px solid var(--color-border-tertiary); padding-top: 10px; line-height: 1.5; }
+</style>
+
+<div style="padding: 1rem 0;">
+
+  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:18px; flex-wrap:wrap; gap:8px;">
+    <div>
+      <div style="font-size:16px; font-weight:500; color:var(--color-text-primary);">T1 · US debt cycle position report</div>
+      <div style="font-size:12px; color:var(--color-text-secondary); margin-top:2px;">April 2026 · Dalio framework</div>
+    </div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <span class="badge b-red"><span class="dot d-red"></span>3 / 3 in warning zone</span>
+      <span class="badge b-amber">Late plateau</span>
+    </div>
+  </div>
+
+  <div class="lbl">Section A — headline scorecard</div>
+  <div class="card" style="margin-bottom:14px;">
+
+    <div class="row-sep" style="display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.2fr) 90px; gap:12px; align-items:center;">
+      <div style="font-size:11px; font-weight:500; color:var(--color-text-tertiary); text-transform:uppercase; letter-spacing:0.4px;">Indicator</div>
+      <div style="font-size:11px; font-weight:500; color:var(--color-text-tertiary); text-transform:uppercase; letter-spacing:0.4px;">Current</div>
+      <div style="font-size:11px; font-weight:500; color:var(--color-text-tertiary); text-transform:uppercase; letter-spacing:0.4px;">Dalio warn threshold</div>
+      <div style="font-size:11px; font-weight:500; color:var(--color-text-tertiary); text-transform:uppercase; letter-spacing:0.4px;">Status</div>
+    </div>
+
+    <div class="row-sep" style="display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.2fr) 90px; gap:12px; align-items:center;">
+      <div>
+        <div style="font-size:13px; font-weight:500; color:var(--color-text-primary);">Govt debt / GDP</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:2px;">Gross federal debt · Q4 2025</div>
+        <div class="track"><div class="fill-r" style="width:93%"></div></div>
+      </div>
+      <div>
+        <div style="font-size:18px; font-weight:500; color:#A32D2D;">125.2%</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary);">CEIC Q4 2025</div>
+      </div>
+      <div style="font-size:12px; color:var(--color-text-secondary); line-height:1.4;">Sustained &gt;100% = fiscal &amp; monetary space constrained. Historical analog: 130% post-WWII peak (1946).</div>
+      <div><span class="badge b-red"><span class="dot d-red"></span>Critical</span></div>
+    </div>
+
+    <div class="row-sep" style="display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.2fr) 90px; gap:12px; align-items:center;">
+      <div>
+        <div style="font-size:13px; font-weight:500; color:var(--color-text-primary);">Interest cost / federal revenue</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:2px;">Net interest as % of receipts · FY2026</div>
+        <div class="track"><div class="fill-r" style="width:88%"></div></div>
+      </div>
+      <div>
+        <div style="font-size:18px; font-weight:500; color:#A32D2D;">18.6%</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary);">CBO Feb 2026 · record high</div>
+      </div>
+      <div style="font-size:12px; color:var(--color-text-secondary); line-height:1.4;">Dalio: pressure escalates sharply above ~15%. Now above the 1991 previous record. On path to 25.8% by 2036.</div>
+      <div><span class="badge b-red"><span class="dot d-red"></span>Critical</span></div>
+    </div>
+
+    <div class="row-sep" style="display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr) minmax(0,1.2fr) 90px; gap:12px; align-items:center;">
+      <div>
+        <div style="font-size:13px; font-weight:500; color:var(--color-text-primary);">10yr TIPS real yield (DFII10)</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary); margin-top:2px;">Inflation-indexed Treasury yield · Apr 10, 2026</div>
+        <div class="track"><div class="fill-a" style="width:55%"></div></div>
+      </div>
+      <div>
+        <div style="font-size:18px; font-weight:500; color:#854F0B;">+1.94%</div>
+        <div style="font-size:11px; color:var(--color-text-tertiary);">Trading Economics / Fed H.15</div>
+      </div>
+      <div style="font-size:12px; color:var(--color-text-secondary); line-height:1.4;">Gold demand spikes when approaching 0% or turning negative. Currently positive but down 0.36pp vs one year ago — direction bearish for real yields.</div>
+      <div><span class="badge b-amber"><span class="dot d-amber"></span>Elevated</span></div>
+    </div>
+
+  </div>
+
+  <div class="lbl">Section B — cycle phase assessment</div>
+
+  <div class="phase-box">
+    <div style="font-size:13px; font-weight:500; color:#633806; margin-bottom:4px;">Phase: late plateau — approaching structural constraint</div>
+    <div style="font-size:12px; color:#854F0B; line-height:1.55;">Debt has been above 100% of GDP since 2013, and conventional monetary policy has already been used to manage three distinct crises (2008, COVID-2020, inflation 2022–24). Each crisis left interest rates and debt levels higher than before. The structural feature of the plateau phase — where debt is high but still serviceable — is now being tested by the interest-burden indicator, which has crossed into warning territory for the first time since 1991.</div>
+  </div>
+
+  <div class="g2" style="margin-bottom:14px;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="lbl" style="margin-bottom:6px;">Historical analog</div>
+      <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); margin-bottom:6px;">US 1968–1980 (closest); Japan 1995–2005 (partial)</div>
+      <div class="body14">
+        <span class="em">Similar to 1968–80:</span> high debt, sticky inflation preventing aggressive rate cuts, political gridlock blocking fiscal consolidation, dollar under structural pressure from fiscal excess. Gold surged ~20× in the 1970s as debasement materialized.<br><br>
+        <span class="em">Different from 1968–80:</span> the US still holds reserve currency status and dollar-denominated debt retains global demand, which extends the plateau. Japan's 1995–2005 experience (debt/GDP over 100%, near-zero rates, deflation rather than inflation) shows a plateau can persist far longer than expected when the sovereign has monetary sovereignty and domestic savings base.
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+      <div class="lbl" style="margin-bottom:6px;">Time-to-constraint estimate</div>
+      <div style="font-size:13px; font-weight:500; color:var(--color-text-primary); margin-bottom:6px;">Constraint already active; acute pressure within 3–7 years</div>
+      <div class="body14">
+        The interest/revenue ratio is already above the historical danger threshold. The constraint is not a future risk — it is present now and compounding. <span class="em">CRFB analysis</span> warns that if the average interest rate on debt exceeds GDP growth rate (projected by FY2031 under baseline), the US enters a <span class="em">debt spiral</span> dynamic. The 3–7 year window before acute crisis reflects the buffer of reserve currency status and domestic institutional demand for Treasuries — not a clean bill of fiscal health.
+      </div>
+    </div>
+  </div>
+
+  <div class="lbl">Section C — monetary policy space</div>
+
+  <div class="g3" style="margin-bottom:14px;">
+    <div class="sm">
+      <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:5px;">Rate cut headroom</div>
+      <div style="font-size:18px; font-weight:500; color:var(--color-text-primary);">~150–175 bps</div>
+      <div class="unit">to effective lower bound</div>
+      <div class="note">Fed funds: 3.50–3.75% (Mar 2026 hold). Fed median projection: one cut in 2026. JPM expects on-hold all year. Effective lower bound ~2.0–2.5%. Headroom limited vs pre-2008 norm of 500+ bps.</div>
+    </div>
+    <div class="sm">
+      <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:5px;">QE credibility</div>
+      <div style="font-size:18px; font-weight:500; color:#854F0B;">Degraded</div>
+      <div class="unit">inflation still above 2% target</div>
+      <div class="note">Core PCE ~2.5–2.8%; CPI jumped to 3.26% in March 2026 (JEC). Any QE deployment now risks re-igniting inflation expectations. Fed explicitly cannot run QE freely while inflation is above target — a key constraint Dalio identifies as the tell-tale sign of a late plateau.</div>
+    </div>
+    <div class="sm">
+      <div style="font-size:11px; color:var(--color-text-tertiary); margin-bottom:5px;">Currency debasement risk</div>
+      <div style="font-size:18px; font-weight:500; color:#A32D2D;">Elevated</div>
+      <div class="unit">structural, not cyclical</div>
+      <div class="note">Moody's downgraded US to Aa1 (May 2025) — now rated below Aa1 by all three major agencies. Deficits projected at ~6% of GDP through 2035. CBO Feb 2026: interest will double nominally by 2036. These are debasement preconditions, not triggers.</div>
+    </div>
+  </div>
+
+  <div class="lbl">Section D — asset implications</div>
+
+  <div class="g2" style="margin-bottom:10px;">
+    <div class="card" style="margin-bottom:0;">
+      <div class="lbl" style="margin-bottom:6px;">Gold / real assets thesis</div>
+      <div class="body14">
+        The debt cycle framework produces a clear directional signal: as the real yield on TIPS trends toward zero (currently +1.94%, down 0.36pp YoY), the opportunity cost of gold declines. The interest/revenue ratio already exceeding the 1991 record — and compounding toward 25.8% by 2036 — increases the structural probability of monetization rather than fiscal consolidation as the resolution path. Gold is the canonical beneficiary of monetization: it carries no counterparty risk and no sovereign default risk. <span class="em">Dalio's Oct 2025 guidance</span> for this type of environment: raise strategic gold allocation toward 15% of total portfolio.
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:0;">
+      <div class="lbl" style="margin-bottom:6px;">Long-duration bond risk</div>
+      <div class="body14">
+        Long-duration Treasuries face a structurally adverse setup. The supply of issuance is rising (deficit ~$1.9T in FY2026; CBO), while the natural demand base is eroding as foreign central banks diversify into gold. The term premium is not adequately compensating for this risk. <span class="em">If</span> the Fed is forced to monetize (QE into a high-inflation environment), long bonds would face simultaneous duration risk (yields rising) and currency debasement. The classic All-Weather 40% long-bond allocation requires explicit leverage caveats in this environment — an inflationary late-plateau is the one macro regime where that position structurally underperforms.
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="lbl" style="margin-bottom:10px;">Watchlist triggers — what would change this assessment</div>
+    <div class="trig-row">
+      <div class="trig-ic d-green" style="background:#639922;"></div>
+      <div class="trig-name">Interest/revenue stabilizes or declines</div>
+      <div class="trig-body">If a credible multi-year fiscal consolidation plan passes (spending cuts + revenue measures) and the CBO forward path for interest/revenue bends down, reassess phase from late plateau toward mid plateau. This is the most important single indicator to monitor quarterly.</div>
+    </div>
+    <div class="trig-row">
+      <div class="trig-ic d-amber" style="background:#EF9F27;"></div>
+      <div class="trig-name">TIPS real yield falls below +1%</div>
+      <div class="trig-body">Historically, TIPS yields moving below +1% have been associated with gold entering a sustained bull phase. Currently at +1.94% — falling 0.36pp YoY. Track monthly: a further 0.5–1pp decline materially strengthens the gold thesis.</div>
+    </div>
+    <div class="trig-row">
+      <div class="trig-ic d-red" style="background:#E24B4A;"></div>
+      <div class="trig-name">Interest rate exceeds GDP growth rate (debt spiral threshold)</div>
+      <div class="trig-body">CRFB projects this crossover by FY2031 under baseline. If it occurs earlier due to re-inflation or recession-driven growth slowdown, phase reclassifies from late plateau to early deleveraging — the most serious escalation step. Monitor avg debt interest rate (JEC monthly) vs nominal GDP growth (BEA quarterly).</div>
+    </div>
+    <div class="trig-row">
+      <div class="trig-ic d-red" style="background:#E24B4A;"></div>
+      <div class="trig-name">Foreign demand for Treasuries deteriorates sharply</div>
+      <div class="trig-body">TIC data showing sustained net selling by foreign official holders, combined with rising term premiums, would signal the dollar's safe-haven bid is weakening. This is the transmission mechanism from debt cycle stress into currency debasement. Track monthly TIC report.</div>
+    </div>
+    <div class="trig-row">
+      <div class="trig-ic d-amber" style="background:#EF9F27;"></div>
+      <div class="trig-name">Fed chair transition (Powell term ends May 2026)</div>
+      <div class="trig-body">Kevin Warsh nominated as new chair (Trump, Jan 2026). A chair perceived as more politically compliant could raise inflation expectations and weaken dollar safe-haven status, accelerating debasement risk. Monitor Fed communication tone and market inflation breakeven rate.</div>
+    </div>
+  </div>
+
+  <div class="verdict">
+    <div class="verdict-title">Section D synthesis — bottom line for T5 and T3 consumption</div>
+    <div class="verdict-body">All three Dalio indicators are in warning territory simultaneously for the first time since the early 1990s, with the interest/revenue ratio now exceeding the 1991 record. The cycle phase is late plateau: debt is historically elevated, monetary policy headroom is limited, QE credibility is degraded by sticky inflation, and a debt spiral threshold is projected within the current decade. This reading, fed into T5 (five forces), contributes a critical score for Force 1. Fed into T3 (allocation audit), it justifies a gold allocation near or at Dalio's stress-environment guidance of ~15%, subject to cross-check with the T2 season and T4 world order readings.</div>
+  </div>
+
+  <div class="meta">Sources: CEIC/BEA (debt/GDP Q4 2025 125.2%), PGPF/CBO Feb 2026 (interest/revenue 18.6% in FY2026, path to 25.8% by 2036), Trading Economics / Fed H.15 (DFII10 +1.94% Apr 10 2026), JEC Monthly Debt Update (total debt $38.98T as of Apr 3 2026, avg rate 3.365%), CRFB Feb 2026 baseline, Moody's downgrade May 2025, iShares/JPM (Fed funds 3.50–3.75%, on-hold outlook). Not investment advice.</div>
+
+</div>

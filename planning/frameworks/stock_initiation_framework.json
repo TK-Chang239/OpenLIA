@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "department": "equity_research",
+  "report_mode": "stock_initiation",
+  "cover": {
+    "instructions": "Fill in the report cover. Title should be 'Stock Initiation Report'. Subtitle is the full company name. Ticker is the stock ticker symbol. Tagline is a one-sentence investment thesis (what makes this stock interesting right now). Key metrics: include current stock price (with recent % change), market cap, P/E ratio, and 1-2 other metrics most relevant to this company. Stats panel: include rating (Buy/Hold/Sell or Overweight/Equal Weight/Underweight), target price, upside/downside %, market cap, free float %, sector, exchange, and report date.",
+    "title": null,
+    "subtitle": null,
+    "ticker": null,
+    "tagline": null,
+    "key_metrics": [],
+    "stats_panel": []
+  },
+  "sections": [
+    {
+      "id": "company_overview",
+      "title": "Company Overview",
+      "instructions": "Provide a concise profile of the company. Include: full company name, ticker symbol, year founded, headquarters location, main products or services, and number of employees. Present this as a brief narrative paragraph followed by a metric cards block with key company facts.",
+      "blocks": []
+    },
+    {
+      "id": "industry_overview",
+      "title": "Industry Overview",
+      "instructions": "Cover two areas. First, define what industry the company operates in and describe its current state: are there government incentives or restrictions? What factors are driving or constraining the industry? Second, quantify the market: what is the total addressable market size (in dollars)? What has the historical market CAGR been over the past 5 years? What is the projected future growth rate, and what factors drive that growth? What is the estimated market size by the target year? Use a combo chart or area chart to show historical and projected market size over time.",
+      "blocks": []
+    },
+    {
+      "id": "products_and_services",
+      "title": "Products and Services",
+      "instructions": "Cover two areas. First, for each major product or service line: what customer pain point does it address? How does the company's solution work? What differentiates it from alternatives? If the company has multiple product lines, describe each separately. Second, show the revenue breakdown: use a pie/donut chart showing each product or service line's share of the most recent fiscal year revenue. Include a brief table with revenue figures and growth rates per segment if data is available.",
+      "blocks": []
+    },
+    {
+      "id": "business_model",
+      "title": "Business Model",
+      "instructions": "Explain how the company makes money. Identify all key stakeholders (suppliers, customers, partners, distributors) and describe the relationships between them. If the company sells physical products, describe the supply chain: who are the upstream suppliers, what does the company do, and who are the downstream buyers? Identify where the company sits in this chain. If the company provides services, explain the revenue model (subscription, transaction fees, licensing, advertising, etc.) and how money flows. Use text to explain, supported by metric cards for key business metrics (e.g., gross margin, customer count, ARPU, retention rate).",
+      "blocks": []
+    },
+    {
+      "id": "competitive_analysis",
+      "title": "Competitive Analysis",
+      "instructions": "Cover three areas. First, identify the main competitors and provide a brief profile of each (what they do, their key strengths). Second, create a comparison table across multiple dimensions: market share, revenue, growth rate, profitability, key product differentiators, geographic presence, and any other relevant factors. Use cell formatting to highlight where the target company leads or lags. Third, assess the company's moat (if any): does it have network effects, switching costs, cost advantages, intangible assets (brands, patents), or efficient scale? Be specific about what the moat is and how durable it appears.",
+      "blocks": []
+    },
+    {
+      "id": "management_team",
+      "title": "Management Team",
+      "instructions": "Cover two areas. First, profile the key executives (CEO, CFO, CTO, and other critical roles): their educational background, prior experience, tenure at the company, and notable achievements. Present this as a table with columns for name, title, background, and tenure. Second, flag any concerns: are there integrity issues, frequent executive turnover, related-party transactions, regulatory actions against management, or other governance red flags? If there are none, state that explicitly.",
+      "blocks": []
+    },
+    {
+      "id": "competitive_advantages",
+      "title": "Competitive Advantages and Weaknesses",
+      "instructions": "Provide a structured assessment of the company's strengths and weaknesses across these dimensions: product quality and differentiation, business model durability, sales and distribution channels, management team quality, technology and R&D capability, and financial position. Use a two-column group layout: one side listing advantages (strengths), the other listing disadvantages (weaknesses). Use text blocks with bullet points. End with a key finding block summarizing the net competitive position.",
+      "blocks": []
+    },
+    {
+      "id": "risk_analysis",
+      "title": "Risk Analysis",
+      "instructions": "Analyze risks across three categories. Industry risks: potential adverse government policies, supply chain bottlenecks, emerging technologies or substitutes that could displace the company's products, and potential new competitors. Operational risks: management stability, integrity concerns, recent acquisitions and integration uncertainty, product mass-production challenges, and known or potential legal/litigation risks. Financial risks: balance sheet health and going-concern risk, auditor changes or CFO departures, trajectory of losses, cash runway (can the company sustain operations?), whether capital can support investment needs over the next 5 years, and ability to raise additional funding or debt. Present each category as a separate subsection with a text block. Use a rating badge or key finding block to summarize overall risk level (Low / Moderate / High / Very High).",
+      "blocks": []
+    },
+    {
+      "id": "historical_financials",
+      "title": "Historical Financial Data",
+      "instructions": "Cover four areas. First, state the company's fiscal year end date. Second, present a 5-year balance sheet summary table (total assets, total liabilities, shareholders' equity, cash and equivalents, total debt, and other material items). Third, present a 5-year income statement summary table (revenue, cost of revenue, gross profit, operating income, net income, EPS, revenue growth rate YoY, EPS growth rate YoY). Apply directional cell formatting to growth rates. Fourth, if there were any mergers, acquisitions, divestitures, or spin-offs during this period that caused significant changes in revenue or profit, explain them in a text block. Use combo charts to visualize revenue and margin trends over the 5-year period.",
+      "blocks": []
+    },
+    {
+      "id": "financial_analysis",
+      "title": "Financial Analysis",
+      "instructions": "Cover three areas. First, present a table of income statement margin ratios over time (gross margin, operating margin, net margin, EBITDA margin) and visualize trends with a line chart. Second, evaluate financial health using: current ratio, quick ratio, debt-to-equity ratio, interest coverage ratio, operating cash flow to current liabilities ratio, and operating cash flow to net income ratio. State whether the company's finances are healthy and explain any concerns. Third, create a peer comparison table showing the target company vs. competitors on: accounts receivable turnover days, inventory turnover days, and accounts payable turnover days. Use cell formatting to highlight where the company stands relative to peers.",
+      "blocks": []
+    },
+    {
+      "id": "financial_projections",
+      "title": "Financial Projections",
+      "instructions": "Present a 3-year financial forecast including projected revenue, revenue growth rate, operating income, net income, and EPS for each year. Show assumptions behind the projections (e.g., segment growth drivers, margin expansion or compression, capital expenditure plans). Use a table for the forecast figures with directional formatting on growth rates, and a combo chart showing projected revenue bars with a margin trend line overlay. If consensus analyst estimates are available, compare the projections to consensus.",
+      "blocks": []
+    },
+    {
+      "id": "valuation_analysis",
+      "title": "Valuation Analysis",
+      "instructions": "Cover three areas. First, apply appropriate valuation models to derive conservative, base, and optimistic price targets. Choose from: P/E multiple, P/B multiple, DCF (discounted cash flow), EV/EBITDA, or other relevant methods depending on the company type. Show the calculation inputs and resulting target prices in a table. Second, show the company's historical long-term P/E ratio trend using a line chart, and compare the current P/E to the historical average. Third, create a peer valuation comparison table showing P/E and P/B ratios for the target company and its main competitors, with cell formatting to highlight relative over/undervaluation.",
+      "blocks": []
+    },
+    {
+      "id": "investment_recommendation",
+      "title": "Investment Recommendation",
+      "instructions": "Provide the final investment verdict. State the current stock price and date. Use a rating badge block to show the recommendation (Buy / Hold / Sell, or Overweight / Equal Weight / Underweight). Summarize the bull case and bear case in 2-3 sentences each. State the target price and expected upside/downside. End with a key finding block containing the single most important reason to invest or not invest in this stock.",
+      "blocks": []
+    }
+  ]
+}

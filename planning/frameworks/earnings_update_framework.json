@@ -1,0 +1,65 @@
+{
+  "schema_version": "1.0",
+  "department": "earnings_update",
+  "report_mode": "earnings_analysis",
+  "cover": {
+    "instructions": "Fill in the report cover. Title should be 'Earnings Analysis Report'. Subtitle is the full company name. Ticker is the stock ticker symbol. Reporting period identifies the quarter and fiscal year (e.g., 'Q1 FY2026'). Tagline is a single sentence that leads with the earnings verdict — beat, miss, or in-line — followed by the investment implication (e.g., 'Revenue and EPS beat consensus on AI server strength; raising target price to $185, maintain Buy'). Key metrics: current stock price with post-earnings change (%), EPS actual vs consensus, revenue actual vs consensus, and the rating (Buy/Hold/Sell). Stats panel: market cap, reporting period, release date, earnings call date/time, fiscal year end, sector, exchange.",
+    "title": null,
+    "subtitle": null,
+    "ticker": null,
+    "reporting_period": null,
+    "tagline": null,
+    "key_metrics": [],
+    "stats_panel": []
+  },
+  "sections": [
+    {
+      "id": "quick_take",
+      "title": "Quick Take",
+      "instructions": "Summarize the entire earnings report in 1-3 sentences. Lead with the verdict (beat/miss/in-line), cite the 1-2 most important figures (revenue and EPS vs consensus), state the investment implication (maintaining/changing rating, raising/lowering target price), and note the single most significant qualitative signal (management guidance direction, tone shift, or strategic pivot). This is the executive summary the reader sees first — every word must earn its place. Use a key finding block.",
+      "blocks": []
+    },
+    {
+      "id": "market_reaction",
+      "title": "Post-Earnings Market Reaction",
+      "instructions": "Capture the market's immediate response to the earnings release. Include: post-announcement stock price change (after-hours or next-day open, specify which), trading volume relative to the 20-day average (e.g., '2.3x average volume'), performance relative to sector peers or benchmark index on the same day, and a 1-2 sentence summary of what the market is pricing in (e.g., 'Market sold off despite the beat, suggesting the guidance cut outweighed the quarterly outperformance'). If analyst rating changes or price target revisions were issued within 24 hours, note the count and direction (e.g., '4 of 12 covering analysts raised price targets'). Use metric cards for price change, volume ratio, and relative performance, followed by a text block for the market interpretation.",
+      "blocks": []
+    },
+    {
+      "id": "key_financials",
+      "title": "Key Financials vs Consensus",
+      "instructions": "Present the core financial results in a structured comparison table. Rows: Revenue, Gross Margin (%), Operating Income / Operating Margin (%), EBITDA / EBITDA Margin (%), Adjusted EPS, Free Cash Flow, and 1-2 business-specific KPIs most relevant to this company (e.g., subscriber count, same-store sales, bookings, ARR). Columns: Actual, Consensus Estimate, Beat/Miss (%), Prior Quarter, QoQ Change (%), Year-Ago Quarter, YoY Change (%). Use directional cell formatting: green for beats and positive changes, red for misses and negative changes. Below the table, include a brief 'Earnings Quality Notes' text block (2-4 sentences) flagging any non-recurring items, significant non-GAAP adjustments, FCF-to-net-income conversion ratio, or unusual accrual items that affect the signal quality of the reported numbers.",
+      "blocks": []
+    },
+    {
+      "id": "operational_highlights",
+      "title": "Operational Highlights and Drivers",
+      "instructions": "Analyze the key drivers behind the quarter's results across four areas, each as a separate subsection. (1) Beats and Positives: list the 2-4 items that drove outperformance — identify the specific business line, geography, product, pricing, or mix shift and quantify the contribution where possible. (2) Misses and Negatives: list the 2-3 items that underperformed and explain whether each is structural or one-time. (3) Watch Items: identify 1-3 topics management raised or analysts probed that are not yet reflected in numbers but could matter in coming quarters (e.g., new product pipeline, competitive entry, regulatory action, macro assumption). (4) Segment and Geographic Breakdown: present revenue and margin by business segment and/or geography using a table, noting the most significant QoQ and YoY changes. Each subsection uses a text block with bullet points. The segment breakdown uses a table with directional formatting on growth rates.",
+      "blocks": []
+    },
+    {
+      "id": "forward_guidance",
+      "title": "Forward Guidance",
+      "instructions": "Present management's forward guidance in a structured comparison table. Rows: Next Quarter Revenue, Next Quarter EPS, Full Year Revenue, Full Year Gross Margin, Full Year EPS, CapEx, and any other guided metrics. Columns: New Guidance (or range midpoint), Prior Guidance, Change, Street Consensus, vs Street (above/below/in-line). Use directional cell formatting on the change and vs-street columns. Below the table, include a 'Guidance Quality Assessment' text block (3-5 sentences) evaluating: (a) how the new guidance compares to street expectations (above/below/in-line, by how much), (b) whether management has a historical pattern of guiding conservatively or aggressively (cite beat rate if data is available), and (c) the key assumptions embedded in the guidance (FX rates, commodity prices, macro environment, product launch timing).",
+      "blocks": []
+    },
+    {
+      "id": "earnings_call",
+      "title": "Earnings Call Key Points",
+      "instructions": "Distill the most important information from the earnings call across three areas, each as a separate subsection. (1) Management Commentary: summarize the CEO's qualitative view on the business outlook (2-3 sentences in indirect speech), the CFO's key financial explanations (2-3 sentences), and any material strategic announcements (M&A, capital allocation changes, restructuring, new product launches). (2) Q&A Highlights: select the 3-5 most revealing analyst questions and management responses, each as a single bullet point summarizing the exchange (e.g., 'On AI server margins: management acknowledged near-term margin dilution from liquid cooling components but expects margins to normalize by 2H26 as volumes scale'). Prioritize questions that reveal new information not in the prepared remarks. (3) Management Tone Assessment: present a small table rating Overall Tone (Optimistic / Neutral / Cautious / Defensive), Confidence Level (Strong / Moderate / Low), Change vs Prior Quarter (More Positive / Similar / More Cautious), and whether management flagged specific risks (Yes with description / No).",
+      "blocks": []
+    },
+    {
+      "id": "risk_assessment",
+      "title": "Risk Assessment",
+      "instructions": "Present risks in two categories. Upside Risks: list 2-3 specific scenarios that could drive the stock above the base case (e.g., 'Faster-than-expected data center buildout driving server component demand above current estimates'). Downside Risks: list 3-4 specific scenarios that could drive the stock below the base case (e.g., 'Gross margin compression if commodity input costs rise faster than pricing power allows'). Each risk is one sentence, specific to this company and the current earnings context — not generic. End with a key finding block summarizing the net risk skew (tilted upside / balanced / tilted downside) based on this quarter's results and guidance.",
+      "blocks": []
+    },
+    {
+      "id": "thesis_check",
+      "title": "Investment Thesis Check",
+      "instructions": "Evaluate how this quarter's results affect the existing investment thesis. Present a table with columns: Thesis Pillar, Status (Strengthened / Unchanged / Weakened), Commentary. Include 3-5 thesis pillars that represent the core reasons to own or avoid the stock (e.g., 'AI server revenue ramp', 'Margin expansion from product mix shift', 'Market share gains in enterprise segment'). The status should reflect whether this specific quarter's data reinforced, left unchanged, or undermined each pillar. Commentary is one sentence per row citing the specific data point. Below the table, include a 2-3 sentence summary stating whether the overall investment thesis is intact, strengthened, or needs revision, and whether the rating and target price should change. Use a rating badge block to show the recommendation (Buy / Hold / Sell or Maintain / Upgrade / Downgrade).",
+      "blocks": []
+    }
+  ]
+}

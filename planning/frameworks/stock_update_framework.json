@@ -1,0 +1,58 @@
+{
+  "schema_version": "1.0",
+  "department": "equity_research",
+  "report_mode": "stock_update",
+  "cover": {
+    "instructions": "Fill in the report cover. Title should be 'Stock Update Report'. Subtitle is the full company name. Ticker is the stock ticker symbol. Tagline is a single sentence that leads with the investment conclusion, not the event description (e.g., 'Rising liquid cooling penetration and specification upgrades drive earnings growth ahead; Buy' rather than 'Company reported 4Q25 results'). Key metrics: current stock price with date, 12-month price target with upside/downside %, and the rating (Buy/Hold/Sell or Overweight/Equal-weight/Underweight). Stats panel: market cap (in local currency and USD), enterprise value, 3-month ADTV, sector, exchange, and a forecast table showing Revenue, EBITDA, EPS, and P/E for the most recent fiscal year plus 2-3 forward years (mark estimates with 'E' suffix).",
+    "title": null,
+    "subtitle": null,
+    "ticker": null,
+    "tagline": null,
+    "key_metrics": [],
+    "stats_panel": []
+  },
+  "sections": [
+    {
+      "id": "investment_thesis",
+      "title": "Investment Thesis / Key Takeaway",
+      "instructions": "State the investment thesis in one of two formats. Format A (dense paragraph): Write a single paragraph (4-8 sentences) that weaves together the event, key data, and investment implication. Lead with the conclusion — what does this mean for the stock? Cite the 1-2 most impactful data points inline using the format: 'metric of $X.XB (+Y.Y% YoY)'. End with the rating and target price including the valuation basis in one sentence: 'Maintain Buy with 12M TP raised to NT$2,259 (21.2x 2027E P/E)'. Format B (bullet points): Write a 2-3 sentence introductory thesis, then list 4-6 key takeaways as bullet points, each one sentence with a specific data point. Choose the format that best fits the event complexity. Use a key finding block for the thesis.",
+      "blocks": []
+    },
+    {
+      "id": "event_analysis",
+      "title": "Event Analysis",
+      "instructions": "Analyze the event that triggered this report. For earnings releases: present key headline numbers with comparisons in the format 'NT$5,392mn (+13.2% QoQ, 5.5% YoY), which came in 7%/5% above GSe/Bloomberg'. Use numbered takeaways for multi-topic events: '(1) IC substrate business sees solid growth... (2) BT substrate UTR continues at a high level... (3) Price adjustments implemented across product lines...'. Include management commentary in indirect speech: 'Management expects growth to be back-end loaded, with 2H26 outperforming 1H26. Management targets a return to 20-30% YoY revenue growth in 2H26.' For non-earnings events (capex increase, contract win, product launch): explain what changed, quantify the impact, and state why it matters for the investment thesis. Always compare results or events to prior expectations or consensus. Use text blocks for narrative and metric cards for the 3-4 most important headline figures.",
+      "blocks": []
+    },
+    {
+      "id": "financial_results",
+      "title": "Financial Results Summary",
+      "instructions": "Present key financial figures in a structured comparison table. Column structure: prior quarter (e.g., 3Q25), current quarter (e.g., 4Q25), QoQ change, YoY change, analyst estimate, actual vs estimate, consensus, actual vs consensus. Row items: Revenue, Gross Profit, Operating Profit, Net Income, then margins: GM, OPM, NM. Show margin changes in percentage points (ppts), not percentages: '-0.5ppt QoQ'. Use directional cell formatting: green for beats and positive changes, red for misses and negative changes. Below the table, add 2-3 sentences identifying what drove the results: 'We attribute the lower GM to higher contribution of AI rack servers in 4Q25, which comes with high ASP and lower margin ratio.' For the forward outlook, include management's near-term revenue guidance if available: '1Q26 revenue is seen down >15% QoQ but up >15% YoY.' Include a quarterly revenue trend bar chart if data is available.",
+      "blocks": []
+    },
+    {
+      "id": "estimate_revisions",
+      "title": "Estimate Revisions",
+      "instructions": "Show how forward estimates change in light of this event. Present a revision table with the following structure — for each of the next 2-3 fiscal years, show columns: Old estimate, New estimate, Diff %. Rows: Revenue, Gross Profit or GM%, Operating Profit or OPM%, Net Income, EPS. Use directional cell formatting on the Diff % column. Below the table, explain the revision driver in 1-3 sentences: 'We revise up our 2026-28E revenues by 5%/7%/7%, mainly on higher AI server liquid cooling components shipments estimates' or 'We trim our 2026 earnings estimate 5%, mainly to reflect an uncertain outlook given Middle East conflict.' When consensus estimates are available, state the comparison: 'Our 2026-27e EPS estimates are still 14% and 4% below consensus, respectively.' If management provided forward guidance, compare estimates to guidance.",
+      "blocks": []
+    },
+    {
+      "id": "valuation_and_target",
+      "title": "Valuation and Price Target",
+      "instructions": "State the price target and show the valuation math explicitly. Use one of these proven methodologies based on the company type: (1) Forward P/E: 'Our 12m TP of NT$X is based on Y.Yx 2027E P/E, which is Z.Zx STDV above the past upcycle average P/E of W.Wx' or 'based on target PER of 22x (close to the mid-point of its past-5-year range of 15-27x)'. (2) P/B: 'Our TP implies X.Xx 2026e P/B, justified by [reason]'. (3) Residual Income: 'Key assumptions include a cost of equity of X% (beta of Y, equity risk premium of Z%, risk-free rate of W%), medium-term growth rate of A%, terminal growth rate of B%'. (4) PEG validation: 'Our EPS CAGR of X% implies a PEG of Y.Yx at our TP, which we consider undemanding.' Always state: the target price (with prior target if changed), the methodology, the specific multiple and metric, implied upside/downside from current price, and how the target multiple compares to historical range or peers. Use metric cards for the headline target price, upside/downside %, and primary valuation multiple.",
+      "blocks": []
+    },
+    {
+      "id": "scenarios",
+      "title": "Bull / Bear / Base Scenarios",
+      "instructions": "Present three scenarios with specific target prices. Bull scenario: state the optimistic conditions (e.g., 'stronger cloud demand, faster spec migration, mild competition') and the resulting target price with implied upside from current price. Base scenario: state the most likely outcome and the target price derived from the primary valuation methodology. Bear scenario: state the downside conditions (e.g., 'softening cloud demand, slower spec migration, intensified competition, policy tightening') and the resulting target price with implied downside. Use a group block with three columns, one per scenario. Each scenario should have 2-3 bullet points stating the key assumptions. End with a metric card row showing the three target prices side by side with their implied returns.",
+      "blocks": []
+    },
+    {
+      "id": "risks",
+      "title": "Risks",
+      "instructions": "List 3-5 key risks as a numbered list or bullet points. Each risk should be specific and tied to the investment thesis. Use the pattern: 'Slower/faster-than-expected [specific driver]' — for example: '(1) Slower-than-expected PC demand recovery, (2) Slower-than-expected ABF substrate pricing outlook, (3) Slower-than-expected AI server PCB market share gains.' For non-directional risks: 'Macro demand slowdown impacting [specific segment]', 'Intensifying competition from [specific competitors]', 'Execution risk on [specific initiative]'. Each risk is 1 sentence. Do not include generic risks without specificity. Prioritize by likelihood and impact. Present as a bulleted text block.",
+      "blocks": []
+    }
+  ]
+}
