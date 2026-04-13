@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "department": "equity_research",
+  "report_mode": "sector_research",
+  "cover": {
+    "instructions": "Fill in the report cover. Title should be 'Sector Research Report'. Subtitle is the sector or industry name (e.g., 'Semiconductor Specialty Chemicals', 'Physical AI / Robotics', 'Global Technology Hardware'). Tagline is a single sentence that leads with the investment conclusion or key insight, not a description of the report contents (e.g., 'Memory supercycle poses downside risk to hardware OEM margins; downgrading Dell, HPQ, Asustek' rather than 'A report on the hardware sector'). Key metrics: sector industry view rating (Attractive/In-Line/Cautious) if applicable, key market size figure, and projected growth rate. Stats panel: number of companies covered, sector classification, region focus, key forecast metrics (market size or WFE or TAM for current year plus 2-3 forward years with CAGR), and report date.",
+    "title": null,
+    "subtitle": null,
+    "sector": null,
+    "tagline": null,
+    "key_metrics": [],
+    "stats_panel": []
+  },
+  "sections": [
+    {
+      "id": "sector_thesis",
+      "title": "Sector Thesis / Key Takeaway",
+      "instructions": "State the sector investment thesis in one of two formats. Format A (dense paragraph): Write a single paragraph (4-8 sentences) that weaves together the sector dynamics, key data points, and investment implication. Lead with the conclusion: what is happening in this sector and what should investors do? Cite the 1-2 most impactful data points inline: 'spot NAND and DRAM prices up 50% and 300% in the last 6 months'. End with the actionable recommendation: preferred stocks, rating changes, or positioning advice. Format B (numbered takeaways): Write a 2-3 sentence introductory thesis, then list 4-6 key takeaways as bullet points, each one sentence with a specific data point or insight. Format B is preferred when the report covers multiple distinct sub-themes. Use a key finding block for the thesis.",
+      "blocks": []
+    },
+    {
+      "id": "industry_overview",
+      "title": "Industry Overview and Market Sizing",
+      "instructions": "Define the industry or sector being analyzed. Cover: what the industry produces or enables, its current state and maturity, and the market opportunity. Quantify the market: total addressable market size (in dollars), historical growth rate (CAGR over past 3-5 years), and projected growth rate with the key assumptions behind it. For emerging sectors (robotics, space), frame the opportunity with bottom-up forecasts: 'We estimate robot bearings demand rising from ~200mn units ($827mn) in 2025 to 40.6bn ($255bn) in 2050.' For established sectors, use industry data sources: 'According to SIA, January semiconductor billings were down 4.9% m/m, above the 10-yr average change of -9.8%.' Include a market sizing chart (area or bar chart showing historical and projected market size over time). For sector initiations, provide a brief primer on how the industry works before diving into data. Use text blocks for narrative and a chart block for the market sizing visualization.",
+      "blocks": []
+    },
+    {
+      "id": "key_drivers",
+      "title": "Key Drivers and Trends",
+      "instructions": "Identify and analyze the 3-5 most important drivers shaping the sector. These typically fall into categories: demand drivers (AI spending, consumer electronics cycles, government policy), technology shifts (process node migration, architecture changes, new form factors), supply dynamics (capacity expansion, bottlenecks, pricing cycles), and regulatory or geopolitical factors (tariffs, supply chain localization, export controls). For each driver, state what is happening, quantify its impact, and explain why it matters for investment positioning. Use numbered takeaways: '(1) GAA architecture at N2 drives chemical usage per wafer to 3x the 14nm level... (2) TSMC supply chain localization benefits domestic suppliers...' Include management commentary or industry expert quotes in indirect speech where impactful: 'Our conversations with robotics experts indicate that potentially >90% of the critical components supply chain is in some way controlled by China.' Each driver should be 2-4 sentences with at least one data point. Use text blocks with numbered takeaways.",
+      "blocks": []
+    },
+    {
+      "id": "data_analysis",
+      "title": "Market Data and Analysis",
+      "instructions": "Present the quantitative backbone of the sector thesis. This section is data-heavy and chart-heavy. Common data types by sector: industry billings data (SIA for semis, SEMI for equipment), pricing data (DRAM/NAND spot prices, contract prices), capacity data (wafer capacity additions, factory utilization rates), demand indicators (CIO survey results, order book data, fulfillment rates), and historical cycle comparisons ('In the 2016-2018 cycle, NAND and DRAM spot prices increased 80-90% over 12 months'). Present data with full context: actual figure, comparison to estimate or seasonality, and directional significance. Use the format: 'Overall sales were down 4.9% m/m, above our estimate of -15.7% and above the 10-yr average change of -9.8%.' Group data by sub-segment where applicable: 'By geography: Asia Pacific (+90.8%), China (+61.9%), Americas (+47.4%).' Historical comparisons should be specific: 'DRAM spot prices are up >260% in just two months vs. +90% over the course of 12 months in the last cycle.' Include 2-4 exhibits (charts or tables) with source attribution. Use text blocks interspersed with chart blocks.",
+      "blocks": []
+    },
+    {
+      "id": "competitive_landscape",
+      "title": "Competitive Landscape and Value Chain",
+      "instructions": "Map who the key players are and where value accrues in the sector. For mature sectors: provide market share data ('top 6 global manufacturers represent >50% of the market'), identify the key competitors by tier, and note any structural shifts in competitive positioning. For emerging sectors: profile the key private companies and startups alongside public companies, noting funding, leadership, and stage of development. For value chain analysis: trace the flow from raw inputs to end products, identify which segments have pricing power or bottleneck characteristics, and flag picks-and-shovels plays ('bearings offer diversified, architecture-agnostic exposure to the secular robotics theme'). Include a value chain exhibit or competitive landscape table where data supports it. When covering supply chain concentration risks, quantify them: 'China accounted for 54% of all industrial robots installed globally in 2024.' Use text blocks for narrative, a table block for competitive comparison, and optionally a group block for value chain visualization.",
+      "blocks": []
+    },
+    {
+      "id": "company_analysis",
+      "title": "Company Analysis and Stock Implications",
+      "instructions": "Translate the sector thesis into specific stock recommendations. Structure depends on the number of companies covered. For broad sector notes (5+ companies): use a summary table showing key financial metrics across all covered companies (columns: ticker, rating, target price, current price, upside/downside, key financial metrics for 2-3 forward years), followed by 1-2 paragraph write-ups for key rating changes or top picks. For focused notes (2-3 companies): provide deeper analysis per company with individual financial summaries. For each company or rating change, state: the action (initiate, upgrade, downgrade, reiterate), the target price with methodology, and the 1-2 key reasons. Example: 'We initiate coverage of Shin-Etsu Chemical (4749 TT, NT$920, Buy) with a target price of NT$1,260 based on 50x 2027E P/E (vs. historical range of 30-80x), driven by N2 process validation and supply chain localization.' Include a peer valuation comparison table. For each stock, cite the most relevant financial data point from the sector thesis. Use table blocks for comparison tables and text blocks for individual company analysis.",
+      "blocks": []
+    },
+    {
+      "id": "valuation",
+      "title": "Valuation",
+      "instructions": "Present the valuation framework for the sector and key stocks. Show how target prices are derived and how they compare to historical ranges and peers. Common approaches for sector reports: (1) Forward P/E with historical context: 'We assign a 50x P/E (vs. historical range of 30-80x) on 2027E EPS to arrive at our target price of NT$1,260.' (2) Through-cycle multiples: 'We assume 23x through-cycle EPS of $30.00 vs. trailing 9-year average of $6.33.' (3) Relative valuation: 'AMAT continues to trade at a discount to peers (target multiple ~3x below LAM and ~5x below KLA) despite our expectation that the company will outperform WFE growth.' (4) Risk-reward framework: present bull/bear/base scenarios with probability weighting for key stocks. Include a sector P/E band chart or historical valuation range chart if data supports it. Always state: methodology, specific multiple, the metric it applies to, comparison to historical range, and implied upside/downside. Use metric cards for headline valuations and a table block for peer comparison.",
+      "blocks": []
+    },
+    {
+      "id": "risks",
+      "title": "Risks",
+      "instructions": "List 3-5 key risks specific to the sector thesis. Risks should address both the sector-level thesis and the stock-level implications. Common patterns: (1) Timing risk: 'We could be too early on our call, as it took 6-12 months for gross margins to begin contracting after memory prices surged in 2016-2018.' (2) Demand risk: 'Slower-than-expected adoption of [specific technology] reducing demand for [specific segment].' (3) Supply risk: 'Higher-than-expected capacity additions diluting pricing power.' (4) Policy/regulatory: 'Changes to tariff or export control policy altering competitive dynamics.' (5) Technology disruption: 'Emergence of alternative architectures reducing dependency on [current technology].' Each risk should be specific to the sector and quantifiable where possible: 'Product certification delays; advanced process wafer loading below expectations.' Also include upside risks if the thesis is bearish. Keep to 3-5 risks maximum, each 1-2 sentences. Present as a bulleted text block.",
+      "blocks": []
+    }
+  ]
+}

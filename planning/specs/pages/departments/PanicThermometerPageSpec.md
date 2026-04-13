@@ -618,6 +618,26 @@ Macro table
 
 ---
 
+## Data Requirements
+
+PT is a pre-fetch dashboard department. Data is fetched periodically and fed into the formula engine for threshold evaluation.
+
+**Basic (department disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Historical prices | `historical_prices` | Historical daily OHLCV for oil proxy (BNO), TIP ETF, and computed indicators (MAs, ATR, streaks) |
+| Stock quote | `stock_quote` | Real-time or delayed prices for dashboard panel updates |
+| Economic events | `economic_events` | Economic calendar for wages (Average Hourly Earnings), inflation (Michigan survey), and FOMC dates |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Company news | `company_news` | News articles for Fed language keyword scanning and diplomatic progress tracking | Fed Language Tracker and Diplomatic Progress panels disabled; only Oil, Inflation, and Wage panels operational |
+
+---
+
 ## Tech stack
 
 | Layer | Choice | Rationale |

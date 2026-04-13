@@ -1,26 +1,32 @@
-# Earnings Report Department Spec
+# Earnings Update Department Spec
 ## Department Overview
-The Earnings Report Department is in charge of monitoring earnings report releases by companies on the watchlist and generating analysis reports on the earnings reports whenever an earnings report is released. The user will add companies that he wants to track to the watchlist.
+The Earnings Update Department is in charge of monitoring earnings report releases by companies on the watchlist and generating analysis reports on the earnings reports whenever an earnings report is released. The user will add companies that he wants to track to the watchlist.
 
-In addition, the user can also request an immediate generation of an earnings analysis report through ER.
+In addition, the user can also request an immediate generation of an earnings analysis report through EU.
 
 ## Functions
-1. **Watchlist**: The user can manage a watchlist for ER, adding or removing companies/tickers that he wants to follow. When the user adds a company/ticker to the watchlist, find  the next earnings release date for the company to schedule the analysis report. Display the next earning report release date of the company on the watchlist for the user to see, including whether its a pre-market or post-market release.
-2. **ER Cabinet**: When analysis reports are completed, they are added to the ER Cabinet that stores all generated reports, organized by chronological order. On the page under the ER Cabinet section there is a small preview list for most recently generated reports. The user can open the ER Cabinet to see the full list, as well as click on these reports to open report preview to read these reports.
+1. **Watchlist**: The user can manage a watchlist for EU, adding or removing companies/tickers that he wants to follow. When the user adds a company/ticker to the watchlist, find  the next earnings release date for the company to schedule the analysis report. Display the next earning report release date of the company on the watchlist for the user to see, including whether its a pre-market or post-market release.
+2. **EU Cabinet**: When analysis reports are completed, they are added to the EU Cabinet that stores all generated reports, organized by chronological order. On the page under the EU Cabinet section there is a small preview list for most recently generated reports. The user can open the EU Cabinet to see the full list, as well as click on these reports to open report preview to read these reports.
 3. **Automated Reports**: When the release date for a company arrives, automatically generate an analysis report on the earnings release, adds the report to the "generated reports section," and notifies the user through email. 
-4. **On-Demand Reports**: The user can request ER to generate a earnings analysis report immediately on a country's latest earnings release. This "On-demand" report will also be saved to the ER Cabinet.
+4. **On-Demand Reports**: The user can request EU to generate an earnings analysis report immediately on a company's latest earnings release. This "On-demand" report will also be saved to the EU Cabinet.
 
 ## Report Frameworks
+
+| Report Type | Framework File | Sections |
+|---|---|---|
+| Earnings Analysis Report | `earnings_update.json` | 8 sections (Quick Take, Market Reaction, Key Financials, Operational Highlights, Forward Guidance, Earnings Call, Risk Assessment, Thesis Check) |
+
+Style guide: `earnings_update_style_guide.md`
 
 ## User Interface Design
 
 ### Layout
 
-The Earnings Reports page uses a **two-section stacked layout** within the main content area. The page header provides the primary action. Content is not a chat interface — it is a dashboard with a watchlist panel and a report cabinet.
+The Earnings Updates page uses a **two-section stacked layout** within the main content area. The page header provides the primary action. Content is not a chat interface — it is a dashboard with a watchlist panel and a report cabinet.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  Earnings Reports                    [+ On-Demand Report]      │
+│  Earnings Updates                    [+ On-Demand Report]      │
 │────────────────────────────────────────────────────────────────│
 │                                                                │
 │  WATCHLIST                                   [+ Add Ticker]   │
@@ -54,7 +60,7 @@ The Earnings Reports page uses a **two-section stacked layout** within the main 
 | Height | 56px (`h-14`), `flex-shrink-0` |
 | Background | `--color-bg-base` |
 | Border | 1px bottom, `--color-border-subtle` |
-| Page title | "Earnings Reports" — `text-xl font-semibold text-[--color-text-primary]`, `pl-6` |
+| Page title | "Earnings Updates" — `text-xl font-semibold text-[--color-text-primary]`, `pl-6` |
 | On-Demand Report button | `pr-6`; `Plus` icon (16px) + "On-Demand Report" label; `bg-[--color-accent-primary] text-white text-sm px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover]`; opens On-Demand modal |
 
 ---
@@ -108,13 +114,13 @@ Shows the 5 most recently generated reports as a scrollable list. Full history i
 
 ---
 
-### ER Cabinet (Full View)
+### EU Cabinet (Full View)
 
 Opened via "Open Cabinet →" in the Recent Reports header. The cabinet slides in as a full-page overlay or navigates to a sub-view within the Earnings page.
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│  ← Back to Earnings Reports                   ER Cabinet       │
+│  ← Back to Earnings Updates                   EU Cabinet       │
 │────────────────────────────────────────────────────────────────│
 │  [ Search reports...                     ]  [ Filters ▾ ]     │
 │  ─────────────────────────────────────────────────────────     │
@@ -130,7 +136,7 @@ Opened via "Open Cabinet →" in the Recent Reports header. The cabinet slides i
 
 | Element | Detail |
 |---|---|
-| Header | "← Back" text link (returns to main view) + "ER Cabinet" title centered or right-aligned |
+| Header | "← Back" text link (returns to main view) + "EU Cabinet" title centered or right-aligned |
 | Search | Full-width search input; searches by company name or ticker |
 | Filter button | "Filters ▾" opens a filter dropdown: by ticker, date range |
 | Date group headers | Reports grouped by month; `text-sm font-medium text-[--color-text-secondary] px-6 py-2` |
@@ -145,7 +151,7 @@ Triggered by "+ On-Demand Report" in the page header. Generates an immediate ear
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  On-Demand Earnings Report                         [✕]   │
+│  On-Demand Earnings Update                         [✕]   │
 │──────────────────────────────────────────────────────────│
 │  Generate an earnings analysis for a company's most      │
 │  recently released earnings report.                      │
@@ -170,7 +176,7 @@ Triggered by "+ On-Demand Report" in the page header. Generates an immediate ear
 
 ### Notification Dot (Sidebar)
 
-When a new automated earnings report is generated, the "Earnings Reports" nav item in the sidebar shows a notification dot: a `w-1.5 h-1.5 rounded-full bg-[--color-accent-primary]` dot positioned top-right of the icon. The dot disappears once the user visits the Earnings Reports page.
+When a new automated earnings report is generated, the "Earnings Updates" nav item in the sidebar shows a notification dot: a `w-1.5 h-1.5 rounded-full bg-[--color-accent-primary]` dot positioned top-right of the icon. The dot disappears once the user visits the Earnings Updates page.
 
 ---
 
@@ -200,6 +206,27 @@ In the settings page for SR, changeable settings are avaliable as below:
 1. Report Sections: Allows the user to select what sections the user wants to be included in the report. Default sections are included for the user to check or uncheck.
 2. Custom Sections: There is also a custom button that allows users to add custom sections. The custom button opens up another pop-up that allows user to input a name for their custom section as well as a description box for what the section should be about.
 3. Length Adjuster: Allows user to choose the length of reports, such as concise, normal, or ellaborative.
+
+## Data Requirements
+
+EU uses pre-fetch for the watchlist (earnings dates fetched on add) and tool-calling for report generation.
+
+**Basic (department disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Earnings dates | `earnings_dates` | Upcoming and historical earnings release dates for watchlist scheduling and automated triggers |
+| Financial statements | `financial_statements` | Quarterly income statement, balance sheet for Key Financials and Operational Highlights sections |
+| Stock quote | `stock_quote` | Current price and daily change for Market Reaction analysis |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Earnings transcripts | `earnings_transcripts` | Earnings call transcripts for qualitative analysis | Earnings Call section omitted from report |
+| Company news | `company_news` | News around earnings events for context | Event context section lacks news coverage |
+| Historical prices | `historical_prices` | Price history for pre/post earnings price action | Market Reaction section lacks price chart context |
+| Analyst ratings | `analyst_ratings` | Consensus estimates for beat/miss scoring | Key Financials section lacks consensus estimate comparison |
 
 ## Configuration
 - LLM Model:

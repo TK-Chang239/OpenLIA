@@ -53,6 +53,22 @@ Tracks all known gaps, incomplete work, and open questions across the project. U
 
 ---
 
+## Portfolio Page
+
+### Gaps
+
+- None currently.
+
+### Remaining Tasks
+
+- None currently.
+
+### Open Questions
+
+- Should there be a confirmation prompt before opening a new Equity Research chat session if the user already has an active session for that department?
+
+---
+
 ## Macro Research Department (MR)
 
 Department redesigned from chat-based report generator to five framework-driven dashboards based on Ray Dalio's macro methodology. Design spec: `planning/specs/systems/macro-research-dalio-dashboards-design.md`.
@@ -119,6 +135,36 @@ Full spec exists: `planning/specs/pages/departments/PanicThermometerPageSpec.md`
 ### Open Questions
 
 - None currently. Spec is complete.
+
+---
+
+## Data Requirements (All Departments)
+
+Data requirements have been added to all department and page specs. Each spec declares basic (required) and advanced (optional) data requirements in a consistent format for the setup wizard to map configured providers against.
+
+### Requirement Types Across All Departments
+
+| Type | Used By |
+|---|---|
+| `stock_quote` | Secretary, EqR, EU, MB, PT, MR, RS, Portfolio |
+| `company_profile` | Secretary, EqR, Portfolio |
+| `company_news` | Secretary, EqR, EU, MB, PT, MR, RS |
+| `historical_prices` | Secretary, EqR, EU, MB, PT, MR, RS |
+| `financial_statements` | EqR, EU |
+| `economic_events` | Secretary, MB, PT, MR |
+| `macro_indicators` | MB, MR |
+| `earnings_dates` | EU |
+| `earnings_transcripts` | EU |
+| `earnings_data` | EqR |
+| `analyst_ratings` | EqR, EU |
+| `insider_transactions` | EqR |
+| `intraday_prices` | Portfolio |
+| `social_sentiment` | RS |
+| `options_data` | RS |
+| `short_interest` | RS |
+| `institutional_holdings` | RS |
+
+The full requirements manifest (`packages/core/src/openlia/data/manifest/requirements.yaml`) will be the union of all department requirements. The setup wizard maps each configured provider's capabilities against this manifest to determine which departments and features are available.
 
 ---
 

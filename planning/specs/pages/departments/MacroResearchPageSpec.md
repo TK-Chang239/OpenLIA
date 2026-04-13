@@ -172,6 +172,27 @@ Not applicable. MR is a dashboard department and does not generate text reports.
 
 ---
 
+## Data Requirements
+
+MR is a pre-fetch dashboard department. T1/T2 use formula engine evaluation, T3 uses computational risk math, T4/T5 use LLM assessment.
+
+**Basic (department disabled without these):**
+
+| Requirement | Type | Description |
+|---|---|---|
+| Macro indicators | `macro_indicators` | Debt/GDP, interest rates, CPI, PMI, GDP, credit spreads for T1 (Debt Cycle) and T2 (Four Seasons) |
+| Economic events | `economic_events` | Economic calendar events for T1/T2 formula engine inputs |
+| Historical prices | `historical_prices` | Price history for DXY proxy, gold, bonds, equities used across T1-T5 dashboards |
+
+**Advanced (features degrade gracefully if missing):**
+
+| Requirement | Type | Description | Without It |
+|---|---|---|---|
+| Company news | `company_news` | News articles for T4 (World Order) and T5 (Five Forces) LLM context | T4 and T5 assessments lack current events context; assessments rely solely on market data |
+| Stock quote | `stock_quote` | Real-time prices for dashboard auto-refresh | Dashboard shows last-close prices only; no intraday refresh |
+
+---
+
 ## Non-Goals (v1)
 
 - Chat interface or conversational interaction

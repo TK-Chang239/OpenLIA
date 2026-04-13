@@ -1,0 +1,304 @@
+
+<h2 class="sr-only">Dalio macro analysis report template system — five frameworks mapped to reusable report sections</h2>
+
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font-sans); }
+  .nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+  .nav button { font-size: 12px; padding: 5px 12px; border-radius: 20px; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; }
+  .nav button.active { background: var(--color-background-secondary); color: var(--color-text-primary); border-color: var(--color-border-primary); }
+  .nav button:hover:not(.active) { background: var(--color-background-secondary); }
+
+  .template { display: none; }
+  .template.active { display: block; }
+
+  .template-header { margin-bottom: 20px; }
+  .template-header h3 { font-size: 15px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 4px; }
+  .template-header p { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
+
+  .section-block { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); padding: 14px 16px; margin-bottom: 10px; }
+  .section-block .label { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .section-block .title { font-size: 14px; font-weight: 500; color: var(--color-text-primary); margin-bottom: 6px; }
+  .section-block .fields { display: flex; flex-direction: column; gap: 4px; }
+  .field { font-size: 13px; color: var(--color-text-secondary); padding: 4px 8px; background: var(--color-background-secondary); border-radius: 6px; line-height: 1.4; }
+  .field .fname { font-weight: 500; color: var(--color-text-primary); }
+  .field span { color: var(--color-text-tertiary); font-size: 12px; margin-left: 4px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; margin-bottom: 8px; }
+  .badge-teal { background: #E1F5EE; color: #0F6E56; }
+  .badge-amber { background: #FAEEDA; color: #854F0B; }
+  .badge-coral { background: #FAECE7; color: #993C1D; }
+  .badge-purple { background: #EEEDFE; color: #3C3489; }
+  .badge-blue { background: #E6F1FB; color: #0C447C; }
+
+  .signal-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 13px; }
+  .signal-row:last-child { border-bottom: none; }
+  .signal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-red { background: #E24B4A; }
+  .dot-amber { background: #EF9F27; }
+  .dot-green { background: #639922; }
+  .dot-gray { background: #888780; }
+  .signal-name { flex: 1; color: var(--color-text-primary); }
+  .signal-val { color: var(--color-text-secondary); font-size: 12px; }
+
+  .use-btn { margin-top: 14px; }
+  .use-btn button { font-size: 12px; padding: 6px 14px; border-radius: 20px; border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-secondary); cursor: pointer; }
+  .use-btn button:hover { background: var(--color-background-secondary); color: var(--color-text-primary); }
+</style>
+
+<div style="padding: 1rem 0;">
+
+  <div class="nav" id="nav">
+    <button class="active" onclick="show('debt')">1 · Debt cycle</button>
+    <button onclick="show('seasons')">2 · Four seasons</button>
+    <button onclick="show('allweather')">3 · All-weather</button>
+    <button onclick="show('worldorder')">4 · World order</button>
+    <button onclick="show('fiveforces')">5 · Five forces</button>
+  </div>
+
+  <!-- Template 1: Debt Cycle -->
+  <div class="template active" id="t-debt">
+    <div class="template-header">
+      <div class="badge badge-teal">Framework 1</div>
+      <h3>Debt cycle position report</h3>
+      <p>Diagnoses where a country sits on the long-term debt cycle using Dalio's three concrete indicators. Best run quarterly or when a major fiscal event occurs.</p>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section A — headline scorecard</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Indicator</span> <span>name · current value · Dalio warning threshold · status signal</span></div>
+        <div class="signal-row"><div class="signal-dot dot-red"></div><div class="signal-name">Govt debt / GDP</div><div class="signal-val">US 124% · warn &gt;100%</div></div>
+        <div class="signal-row"><div class="signal-dot dot-amber"></div><div class="signal-name">Interest cost / revenue</div><div class="signal-val">~19% · escalates after 15%</div></div>
+        <div class="signal-row"><div class="signal-dot dot-amber"></div><div class="signal-name">10yr TIPS real yield</div><div class="signal-val">~+2% · gold demand rises near 0%</div></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="section-block">
+        <div class="label">Section B — cycle phase</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Phase label</span> <span>expansion / plateau / deleveraging</span></div>
+          <div class="field"><span class="fname">Nearest historical analog</span> <span>e.g. 1970s US, 1990s Japan</span></div>
+          <div class="field"><span class="fname">Time-to-constraint estimate</span> <span>narrative range, not point forecast</span></div>
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="label">Section C — monetary policy space</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Rate cut headroom</span> <span>nominal vs effective lower bound</span></div>
+          <div class="field"><span class="fname">QE credibility score</span> <span>inflation expectations anchored?</span></div>
+          <div class="field"><span class="fname">Currency debasement risk</span> <span>low / moderate / elevated</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section D — asset implications</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Gold / real assets thesis</span></div>
+        <div class="field"><span class="fname">Long-duration bond risk</span></div>
+        <div class="field"><span class="fname">Key watchlist triggers</span> <span>what would change the assessment</span></div>
+      </div>
+    </div>
+    <div class="use-btn"><button onclick="sendPrompt('Generate a debt cycle position report for the US using Dalio\'s framework — scorecard, cycle phase, policy space, and asset implications')">Run this template for US ↗</button></div>
+  </div>
+
+  <!-- Template 2: Four Seasons -->
+  <div class="template" id="t-seasons">
+    <div class="template-header">
+      <div class="badge badge-amber">Framework 2</div>
+      <h3>Economic season diagnostic</h3>
+      <p>Identifies the current macro quadrant (spring / summer / autumn / winter) and maps it to asset class positioning. Run monthly when PMI and CPI data refresh.</p>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section A — quadrant inputs</div>
+      <div class="two-col">
+        <div class="fields">
+          <div class="field"><span class="fname">Growth signal</span> <span>PMI trend · GDP qoq · direction</span></div>
+          <div class="field"><span class="fname">Inflation signal</span> <span>CPI yoy · core · direction</span></div>
+        </div>
+        <div class="fields">
+          <div class="field"><span class="fname">Credit conditions</span> <span>IG / HY spreads vs 12m avg</span></div>
+          <div class="field"><span class="fname">Real rate trend</span> <span>TIPS 10yr: rising / flat / falling</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section B — season verdict</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Primary season</span> <span>e.g. Autumn — slowing growth + sticky inflation</span></div>
+        <div class="field"><span class="fname">Confidence level</span> <span>clear / mixed / transitioning</span></div>
+        <div class="field"><span class="fname">Nearest comparable period</span> <span>e.g. 2022 H1, 1973–74</span></div>
+        <div class="field"><span class="fname">Transition risk</span> <span>which adjacent season could emerge and why</span></div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section C — asset playbook for current season</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Tailwind assets</span> <span>best performers in this quadrant historically</span></div>
+        <div class="field"><span class="fname">Headwind assets</span> <span>historically weak in this quadrant</span></div>
+        <div class="field"><span class="fname">Portfolio stress test</span> <span>if current season persists 2–4 quarters, what breaks?</span></div>
+      </div>
+    </div>
+    <div class="use-btn"><button onclick="sendPrompt('Run a four-seasons economic diagnostic for the current US macro environment — determine the quadrant, confidence level, and asset playbook')">Run current US season diagnostic ↗</button></div>
+  </div>
+
+  <!-- Template 3: All Weather -->
+  <div class="template" id="t-allweather">
+    <div class="template-header">
+      <div class="badge badge-purple">Framework 3</div>
+      <h3>All-weather allocation review</h3>
+      <p>Stress-tests a portfolio against Dalio's risk-parity logic. Shows which seasons each position covers and where coverage gaps exist. Run semi-annually or after major allocation shifts.</p>
+    </div>
+
+    <div class="two-col">
+      <div class="section-block">
+        <div class="label">Section A — coverage map</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Spring cover</span> <span>equity weight · risk contribution %</span></div>
+          <div class="field"><span class="fname">Summer cover</span> <span>commodities + TIPS weight</span></div>
+          <div class="field"><span class="fname">Autumn cover</span> <span>gold + real assets weight</span></div>
+          <div class="field"><span class="fname">Winter cover</span> <span>long-duration bonds + cash weight</span></div>
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="label">Section B — risk parity audit</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Equity risk share</span> <span>target ~25% · actual?</span></div>
+          <div class="field"><span class="fname">Bond risk share</span> <span>target ~35%</span></div>
+          <div class="field"><span class="fname">Real asset risk share</span> <span>target ~20% each</span></div>
+          <div class="field"><span class="fname">Dominant risk source</span> <span>which asset drives &gt;50% of total vol?</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section C — gold allocation check</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Current gold weight</span> <span>vs Dalio baseline 7.5% / stress-env target 15%</span></div>
+        <div class="field"><span class="fname">Gap or overshoot</span></div>
+        <div class="field"><span class="fname">Adjustment rationale</span> <span>linked to debt cycle + season assessment</span></div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section D — retail investor caveats</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Leverage assumption</span> <span>original AW requires leverage for bond parity — document if absent</span></div>
+        <div class="field"><span class="fname">Bond allocation risk</span> <span>inflationary envs undermine heavy bond weights</span></div>
+        <div class="field"><span class="fname">Rebalancing cadence</span> <span>quarterly / threshold-based</span></div>
+      </div>
+    </div>
+    <div class="use-btn"><button onclick="sendPrompt('Review a portfolio against the All-Weather risk parity framework — coverage map, risk contribution audit, and gold allocation check')">Run allocation review ↗</button></div>
+  </div>
+
+  <!-- Template 4: World Order -->
+  <div class="template" id="t-worldorder">
+    <div class="template-header">
+      <div class="badge badge-coral">Framework 4</div>
+      <h3>Long-term world order assessment</h3>
+      <p>Evaluates structural shifts in the global monetary and reserve system. A slow-moving template — update annually or when a major geopolitical or monetary regime event occurs.</p>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section A — reserve currency health indicators</div>
+      <div class="fields">
+        <div class="field"><span class="fname">USD share of global FX reserves</span> <span>trend direction · current % vs 10yr ago</span></div>
+        <div class="field"><span class="fname">Central bank gold purchases</span> <span>net tonnes yoy · accelerating / decelerating</span></div>
+        <div class="field"><span class="fname">Foreign Treasury holdings</span> <span>trend · largest reducers</span></div>
+        <div class="field"><span class="fname">Dollar index trend</span> <span>structural vs cyclical move?</span></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="section-block">
+        <div class="label">Section B — empire cycle stage</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Stage</span> <span>rise / peak / plateau / decline</span></div>
+          <div class="field"><span class="fname">Debasement signals</span></div>
+          <div class="field"><span class="fname">Historical analog</span> <span>e.g. pre-1971 Bretton Woods</span></div>
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="label">Section C — great wealth shift signal</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Financial → real wealth flows</span> <span>early / mid / late stage</span></div>
+          <div class="field"><span class="fname">Multi-polar reserve evidence</span></div>
+          <div class="field"><span class="fname">Gold structural demand trend</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section D — investment implications</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Recommended gold range</span> <span>5–10% normal · up to 15% in stress · current regime suggests</span></div>
+        <div class="field"><span class="fname">Currency exposure guidance</span></div>
+        <div class="field"><span class="fname">Sovereign bond risk premium</span></div>
+      </div>
+    </div>
+    <div class="use-btn"><button onclick="sendPrompt('Run a world order assessment using Dalio\'s framework — reserve currency health, empire cycle stage, great wealth shift signals, and investment implications')">Run world order assessment ↗</button></div>
+  </div>
+
+  <!-- Template 5: Five Forces -->
+  <div class="template" id="t-fiveforces">
+    <div class="template-header">
+      <div class="badge badge-blue">Framework 5</div>
+      <h3>Five interlocking forces dashboard</h3>
+      <p>Scores each of Dalio's five forces (debt/money, domestic politics, geopolitics, technology, natural) for current intensity. The key insight is their simultaneous activation — run quarterly.</p>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section A — force intensity scorecard</div>
+      <div class="fields">
+        <div class="signal-row"><div class="signal-dot dot-red"></div><div class="signal-name">Force 1 · Debt &amp; money cycle</div><div class="signal-val">High · structural driver</div></div>
+        <div class="signal-row"><div class="signal-dot dot-amber"></div><div class="signal-name">Force 2 · Domestic political cycle</div><div class="signal-val">Elevated · polarization rising</div></div>
+        <div class="signal-row"><div class="signal-dot dot-red"></div><div class="signal-name">Force 3 · Geopolitical cycle</div><div class="signal-val">High · reserve fragmentation</div></div>
+        <div class="signal-row"><div class="signal-dot dot-amber"></div><div class="signal-name">Force 4 · Technology wave</div><div class="signal-val">High · AI disruption accelerating</div></div>
+        <div class="signal-row"><div class="signal-dot dot-gray"></div><div class="signal-name">Force 5 · Natural forces</div><div class="signal-val">Moderate · tail risk watch</div></div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="label">Section B — reinforcement analysis</div>
+      <div class="fields">
+        <div class="field"><span class="fname">Active force count</span> <span>2–3 forces = elevated · 4–5 = historical turning point zone</span></div>
+        <div class="field"><span class="fname">Dominant feedback loop</span> <span>which force pair is most mutually reinforcing?</span></div>
+        <div class="field"><span class="fname">Stabilizing offsets</span> <span>any forces acting as dampeners?</span></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="section-block">
+        <div class="label">Section C — gold demand implication</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Monetary system confidence erosion</span> <span>low / moderate / high</span></div>
+          <div class="field"><span class="fname">Strategic gold allocation signal</span></div>
+        </div>
+      </div>
+      <div class="section-block">
+        <div class="label">Section D — scenario risks</div>
+        <div class="fields">
+          <div class="field"><span class="fname">Bull case</span> <span>forces decouple — what reverses first?</span></div>
+          <div class="field"><span class="fname">Bear case</span> <span>all five forces intensify together</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="use-btn"><button onclick="sendPrompt('Run a five interlocking forces dashboard — score each of Dalio\'s five forces for current intensity, analyze reinforcement loops, and draw the gold allocation implication')">Run five forces dashboard ↗</button></div>
+  </div>
+
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.template').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('t-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>

@@ -34,8 +34,8 @@ openlia/
 │   │   │       │   ├── __init__.py
 │   │   │       │   ├── base.py             # Base department class
 │   │   │       │   ├── secretary.py
-│   │   │       │   ├── stock_research.py
-│   │   │       │   ├── earnings_report.py
+│   │   │       │   ├── equity_research.py
+│   │   │       │   ├── earnings_update.py
 │   │   │       │   ├── morning_briefing.py
 │   │   │       │   ├── retail_sentiment.py
 │   │   │       │   └── macro_research.py
@@ -56,8 +56,8 @@ openlia/
 │   │   │       │
 │   │   │       ├── prompts/                # Prompt templates (YAML)
 │   │   │       │   ├── secretary.yaml
-│   │   │       │   ├── stock_research.yaml
-│   │   │       │   ├── earnings_report.yaml
+│   │   │       │   ├── equity_research.yaml
+│   │   │       │   ├── earnings_update.yaml
 │   │   │       │   ├── morning_briefing.yaml
 │   │   │       │   ├── retail_sentiment.yaml
 │   │   │       │   └── macro_research.yaml
@@ -137,7 +137,7 @@ openlia/
 │       ├── pages/                  # One page per department + other pages
 │       │   ├── SecretaryPage.tsx
 │       │   ├── StockResearchPage.tsx
-│       │   ├── EarningsReportPage.tsx
+│       │   ├── EarningsUpdatePage.tsx
 │       │   ├── MorningBriefingPage.tsx
 │       │   ├── RetailSentimentPage.tsx
 │       │   ├── MacroResearchPage.tsx
@@ -171,7 +171,7 @@ openlia/
 │   │   │   ├── departments/
 │   │   │   │   ├── SecretaryPageSpec.md
 │   │   │   │   ├── StockResearchPageSpec.md
-│   │   │   │   ├── EarningsReportsPageSpec.md
+│   │   │   │   ├── EarningsUpdatePageSpec.md
 │   │   │   │   ├── MorningBriefingsPageSpec.md
 │   │   │   │   ├── RetailSentimentPageSpec.md
 │   │   │   │   └── MacroResearchPageSpec.md

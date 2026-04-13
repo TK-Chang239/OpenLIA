@@ -32,8 +32,8 @@ Departments fall into two categories based on how they access data:
 
 **Tool-calling departments** receive mapped tools and the runtime expansion meta-tool. The LLM decides which tools to call and when.
 - Secretary
-- Stock Research
-- Earnings Report
+- Equity Research
+- Earnings Update
 - Macro Research
 - Morning Briefing
 
@@ -119,7 +119,7 @@ Requirements are split into two tiers:
 #         description: <plain-language description>
 #
 # Example entry:
-#   department: stock_research
+#   department: equity_research
 #   requirements:
 #     basic:
 #       - type: stock_quote
@@ -272,8 +272,8 @@ When a user configures or changes a provider, the AI review runs to map provider
 One file per department:
 
 ```yaml
-# ~/.openlia/mappings/stock_research.yaml
-department: stock_research
+# ~/.openlia/mappings/equity_research.yaml
+department: equity_research
 generated_at: "2026-04-11T09:30:00Z"
 review_model: gpt-4o-mini
 basic:
@@ -418,7 +418,7 @@ Each entry:
 ```json
 {
   "timestamp": "2026-04-11T14:22:00Z",
-  "department": "stock_research",
+  "department": "equity_research",
   "session_id": "abc123",
   "description": "insider trading activity for AAPL",
   "reason": "mapped tools don't include insider data",
@@ -540,8 +540,8 @@ packages/core/src/openlia/data/
 │   └── social_media/
 ├── mappings/                      # AI-generated requirement-to-endpoint mappings
 │   ├── secretary.yaml
-│   ├── stock_research.yaml
-│   ├── earnings_report.yaml
+│   ├── equity_research.yaml
+│   ├── earnings_update.yaml
 │   ├── morning_briefing.yaml
 │   ├── macro_research.yaml
 │   ├── retail_sentiment.yaml

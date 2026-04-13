@@ -1,0 +1,93 @@
+<h2>Macro Research: Design Comparison</h2>
+<p class="subtitle">Other agent's template system vs. our evolving dashboard design</p>
+
+<div class="section">
+  <h3>Other Agent's Design: "Template System"</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 14px;">
+      <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">Strengths</div>
+      <ul style="font-size: 14px; color: var(--text-secondary); line-height: 1.7; padding-left: 18px;">
+        <li><strong>Cross-template dependency graph</strong> -- T1, T2, T4 feed into T5; T5 feeds into T3. Execution order enforced.</li>
+        <li><strong>Polished visual design system</strong> -- shared color semantics (red/amber/green/blue/purple), badge components, card hierarchy, scorecard tables.</li>
+        <li><strong>T3 as portfolio audit</strong> -- compares user's portfolio against All-Weather targets (coverage map, risk parity, gold gap).</li>
+        <li><strong>Reinforcement loop analysis</strong> in T5 -- identifies feedback loops between forces.</li>
+        <li><strong>Historical analogs</strong> in T4 -- requires both "Similar" and "Different" to resist lazy analogizing.</li>
+        <li><strong>Synthesis verdicts</strong> with downstream consumption notes per template.</li>
+      </ul>
+    </div>
+    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 14px;">
+      <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">Weaknesses</div>
+      <ul style="font-size: 14px; color: var(--text-secondary); line-height: 1.7; padding-left: 18px;">
+        <li><strong>Static reports, not live dashboards</strong> -- hardcoded April 2026 data. No auto-refresh.</li>
+        <li><strong>No user-configurable thresholds</strong> -- Dalio's warning zones are baked in, not editable.</li>
+        <li><strong>Standalone HTML files</strong> -- not integrated into OpenLIA's three-layer architecture.</li>
+        <li><strong>Every refresh requires a full LLM run</strong> -- expensive for indicators that are just numbers.</li>
+        <li><strong>No formula engine</strong> -- threshold evaluation is narrative, not programmatic.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 20px;">
+  <h3>Our Design Direction</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 14px;">
+      <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">Strengths</div>
+      <ul style="font-size: 14px; color: var(--text-secondary); line-height: 1.7; padding-left: 18px;">
+        <li><strong>Live-updating dashboards</strong> -- auto-refresh with configurable intervals.</li>
+        <li><strong>Formula engine for T1 & T2</strong> -- user-configurable thresholds via Panic Thermometer DSL. Fast, deterministic, no LLM cost.</li>
+        <li><strong>LLM assessment for T4 & T5</strong> -- qualitative frameworks get proper narrative interpretation.</li>
+        <li><strong>Integrated into OpenLIA</strong> -- fits the three-layer architecture (core/server/frontend).</li>
+        <li><strong>Pre-fetch data pattern</strong> -- code fetches data, formula engine or LLM evaluates. Clear separation.</li>
+      </ul>
+    </div>
+    <div style="background: var(--bg-secondary); border-radius: 8px; padding: 14px;">
+      <div style="font-weight: 600; margin-bottom: 8px; color: var(--text-primary);">What We Were Missing</div>
+      <ul style="font-size: 14px; color: var(--text-secondary); line-height: 1.7; padding-left: 18px;">
+        <li><strong>Cross-dashboard dependencies</strong> -- T5 needs T1/T2/T4 outputs; T3 needs T1/T2/T5.</li>
+        <li><strong>T3 as portfolio audit</strong> -- much richer than just displaying All-Weather weights.</li>
+        <li><strong>Visual design system</strong> -- the other agent's color semantics and component patterns are excellent.</li>
+        <li><strong>Execution ordering for LLM assessments</strong> -- can't run T5 before T1 and T4.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px; background: #f0f7ff; border-radius: 8px; padding: 16px; border: 1px solid #cce0ff;">
+  <h3 style="margin-bottom: 10px;">The Combined Design</h3>
+  <p style="font-size: 14px; color: var(--text-secondary); line-height: 1.7;">
+    Adopt the other agent's <strong>visual design system</strong>, <strong>cross-template dependency graph</strong>, and <strong>T3 portfolio audit concept</strong>.
+    Combine with our <strong>live data refresh</strong>, <strong>formula engine for T1/T2</strong>, <strong>periodic LLM assessment for T4/T5</strong>, and <strong>OpenLIA integration</strong>.
+  </p>
+  <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;">
+    <div style="background: white; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #ddd;">
+      <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">T1 Debt Cycle</div>
+      <div style="font-size: 12px; font-weight: 600; margin-top: 4px; color: #0c447c;">Formula Engine</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">Auto-refresh on data</div>
+    </div>
+    <div style="background: white; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #ddd;">
+      <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">T2 Four Seasons</div>
+      <div style="font-size: 12px; font-weight: 600; margin-top: 4px; color: #0c447c;">Formula Engine</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">Auto-refresh on data</div>
+    </div>
+    <div style="background: white; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #ddd;">
+      <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">T3 All-Weather</div>
+      <div style="font-size: 12px; font-weight: 600; margin-top: 4px; color: #1d9e75;">Computation</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">Daily price refresh</div>
+    </div>
+    <div style="background: white; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #ddd;">
+      <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">T4 World Order</div>
+      <div style="font-size: 12px; font-weight: 600; margin-top: 4px; color: #854f0b;">LLM Assessment</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">Quarterly + trigger</div>
+    </div>
+    <div style="background: white; border-radius: 6px; padding: 10px; text-align: center; border: 1px solid #ddd;">
+      <div style="font-size: 11px; color: #666; text-transform: uppercase; letter-spacing: 0.5px;">T5 Five Forces</div>
+      <div style="font-size: 12px; font-weight: 600; margin-top: 4px; color: #854f0b;">LLM Assessment</div>
+      <div style="font-size: 11px; color: #888; margin-top: 2px;">Quarterly + trigger</div>
+    </div>
+  </div>
+  <div style="margin-top: 12px; font-size: 13px; color: #555; line-height: 1.6;">
+    <strong>Dependency graph preserved:</strong> T1, T2, T4 run independently. T5 synthesizes T1+T2+T4. T3 consumes T1+T2+T5.
+    <br><strong>Refresh cadence:</strong> Market data auto-refreshes (configurable). Economic releases trigger T1/T2 re-evaluation. LLM assessments (T4/T5) run quarterly or on significant news triggers. T3 recomputes whenever upstream dashboards update.
+  </div>
+</div>
