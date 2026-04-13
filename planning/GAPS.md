@@ -80,19 +80,26 @@ Department redesigned from chat-based report generator to five framework-driven 
 
 ## Retail Sentiment Department (RS)
 
+Department redesigned from a 3-metric dashboard into a 12-metric sentiment monitoring platform with 3 analytical tabs, batch LLM classification, and cross-source validation. Design spec: `planning/specs/systems/retail-sentiment-dashboard-design.md`.
+
 ### Gaps
 
-- **No framework JSON**: No report framework exists for the sentiment outputs.
-- **No style guide**: No style guide exists.
+- **No framework JSON or style guide needed**: RS is a dashboard department and does not generate text reports.
+- **X API v2 access tier unverified**: Need to verify which X API tier is required for hourly tweet volume the dashboard needs.
+- **FMP social sentiment endpoint availability**: The `/api/v4/historical/social-sentiment` endpoint may require a specific FMP plan.
+- **NLP batch classification accuracy**: Batch classification of 30 items per call may reduce accuracy vs per-item. Needs testing during implementation.
+- **Engagement weighting formula**: Exact formula for converting likes/retweets/follower count into contribution weights needs to be defined during implementation.
 
 ### Remaining Tasks
 
-- Determine whether RS produces formal reports (requiring a framework) or dashboard-style outputs.
-- If reports, design and create the framework JSON and style guide.
+- Implementation plan for the dashboard design (pending user review of spec).
+- Build batch NLP classification pipeline with structured prompt template.
+- Build metrics computation engine (12 metrics, Pandas-based).
 
 ### Open Questions
 
-- RS produces three outputs per the spec (overall market sentiment, per-stock scores, volume spike detection). Are these presented as a single report or separate views?
+- **Reliability matrix calibration**: Predictive strength and timeliness scores are estimated from literature. Should these be calibrated with backtesting data in a future version?
+- **X API cost**: Basic tier ($100/month) may be insufficient. Need to estimate required volume per watchlist size.
 
 ---
 
@@ -120,6 +127,7 @@ Full spec exists: `planning/specs/pages/departments/PanicThermometerPageSpec.md`
 - **Data provider system design** (`planning/specs/systems/data-provider-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Report rendering pipeline design** (`planning/specs/systems/report-rendering-pipeline-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Macro Research Dalio dashboards design** (`planning/specs/systems/macro-research-dalio-dashboards-design.md`): Spec written and committed. Pending user review before implementation planning.
+- **Retail Sentiment dashboard design** (`planning/specs/systems/retail-sentiment-dashboard-design.md`): Spec written and committed. Pending user review before implementation planning.
 
 ---
 
