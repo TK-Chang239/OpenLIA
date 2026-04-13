@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-OpenLia is an open-source, self-hosted AI investor assistant. It uses multiple specialized LLM agents called **Departments** (Secretary, Stock Research, Earnings Report, Morning Briefing, Retail Sentiment, Macro Research), each focused on a single financial domain.
+OpenLia is an open-source, self-hosted AI investor assistant. It uses multiple specialized LLM agents called **Departments** (Secretary, Equity Research, Earnings Update, Morning Briefing, Retail Sentiment, Macro Research), each focused on a single financial domain.
 
 Two deployment modes from the same codebase: **personal** (single user, localhost, no auth) and **company** (multi-user, network-accessible, auth enabled).
 
@@ -124,6 +124,7 @@ Before implementing any feature, read the relevant spec in `planning/specs/`. Sp
 `planning/PLAN.md` — full architecture description, deployment modes, data sources, installation.
 `planning/projectStructure.md` — detailed directory layout with key design rules.
 `planning/specs/pages/` — per-page UI and feature specs.
-`planning/specs/UtilityTools/` — specs for sidebar, chat history, file viewer, etc.
+`planning/specs/components/` — specs for shared components (sidebar, chat interface, file viewer, etc.).
+`planning/specs/systems/` — cross-cutting system design specs (data provider, report rendering, macro research dashboards).
 
 Planning docs are excluded from Python package builds and Docker images.

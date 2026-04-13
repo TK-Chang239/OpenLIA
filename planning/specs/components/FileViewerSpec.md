@@ -92,7 +92,7 @@ Before the viewer opens, the file is represented as an **attachment chip** — a
 ```
 ┌────────────────────────────────────────────────────────────────┐
 │  quarterly-report.pdf                 [🔖 Save] [↓] [✕]       │
-│  PDF · 12 pages · Macro Research · Generated Apr 3, 2026       │
+│  PDF · 12 pages · Equity Research · Generated Apr 3, 2026      │
 └────────────────────────────────────────────────────────────────┘
 ```
 

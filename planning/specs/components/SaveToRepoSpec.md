@@ -93,8 +93,8 @@ The `SaveToRepo` button appears in two surfaces, mirroring the placement of the 
  
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  q1-macro-briefing.pdf       [🔖 Save to Repo] [↓ Download] [✕] │
-│  PDF · 8 pages · Macro Research                            │
+│  AAPL-initiation.pdf         [🔖 Save to Repo] [↓ Download] [✕] │
+│  PDF · 8 pages · Equity Research                           │
 └────────────────────────────────────────────────────────────┘
 ```
  
@@ -226,7 +226,7 @@ The `SaveToRepo` button is available:
  
 - On **all report thumbnails** across the product, regardless of department or page
 - Inside **all `FileViewer` windows** opened from a report thumbnail
-- For **all departments**: stock research, earnings, morning briefing, retail sentiment, macro research, and any future departments
+- For **all report-generating departments**: equity research, earnings, morning briefing, retail sentiment, and any future departments that produce reports (note: Macro Research and Panic Thermometer are dashboard departments and do not generate saveable reports)
 - For **all authenticated users** — no role-gating in v1
  
 The button is **not** shown on non-report file attachments (e.g. raw data uploads, user-uploaded reference documents). It is exclusively a report output action.

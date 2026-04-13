@@ -287,9 +287,10 @@ The default sections and what the user can change are:
 1. Executive Summary
 - A summary of each morning briefing.
 - User Options: The user can only check or uncheck this section, but can not add any key words.
-2. Global Marco News
+2. Global Macro News
 - A summary of important news around the world. Covers the biggest events around the world.
-- User Options: In addition to the biggest events around the world, the user can add more specifict topics to this section, such as war, politics, energy, etc.
+- User Options: In addition to the biggest events around the world, the user can add more specific topics to this section, such as war, politics, energy, etc.
+- Cross-reference: When the Macro Research department has dashboard data available, MB can reference MR's current framework statuses (debt cycle phase, current economic season, active force count) to provide macro context in the briefing.
 3. Country News
 - Covers main news of a country. Will cover specific topics in greater detail if specified by user under advanced options.
 - User Options: The user can add countries to this list, such as US, Taiwan, Japan, Korea, etc. The report will only cover news of countries that are in this list. 
@@ -314,5 +315,14 @@ The user can choose what time to the morning briefing reports should be generate
 
 ## Report Framework
 
-## Configuartions
+| File | Path |
+|---|---|
+| Framework JSON | `planning/frameworks/morning_briefing_framework.json` |
+| Style Guide | `planning/frameworks/morning_briefing_style_guide.md` |
+
+The Morning Briefing has a single report mode: `morning_briefing`. The 7 standard sections (Executive Summary, Global Macro, Country News, Market News, Sector News, Stock News, Upcoming Preview) are fixed in the framework, but the user configures which sections are active and what topics appear under each section via the Settings View. The server-side template builder strips unchecked sections and injects user-configured topics into the section instructions before passing the framework to the LLM.
+
+Custom Sections defined by the user are appended after the standard sections. Each custom section's user-provided description is used as the LLM instruction.
+
+## Configurations
 - LLM: 

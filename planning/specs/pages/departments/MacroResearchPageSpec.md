@@ -1,13 +1,21 @@
 # Macro Research Department Spec
 
 ## Page Overview
-The Macro Research Department (MR) generates comprehensive research reports on macroeconomic topics. The user prompts MR with a research question or topic — such as monetary policy, inflation trends, GDP forecasts, geopolitical risks, or currency markets — and MR returns a structured analysis report. MR also functions as an LLM chatbot for follow-up questions on any generated report or new macro topic.
+
+The Macro Research Department (MR) provides five framework-driven dashboards based on Ray Dalio's macro investing methodology. Each dashboard maps 1:1 to a Dalio framework: Debt Cycle, Four Economic Seasons, All-Weather Portfolio Audit, Long-Term World Order, and Five Interlocking Forces. Dashboards update periodically with live market data, formula engine evaluations, and LLM assessments.
+
+MR is a dashboard department -- there is no chat interface.
+
+Full design spec: `planning/specs/systems/macro-research-dalio-dashboards-design.md`
 
 ## Functions
-1. **Macro Research Report**: MR generates a comprehensive macro research report based on the user's prompt. Reports follow the MR report framework.
-2. **LLM Chatbot**: MR operates as an LLM chatbot, supporting follow-up questions and clarifications on generated reports or on new macro research questions.
-3. **Save Reports**: After a report is generated, the user can save it to the Repository or download it as PDF or DOCX.
-4. **Report Preview**: Generated reports appear as a thumbnail card in the chat. Clicking the card opens the report in the FileViewer panel.
+
+1. **Five Framework Dashboards**: Each of the five Dalio frameworks has its own dashboard tab with indicators, visualizations, and assessments. T1 (Debt Cycle) and T2 (Four Seasons) use a formula engine for threshold-based evaluation. T3 (All-Weather) uses computational risk math. T4 (World Order) and T5 (Five Forces) use LLM assessment.
+2. **Summary Tab**: A default landing tab that provides a composite assessment across all five frameworks with mini visualizations and a cross-framework synthesis narrative.
+3. **Auto-Refresh**: Market data and economic indicators refresh on a configurable interval. LLM assessments (T4/T5) run on a user-configurable schedule (quarterly, weekly, or on news trigger).
+4. **Smart Mode**: When enabled, the LLM periodically reviews and adjusts thresholds across all dashboards based on evolving macro conditions. Each adjustment is logged with rationale.
+5. **Cross-Dashboard Dependencies**: T5 synthesizes T1+T2+T4 outputs. T3 consumes T1+T2+T5 outputs. Execution order for a full run: T1 -> T2 -> T4 -> T5 -> T3.
+6. **Portfolio Integration**: T3 reads the user's actual portfolio from the Portfolio page for the All-Weather audit. Falls back to 60/40 benchmark if no portfolio is configured.
 
 ---
 
@@ -15,46 +23,19 @@ The Macro Research Department (MR) generates comprehensive research reports on m
 
 ### Layout
 
-MR uses a full-height chat interface. There are two states: **Welcome** (no active conversation) and **Active** (conversation in progress).
-
-**Welcome State:**
+MR uses a tabbed single-page dashboard. Six tabs: **Summary** (default landing) | Debt Cycle | Four Seasons | All-Weather | World Order | Five Forces.
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│  Macro Research                           [⚙ Report Settings]  │
-│────────────────────────────────────────────────────────────────│
-│                                                                │
-│                                                                │
-│                     Macro Research                             │
-│          Research macroeconomic trends and market forces       │
-│                                                                │
-│   ┌───────────────────────────────────────────────────────┐   │
-│   │ [Fed Policy & Rates] [Inflation Outlook] [Global GDP] │   │
-│   │                             [FX & Currency Markets]   │   │
-│   └───────────────────────────────────────────────────────┘   │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐ │
-│  │  Ask a macro question or describe a research topic...    │ │
-│  │                                                  [Send]  │ │
-│  └──────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────┘
-```
-
-**Active State:**
-
-```
-┌────────────────────────────────────────────────────────────────┐
-│  Macro Research                           [⚙ Report Settings]  │
-│────────────────────────────────────────────────────────────────│
-│  ┌──────────────────────────────────────────────────────────┐ │
-│  │                                                          │ │
-│  │        [Scrollable chat: messages + report cards]        │ │
-│  │                                                          │ │
-│  └──────────────────────────────────────────────────────────┘ │
-│  ┌──────────────────────────────────────────────────────────┐ │
-│  │  Ask a follow-up question...                     [Send]  │ │
-│  └──────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────┘
++----------------------------------------------------------------+
+|  Macro Research                  [Auto-refresh v]  [Settings]   |
+|----------------------------------------------------------------|
+|  [Summary *] [Debt Cycle] [Four Seasons] [All-Weather]         |
+|              [World Order] [Five Forces]                        |
+|----------------------------------------------------------------|
+|                                                                 |
+|                    (active tab content)                          |
+|                                                                 |
++----------------------------------------------------------------+
 ```
 
 ---
@@ -63,137 +44,90 @@ MR uses a full-height chat interface. There are two states: **Welcome** (no acti
 
 | Element | Detail |
 |---|---|
-| Height | 56px (`h-14`), `flex-shrink-0` — does not scroll with chat content |
+| Height | 56px (`h-14`), `flex-shrink-0` |
 | Background | `--color-bg-base` |
 | Border | 1px bottom, `--color-border-subtle` |
-| Page title | "Macro Research" — `text-xl font-semibold text-[--color-text-primary]`, left-aligned, `pl-6` |
-| Report Settings button | Right of header, `pr-6`; `Settings` icon (16px) + "Report Settings" label; `text-sm text-[--color-text-secondary]`; border outline style: `border border-[--color-border-secondary] rounded-[--radius-md] px-3 h-8`; hover: `bg-[--color-surface-hover] text-[--color-text-primary]`; transition `--duration-fast`; opens Report Settings modal |
+| Page title | "Macro Research" -- `text-xl font-semibold text-[--color-text-primary]`, left-aligned, `pl-6` |
+| Auto-refresh dropdown | Right of header; options: Off / 5 min / 15 min; `text-sm text-[--color-text-secondary]`; controls market data refresh interval for T1/T2 formula engine dashboards |
+| Settings button | Right of header, `pr-6`; `Settings` icon (16px) + "Settings" label; outline style matching other departments; opens Settings panel |
 
 ---
 
-### Welcome State
-
-Shown when there is no active conversation. Centered vertically in the content area between the header and input.
+### Tab Bar
 
 | Element | Detail |
 |---|---|
-| Heading | "Macro Research" — `text-2xl font-semibold text-[--color-text-primary]`, horizontally centered |
-| Sub-text | "Research macroeconomic trends and market forces" — `text-md text-[--color-text-secondary]`, centered, `mt-2` |
-| Suggestion chips | Horizontal wrapping row of 4 prompt chips: "Fed Policy & Rates", "Inflation Outlook", "Global GDP Trends", "FX & Currency Markets". Clicking a chip populates the input and submits it immediately |
-| Chip style | `px-3.5 py-2 rounded-full border border-[--color-border-secondary] text-sm text-[--color-text-secondary]`; hover: `bg-[--color-surface-hover] text-[--color-text-primary] border-[--color-border-subtle]`; transition `--duration-fast` |
-| Chips container | `flex flex-wrap gap-2 justify-center mt-8 max-w-[520px] mx-auto` |
-| Entry animation | Heading + sub-text: `opacity 0→1, y 12→0, duration 250ms`; chips stagger in `40ms` apart after heading resolves |
-| Exit animation | Entire welcome block: `opacity 1→0, y 0→-8, duration 200ms` before chat area enters |
+| Container | `flex items-center gap-1 px-6 bg-[--color-bg-base] border-b border-[--color-border-subtle]` |
+| Tab | `px-4 py-2.5 text-sm cursor-pointer`; inactive: `text-[--color-text-secondary] hover:text-[--color-text-primary]`; active: `text-[--color-text-primary] font-medium border-b-2 border-[--color-text-primary]` |
+| Default active tab | Summary |
 
 ---
 
-### Chat Message Area
+### Summary Tab
 
-Replaces the welcome content once a conversation starts. Scrolls independently within the content area.
+The default landing view. Composite assessment banner at top, five clickable framework cards in a 2-column grid (T5 full-width at bottom), cross-framework synthesis callout at the bottom. Clicking any card navigates to that framework's tab.
 
-| Element | Detail |
-|---|---|
-| Container | `flex-1 overflow-y-auto px-6 py-6` |
-| Content max-width | `max-w-[680px] mx-auto` (matches `--max-width-chat`) |
-| User messages | Right-aligned bubble: `rounded-2xl rounded-br-sm px-4 py-2.5 bg-[--color-surface-active] text-[--color-text-primary] text-md`; `max-w-[72%]`; `whitespace-pre-wrap` |
-| Assistant messages | Left-aligned, no bubble, no background: `text-md text-[--color-text-primary] leading-relaxed`; full width up to chat max-width; markdown rendered (bold, bullet lists, numbered lists, tables, inline code, code blocks) |
-| Timestamps | Hidden by default. On hover of a message group, a timestamp fades in below: `text-xs text-[--color-text-tertiary]`; fade: `opacity 0→1, --duration-fast` |
-| Streaming text | Token-by-token reveal; a blinking cursor (`▌`, `--color-text-tertiary`, 800ms blink cycle) follows the last character until streaming completes |
-| Loading indicator | While awaiting first token: three animated dots in a row, each `w-1.5 h-1.5 rounded-full bg-[--color-text-tertiary]`; opacity oscillates `0.3→1→0.3` over 1.2s, staggered `200ms` between dots |
-| Message entry | Each new message: `opacity 0→1, y 8→0, duration 200ms, ease-out` |
-| Between-message gap | `space-y-6` |
+See design spec Section "Summary Tab" for full detail on the composite banner, framework cards with mini visualizations, and synthesis block.
 
 ---
 
-### Report Thumbnail Card
+### T1 -- Debt Cycle Tab
 
-When MR completes a report, it appears as a structured card inside the assistant's response area in the chat.
+Formula engine dashboard. Four indicators (Debt/GDP, Interest/Revenue, TIPS Yield, DXY) with user-configurable thresholds. Sections: headline scorecard, phase assessment with historical analogs, monetary policy space, asset implications (gold thesis + bond risk), watchlist triggers, synthesis verdict.
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ [FileText]  Macro Research Report                            │
-│             Fed Policy & Rate Outlook  ·  Apr 9, 2026        │
-│──────────────────────────────────────────────────────────────│
-│ Global central banks are navigating a complex environment    │
-│ as inflation moderates but remains above target in key       │
-│ economies. The Federal Reserve held rates steady at...       │
-│                                          [read more →]       │
-│──────────────────────────────────────────────────────────────│
-│ [Open Report]          [Download ▾]    [Save to Repo]        │
-└──────────────────────────────────────────────────────────────┘
-```
-
-| Element | Detail |
-|---|---|
-| Card container | `bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-lg] overflow-hidden shadow-sm`; `max-w-[560px]` |
-| Header row | `px-4 py-3 flex items-start gap-3`; `FileText` icon (16px, `--color-text-tertiary`); two-line label — "Macro Research Report" (`text-base font-medium text-[--color-text-primary]`) on line 1, topic + date (`text-sm text-[--color-text-secondary]`) on line 2 |
-| Preview text | `px-4 py-3 text-sm text-[--color-text-secondary] leading-relaxed`; clamped to 3 lines (`line-clamp-3`); "read more →" text link fades in at bottom when clamped; clicking expands to full preview |
-| Action row | `px-4 py-2.5 flex items-center gap-2 bg-[--color-bg-base] border-t border-[--color-border-subtle]` |
-| Open Report button | `px-3 h-7 rounded-[--radius-md] bg-[--color-accent-primary] text-white text-sm font-medium hover:bg-[--color-accent-hover]`; opens FileViewer panel |
-| Download button | `px-3 h-7 rounded-[--radius-md] border border-[--color-border-secondary] text-sm text-[--color-text-secondary] hover:bg-[--color-surface-hover]`; opens a small dropdown: "PDF" / "DOCX" |
-| Save to Repo button | `flex items-center gap-1.5 text-sm text-[--color-text-secondary] hover:text-[--color-text-primary]`; `Bookmark` icon (14px); on save: icon transitions to filled, color shifts to `--color-accent-primary`, brief scale pulse `1→1.2→1 over 200ms` |
-| Card entry animation | `opacity 0→1, y 12→0, duration 250ms, ease-out` |
+See design spec Section "T1 -- Debt Cycle Dashboard" for full detail.
 
 ---
 
-### Message Input
+### T2 -- Four Seasons Tab
 
-Always visible, fixed to the bottom of the page.
+Formula engine dashboard. Four indicators (PMI, Real GDP, CPI, Credit Spreads) mapped to a 2x2 growth/inflation matrix. Sections: quadrant inputs table with directional arrows, quadrant map with position markers, transition risk (bull/bear case), asset playbook with season-to-asset mapping, synthesis verdict.
 
-| Element | Detail |
-|---|---|
-| Container | `flex-shrink-0 px-6 py-4 border-t border-[--color-border-subtle] bg-[--color-bg-base]` |
-| Inner wrapper | `max-w-[680px] mx-auto` |
-| Input field | Multi-line `<textarea>`, grows from 1 line up to 4 lines (~120px) before scrolling; `bg-[--color-bg-input] rounded-xl border border-[--color-border-subtle] px-4 py-3 text-md text-[--color-text-primary] placeholder:text-[--color-text-tertiary] resize-none outline-none`; on focus: border transitions to `--color-border-secondary`, `--duration-fast` |
-| Placeholder — welcome | "Ask a macro question or describe a research topic..." |
-| Placeholder — active | "Ask a follow-up question..." |
-| Send button | `w-8 h-8 rounded-[--radius-md] bg-[--color-accent-primary] text-white flex items-center justify-center`; `ArrowUp` icon (14px); when input is empty: `opacity-40 cursor-not-allowed`; hover (enabled): `bg-[--color-accent-hover]`; transition `--duration-fast` |
-| Stop button | Replaces send while streaming; same dimensions; `bg-[--color-surface-active] text-[--color-text-secondary]`; `Square` icon (14px); click cancels stream |
-| Keyboard | Enter = submit; Shift+Enter = newline; empty input cannot be submitted |
-| Helper text | `mt-2 text-xs text-[--color-text-tertiary] text-center` — "Press Enter to send · Shift+Enter for new line" |
-| Disabled state | While streaming: textarea `opacity-60`, send button replaced with stop button |
+See design spec Section "T2 -- Four Seasons Dashboard" for full detail.
 
 ---
 
-### Report Settings Modal
+### T3 -- All-Weather Tab
 
-Opened via the "Report Settings" button in the page header.
+Computational dashboard. Reads portfolio from the Portfolio page (or 60/40 fallback). Sections: portfolio comparison doughnut charts, season coverage map (cross-references T2), risk parity audit bar charts, gold allocation gradient bar (cross-references T1/T2/T5), retail investor caveats, synthesis verdict.
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  Report Settings                                   [✕]   │
-│──────────────────────────────────────────────────────────│
-│  Report Length                                           │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │  Concise   │   Normal ●   │   Elaborative           │  │
-│  └────────────────────────────────────────────────────┘  │
-│──────────────────────────────────────────────────────────│
-│  SECTIONS                                                │
-│  ☑  Executive Summary                                    │
-│  ☑  Macroeconomic Context                                │
-│  ☑  Key Indicators & Data                                │
-│  ☑  Policy Analysis                                      │
-│  ☑  Market Implications                                  │
-│  ☑  Risks & Scenarios                                    │
-│  ☑  Outlook                                              │
-│──────────────────────────────────────────────────────────│
-│  CUSTOM SECTIONS                             [+ Add]     │
-│──────────────────────────────────────────────────────────│
-│                          [Cancel]  [Save Settings]       │
-└──────────────────────────────────────────────────────────┘
-```
+See design spec Section "T3 -- All-Weather Portfolio Audit" for full detail.
 
-| Element | Detail |
-|---|---|
-| Backdrop | `bg-black/40`, covers full viewport, click-to-dismiss |
-| Modal container | `bg-[--color-bg-elevated] rounded-[--radius-lg] shadow-lg border border-[--color-border-subtle]`; `w-full max-w-[480px]`; centered `fixed inset-0 m-auto h-fit` |
-| Header | `flex justify-between items-center px-6 py-4 border-b border-[--color-border-subtle]`; "Report Settings" `text-lg font-semibold text-[--color-text-primary]`; `✕` close button `text-[--color-text-secondary] hover:text-[--color-text-primary]` |
-| Report Length | Segmented 3-button row: Concise / Normal / Elaborative; active: `bg-[--color-surface-active] text-[--color-text-primary] font-medium`; inactive: `text-[--color-text-secondary] hover:bg-[--color-surface-hover]`; `rounded-[--radius-md] px-4 py-2 text-sm`; contained in a `border border-[--color-border-subtle] rounded-[--radius-md] p-1 flex gap-1` pill group |
-| Section divider label | `text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em] px-6 pt-4 pb-2` |
-| Section rows | `flex items-center gap-3 px-6 py-2.5 border-b border-[--color-border-subtle] last:border-0`; checkbox on left; section name `text-base text-[--color-text-primary]`; checked: checkbox fills with `--color-accent-primary` |
-| Custom sections | Section header row `px-6 py-3 flex justify-between items-center border-t border-[--color-border-subtle]`; `+ Add` button `text-sm text-[--color-accent-primary] hover:text-[--color-accent-hover]`; each custom section row has a section name input + optional description textarea + remove `✕` |
-| Footer | `px-6 py-4 border-t border-[--color-border-subtle] flex justify-end gap-2`; Cancel: outline `border border-[--color-border-secondary] text-sm text-[--color-text-secondary] px-4 h-9 rounded-[--radius-md]`; Save: `bg-[--color-accent-primary] text-white text-sm px-4 h-9 rounded-[--radius-md] hover:bg-[--color-accent-hover]` |
-| Entry animation | `opacity 0→1, scale 0.97→1, duration 200ms, ease-out`; exit: `opacity 1→0, scale 1→0.97, duration 150ms` |
+---
+
+### T4 -- World Order Tab
+
+LLM assessment dashboard. Sections: reserve currency health scorecard, reserve currency composition chart (multi-line, 1999-present), empire cycle stage timeline strip, Dalio quote callout, Stage 5 markers checklist, historical analog grid (similar + different), wealth shift signals, currency and bond risk implications, synthesis verdict.
+
+See design spec Section "T4 -- World Order Assessment" for full detail.
+
+---
+
+### T5 -- Five Forces Tab
+
+LLM assessment dashboard. Synthesis template consuming T1+T2+T4. Sections: force scorecard with intensity bars (1-10 scale), active force count banner, reinforcement loop analysis (feedback loops between forces), market data reference, gold allocation signal with gradient bar, scenario analysis (bull/bear), synthesis verdict.
+
+See design spec Section "T5 -- Five Interlocking Forces Dashboard" for full detail.
+
+---
+
+### Settings Panel
+
+Collapsible drawer or modal. Contains:
+
+**Global Settings:**
+- Auto-refresh interval (market data): Off / 5 min / 15 min
+- T4/T5 LLM assessment schedule: Quarterly / Weekly / On news trigger
+- T4/T5 news trigger sensitivity: Significant events only / All events
+- Smart Mode toggle: Off (default) / On -- when enabled, LLM adjusts thresholds periodically
+
+**Per-Dashboard Settings (T1, T2):** Data source selector, params table (threshold editor with AI badge when Smart Mode active), rule editor, preset loader (Dalio defaults / Conservative / Relaxed).
+
+**Per-Dashboard Settings (T3):** Portfolio source, volatility estimates, coverage thresholds.
+
+**Per-Dashboard Settings (T4, T5):** Assessment schedule, news trigger keywords, LLM model, manual run button, scoring anchors.
+
+See design spec Section "Settings Panel" for full detail.
 
 ---
 
@@ -201,12 +135,14 @@ Opened via the "Report Settings" button in the page header.
 
 | State | Visual Treatment |
 |---|---|
-| **Welcome** | Centered heading + chips displayed in the content area; no chat history visible |
-| **Generating** | Typing indicator shown where assistant response will appear; send button replaced by stop button; textarea opacity reduced to 60% |
-| **Streaming** | Token-by-token text reveal with blinking cursor; stop button visible |
-| **Idle** | Chat scrollable; full input enabled; send button active when input has content |
-| **Response Stopped** | Partial response shown as-is; muted italicized "Response stopped." label appended below the text |
-| **Error** | Inline error row below last message: `text-sm text-[--color-feedback-error]` message + `RotateCcw` icon + "Try again" text link that retries the last user message |
+| **Loading (initial)** | Skeleton placeholders for each section; spinner on tab bar |
+| **Loading (refresh)** | Subtle loading indicator per dashboard; existing data remains visible |
+| **Data available** | Full dashboard rendered |
+| **LLM running (T4/T5)** | Pulsing indicator on dashboard header; "Assessment in progress..." label; previous assessment remains visible |
+| **LLM complete** | New assessment replaces previous; timestamp updates |
+| **No portfolio (T3)** | Fallback to 60/40 benchmark; amber banner: "Set up your Portfolio for personalized analysis" with link to Portfolio page |
+| **Error** | Inline error row below affected section: `text-sm text-[--color-feedback-error]` + retry link |
+| **Stale data** | Amber timestamp label: "Data is N hours old" when auto-refresh is off and data exceeds staleness threshold |
 
 ---
 
@@ -214,31 +150,42 @@ Opened via the "Report Settings" button in the page header.
 
 | Breakpoint | Behavior |
 |---|---|
-| Desktop (>1024px) | Full layout; chat container centered at `max-w-[680px]` |
-| Tablet (768–1024px) | Same layout; chat fills available width |
-| Mobile (<768px) | Horizontal padding reduced to `px-4`; report card action row allows wrapping; modal is full-width bottom sheet on mobile |
+| Desktop (>1024px) | Full layout; 2-column grids, all charts at full size |
+| Tablet (768-1024px) | Single column; all grids collapse to stacked |
+| Mobile (<768px) | Single column; horizontal padding reduced to `px-4`; charts reduce height; tab bar scrolls horizontally |
 
 ---
 
 ## Page Settings
-Report section configuration and length preference are accessible via the Report Settings modal in the page header.
+
+All configuration is accessed via the Settings panel in the page header. There is no Report Settings modal -- MR does not generate reports.
 
 ## Report Framework
-*(To be defined.)*
+
+Not applicable. MR is a dashboard department and does not generate text reports. Evaluation is handled by the formula engine (T1/T2), computational risk math (T3), and LLM assessment (T4/T5).
 
 ## Configurations
-- LLM Model: `openai/gpt-oss-120b`
-- Streaming: enabled
-- Max context window: managed by the LLM backend; older messages may be summarized or truncated silently when the conversation grows long
+
+- Formula engine: Shared with Panic Thermometer (safe expression evaluator DSL)
+- LLM for T4/T5 assessments: User-configurable in Settings
+- Data sources: EODHD (market data, economic events, macro indicators, news)
 
 ---
 
 ## Non-Goals (v1)
-- File upload or document analysis
-- Embedded charts or live data visualization within the chat
-- Export to Excel or CSV formats
-- Persistent cross-session memory beyond what Chat History stores
+
+- Chat interface or conversational interaction
+- Report generation, PDF/DOCX export
+- Real-time streaming updates (SSE) -- polling is sufficient
+- User-editable LLM prompts for T4/T5
+- Historical playback (viewing past dashboard states)
+- Alerting/notifications when dashboard status changes
+- Multi-country support (US-focused in v1)
 
 ## Open Questions
-- Should Macro Research share its report settings configuration with other departments (same section editor UX) or use its own settings panel?
-- Should suggestion chips be static or personalized based on current macro news headlines?
+
+- EODHD macro indicator availability for Debt/GDP and Interest/Revenue -- may need to compute from economic events or hardcode with manual update.
+- DXY proxy -- EODHD may not carry DXY directly; UUP (ETF) is a proxy.
+- IMF COFER data for T4 reserve composition chart -- quarterly with lag, hardcoded snapshots.
+- T4/T5 LLM cost per run -- settings should show estimated cost based on configured model.
+- Formula engine extraction into shared module with Panic Thermometer.

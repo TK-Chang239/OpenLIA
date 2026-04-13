@@ -29,7 +29,7 @@ The user can apply filters to narrow results. Multiple filters can be active sim
 
 | Filter | Options |
 |---|---|
-| Department | Secretary, Stock Research, Earnings Report, Morning Briefing, Retail Sentiment, Macro Research |
+| Department | Secretary, Equity Research, Earnings Update, Morning Briefing, Retail Sentiment |
 | Date Generated | Date range picker (from / to) applied to `generated_at` |
 | Date Saved | Date range picker (from / to) applied to `saved_at` |
 
@@ -89,16 +89,16 @@ Note: the confirmation dialog only appears when removing from the Repository pag
 │  Repository                                                     │
 │────────────────────────────────────────────────────────────────│
 │  [ Search reports...                         ]  [ Filters ▾ ]  │
-│  ● Macro Research  ● Date Saved: Apr 2026         [Clear all]  │
+│  ● Equity Research  ● Date Saved: Apr 2026        [Clear all]  │
 │  Sort: Date Saved (newest) ▾                                   │
 │  ─────────────────────────────────────────────────────────     │
 │  ┌────────────────────────────────────────────────────────┐   │
-│  │ [FileText]  q1-macro-briefing.pdf                       │   │
-│  │              Macro Research  ·  Apr 3, 2026  ·  Apr 5   │   │
+│  │ [FileText]  AAPL-initiation-coverage.pdf                │   │
+│  │              Equity Research  ·  Apr 3, 2026  ·  Apr 5  │   │
 │  │                                           [↓]  [✕]     │   │
 │  ├────────────────────────────────────────────────────────┤   │
 │  │ [FileText]  AAPL-earnings-q1-2026.pdf                   │   │
-│  │              Earnings Reports  ·  Apr 2  ·  Apr 4       │   │
+│  │              Earnings Updates  ·  Apr 2  ·  Apr 4       │   │
 │  │                                           [↓]  [✕]     │   │
 │  └────────────────────────────────────────────────────────┘   │
 └────────────────────────────────────────────────────────────────┘
@@ -175,7 +175,7 @@ Each row is a full-width item in a bordered list. The list container uses `divid
 | Text column | `flex flex-col min-w-0 flex-1` |
 | Filename | `text-base font-medium text-[--color-text-primary] truncate` |
 | Metadata line | `text-xs text-[--color-text-secondary] flex items-center gap-1.5 mt-0.5`; format: "[Department badge] · Generated [date] · Saved [date]" |
-| Department badge | `text-xs rounded-full px-2 py-0.5 font-medium`; each department has a distinct muted tint: Stock Research `bg-[--color-info]/10 text-[--color-info]`; Earnings `bg-[--color-success]/10 text-[--color-success]`; Macro `bg-[--color-warning]/10 text-[--color-warning]`; Morning `bg-[--color-accent-subtle] text-[--color-accent-primary]`; Retail Sentiment `bg-[--color-info]/10 text-[--color-info]` |
+| Department badge | `text-xs rounded-full px-2 py-0.5 font-medium`; each department has a distinct muted tint: Equity Research `bg-[--color-info]/10 text-[--color-info]`; Earnings Update `bg-[--color-success]/10 text-[--color-success]`; Macro `bg-[--color-warning]/10 text-[--color-warning]`; Morning `bg-[--color-accent-subtle] text-[--color-accent-primary]`; Retail Sentiment `bg-[--color-info]/10 text-[--color-info]` |
 | Action buttons | `flex items-center gap-1 flex-shrink-0 ml-2`; hidden by default on desktop, revealed on row hover; always visible on touch |
 | Download button | Icon-only `w-7 h-7 rounded-[--radius-sm] flex items-center justify-center text-[--color-text-secondary] hover:bg-[--color-surface-active] hover:text-[--color-text-primary]`; `Download` icon (14px) |
 | Remove button | Same size; `Trash2` icon (14px); hover: `text-[--color-feedback-error] bg-[--color-feedback-error]/10` |
@@ -209,8 +209,8 @@ When a report is opened from the Repo, the FileViewer header shows Download + Cl
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  q1-macro-briefing.pdf          [↓ Download]  [✕ Close]    │
-│  PDF · 12 pages · Macro Research · Generated Apr 3, 2026   │
+│  AAPL-initiation-coverage.pdf   [↓ Download]  [✕ Close]    │
+│  PDF · 12 pages · Equity Research · Generated Apr 3, 2026  │
 └────────────────────────────────────────────────────────────┘
 ```
 

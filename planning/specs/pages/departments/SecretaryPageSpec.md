@@ -7,7 +7,7 @@ The Secretary is the home page of LIA and serves as the general-purpose LLM chat
 1. **General Inquiries**: The Secretary answers open-ended questions from the user, including how-to questions about LIA, quick factual lookups, brief explanations of financial concepts, and general conversation.
 2. **Real-Time Market Data**: The Secretary can fetch and display real-time or latest market data for a ticker or asset on request (e.g., current price, daily change, volume). Data is sourced from the same EODHD integration used across the product.
 3. **Topic Summaries**: The Secretary generates concise summaries of user-prompted topics, such as a quick overview of a company, a market event, or a financial term.
-4. **Department Redirect**: When the user's request maps to a specialized department (e.g., a detailed stock research report, a macro research query, an earnings analysis, or a retail sentiment check), the Secretary recognizes the intent and redirects the user to the appropriate department. The redirect is surfaced as an inline suggestion before navigating, so the user can confirm or continue in the Secretary instead.
+4. **Department Redirect**: When the user's request maps to a specialized department (e.g., a detailed equity research report, a macro dashboard view, an earnings analysis, or a retail sentiment check), the Secretary recognizes the intent and redirects the user to the appropriate department. The redirect is surfaced as an inline suggestion before navigating, so the user can confirm or continue in the Secretary instead.
 5. **Product Guidance**: The Secretary can explain what each department does, how to use features across the product, and what kinds of questions or tasks are best suited to each department.
 
 ## User Interface Design
@@ -56,7 +56,7 @@ The Secretary has no traditional page header — the welcome greeting serves as 
 |---|---|
 | Greeting | "Welcome back, [User Name]." in large text, centered |
 | Sub-text | "What can I help you with today?" in smaller, muted text below the greeting |
-| Suggestion chips | A horizontal row of 3–4 short prompt suggestions (e.g., "What is LIA?", "Get a quick market snapshot", "How do I use Stock Research?", "Summarize [topic]"). Clicking a chip populates the input and submits it. |
+| Suggestion chips | A horizontal row of 3–4 short prompt suggestions (e.g., "What is LIA?", "Get a quick market snapshot", "How do I use Equity Research?", "Summarize [topic]"). Clicking a chip populates the input and submits it. |
 
 ---
 
@@ -82,10 +82,10 @@ When the Secretary identifies that a request is better handled by another depart
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ This looks like a Stock Research request. I can take     │
+│ This looks like a Equity Research request. I can take     │
 │ you there for a full in-depth report.                    │
 │──────────────────────────────────────────────────────────│
-│ [Go to Stock Research →]   Stay here and answer instead  │
+│ [Go to Equity Research →]   Stay here and answer instead  │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -122,10 +122,10 @@ The Secretary uses intent detection to route requests to departments. Routing de
 
 | User Intent | Target Department |
 |---|---|
-| Detailed company or stock research report | Stock Research |
-| Earnings analysis or earnings monitoring | Earnings Reports |
+| Detailed company or equity research report | Equity Research |
+| Earnings analysis or earnings monitoring | Earnings Updates |
 | Retail investor sentiment for a ticker | Retail Sentiment |
-| Macro economic research or analysis | Macro Research |
+| Macro economic environment, Dalio frameworks, debt cycle, economic seasons | Macro Research |
 | Morning briefings setup or report review | Morning Briefings |
 | Portfolio management | Portfolio |
 

@@ -2,7 +2,9 @@
 
 ## Overview
 
-This spec defines the shared chat interface design used across all LIA department pages (Secretary, Stock Research, Macro Research). All department chat pages conform to this layout, message treatment, animation system, and state patterns. Department-specific elements (welcome content, input placeholder, report thumbnails) are defined in each department's page spec.
+This spec defines the shared chat interface design used across all LIA department pages that use a chat interface (Secretary, Equity Research). All department chat pages conform to this layout, message treatment, animation system, and state patterns. Department-specific elements (welcome content, input placeholder, report thumbnails) are defined in each department's page spec.
+
+Note: Not all departments use the chat interface. Macro Research, Panic Thermometer, and Retail Sentiment are dashboard departments with their own page layouts.
 
 ---
 

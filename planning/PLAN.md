@@ -44,7 +44,7 @@ A FastAPI application that wraps the library layer and exposes it over HTTP. Han
 - API key configuration and management (server-side, not client-side)
 - Request queuing and rate limiting for shared deployments
 - Chat history and report storage via local database
-- Background task scheduling for departments that run on a schedule (Morning Briefing, Earnings Report daily scans). Scheduler library is [TBD -- evaluate APScheduler, Celery, or similar based on spec review]
+- Background task scheduling for departments that run on a schedule (Morning Briefing, Earnings Update daily scans). Scheduler library is [TBD -- evaluate APScheduler, Celery, or similar based on spec review]
 - CORS middleware configured to allow the frontend dev server during development
 
 In personal mode, the server binds to `localhost`. In company mode, it binds to `0.0.0.0` and is accessible across the network.
@@ -85,13 +85,13 @@ Configuration includes:
 The Secretary serves as the general chatbot, where the user can ask it any question for quick and general answers. These include quick summaries of market news, stock updates, and more.
 @planning/specs/pages/departments/SecretaryPageSpec.md
 
-## Stock Research Department (SR)
-The Stock Research Department, or SR, takes a ticker or company name and generates a research report on that company.
-@planning/specs/pages/departments/StockResearchPageSpec.md
+## Equity Research Department (EqR)
+The Equity Research Department, or EqR, takes a ticker, company name, or sector topic and generates research reports. It supports three modes: Stock Initiation (full company initiation), Stock Update (event/earnings note), and Sector Research (industry/thematic analysis).
+@planning/specs/pages/departments/EquityResearchPageSpec.md
 
-## Earnings Report Department (ER)
-The Earnings Report Department, or ER, keeps track of a list of tickers or companies and conducts a daily scan to see if companies on that list have released new earnings report. If yes, then the ER will produce an analysis report on the earnings report. In addition to watchlists, ER also allows user request an on-demand earnings report anytime.
-@planning/specs/pages/departments/EarningsReportsPageSpec.md
+## Earnings Update Department (EU)
+The Earnings Update Department, or EU, keeps track of a list of tickers or companies and conducts a daily scan to see if companies on that list have released new earnings report. If yes, then the EU will produce an analysis report on the earnings report. In addition to watchlists, EU also allows user request an on-demand earnings analysis anytime.
+@planning/specs/pages/departments/EarningsUpdatePageSpec.md
 
 ## Morning Briefing Department (MB)
 The Morning Briefing Department, or MB, produces a daily morning briefing before the market open to summarize key overnight news.
@@ -127,27 +127,27 @@ The settings page allows the user to edit preferences and settings. In company m
 
 ## User Management
 In personal mode, there is no login -- the single user has direct access. In company mode, authentication is enabled and users log in to access their own chat history, portfolio, and saved reports. User data is stored locally on the server (SQLite or PostgreSQL), not in a third-party cloud.
-@planning/specs/UtilityTools/AccountManagementSpec.md
+@planning/specs/components/AccountManagementSpec.md
 
 ## Chat History
 Each Department manages its own chat history, allowing the user to revisit previous conversations with that department. Chat history is stored in the local database.
-@planning/specs/UtilityTools/ChatHistorySpec.md
+@planning/specs/components/ChatHistorySpec.md
 
 ## FileViewer
 Each time a report is generated, a report thumbnail is shown in the chat. Clicking it opens a preview window on the right side of the screen with the chat on the left. The preview window allows scrolling and reading through the report.
-@planning/specs/UtilityTools/FileViewerSpec.md
+@planning/specs/components/FileViewerSpec.md
 
 ## File Download
 Users can download reports to their local computer by clicking the download button on the report thumbnail or in the FileViewer window.
-@planning/specs/UtilityTools/FileDownloadSpec.md
+@planning/specs/components/FileDownloadSpec.md
 
 ## SaveToRepo
 Users can save reports to the Repository by clicking the save button on the report thumbnail or in the FileViewer window. Saving records the generation time and originating department for metadata management.
-@planning/specs/UtilityTools/SaveToRepoSpec.md
+@planning/specs/components/SaveToRepoSpec.md
 
 ## Side Bar
 A sidebar on the left side of the page allows the user to navigate between departments, portfolio, repository, and settings.
-@planning/specs/UtilityTools/SideBarSpec.md
+@planning/specs/components/SideBarSpec.md
 
 
 # 6. Extension Functionalities (Ignore for now)

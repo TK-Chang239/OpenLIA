@@ -96,11 +96,11 @@ Each department is a nav item that navigates to that department's dedicated page
 | Department | Lucide Icon | Description |
 |---|---|---|
 | Secretary | `MessageSquare` | General-purpose LLM assistant; product home page |
-| Stock Research | `TrendingUp` | Stock research report generation |
-| Earnings | `ClipboardList` | Earnings monitoring and analysis |
+| Equity Research | `TrendingUp` | Stock research report generation |
+| Earnings Update | `ClipboardList` | Earnings monitoring and analysis |
 | Morning Briefing | `Sun` | Daily briefing report generation and archive |
 | Retail Sentiment | `BarChart2` | Social media sentiment monitoring dashboard |
-| Macro Research | `Globe` | Macroeconomic research report generation |
+| Macro Research | `Globe` | Dalio framework macro dashboards (Debt Cycle, Four Seasons, All-Weather, World Order, Five Forces) |
 
 All icons are from the **Lucide** library, stroke-weight 1.5px, rendered at 18×18px. Icon names are the component key used in the `ICON_MAP` record in the Sidebar implementation.
 
@@ -126,8 +126,8 @@ Expanded:                        Collapsed:
 │  🏠  Home            │         │  🏠    │
 │  🗂  Repository      │         │  🗂    │
 │  ─── Departments ─── │         │  ────  │
-│  📈  Stock Research  │         │  📈    │
-│  📋  Earnings        │         │  📋    │
+│  📈  Equity Research  │         │  📈    │
+│  📋  Earnings Update │         │  📋    │
 │  ☀️  Morning Brief   │         │  ☀️    │
 │  💬  Retail Sentiment│         │  💬    │
 │  🌐  Macro Research  │         │  🌐    │
