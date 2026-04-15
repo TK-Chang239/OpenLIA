@@ -245,7 +245,7 @@ Planned as part 2 of the LLM system series, following `llm-provider-design.md`. 
 - **Retail Sentiment dashboard design** (`planning/specs/systems/retail-sentiment-dashboard-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Formula engine DSL design** (`planning/specs/systems/formula-engine-design.md`): Spec written. Pending user review and commit before implementation planning.
 - **Setup Wizard design** (`planning/specs/pages/SetupWizardSpec.md`): Spec written and committed. Pending user review before implementation planning.
-- **LLM Provider & Configuration System design** (`planning/specs/systems/llm-provider-design.md`): Spec written. Pending user review and commit before implementation planning. Part 1 of 2 in the LLM system series.
+- **LLM Provider & Configuration System design** (`planning/specs/systems/llm-provider-design.md`): Spec written and committed. Pending user review before implementation planning. Part 1 of 2 in the LLM system series.
 
 ---
 
