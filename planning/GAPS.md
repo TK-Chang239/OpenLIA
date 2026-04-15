@@ -79,12 +79,12 @@ Department redesigned from chat-based report generator to five framework-driven 
 - **EODHD macro indicator availability unverified**: Debt-to-GDP and interest/revenue may not be available as direct EODHD endpoints. May need to compute from multiple economic event data points or hardcode with manual update on release.
 - **DXY proxy unverified**: EODHD may not carry DXY directly. UUP (ETF) is a proxy. Need to verify ticker availability during implementation.
 - **IMF COFER data for T4**: Quarterly with a lag. Reserve composition chart will use hardcoded snapshots updated on COFER release. Could fetch from IMF API if user provides access.
-- **Formula engine not yet shared**: The formula engine DSL shared between Panic Thermometer and MR T1/T2 needs to be extracted into a shared core module. Currently only designed in the PT spec.
+- **Formula engine not yet implemented**: Design is now documented in `planning/specs/systems/formula-engine-design.md` (shared module for PT and MR T1/T2). Implementation pending.
 
 ### Remaining Tasks
 
 - Implementation plan for the dashboard design (pending user review of spec).
-- Extract formula engine into shared module usable by both Panic Thermometer and MR T1/T2.
+- Build the shared formula engine module per `planning/specs/systems/formula-engine-design.md` (usable by both PT and MR T1/T2).
 - Build YAML prompt templates for T4/T5 LLM assessments with Dalio's framework as system context.
 
 ### Open Questions
@@ -125,12 +125,12 @@ Full spec exists: `planning/specs/pages/departments/PanicThermometerPageSpec.md`
 
 ### Gaps
 
-- **Formula engine not yet implemented**: The formula engine DSL (safe expression evaluator with operators, built-in functions) is designed in the spec but not yet built. Will be shared with MR T1/T2.
+- **Formula engine not yet implemented**: The formula engine DSL is fully designed in `planning/specs/systems/formula-engine-design.md` (shared with MR T1/T2). Implementation pending.
 
 ### Remaining Tasks
 
 - Implementation plan for the Panic Thermometer page.
-- Build the shared formula engine module in `packages/core/`.
+- Build the shared formula engine module per `planning/specs/systems/formula-engine-design.md`.
 
 ### Open Questions
 
@@ -168,12 +168,84 @@ The full requirements manifest (`packages/core/src/openlia/data/manifest/require
 
 ---
 
+## Setup Wizard
+
+Full spec exists: `planning/specs/pages/SetupWizardSpec.md`. Dual-mode wizard (personal / company) with mode selector on welcome, AI model + data provider configuration, AI review for department readiness, env-var precedence with read-only field rendering, and DB-canonical configuration storage.
+
+### Gaps
+
+- **Secrets encryption at rest**: `config_store` plans to hold API keys in plaintext for v1. Upgrade path to server-derived key encryption is not yet designed.
+- **`openlia wizard reset` CLI**: Referenced in the spec's error-handling section as the manual escape hatch for re-running the wizard or converting modes. Not yet implemented and not yet specced under the CLI surface.
+- **`--color-surface-info` design token**: The MCP authentication info card uses this token. May need to be added to the app's token set if missing.
+- **Step 3 AI Models section needs rewrite**: `llm-provider-design.md` supersedes the current Primary + Review two-slot structure with a three-tier structure (Thinking + Everyday + Quick) and adds Google Gemini to the provider list. Required edits enumerated under Cross-References in `llm-provider-design.md`.
+- **Step 6 Review copy**: The AI Review model is now the Quick tier (formerly called "Review model"); wording needs updating.
+- **Env var surface**: `OPENLIA_LLM_PRIMARY_*` / `OPENLIA_LLM_REVIEW_*` rows need to be replaced with the three-tier triplet plus per-department override env vars per `llm-provider-design.md`.
+
+### Remaining Tasks
+
+- Implementation plan for the wizard (pending user review of spec).
+- Implement `GET /setup/status` and the 14 other `/setup/*` endpoints per the spec.
+- Wire the wizard's mode selection + access-control output to the server's bind-and-auth startup behavior (requires server restart after company-mode completion).
+- Apply the Cross-References edits from `llm-provider-design.md` to `SetupWizardSpec.md` (Step 3, Step 6, Configuration Storage sections).
+
+### Open Questions
+
+- **Review model cost visibility**: Should Step 3 show an estimated per-run cost for the review model based on manifest size and provider pricing? Useful on paid APIs; adds UI complexity.
+- **Review cancel behavior**: If the user clicks "Back to Data Providers" during a running review, should the in-flight LLM call be cancelled server-side (save tokens) or allowed to complete (save latency on return)? Current plan: cancel.
+- **Cross-browser resume**: Wizard state is DB-backed and unauthenticated in personal mode. Should a second browser on the same machine seamlessly resume, or require take-over confirmation? Current plan: take-over confirmation.
+- **Post-completion mode switching**: The v1 non-goal says switching modes requires `openlia wizard reset` + env flip. Should Settings offer a gentler in-app path in a later version?
+
+---
+
+## LLM Provider & Configuration System
+
+Full spec exists: `planning/specs/systems/llm-provider-design.md`. Defines the six-provider surface (OpenAI, Anthropic, Gemini, OpenRouter, OpenAI-compatible, Ollama), the three-tier model-role structure (Thinking / Everyday / Quick), per-department tier defaults with rationale, per-user BYO override for company mode, the runtime resolution order, shared connection-testing flow, and runtime failure handling (retry with backoff for transient errors, fail loudly for non-transient).
+
+### Gaps
+
+- **Shipped tier default model names need confirmation**: Current spec lists `gpt-5.4-pro` / `gpt-5.4` / `gpt-5.4-mini`, `claude-opus-4-6` / `claude-sonnet-4-6` / `claude-haiku-4-5`, `gemini-3.1-pro` / `gemini-3-flash` / `gemini-3.1-flash-lite`. Confirm exact variant names against each provider's docs before shipping.
+- **Capability map maintenance cadence**: `core/llm/capabilities.py` is manually maintained per release. Dev Notes flag reconsidering after 2–3 releases of actual maintenance experience.
+- **Secrets encryption at rest**: Inherited from Setup Wizard. Plaintext SQLite in v1.
+
+### Remaining Tasks
+
+- User review of `llm-provider-design.md` before implementation planning.
+- Apply required cross-reference edits to `SetupWizardSpec.md` (Step 3 three-tier slots, Step 6 Quick-tier wording, env var surface) and `SettingsPageSpec.md` (add Models section, sidebar nav entry).
+- Confirm or update `planning/projectStructure.md` to list the `core/openlia/llm/` file layout.
+- Implementation plan for the provider abstraction, adapter modules, resolver, capability system, and `/settings/models/*` API surface.
+
+### Open Questions
+
+- **Model defaults freshness**: Shipped defaults risk going stale between releases. Current plan relies on the wizard's live-populated Model dropdown (from each provider's `/v1/models`) so users are one click away from a current model even if the shipped default is stale. Acceptable?
+- **Test-completion cost debounce**: Every Save on a tier card runs a 1-token test completion. Should rapid sequential Saves coalesce into one test?
+- **Data-provider BYO parity**: The LLM spec allows per-user BYO key overrides in company mode. Data providers remain admin-only per `data-provider-design.md`. Should data providers adopt the same hybrid pattern in a future iteration?
+
+---
+
+## LLM Runtime / Execution (Planned)
+
+Planned as part 2 of the LLM system series, following `llm-provider-design.md`. Not yet specced.
+
+### Remaining Tasks
+
+- Brainstorm and draft `planning/specs/systems/llm-runtime-execution-design.md` covering:
+  - Prompt assembly (system + user + framework injection per department).
+  - Loading of `planning/frameworks/*.json` and `planning/frameworks/*_style_guide.md` into LLM calls.
+  - Tool schema construction from the data-provider surface and how departments invoke tools.
+  - Backend→frontend SSE streaming protocol (token events, tool-call events, error events, report-thumbnail events).
+  - Web search as a department capability (distinct from configuration-time model discovery, which was rejected in the configuration spec).
+
+---
+
 ## Design Specs Pending Review
 
 - **Data provider system design** (`planning/specs/systems/data-provider-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Report rendering pipeline design** (`planning/specs/systems/report-rendering-pipeline-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Macro Research Dalio dashboards design** (`planning/specs/systems/macro-research-dalio-dashboards-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Retail Sentiment dashboard design** (`planning/specs/systems/retail-sentiment-dashboard-design.md`): Spec written and committed. Pending user review before implementation planning.
+- **Formula engine DSL design** (`planning/specs/systems/formula-engine-design.md`): Spec written. Pending user review and commit before implementation planning.
+- **Setup Wizard design** (`planning/specs/pages/SetupWizardSpec.md`): Spec written and committed. Pending user review before implementation planning.
+- **LLM Provider & Configuration System design** (`planning/specs/systems/llm-provider-design.md`): Spec written. Pending user review and commit before implementation planning. Part 1 of 2 in the LLM system series.
 
 ---
 
