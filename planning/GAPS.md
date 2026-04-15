@@ -222,18 +222,33 @@ Full spec exists: `planning/specs/systems/llm-provider-design.md`. Defines the s
 
 ---
 
-## LLM Runtime / Execution (Planned)
+## LLM Runtime / Execution System
 
-Planned as part 2 of the LLM system series, following `llm-provider-design.md`. Not yet specced.
+Full spec exists: `planning/specs/systems/llm-runtime-design.md`. Part 2 of 2 in the LLM system series. Defines three runners (`ChatRunner`, `ReportRunner`, `BatchRunner`) under `core/openlia/llm/runtime/`, per-department YAML prompt authoring (Jinja2-templated), framework JSON + style-guide markdown injection for report runs, tool-schema construction (requirement-named data tools + `find_more_data` meta-tool + `web_search`), the `chat.*` / `report.*` SSE event taxonomy, hybrid web-search sourcing (provider-native first, user-configured Brave / Tavily / Serper / You.com fallback, unavailable otherwise), and cancellation via client disconnect.
+
+### Gaps
+
+- **Cross-reference edits to Part 1**: `llm-provider-design.md` needs `web_search_native: bool` added to the `Capabilities` dataclass, the shipped capability map updated for supporting model families, and `web_search` added as a `Capability` enum value valid in `DepartmentRequirements.preferred` only.
+- **Cross-reference edit to data-provider spec**: `data-provider-design.md` needs a fourth provider category `search` (Brave / Tavily / Serper / You.com), `api_key` mode only, optional at startup, consumed by the runtime layer directly (does not participate in the requirements-manifest AI-review flow).
+- **Cross-reference edit to Setup Wizard**: `SetupWizardSpec.md` Step 4 needs an optional "Web Search" card below the Social Media card. Missing search provider shows as amber in Step 6 review, never blocking.
+- **Cross-reference edit to report rendering pipeline**: `report-rendering-pipeline-design.md` streaming section needs its four `report:*` events replaced by the `report.*` taxonomy in the runtime spec (dot-namespaced, adds `report.tool_call`, `report.complete` carries the full `ReportSchema`).
+- **Cross-reference edit to Chat Interface Spec**: `ChatInterfaceSpec.md` needs a new Event Handling section specifying how the frontend consumes `chat.*` events and how each event drives UI state transitions.
+- **Cross-reference edit to projectStructure**: `planning/projectStructure.md` needs `core/openlia/llm/runtime/` added with its file list, `core/openlia/prompts/` added as a sibling with per-department YAML files, and a note that `reports/frameworks/` holds the framework JSON and style-guide markdown moved from `planning/frameworks/`.
+- **Framework / style-guide file migration**: `planning/frameworks/*.json` and `*_style_guide.md` need to move into the package at `packages/core/src/openlia/reports/frameworks/`. `planning/` is dev-only and excluded from Python package builds.
 
 ### Remaining Tasks
 
-- Brainstorm and draft `planning/specs/systems/llm-runtime-execution-design.md` covering:
-  - Prompt assembly (system + user + framework injection per department).
-  - Loading of `planning/frameworks/*.json` and `planning/frameworks/*_style_guide.md` into LLM calls.
-  - Tool schema construction from the data-provider surface and how departments invoke tools.
-  - Backend→frontend SSE streaming protocol (token events, tool-call events, error events, report-thumbnail events).
-  - Web search as a department capability (distinct from configuration-time model discovery, which was rejected in the configuration spec).
+- User review of `llm-runtime-design.md` before implementation planning.
+- Apply the six cross-reference edits enumerated above.
+- Implementation plan for the runtime layer (runners, prompt loader, tool dispatcher, web-search adapter, SSE event types, cancellation helper).
+
+### Open Questions
+
+- **Prompt caching effectiveness**: The system / user split is designed to maximize prompt-cache hit rates across providers. Dev note flags validating cache-hit rates in the first few weeks of production telemetry and revisiting the YAML structure if hits are poor.
+- **`find_more_data` latency in reports**: The expansion meta-tool adds ~1-2s per call (Quick-tier catalog search). Bursty use during report generation could inflate total time. Consider caching expansion results per `(department, description)` for the lifetime of a generation call.
+- **Batch-runner concurrency default**: Default `concurrency=8` is a guess. RS classifies hundreds of social posts per dashboard refresh; could saturate rate-limited tiers. Instrument batch duration and 429 counts; tune per department if needed.
+- **Native web-search cost visibility**: Anthropic and OpenAI bill native web-search on top of completion tokens. Surface a one-liner in Settings → Models when native web search is active so users aren't surprised by bills.
+- **v2 user-authored custom tools**: Runtime spec dev note flags a future iteration allowing users to register arbitrary tools (user OpenAPI specs, general MCP tool servers, hand-written Python callables) per department. Design considerations: capability gating, interaction with per-department mappings, expansion-budget accounting, and name-collision rules with requirement tools.
 
 ---
 
@@ -246,6 +261,7 @@ Planned as part 2 of the LLM system series, following `llm-provider-design.md`. 
 - **Formula engine DSL design** (`planning/specs/systems/formula-engine-design.md`): Spec written. Pending user review and commit before implementation planning.
 - **Setup Wizard design** (`planning/specs/pages/SetupWizardSpec.md`): Spec written and committed. Pending user review before implementation planning.
 - **LLM Provider & Configuration System design** (`planning/specs/systems/llm-provider-design.md`): Spec written and committed. Pending user review before implementation planning. Part 1 of 2 in the LLM system series.
+- **LLM Runtime / Execution System design** (`planning/specs/systems/llm-runtime-design.md`): Spec written and committed. Pending user review before implementation planning. Part 2 of 2 in the LLM system series.
 
 ---
 
