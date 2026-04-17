@@ -181,8 +181,8 @@ How long oil has remained in an "elevated" state. The user defines what "elevate
 
 ### Data source
 
-- **History**: `EODHD:get_historical_stock_prices` with the user-configured `ticker` and `start_date` = `history_lookback_months` ago.
-- **Live**: `EODHD:get_live_price_data` with the same ticker.
+- **History**: `historical_prices` with the user-configured `ticker` and `start_date` = `history_lookback_months` ago.
+- **Live**: `stock_quote` with the same ticker.
 
 ### UI
 
@@ -245,8 +245,8 @@ The market's implied expectation of average annual inflation over the next five 
 
 ### Data source
 
-- **TIP ETF**: `EODHD:get_historical_stock_prices` with `ticker` = `primary_ticker`.
-- **Michigan survey**: `EODHD:get_economic_events` with `country=US` → filter for `event_type_filter`.
+- **TIP ETF**: `historical_prices` with `ticker` = `primary_ticker`.
+- **Michigan survey**: `economic_events` with `country=US` → filter for `event_type_filter`.
 
 ### UI
 
@@ -310,15 +310,15 @@ Advanced users can also modify the rule formulas — e.g. requiring `hawkish_key
 
 ### Data source
 
-- `EODHD:get_company_news` — search for `news_search_tags`
-- `EODHD:get_economic_events` with `country=US` → filter for FOMC-related entries
+- `company_news` — search for `news_search_tags`
+- `economic_events` with `country=US` → filter for FOMC-related entries
 
 ### UI
 
 - **Metric card**: current detected posture label, date of last FOMC statement, status pill.
 - **Timeline**: horizontal timeline showing FOMC meeting dates as dots, colored by detected posture at that time.
 - **Keyword scanner**: last 5 Fed-related headlines with matched trigger phrases highlighted in the status color. Each keyword list (dovish / neutral / hawkish / crisis) is editable inline.
-- **Manual override toggle**: user can force the status if they disagree with automated detection. Override persists to `window.storage`.
+- **Manual override toggle**: user can force the status if they disagree with automated detection. Override persists to `pt_user_configs.panel_config` (see `database-design.md`).
 
 ---
 
@@ -373,7 +373,7 @@ Month-over-month growth in average hourly earnings. Two consecutive months above
 
 ### Data source
 
-- `EODHD:get_economic_events` with `country=US`, `start_date` = `history_lookback_months` ago → filter for `event_type_filter`
+- `economic_events` with `country=US`, `start_date` = `history_lookback_months` ago → filter for `event_type_filter`
 - Also pull CPI MoM and Real Earnings MoM for derived fields
 
 ### UI
@@ -433,8 +433,8 @@ Whether substantive diplomatic progress has occurred within a rolling window. Pr
 
 ### Data source
 
-- `EODHD:get_company_news` — search for `news_keywords` and `escalation_keywords`
-- Window start date stored in `window.storage`
+- `company_news` — search for `news_keywords` and `escalation_keywords`
+- Window start date stored in `pt_user_configs.panel_config` (see `database-design.md`)
 
 ### UI
 
@@ -548,7 +548,7 @@ In weighted mode, each red panel contributes its weight to the total score. User
 │  [edit threshold ▼]     │  [edit threshold ▼]            │
 ├─────────────────────────┼────────────────────────────────┤
 │  DASHBOARD 3            │  DASHBOARD 4                   │
-│  Fed language tracker   │  Avg hourly earnings MoM       │
+│  Fed language tracker   │  Wage growth                   │
 │  [FOMC timeline]        │  [bar chart]                   │
 │  [headline scanner]     │  ───── user threshold          │
 │  [keyword editor]       │  [edit threshold ▼]            │
@@ -559,8 +559,8 @@ In weighted mode, each red panel contributes its weight to the total score. User
 │  [window length: {user-set} days]                        │
 ├──────────────────────────────────────────────────────────┤
 │  MACRO DATA TABLE                                        │
-│  Latest releases from EODHD economic calendar            │
-│  [auto-populated from get_economic_events]               │
+│  Latest releases from configured economic calendar       │
+│  [auto-populated from `economic_events` requirement]     │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -574,45 +574,47 @@ In weighted mode, each red panel contributes its weight to the total score. User
 
 ## Data refresh strategy
 
-| Data type | Refresh interval | EODHD endpoint |
-|-----------|-----------------|----------------|
-| Price-based tickers (live) | User-configurable (default 5 min) | `get_live_price_data` |
-| Price-based tickers (history) | Daily at market close | `get_historical_stock_prices` |
-| Economic events | 1 hour | `get_economic_events` |
-| News (Fed / geopolitical) | 30 min | Company news API |
-| Michigan survey | On release (monthly) | `get_economic_events` |
+| Data type | Refresh interval | Requirement |
+|-----------|-----------------|-------------|
+| Price-based tickers (live) | User-configurable (default 5 min) | `stock_quote` |
+| Price-based tickers (history) | Daily at market close | `historical_prices` |
+| Economic events | 1 hour | `economic_events` |
+| News (Fed / geopolitical) | 30 min | `company_news` |
+| Michigan survey | On release (monthly) | `economic_events` |
 
 Auto-refresh toggle in the top-right corner with options: Off / 1 min / 5 min / 15 min.
 
 A "last updated" timestamp is shown beside each panel.
 
+Concrete provider endpoints (e.g. EODHD's `get_live_price_data`, FMP's `get_historical_price_full`) are resolved per-installation by the requirement-to-endpoint mapping; see `data-provider-design.md`.
+
 ---
 
-## EODHD API call map
+## Data requirement call map
 
 ```
 Dashboard 1 (Oil)
-├── get_historical_stock_prices(ticker=<user.ticker>, start_date=<user.lookback>)
-└── get_live_price_data(ticker=<user.ticker>)
+├── historical_prices(ticker=<user.ticker>, start_date=<user.lookback>)
+└── stock_quote(ticker=<user.ticker>)
 
-Dashboard 2 (Breakeven)
-├── get_historical_stock_prices(ticker=<user.primary_ticker>, start_date=<user.lookback>)
-├── get_live_price_data(ticker=<user.primary_ticker>)
-└── get_economic_events(country="US") → filter <user.event_type_filter>
+Dashboard 2 (Inflation expectations)
+├── historical_prices(ticker=<user.primary_ticker>, start_date=<user.lookback>)
+├── stock_quote(ticker=<user.primary_ticker>)
+└── economic_events(country="US") → filter <user.event_type_filter>
 
 Dashboard 3 (Fed language)
-├── Company news search for <user.news_search_tags>
-└── get_economic_events(country="US") → filter FOMC dates
+├── company_news(search=<user.news_search_tags>)
+└── economic_events(country="US") → filter FOMC dates
 
-Dashboard 4 (Wages)
-└── get_economic_events(country="US", start_date=<user.lookback>)
+Dashboard 4 (Wage growth)
+└── economic_events(country="US", start_date=<user.lookback>)
     → filter <user.event_type_filter>
 
 Dashboard 5 (Diplomacy)
-└── Company news search for <user.news_keywords> and <user.escalation_keywords>
+└── company_news(search=<user.news_keywords> + <user.escalation_keywords>)
 
 Macro table
-└── get_economic_events(country="US", start_date=7d_ago)
+└── economic_events(country="US", start_date=7d_ago)
     → filter CPI, Core CPI, PCE, GDP, Michigan, Real Earnings
 ```
 
@@ -644,10 +646,10 @@ PT is a pre-fetch dashboard department. Data is fetched periodically and fed int
 |-------|--------|-----------|
 | Framework | React (`.jsx` artifact) | Renders inline in Claude; interactive |
 | Charts | Chart.js 4.x via CDN | Lightweight, streams well |
-| State | `useState` + `useReducer` | No localStorage in Claude artifacts |
-| Styling | Tailwind utility classes + CSS variables | Matches Claude design system |
-| Data | EODHD MCP via Anthropic API | Artifact calls Claude API with MCP servers |
-| Persistence | `window.storage` (artifact storage API) | Persist config, manual overrides across sessions |
+| State | `useState` + `useReducer` | Standard React state management |
+| Styling | Tailwind utility classes + CSS variables | Matches OpenLIA design system |
+| Data | EODHD via data-provider layer | Data-provider adapter handles API calls |
+| Persistence | DB-backed: `pt_user_configs`, `pt_presets` | Per-user config, manual overrides, presets across sessions (see `database-design.md`) |
 | Formula engine | Custom safe DSL parser | Sandboxed — no eval(), no arbitrary code execution |
 
 ---
@@ -701,7 +703,7 @@ Wire up each panel to call the Anthropic API with the EODHD MCP server. The arti
 
 ### Phase 3 — Auto-refresh + persistence + presets
 
-Add the refresh timer. Persist full configuration (params + rules + manual overrides) to `window.storage`. Implement the three preset libraries. Add import/export JSON. Loading spinners per panel.
+Add the refresh timer. Persist full configuration (params + rules + manual overrides) to `pt_user_configs` via the server API. Implement the three preset libraries (shipped presets seeded from `pt_presets`). Add import/export JSON. Loading spinners per panel.
 
 ### Phase 4 — Alerts + historical playbook overlay
 

@@ -1,0 +1,60 @@
+<h2>Setup Wizard — dual-mode flow</h2>
+<p class="subtitle">Welcome step branches on mode. Personal path = 5 steps. Company path = 6 steps (adds Admin account + Access control, replaces Identity).</p>
+
+<style>
+  .row { display:flex; gap: 8px; align-items: stretch; margin: 16px 0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
+  .step { flex:1; border: 1px solid rgba(120,140,200,0.25); border-radius: 8px; padding: 10px 12px; background: rgba(120,140,200,0.04); position:relative; min-width:0; }
+  .step-num { position:absolute; top:-10px; left:10px; background: rgba(60,80,140,0.85); color: #fff; width: 22px; height: 22px; border-radius: 11px; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:11px; }
+  .step-title { font-weight: 600; font-size: 12px; margin-bottom: 4px; margin-top: 4px; }
+  .step-body { font-size: 11px; opacity: 0.82; line-height: 1.4; }
+  .arrow { align-self:center; opacity:0.4; font-size: 14px; }
+  .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; margin-bottom: 6px; margin-top: 14px; font-weight: 600; }
+  .branch { border-left: 2px dashed rgba(120,140,200,0.25); padding-left: 14px; margin-left: 8px; }
+  .step.company { background: rgba(230,190,120,0.06); border-color: rgba(230,190,120,0.3); }
+  .step.personal { background: rgba(120,200,160,0.05); border-color: rgba(120,200,160,0.3); }
+  .step.shared { background: rgba(120,140,200,0.06); }
+  .note { background: rgba(120,140,200,0.08); padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-top: 10px; line-height: 1.5; }
+</style>
+
+<div class="label">Welcome (shared)</div>
+<div class="row">
+  <div class="step shared" style="flex:0 0 220px;">
+    <div class="step-num">1</div>
+    <div class="step-title">Welcome / Mode</div>
+    <div class="step-body">Pick: Personal or Company. Hint links to company-URL guidance. If OPENLIA_MODE is in env, choice is pre-selected & disabled.</div>
+  </div>
+  <div style="flex:1;"></div>
+</div>
+
+<div class="label">Personal path</div>
+<div class="row branch">
+  <div class="step personal"><div class="step-num">2</div><div class="step-title">Identity</div><div class="step-body">Display name.</div></div>
+  <div class="arrow">›</div>
+  <div class="step personal"><div class="step-num">3</div><div class="step-title">AI Models</div><div class="step-body">Primary + Review model. Ping on save.</div></div>
+  <div class="arrow">›</div>
+  <div class="step personal"><div class="step-num">4</div><div class="step-title">Data Providers</div><div class="step-body">Sidebar tabs: Financial / News / Social. Panel-takeover add flow.</div></div>
+  <div class="arrow">›</div>
+  <div class="step personal"><div class="step-num">5</div><div class="step-title">Review</div><div class="step-body">AI mapping \u2192 dept-readiness grid.</div></div>
+</div>
+
+<div class="label">Company path</div>
+<div class="row branch">
+  <div class="step company"><div class="step-num">2</div><div class="step-title">Admin account</div><div class="step-body">Email, password, display name. First user, role=admin.</div></div>
+  <div class="arrow">›</div>
+  <div class="step company"><div class="step-num">3</div><div class="step-title">AI Models</div><div class="step-body">Instance-shared primary + review model.</div></div>
+  <div class="arrow">›</div>
+  <div class="step company"><div class="step-num">4</div><div class="step-title">Data Providers</div><div class="step-body">Instance-shared. Same UI as personal.</div></div>
+  <div class="arrow">›</div>
+  <div class="step company"><div class="step-num">5</div><div class="step-title">Access control</div><div class="step-body">Signup policy (invite / email domain / open) + bind address + port.</div></div>
+  <div class="arrow">›</div>
+  <div class="step company"><div class="step-num">6</div><div class="step-title">Review</div><div class="step-body">AI mapping + 'Deployment ready' with login URL.</div></div>
+</div>
+
+<div class="note"><strong>Cross-cutting (both paths):</strong>
+<ul style="margin: 4px 0 0 16px; padding:0;">
+  <li><strong>Mode detection:</strong> OPENLIA_MODE env var (personal | company) wins if set; otherwise picked in step 1.</li>
+  <li><strong>Env precedence:</strong> env-set fields render read-only with an 'inherited from environment' badge.</li>
+  <li><strong>Resume:</strong> server persists progress after each step; reopening the wizard returns to last incomplete step.</li>
+  <li><strong>Validation:</strong> ping test on every key save \u2014 inline green/red feedback.</li>
+  <li><strong>Completion gate:</strong> can't finish unless all basic requirements met for required departments.</li>
+</ul></div>

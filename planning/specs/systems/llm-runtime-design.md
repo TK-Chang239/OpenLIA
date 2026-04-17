@@ -6,6 +6,8 @@ Defines the layer between the `LLMProvider` returned by the resolver in `llm-pro
 
 This is **part 2 of 2** in the LLM system series. Part 1 (`llm-provider-design.md`) specifies provider adapters, capability gating, configuration storage, and failure classification. This spec consumes that contract.
 
+> **Cross-reference note (2026-04-15):** Updated to reflect `database-design.md` decisions: `TierNotConfiguredError` handling in all runners (replaces `LLMConfigError`), dedicated SSE error events for unconfigured tiers.
+
 ## Scope
 
 In scope:
@@ -45,7 +47,7 @@ Panic Thermometer does not use the LLM at all.
 
 Each runner:
 
-1. Calls `resolve()` from Part 1 with `(department_id, user_id, tier_override?)` to obtain an `LLMProvider`.
+1. Calls `resolve()` from Part 1 with `(department_id, user_id, tier_override?)` to obtain an `LLMProvider`. If the resolved tier has no enabled models, `resolve()` raises `TierNotConfiguredError` — the runner terminates with a `*.error` event.
 2. Loads the department's prompt YAML, the style guide (report only), and the framework JSON (report only).
 3. Builds the tool list (tool-calling departments only).
 4. Runs the provider call, dispatching tool calls as they arrive.
@@ -483,7 +485,8 @@ Inherits Part 1 unchanged. Every runner sits on top of `LLMProvider`, so the ret
 | Part 1 error class | Runner behavior |
 |---|---|
 | `TransportError` / `RateLimitError` / `ProviderOutageError` | Retried inside the adapter. If retries exhaust, the exception reaches the runner and becomes a terminal `*.error` event with the corresponding `error_class`. |
-| `AuthError` / `ModelNotFoundError` / `ContextLengthError` / `CapabilityError` / `LLMConfigError` | No retry. Terminal `*.error` event with the Part 1 chat-facing message. |
+| `AuthError` / `ModelNotFoundError` / `ContextLengthError` / `CapabilityError` | No retry. Terminal `*.error` event with the Part 1 chat-facing message. |
+| `TierNotConfiguredError` | No retry. Terminal `*.error` event. Chat message: "The `<tier>` tier has no models configured. Ask your admin to add one in Settings → Admin → Models." Frontend renders a deep-link to the admin panel. |
 
 ### Tool-Dispatch Failures
 

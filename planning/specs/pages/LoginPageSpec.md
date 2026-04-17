@@ -1,22 +1,23 @@
 # Login Page Spec
 
 ## Page Overview
-The Login Page is the entry point for all users. It handles authentication so users can access their accounts and retrieve saved data such as conversation history, portfolio, and repository reports. Unauthenticated users are redirected here before accessing any other page.
+The Login Page is the entry point for all company-mode users. It handles authentication so users can access their accounts and retrieve saved data such as conversation history, portfolio, and repository reports. Unauthenticated users are redirected here before accessing any other page.
 
 ## Page Functionalities
-1. **Google OAuth Login**: Allows the user to sign in with their Google account via OAuth 2.0. This is the primary and recommended sign-in method. On success, the user is redirected to the Secretary (home page). If the Google account email has no existing LIA account, one is created automatically.
-2. **Email and Password Login**: Allows the user to log in with their registered email address and password. On successful login, the user is redirected to the Secretary (home page).
-3. **Account Registration**: Allows new users to create an account by providing an email address and setting a password. After registration, the user is logged in automatically and redirected to the Secretary. Users who signed up via Google OAuth do not need a separate password.
-4. **Forgot Password**: Displays an inline form where the user enters their email address. A password reset link is sent to that email. A confirmation message is shown after submission regardless of whether the email exists (to prevent email enumeration). Not applicable for Google OAuth accounts.
+1. **Email and Password Login**: Allows the user to log in with their registered email address and password. On successful login, the user is redirected to the Secretary (home page).
+2. **Account Registration**: Allows new users to create an account by providing an email address and setting a password. Registration requires an invite token (delivered via URL query parameter `?invite=<token>`). After registration, the user is logged in automatically and redirected to the Secretary. The "Sign up" link is only visible when an invite token is present in the URL.
+3. **Forgot Password**: Displays an inline form where the user enters their email address. The server creates a password reset request for the admin to approve. A neutral confirmation message ("If the email matches an account, your admin will be notified") is shown regardless of whether the email exists (to prevent email enumeration). No email is sent -- the admin delivers the reset link out-of-band after approving the request.
+4. **Reset Password Page**: A public page at `/reset-password?token=<...>` where the user enters a new password after the admin has approved their reset request and delivered the one-time link. The token is validated server-side; expired or consumed tokens show an error.
 5. **Keep Me Logged In**: A checkbox that, when selected, persists the user session on the device so the user is not required to log in again on subsequent visits. When unchecked, the session expires when the browser is closed.
 6. **Input Validation**: Email format and password requirements are validated on the client side before submission. Server-side validation is also enforced. Clear inline error messages are shown below the relevant field.
 7. **Rate Limiting**: Failed login attempts are rate-limited server-side. After 5 consecutive failed attempts, the account is temporarily locked for 15 minutes and the user is notified on screen.
+8. **Must Change Password**: When a user logs in with `must_change_password = true` (set by admin direct password reset), the login succeeds but the frontend routes to a change-password form before allowing any other navigation.
 
 ## Page Design
 
 ### Layout
 
-All three views (Login, Register, Forgot Password) share the same centered single-column layout. Only the form content changes — no full page navigation occurs between views.
+All views (Login, Register, Forgot Password, Reset Password, Must Change Password) share the same centered single-column layout. Only the form content changes -- no full page navigation occurs between views (except Reset Password, which is a separate URL).
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -24,10 +25,6 @@ All three views (Login, Register, Forgot Password) share the same centered singl
 │            [Logo + Product Name]             │
 │                                              │
 │   ┌──────────────────────────────────────┐   │
-│   │                                      │   │
-│   │       [Continue with Google]         │   │
-│   │                                      │   │
-│   │     ─────────── or ───────────       │   │
 │   │                                      │   │
 │   │          [Form Content]              │   │
 │   │                                      │   │
@@ -56,24 +53,6 @@ All three views (Login, Register, Forgot Password) share the same centered singl
 | Wordmark block | Above the card, centered: "LIA" `text-2xl font-semibold text-[--color-text-primary]` + "Your financial assistant" `text-sm text-[--color-text-secondary] mt-1`; `mb-6` gap below before card |
 | Card | `bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-xl] shadow-lg w-full max-w-[420px] px-8 py-10` |
 | Card — mobile | `border-none shadow-none rounded-none px-6 py-8` (full-width, no card treatment) |
-
-#### Google OAuth Button
-
-| Element | Spec |
-|---|---|
-| Container | `w-full h-10 flex items-center justify-center gap-2.5 rounded-[--radius-md] border border-[--color-border-secondary] bg-[--color-bg-elevated] text-sm font-medium text-[--color-text-primary]` |
-| Hover | `bg-[--color-surface-hover]`; transition `--duration-fast` |
-| Icon | Google "G" SVG logo, 18px, rendered at natural colors (not tinted) |
-| Label | "Continue with Google" |
-| Loading | Button disabled, spinner replaces icon, `opacity-70` |
-
-#### OR Divider
-
-| Element | Spec |
-|---|---|
-| Container | `flex items-center gap-3 my-5` |
-| Lines | `flex-1 h-px bg-[--color-border-subtle]` on each side |
-| Text | "or" — `text-xs text-[--color-text-tertiary]` |
 
 #### Form Fields
 
@@ -161,31 +140,30 @@ Entry point for returning users.
 | Element | Detail |
 |---|---|
 | Logo + product name | Displayed above the form card |
-| Continue with Google button | Full-width button with Google logo; initiates OAuth 2.0 flow |
-| Divider | "or" divider separating OAuth from email/password form |
 | Email input | Full-width text field, labeled "Email" |
 | Password input | Full-width, labeled "Password", with show/hide toggle |
 | Keep me logged in | Checkbox with label, positioned below the password field |
 | Log In button | Full-width primary action button |
 | Forgot password? | Text link below the button |
-| Sign up link | "Don't have an account? Sign up" at the bottom of the card |
+| Sign up link | "Don't have an account? Sign up" -- **only visible when `?invite=<token>` is present in the URL**. When no invite token is in the URL, this link is hidden entirely. |
 
 ---
 
 ### Registration View
 
-Accessed by clicking "Sign up" from the Login View.
+Accessed by clicking "Sign up" from the Login View. Only reachable when an invite token is present in the URL (`/register?invite=<token>`).
 
 | Element | Detail |
 |---|---|
 | Logo + product name | Displayed above the form card |
-| Continue with Google button | Full-width button with Google logo; creates account and signs in via OAuth 2.0 |
-| Divider | "or" divider separating OAuth from email/password form |
 | Email input | Full-width text field, labeled "Email" |
 | Password input | Full-width, with show/hide toggle and password strength indicator |
 | Confirm password input | Full-width, labeled "Confirm Password" |
+| Display name input | Full-width, labeled "Display Name" (optional, defaults to email local-part) |
 | Create Account button | Full-width primary action button |
 | Log in link | "Already have an account? Log in" at the bottom of the card |
+
+If the invite token is invalid, expired, revoked, or at capacity, a form-level error banner is shown: "This invite link is no longer valid. Contact your administrator for a new one."
 
 ---
 
@@ -196,10 +174,47 @@ Accessed by clicking "Forgot password?" from the Login View.
 | Element | Detail |
 |---|---|
 | Logo + product name | Displayed above the form card |
-| Instruction text | "Enter your email to receive a password reset link" |
+| Instruction text | "Enter your email and we'll notify your admin to approve a password reset." |
 | Email input | Full-width text field, labeled "Email" |
-| Send Reset Link button | Full-width primary action button |
+| Request Reset button | Full-width primary action button |
 | Back to Log In link | Text link at the bottom of the card |
+
+On submission, the server posts to `/auth/password-reset/request`. The confirmation message shown is always: "If the email matches an account, your admin has been notified. They'll send you a reset link." This is shown regardless of whether the email exists (anti-enumeration).
+
+---
+
+### Reset Password View
+
+A separate page at `/reset-password?token=<...>`. Accessed via the one-time link the admin delivers after approving a password reset request.
+
+| Element | Detail |
+|---|---|
+| Logo + product name | Displayed above the form card |
+| New password input | Full-width, with show/hide toggle and password strength indicator |
+| Confirm password input | Full-width, labeled "Confirm New Password" |
+| Reset Password button | Full-width primary action button |
+| Back to Log In link | Text link at the bottom of the card |
+
+States:
+- **Valid token**: form is shown normally.
+- **Invalid/expired/consumed token**: form is replaced with an error banner: "This reset link has expired or has already been used. Contact your administrator for a new one." Back to Log In link shown.
+- **Success**: banner "Password updated successfully. You can now log in." with redirect to Login View after 3 seconds.
+
+---
+
+### Must Change Password View
+
+Shown when login succeeds but the response includes `must_change_password: true`. The user cannot navigate away until the password is changed.
+
+| Element | Detail |
+|---|---|
+| Logo + product name | Displayed above the form card |
+| Instruction text | "Your administrator has reset your password. Please set a new one to continue." |
+| New password input | Full-width, with show/hide toggle and password strength indicator |
+| Confirm password input | Full-width, labeled "Confirm New Password" |
+| Set Password button | Full-width primary action button |
+
+On success: `must_change_password` is cleared server-side and the user is redirected to the Secretary (home page).
 
 ---
 
@@ -217,15 +232,10 @@ Accessed by clicking "Forgot password?" from the Login View.
 ### Behavior & Interactions
 
 #### View Transitions
-- Switching between Login, Registration, and Forgot Password views swaps form content in place
+- Switching between Login, Registration, Forgot Password, and Must Change Password views swaps form content in place
 - Transition animates with a short fade (~150ms)
-- The URL may update to reflect the current view (e.g. `/login`, `/register`, `/forgot-password`) to support direct linking and browser back navigation
-
-#### Google OAuth Flow
-- Clicking "Continue with Google" opens the Google account selector in a popup or redirect (redirect preferred for mobile)
-- On Google authorization, the backend exchanges the auth code for tokens, creates or retrieves the LIA account, and issues a session
-- If the Google account is already linked to an existing email/password LIA account, the accounts are treated as the same account
-- On failure (user cancels, Google error), the user is returned to the Login View with an appropriate error message
+- The URL may update to reflect the current view (e.g. `/login`, `/register?invite=<token>`, `/forgot-password`) to support direct linking and browser back navigation
+- Reset Password (`/reset-password?token=<...>`) is a separate page load, not an in-place swap
 
 #### Form Submission
 - Client-side validation runs on submit before any network request
@@ -286,16 +296,14 @@ There are no report frameworks for this page.
 ---
 
 ## Non-Goals (v1)
-- Additional OAuth providers beyond Google (e.g. GitHub, Apple)
+- Google OAuth or any OAuth provider (v2)
 - Two-factor authentication (2FA)
 - Magic link (passwordless) login
-- Account deletion from this page
+- SMTP-based password reset emails
 - CAPTCHA or bot detection challenges
 
 ---
 
 ## Open Questions
-- Should the reset password link expire after a set time (e.g. 1 hour)? If so, what happens when an expired link is clicked?
-- Should failed login attempts be per-IP, per-account, or both for rate limiting?
-- Should the Registration view require email verification before first login, or allow immediate access?
-- What are the minimum password requirements (length, character types)?
+- Should the Registration view require email verification before first login, or allow immediate access? (Low priority for invite-only where the admin controls who registers.)
+- What are the minimum password requirements (length, character types)? Current plan: `OPENLIA_PASSWORD_MIN_LENGTH=8`, no complexity requirements in v1.

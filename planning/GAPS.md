@@ -174,19 +174,17 @@ Full spec exists: `planning/specs/pages/SetupWizardSpec.md`. Dual-mode wizard (p
 
 ### Gaps
 
-- **Secrets encryption at rest**: `config_store` plans to hold API keys in plaintext for v1. Upgrade path to server-derived key encryption is not yet designed.
-- **`openlia wizard reset` CLI**: Referenced in the spec's error-handling section as the manual escape hatch for re-running the wizard or converting modes. Not yet implemented and not yet specced under the CLI surface.
+- ~~**Secrets encryption at rest**: `config_store` plans to hold API keys in plaintext for v1. Upgrade path to server-derived key encryption is not yet designed.~~ **Resolved by DB design Section 5 (2026-04-15)**: AES-256-GCM at rest in `llm_providers.api_key_encrypted` / `data_providers.api_key_encrypted` / `web_search_providers.api_key_encrypted`, keyed by `OPENLIA_SECRET_KEY` env var or `~/.openlia/secret.key` (0600), row-`id` as AAD, `openlia secrets rotate-key` CLI for rotation. `config_store` no longer holds API keys.
+- ~~**`openlia wizard reset` CLI**: Referenced in the spec's error-handling section as the manual escape hatch for re-running the wizard or converting modes. Not yet implemented and not yet specced under the CLI surface.~~ **Resolved (2026-04-16):** Specced in `cli-surface-design.md`.
 - **`--color-surface-info` design token**: The MCP authentication info card uses this token. May need to be added to the app's token set if missing.
-- **Step 3 AI Models section needs rewrite**: `llm-provider-design.md` supersedes the current Primary + Review two-slot structure with a three-tier structure (Thinking + Everyday + Quick) and adds Google Gemini to the provider list. Required edits enumerated under Cross-References in `llm-provider-design.md`.
-- **Step 6 Review copy**: The AI Review model is now the Quick tier (formerly called "Review model"); wording needs updating.
-- **Env var surface**: `OPENLIA_LLM_PRIMARY_*` / `OPENLIA_LLM_REVIEW_*` rows need to be replaced with the three-tier triplet plus per-department override env vars per `llm-provider-design.md`.
+- Cross-reference edits from `llm-provider-design.md` and `llm-runtime-design.md` are **applied** (2026-04-14): Step 3 rewritten to the three-tier structure with Gemini added, Step 4 Web Search tab added, Step 6 copy clarifies the Quick tier runs the AI review, and the env-var surface carries the three-tier triplet plus per-department overrides.
 
 ### Remaining Tasks
 
 - Implementation plan for the wizard (pending user review of spec).
 - Implement `GET /setup/status` and the 14 other `/setup/*` endpoints per the spec.
 - Wire the wizard's mode selection + access-control output to the server's bind-and-auth startup behavior (requires server restart after company-mode completion).
-- Apply the Cross-References edits from `llm-provider-design.md` to `SetupWizardSpec.md` (Step 3, Step 6, Configuration Storage sections).
+- ~~Apply the Cross-References edits from `llm-provider-design.md` to `SetupWizardSpec.md` (Step 3, Step 6, Configuration Storage sections).~~ Done 2026-04-14.
 
 ### Open Questions
 
@@ -199,26 +197,26 @@ Full spec exists: `planning/specs/pages/SetupWizardSpec.md`. Dual-mode wizard (p
 
 ## LLM Provider & Configuration System
 
-Full spec exists: `planning/specs/systems/llm-provider-design.md`. Defines the six-provider surface (OpenAI, Anthropic, Gemini, OpenRouter, OpenAI-compatible, Ollama), the three-tier model-role structure (Thinking / Everyday / Quick), per-department tier defaults with rationale, per-user BYO override for company mode, the runtime resolution order, shared connection-testing flow, and runtime failure handling (retry with backoff for transient errors, fail loudly for non-transient).
+Full spec exists: `planning/specs/systems/llm-provider-design.md`. Defines the six-provider surface (OpenAI, Anthropic, Gemini, OpenRouter, OpenAI-compatible, Ollama), the three-tier model-role structure (Thinking / Everyday / Quick), per-department tier defaults with rationale, admin-managed model roster with `user_llm_preferences` pointer table (no per-user BYO keys), the runtime resolution order (user preference → tier default → any enabled → `TierNotConfiguredError`), shared connection-testing flow, and runtime failure handling (retry with backoff for transient errors, fail loudly for non-transient).
 
 ### Gaps
 
 - **Shipped tier default model names need confirmation**: Current spec lists `gpt-5.4-pro` / `gpt-5.4` / `gpt-5.4-mini`, `claude-opus-4-6` / `claude-sonnet-4-6` / `claude-haiku-4-5`, `gemini-3.1-pro` / `gemini-3-flash` / `gemini-3.1-flash-lite`. Confirm exact variant names against each provider's docs before shipping.
 - **Capability map maintenance cadence**: `core/llm/capabilities.py` is manually maintained per release. Dev Notes flag reconsidering after 2–3 releases of actual maintenance experience.
-- **Secrets encryption at rest**: Inherited from Setup Wizard. Plaintext SQLite in v1.
+- ~~**Secrets encryption at rest**: Inherited from Setup Wizard. Plaintext SQLite in v1.~~ **Resolved by DB design Section 5 (2026-04-15)**: AES-256-GCM at rest in `llm_providers.api_key_encrypted`, keyed by `OPENLIA_SECRET_KEY` / `~/.openlia/secret.key`.
 
 ### Remaining Tasks
 
 - User review of `llm-provider-design.md` before implementation planning.
-- Apply required cross-reference edits to `SetupWizardSpec.md` (Step 3 three-tier slots, Step 6 Quick-tier wording, env var surface) and `SettingsPageSpec.md` (add Models section, sidebar nav entry).
-- Confirm or update `planning/projectStructure.md` to list the `core/openlia/llm/` file layout.
+- ~~Apply required cross-reference edits to `SetupWizardSpec.md` (Step 3 three-tier slots, Step 6 Quick-tier wording, env var surface) and `SettingsPageSpec.md` (add Models section, sidebar nav entry).~~ Done 2026-04-14.
+- ~~Confirm or update `planning/projectStructure.md` to list the `core/openlia/llm/` file layout.~~ Done 2026-04-14.
 - Implementation plan for the provider abstraction, adapter modules, resolver, capability system, and `/settings/models/*` API surface.
 
 ### Open Questions
 
 - **Model defaults freshness**: Shipped defaults risk going stale between releases. Current plan relies on the wizard's live-populated Model dropdown (from each provider's `/v1/models`) so users are one click away from a current model even if the shipped default is stale. Acceptable?
 - **Test-completion cost debounce**: Every Save on a tier card runs a 1-token test completion. Should rapid sequential Saves coalesce into one test?
-- **Data-provider BYO parity**: The LLM spec allows per-user BYO key overrides in company mode. Data providers remain admin-only per `data-provider-design.md`. Should data providers adopt the same hybrid pattern in a future iteration?
+- **Per-user BYO keys (v2)**: Both LLM and data providers are admin-only in v1. Should v2 allow per-user BYO keys for LLM providers so users can bring their own API keys?
 
 ---
 
@@ -228,18 +226,13 @@ Full spec exists: `planning/specs/systems/llm-runtime-design.md`. Part 2 of 2 in
 
 ### Gaps
 
-- **Cross-reference edits to Part 1**: `llm-provider-design.md` needs `web_search_native: bool` added to the `Capabilities` dataclass, the shipped capability map updated for supporting model families, and `web_search` added as a `Capability` enum value valid in `DepartmentRequirements.preferred` only.
-- **Cross-reference edit to data-provider spec**: `data-provider-design.md` needs a fourth provider category `search` (Brave / Tavily / Serper / You.com), `api_key` mode only, optional at startup, consumed by the runtime layer directly (does not participate in the requirements-manifest AI-review flow).
-- **Cross-reference edit to Setup Wizard**: `SetupWizardSpec.md` Step 4 needs an optional "Web Search" card below the Social Media card. Missing search provider shows as amber in Step 6 review, never blocking.
-- **Cross-reference edit to report rendering pipeline**: `report-rendering-pipeline-design.md` streaming section needs its four `report:*` events replaced by the `report.*` taxonomy in the runtime spec (dot-namespaced, adds `report.tool_call`, `report.complete` carries the full `ReportSchema`).
-- **Cross-reference edit to Chat Interface Spec**: `ChatInterfaceSpec.md` needs a new Event Handling section specifying how the frontend consumes `chat.*` events and how each event drives UI state transitions.
-- **Cross-reference edit to projectStructure**: `planning/projectStructure.md` needs `core/openlia/llm/runtime/` added with its file list, `core/openlia/prompts/` added as a sibling with per-department YAML files, and a note that `reports/frameworks/` holds the framework JSON and style-guide markdown moved from `planning/frameworks/`.
-- **Framework / style-guide file migration**: `planning/frameworks/*.json` and `*_style_guide.md` need to move into the package at `packages/core/src/openlia/reports/frameworks/`. `planning/` is dev-only and excluded from Python package builds.
+- All six cross-reference edits from the runtime spec are **applied** (2026-04-14): `Capabilities.web_search_native` and the `Capability.web_search` enum value are in `llm-provider-design.md`; `search` is a fourth category in `data-provider-design.md`; `SetupWizardSpec.md` Step 4 has a Web Search tab; `report-rendering-pipeline-design.md` carries the `report.*` dot-namespaced taxonomy including `report.tool_call` and a full `ReportSchema` payload on `report.complete`; `ChatInterfaceSpec.md` has an Event Handling section; `planning/projectStructure.md` lists the `runtime/` subdirectory, the per-department YAML prompt files, and the `reports/frameworks/` sibling directory.
+- **Framework / style-guide file migration**: `planning/frameworks/*.json` and `*_style_guide.md` still need to physically move into the package at `packages/core/src/openlia/reports/frameworks/`. `planning/` is dev-only and excluded from Python package builds.
 
 ### Remaining Tasks
 
 - User review of `llm-runtime-design.md` before implementation planning.
-- Apply the six cross-reference edits enumerated above.
+- ~~Apply the six cross-reference edits enumerated above.~~ Done 2026-04-14.
 - Implementation plan for the runtime layer (runners, prompt loader, tool dispatcher, web-search adapter, SSE event types, cancellation helper).
 
 ### Open Questions
@@ -252,8 +245,89 @@ Full spec exists: `planning/specs/systems/llm-runtime-design.md`. Part 2 of 2 in
 
 ---
 
+## Database Design
+
+Full spec exists: `planning/specs/systems/database-design.md` (29 tables, 11 sections). Key decisions:
+
+- **Scope**: Comprehensive — all persistent application state lives in SQLite. No provider response caching in v1.
+- **Engine**: SQLite only for v1 (Postgres dropped). Rationale: self-hosted, single-admin, low write volume, zero-ops.
+- **Schema architecture**: Hybrid (Approach 1) — relational core tables + JSON columns for flexible substructure + a narrow KV escape hatch (`config_store`).
+- **Tenancy**: Option A — single schema with a synthetic `local` user row for personal mode; company mode rows key off real user IDs.
+- **Auth (v1)**: Argon2id password hashing, DB-backed opaque session tokens, invite-only registration (multi-use invites with optional usage cap), admin-approved password reset flow via `password_reset_requests` table — user initiates from login page, admin approves and delivers one-time link out-of-band, no SMTP required.
+- **OAuth / SMTP**: Not in v1. Planned for v2.
+- **LLM config granularity**: Admin configures zero-or-many models per tier (Thinking / Everyday / Quick) — no hard requirement to populate every tier. Setup Wizard and Settings show a soft reminder to configure at least one model per tier. Each user picks a preferred model per tier from the admin's roster. Departments calling into an unconfigured tier surface a clear "not configured" error rather than silently downgrading. No per-user BYO keys in v1.
+- **Data provider config**: Admin-only. Per-category multi-provider fallback already in `data-provider-design.md` is unchanged; no per-user BYO.
+- **Deployment posture**: Company mode defaults to HTTPS domain from v1. Three recommended recipes: Cloudflare Tunnel (default), Docker + Caddy (self-managed reverse proxy), and LAN-only (fallback for IT-constrained shops). New env vars `OPENLIA_TRUST_PROXY_HEADERS` and `OPENLIA_COOKIE_SECURE` cover proxied deployments.
+
+### Remaining Tasks (cross-spec edits)
+
+All cross-spec edits from the DB design have been applied (2026-04-15). Status below for reference.
+
+- ~~**`planning/specs/components/AccountManagementSpec.md`** — full rewrite: invite-only registration, admin-approved password reset, direct admin reset, admin user lifecycle.~~ Done 2026-04-15.
+- ~~**`planning/specs/pages/LoginPageSpec.md`** — dropped Google OAuth, added Reset Password page, Must Change Password view, invite-gated registration.~~ Done 2026-04-15.
+- ~~**`planning/specs/pages/SetupWizardSpec.md`** — zero-or-many models per tier, soft reminders, encryption-at-rest notes, `OPENLIA_SECRET_KEY`/`OPENLIA_TRUST_PROXY_HEADERS`/`OPENLIA_COOKIE_SECURE` env vars, invite-only as v1 default, deployment guidance.~~ Done 2026-04-15.
+- ~~**`planning/specs/pages/SettingsPageSpec.md`** — Models section rewritten (read-only roster + per-tier picker for users, admin link), Admin section added (invites, users, reset requests, model CRUD, data provider CRUD), Account section updated (removed Google OAuth refs, added `must_change_password` flow).~~ Done 2026-04-15.
+- ~~**`planning/specs/systems/llm-provider-design.md`** — removed `user_llm_overrides`, added `user_llm_preferences` pointer table, restructured to DB tables (`llm_providers`/`llm_models`), updated resolver to 4-step order with `TierNotConfiguredError`, replaced plaintext secrets with AES-256-GCM, removed tier-level env vars.~~ Done 2026-04-15.
+- ~~**`planning/specs/systems/data-provider-design.md`** — scrubbed per-user BYO language (user→admin throughout), added encryption-at-rest cross-reference, added DB table references (`data_providers`, `data_provider_requirement_mapping`).~~ Done 2026-04-15.
+- ~~**`planning/specs/systems/llm-runtime-design.md`** — added `TierNotConfiguredError` handling in all three runners, dedicated SSE error events for unconfigured tiers.~~ Done 2026-04-15.
+- ~~**`planning/specs/pages/departments/PanicThermometerPageSpec.md`** — replaced `window.storage` with DB-backed `pt_user_configs`/`pt_presets` tables.~~ Done 2026-04-15.
+- ~~**`planning/specs/systems/macro-research-dalio-dashboards-design.md`** — added DB persistence cross-reference (`mr_dashboard_state`, `mr_assessment_cache`).~~ Done 2026-04-15.
+- ~~**`planning/specs/systems/retail-sentiment-dashboard-design.md`** — added DB persistence cross-reference (`rs_user_config`, `rs_snapshots`, `rs_classification_log`).~~ Done 2026-04-15.
+- ~~**`planning/specs/components/ChatHistorySpec.md`** — populated with DB table references (`chat_sessions`, `chat_messages`, `chat_attachments`) and key behavior outline.~~ Done 2026-04-15.
+- ~~**`planning/PLAN.md`** — dropped Postgres (SQLite only v1), added deployment recipes reference, updated backup note.~~ Done 2026-04-15.
+- ~~**`planning/projectStructure.md`** — confirmed no Postgres references. `db/models.py`, `db/migrations/` (Alembic), `db/session.py` are already the canonical paths.~~ Done 2026-04-15.
+
+### Open Questions (v2 horizon)
+
+- **Google OAuth return in v2**: When v2 adds OAuth, re-introduce the `auth_accounts` table (user_id, provider, provider_user_id, linked_at). Flow: first-time OAuth login auto-links to an existing email match (if admin opted in) or creates a new pending-approval user (if open registration is enabled). Library: `authlib`.
+- **Cloudflare Access SSO integration**: For company deployments behind Cloudflare Tunnel, offering "trust Cloudflare Access JWT" as an auth mode would remove the need for OpenLIA's own login page entirely. Design question: do we read `Cf-Access-Jwt-Assertion` and auto-provision users, or treat CF Access as a separate auth mode?
+- **SMTP as optional v2 feature**: If added, it would automate delivery of approved password-reset links and invite emails (currently admin delivers out-of-band). Gate behind an env var so personal-mode deployments don't need it.
+
+---
+
+## Background Task Scheduling System
+
+Full spec exists: `planning/specs/systems/background-task-scheduling-design.md`. APScheduler 4.x with in-memory job store, running inside the FastAPI process. Four job types: MB briefing (user cron), EU scan (user cron), MR assessment (user cron -- weekly/quarterly), nightly maintenance (system interval). Per-user independent schedules. DB is source of truth; APScheduler rebuilt on startup. Missed job catch-up within 6-hour grace window. Retry 3x with exponential backoff, then failure record visible to user. Polling-based notifications via `user_notifications` table.
+
+### Gaps
+
+- None currently. Spec is complete.
+
+### Remaining Tasks
+
+- Implementation plan for the scheduling system (pending user review of spec).
+- All cross-reference edits applied (2026-04-16): `PLAN.md` (APScheduler resolved), `projectStructure.md` (scheduler/ directory), `database-design.md` (`eu_schedules`, `job_runs`, `user_notifications` tables + maintenance sweep updates), `EarningsUpdatePageSpec.md` (scan schedule configuration section), `SideBarSpec.md` (notification polling mechanism formalized), `AccountManagementSpec.md` (`user_notifications` and schedule tables added to user-scoped data contract), `macro-research-dalio-dashboards-design.md` (news trigger manual-only in v1).
+
+### Open Questions
+
+1. **EU scan efficiency at scale.** Bulk earnings-calendar API call vs per-ticker lookups. Depends on data provider capabilities.
+2. **Concurrent report generation limit.** Global concurrency cap for simultaneous ReportRunner calls from scheduled jobs. Consider `OPENLIA_SCHEDULER_MAX_CONCURRENT_JOBS` env var.
+3. **Job run retention.** Completed runs pruned at 90 days, failed runs kept longer for audit. Final retention policy TBD during implementation.
+
+---
+
+## CLI Surface
+
+Full spec exists: `planning/specs/systems/cli-surface-design.md`. Typer-based CLI registered as `openlia` via `[project.scripts]`. Commands: `serve` (start server), `admin` (9 user/invite/session management subcommands, company-mode only), `wizard reset` (re-run setup), `secrets rotate-key` (re-encrypt API keys), `maintenance` (manual pruning sweep). All non-serve commands connect directly to the DB without requiring the server to be running.
+
+### Gaps
+
+- None currently. Spec is complete.
+
+### Remaining Tasks
+
+- Implementation plan for the CLI (pending user review of spec).
+
+### Open Questions
+
+1. **Auto-migrate on startup.** Should `serve` auto-run Alembic migrations, or require an explicit `openlia db upgrade` command? Current plan: auto-upgrade for simplicity.
+2. **Admin commands while server is running.** Current plan: safe with WAL mode. Exception: `secrets rotate-key` requires exclusive access.
+
+---
+
 ## Design Specs Pending Review
 
+- **Database design** (`planning/specs/systems/database-design.md`): Spec written (2026-04-15). 29 tables across auth, config, content, infrastructure, and dashboard categories. All cross-spec edits applied. Pending user review before implementation planning.
 - **Data provider system design** (`planning/specs/systems/data-provider-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Report rendering pipeline design** (`planning/specs/systems/report-rendering-pipeline-design.md`): Spec written and committed. Pending user review before implementation planning.
 - **Macro Research Dalio dashboards design** (`planning/specs/systems/macro-research-dalio-dashboards-design.md`): Spec written and committed. Pending user review before implementation planning.
@@ -262,6 +336,8 @@ Full spec exists: `planning/specs/systems/llm-runtime-design.md`. Part 2 of 2 in
 - **Setup Wizard design** (`planning/specs/pages/SetupWizardSpec.md`): Spec written and committed. Pending user review before implementation planning.
 - **LLM Provider & Configuration System design** (`planning/specs/systems/llm-provider-design.md`): Spec written and committed. Pending user review before implementation planning. Part 1 of 2 in the LLM system series.
 - **LLM Runtime / Execution System design** (`planning/specs/systems/llm-runtime-design.md`): Spec written and committed. Pending user review before implementation planning. Part 2 of 2 in the LLM system series.
+- **Background Task Scheduling System design** (`planning/specs/systems/background-task-scheduling-design.md`): Spec written (2026-04-16). APScheduler 4.x, per-user schedules, four job types, polling notifications. All cross-spec edits applied. Pending user review before implementation planning.
+- **CLI Surface design** (`planning/specs/systems/cli-surface-design.md`): Spec written (2026-04-16). Typer-based CLI with `serve`, `admin` (9 subcommands), `wizard reset`, `secrets rotate-key`, `maintenance`. Consolidates commands already defined across other specs. Cross-spec edits applied. Pending user review before implementation planning.
 
 ---
 
@@ -270,7 +346,6 @@ Full spec exists: `planning/specs/systems/llm-runtime-design.md`. Part 2 of 2 in
 ### Remaining Tasks
 
 - **Style extraction procedure**: `planning/specs/style_extraction_procedure.md` describes the extraction pipeline. The pipeline scripts (`scripts/extraction/pipeline.py`, `prompts.py`) exist but are not yet integrated into the core package. Needs to be moved to `packages/core/src/openlia/reports/style_extraction/` and exposed via a server route.
-- **Rendering pipeline framework registry**: The report rendering pipeline spec needs to be updated to reference all three EqR framework files (`stock_initiation.json`, `stock_update.json`, `sector_research.json`) once the spec is approved and implementation begins.
 
 ### Open Questions
 

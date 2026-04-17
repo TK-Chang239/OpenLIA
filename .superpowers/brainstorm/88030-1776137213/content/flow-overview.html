@@ -1,0 +1,53 @@
+<h2>Setup Wizard — full flow</h2>
+<p class="subtitle">Five linear steps, with a hub in step 4. Entry condition: personal mode, first launch (no completed wizard record in DB). Env vars don't block the wizard; they appear as read-only pre-filled values.</p>
+
+<style>
+  .journey { display:flex; gap: 8px; align-items: stretch; margin: 18px 0; font-family: ui-sans-serif, system-ui, sans-serif; font-size: 12px; }
+  .step { flex:1; border: 1px solid rgba(120,140,200,0.25); border-radius: 8px; padding: 12px; background: rgba(120,140,200,0.04); position:relative; }
+  .step-num { position:absolute; top:-10px; left:10px; background: rgba(60,80,140,0.85); color: #fff; width: 22px; height: 22px; border-radius: 11px; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:11px; }
+  .step-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; margin-top: 4px; }
+  .step-body { font-size: 11px; opacity: 0.82; line-height: 1.5; }
+  .step-body ul { margin: 6px 0 0 0; padding-left: 16px; }
+  .arrow { align-self:center; opacity:0.4; font-size: 16px; }
+  .note { background: rgba(120,140,200,0.08); padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-top: 8px; line-height: 1.5; }
+</style>
+
+<div class="journey">
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-title">Welcome</div>
+    <div class="step-body">One-screen intro. Explains the 4 upcoming steps and what keys to have ready. Single 'Get started' button.</div>
+  </div>
+  <div class="arrow">›</div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-title">Identity</div>
+    <div class="step-body">Display name only. Used by departments when addressing user.</div>
+  </div>
+  <div class="arrow">›</div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-title">AI Models</div>
+    <div class="step-body">Primary model + Review model. Two slots, same-provider default. Ping on save.</div>
+  </div>
+  <div class="arrow">›</div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-title">Data Providers</div>
+    <div class="step-body">Sidebar tabs: Financial, News, Social. Hub per tab with ordered list + 'Add' (panel takeover). Ping on save per provider.</div>
+  </div>
+  <div class="arrow">›</div>
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-title">Review</div>
+    <div class="step-body">Auto-runs AI mapping. 2-col grid of department readiness cards. Finish enables if all basic reqs met.</div>
+  </div>
+</div>
+
+<div class="note"><strong>Cross-cutting:</strong>
+<ul style="margin: 4px 0 0 16px; padding:0;">
+  <li><strong>Env precedence:</strong> All steps appear; env-set fields render read-only with 'from environment' badge.</li>
+  <li><strong>Resume:</strong> Server persists progress after each step. Reopening wizard returns to the last completed step.</li>
+  <li><strong>Validation:</strong> Ping test on every key save; green/red inline feedback.</li>
+  <li><strong>Completion gate:</strong> User cannot finish unless Review reports all basic requirements met for required departments.</li>
+</ul></div>

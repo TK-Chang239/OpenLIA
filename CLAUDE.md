@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-OpenLia is an open-source, self-hosted AI investor assistant. It uses multiple specialized LLM agents called **Departments** (Secretary, Equity Research, Earnings Update, Morning Briefing, Retail Sentiment, Macro Research), each focused on a single financial domain.
+OpenLia is an open-source, self-hosted AI investor assistant. It uses multiple specialized LLM agents called **Departments** (Secretary, Equity Research, Earnings Update, Morning Briefing, Retail Sentiment, Macro Research, Panic Thermometer), each focused on a single financial domain.
 
 Two deployment modes from the same codebase: **personal** (single user, localhost, no auth) and **company** (multi-user, network-accessible, auth enabled).
 
@@ -19,7 +19,7 @@ frontend              -- React/TypeScript/Vite, talks to server via REST + SSE
 ```
 
 **Boundary rules (enforce strictly):**
-- `packages/core/` must never import FastAPI, uvicorn, or anything HTTP-related. Test: `from openlia import StockResearchDepartment` must work with only `openlia-core` installed, no server running.
+- `packages/core/` must never import FastAPI, uvicorn, or anything HTTP-related. Test: `from openlia import EquityResearchDepartment` must work with only `openlia-core` installed, no server running.
 - Route handlers in `packages/server/` call core methods and return results. Business logic belongs in core, not routes.
 - Frontend communicates only through the server's REST API.
 - Config flows one direction: `.env`/env vars → `core/config.py` → server passes to core at startup. Frontend never touches config directly.

@@ -4,6 +4,8 @@
 
 Defines OpenLIA's LLM provider abstraction layer and the end-to-end user flow for configuring it. Backing system for `SetupWizardSpec.md` Step 3 and for a new Settings → Models section. Sibling of `data-provider-design.md`.
 
+> **Cross-reference note (2026-04-15):** This spec has been updated to reflect decisions from `database-design.md`: admin-only API key management (no per-user BYO keys), `llm_providers` and `llm_models` tables replacing `config_store`-based storage, `user_llm_preferences` pointer table, AES-256-GCM encryption at rest for API keys, zero-or-many models per tier with `TierNotConfiguredError`, and revised resolver order.
+
 This is **part 1 of 2** in the LLM system series. Part 2 — the LLM Runtime / Execution spec — will cover prompt assembly, framework/style-guide loading, tool schema construction, and the backend→frontend SSE streaming protocol.
 
 ## Scope
@@ -13,8 +15,8 @@ In scope:
 - Supported providers and the adapter interface (`core/openlia/llm/`).
 - Capability matrix and department requirement manifests.
 - Three-tier model-role structure (Thinking / Everyday / Quick).
-- Configuration storage schema (instance-level and per-user).
-- Runtime resolution order (env > user BYO > department pin > department tier > shipped default > tier slot).
+- Configuration storage schema (admin-managed DB tables: `llm_providers`, `llm_models`, `user_llm_preferences`).
+- Runtime resolution order (user preference → tier default → any enabled in tier → `TierNotConfiguredError`).
 - Wizard Step 3 extension and Settings → Models UI.
 - Connection-testing flow shared by wizard and settings.
 - Runtime failure behavior (retry policy, error classes, user-facing messaging).
@@ -22,13 +24,14 @@ In scope:
 Out of scope (deferred to the Runtime / Execution spec):
 
 - Prompt assembly (system + user + framework injection).
-- Framework (`planning/frameworks/*.json`) and style-guide loading into LLM calls.
+- Framework (`packages/core/src/openlia/reports/frameworks/*.json`) and style-guide loading into LLM calls.
 - Tool schema construction from the data-provider surface.
 - Backend→frontend SSE streaming protocol (token / tool-call / report-thumbnail events).
 - Web search as a department *capability* for chat/report use.
 
 Out of scope entirely:
 
+- Per-user BYO API keys for LLM providers (admin-only in v1; see `database-design.md`).
 - Per-user data-provider API key overrides (see `data-provider-design.md`).
 - Budget / spend tracking.
 - OAuth / SSO for LLM provider authentication.
@@ -91,9 +94,21 @@ class Capabilities:
     tool_calling: bool
     structured_output: bool       # JSON schema / response_format
     vision: bool                  # image inputs
+    web_search_native: bool       # provider's built-in web-search tool is available
     max_context_tokens: int
     max_output_tokens: int
 ```
+
+The shipped capability map flags `web_search_native=true` for the model families that support it at time of release:
+
+- Anthropic families supporting `web_search_20250305` (Claude Sonnet / Opus 4.x with the web-search tool enabled).
+- OpenAI `gpt-5.4+` with `web_search_preview`.
+- Google Gemini models with Google Search grounding available (Gemini 3.x Pro and Flash).
+- OpenRouter when routing to any of the above upstream model IDs (the flag is inherited from the upstream family regex).
+
+All other providers (OpenAI-compatible catch-all, Ollama, older-family models) default to `web_search_native=false`. Web search for those providers is served by the `web_search` tool the runtime builds from a configured search provider (see `llm-runtime-design.md` § Web Search).
+
+`web_search` is also exposed as a `Capability` enum value for use in `DepartmentRequirements.preferred` only — never `required`. A department must function without web search; the `Capability.web_search` preference is satisfied if **either** the resolved model has `web_search_native=true` **or** the instance has at least one configured search provider. See the Department Requirements Manifest section below.
 
 ### Resolution order for capabilities
 
@@ -149,7 +164,7 @@ Input to the Wizard Step 6 Review grid: resolved model capabilities are checked 
 | OpenAI-compatible | (user types) | (user types) | (user types) |
 | Ollama | (user types) | (user types) | (user types) |
 
-Maintained in `core/llm/model_defaults.py`. Wizard/Settings Model dropdowns for named providers (1–3) live-populate from each provider's `/models` endpoint — the shipped default is only the initial pre-selection. Users are never stuck on a stale default.
+Maintained in `core/llm/model_defaults.py`. This file is used only as a suggestion source for the wizard's first-run model pickers, not as a runtime fallback. Wizard/Settings Model dropdowns for named providers (1–3) live-populate from each provider's `/models` endpoint — the shipped default is only the initial pre-selection. Users are never stuck on a stale default.
 
 ### Department default tier mapping
 
@@ -177,81 +192,57 @@ The Settings UI surfaces `DEFAULT_TIER_REASON` in an info tooltip next to each d
 
 ## Configuration Storage
 
-### Instance-level config keys (in `config_store`)
+> **Cross-reference (2026-04-15):** Full table schemas are in `database-design.md` § 4. This section summarizes the storage model; the DB spec is authoritative for column definitions and constraints.
 
-```
-llm.thinking.provider / model / api_key / base_url
-llm.everyday.provider / model / api_key / base_url
-llm.quick.provider    / model / api_key / base_url
+### Provider and model tables (admin-managed)
 
-llm.department.<id>.tier           # "thinking" | "everyday" | "quick" | null (null = use shipped default)
-llm.department.<id>.provider       # optional; overrides tier entirely for a specific model pin
-llm.department.<id>.model
-llm.department.<id>.api_key
-llm.department.<id>.base_url
+LLM configuration lives in dedicated relational tables, not `config_store`:
 
-llm.capability_override.<provider>.<model>   # JSON blob: Capabilities struct
-```
+- **`llm_providers`** — one row per configured provider credential set. Admin can have multiple entries for the same provider type (e.g., two OpenAI keys for different budgets). Columns: `id`, `kind`, `label`, `api_key_encrypted`, `env_var_name`, `base_url`, `extra_config`, `is_enabled`.
+- **`llm_models`** — admin's roster of available models. Each row is a model the admin has explicitly made available. Columns: `id`, `provider_id` (FK), `tier`, `model_ref`, `display_name`, `is_tier_default`, `is_enabled`, `overrides` (JSON: temperature, max_tokens, reasoning_effort).
 
-`<id>` values: `secretary`, `equity_research`, `earnings_update`, `morning_briefing`, `retail_sentiment`, `macro_research`, `panic_thermometer`.
+**No hard requirement to populate every tier.** Admin configures zero-or-many models per tier. Setup Wizard and Settings show a soft reminder: "We recommend configuring at least one model per tier so every department works." If a department calls into an unconfigured tier, it surfaces a `TierNotConfiguredError` rather than silently downgrading.
 
-`api_key` is null for Ollama. `base_url` is null for named cloud providers (1–4), required for `openai_compat` and `ollama`.
+### Per-user preferences (pointer table, no credentials)
 
-### Per-user BYO override (company mode only)
+- **`user_llm_preferences`** — per-user, per-tier model choice. Columns: `user_id`, `tier`, `model_id` (FK to `llm_models`). Users pick from the admin's roster; they do not enter API keys or provider credentials.
 
-New table:
+### Department tier overrides and capability overrides
 
-```
-user_llm_overrides
-  user_id              fk -> users.id
-  tier                 text  ("thinking" | "everyday" | "quick")
-  enabled              bool
-  provider             text nullable
-  model                text nullable
-  api_key              text nullable
-  base_url             text nullable
-  updated_at           timestamp
-  primary key (user_id, tier)
-```
-
-Users can opt in to BYO on any subset of tiers independently — e.g. BYO Thinking with their personal Anthropic key, fall through to instance default for Everyday and Quick.
-
-Per-department overrides and capability overrides are **admin-only** — not available at the per-user level.
+- **Department tier overrides**: stored in `config_store` under `llm.department.<id>.tier` (one of `thinking`, `everyday`, `quick`, or null for shipped default). Admin-only.
+- **Capability overrides**: stored in `config_store` under `llm.capability_override.<provider>.<model>` as a JSON blob. Admin-only.
 
 ### Secrets at rest
 
-V1 plaintext in SQLite, inherited from `SetupWizardSpec.md`. See Dev Notes.
+API keys in `llm_providers.api_key_encrypted` are encrypted with AES-256-GCM using a server-derived key. See `database-design.md` § 5 for the full encryption scheme (`OPENLIA_SECRET_KEY` env var or auto-generated `~/.openlia/secret.key`).
 
 ---
 
 ## Runtime Resolution Order
 
-Resolution proceeds in two stages. **Stage 1** decides whether this call uses a pinned model or a tier; **Stage 2** fills in the tier credentials from the highest-precedence source available.
+> **Cross-reference (2026-04-15):** The canonical resolver order is defined in `database-design.md` § 4 (`user_llm_preferences` section). This section restates it with the full two-stage flow.
 
-### Stage 1 — Model source
+Resolution proceeds in two stages. **Stage 1** determines which tier this call consumes; **Stage 2** resolves a concrete model within that tier.
 
-```
-1. If the department has a model pin set (llm.department.<id>.provider/model non-null, or the
-   matching OPENLIA_LLM_DEPARTMENT_<ID>_PROVIDER/MODEL env vars are set), use those creds directly.
-   Skip Stage 2.
-
-2. Otherwise, determine which tier this call consumes:
-   a. OPENLIA_LLM_DEPARTMENT_<ID>_TIER env var, if set.
-   b. llm.department.<id>.tier DB row, if non-null.
-   c. The department's shipped DEFAULT_TIER (from core/openlia/departments/<id>.py).
-   d. A caller-supplied tier_override argument to resolve() trumps all of the above — used by
-      a heavy department that wants Quick for a specific micro-task.
-```
-
-### Stage 2 — Tier credentials
+### Stage 1 — Tier selection
 
 ```
-1. OPENLIA_LLM_{TIER}_PROVIDER/MODEL/API_KEY/BASE_URL env vars (instance-wide).
-2. user_llm_overrides row for this (user_id, tier) with enabled=true (company mode only).
-3. llm.{tier}.provider/model/api_key/base_url in config_store.
+1. A caller-supplied tier_override argument to resolve() — used by a heavy department
+   that wants Quick for a specific micro-task. Trumps all below.
+2. llm.department.<id>.tier in config_store, if non-null (admin override).
+3. The department's shipped DEFAULT_TIER (from core/openlia/departments/<id>.py).
 ```
 
-If none of Stage 2's sources produces a complete credential set, `resolve()` raises `LLMConfigError` with a message naming the missing tier.
+### Stage 2 — Model resolution within the tier
+
+```
+1. user_llm_preferences row for (user_id, tier) — if the pointed-to model is enabled, use it.
+2. llm_models row where tier = X AND is_tier_default = true AND is_enabled = true.
+3. Any enabled llm_models row in tier X (deterministic tiebreak: oldest created_at).
+4. Raise TierNotConfiguredError with a message naming the empty tier.
+```
+
+The resolver looks up the model's `provider_id` to get the provider credentials (`llm_providers` row), decrypts `api_key_encrypted`, and returns a ready-to-use adapter.
 
 The resolver is a single function in `core/openlia/llm/resolver.py`:
 
@@ -262,7 +253,13 @@ def resolve(
     user_id: str | None = None,
 ) -> LLMProvider:
     """Returns a ready-to-use LLMProvider with credentials + model bound.
-    Raises LLMConfigError if resolution fails (e.g. dept pinned to a model whose credentials are missing)."""
+    Raises TierNotConfiguredError if the resolved tier has no enabled models.
+
+    Note: TierNotConfiguredError is a defense-in-depth safeguard. The Setup
+    Wizard's required-tier gating (see SetupWizardSpec § Step 3) ensures this
+    is unreachable for tiers any enabled department defaults to. It can still
+    fire if (a) an admin deletes the last model in a required tier post-setup,
+    or (b) a caller passes tier_override pointing at an unconfigured tier."""
 ```
 
 Departments call it like this:
@@ -281,21 +278,19 @@ llm_quick = resolve(department_id="equity_research", tier_override=ModelTier.QUI
 
 ## Env Var Surface
 
-```
-# Three tier models
-OPENLIA_LLM_THINKING_PROVIDER / MODEL / API_KEY / BASE_URL
-OPENLIA_LLM_EVERYDAY_PROVIDER / MODEL / API_KEY / BASE_URL
-OPENLIA_LLM_QUICK_PROVIDER    / MODEL / API_KEY / BASE_URL
+Provider credentials and model roster are managed entirely in the database (`llm_providers`, `llm_models`). The tier-level `OPENLIA_LLM_{TIER}_*` env vars from earlier drafts are removed — all provider configuration flows through the admin UI (Setup Wizard Step 3 or Settings → Admin → Models).
 
-# Per-department overrides (all optional)
+Remaining LLM-related env vars:
+
+```
+# Per-department tier overrides (all optional, admin use)
 OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_TIER        # "thinking" | "everyday" | "quick"
-OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_PROVIDER    # pin a specific provider
-OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_MODEL
-OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_API_KEY
-OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_BASE_URL
+
+# Secrets infrastructure (see database-design.md § 5)
+OPENLIA_SECRET_KEY                             # 32-byte base64 encryption key for API keys at rest
 ```
 
-Env presence shadows the DB row and renders the corresponding field read-only with a `from environment` badge in both Wizard Step 3 and Settings → Models.
+Env presence for department tier overrides shadows the `config_store` row and renders the corresponding field read-only with a `from environment` badge in Settings.
 
 ---
 
@@ -308,86 +303,45 @@ SetupWizardSpec Step 3 is updated as follows:
 - Add Google Gemini to the Provider dropdown (5 → 6 options).
 - For OpenRouter and Ollama, replace the populated Model dropdown with a free-text model-name input (helper text points to openrouter.ai/models for OpenRouter, `ollama list` for Ollama).
 - Capability flags are captured invisibly for named providers (from shipped map). For Ollama and OpenAI-compatible, checkboxes appear under an "Advanced" disclosure, pre-filled from the shipped map's best-guess entry.
-- Test semantics: each slot runs `list_models` (skipped for OpenRouter/Ollama) + 1-token completion on the selected model. All three slots must return green for Next.
+- Test semantics: each configured slot runs `list_models` (skipped for OpenRouter/Ollama) + 1-token completion on the selected model.
+- **Required-tier gating:** the wizard computes the union of `DEFAULT_TIER` across enabled departments — the *required-tier set* — and refuses to advance until each required tier has at least one green model. Tiers outside that set are not gated. This guarantees the runtime resolver never raises `TierNotConfiguredError` for a normally-completed installation. See `SetupWizardSpec.md` § Step 3 for the inline UI behavior.
 
-Review-specific copy is retired. The Wizard Step 6 AI Review consumes the Quick tier.
+Review-specific copy is retired. The Wizard Step 6 AI Review consumes the Quick tier (guaranteed populated whenever any enabled department defaults to Quick; otherwise the review falls back through Everyday → Thinking).
 
 ---
 
 ## Settings → Models Section
 
-New sidebar entry in `SettingsPageSpec.md` alongside General and Account. Role-gated content.
+> **Cross-reference (2026-04-15):** The full UI spec for the Models and Admin sections is in `SettingsPageSpec.md`. This section summarizes the key design points relevant to the provider system.
+
+Settings sidebar entry alongside General, Account, and Admin. Role-gated content.
+
+### User view (non-admin, company mode)
+
+Three tier sections (Thinking, Everyday, Quick), each showing:
+- Read-only list of models the admin has configured for this tier (display name, provider, connection status).
+- "Not configured yet" state when a tier has zero models.
+- Per-tier preference picker dropdown: "Use tier default" or pick from the available models. Writes to `user_llm_preferences`.
+
+No per-user BYO keys. Users pick from the admin's roster only.
 
 ### Admin / personal user view
 
-```
-Models
-  Three tiers — Thinking, Everyday, Quick. Assign any model to any slot.
+Same as user view, plus a "Manage models in Admin panel" link per tier. Full model roster CRUD (providers and models) lives in Settings → Admin → Models. In personal mode, admin controls are inline since there's no separate Admin section.
 
-  ┌─ Thinking model ───────────────────────────────────────────┐
-  │ Provider [Anthropic ▾]   Model [claude-opus-4-6 ▾]          │
-  │ API key  [••••••••••]       [Edit capabilities]             │
-  │ ● Connected (62ms)                   [Test]  [Save changes] │
-  └─────────────────────────────────────────────────────────────┘
-  ┌─ Everyday model ───────────────────────────────────────────┐
-  │ ... same controls ...                                       │
-  └─────────────────────────────────────────────────────────────┘
-  ┌─ Quick model ──────────────────────────────────────────────┐
-  │ ... same controls ...                                       │
-  └─────────────────────────────────────────────────────────────┘
+### Per-department tier defaults
 
-  ┌─ Per-department defaults ──────────────────────────────────┐
-  │ Each department uses a recommended tier by default. Click   │
-  │ the info icon for the reason, or override individually.     │
-  │                                                             │
-  │  Secretary          [Default: Everyday ⓘ ▾]                 │
-  │  Equity Research    [Default: Thinking ⓘ ▾]                 │
-  │  Earnings Update    [Default: Everyday ⓘ ▾]                 │
-  │  Morning Briefing   [Default: Everyday ⓘ ▾]                 │
-  │  Retail Sentiment   [Default: Quick ⓘ ▾]                    │
-  │  Macro Research     [Default: Thinking ⓘ ▾]                 │
-  │  Panic Thermometer  [Default: Quick ⓘ ▾]                    │
-  │                                                             │
-  │  Dropdown options per row:                                  │
-  │    - Use default (<tier>)                                   │
-  │    - Use Thinking tier                                      │
-  │    - Use Everyday tier                                      │
-  │    - Use Quick tier                                         │
-  │    - Pin to a specific model...  (opens model-picker form)  │
-  └─────────────────────────────────────────────────────────────┘
-```
-
-Hovering the ⓘ icon shows `DEFAULT_TIER_REASON` for the department.
-
-### Company non-admin user view
-
-```
-Models
-  Currently using: instance defaults configured by your administrator
-     Thinking:  Anthropic / claude-opus-4-6
-     Everyday:  Anthropic / claude-sonnet-4-6
-     Quick:     Anthropic / claude-haiku-4-5
-
-  ┌─ My own models (optional, per tier) ──────────────────────┐
-  │ [ ] Override Thinking tier with my own model                │
-  │ [ ] Override Everyday tier with my own model                │
-  │ [ ] Override Quick tier with my own model                   │
-  │                                                             │
-  │ (each unfolds a provider/model/key/base-URL form with       │
-  │  Test + Save when checked)                                  │
-  └─────────────────────────────────────────────────────────────┘
-```
+Read-only reference panel listing each department with its default tier and an info icon showing `DEFAULT_TIER_REASON`. Admin can override per-department tier routing from the Admin panel.
 
 ### Edit capability flags dialog
 
-Modal triggered from the `[Edit capabilities]` link on any configured model. Checkboxes: streaming, tool_calling, structured_output, vision. Number inputs: max_context_tokens, max_output_tokens. Save writes to `llm.capability_override.<provider>.<model>`. Clear button removes the override.
+Modal triggered from model edit in the admin panel. Checkboxes: streaming, tool_calling, structured_output, vision. Number inputs: max_context_tokens, max_output_tokens. Save writes to `llm.capability_override.<provider>.<model>` in `config_store`. Clear button removes the override.
 
 ### Save semantics
 
-- Each card has its own `[Save changes]` button; saves are scoped.
-- Every Save runs `Test` first; rejects on failure with an inline error.
+- Each form has its own Save button; saves are scoped.
+- Every Save on a provider runs `Test` first; rejects on failure with an inline error.
 - Unsaved-changes warning on navigation (pattern from `SettingsPageSpec.md`).
-- Env-shadowed fields render read-only with the `from environment` badge.
 
 ---
 
@@ -413,7 +367,7 @@ After the final retry the original exception is re-raised with retry metadata (`
 | `ModelNotFoundError` | HTTP 404 on completion, Ollama `model not found` | "Model `<model>` is unavailable on `<provider>`. Pick a different model in Settings → Models." |
 | `ContextLengthError` | HTTP 400 with context-length signal | "This request exceeded `<model>`'s context limit (`<limit>` tokens). Split the task or switch to a larger-context model." |
 | `CapabilityError` | Provider rejected tools / JSON on an unsupported model | "The current model doesn't support `<capability>`. `<department>` needs this — switch models in Settings → Models." |
-| `LLMConfigError` | Resolver couldn't produce a provider (missing key, unreachable instance default) | "LLM isn't configured. Open Settings → Models to set up your `<tier>` model." |
+| `TierNotConfiguredError` | Resolver found no enabled models in the resolved tier | "The `<tier>` tier has no models configured. Ask your admin to add one in Settings → Admin → Models." |
 
 All five classes derive from `LLMProviderError`. The server layer catches the base class and forwards structured error events to the frontend over the chat SSE stream. The frontend renders the message inline with a **"Open Models settings"** deep-link.
 
@@ -440,22 +394,40 @@ Full-test timeout: 10 seconds. Exceeding returns `{ok: false, error_class: "Tran
 
 ## API Surface
 
-All endpoints under `/settings/models/*` require authentication in company mode. Admin-only endpoints return `403` for non-admin users.
+All endpoints require authentication in company mode. Admin-only endpoints return `403` for non-admin users.
 
-| Method | Path | Purpose | Auth |
-|---|---|---|---|
-| GET | `/settings/models` | Full config view. Role-shaped payload. | any user |
-| POST | `/settings/models/tier/{thinking\|everyday\|quick}` | Set tier slot. Tests first. | admin / personal |
-| POST | `/settings/models/tier/{tier}/test` | Test a tier config without persisting. | admin / personal |
-| POST | `/settings/models/department/{id}` | Body: `{tier?, pin?}`. One or the other. Null body resets to shipped default. | admin / personal |
-| POST | `/settings/models/department/{id}/test` | Test the department's currently resolved model. | admin / personal |
-| POST | `/settings/models/capability_override/{provider}/{model}` | Set capability override. Omit body to clear. | admin / personal |
-| GET | `/settings/models/user_override` | Current user's BYO overrides across tiers. | any authenticated user |
-| POST | `/settings/models/user_override/tier/{tier}` | Per-tier user BYO. | any authenticated user |
-| POST | `/settings/models/user_override/tier/{tier}/test` | Test user BYO without persisting. | any authenticated user |
-| GET | `/settings/models/providers/{provider}/models` | Proxy to provider's `/models` endpoint. Skipped for Ollama/OpenRouter. | any authenticated user |
+### Provider and model CRUD (admin only)
 
-Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `SetupWizardSpec.md`. Their payload shape is updated to carry three tier slots instead of Primary + Review.
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/admin/llm/providers` | List all LLM providers with model counts. |
+| POST | `/admin/llm/providers` | Create a provider. Tests connection first. |
+| PUT | `/admin/llm/providers/{id}` | Update provider. Tests connection first. |
+| DELETE | `/admin/llm/providers/{id}` | Delete provider. Blocked if models exist. |
+| POST | `/admin/llm/providers/{id}/test` | Test provider connection without persisting. |
+| GET | `/admin/llm/providers/{id}/models` | List models for a provider. |
+| POST | `/admin/llm/models` | Create a model entry. |
+| PUT | `/admin/llm/models/{id}` | Update model (tier, display name, overrides, default, enabled). |
+| DELETE | `/admin/llm/models/{id}` | Delete model. Cascades `user_llm_preferences`. |
+| GET | `/admin/llm/providers/{id}/remote-models` | Proxy to provider's `/models` endpoint for live model list. Skipped for Ollama/OpenRouter. |
+
+### User-facing (any authenticated user)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/settings/models` | Role-shaped payload: tier roster, user preferences, per-department defaults. |
+| GET | `/settings/models/preferences` | Current user's per-tier preferences. |
+| PUT | `/settings/models/preferences/{tier}` | Set user's preferred model for a tier. Body: `{model_id}`. |
+| DELETE | `/settings/models/preferences/{tier}` | Clear preference (fall back to tier default). |
+
+### Department config (admin only)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/admin/llm/department/{id}` | Body: `{tier?}`. Null body resets to shipped default. |
+| POST | `/admin/llm/capability_override/{provider}/{model}` | Set capability override. Omit body to clear. |
+
+Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `SetupWizardSpec.md`. Their payload shape is updated to carry three tier slots and write to `llm_providers` / `llm_models` tables.
 
 ---
 
@@ -465,8 +437,8 @@ Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `S
 - **Resolver tests** covering each path of the precedence order with both personal and company-mode fixtures.
 - **Capability-gate tests** verify Wizard Step 6 Review renders Ready / Amber / Blocked for representative (department, model) pairs.
 - **Retry tests** verify transient errors retry 3× with exponential backoff and non-transient errors fail immediately.
-- **Server route tests** verify admin-only routes return 403 to non-admins, user BYO routes respect the logged-in user's scope, and env-shadowed keys render read-only.
-- **Integration test** runs the wizard through all three tier slots with a fake Ollama provider (HTTP-level mocked) and asserts `config_store` contents after Finish.
+- **Server route tests** verify admin-only provider/model CRUD routes return 403 to non-admins, user preference routes respect the logged-in user's scope, and API key encryption round-trips correctly.
+- **Integration test** runs the wizard through all three tier slots with a fake Ollama provider (HTTP-level mocked) and asserts `llm_providers` / `llm_models` table contents after Finish.
 
 ---
 
@@ -474,13 +446,13 @@ Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `S
 
 - Fallback model chains. If the configured model is down, OpenLIA fails loudly with a specific error.
 - Auto-discovery of new models via web search. Provider `/v1/models` is the authoritative source.
+- Per-user BYO API keys. Users pick from the admin's roster; they do not enter their own credentials (v2 consideration).
 - Per-user data-provider API key overrides. Data providers stay admin-only (see `data-provider-design.md`).
-- Multi-admin LLM config. Only `role=admin` users see the admin view; no "model admin" sub-role.
+- Multi-admin LLM config. Only `is_admin = true` users see the admin view; no "model admin" sub-role.
 - Budget / spend tracking or cost caps.
 - OAuth / SSO for LLM provider authentication. Any OAuth-protected provider must be fronted by a user-run proxy.
 - Fine-tuned model management. Users enter a fine-tuned model ID in any slot; OpenLIA doesn't host fine-tuning.
 - Capability auto-probing of unfamiliar models.
-- Promotion of a user BYO override to instance default.
 - Localization of tier / department explanations (English-only per project memory).
 
 ---
@@ -491,7 +463,7 @@ Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `S
 
 > **Dev note — model defaults freshness.** `core/llm/model_defaults.py` is maintainer-curated per release, same cadence as `capabilities.py`. Users are never stuck with a stale default because the wizard's Model dropdown is live-populated from each provider's `/v1/models` endpoint; shipped defaults are only pre-selections. Runtime web-search for "newest models" was considered and rejected — the provider's own `/models` endpoint is more authoritative than scraping release notes, and runtime web dependencies would violate the `openlia-core` hermetic-layer rule.
 
-> **Dev note — secrets encryption at rest.** Inherited from `SetupWizardSpec.md`. V1 stores API keys as plaintext in SQLite with a schema comment noting the intended upgrade to a server-derived encryption key. Revisit once the user base includes company deployments that materially raise the stakes of a stolen DB file.
+> **Dev note — secrets encryption at rest.** Resolved (2026-04-15). API keys are AES-256-GCM encrypted at rest using `OPENLIA_SECRET_KEY`. See `database-design.md` § 5 for the full scheme.
 
 > **Dev note — test-completion cost during configuration.** Every Save on a tier card runs a 1-token test completion. For users on paid APIs this is ~$0 but non-zero. Consider a debounce on rapid-fire Saves (changing API key then provider within 2 seconds should coalesce into one test). Not urgent for v1.
 
@@ -501,24 +473,13 @@ Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `S
 
 ## Cross-References: Required Edits to Other Specs
 
-This spec introduces changes that require targeted edits to already-written specs.
+This spec introduces changes that require targeted edits to already-written specs. Status tracked in `planning/GAPS.md`.
 
-1. **`SetupWizardSpec.md` § Step 3 — AI Models.**
-   - Replace the two-slot structure (Primary + Review) with the three-tier structure (Thinking + Everyday + Quick). Review-specific copy is retired; the Quick tier serves the AI Review and any runtime structured micro-tasks.
-   - Add Google Gemini to the provider dropdown (5 → 6 options).
-   - Replace "model dropdown populated via `list_models`" for OpenRouter and Ollama with a free-text model-name input.
-
-2. **`SetupWizardSpec.md` § Configuration Storage and Env Precedence.**
-   - Replace `OPENLIA_LLM_PRIMARY_*` / `OPENLIA_LLM_REVIEW_*` with the three-tier triplet (`OPENLIA_LLM_THINKING_*`, `OPENLIA_LLM_EVERYDAY_*`, `OPENLIA_LLM_QUICK_*`) plus the per-department override env surface.
-
-3. **`SetupWizardSpec.md` § Step 6 — Review.**
-   - Clarify that the AI Review LLM is the Quick tier (formerly "Review model").
-
-4. **`SettingsPageSpec.md` § Settings Sidebar (Desktop).**
-   - Add `Models` to the navigation list alongside General and Account.
-   - Add the Models-section design (role-gated: admin/personal view and company-user view) per this spec.
-
-5. **`planning/projectStructure.md` § `core/openlia/llm/`.**
+1. ~~**`SetupWizardSpec.md` § Step 3 — AI Models.** Done (2026-04-15).~~
+2. ~~**`SetupWizardSpec.md` § Configuration Storage and Env Precedence.** Done (2026-04-15).~~
+3. ~~**`SetupWizardSpec.md` § Step 6 — Review.** Done (2026-04-15).~~
+4. ~~**`SettingsPageSpec.md` § Settings Sidebar and Models section.** Done (2026-04-15).~~
+5. **`planning/projectStructure.md` § `core/openlia/llm/`.** Pending.
    - Confirm the directory contains: `base.py`, `openai.py`, `anthropic.py`, `gemini.py`, `openrouter.py`, `openai_compat.py`, `ollama.py`, `capabilities.py`, `model_defaults.py`, `resolver.py`, `exceptions.py`.
 
 ---
@@ -528,7 +489,7 @@ This spec introduces changes that require targeted edits to already-written spec
 The configuration story ends here. The planned follow-up spec — **LLM Runtime / Execution** — will cover:
 
 - How each department assembles prompts (system + user + framework injection).
-- How `planning/frameworks/*.json` and `planning/frameworks/*_style_guide.md` are loaded into LLM calls.
+- How `packages/core/src/openlia/reports/frameworks/*.json` and `*_style_guide.md` are loaded into LLM calls.
 - Tool schema construction from the data-provider surface, and how department calls invoke tools.
 - The backend→frontend SSE streaming protocol (token events, tool-call events, error events, report-thumbnail events).
 - Web search as a *department capability* (distinct from the configuration-time discovery considered and rejected above).

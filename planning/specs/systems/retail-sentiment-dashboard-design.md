@@ -2,6 +2,8 @@
 
 Redesign of the Retail Sentiment department from a minimal 3-metric dashboard into a full sentiment monitoring platform with 12 metrics, 3 analytical tabs, evidence traceability, LLM-powered classification, and cross-source validation. Based on `sentiment_dashboard_design.md`.
 
+> **Cross-reference note (2026-04-15):** Dashboard persistence is DB-backed per `database-design.md`: `rs_user_config` (per-user tab state, metric settings, filter presets, refresh interval), `rs_snapshots` (global point-in-time sentiment metric snapshots), and `rs_classification_log` (LLM classification audit trail). Watchlist integration uses the shared `watchlists`/`watchlist_items` tables.
+
 
 ## Department Identity
 
