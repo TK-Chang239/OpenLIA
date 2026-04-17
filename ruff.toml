@@ -11,7 +11,6 @@ select = [
   "UP",   # pyupgrade
   "RUF",  # ruff-specific
 ]
-ignore = []
 
 [lint.per-file-ignores]
 "**/tests/**" = ["B011"]  # allow `assert False` patterns in tests
