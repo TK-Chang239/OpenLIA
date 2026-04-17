@@ -4,6 +4,8 @@ Redesign of the Macro Research department from a chat-based report generator int
 
 Source article: "Ray Dalio's Methodology: An Investing Framework Distilled From 500 Years of History" (TradingKey, Apr 2026). Reference mockups in `MacroResearcherHTML/`.
 
+> **Cross-reference note (2026-04-15):** Dashboard persistence is DB-backed per `database-design.md`: `mr_dashboard_state` (per-user view config and threshold overrides per dashboard) and `mr_assessment_cache` (global LLM assessment result cache with TTL-based expiry).
+
 
 ## Department Identity
 
@@ -20,8 +22,8 @@ Source article: "Ray Dalio's Methodology: An Investing Framework Distilled From 
 | T1 | Debt Cycle | Formula engine (shared with Panic Thermometer) | Auto-refresh on data; re-evaluate on economic releases |
 | T2 | Four Economic Seasons | Formula engine | Auto-refresh on data; re-evaluate on ISM/BLS/BEA releases |
 | T3 | All-Weather Portfolio Audit | Computational (risk math) | Recomputes when upstream dashboards or Portfolio data changes |
-| T4 | Long-Term World Order | LLM assessment | User-configurable: quarterly, weekly, or on significant news trigger |
-| T5 | Five Interlocking Forces | LLM assessment (synthesis of T1+T2+T4) | User-configurable: quarterly, weekly, or on significant news trigger |
+| T4 | Long-Term World Order | LLM assessment | User-configurable: quarterly or weekly. "On news trigger" is manual-only in v1 (user clicks "Run assessment now"). |
+| T5 | Five Interlocking Forces | LLM assessment (synthesis of T1+T2+T4) | Same schedule as T4. |
 
 
 ## Cross-Dashboard Dependencies
@@ -183,12 +185,12 @@ Amber callout block. Explicitly labeled with downstream consumption notes: "Bott
 
 ### Data Refresh
 
-| Data Type | Refresh Trigger | Source |
-|-----------|----------------|--------|
-| TIPS yield (live) | Auto-refresh interval (default 5 min) | `get_live_price_data` or `get_historical_stock_prices` |
-| DXY (live) | Auto-refresh interval | `get_live_price_data` or `get_historical_stock_prices` |
-| Debt/GDP | On economic event release (quarterly) | `get_economic_events` or `get_macro_indicator` |
-| Interest/Revenue | On economic event release (fiscal data) | `get_economic_events` |
+| Data Type | Refresh Trigger | Requirement |
+|-----------|----------------|-------------|
+| TIPS yield (live) | Auto-refresh interval (default 5 min) | `stock_quote` (with `historical_prices` fallback) |
+| DXY (live) | Auto-refresh interval | `stock_quote` (with `historical_prices` fallback) |
+| Debt/GDP | On economic event release (quarterly) | `economic_events` or `macro_indicator` |
+| Interest/Revenue | On economic event release (fiscal data) | `economic_events` |
 | LLM sections (phase, asset implications, synthesis) | When indicator statuses change | LLM call with current data context |
 
 
@@ -253,12 +255,12 @@ Amber callout. Downstream consumption: T3 coverage map, T5 Force assessment, Mor
 
 ### Data Refresh
 
-| Data Type | Refresh Trigger | Source |
-|-----------|----------------|--------|
-| Credit spreads (ETF prices) | Auto-refresh interval | `get_live_price_data` |
-| PMI | On ISM release (monthly) | `get_economic_events` |
-| CPI | On BLS release (monthly) | `get_economic_events` |
-| GDP | On BEA release (quarterly) | `get_economic_events` |
+| Data Type | Refresh Trigger | Requirement |
+|-----------|----------------|-------------|
+| Credit spreads (ETF prices) | Auto-refresh interval | `stock_quote` |
+| PMI | On ISM release (monthly) | `economic_events` |
+| CPI | On BLS release (monthly) | `economic_events` |
+| GDP | On BEA release (quarterly) | `economic_events` |
 | LLM sections | When indicator statuses change | LLM call with current data context |
 
 
@@ -342,7 +344,7 @@ T3 does not make its own LLM calls. The gold allocation rationale callout refere
 
 ### Evaluation Method
 
-LLM assessment. Runs on a user-configurable schedule: quarterly, weekly, or on significant news trigger. The LLM receives current data (fetched by the server before the call) and Dalio's world order framework as the system prompt.
+LLM assessment. Runs on a user-configurable schedule: quarterly or weekly. The LLM receives current data (fetched by the server before the call) and Dalio's world order framework as the system prompt. The "Run assessment now" button triggers an immediate one-off run. Automatic news-triggered runs are a v2 feature (see `background-task-scheduling-design.md` dev note).
 
 ### Data Inputs
 
@@ -399,7 +401,7 @@ Amber callout. Downstream: T5 Force 3 intensity score, T3 gold allocation indepe
 
 ### Evaluation Method
 
-LLM assessment. This is the synthesis template -- it consumes outputs from T1, T2, and T4. Same schedule options as T4 (quarterly/weekly/news trigger, user-configurable).
+LLM assessment. This is the synthesis template -- it consumes outputs from T1, T2, and T4. Same schedule as T4 (quarterly/weekly, user-configurable). Runs immediately after T4 completes.
 
 ### The Five Forces
 
@@ -484,7 +486,7 @@ Accessible from the Settings button in the page header. Collapsible drawer or mo
 |---------|------|---------|
 | Auto-refresh interval (market data) | Dropdown | 5 min |
 | T4/T5 LLM assessment schedule | Dropdown | Quarterly |
-| T4/T5 news trigger sensitivity | Dropdown | Significant events only |
+| ~~T4/T5 news trigger sensitivity~~ | ~~Dropdown~~ | ~~Significant events only~~ v1: manual-only via "Run assessment now" button. Automatic news triggers deferred to v2. |
 | Smart Mode (thresholds) | Toggle | Off |
 
 ### Smart Mode
@@ -523,8 +525,8 @@ Formula engine dashboards share the Panic Thermometer settings pattern:
 
 ### Per-Dashboard Settings (T4, T5)
 
-1. **Assessment schedule** -- Quarterly / Weekly / On news trigger
-2. **News trigger keywords** -- editable keyword list for detecting significant events that warrant a re-run
+1. **Assessment schedule** -- Quarterly / Weekly (managed by the background task scheduler; see `background-task-scheduling-design.md`)
+2. ~~**News trigger keywords**~~ -- deferred to v2. In v1, the user clicks "Run assessment now" for ad-hoc runs.
 3. **LLM model** -- which configured LLM to use for assessments
 4. **Manual run button** -- "Run assessment now" to trigger an immediate LLM run
 5. **Scoring anchors** -- reference descriptions for what each score range (1-3, 4-6, 7-8, 9-10) means per force. Smart Mode can recalibrate these anchors as baseline conditions drift over time.
@@ -532,13 +534,13 @@ Formula engine dashboards share the Panic Thermometer settings pattern:
 
 ## Data Refresh Strategy
 
-| Data Type | Refresh Interval | Source |
-|-----------|-----------------|--------|
-| Price-based tickers (live) | User-configurable (default 5 min) | `get_live_price_data` |
-| Price-based tickers (history) | Daily at market close | `get_historical_stock_prices` |
-| Economic events | 1 hour | `get_economic_events` |
-| Macro indicators | On release | `get_macro_indicator` |
-| News (for T4/T5 triggers) | 30 min | Company news API |
+| Data Type | Refresh Interval | Requirement |
+|-----------|-----------------|-------------|
+| Price-based tickers (live) | User-configurable (default 5 min) | `stock_quote` |
+| Price-based tickers (history) | Daily at market close | `historical_prices` |
+| Economic events | 1 hour | `economic_events` |
+| Macro indicators | On release | `macro_indicator` |
+| News (for T4/T5 triggers) | 30 min | `company_news` |
 | LLM assessments (T4/T5) | User-configurable schedule | LLM call with fetched data context |
 | Portfolio data (for T3) | On change | Portfolio page data |
 
@@ -642,6 +644,48 @@ Three levels:
 - `pages/MacroResearch/WorldOrderTab.tsx` -- T4 dashboard.
 - `pages/MacroResearch/FiveForcesTab.tsx` -- T5 dashboard.
 - `components/MacroResearch/` -- Shared components: Scorecard, QuadrantMap, GradientBar, ForceRow, StageTimeline, SeasonCoverageCell, SynthesisVerdict.
+
+
+## Public API for Cross-Department Consumers
+
+Other departments (notably Morning Briefing) need a stable, in-process way to read MR's current state without scraping dashboards or duplicating data-fetch logic. MR exposes a single read-only Python entry point on the Department class.
+
+### Contract
+
+```python
+# packages/core/src/openlia/departments/macro_research/__init__.py
+
+from datetime import datetime
+from pydantic import BaseModel
+
+class MRSnapshot(BaseModel):
+    debt_cycle_phase: str | None        # T1 verdict label, e.g. "Late-cycle expansion"
+    economic_season: str | None         # T2 quadrant label, e.g. "Inflationary growth"
+    active_force_count: int | None      # T5: number of forces flagged amber/red (0-5)
+    generated_at: datetime | None       # When the underlying assessments were produced
+    is_stale: bool                      # True if any source assessment is older than its expected refresh cadence
+
+class MacroResearchDepartment:
+    def get_current_snapshot(self, user_id: str) -> MRSnapshot: ...
+```
+
+### Behavior
+
+- **Source of truth:** Reads from `mr_assessment_cache` (T4/T5 LLM outputs) and `mr_dashboard_state` (per-user T1/T2 evaluated state). No new LLM calls, no new data fetches.
+- **Empty state:** If a user has never run MR (or no cached assessment exists for a field), the corresponding field is `None`. `generated_at` is the *oldest* timestamp across the populated fields, so consumers can reason about the freshest snapshot the user has.
+- **Staleness rule:** `is_stale = True` when any populated source is older than its expected refresh cadence:
+  - T1/T2: stale if older than 24 hours (formula-engine dashboards expect daily-or-better refresh).
+  - T4/T5: stale if older than the user's configured `Assessment schedule` (Quarterly: 95 days; Weekly: 8 days).
+- **No side effects:** Never writes to DB, never schedules background work. Pure read.
+- **Synchronous and fast:** Two indexed DB reads. Safe to call inline from another department's report-generation path.
+
+### Consumers
+
+| Department | Use case |
+|------------|----------|
+| Morning Briefing | Macro-context block in briefings (see `MorningBriefingsPageSpec.md` § Report Sections, Global Macro News). Skips the block when `is_stale=True` or all fields are `None`. |
+
+Future consumers (Equity Research, Earnings Update) follow the same contract: import the department, call `get_current_snapshot`, render `None`/stale gracefully.
 
 
 ## Non-Goals (v1)

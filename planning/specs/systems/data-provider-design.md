@@ -2,28 +2,35 @@
 
 Multi-provider, requirements-first data system for OpenLIA. Allows users to configure any combination of financial and news data providers while departments retain full access to each provider's unique strengths.
 
+> **Cross-reference note (2026-04-15):** This spec has been updated to reflect decisions from `database-design.md`: admin-only data provider configuration (no per-user BYO keys), `data_providers` and `data_provider_requirement_mapping` tables for storage, and AES-256-GCM encryption at rest for API keys.
+
 ## Core Concepts
 
-**Requirements-first:** OpenLIA ships with a department requirements manifest that defines what *types* of data each department needs — not specific endpoint IDs. Requirements are split into basic (must be satisfied) and advanced (optional). Provider endpoint documentation is only installed when the user configures a provider.
+**Requirements-first:** OpenLIA ships with a department requirements manifest that defines what *types* of data each department needs — not specific endpoint IDs. Requirements are split into basic (must be satisfied) and advanced (optional). Provider endpoint documentation is only installed when the admin configures a provider.
 
 **Author-time mapping:** When a provider is configured, an AI reviewer maps the provider's endpoints to department requirements and persists the mappings to files. Runtime reads these files deterministically — no AI inference at report-generation time for tool selection.
 
-**Multi-provider per category:** Users can configure multiple providers within each category (financial, news). Each requirement is fulfilled by whichever provider the user has prioritized highest that can satisfy it.
+**Multi-provider per category:** Admins can configure multiple providers within each category (financial, news). Each requirement is fulfilled by whichever provider the admin has prioritized highest that can satisfy it.
 
 **Runtime expansion:** If the report-writing LLM needs data beyond its mapped tools, it can trigger a fast AI search across all active provider catalogs to find and temporarily add relevant endpoints.
 
 
 ## Provider Categories
 
-Three categories of data providers:
+Four categories of data providers:
 
 | Category | Purpose | Examples | Required |
 |----------|---------|----------|----------|
 | Financial | Market data, fundamentals, technicals, earnings, options | FMP, EODHD, Finnhub, yfinance | Yes |
 | News | Headlines, article search, political events, sector news | NewsAPI.ai, Mediastack, NewsAPI.org | Yes |
 | Social Media | Social posts, trending tickers, retail discussion volume | X (Twitter), Reddit | No |
+| Search | General web search fallback for departments whose LLM lacks native web search | Brave Search API, Tavily, Serper, You.com | No |
 
-Financial and news providers are required — OpenLIA will not start without at least one of each. Social media providers are optional and primarily serve the Retail Sentiment department.
+Financial and news providers are required — OpenLIA will not start without at least one of each. Social media providers are optional and primarily serve the Retail Sentiment department. Search providers are optional; they are consumed directly by the runtime layer (see `llm-runtime-design.md` § Web Search) as a fallback when the resolved LLM does not natively support web search.
+
+### Search category specifics
+
+Search providers use `api_key` mode only (no MCP shape is applicable). Same `ProviderEntry` schema as the other categories. Search providers **do not participate in the requirements-manifest AI-review flow** — they are not mapped to department requirements or exposed as data tools. The runtime uses the highest-priority configured search provider directly to back the `web_search` tool when native web search is unavailable on the active LLM.
 
 
 ## Department Data Access Patterns
@@ -44,34 +51,35 @@ Departments fall into two categories based on how they access data:
 
 ## Configuration
 
+> **Storage (2026-04-15):** Data provider configuration is stored in the `data_providers` and `data_provider_requirement_mapping` DB tables (see `database-design.md` § 4). API keys are AES-256-GCM encrypted at rest in `data_providers.api_key_encrypted`. All provider configuration is admin-only; there are no per-user BYO keys.
+
 ### Provider Entry
 
-Each configured provider is represented by a `ProviderEntry`:
+Each configured provider is represented by a `ProviderEntry` in the application layer, backed by a `data_providers` DB row:
 
 ```python
 class ProviderEntry(BaseModel):
-    id: str                                    # e.g. "fmp", "eodhd", "finnhub"
-    category: Literal["financial", "news"]
-    mode: Literal["api_key", "mcp"]
-    api_key: SecretStr | None = None
+    id: str                                    # UUID from data_providers.id
+    kind: str                                  # e.g. "fmp", "eodhd", "finnhub", "brave"
+    category: Literal["financial", "news", "social_media", "search"]
+    mode: Literal["api_key", "mcp"]            # "search" category is api_key only
+    api_key: SecretStr | None = None           # decrypted from data_providers.api_key_encrypted at load time
     base_url: HttpUrl | None = None            # required for api_key mode
     mcp_url: HttpUrl | None = None             # required for mcp mode
     mcp_auth_header: str | None = None
+    is_enabled: bool = True
 
 class DataProvidersConfig(BaseModel):
-    financial: list[ProviderEntry]             # ordered by user priority (first = highest)
-    news: list[ProviderEntry]                  # ordered by user priority (first = highest)
-    social_media: list[ProviderEntry] = []     # optional, ordered by user priority
-
-class ReviewConfig(BaseModel):
-    model: str                                 # fast/cheap model for AI review + runtime expansion
-    api_key: SecretStr | None = None
+    financial: list[ProviderEntry]             # ordered by priority (from data_provider_requirement_mapping)
+    news: list[ProviderEntry]                  # ordered by priority
+    social_media: list[ProviderEntry] = []     # optional, ordered by priority
+    search: list[ProviderEntry] = []           # optional, ordered by priority; consumed by llm-runtime only
 
 class ExpansionConfig(BaseModel):
     max_expansions_per_report: int = 15        # user-configurable in settings, unlimited for Secretary
 ```
 
-Provider lists are ordered by user priority. When the AI review maps requirements to endpoints, it walks providers in priority order — the first provider that can satisfy a requirement wins. The user controls which provider is preferred for what, not the AI.
+Provider lists are ordered by admin-set priority (via `data_provider_requirement_mapping.priority`). When the AI review maps requirements to endpoints, it walks providers in priority order — the first provider that can satisfy a requirement wins. The admin controls which provider is preferred for what, not the AI.
 
 ### Dual Transport
 
@@ -210,7 +218,7 @@ packages/core/src/openlia/data/catalog/bundled/
     └── reddit.yaml       # placeholder — to be filled in
 ```
 
-When a user configures a provider, the corresponding bundled template is copied to the **active catalog directory** in user data:
+When the admin configures a provider, the corresponding bundled template is copied to the **active catalog directory** in user data:
 
 ```
 ~/.openlia/providers/
@@ -229,7 +237,7 @@ Three ways a catalog gets installed:
 
 1. **Known provider (API key mode):** Bundled template is copied to `~/.openlia/providers/`. No network call needed.
 2. **MCP provider:** OpenLIA calls `list_tools()` on the MCP server and generates a catalog YAML from the returned tool schemas via the discovery module.
-3. **Unknown provider (API key mode):** User supplies an OpenAPI spec URL or file. OpenLIA generates a catalog from that spec.
+3. **Unknown provider (API key mode):** Admin supplies an OpenAPI spec URL or file. OpenLIA generates a catalog from that spec.
 
 ### Catalog Module Layout
 
@@ -246,7 +254,7 @@ packages/core/src/openlia/data/catalog/
 
 ## AI Review (Author-Time Mapping)
 
-When a user configures or changes a provider, the AI review runs to map provider endpoints to department requirements.
+When the admin configures or changes a provider, the AI review runs to map provider endpoints to department requirements.
 
 ### Flow
 
@@ -323,7 +331,7 @@ advanced:
 The AI review re-runs when:
 - A provider is added, removed, or has its priority changed
 - A provider catalog is updated (e.g. new version of a bundled template)
-- The user customizes report sections that change a department's data needs (section additions or deletions, not enable/disable toggles). How custom section requirements feed into the manifest is defined by the Report Framework System spec — this spec only defines that a re-review is triggered.
+- The admin customizes report sections that change a department's data needs (section additions or deletions, not enable/disable toggles). How custom section requirements feed into the manifest is defined by the Report Framework System spec — this spec only defines that a re-review is triggered.
 
 ### Review Module Layout
 
@@ -398,7 +406,7 @@ request_additional_tools(
 - **Unlimited** for Secretary (general-purpose chatbot, unpredictable needs). Not affected by the setting.
 - **Session-scoped:** Expanded tools are not persisted to the mapping files automatically
 - **Audit trail:** All expansions logged with timestamp, department, description, reason, matched endpoints
-- **User promotion (v1):** Users can review the audit trail and explicitly promote useful expansions to permanent mappings
+- **Admin promotion (v1):** Admins can review the audit trail and explicitly promote useful expansions to permanent mappings
 
 ### Confidence Threshold
 

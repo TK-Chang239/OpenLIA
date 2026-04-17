@@ -121,8 +121,8 @@ scripts/extraction/output/          # gitignored (may contain proprietary conten
 
 ### Generated Outputs (committed)
 
-- `planning/frameworks/stock_update_style_guide.md` -- The style guide produced by this pipeline, manually reviewed and committed. Used as a reference during report generation.
-- `planning/frameworks/stock_update_framework.json` -- The framework template with section instructions enriched using patterns from the extraction. The instructions field in each section was updated to reflect writing conventions, data citation formats, table structures, and exemplar patterns observed in the 34 professional reports.
+- `packages/core/src/openlia/reports/frameworks/stock_update_style_guide.md` -- The style guide produced by this pipeline, manually reviewed and committed. Used as a reference during report generation. (Historical: the first extraction wrote to `planning/frameworks/`; files moved into the package per `GAPS.md` framework-migration task.)
+- `packages/core/src/openlia/reports/frameworks/stock_update.json` -- The framework template with section instructions enriched using patterns from the extraction. The instructions field in each section was updated to reflect writing conventions, data citation formats, table structures, and exemplar patterns observed in the 34 professional reports.
 
 ## Mapping to a User-Facing Feature
 
@@ -178,7 +178,7 @@ Report generation uses custom style guide in system prompt
 3. **Server route**: Add endpoint in `packages/server/` to trigger extraction, report progress via SSE, and store results
 4. **Progress reporting**: Phase 1 progress is per-report; Phases 2-4 are per-section-type. Report both via SSE events.
 5. **Error handling**: Phase 1 JSON parse failures should be retried once (the LLM occasionally wraps JSON in markdown code blocks despite the system prompt). The current `parse_json_response` already strips code block wrappers.
-6. **Storage**: Decide between filesystem (planning/frameworks/ pattern) and database. Filesystem is simpler for self-hosted single-user; database is needed for multi-user company mode.
+6. **Storage**: Decide between filesystem (the `packages/core/src/openlia/reports/frameworks/` pattern used by shipped frameworks) and database. Filesystem is simpler for self-hosted single-user; database is needed for multi-user company mode where each user can have a personal style guide.
 
 ## First Extraction Run: Reference
 

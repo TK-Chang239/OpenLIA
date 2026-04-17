@@ -565,20 +565,25 @@ Configured once at the `ReportRenderer` level, not by the LLM. Populated server-
 
 Single-pass generation means the entire report is produced in one LLM call. The user sees a loading state until the full report is ready.
 
-**SSE events:**
+**SSE events** (defined by `llm-runtime-design.md` § SSE Protocol — reproduced here for report-specific context):
 
 | Event type | Payload | When |
 |-----------|---------|------|
-| `report:generating` | `{department, section_titles}` | Generation begins |
-| `report:progress` | `{status: "fetching_data"}` or `{status: "writing"}` | Phase updates |
-| `report:complete` | `{report_id, schema}` | Full report ready |
-| `report:error` | `{error}` | Generation failed |
+| `report.start` | `{report_id, department, mode, section_titles}` | Generation begins |
+| `report.phase` | `{report_id, phase}` where `phase ∈ {"fetching_data", "writing", "finalizing"}` | Phase transitions |
+| `report.tool_call` | `{report_id, tool_name, summary}` | During `fetching_data` phase, per dispatched data tool — `summary` is a pre-formatted one-line UI string |
+| `report.complete` | `{report_id, schema}` where `schema` is the full `ReportSchema` defined earlier in this document | Full report ready; terminal on success |
+| `report.error` | `{report_id, error_class, message}` | Terminal on error |
+
+All events follow the flat typed-event shape with a `type` discriminator (`{"type": "report.start", ...}`). See `llm-runtime-design.md` for the full taxonomy and normalization rules. No incremental token streaming during generation — the frontend sees the skeleton plus phase/tool-call ticks until `report.complete` arrives.
 
 **Frontend during generation:**
 - FileViewer opens with loading state: report title, section list as grayed-out placeholders, animated progress bar
-- Phase indicator: "Fetching data..." then "Writing report..."
-- On complete: full report renders, download button activates
-- On error: error message with "Retry" button to regenerate the entire report
+- `report.start` primes the skeleton with the final section titles
+- `report.phase` drives the phase indicator: "Fetching data…" then "Writing report…" then "Finalizing…"
+- `report.tool_call` ticks render a narration chip ("Fetched quote for AAPL") below the progress bar during the `fetching_data` phase
+- On `report.complete`: full report renders from the delivered `ReportSchema`; download button activates
+- On `report.error`: error message with "Retry" button to regenerate the entire report
 
 
 ## PDF Export Pipeline
@@ -848,10 +853,16 @@ packages/core/src/openlia/
 │   └── frameworks/
 │       ├── __init__.py
 │       ├── loader.py                   # Load framework, apply user customizations
-│       ├── equity_research.json         # Placeholder — to be filled in
-│       ├── earnings_update.json        # Placeholder — to be filled in
-│       ├── macro_research.json         # Placeholder — to be filled in
-│       └── morning_briefing.json       # Placeholder — to be filled in
+│       ├── stock_initiation.json       # Equity Research — Initiation mode (13 sections)
+│       ├── stock_initiation_style_guide.md
+│       ├── stock_update.json           # Equity Research — Update mode (7 sections)
+│       ├── stock_update_style_guide.md
+│       ├── sector_research.json        # Equity Research — Sector mode (8 sections)
+│       ├── sector_research_style_guide.md
+│       ├── earnings_update.json        # Earnings Update (8 sections)
+│       ├── earnings_update_style_guide.md
+│       ├── morning_briefing.json       # Morning Briefing
+│       └── morning_briefing_style_guide.md
 ```
 
 ### Toolkit
@@ -892,10 +903,13 @@ Deferred:
 
 | File | What it needs |
 |------|---------------|
-| `frameworks/equity_research.json` | Section structure and guiding instructions for SR reports |
-| `frameworks/earnings_update.json` | Section structure and guiding instructions for EU reports |
-| `frameworks/macro_research.json` | Section structure and guiding instructions for MR reports |
-| `frameworks/morning_briefing.json` | Section structure and guiding instructions for MB reports |
+| `frameworks/stock_initiation.json` | Section structure and guiding instructions for Equity Research Initiation reports (13 sections) |
+| `frameworks/stock_update.json` | Section structure and guiding instructions for Equity Research Update reports (7 sections) |
+| `frameworks/sector_research.json` | Section structure and guiding instructions for Equity Research Sector reports (8 sections) |
+| `frameworks/earnings_update.json` | Section structure and guiding instructions for Earnings Update reports (8 sections) |
+| `frameworks/morning_briefing.json` | Section structure and guiding instructions for Morning Briefing reports |
+
+Macro Research is a dashboard department, not a report department: its T4/T5 LLM assessments use prompt templates in `core/openlia/prompts/macro_research.yaml`, not a framework JSON. There is no `macro_research.json` framework.
 
 
 ## Deferred

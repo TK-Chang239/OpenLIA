@@ -211,6 +211,26 @@ The welcome state covers the message area until the first message is sent, then 
 
 ---
 
+## Event Handling
+
+The chat component consumes the `chat.*` SSE event stream defined in `llm-runtime-design.md` § SSE Protocol. Events arrive over a single stream per turn; each `type` drives a specific UI transition:
+
+| Event | UI behavior |
+|---|---|
+| `chat.start` | Render the LIA badge and the Thinking/Loading indicator (three bouncing dots). Show nothing in the message body yet. |
+| `chat.tool_call.start` | Append a narration chip under the thinking indicator, e.g. "Fetching quote for AAPL…" (built from `tool_name` + `args_preview`). Leave prior chips visible. |
+| `chat.tool_call.result` with `ok=true` | Replace the active chip's trailing ellipsis with the event's `summary` text; chip switches to a neutral "done" color. |
+| `chat.tool_call.result` with `ok=false` | Leave the chip in place but render with `--color-text-tertiary` and a short inline failure label ("Failed to fetch quote for AAPL"); the turn continues. |
+| `chat.token` | Append `text` to the current assistant message body. Hide the thinking indicator on the first `chat.token`; keep the streaming cursor active. |
+| `chat.report_thumbnail` | Render a report thumbnail card inline at the current position in the assistant message (uses `ReportThumbnail`). |
+| `chat.done` | Remove the streaming cursor. The message is finalized. |
+| `chat.error` | Replace the streaming cursor with the Inline Error State (§ 7) using the event's `message` and a "Try again" action. `chat.error` is mutually exclusive with `chat.done` — only one terminal event is received per turn. |
+| Connection closed without a terminal event | Stop the cursor and render the "Response stopped." label (§ 6) below the partial content. This is the cancellation path: the server closes the stream on client disconnect and does **not** emit a terminal event (see `llm-runtime-design.md` § Cancellation). |
+
+The frontend treats the event stream as a strict state machine: it never expects content after `chat.done` or `chat.error`, and it never expects a terminal event after the connection is closed. All other non-terminal events may arrive in any order consistent with the runner's sequencing.
+
+---
+
 ## Animation Summary
 
 | Interaction | Tool | Spec |

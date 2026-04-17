@@ -34,7 +34,7 @@ OpenLia is built as three independent layers. This separation ensures the core l
 ### Library Layer (Python Package)
 The core of OpenLia. Contains all department agents, prompt management, LLM abstraction, data fetching, and report generation logic. This layer has zero web dependencies -- no HTTP, no sessions, no user management. It is a pure Python package that can be imported and used in scripts, notebooks, or other applications independently.
 
-Test: `from openlia import StockResearchDepartment` should work in a Jupyter notebook with only `openlia-core` installed and no server running.
+Test: `from openlia import EquityResearchDepartment` should work in a Jupyter notebook with only `openlia-core` installed and no server running.
 
 ### Server Layer (FastAPI)
 A FastAPI application that wraps the library layer and exposes it over HTTP. Handles:
@@ -44,13 +44,13 @@ A FastAPI application that wraps the library layer and exposes it over HTTP. Han
 - API key configuration and management (server-side, not client-side)
 - Request queuing and rate limiting for shared deployments
 - Chat history and report storage via local database
-- Background task scheduling for departments that run on a schedule (Morning Briefing, Earnings Update daily scans). Scheduler library is [TBD -- evaluate APScheduler, Celery, or similar based on spec review]
+- Background task scheduling for departments that run on a schedule (Morning Briefing, Earnings Update, Macro Research T4/T5 assessments) and system maintenance. Uses APScheduler 4.x with in-memory job store, running inside the FastAPI process. See `background-task-scheduling-design.md`.
 - CORS middleware configured to allow the frontend dev server during development
 
 In personal mode, the server binds to `localhost`. In company mode, it binds to `0.0.0.0` and is accessible across the network.
 
 ### Database
-SQLite is the default database for all deployments. It requires zero configuration, stores data in a single file, and ships with Python. For company deployments with high concurrency needs, PostgreSQL is supported as an optional alternative, configured via environment variable. The database stores chat history, user accounts (company mode), portfolio data, saved reports, and server-side configuration set via the setup wizard.
+SQLite is the only database for v1. It requires zero configuration, stores data in a single file (`~/.openlia/openlia.db`), and ships with Python. WAL mode is enabled for concurrent readers. The database stores chat history, user accounts (company mode), portfolio data, saved reports, LLM/data provider configuration, and server-side settings. API keys are encrypted at rest with AES-256-GCM. Backup: `cp openlia.db openlia.db.bak`. See `database-design.md` for the full schema (29 tables).
 
 ### Frontend Layer (Web UI)
 Built with React, TypeScript, and Vite. The UI communicates with the server layer via REST API for data operations and SSE for streaming chat responses. The UI is identical regardless of deployment mode. Design and layout follow the patterns of LLM products like Claude and ChatGPT, with department-specific pages, a sidebar for navigation, and a file viewer for reports.
@@ -105,8 +105,9 @@ The Retail Sentiment Department, or RS, monitors social media platforms to analy
 When triggered by the user with a specific question or scope, the Macro Research Department, or MR, applies structured macroeconomic analytical frameworks to current data and produces a deep, framework-driven macro report.
 @planning/specs/pages/departments/MacroResearchPageSpec.md
 
-## Panic Thermometer
-The dashboard acts as a real-time "panic thermometer" — scoring each indicator as green / amber / red and rolling them into a composite threat level by tracking real time data.
+## Panic Thermometer Department (PT)
+The Panic Thermometer Department, or PT, is a dashboard department that scores each macro-stress indicator (oil, inflation, Fed language, wage growth, diplomacy) as green / amber / red and rolls them into a composite threat level by tracking real-time data. Like Macro Research, it has no chat interface — it pre-fetches data, evaluates user-configurable thresholds via the shared formula engine, and renders panel verdicts.
+@planning/specs/pages/departments/PanicThermometerPageSpec.md
 
 # 4. Product Functionalities - Other Pages
 
@@ -126,7 +127,7 @@ The settings page allows the user to edit preferences and settings. In company m
 # 5. Product Functionalities - Utility Tools
 
 ## User Management
-In personal mode, there is no login -- the single user has direct access. In company mode, authentication is enabled and users log in to access their own chat history, portfolio, and saved reports. User data is stored locally on the server (SQLite or PostgreSQL), not in a third-party cloud.
+In personal mode, there is no login -- the single user has direct access. In company mode, authentication is enabled and users log in to access their own chat history, portfolio, and saved reports. User data is stored locally on the server (SQLite), not in a third-party cloud. Company-mode deployment recipes: Cloudflare Tunnel (recommended), Docker + Caddy reverse proxy, or LAN-only (see `database-design.md` § 10).
 @planning/specs/components/AccountManagementSpec.md
 
 ## Chat History
@@ -218,10 +219,10 @@ The Docker image uses a multi-stage build: the first stage builds the React fron
 pip install openlia-core
 ```
 ```python
-from openlia import StockResearchDepartment
+from openlia import EquityResearchDepartment
 
-sr = StockResearchDepartment(config="path/to/.env")
-report = sr.run(ticker="AAPL")
+er = EquityResearchDepartment(config="path/to/.env")
+report = er.run(ticker="AAPL")
 ```
 This installs only the core library with no web dependencies. Useful for scripting, notebooks, and integration into other applications.
 

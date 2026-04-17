@@ -101,6 +101,7 @@ Each department is a nav item that navigates to that department's dedicated page
 | Morning Briefing | `Sun` | Daily briefing report generation and archive |
 | Retail Sentiment | `BarChart2` | Social media sentiment monitoring dashboard |
 | Macro Research | `Globe` | Dalio framework macro dashboards (Debt Cycle, Four Seasons, All-Weather, World Order, Five Forces) |
+| Panic Thermometer | `Thermometer` | Panic-driven indicator dashboards (Oil, Inflation, Fed Language, Wage Growth, Diplomacy) with formula-based threshold evaluation |
 
 All icons are from the **Lucide** library, stroke-weight 1.5px, rendered at 18×18px. Icon names are the component key used in the `ICON_MAP` record in the Sidebar implementation.
 
@@ -131,6 +132,7 @@ Expanded:                        Collapsed:
 │  ☀️  Morning Brief   │         │  ☀️    │
 │  💬  Retail Sentiment│         │  💬    │
 │  🌐  Macro Research  │         │  🌐    │
+│  🌡  Panic Thermo.   │         │  🌡    │
 ├──────────────────────┤         ├────────┤
 │  👤  User Name       │         │  👤    │
 │  ⚙️  Settings        │         │  ⚙️    │
@@ -200,17 +202,23 @@ Only one item is active at a time, derived from the current route. `aria-current
 
 ### Notification Badge
 
-When a new automated report is generated while the user is away from a department page, the department's nav item shows a notification dot.
+> **Cross-reference note (2026-04-16):** Notification mechanism formalized by `background-task-scheduling-design.md`. Dots are driven by polling `GET /notifications/unread`, which returns per-department unread counts from the `user_notifications` table. Notifications are created by the background task scheduler when scheduled jobs complete or fail (MB briefings, EU earnings scans, MR assessments).
+
+When a background job produces a result (report ready or job failed) while the user is away from that department's page, the department's nav item shows a notification dot.
 
 | Property | Spec |
 |---|---|
 | Shape | `w-1.5 h-1.5 rounded-full` (6px circle) |
 | Color | `bg-[--color-accent-primary]` |
 | Position | Top-right corner of the icon, offset `top-0 right-0` — overlapping the icon's top-right quadrant |
-| Visibility | Shown when unread count > 0; hidden once the user visits the page |
+| Visibility | Shown when unread count > 0 for that department; hidden once the user visits the page |
 | Collapsed mode | Dot visible on the icon |
 | Expanded mode | Dot visible on the icon (same position — does not move to the label) |
 | Animation | Fades in `opacity 0→1` over `120ms` when first shown |
+
+**Polling mechanism:** The frontend polls `GET /notifications/unread` every 60 seconds while the app is open, and on each page navigation. The response includes `{total: N, by_department: {"morning_briefing": 2, ...}}`. The sidebar renders a dot on each department that has a non-zero count.
+
+**Clearing:** When the user navigates to a department page, the frontend calls `POST /notifications/read` with `{department: "<department_id>"}`, which marks those notifications as read and the dot disappears.
 
 The dot is the only badge type in v1 — no numeric count badges.
 
@@ -308,7 +316,7 @@ All colors reference tokens — no hardcoded values — so Sidebar adapts automa
 - **Pinned / favorited pages** — no user customization of nav item order or visibility
 - **Nested sub-navigation** — no expandable accordion items within the Sidebar; all destinations are flat
 - **Search within nav** — no search or filter field in the Sidebar
-- **Notification counts** — the Repository badge (if implemented) is the only badge; no per-department notification counts in v1
+- **Numeric count badges** — department notification signals are binary dots only (present/absent); no `(3)` or `99+` style counters on nav items in v1. See § Notification Badge for the per-department dot mechanism.
 - **Contextual nav changes** — Sidebar content is the same on all pages; no page-specific secondary nav items injected into the Sidebar
 
 ---

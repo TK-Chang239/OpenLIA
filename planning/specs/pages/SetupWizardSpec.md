@@ -4,7 +4,9 @@
 
 The Setup Wizard is a guided, resumable configuration flow shown on first launch of an OpenLIA instance. It collects everything the server needs to start real department work: deployment mode, user identity (or admin account in company mode), AI model configuration, data providers, optional access control, and an AI review that maps configured providers to the department requirements manifest. On completion it writes a `wizard_completed_at` record to the server config store and routes the user into the app.
 
-The wizard runs in the same frontend that serves the main app; there is no separate installer. Users who want to consume a company-hosted OpenLIA deployment do not run the wizard — they open the server URL their admin provides and land on `/login`.
+The wizard runs in the same frontend that serves the main app; there is no separate installer. Users who want to consume a company-hosted OpenLIA deployment do not run the wizard -- they open the server URL their admin provides and land on `/login`.
+
+> **Cross-reference note (2026-04-15):** This spec has been updated to reflect decisions from `database-design.md`: SQLite-only engine, AES-256-GCM encryption at rest for API keys, invite-only registration as v1 default, deployment recipes (Cloudflare Tunnel / Docker+Caddy / LAN), and new env vars (`OPENLIA_SECRET_KEY`, `OPENLIA_TRUST_PROXY_HEADERS`, `OPENLIA_COOKIE_SECURE`). Tier configuration in Step 3 is gated by the **required-tier set** — the union of `DEFAULT_TIER` across enabled departments — rather than the earlier "zero-or-many models per tier with no blocking requirement" rule.
 
 ---
 
@@ -112,23 +114,27 @@ OPENLIA_BIND_PORT                # default: 8000
 OPENLIA_DB_URL                   # default: sqlite:///~/.openlia/openlia.db
 OPENLIA_AUTH_ENABLED             # default: inferred from MODE
 
-# Primary + review model
-OPENLIA_LLM_PRIMARY_PROVIDER     # openai | anthropic | openrouter | ollama | openai_compat
-OPENLIA_LLM_PRIMARY_MODEL
-OPENLIA_LLM_PRIMARY_API_KEY
-OPENLIA_LLM_PRIMARY_BASE_URL     # only for ollama / openai_compat
+# Secrets and security
+OPENLIA_SECRET_KEY               # base64-encoded 32-byte AES key for API key encryption at rest
+                                 # falls back to auto-generated ~/.openlia/secret.key (0600)
+OPENLIA_TRUST_PROXY_HEADERS      # true | false (default: false) — trust X-Forwarded-For/Proto
+OPENLIA_COOKIE_SECURE            # true | false (default: true company / false personal)
 
-OPENLIA_LLM_REVIEW_PROVIDER      # defaults to PRIMARY_PROVIDER
-OPENLIA_LLM_REVIEW_MODEL
-OPENLIA_LLM_REVIEW_API_KEY       # defaults to PRIMARY_API_KEY
-OPENLIA_LLM_REVIEW_BASE_URL
+# LLM provider credentials (env vars reference — admin enters key names during wizard)
+# The wizard stores provider configs in the DB (encrypted). These env vars are an override lane
+# for ops/Docker deploys. Each provider row can optionally reference an env var by name instead
+# of storing the key in the DB.
+
+# Per-department LLM overrides (all optional)
+OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_TIER        # "thinking" | "everyday" | "quick"
 
 # Data providers: priority order per category (comma-separated provider IDs)
 OPENLIA_PROVIDERS_FINANCIAL      # e.g. fmp,eodhd
-OPENLIA_PROVIDERS_NEWS           # e.g. newsapi_ai,mediastack
-OPENLIA_PROVIDERS_SOCIAL         # e.g. x,reddit
+OPENLIA_PROVIDERS_NEWS            # e.g. newsapi_ai,mediastack
+OPENLIA_PROVIDERS_SOCIAL          # e.g. x,reddit
+OPENLIA_PROVIDERS_SEARCH          # optional; e.g. brave,tavily (web-search providers)
 
-# Per-provider credentials
+# Per-provider credentials (env var name is referenced by the provider row)
 OPENLIA_PROVIDER_<ID>_API_KEY
 
 # MCP-mode providers
@@ -136,8 +142,8 @@ OPENLIA_PROVIDER_<ID>_MCP_URL
 OPENLIA_PROVIDER_<ID>_MCP_AUTH_HEADER
 
 # Access control (company mode)
-OPENLIA_SIGNUP_POLICY            # invite | domain | open
-OPENLIA_SIGNUP_ALLOWED_DOMAINS   # comma-separated, only when policy=domain
+OPENLIA_SIGNUP_POLICY            # invite_only | closed | open (default: invite_only for company)
+OPENLIA_SIGNUP_ALLOWED_DOMAINS   # comma-separated domain allowlist (applied on top of invite)
 ```
 
 Display name and admin password have no env equivalent — they are wizard-only.
@@ -178,29 +184,44 @@ Saves via `POST /setup/admin`, which creates the first user with `role = admin` 
 
 ### Step 3 — AI Models
 
-Two grouped slots in one step.
+Three grouped tier slots in one step, following `llm-provider-design.md`.
 
-**Primary model** (used by departments for chat and reports):
-- Provider dropdown: OpenAI, Anthropic, OpenRouter, Ollama, OpenAI-compatible.
-- Model dropdown: populated via provider `list_models` when the key is entered; falls back to a curated static list if the call fails.
+Short explainer at the top: *"OpenLIA uses a top-tier Thinking model for deep analysis, an Everyday model for general chat and standardized tasks, and a Quick model for classification and lightweight jobs. Each department uses a sensible default tier, which you can change later in Settings. You can put any model in any slot — the tier is a routing label, not a restriction."*
+
+**Thinking model** (deep reasoning, long-form report drafting):
+- Provider dropdown: OpenAI, Anthropic, Google Gemini, OpenRouter, OpenAI-compatible, Ollama (6 options).
+- Model selector:
+  - OpenAI / Anthropic / Gemini — dropdown live-populated from each provider's `/models` endpoint once a valid API key is entered; a shipped default is pre-selected (see `llm-provider-design.md` § Shipped tier defaults per provider).
+  - OpenRouter — free-text model-name input. Helper text: *"Paste a model ID from [openrouter.ai/models](https://openrouter.ai/models)."*
+  - OpenAI-compatible — dropdown probes `{base_url}/models` with a text-input fallback on 404.
+  - Ollama — free-text model-name input. Helper text: *"Use the model name shown by `ollama list`."*
 - API key input (hidden for Ollama local).
-- Base URL input (visible only for Ollama / OpenAI-compatible).
+- Base URL input (visible only for OpenAI-compatible and Ollama).
+- **Advanced capability flags** (collapsible disclosure):
+  - Hidden for named providers (OpenAI / Anthropic / Gemini / OpenRouter) — capability flags come from the shipped map.
+  - Shown for OpenAI-compatible and Ollama as checkboxes: streaming, tool_calling, structured_output, vision — pre-filled from the shipped best-guess entry; user can correct.
 
-**Review model** (used by author-time mapping and runtime expansion):
-- Provider dropdown defaults to the Primary provider.
-- Model dropdown defaults to a cheap-variant mapping (`gpt-4o-mini` for OpenAI, `claude-haiku-4-5` for Anthropic, equivalent for others).
-- API key defaults to the Primary key.
-- Collapsible **Advanced: use a different provider for the review model** toggle reveals a full provider + key + base-URL trio.
+**Everyday model** (general chat and standardized tasks): same controls as Thinking. Shipped default pre-selects the Everyday variant per provider.
 
-On Save per slot, the server pings the provider (`list_models` or a 1-token completion) and shows inline green/red status. Next is disabled until both slots report green.
+**Quick model** (cheap/fast for classification, micro-tasks, and the Step 6 AI review): same controls as Thinking. Shipped default pre-selects the Quick variant per provider. Capacity note: *"The Quick model runs the AI review at the end of this wizard, as well as runtime structured micro-tasks."*
 
-Saves via `POST /setup/models`. Live test via `POST /setup/models/test`.
+Users may put the same provider/model/key combination in multiple slots -- e.g. run everything on one top-tier model -- and OpenLIA will faithfully do so. No enforcement of tier quality.
+
+**Required-tier gating.** The wizard reads each enabled department's `DEFAULT_TIER` (declared in `core/openlia/departments/<id>.py`) and computes the **required-tier set** — the union of those defaults across all enabled departments. Every required tier must have at least one green model before Next is enabled. The required-tier set is recomputed live as the user toggles departments on/off in earlier steps; Step 3 displays it inline beneath the tier cards:
+
+> *"Required by your enabled departments: **Thinking** (Equity Research, Macro Research), **Everyday** (Secretary, Earnings Update, Morning Briefing), **Quick** (Retail Sentiment, Macro Research T4/T5, Panic Thermometer). Configure at least one model in each of these tiers to continue."*
+
+A tier *not* in the required set may still be configured (it remains useful for future departments and per-user overrides), but is not gated. If a required tier has no green model, the corresponding tier card displays a blocking error: *"This tier is required by <department list>. Add at least one working model to proceed."*
+
+On Save per slot, the server pings the provider (`list_models` where applicable, plus a 1-token completion) and shows inline green/red status. API keys entered in the wizard are **encrypted at write time** using the AES-256-GCM scheme from `database-design.md` Section 5 -- the UI shows "(stored encrypted)" next to saved keys. Next is enabled when **every required tier** has ≥ 1 green model.
+
+Saves via `POST /setup/models`. Live test via `POST /setup/models/test`. Payload carries provider entries per tier. The admin can add multiple models to a single tier; one can be marked as tier default.
 
 ### Step 4 — Data Providers
 
 A sidebar-tabs layout inside the step:
 
-- Left column: three tabs — **Financial** (required), **News** (required), **Social** (optional). Each tab shows a count badge of configured providers.
+- Left column: four tabs — **Financial** (required), **News** (required), **Social** (optional), **Web Search** (optional). Each tab shows a count badge of configured providers.
 - Right column: for the active tab, an ordered list of configured providers with drag handle, name, connection status pill, and per-row actions (edit, remove). Below the list: a single `+ Add <category> provider` button.
 
 Clicking `+ Add` transitions the right panel into the **add-provider form** (content-panel takeover).
@@ -231,32 +252,49 @@ All three modes share a Cancel / Test / Save row. Test runs a minimal connectivi
 - Each row has inline edit (re-opens the add-provider form in edit mode) and remove (confirmation inline).
 - Per-row re-test available via `POST /setup/providers/{id}/test`.
 
+#### Web Search Tab
+
+Optional fourth category. Lists configured web-search providers (Brave Search API, Tavily, Serper, You.com) used by departments that benefit from fresh web context when the resolved LLM does not support native web search. Same row layout as other categories; `api_key` mode only (MCP mode not applicable).
+
+Helper text above the list: *"Optional. OpenLIA uses a web-search provider when the active LLM does not natively support web search. If you leave this empty, departments that declare web search as a preferred capability will run without it — you'll see an amber advisory on the Review step but never a block."*
+
 #### Step Gate
 
-Next is enabled only when **≥1 green Financial provider AND ≥1 green News provider** are configured. Social is optional.
+Next is enabled only when **≥1 green Financial provider AND ≥1 green News provider** are configured. Social and Web Search are optional.
 
 On leaving the step, the wizard kicks off the AI review in the background so Step 5/6 loads with results ready (or a short wait) rather than starting fresh.
 
 Saves via `POST /setup/providers`, `PATCH /setup/providers/{id}`, `DELETE /setup/providers/{id}`.
 
-### Step 5 — Access Control (Company only)
+### Step 5 -- Access Control (Company only)
 
-Three grouped fields:
+Four grouped areas:
 
 - **Signup policy** (segmented control):
-  - **Invite-only** (recommended default)
-  - **Email domain allow-list** — reveals a text input for `@domain.com` entries, comma-separated.
-  - **Open signup**
-- **Server bind address** (text input) — default `0.0.0.0`. Helper text explains network exposure implications.
-- **Server port** (number input) — default `8000`.
+  - **Invite-only** (v1 default, recommended). Helper text: *"You'll create invite links in Settings after setup. Share them with your team."*
+  - **Closed** -- no public registration; admin creates accounts manually via CLI.
+  - **Open signup** (reserved for v2, shown as disabled with "coming soon" badge).
+- **Email domain allow-list** (optional, visible for any policy): text input for `@domain.com` entries, comma-separated. Applied on top of invite validation. Helper text: *"Optional. Restrict registrations to specific email domains."*
+- **Server bind address** (text input) -- default `0.0.0.0`. Helper text explains network exposure implications.
+- **Server port** (number input) -- default `8000`.
+
+**Deployment guidance** (collapsible section below the bind fields):
+
+> **How should users reach this server?**
+>
+> - **Cloudflare Tunnel (recommended):** Run `cloudflared tunnel` alongside `openlia serve`. Cloudflare handles TLS, DNS, and DDoS protection. No port forwarding needed. Set `OPENLIA_TRUST_PROXY_HEADERS=true` and `OPENLIA_COOKIE_SECURE=true`.
+> - **Docker + Caddy:** Run OpenLIA behind a Caddy reverse proxy with auto-provisioned Let's Encrypt TLS. Requires a public domain and port 443.
+> - **LAN only:** Users access via `http://<lan-ip>:8000`. No TLS. Suitable for small offices on one network. Set `OPENLIA_COOKIE_SECURE=false`.
 
 Section note: *"Changes to bind address and port take effect after you restart the server."*
 
 Saves via `POST /setup/access_control`.
 
-### Step 6 — Review
+### Step 6 -- Review
 
-Auto-runs the AI review when the user arrives (or shows cached results from a Step 4 pre-run).
+Auto-runs the AI review when the user arrives (or shows cached results from a Step 4 pre-run). The review is executed by the **Quick-tier** LLM configured in Step 3 -- the same model OpenLIA uses at runtime for structured micro-tasks and `find_more_data` expansion. Quick is guaranteed to be configured here whenever any enabled department defaults to Quick (Step 3's required-tier gating ensures it). In the rare case where no enabled department requires Quick *and* the admin chose not to configure it, the review falls back through Everyday → Thinking. If no model is configured at all (only possible when zero departments are enabled), the review is skipped with a warning.
+
+**Unconfigured tier handling:** All required tiers are guaranteed populated by Step 3's gating, so the review only ever encounters empty *non-required* tiers. Those are surfaced as informational notes ("Quick tier is empty -- not currently required by any enabled department; configure later in Settings if you enable departments that use it") and do not block Finish.
 
 **Running state.** Linear progress bar plus "Mapping <provider> endpoints to department requirements…" label with a Cancel button that returns to Data Providers.
 
@@ -295,7 +333,7 @@ All endpoints live under `/setup/*`. None require auth because they only functio
 | POST | `/setup/mode` | Body: `{mode}`. Rejected if env sets `OPENLIA_MODE`. |
 | POST | `/setup/identity` | Personal only. Body: `{display_name}`. |
 | POST | `/setup/admin` | Company only. Body: `{email, password, display_name}`. Returns `409` if admin exists. |
-| POST | `/setup/models` | Body: `{primary, review}`. |
+| POST | `/setup/models` | Body: `{thinking, everyday, quick}`. Each slot: `{provider, model, api_key?, base_url?, capabilities?}`. |
 | POST | `/setup/models/test` | Body: `{provider, model, api_key, base_url?}`. Returns `{ok, latency_ms, error?}`. |
 | GET | `/setup/providers` | Returns providers across all categories in priority order. |
 | POST | `/setup/providers` | Body: `{category, entry: ProviderEntry}`. Runs validation ping; returns `{ok, entry_id, error?}`. |
@@ -311,34 +349,19 @@ All endpoints live under `/setup/*`. None require auth because they only functio
 
 ## Data Model
 
-```
-config_store
-  key             text primary key     # e.g. "mode", "llm.primary.provider", "provider.fmp.api_key"
-  value           text                 # secrets encrypted at rest if enabled
-  source          text                 # "wizard" | "settings" — env never writes here
-  updated_at      timestamp
+All tables are defined in `database-design.md`. The wizard writes to:
 
-wizard_state                           # single row
-  current_step    text
-  completed_steps json
-  started_at      timestamp
-  completed_at    timestamp nullable
-  active_token    text                 # concurrency guard
+- **`wizard_state`** -- singleton row tracking wizard progress, current step, and intermediate `step_data` JSON. Cleared on completion.
+- **`config_store`** -- KV table for `wizard.completed` flag and miscellaneous settings.
+- **`users`** -- inserts the admin user (Step 2b, company mode) or seeds the `local` user (personal mode).
+- **`signup_policy`** -- singleton row written on Step 5 (company) or seeded as `closed` (personal).
+- **`llm_providers`** -- one row per configured provider credential set (Step 3). API keys are encrypted at rest with AES-256-GCM per `database-design.md` Section 5.
+- **`llm_models`** -- one row per admin-added model, assigned to a tier with optional `is_tier_default` flag (Step 3).
+- **`data_providers`** -- one row per configured data source (Step 4). API keys encrypted at rest.
+- **`data_provider_requirement_mapping`** -- requirement-to-provider priority mapping (populated by Step 4 / Step 6 AI review).
+- **`web_search_providers`** -- optional web search backends (Step 4 Web Search tab). API keys encrypted at rest.
 
-data_providers
-  id              text primary key     # generated
-  provider_id     text                 # e.g. "fmp", "eodhd"
-  category        text                 # financial | news | social_media
-  mode            text                 # api_key | mcp
-  credentials_ref text                 # key prefix into config_store
-  priority        integer
-  created_at      timestamp
-
-users                                  # existing, per AccountManagementSpec
-  id, email, password_hash, display_name, role, created_at, ...
-```
-
-Secrets referenced by `data_providers.credentials_ref` live under `config_store` keys like `provider.<id>.api_key`, `provider.<id>.mcp_url`, `provider.<id>.mcp_auth_header` so encryption lives in one place.
+Secrets are **never** stored in `config_store`. Each provider table has its own `api_key_encrypted` column (or `env_var_name` as an alternative). See `database-design.md` Section 5 for the encryption scheme.
 
 ---
 
@@ -501,8 +524,10 @@ Grid container: `grid grid-cols-2 gap-3`. Disabled-state cards may span both col
 
 ## Configurations
 
-- **Primary LLM:** Captured in Step 3, used by all departments for chat and reports.
-- **Review LLM:** Captured in Step 3, used by the author-time mapping in Step 6 and by runtime tool expansion post-setup.
+- **Thinking-tier LLM:** Captured in Step 3. Default for departments like Equity Research and Macro Research that perform deep reasoning and long-form report drafting. See `llm-provider-design.md`.
+- **Everyday-tier LLM:** Captured in Step 3. Default for Secretary, Earnings Update, and Morning Briefing. Balanced quality/speed.
+- **Quick-tier LLM:** Captured in Step 3. Runs the Step 6 AI review, all runtime structured micro-tasks (Retail Sentiment classification, Macro Research T4/T5 assessments, Panic Thermometer scoring), and `find_more_data` catalog search.
+- Any tier slot can be overridden per-department, either by selecting a different tier or by pinning a specific model, from Settings → Models after wizard completion.
 - The wizard page itself does not invoke any department or produce any report.
 
 ---
@@ -523,7 +548,7 @@ Grid container: `grid grid-cols-2 gap-3`. Disabled-state cards may span both col
 
 ## Open Questions
 
-- **Secrets encryption at rest.** Should the `config_store` encrypt secret values (API keys) using a server-derived key, or rely on OS-level disk encryption? Current plan: plaintext in SQLite for v1, with a clear comment in the schema noting the intended upgrade path.
+- ~~**Secrets encryption at rest.**~~ **Resolved (2026-04-15):** API keys are encrypted at rest with AES-256-GCM, keyed by `OPENLIA_SECRET_KEY` env var or `~/.openlia/secret.key`. Secrets are never stored in `config_store`. See `database-design.md` Section 5.
 - **Review model cost visibility.** Should Step 3 show an estimated per-run cost for the review model based on average requirement-manifest size and provider pricing? Useful for users on paid APIs; adds complexity to the wizard UI.
 - **Review cancel behavior.** If the user clicks "Back to Data Providers" during a running review, should the in-flight LLM call be cancelled server-side (save tokens) or allowed to complete (save latency on return)? Current plan: cancel.
 - **Resume across browsers.** Wizard state is DB-backed and unauthenticated in personal mode. Should a second browser on the same machine seamlessly resume, or require take-over confirmation? Current plan: take-over confirmation for both browsers and sessions.

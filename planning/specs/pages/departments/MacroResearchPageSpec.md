@@ -12,7 +12,7 @@ Full design spec: `planning/specs/systems/macro-research-dalio-dashboards-design
 
 1. **Five Framework Dashboards**: Each of the five Dalio frameworks has its own dashboard tab with indicators, visualizations, and assessments. T1 (Debt Cycle) and T2 (Four Seasons) use a formula engine for threshold-based evaluation. T3 (All-Weather) uses computational risk math. T4 (World Order) and T5 (Five Forces) use LLM assessment.
 2. **Summary Tab**: A default landing tab that provides a composite assessment across all five frameworks with mini visualizations and a cross-framework synthesis narrative.
-3. **Auto-Refresh**: Market data and economic indicators refresh on a configurable interval. LLM assessments (T4/T5) run on a user-configurable schedule (quarterly, weekly, or on news trigger).
+3. **Auto-Refresh**: Market data and economic indicators refresh on a configurable interval. LLM assessments (T4/T5) run on a user-configurable schedule (quarterly or weekly), plus a manual "Run assessment now" button for ad-hoc runs. Automatic news-triggered runs are deferred to v2 (see `macro-research-dalio-dashboards-design.md` § Per-Dashboard Settings T4/T5).
 4. **Smart Mode**: When enabled, the LLM periodically reviews and adjusts thresholds across all dashboards based on evolving macro conditions. Each adjustment is logged with rationale.
 5. **Cross-Dashboard Dependencies**: T5 synthesizes T1+T2+T4 outputs. T3 consumes T1+T2+T5 outputs. Execution order for a full run: T1 -> T2 -> T4 -> T5 -> T3.
 6. **Portfolio Integration**: T3 reads the user's actual portfolio from the Portfolio page for the All-Weather audit. Falls back to 60/40 benchmark if no portfolio is configured.
@@ -117,15 +117,14 @@ Collapsible drawer or modal. Contains:
 
 **Global Settings:**
 - Auto-refresh interval (market data): Off / 5 min / 15 min
-- T4/T5 LLM assessment schedule: Quarterly / Weekly / On news trigger
-- T4/T5 news trigger sensitivity: Significant events only / All events
+- T4/T5 LLM assessment schedule: Quarterly / Weekly
 - Smart Mode toggle: Off (default) / On -- when enabled, LLM adjusts thresholds periodically
 
 **Per-Dashboard Settings (T1, T2):** Data source selector, params table (threshold editor with AI badge when Smart Mode active), rule editor, preset loader (Dalio defaults / Conservative / Relaxed).
 
 **Per-Dashboard Settings (T3):** Portfolio source, volatility estimates, coverage thresholds.
 
-**Per-Dashboard Settings (T4, T5):** Assessment schedule, news trigger keywords, LLM model, manual run button, scoring anchors.
+**Per-Dashboard Settings (T4, T5):** Assessment schedule, LLM model, manual "Run assessment now" button, scoring anchors. (News-trigger keywords and sensitivity controls are deferred to v2 -- see `macro-research-dalio-dashboards-design.md`.)
 
 See design spec Section "Settings Panel" for full detail.
 

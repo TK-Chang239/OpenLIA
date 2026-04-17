@@ -228,5 +228,31 @@ EU uses pre-fetch for the watchlist (earnings dates fetched on add) and tool-cal
 | Historical prices | `historical_prices` | Price history for pre/post earnings price action | Market Reaction section lacks price chart context |
 | Analyst ratings | `analyst_ratings` | Consensus estimates for beat/miss scoring | Key Financials section lacks consensus estimate comparison |
 
+## Scan Schedules
+
+> **Cross-reference note (2026-04-16):** Added by `background-task-scheduling-design.md`. EU supports user-configured scan schedules, mirroring the MB schedule pattern.
+
+The user can configure one or more scan schedules that determine when EU automatically checks the watchlist for new earnings releases. Each schedule specifies a time, timezone, and days of the week.
+
+**Typical setup:** Two scans per day -- a pre-market scan (e.g. 6:00 AM ET Mon-Fri) to catch overnight releases, and a post-market scan (e.g. 5:00 PM ET Mon-Fri) to catch after-hours releases.
+
+**Schedule configuration** is accessible from the EU page via a Settings button (same pattern as MB Settings view). The schedule section uses the same UI components as MB's schedule section:
+
+| Element | Detail |
+|---|---|
+| Section header | "SCAN SCHEDULES" label + "+ Add Schedule" button (outline style) |
+| Schedule list | Bordered list of configured schedules |
+| Schedule row | Time + timezone + days + label (e.g. "6:00 AM ET -- Mon-Fri -- Pre-Market Scan"); Edit + Remove actions |
+| Add Schedule modal | Time picker, timezone selector dropdown, days-of-week checkboxes, label field |
+| Empty state | "No scan schedules configured. Earnings reports will not be detected automatically." + "+ Add Schedule" CTA |
+
+When a scan fires, it checks all watchlist tickers for new earnings data since the last scan. For each ticker with new earnings, EU generates an analysis report and adds it to the EU Cabinet.
+
+**Schedule storage:** `eu_schedules` table (see `database-design.md`). Per-user, multiple schedules allowed.
+
+**Failure handling:** If a scan fails (LLM provider down, data provider timeout), the failure is recorded and visible to the user as a failed job entry. See `background-task-scheduling-design.md` for retry and notification details.
+
+---
+
 ## Configuration
 - LLM Model:

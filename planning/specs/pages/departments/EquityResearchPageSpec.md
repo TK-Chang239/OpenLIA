@@ -371,7 +371,7 @@ EqR uses three JSON framework templates, one per report mode. Each framework def
 | Stock Update Report | `stock_update.json` | 7 sections (event/earnings note) |
 | Sector Research Report | `sector_research.json` | 8 sections (sector/industry analysis) |
 
-Framework files are located in `planning/frameworks/`. See the Report Rendering Pipeline spec for how frameworks are filled by the LLM and rendered into the final report.
+Framework files ship with the core package at `packages/core/src/openlia/reports/frameworks/`. See the Report Rendering Pipeline spec for how frameworks are filled by the LLM and rendered into the final report.
 
 ## Data Requirements
 
