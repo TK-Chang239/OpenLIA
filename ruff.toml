@@ -1,5 +1,6 @@
 target-version = "py312"
 line-length = 100
+extend-exclude = ["scripts/"]  # legacy one-off tooling, not part of the shipped product
 
 [lint]
 select = [
