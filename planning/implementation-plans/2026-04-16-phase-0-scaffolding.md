@@ -114,8 +114,12 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["packages/core/tests", "packages/server/tests"]
 python_files = ["test_*.py"]
-addopts = ["-ra", "--strict-markers"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]
 ```
+
+> **`--import-mode=importlib` + no test `__init__.py` files.** The default pytest import mode ("prepend") adds test dirs to `sys.path` and treats `__init__.py`-bearing test dirs as packages — which causes a collision when two packages both expose `tests.test_smoke` (one from core, one from server). `importlib` mode uses real importlib machinery and sidesteps this entirely. Tasks 2 and 3 therefore do **not** create `tests/__init__.py` files — the `tests/` directories are plain folders that pytest discovers via `testpaths` without needing to import them as packages.
 
 > **`[project]` on a non-package root.** uv reads `requires-python` from `[project]` even when `package = false`. Without this, uv defaults to the host Python (3.13 on this machine) and the Phase 1 lockfile would resolve against the wrong version. The `name`/`version` are placeholders — they're never published.
 
@@ -256,14 +260,11 @@ git commit -m "chore: scaffold uv workspace, ruff config, gitignore, env templat
 - Create: `packages/core/src/openlia/__init__.py`
 - Create: `packages/core/src/openlia/exceptions.py`
 - Create: `packages/core/src/openlia/config.py`
-- Create: `packages/core/tests/__init__.py`
 - Create: `packages/core/tests/test_smoke.py`
 
-- [ ] **Step 1: Write the failing test first**
+> **Note:** do **not** create `packages/core/tests/__init__.py`. Task 1's pytest config uses `--import-mode=importlib`, which discovers test files without needing packaged test dirs. Having `__init__.py` in both core and server test dirs would collide on the shared module name `tests.test_smoke`.
 
-Create `packages/core/tests/__init__.py` (empty file):
-```python
-```
+- [ ] **Step 1: Write the failing test first**
 
 Create `packages/core/tests/test_smoke.py`:
 ```python
@@ -399,14 +400,11 @@ git commit -m "feat(core): scaffold openlia-core package with smoke tests"
 - Create: `packages/server/src/openlia_server/__init__.py`
 - Create: `packages/server/src/openlia_server/app.py`
 - Create: `packages/server/src/openlia_server/cli.py`
-- Create: `packages/server/tests/__init__.py`
 - Create: `packages/server/tests/test_smoke.py`
 
-- [ ] **Step 1: Write the failing tests first**
+> **Note:** do **not** create `packages/server/tests/__init__.py` — see the Task 2 note on why `--import-mode=importlib` + unpackaged test dirs is the chosen approach.
 
-Create `packages/server/tests/__init__.py` (empty):
-```python
-```
+- [ ] **Step 1: Write the failing tests first**
 
 Create `packages/server/tests/test_smoke.py`:
 ```python
