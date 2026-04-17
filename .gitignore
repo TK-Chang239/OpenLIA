@@ -1,5 +1,36 @@
-# Secrets and local environment
-.env
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
 
-# Extraction pipeline output (contains content from proprietary reports)
-scripts/extraction/output/
+# uv
+uv.lock
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# OpenLIA runtime user data (lives under ~/.openlia, but block accidental commits if someone runs from repo)
+.openlia/
+
+# Build artifacts
+dist/
+build/

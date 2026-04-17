@@ -1,0 +1,20 @@
+target-version = "py312"
+line-length = 100
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "I",    # isort
+  "B",    # bugbear
+  "UP",   # pyupgrade
+  "RUF",  # ruff-specific
+]
+ignore = []
+
+[lint.per-file-ignores]
+"**/tests/**" = ["B011"]  # allow `assert False` patterns in tests
+
+[format]
+quote-style = "double"
+indent-style = "space"
