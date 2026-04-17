@@ -34,3 +34,6 @@ frontend/coverage/
 # Build artifacts
 dist/
 build/
+
+# Extraction pipeline output (contains content from proprietary reports)
+scripts/extraction/output/
