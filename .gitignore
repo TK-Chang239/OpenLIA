@@ -8,7 +8,7 @@ __pycache__/
 .venv/
 venv/
 
-# uv
+# uv (Phase 1 will remove this entry once real deps are pinned)
 uv.lock
 
 # Node / frontend
