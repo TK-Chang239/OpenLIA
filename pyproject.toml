@@ -19,4 +19,6 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["packages/core/tests", "packages/server/tests"]
 python_files = ["test_*.py"]
-addopts = ["-ra", "--strict-markers"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]
