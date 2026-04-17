@@ -6,19 +6,13 @@ import uvicorn
 app = typer.Typer(
     name="openlia",
     help="OpenLIA — open-source self-hosted AI investor assistant.",
+    no_args_is_help=True,
 )
 
 
-@app.callback(invoke_without_command=True)
-def default(ctx: typer.Context) -> None:
-    """Default callback to show help when no subcommand is provided.
-
-    Note: We use a callback with invoke_without_command instead of
-    no_args_is_help=True because that flag would prevent proper subcommand
-    recognition in Typer.
-    """
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
+@app.callback()
+def _root() -> None:
+    """Force Typer into multi-command mode so `serve` shows as a named subcommand."""
 
 
 @app.command()

@@ -2,11 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stand up the empty OpenLIA monorepo — uv workspace with two Python packages (`openlia-core`, `openlia`), a React+TS+Vite frontend skeleton, shared lint config, and CI — so that every later phase has a working `uv sync && npm install && uv run pytest && npm run build` baseline to add to.
+**Goal:** Stand up the empty OpenLIA monorepo — uv workspace with two Python packages (`openlia-core`, `openlia`), a React+TS+Vite frontend skeleton, shared lint config, and CI — so that every later phase has a working `uv sync --all-packages && npm install && uv run pytest && npm run build` baseline to add to.
+
+> **Note on `uv sync --all-packages`.** A bare `uv sync` only installs dependencies of the workspace root, not of member packages. With multiple members (`openlia-core` + `openlia`), `--all-packages` is required to install every member as editable into the shared `.venv` so tests can `import openlia` / `import openlia_server`. All verification commands below use this form.
 
 **Architecture:** uv workspace at the repo root with two member packages under `packages/`. `openlia-core` is a pure-Python library with zero web deps. `openlia` depends on `openlia-core` via a workspace reference and registers a Typer CLI (`openlia`) plus a FastAPI app factory. The frontend is a separate Vite + React 18 + TypeScript app under `frontend/` (not a Python package). CI runs ruff + pytest + frontend build on every push.
 
-**Tech Stack:** Python 3.12, uv 0.9.x (uv_build backend), ruff, pytest. FastAPI 0.115+, Typer 0.12+, uvicorn 0.34+ (server skeleton only — no routes yet). React 18, TypeScript 5, Vite 5, Vitest 1. GitHub Actions for CI.
+**Tech Stack:** Python 3.12, uv 0.11.x (uv_build backend), ruff, pytest. FastAPI 0.115+, Typer 0.12+, uvicorn 0.34+ (server skeleton only — no routes yet). React 18, TypeScript 5, Vite 5, Vitest 1. GitHub Actions for CI.
 
 **Source spec:** `planning/projectStructure.md` (canonical directory layout + dependency graph + workspace `pyproject.toml` template).
 
@@ -91,15 +93,23 @@ Expected: prints version `>= 0.9.5` (e.g. `uv 0.9.5`). If not installed: `curl -
 
 Create `pyproject.toml`:
 ```toml
-[build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
-build-backend = "uv_build"
+[project]
+name = "openlia-workspace"
+version = "0.0.0"
+description = "OpenLIA monorepo workspace root (not an installable package)."
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
 
 [tool.uv.workspace]
 members = ["packages/*"]
 
-[tool.uv]
-package = false
+[dependency-groups]
+dev = [
+    "ruff>=0.11",
+    "pytest>=8.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["packages/core/tests", "packages/server/tests"]
@@ -107,12 +117,19 @@ python_files = ["test_*.py"]
 addopts = ["-ra", "--strict-markers"]
 ```
 
+> **`[project]` on a non-package root.** uv reads `requires-python` from `[project]` even when `package = false`. Without this, uv defaults to the host Python (3.13 on this machine) and the Phase 1 lockfile would resolve against the wrong version. The `name`/`version` are placeholders — they're never published.
+
+> **No `[build-system]` block.** `package = false` tells uv not to build the workspace root as a distribution, so the build backend is never consulted. Member packages (Tasks 2 and 3) declare their own `[build-system]`.
+
+> **`[dependency-groups]` (PEP 735)** is the canonical uv way to declare workspace-wide tools that aren't shipped with any package. `uv sync` installs them by default into the workspace `.venv`, which makes `uv run ruff` and `uv run pytest` work from the repo root.
+
 - [ ] **Step 3: Write `ruff.toml`**
 
 Create `ruff.toml`:
 ```toml
 target-version = "py312"
 line-length = 100
+extend-exclude = ["scripts/"]  # legacy one-off tooling, not part of the shipped product
 
 [lint]
 select = [
@@ -123,7 +140,6 @@ select = [
   "UP",   # pyupgrade
   "RUF",  # ruff-specific
 ]
-ignore = []
 
 [lint.per-file-ignores]
 "**/tests/**" = ["B011"]  # allow `assert False` patterns in tests
@@ -133,9 +149,12 @@ quote-style = "double"
 indent-style = "space"
 ```
 
+> `scripts/extraction/` predates this plan and contains experimental PDF-extraction tooling. It lives outside the spec (`projectStructure.md` only covers `packages/` and `frontend/`). Exclude it from lint rather than rewrite it; if it becomes production code later, lint it then.
+
 - [ ] **Step 4: Write `.gitignore`**
 
-Create `.gitignore`:
+A `.gitignore` may already exist with project-specific entries. **Preserve all existing entries** and merge the new entries below. Final contents:
+
 ```gitignore
 # Python
 __pycache__/
@@ -147,7 +166,7 @@ __pycache__/
 .venv/
 venv/
 
-# uv
+# uv (Phase 1 will remove this entry once real deps are pinned)
 uv.lock
 
 # Node / frontend
@@ -173,9 +192,14 @@ frontend/coverage/
 # Build artifacts
 dist/
 build/
+
+# Extraction pipeline output (contains content from proprietary reports)
+scripts/extraction/output/
 ```
 
 > **Note on `uv.lock`:** ignoring it for Phase 0 keeps the lockfile out of code review noise during scaffolding. Phase 1 (the first plan that pins real dependencies) will remove this entry and commit the lockfile.
+
+> **Note on existing entries:** If `git show HEAD:.gitignore` shows lines not in the list above, preserve them. The list above is what *must* be present; do not delete pre-existing project conventions.
 
 - [ ] **Step 5: Write `.env.example`**
 
@@ -191,8 +215,9 @@ OPENLIA_DEPLOYMENT_MODE=personal
 # If unset, the server auto-generates one and writes it to ~/.openlia/secret.key on first run.
 # OPENLIA_SECRET_KEY=
 
-# Database URL. If unset, defaults to sqlite at ~/.openlia/openlia.db
-# OPENLIA_DB_URL=sqlite:///~/.openlia/openlia.db
+# Database URL. If unset, defaults to a SQLite file under ~/.openlia/openlia.db.
+# The server expands `~` at startup before passing to SQLAlchemy.
+# OPENLIA_DB_URL=
 
 # Server bind address (defaults: 127.0.0.1:8000 in personal, 0.0.0.0:8000 in company)
 # OPENLIA_HOST=127.0.0.1
@@ -205,7 +230,7 @@ Run:
 ```bash
 uv sync
 ```
-Expected: completes without error, creates `.venv/`. May warn that no workspace members declare dependencies yet — acceptable.
+Expected: completes without error, creates `.venv/`, installs the dev group (ruff, pytest). No `requires-python` warning. (Workspace members don't exist yet, so plain `uv sync` is appropriate here. Tasks 2+ use `uv sync --all-packages`.)
 
 - [ ] **Step 7: Verify `ruff check .` runs cleanly**
 
@@ -294,7 +319,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'openlia'` (the packag
 Create `packages/core/pyproject.toml`:
 ```toml
 [build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
+requires = ["uv_build>=0.11,<0.12"]
 build-backend = "uv_build"
 
 [project]
@@ -345,10 +370,10 @@ Create `packages/core/src/openlia/config.py` (intentionally minimal — Phase 2'
 
 Run:
 ```bash
-uv sync
+uv sync --all-packages
 uv run pytest packages/core/tests/test_smoke.py -v
 ```
-Expected: 3 passed. If `test_no_web_imports_in_core` fails, something in `openlia/__init__.py` is importing fastapi/uvicorn/starlette transitively — fix the import.
+Expected: 3 passed. The `--all-packages` flag installs `openlia-core` editable into the workspace `.venv` so `import openlia` resolves. If `test_no_web_imports_in_core` fails, something in `openlia/__init__.py` is importing fastapi/uvicorn/starlette transitively — fix the import.
 
 - [ ] **Step 6: Verify ruff is still clean**
 
@@ -440,7 +465,7 @@ Expected: FAIL with `ModuleNotFoundError: No module named 'openlia_server'` (and
 Create `packages/server/pyproject.toml`:
 ```toml
 [build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
+requires = ["uv_build>=0.11,<0.12"]
 build-backend = "uv_build"
 
 [project]
@@ -517,6 +542,11 @@ app = typer.Typer(
 )
 
 
+@app.callback()
+def _root() -> None:
+    """Force Typer into multi-command mode so `serve` shows as a named subcommand."""
+
+
 @app.command()
 def serve(
     host: str = typer.Option("127.0.0.1", help="Bind address."),
@@ -542,7 +572,7 @@ def main() -> None:
 
 Run:
 ```bash
-uv sync
+uv sync --all-packages
 uv run pytest packages/server/tests/test_smoke.py -v
 ```
 Expected: 5 passed.
@@ -855,13 +885,13 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
-          version: "0.9.5"
+          version: "0.11"
 
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Sync workspace
-        run: uv sync
+      - name: Sync workspace (all members)
+        run: uv sync --all-packages
 
       - name: Lint (ruff)
         run: uv run ruff check .
@@ -977,11 +1007,11 @@ Open-source, self-hosted AI investor assistant. Multiple specialized LLM agents 
 
 ## Quickstart (development)
 
-Prerequisites: Python 3.12+, [uv](https://github.com/astral-sh/uv) 0.9.5+, Node.js 20+.
+Prerequisites: Python 3.12+, [uv](https://github.com/astral-sh/uv) 0.11+, Node.js 20+.
 
 ```bash
 # Backend
-uv sync
+uv sync --all-packages                         # install workspace + dev tools
 uv run pytest                                  # run all Python tests
 uv run openlia --help                          # see CLI commands
 uv run openlia serve                           # start FastAPI on http://127.0.0.1:8000
@@ -1010,7 +1040,7 @@ MIT.
 
 Run, in order, from the repo root:
 ```bash
-uv sync
+uv sync --all-packages
 uv run ruff check .
 uv run ruff format --check .
 uv run pytest -v
@@ -1019,7 +1049,7 @@ uv run openlia --help
 ```
 
 Expected:
-- `uv sync`: completes, `.venv/` exists.
+- `uv sync --all-packages`: completes, `.venv/` exists with `openlia-core` and `openlia` editable.
 - `ruff check`: `All checks passed!`
 - `ruff format --check`: `All files already formatted!` (or `N files already formatted`).
 - `pytest`: 8 passed (3 from core + 5 from server).
@@ -1052,7 +1082,7 @@ Expected: `nothing to commit, working tree clean`.
 
 Phase 0 is done when **all of the following are true** on a fresh clone:
 
-1. `uv sync` succeeds with no errors.
+1. `uv sync --all-packages` succeeds with no errors and installs both workspace members editable.
 2. `uv run pytest -v` reports 8 passed (3 core smoke + 5 server smoke).
 3. `uv run ruff check .` reports `All checks passed!`.
 4. `uv run ruff format --check .` reports formatted.
