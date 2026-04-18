@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -25,9 +24,7 @@ def test_resolve_db_url_defaults_to_home_dir(
     assert bootstrap.resolve_db_url() == expected
 
 
-def test_ensure_openlia_dir_creates_dir(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_ensure_openlia_dir_creates_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from openlia_server.db import bootstrap
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -37,9 +34,7 @@ def test_ensure_openlia_dir_creates_dir(
     assert path.is_dir()
 
 
-def test_ensure_openlia_dir_is_idempotent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_ensure_openlia_dir_is_idempotent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from openlia_server.db import bootstrap
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -58,10 +53,9 @@ def test_resolve_db_url_expands_tilde(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert bootstrap.resolve_db_url() == f"sqlite:///{tmp_path / 'custom.db'}"
 
 
-def test_bootstrap_creates_local_user(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from openlia_server.db import bootstrap, session as session_mod
+def test_bootstrap_creates_local_user(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from openlia_server.db import bootstrap
+    from openlia_server.db import session as session_mod
     from openlia_server.db.models.auth import User
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -80,10 +74,9 @@ def test_bootstrap_creates_local_user(
     session_mod.dispose_engine()
 
 
-def test_bootstrap_is_idempotent(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from openlia_server.db import bootstrap, session as session_mod
+def test_bootstrap_is_idempotent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from openlia_server.db import bootstrap
+    from openlia_server.db import session as session_mod
     from openlia_server.db.models.auth import User
     from openlia_server.db.models.infrastructure import ConfigStore
 
@@ -105,10 +98,9 @@ def test_bootstrap_is_idempotent(
     assert first_instance_id == second_instance_id
 
 
-def test_bootstrap_seeds_config_store(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    from openlia_server.db import bootstrap, session as session_mod
+def test_bootstrap_seeds_config_store(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from openlia_server.db import bootstrap
+    from openlia_server.db import session as session_mod
     from openlia_server.db.models.infrastructure import ConfigStore
 
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -129,9 +121,7 @@ def test_bootstrap_seeds_config_store(
     session_mod.dispose_engine()
 
 
-def test_bootstrap_runs_migrations(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_bootstrap_runs_migrations(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from openlia_server.db import bootstrap
     from sqlalchemy import create_engine, inspect
 
