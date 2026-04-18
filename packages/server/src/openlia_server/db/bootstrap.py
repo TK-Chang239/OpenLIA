@@ -13,6 +13,9 @@ OPENLIA_DIR_NAME = ".openlia"
 
 
 def openlia_home() -> Path:
+    env_home = os.environ.get("OPENLIA_HOME")
+    if env_home:
+        return Path(env_home)
     return Path(os.path.expanduser("~")) / OPENLIA_DIR_NAME
 
 
