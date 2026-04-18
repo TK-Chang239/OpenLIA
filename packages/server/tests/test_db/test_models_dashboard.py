@@ -418,3 +418,28 @@ def test_fe_saved_formulas_cascade_on_user_delete(create_tables, db_session: Ses
     db_session.commit()
 
     assert db_session.execute(select(FeSavedFormula)).scalar_one_or_none() is None
+
+
+def test_dashboard_and_scheduler_registered_via_models_init() -> None:
+    """Importing `openlia_server.db.models` alone must register every
+    dashboard + scheduler table on Base.metadata. Alembic's env.py relies
+    on this — it imports the package, not each submodule."""
+    import importlib
+    import openlia_server.db.models as models_pkg
+
+    importlib.reload(models_pkg)
+
+    from openlia_server.db.base import Base
+
+    registered = set(Base.metadata.tables.keys())
+    required = {
+        # Dashboard
+        "pt_user_configs", "pt_presets",
+        "mr_dashboard_state", "mr_assessment_cache",
+        "rs_user_config", "rs_snapshots",
+        "fe_saved_formulas",
+        # Scheduler + notifications
+        "mb_schedules", "eu_schedules", "job_runs", "user_notifications",
+    }
+    missing = required - registered
+    assert missing == set(), f"Not registered via models/__init__.py: {missing}"
