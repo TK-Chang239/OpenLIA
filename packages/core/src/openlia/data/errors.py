@@ -9,8 +9,10 @@ Per data-provider-design.md, three categories:
 All three subclass DataProviderError for blanket try/except at the call site.
 """
 
+from openlia.exceptions import OpenLIAError
 
-class DataProviderError(Exception):
+
+class DataProviderError(OpenLIAError):
     """Base class for all data provider errors."""
 
 
