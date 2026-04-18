@@ -4,7 +4,7 @@ import respx
 from openlia_server.services import llm_providers as svc
 
 
-def _login(client, email="admin@openlia.local", password="pw-12345678"):
+def _login(client, email="admin@example.com", password="pw-12345678"):
     client.post(
         "/auth/login",
         json={"email": email, "password": password},
@@ -13,15 +13,15 @@ def _login(client, email="admin@openlia.local", password="pw-12345678"):
 
 def test_list_providers_requires_admin(company_client, make_user) -> None:
     # Non-admin user hits /settings/admin/llm/providers -> 403
-    make_user(email="u@openlia.local", password="pw-12345678", is_admin=False)
-    _login(company_client, email="u@openlia.local")
+    make_user(email="u@example.com", password="pw-12345678", is_admin=False)
+    _login(company_client, email="u@example.com")
     resp = company_client.get("/settings/admin/llm/providers")
     assert resp.status_code == 403
 
 
 def test_create_provider_requires_admin(company_client, make_user) -> None:
-    make_user(email="u@openlia.local", password="pw-12345678", is_admin=False)
-    _login(company_client, email="u@openlia.local")
+    make_user(email="u@example.com", password="pw-12345678", is_admin=False)
+    _login(company_client, email="u@example.com")
     resp = company_client.post(
         "/settings/admin/llm/providers",
         json={"kind": "openai", "label": "x", "api_key": "k"},
@@ -33,10 +33,10 @@ def test_create_provider_happy_path_encrypts_api_key(
     company_client, make_user, db_session, monkeypatch
 ) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
-    with respx.mock():
-        respx.post("https://api.openai.com/v1/chat/completions").respond(
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
             200,
             json={
                 "choices": [
@@ -68,10 +68,10 @@ def test_create_provider_happy_path_encrypts_api_key(
 
 def test_create_provider_rejects_failing_connection(company_client, make_user, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
-    with respx.mock():
-        respx.post("https://api.openai.com/v1/chat/completions").respond(
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
             401, json={"error": {"message": "bad key"}}
         )
         resp = company_client.post(
@@ -95,10 +95,10 @@ def test_test_provider_endpoint_does_not_persist(
     from openlia_server.db.models.config import LLMProvider
 
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
-    with respx.mock():
-        respx.post("https://api.openai.com/v1/chat/completions").respond(
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
             200,
             json={
                 "choices": [
@@ -121,7 +121,7 @@ def test_test_provider_endpoint_does_not_persist(
 
 def test_create_model_rejects_without_provider(company_client, make_user, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
     resp = company_client.post(
         "/settings/admin/llm/models",
@@ -139,7 +139,7 @@ def test_delete_provider_blocks_with_models(
     company_client, make_user, db_session, monkeypatch
 ) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
     p = svc.create_provider(
         db_session,
@@ -164,7 +164,7 @@ def test_delete_provider_blocks_with_models(
 
 def test_department_tier_override_roundtrip(company_client, make_user, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
     resp = company_client.post(
         "/settings/admin/llm/department/equity_research", json={"tier": "quick"}
@@ -178,7 +178,7 @@ def test_department_tier_override_roundtrip(company_client, make_user, monkeypat
 
 def test_capability_override_roundtrip(company_client, make_user, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@openlia.local", password="pw-12345678", is_admin=True)
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
     resp = company_client.post(
         "/settings/admin/llm/capability_override/openai/gpt-5.4",

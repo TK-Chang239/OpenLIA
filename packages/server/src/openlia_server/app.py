@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session as DBSession
 from openlia_server.db.session import SessionLocal, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
-from openlia_server.routes.settings import build_data_providers_router
+from openlia_server.routes.settings import (
+    build_data_providers_router,
+    build_llm_providers_admin_router,
+)
 
 
 def _default_session_factory() -> DBSession:
@@ -32,6 +35,7 @@ def create_app(
         app.include_router(build_admin_router(db_session_factory=factory))
 
     app.include_router(build_data_providers_router(db_session_factory=factory))
+    app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
     def healthz():
