@@ -3,6 +3,8 @@
 import typer
 import uvicorn
 
+from openlia_server.db.bootstrap import bootstrap
+
 app = typer.Typer(
     name="openlia",
     help="OpenLIA — open-source self-hosted AI investor assistant.",
@@ -21,7 +23,13 @@ def serve(
     port: int = typer.Option(8000, help="Bind port."),
     reload: bool = typer.Option(False, help="Auto-reload on code changes (development)."),
 ) -> None:
-    """Start the OpenLIA HTTP server."""
+    """Start the OpenLIA HTTP server.
+
+    Runs DB bootstrap (directory + migrations + local-user seed) before
+    handing off to uvicorn.
+    """
+    bootstrap()
+
     uvicorn.run(
         "openlia_server.app:create_app",
         host=host,
