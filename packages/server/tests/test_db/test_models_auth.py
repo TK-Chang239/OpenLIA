@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def create_tables(engine):
-    from openlia_server.db.base import Base
     import openlia_server.db.models.auth  # noqa: F401
+    from openlia_server.db.base import Base
 
     Base.metadata.create_all(engine)
     yield
@@ -23,9 +23,18 @@ def test_users_columns(create_tables, engine) -> None:
 
     cols = {c.name: c for c in User.__table__.columns}
     expected = {
-        "id", "email", "display_name", "password_hash", "is_admin", "is_disabled",
-        "must_change_password", "created_at", "updated_at", "last_login_at",
-        "failed_login_attempts", "locked_until",
+        "id",
+        "email",
+        "display_name",
+        "password_hash",
+        "is_admin",
+        "is_disabled",
+        "must_change_password",
+        "created_at",
+        "updated_at",
+        "last_login_at",
+        "failed_login_attempts",
+        "locked_until",
     }
     assert set(cols.keys()) == expected
     assert cols["id"].primary_key
@@ -45,15 +54,16 @@ def test_users_email_unique(create_tables, db_session: Session) -> None:
 
 
 def test_sessions_cascade_delete_on_user(create_tables, db_session: Session) -> None:
-    from openlia_server.db.models.auth import Session as SessionModel, User
+    from openlia_server.db.models.auth import Session as SessionModel
+    from openlia_server.db.models.auth import User
 
     u = User(id="u1", email="u1@example.com", display_name="U1")
     s = SessionModel(
         id="s1",
         user_id="u1",
         token_hash="a" * 64,
-        last_seen_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(hours=12),
+        last_seen_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(hours=12),
     )
     db_session.add_all([u, s])
     db_session.commit()
@@ -103,6 +113,15 @@ def test_password_reset_requests_columns(create_tables) -> None:
     from openlia_server.db.models.auth import PasswordResetRequest
 
     cols = {c.name: c for c in PasswordResetRequest.__table__.columns}
-    assert {"id", "user_id", "status", "requested_at", "requested_ip",
-            "approved_by_user_id", "approved_at", "token_hash", "expires_at",
-            "consumed_at"} <= set(cols.keys())
+    assert {
+        "id",
+        "user_id",
+        "status",
+        "requested_at",
+        "requested_ip",
+        "approved_by_user_id",
+        "approved_at",
+        "token_hash",
+        "expires_at",
+        "consumed_at",
+    } <= set(cols.keys())

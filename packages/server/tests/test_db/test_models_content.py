@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -11,10 +10,10 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def create_tables(engine):
-    from openlia_server.db.base import Base
-    import openlia_server.db.models.auth  # noqa: F401
-    import openlia_server.db.models.config  # noqa: F401
+    import openlia_server.db.models.auth
+    import openlia_server.db.models.config
     import openlia_server.db.models.content  # noqa: F401
+    from openlia_server.db.base import Base
 
     Base.metadata.create_all(engine)
     yield
@@ -42,9 +41,13 @@ def test_report_user_id_set_null_on_delete(create_tables, db_session: Session) -
 
     u = User(id="u1", email="u1@example.com", display_name="U1")
     r = Report(
-        id="r1", user_id="u1", department="equity_research",
-        report_type="stock_update", title="AAPL Update",
-        content_markdown="# AAPL", content_structured={},
+        id="r1",
+        user_id="u1",
+        department="equity_research",
+        report_type="stock_update",
+        title="AAPL Update",
+        content_markdown="# AAPL",
+        content_structured={},
         model_ref="gpt-4o",
     )
     db_session.add_all([u, r])
@@ -63,14 +66,21 @@ def test_report_version_unique_per_report(create_tables, db_session: Session) ->
 
     u = User(id="u1", email="u1@example.com", display_name="U1")
     r = Report(
-        id="r1", user_id="u1", department="equity_research",
-        report_type="stock_update", title="t",
-        content_markdown="m", content_structured={}, model_ref="m",
+        id="r1",
+        user_id="u1",
+        department="equity_research",
+        report_type="stock_update",
+        title="t",
+        content_markdown="m",
+        content_structured={},
+        model_ref="m",
     )
-    v1 = ReportVersion(id="v1", report_id="r1", version_number=1,
-                      content_markdown="m", content_structured={})
-    v2 = ReportVersion(id="v2", report_id="r1", version_number=1,
-                      content_markdown="m", content_structured={})
+    v1 = ReportVersion(
+        id="v1", report_id="r1", version_number=1, content_markdown="m", content_structured={}
+    )
+    v2 = ReportVersion(
+        id="v2", report_id="r1", version_number=1, content_markdown="m", content_structured={}
+    )
     db_session.add_all([u, r, v1, v2])
     with pytest.raises(IntegrityError):
         db_session.commit()
@@ -109,8 +119,11 @@ def test_numeric_columns_use_decimal(create_tables, db_session: Session) -> None
 
     u = User(id="u1", email="u1@example.com", display_name="U1")
     h = PortfolioHolding(
-        id="h1", user_id="u1", ticker="AAPL",
-        shares=Decimal("100.5"), cost_basis=Decimal("150.25"),
+        id="h1",
+        user_id="u1",
+        ticker="AAPL",
+        shares=Decimal("100.5"),
+        cost_basis=Decimal("150.25"),
     )
     db_session.add_all([u, h])
     db_session.commit()
@@ -124,9 +137,14 @@ def test_tags_default_empty_list(create_tables, db_session: Session) -> None:
 
     u = User(id="u1", email="u1@example.com", display_name="U1")
     r = Report(
-        id="r1", user_id="u1", department="equity_research",
-        report_type="stock_update", title="t",
-        content_markdown="m", content_structured={}, model_ref="m",
+        id="r1",
+        user_id="u1",
+        department="equity_research",
+        report_type="stock_update",
+        title="t",
+        content_markdown="m",
+        content_structured={},
+        model_ref="m",
     )
     db_session.add_all([u, r])
     db_session.commit()
