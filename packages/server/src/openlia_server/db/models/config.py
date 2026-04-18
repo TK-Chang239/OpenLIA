@@ -5,7 +5,6 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     Boolean,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -16,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from openlia_server.db.base import Base, TimestampMixin
+from openlia_server.db.base import Base, TimestampMixin, UTCDateTime
 
 
 class LLMProvider(Base, TimestampMixin):
@@ -79,7 +78,7 @@ class UserLLMPreference(Base):
         String(36), ForeignKey("llm_models.id", ondelete="CASCADE"), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
@@ -116,7 +115,7 @@ class DataProviderRequirementMapping(Base):
     )
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),

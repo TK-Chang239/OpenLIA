@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import DateTime, text
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -13,16 +13,15 @@ def test_base_has_naming_convention() -> None:
 
 
 def test_timestamp_mixin_columns_present() -> None:
-    from openlia_server.db.base import Base, TimestampMixin
+    from openlia_server.db.base import Base, TimestampMixin, UTCDateTime
 
     class _Demo(Base, TimestampMixin):
         __tablename__ = "_demo"
         id: Mapped[int] = mapped_column(primary_key=True)
 
     cols = {c.name: c for c in _Demo.__table__.columns}
-    assert isinstance(cols["created_at"].type, DateTime)
-    assert cols["created_at"].type.timezone is True
-    assert cols["updated_at"].type.timezone is True
+    assert isinstance(cols["created_at"].type, UTCDateTime)
+    assert isinstance(cols["updated_at"].type, UTCDateTime)
 
 
 def test_configure_engine_requires_url() -> None:
