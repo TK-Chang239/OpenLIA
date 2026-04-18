@@ -1,0 +1,24 @@
+[project]
+name = "openlia-workspace"
+version = "0.0.0"
+description = "OpenLIA monorepo workspace root (not an installable package)."
+requires-python = ">=3.12"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11",
+    "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/core/tests", "packages/server/tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]

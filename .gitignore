@@ -1,5 +1,44 @@
-# Secrets and local environment
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# uv (Phase 1 will remove this entry once real deps are pinned)
+uv.lock
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
+frontend/vitest.config.d.ts
+frontend/vitest.config.js
+
+# Environment
 .env
+.env.local
+.env.*.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# OpenLIA runtime user data (lives under ~/.openlia, but block accidental commits if someone runs from repo)
+.openlia/
+
+# Build artifacts
+dist/
+build/
 
 # Extraction pipeline output (contains content from proprietary reports)
 scripts/extraction/output/
