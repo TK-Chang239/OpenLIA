@@ -5,13 +5,15 @@ build-backend = "uv_build"
 [project]
 name = "openlia-core"
 version = "0.1.0"
-description = "OpenLIA core library — departments, LLM adapters, data adapters, report generation. Zero web dependencies."
+description = "OpenLIA core library — departments, LLM adapters, data adapters, report generation. Pure Python library. No server-side HTTP frameworks (FastAPI, uvicorn, SQLAlchemy)."
 requires-python = ">=3.12"
 authors = [{name = "OpenLIA contributors"}]
 license = {text = "MIT"}
 dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.6",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
