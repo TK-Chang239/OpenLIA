@@ -32,8 +32,11 @@ def test_cli_help_runs():
 
 
 def test_cli_serve_help_runs():
+    import re
+
     runner = CliRunner()
     result = runner.invoke(cli_app, ["serve", "--help"])
     assert result.exit_code == 0
-    assert "--host" in result.stdout
-    assert "--port" in result.stdout
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", result.stdout)
+    assert "--host" in plain
+    assert "--port" in plain
