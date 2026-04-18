@@ -9,7 +9,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 0 | 0 | Workspace scaffolding | **Done** (2026-04-16) | `2026-04-16-phase-0-scaffolding.md` |
 | 1a | 1 | Database baseline — auth/config/content/infrastructure (22 tables) | Done (2026-04-18) | `2026-04-16-phase-1a-database-baseline.md` |
 | 1b | 1 | Database baseline — dashboard/scheduler/notifications (11 tables) | Complete | `2026-04-17-phase-1b-database-dashboard-scheduler-notifications.md` |
-| 2 | 1 | Secrets encryption + auth primitives | Draft | `2026-04-16-phase-2-auth-and-secrets.md` |
+| 2 | 1 | Secrets encryption + auth primitives | Complete | `2026-04-16-phase-2-auth-and-secrets.md` |
 | 3 | 2 | Data provider adapter system | Draft | `2026-04-16-phase-3-data-provider-adapter-system.md` |
 | 4 | 2 | LLM provider system | Draft | `2026-04-16-phase-4-llm-provider-system.md` |
 | 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Draft | `2026-04-17-phase-5-llm-runtime.md` |
