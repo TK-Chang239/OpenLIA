@@ -40,6 +40,16 @@ class User(Base, TimestampMixin):
     auth_events: Mapped[list[AuthEvent]] = relationship(
         "AuthEvent", foreign_keys="AuthEvent.user_id", back_populates="user"
     )
+    reports: Mapped[list] = relationship("Report", foreign_keys="Report.user_id")
+    chat_sessions: Mapped[list] = relationship(
+        "ChatSession", cascade="all, delete-orphan", passive_deletes=True
+    )
+    portfolio_holdings: Mapped[list] = relationship(
+        "PortfolioHolding", cascade="all, delete-orphan", passive_deletes=True
+    )
+    watchlists: Mapped[list] = relationship(
+        "Watchlist", cascade="all, delete-orphan", passive_deletes=True
+    )
 
 
 class Session(Base):
