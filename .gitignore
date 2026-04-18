@@ -27,6 +27,9 @@ frontend/vitest.config.js
 .env.local
 .env.*.local
 
+# Git worktrees
+.worktrees/
+
 # OS / IDE
 .DS_Store
 .idea/
