@@ -1,10 +1,12 @@
 """Tests for middleware.auth — require_auth, personal-mode shim."""
+
 from __future__ import annotations
+
+from datetime import UTC
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from openlia_server.middleware.auth import COOKIE_NAME, build_require_auth
 from openlia_server.services.auth import sessions
 
@@ -49,7 +51,7 @@ class TestCompanyMode:
 
 class TestPersonalMode:
     def test_no_cookie_still_resolves_to_local_user(self, app_factory, db_session):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from openlia_server.db.models.auth import User
 
@@ -59,8 +61,8 @@ class TestPersonalMode:
             display_name="Local",
             is_admin=True,
             is_disabled=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         db_session.add(user)
         db_session.commit()
@@ -73,7 +75,7 @@ class TestPersonalMode:
         assert data["is_admin"] is True
 
     def test_sessions_table_not_consulted(self, app_factory, db_session):
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         from openlia_server.db.models.auth import User
 
@@ -83,8 +85,8 @@ class TestPersonalMode:
             display_name="Local",
             is_admin=True,
             is_disabled=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         db_session.add(user)
         db_session.commit()

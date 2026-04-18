@@ -4,9 +4,11 @@
 attach to protected routes. In personal mode the dependency short-circuits to
 the synthetic `local` user without touching the `sessions` table.
 """
+
 from __future__ import annotations
 
-from typing import Callable, Literal
+from collections.abc import Callable
+from typing import Literal
 
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy import select
@@ -40,10 +42,14 @@ def build_require_auth(
             return user
 
         if not openlia_session:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated"
+            )
         validated = session_service.validate_session(db, openlia_session)
         if validated is None:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated"
+            )
         return validated.user
 
     return Depends(require_auth)

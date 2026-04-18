@@ -1,9 +1,6 @@
 """Tests for middleware.rate_limit — sliding-window counters."""
+
 from __future__ import annotations
-
-import time
-
-import pytest
 
 from openlia_server.middleware.rate_limit import SlidingWindowLimiter
 

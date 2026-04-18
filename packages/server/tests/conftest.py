@@ -1,8 +1,9 @@
 """Root test conftest — makes db fixtures with tables available to all sub-packages."""
+
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -22,8 +23,8 @@ def db_url(db_path: Path) -> str:
 
 @pytest.fixture
 def engine(db_url: str) -> Iterator[Engine]:
-    from openlia_server.db import session as session_mod
     import openlia_server.db.models  # noqa: F401 — register all models
+    from openlia_server.db import session as session_mod
     from openlia_server.db.base import Base
 
     session_mod.configure_engine(db_url)
@@ -60,8 +61,8 @@ def make_user(db_session):
             password_hash=passwords.hash_password(password) if password else None,
             is_admin=is_admin,
             is_disabled=is_disabled,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         db_session.add(user)
         db_session.commit()
