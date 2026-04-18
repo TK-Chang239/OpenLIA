@@ -24,7 +24,6 @@ def configure_engine(url: str, *, echo: bool = False) -> Engine:
         bind=_engine,
         autoflush=False,
         autocommit=False,
-        expire_on_commit=False,
     )
     return _engine
 
