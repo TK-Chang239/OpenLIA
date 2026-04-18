@@ -6,7 +6,6 @@ from decimal import Decimal
 from sqlalchemy import (
     JSON,
     Boolean,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -18,7 +17,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from openlia_server.db.base import Base, TimestampMixin
+from openlia_server.db.base import Base, TimestampMixin, UTCDateTime
 
 
 class ChatSession(Base, TimestampMixin):
@@ -57,7 +56,7 @@ class ChatMessage(Base):
     model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     token_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
 
     __table_args__ = (Index("ix_chat_messages_session_id_created_at", "session_id", "created_at"),)
@@ -75,7 +74,7 @@ class ChatAttachment(Base):
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
 
     __table_args__ = (Index("ix_chat_attachments_message_id", "message_id"),)
@@ -124,7 +123,7 @@ class ReportVersion(Base):
     change_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
 
     __table_args__ = (
@@ -150,10 +149,10 @@ class PortfolioHolding(Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     added_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
@@ -184,5 +183,5 @@ class WatchlistItem(Base):
     )
     ticker: Mapped[str] = mapped_column(String(16), primary_key=True)
     added_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )

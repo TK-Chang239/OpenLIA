@@ -6,14 +6,13 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     CheckConstraint,
-    DateTime,
     Integer,
     String,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openlia_server.db.base import Base
+from openlia_server.db.base import Base, UTCDateTime
 
 
 class WizardState(Base):
@@ -24,10 +23,10 @@ class WizardState(Base):
     current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     step_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
@@ -42,7 +41,7 @@ class ConfigStore(Base):
     key: Mapped[str] = mapped_column(String(128), primary_key=True)
     value: Mapped[Any] = mapped_column(JSON, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
