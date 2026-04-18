@@ -69,3 +69,47 @@ class TestLoadSecretKey:
         monkeypatch.delenv("OPENLIA_SECRET_KEY")
         second = crypto.load_secret_key()
         assert first is second
+
+
+class TestEncryptDecrypt:
+    @pytest.fixture
+    def setup_key(self, tmp_path, monkeypatch):
+        import base64
+        raw = b"\x09" * 32
+        monkeypatch.setenv("OPENLIA_SECRET_KEY", base64.b64encode(raw).decode())
+        monkeypatch.setenv("OPENLIA_HOME", str(tmp_path))
+
+    def test_roundtrip(self, setup_key):
+        row_id = "llm-provider-abc"
+        plaintext = "sk-example-api-key"
+        ciphertext = crypto.encrypt_for_row(row_id, plaintext)
+        assert ciphertext != plaintext
+        assert crypto.decrypt_for_row(row_id, ciphertext) == plaintext
+
+    def test_ciphertext_is_base64(self, setup_key):
+        import base64
+        ciphertext = crypto.encrypt_for_row("id-1", "secret")
+        raw = base64.b64decode(ciphertext, validate=True)
+        assert len(raw) >= 12 + 16
+
+    def test_different_nonces_each_call(self, setup_key):
+        ct1 = crypto.encrypt_for_row("id-1", "same plaintext")
+        ct2 = crypto.encrypt_for_row("id-1", "same plaintext")
+        assert ct1 != ct2
+
+    def test_aad_binds_to_row_id(self, setup_key):
+        ciphertext = crypto.encrypt_for_row("correct-row", "hello")
+        with pytest.raises(crypto.DecryptError):
+            crypto.decrypt_for_row("different-row", ciphertext)
+
+    def test_tampered_ciphertext_rejected(self, setup_key):
+        import base64
+        ciphertext = crypto.encrypt_for_row("id-1", "hello")
+        raw = bytearray(base64.b64decode(ciphertext))
+        raw[-1] ^= 0x01
+        tampered = base64.b64encode(bytes(raw)).decode()
+        with pytest.raises(crypto.DecryptError):
+            crypto.decrypt_for_row("id-1", tampered)
+
+    def test_empty_plaintext_roundtrips(self, setup_key):
+        assert crypto.decrypt_for_row("id-1", crypto.encrypt_for_row("id-1", "")) == ""
