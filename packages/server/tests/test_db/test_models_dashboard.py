@@ -102,6 +102,7 @@ def test_pt_user_configs_active_preset_set_null_on_preset_delete(
     db_session.delete(p)
     db_session.commit()
 
+    db_session.expire_all()
     fresh = db_session.get(PtUserConfig, "c1")
     assert fresh.active_preset_id is None
 
