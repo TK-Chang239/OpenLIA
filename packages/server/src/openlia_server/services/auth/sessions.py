@@ -1,14 +1,16 @@
 """Session lifecycle helpers."""
+
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session as DBSession
 
-from openlia_server.db.models.auth import Session as SessionRow, User
+from openlia_server.db.models.auth import Session as SessionRow
+from openlia_server.db.models.auth import User
 from openlia_server.services.auth import tokens
 
 PERSISTENT_TTL = timedelta(days=30)
@@ -37,7 +39,7 @@ def create_session(
     user_agent: str | None = None,
     ip_address: str | None = None,
 ) -> CreatedSession:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     raw = tokens.generate_opaque_token()
     ttl = PERSISTENT_TTL if persistent else NON_PERSISTENT_TTL
     row = SessionRow(
@@ -60,15 +62,17 @@ def validate_session(db: DBSession, raw_token: str) -> ValidatedSession | None:
     if not raw_token:
         return None
     hashed = tokens.hash_token(raw_token)
-    stmt = select(SessionRow, User).join(User, User.id == SessionRow.user_id).where(
-        SessionRow.token_hash == hashed
+    stmt = (
+        select(SessionRow, User)
+        .join(User, User.id == SessionRow.user_id)
+        .where(SessionRow.token_hash == hashed)
     )
     row = db.execute(stmt).first()
     if row is None:
         return None
 
     session, user = row
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if session.revoked_at is not None:
         return None
     if session.expires_at <= now:
@@ -89,7 +93,7 @@ def revoke_session(db: DBSession, session_id: str) -> None:
     db.execute(
         update(SessionRow)
         .where(SessionRow.id == session_id, SessionRow.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(timezone.utc))
+        .values(revoked_at=datetime.now(UTC))
     )
     db.commit()
 
@@ -98,13 +102,13 @@ def revoke_all_sessions(db: DBSession, *, user_id: str) -> None:
     db.execute(
         update(SessionRow)
         .where(SessionRow.user_id == user_id, SessionRow.revoked_at.is_(None))
-        .values(revoked_at=datetime.now(timezone.utc))
+        .values(revoked_at=datetime.now(UTC))
     )
     db.commit()
 
 
 def prune_expired(db: DBSession, *, older_than_days: int = 7) -> int:
-    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    cutoff = datetime.now(UTC) - timedelta(days=older_than_days)
     result = db.execute(delete(SessionRow).where(SessionRow.expires_at < cutoff))
     db.commit()
     return int(result.rowcount or 0)

@@ -1,12 +1,12 @@
 """Tests for services.auth.signup_policy — seeding + policy enforcement."""
+
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
-
 from openlia_server.db.models.auth import SignupPolicy
 from openlia_server.services.auth import signup_policy
 from openlia_server.services.auth.errors import AuthError
+from sqlalchemy import select
 
 
 def test_seed_personal_mode(db_session):

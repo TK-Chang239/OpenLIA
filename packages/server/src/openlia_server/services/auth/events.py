@@ -1,8 +1,9 @@
 """Append-only audit log writes."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy.orm import Session as DBSession
@@ -28,7 +29,7 @@ def log_auth_event(
         ip_address=ip_address,
         user_agent=(user_agent or "")[:512] or None,
         event_metadata=metadata,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
     db.add(row)
     db.commit()

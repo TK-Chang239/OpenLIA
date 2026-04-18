@@ -1,12 +1,11 @@
 """Tests for services.auth.registration — register(), normalize_email()."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
-
-from openlia_server.db.models.auth import SignupInvite, User
+from openlia_server.db.models.auth import SignupInvite
 from openlia_server.services.auth import registration, signup_policy
 from openlia_server.services.auth.errors import AuthError
 
@@ -17,12 +16,13 @@ def make_invite(db_session):
         row = SignupInvite(
             id=f"inv-{token}",
             token=token,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             **kwargs,
         )
         db_session.add(row)
         db_session.commit()
         return row
+
     return _make
 
 
@@ -81,7 +81,7 @@ class TestRegister:
 
     def test_revoked_invite_rejected(self, db_session, make_invite):
         invite = make_invite(
-            revoked_at=datetime.now(timezone.utc) - timedelta(minutes=1),
+            revoked_at=datetime.now(UTC) - timedelta(minutes=1),
         )
         with pytest.raises(AuthError) as exc:
             registration.register(
@@ -94,7 +94,7 @@ class TestRegister:
         assert exc.value.code == "invite_invalid"
 
     def test_expired_invite_rejected(self, db_session, make_invite):
-        invite = make_invite(expires_at=datetime.now(timezone.utc) - timedelta(days=1))
+        invite = make_invite(expires_at=datetime.now(UTC) - timedelta(days=1))
         with pytest.raises(AuthError) as exc:
             registration.register(
                 db_session,

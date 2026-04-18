@@ -1,4 +1,5 @@
 """Argon2id password hashing and policy enforcement."""
+
 from __future__ import annotations
 
 import os
@@ -48,6 +49,4 @@ def validate_password_policy(plaintext: str) -> None:
     """Raise WeakPasswordError if the password fails policy."""
     min_len = int(os.environ.get("OPENLIA_PASSWORD_MIN_LENGTH", "8"))
     if len(plaintext) < min_len:
-        raise WeakPasswordError(
-            f"Password must be at least {min_len} characters long."
-        )
+        raise WeakPasswordError(f"Password must be at least {min_len} characters long.")

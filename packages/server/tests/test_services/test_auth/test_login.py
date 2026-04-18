@@ -1,24 +1,27 @@
 """Tests for services.auth.login — authenticate(), lockout state machine."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select
-
 from openlia_server.db.models.auth import AuthEvent
 from openlia_server.services.auth import login
 from openlia_server.services.auth.errors import AuthError
+from sqlalchemy import select
 
 
 @pytest.fixture
 def enable_lockout(db_session):
     from openlia_server.db.models.infrastructure import ConfigStore
-    db_session.add(ConfigStore(
-        key="auth.lockout.enabled",
-        value={"enabled": True},
-        updated_at=datetime.now(timezone.utc),
-    ))
+
+    db_session.add(
+        ConfigStore(
+            key="auth.lockout.enabled",
+            value={"enabled": True},
+            updated_at=datetime.now(UTC),
+        )
+    )
     db_session.commit()
 
 
@@ -75,11 +78,14 @@ class TestLockout:
 
     def test_lockout_disabled_doesnt_lock(self, db_session, make_user):
         from openlia_server.db.models.infrastructure import ConfigStore
-        db_session.add(ConfigStore(
-            key="auth.lockout.enabled",
-            value={"enabled": False},
-            updated_at=datetime.now(timezone.utc),
-        ))
+
+        db_session.add(
+            ConfigStore(
+                key="auth.lockout.enabled",
+                value={"enabled": False},
+                updated_at=datetime.now(UTC),
+            )
+        )
         db_session.commit()
         make_user()
         for _ in range(6):

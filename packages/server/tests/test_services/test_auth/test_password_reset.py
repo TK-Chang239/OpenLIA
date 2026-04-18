@@ -1,14 +1,14 @@
 """Tests for services.auth.password_reset."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
-
-from openlia_server.db.models.auth import PasswordResetRequest, User
+from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.services.auth import password_reset, sessions
 from openlia_server.services.auth.errors import AuthError
+from sqlalchemy import select
 
 
 class TestRequestReset:
@@ -39,7 +39,7 @@ class TestRequestReset:
 
 class TestApproveReject:
     def test_approve_generates_single_use_token(self, db_session, make_user):
-        u = make_user()
+        make_user()
         admin = make_user(email="admin@example.com", is_admin=True)
         password_reset.request_reset(db_session, email="alice@example.com")
         req = db_session.execute(select(PasswordResetRequest)).scalar_one()
@@ -53,7 +53,7 @@ class TestApproveReject:
         assert req.approved_by_user_id == admin.id
 
     def test_reject_marks_rejected(self, db_session, make_user):
-        u = make_user()
+        make_user()
         admin = make_user(email="admin@example.com", is_admin=True)
         password_reset.request_reset(db_session, email="alice@example.com")
         req = db_session.execute(select(PasswordResetRequest)).scalar_one()
@@ -73,7 +73,9 @@ class TestConsume:
 
         password_reset.request_reset(db_session, email="alice@example.com")
         req = db_session.execute(select(PasswordResetRequest)).scalar_one()
-        token = password_reset.approve_request(db_session, request_id=req.id, admin_user_id=admin.id)
+        token = password_reset.approve_request(
+            db_session, request_id=req.id, admin_user_id=admin.id
+        )
 
         password_reset.consume_token(db_session, token=token, new_password="new-strong-password")
 
@@ -82,34 +84,44 @@ class TestConsume:
         assert sessions.validate_session(db_session, s.raw_token) is None
 
     def test_expired_token_rejected(self, db_session, make_user):
-        u = make_user()
+        make_user()
         admin = make_user(email="admin@example.com", is_admin=True)
         password_reset.request_reset(db_session, email="alice@example.com")
         req = db_session.execute(select(PasswordResetRequest)).scalar_one()
-        token = password_reset.approve_request(db_session, request_id=req.id, admin_user_id=admin.id)
+        token = password_reset.approve_request(
+            db_session, request_id=req.id, admin_user_id=admin.id
+        )
 
-        req.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        req.expires_at = datetime.now(UTC) - timedelta(hours=1)
         db_session.commit()
 
         with pytest.raises(AuthError) as exc:
-            password_reset.consume_token(db_session, token=token, new_password="new-strong-password")
+            password_reset.consume_token(
+                db_session, token=token, new_password="new-strong-password"
+            )
         assert exc.value.code == "token_expired"
 
     def test_unknown_token_rejected(self, db_session):
         with pytest.raises(AuthError) as exc:
-            password_reset.consume_token(db_session, token="nope", new_password="new-strong-password")
+            password_reset.consume_token(
+                db_session, token="nope", new_password="new-strong-password"
+            )
         assert exc.value.code == "token_invalid"
 
     def test_consumed_token_cannot_replay(self, db_session, make_user):
-        u = make_user()
+        make_user()
         admin = make_user(email="admin@example.com", is_admin=True)
         password_reset.request_reset(db_session, email="alice@example.com")
         req = db_session.execute(select(PasswordResetRequest)).scalar_one()
-        token = password_reset.approve_request(db_session, request_id=req.id, admin_user_id=admin.id)
+        token = password_reset.approve_request(
+            db_session, request_id=req.id, admin_user_id=admin.id
+        )
 
         password_reset.consume_token(db_session, token=token, new_password="new-strong-password")
         with pytest.raises(AuthError):
-            password_reset.consume_token(db_session, token=token, new_password="other-strong-password")
+            password_reset.consume_token(
+                db_session, token=token, new_password="other-strong-password"
+            )
 
 
 class TestAdminDirectReset:

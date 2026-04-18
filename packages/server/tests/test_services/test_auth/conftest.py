@@ -1,10 +1,10 @@
 """Shared fixtures for services.auth tests."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from openlia_server.db.models.auth import User
 from openlia_server.services.auth import passwords
 
@@ -24,8 +24,8 @@ def make_user(db_session):
             password_hash=passwords.hash_password(password) if password else None,
             is_admin=is_admin,
             is_disabled=is_disabled,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         db_session.add(user)
         db_session.commit()

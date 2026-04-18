@@ -4,13 +4,13 @@ Key sources, in priority order:
 1. OPENLIA_SECRET_KEY env var (base64-encoded 32 bytes).
 2. ~/.openlia/secret.key (0600 permissions, auto-generated on first run).
 """
+
 from __future__ import annotations
 
 import base64
 import os
 import secrets
 import stat
-from pathlib import Path
 from typing import Final
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -56,13 +56,9 @@ def _decode_env_key(b64: str) -> bytes:
     try:
         raw = base64.b64decode(b64, validate=True)
     except (ValueError, base64.binascii.Error) as exc:
-        raise SecretKeyError(
-            "OPENLIA_SECRET_KEY is not valid base64"
-        ) from exc
+        raise SecretKeyError("OPENLIA_SECRET_KEY is not valid base64") from exc
     if len(raw) != KEY_LENGTH_BYTES:
-        raise SecretKeyError(
-            f"OPENLIA_SECRET_KEY must decode to exactly {KEY_LENGTH_BYTES} bytes"
-        )
+        raise SecretKeyError(f"OPENLIA_SECRET_KEY must decode to exactly {KEY_LENGTH_BYTES} bytes")
     return raw
 
 
@@ -71,9 +67,7 @@ def _load_or_create_file_key() -> bytes:
     if key_path.exists():
         mode = stat.S_IMODE(key_path.stat().st_mode)
         if mode != KEY_FILE_MODE:
-            raise SecretKeyError(
-                f"{key_path} must have 0600 permissions, found {oct(mode)}"
-            )
+            raise SecretKeyError(f"{key_path} must have 0600 permissions, found {oct(mode)}")
         raw = base64.b64decode(key_path.read_bytes(), validate=True)
         if len(raw) != KEY_LENGTH_BYTES:
             raise SecretKeyError(f"{key_path} does not contain a 32-byte key")
@@ -111,9 +105,7 @@ def decrypt_for_row(row_id: str, token: str) -> str:
         raise DecryptError("ciphertext too short")
     nonce, ct_with_tag = raw[:NONCE_LENGTH_BYTES], raw[NONCE_LENGTH_BYTES:]
     try:
-        plaintext = AESGCM(load_secret_key()).decrypt(
-            nonce, ct_with_tag, row_id.encode("utf-8")
-        )
+        plaintext = AESGCM(load_secret_key()).decrypt(nonce, ct_with_tag, row_id.encode("utf-8"))
     except Exception as exc:
         raise DecryptError("authenticated decryption failed") from exc
     return plaintext.decode("utf-8")

@@ -1,13 +1,11 @@
 """Tests for db.crypto — AES-256-GCM key loading and column encryption."""
+
 from __future__ import annotations
 
 import base64
-import os
 import stat
-from pathlib import Path
 
 import pytest
-
 from openlia_server.db import crypto
 
 
@@ -75,6 +73,7 @@ class TestEncryptDecrypt:
     @pytest.fixture
     def setup_key(self, tmp_path, monkeypatch):
         import base64
+
         raw = b"\x09" * 32
         monkeypatch.setenv("OPENLIA_SECRET_KEY", base64.b64encode(raw).decode())
         monkeypatch.setenv("OPENLIA_HOME", str(tmp_path))
@@ -88,6 +87,7 @@ class TestEncryptDecrypt:
 
     def test_ciphertext_is_base64(self, setup_key):
         import base64
+
         ciphertext = crypto.encrypt_for_row("id-1", "secret")
         raw = base64.b64decode(ciphertext, validate=True)
         assert len(raw) >= 12 + 16
@@ -104,6 +104,7 @@ class TestEncryptDecrypt:
 
     def test_tampered_ciphertext_rejected(self, setup_key):
         import base64
+
         ciphertext = crypto.encrypt_for_row("id-1", "hello")
         raw = bytearray(base64.b64decode(ciphertext))
         raw[-1] ^= 0x01

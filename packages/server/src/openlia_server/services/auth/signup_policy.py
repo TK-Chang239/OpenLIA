@@ -1,7 +1,8 @@
 """Singleton signup policy row + enforcement helpers."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from sqlalchemy import select
@@ -31,7 +32,7 @@ def seed_signup_policy(db: DBSession, *, mode_flag: Literal["personal", "company
             id=1,
             mode=policy_mode,
             allowed_email_domains=[],
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
     )
     db.commit()
@@ -51,9 +52,7 @@ def check_email_allowed(db: DBSession, email: str) -> None:
         return
     _, _, domain = email.partition("@")
     if domain.lower() not in {d.lower() for d in domains}:
-        raise EmailDomainNotAllowedError(
-            f"Email domain '{domain}' is not in the allowlist."
-        )
+        raise EmailDomainNotAllowedError(f"Email domain '{domain}' is not in the allowlist.")
 
 
 def assert_registration_open(db: DBSession) -> None:

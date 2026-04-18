@@ -1,10 +1,10 @@
 """Tests for services.auth.events.log_auth_event."""
-from __future__ import annotations
 
-from sqlalchemy import select
+from __future__ import annotations
 
 from openlia_server.db.models.auth import AuthEvent
 from openlia_server.services.auth import events
+from sqlalchemy import select
 
 
 def test_log_basic_event(db_session, make_user):

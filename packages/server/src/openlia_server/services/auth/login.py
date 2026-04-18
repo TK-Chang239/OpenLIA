@@ -1,8 +1,9 @@
 """Login + lockout state machine."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
@@ -73,8 +74,9 @@ def authenticate(
         raise AccountDisabledError("Account is disabled. Contact your administrator.")
 
     lockout_enabled = _lockout_enabled(db)
-    if lockout_enabled and user.locked_until is not None and user.locked_until > datetime.now(timezone.utc):
-        retry = int((user.locked_until - datetime.now(timezone.utc)).total_seconds())
+    now = datetime.now(UTC)
+    if lockout_enabled and user.locked_until is not None and user.locked_until > now:
+        retry = int((user.locked_until - datetime.now(UTC)).total_seconds())
         events.log_auth_event(
             db,
             event_type="login_failure",
@@ -89,7 +91,7 @@ def authenticate(
         if lockout_enabled:
             user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
             if user.failed_login_attempts >= LOCKOUT_THRESHOLD:
-                user.locked_until = datetime.now(timezone.utc) + LOCKOUT_DURATION
+                user.locked_until = datetime.now(UTC) + LOCKOUT_DURATION
                 events.log_auth_event(
                     db,
                     event_type="account_locked",
@@ -110,7 +112,7 @@ def authenticate(
 
     user.failed_login_attempts = 0
     user.locked_until = None
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     db.commit()
 
     events.log_auth_event(

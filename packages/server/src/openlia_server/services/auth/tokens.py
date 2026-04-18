@@ -1,4 +1,5 @@
 """Opaque random tokens for sessions, invites, and password-reset links."""
+
 from __future__ import annotations
 
 import hashlib

@@ -65,5 +65,3 @@ def _register_sqlite_pragmas(engine: Engine) -> None:
             cursor.execute("PRAGMA busy_timeout=5000")
         finally:
             cursor.close()
-
-
