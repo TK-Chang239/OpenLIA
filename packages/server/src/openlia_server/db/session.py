@@ -13,12 +13,11 @@ def configure_engine(url: str, *, echo: bool = False) -> Engine:
     if _engine is not None:
         _engine.dispose()
 
-    _engine = create_engine(
-        url,
-        echo=echo,
-        future=True,
-        connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
-    )
+    connect_args: dict = {}
+    if url.startswith("sqlite"):
+        connect_args = {"check_same_thread": False}
+
+    _engine = create_engine(url, echo=echo, future=True, connect_args=connect_args)
     _register_sqlite_pragmas(_engine)
     _SessionFactory = sessionmaker(
         bind=_engine,

@@ -25,7 +25,6 @@ from typing import Any
 from sqlalchemy import (
     JSON,
     Boolean,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -37,7 +36,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openlia_server.db.base import Base, TimestampMixin
+from openlia_server.db.base import Base, TimestampMixin, UTCDateTime
 
 # ---------- Panic Thermometer ----------
 
@@ -112,7 +111,7 @@ class MrDashboardState(Base):
     view_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     threshold_overrides: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
@@ -135,8 +134,8 @@ class MrAssessmentCache(Base):
     result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    generated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (
         UniqueConstraint(
@@ -168,7 +167,7 @@ class RsUserConfig(Base):
     filter_presets: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
     refresh_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
@@ -184,7 +183,7 @@ class RsSnapshot(Base):
     ticker: Mapped[str] = mapped_column(String(16), nullable=False)
     snapshot_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     source_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
 
     __table_args__ = (
         Index(

@@ -13,6 +13,9 @@ OPENLIA_DIR_NAME = ".openlia"
 
 
 def openlia_home() -> Path:
+    env_home = os.environ.get("OPENLIA_HOME")
+    if env_home:
+        return Path(env_home)
     return Path(os.path.expanduser("~")) / OPENLIA_DIR_NAME
 
 
@@ -54,6 +57,7 @@ def bootstrap() -> None:
     3. Run Alembic upgrade head (no-op if already at head).
     4. Seed the synthetic local user (idempotent).
     5. Seed config_store with wizard.completed=false and system.instance_id (idempotent).
+    6. Seed signup_policy singleton (idempotent).
     """
     from openlia_server.db import session as _session_mod
 
@@ -65,6 +69,7 @@ def bootstrap() -> None:
     _run_alembic_upgrade(url)
     _seed_local_user()
     _seed_config_store()
+    _seed_signup_policy()
 
 
 def _run_alembic_upgrade(url: str) -> None:
@@ -97,6 +102,17 @@ def _seed_local_user() -> None:
             )
         )
         s.commit()
+
+
+def _seed_signup_policy() -> None:
+    import os as _os
+
+    from openlia_server.db import session as _session_mod
+    from openlia_server.services.auth import signup_policy as sp
+
+    mode_flag = "company" if _os.environ.get("OPENLIA_MODE") == "company" else "personal"
+    with _session_mod.SessionLocal() as session:
+        sp.seed_signup_policy(session, mode_flag=mode_flag)
 
 
 def _seed_config_store() -> None:
