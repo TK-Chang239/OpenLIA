@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, inspect
 REPO_ROOT_SERVER = Path(__file__).resolve().parents[2]  # packages/server
 
 EXPECTED_TABLES = {
+    # --- Plan 1A baseline (22 tables) ---
     # Auth (6)
     "users",
     "sessions",
@@ -36,6 +37,20 @@ EXPECTED_TABLES = {
     # Infrastructure (2)
     "wizard_state",
     "config_store",
+    # --- Plan 1B additions (11 tables) ---
+    # Dashboard (7)
+    "pt_user_configs",
+    "pt_presets",
+    "mr_dashboard_state",
+    "mr_assessment_cache",
+    "rs_user_config",
+    "rs_snapshots",
+    "fe_saved_formulas",
+    # Scheduler + notifications (4)
+    "mb_schedules",
+    "eu_schedules",
+    "job_runs",
+    "user_notifications",
 }
 
 
