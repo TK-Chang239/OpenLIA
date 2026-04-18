@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.exceptions import (
     AuthError,
     ProviderOutageError,
@@ -52,9 +51,7 @@ async def test_retries_outage_then_gives_up() -> None:
 
 
 async def test_rate_limit_respects_retry_after() -> None:
-    impl, calls = await _factory(
-        [RateLimitError("429", retry_after_seconds=0), "ok"]
-    )
+    impl, calls = await _factory([RateLimitError("429", retry_after_seconds=0), "ok"])
     result = await with_retries(impl, max_attempts=3, base_delay_s=0)
     assert result == "ok"
     assert calls["n"] == 2

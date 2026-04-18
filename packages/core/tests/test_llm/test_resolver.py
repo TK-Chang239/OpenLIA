@@ -3,16 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
 from openlia.llm.exceptions import TierNotConfiguredError
 from openlia.llm.resolver import (
-    ModelRegistry,
     ResolvedModelRow,
     resolve,
     resolve_tier,
 )
 from openlia.llm.types import (
-    Capabilities,
     ModelTier,
     ProviderCredentials,
     ResolvedModel,
@@ -29,9 +26,7 @@ class _FakeRegistry:
     def get_department_tier_override(self, department_id: str) -> ModelTier | None:
         return self.dept_tier_override
 
-    def get_user_preference(
-        self, user_id: str, tier: ModelTier
-    ) -> ResolvedModelRow | None:
+    def get_user_preference(self, user_id: str, tier: ModelTier) -> ResolvedModelRow | None:
         if not self.user_pref:
             return None
         return self.user_pref.get((user_id, tier))

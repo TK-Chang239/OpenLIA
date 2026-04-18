@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from openlia.llm.capabilities import capabilities_for
-from openlia.llm.types import Capabilities
 
 
 def test_unknown_provider_returns_sane_default() -> None:
@@ -40,9 +39,7 @@ def test_gemini_3_1_matches() -> None:
 
 
 def test_openrouter_inherits_upstream() -> None:
-    caps = capabilities_for(
-        provider_kind="openrouter", model="anthropic/claude-sonnet-4-6"
-    )
+    caps = capabilities_for(provider_kind="openrouter", model="anthropic/claude-sonnet-4-6")
     assert caps.tool_calling is True
 
 
@@ -66,9 +63,7 @@ def test_openai_compat_defaults_to_generic_modern() -> None:
 
 def test_override_applies() -> None:
     override = {"tool_calling": False, "max_context_tokens": 16000}
-    caps = capabilities_for(
-        provider_kind="anthropic", model="claude-opus-4-6", override=override
-    )
+    caps = capabilities_for(provider_kind="anthropic", model="claude-opus-4-6", override=override)
     assert caps.tool_calling is False
     assert caps.max_context_tokens == 16000
     assert caps.structured_output is True

@@ -46,9 +46,7 @@ class OpenAICompatAdapter(LLMProvider):
         capabilities: Capabilities,
     ) -> None:
         if not credentials.base_url:
-            raise CapabilityError(
-                "OpenAICompatAdapter requires a base_url in credentials"
-            )
+            raise CapabilityError("OpenAICompatAdapter requires a base_url in credentials")
         super().__init__(credentials=credentials, model=model, capabilities=capabilities)
 
     def _headers(self) -> dict[str, str]:

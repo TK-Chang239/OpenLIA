@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.adapters import ADAPTERS, build_adapter
 from openlia.llm.adapters.anthropic import AnthropicAdapter
 from openlia.llm.adapters.gemini import GeminiAdapter

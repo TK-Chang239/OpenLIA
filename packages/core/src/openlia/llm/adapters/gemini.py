@@ -63,8 +63,7 @@ class GeminiAdapter(LLMProvider):
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload: dict = {
             "contents": [
-                {"role": _role(m.role), "parts": [{"text": m.content}]}
-                for m in request.messages
+                {"role": _role(m.role), "parts": [{"text": m.content}]} for m in request.messages
             ],
             "generationConfig": {
                 "maxOutputTokens": request.max_tokens,
