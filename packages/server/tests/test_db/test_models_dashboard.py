@@ -425,6 +425,7 @@ def test_dashboard_and_scheduler_registered_via_models_init() -> None:
     dashboard + scheduler table on Base.metadata. Alembic's env.py relies
     on this — it imports the package, not each submodule."""
     import importlib
+
     import openlia_server.db.models as models_pkg
 
     importlib.reload(models_pkg)
@@ -434,12 +435,18 @@ def test_dashboard_and_scheduler_registered_via_models_init() -> None:
     registered = set(Base.metadata.tables.keys())
     required = {
         # Dashboard
-        "pt_user_configs", "pt_presets",
-        "mr_dashboard_state", "mr_assessment_cache",
-        "rs_user_config", "rs_snapshots",
+        "pt_user_configs",
+        "pt_presets",
+        "mr_dashboard_state",
+        "mr_assessment_cache",
+        "rs_user_config",
+        "rs_snapshots",
         "fe_saved_formulas",
         # Scheduler + notifications
-        "mb_schedules", "eu_schedules", "job_runs", "user_notifications",
+        "mb_schedules",
+        "eu_schedules",
+        "job_runs",
+        "user_notifications",
     }
     missing = required - registered
     assert missing == set(), f"Not registered via models/__init__.py: {missing}"

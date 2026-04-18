@@ -5,9 +5,9 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import openlia_server.db.models  # noqa: F401
 from openlia_server.db import bootstrap
 from openlia_server.db.base import Base
-import openlia_server.db.models  # noqa: F401
 
 config = context.config
 
