@@ -5,30 +5,43 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-import pytest
 from sqlalchemy import create_engine, inspect
-
 
 REPO_ROOT_SERVER = Path(__file__).resolve().parents[2]  # packages/server
 
 EXPECTED_TABLES = {
     # Auth (6)
-    "users", "sessions", "signup_invites", "signup_policy",
-    "password_reset_requests", "auth_events",
+    "users",
+    "sessions",
+    "signup_invites",
+    "signup_policy",
+    "password_reset_requests",
+    "auth_events",
     # Config (6)
-    "llm_providers", "llm_models", "user_llm_preferences",
-    "data_providers", "data_provider_requirement_mapping", "web_search_providers",
+    "llm_providers",
+    "llm_models",
+    "user_llm_preferences",
+    "data_providers",
+    "data_provider_requirement_mapping",
+    "web_search_providers",
     # Content (8)
-    "chat_sessions", "chat_messages", "chat_attachments",
-    "reports", "report_versions",
-    "portfolio_holdings", "watchlists", "watchlist_items",
+    "chat_sessions",
+    "chat_messages",
+    "chat_attachments",
+    "reports",
+    "report_versions",
+    "portfolio_holdings",
+    "watchlists",
+    "watchlist_items",
     # Infrastructure (2)
-    "wizard_state", "config_store",
+    "wizard_state",
+    "config_store",
 }
 
 
 def _run_alembic(args: list[str], db_url: str) -> subprocess.CompletedProcess:
     import os
+
     merged = os.environ.copy()
     merged["OPENLIA_DB_URL"] = db_url
     return subprocess.run(

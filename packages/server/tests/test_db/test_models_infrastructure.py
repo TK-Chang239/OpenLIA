@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def create_tables(engine):
-    from openlia_server.db.base import Base
     import openlia_server.db.models.infrastructure  # noqa: F401
+    from openlia_server.db.base import Base
 
     Base.metadata.create_all(engine)
     yield

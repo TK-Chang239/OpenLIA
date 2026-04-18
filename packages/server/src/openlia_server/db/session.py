@@ -37,11 +37,9 @@ def get_engine() -> Engine:
     return _engine
 
 
-def SessionLocal() -> Session:  # noqa: N802
+def SessionLocal() -> Session:
     if _SessionFactory is None:
-        raise RuntimeError(
-            "Session factory not configured. Call configure_engine(url) first."
-        )
+        raise RuntimeError("Session factory not configured. Call configure_engine(url) first.")
     return _SessionFactory()
 
 
@@ -59,7 +57,7 @@ def _register_sqlite_pragmas(engine: Engine) -> None:
         return
 
     @event.listens_for(engine, "connect")
-    def _set_pragmas(dbapi_connection, _connection_record) -> None:  # noqa: ANN001
+    def _set_pragmas(dbapi_connection, _connection_record) -> None:
         cursor = dbapi_connection.cursor()
         try:
             cursor.execute("PRAGMA journal_mode=WAL")

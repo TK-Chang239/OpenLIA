@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 
 @pytest.fixture
 def create_tables(engine):
-    from openlia_server.db.base import Base
-    import openlia_server.db.models.auth  # noqa: F401
+    import openlia_server.db.models.auth
     import openlia_server.db.models.config  # noqa: F401
+    from openlia_server.db.base import Base
 
     Base.metadata.create_all(engine)
     yield
@@ -24,8 +21,17 @@ def test_llm_providers_columns(create_tables) -> None:
 
     cols = {c.name for c in LLMProvider.__table__.columns}
     assert cols == {
-        "id", "kind", "label", "api_key_encrypted", "env_var_name", "base_url",
-        "extra_config", "is_enabled", "created_at", "updated_at", "created_by_user_id",
+        "id",
+        "kind",
+        "label",
+        "api_key_encrypted",
+        "env_var_name",
+        "base_url",
+        "extra_config",
+        "is_enabled",
+        "created_at",
+        "updated_at",
+        "created_by_user_id",
     }
 
 
@@ -36,11 +42,27 @@ def test_llm_models_tier_default_partial_unique(create_tables, db_session: Sessi
     db_session.add(p)
     db_session.commit()
 
-    db_session.add(LLMModel(id="m1", provider_id="p1", tier="thinking",
-                            model_ref="a", display_name="A", is_tier_default=True))
+    db_session.add(
+        LLMModel(
+            id="m1",
+            provider_id="p1",
+            tier="thinking",
+            model_ref="a",
+            display_name="A",
+            is_tier_default=True,
+        )
+    )
     db_session.commit()
-    db_session.add(LLMModel(id="m2", provider_id="p1", tier="thinking",
-                            model_ref="b", display_name="B", is_tier_default=True))
+    db_session.add(
+        LLMModel(
+            id="m2",
+            provider_id="p1",
+            tier="thinking",
+            model_ref="b",
+            display_name="B",
+            is_tier_default=True,
+        )
+    )
     with pytest.raises(IntegrityError):
         db_session.commit()
 
