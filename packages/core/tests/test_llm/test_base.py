@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.base import LLMProvider
 from openlia.llm.types import Capabilities, ProviderCredentials
 

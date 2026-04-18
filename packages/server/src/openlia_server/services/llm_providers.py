@@ -271,9 +271,7 @@ def get_user_preference(session: Session, user_id: str, tier: str) -> UserLLMPre
 
 def list_user_preferences(session: Session, user_id: str) -> list[UserLLMPreference]:
     return list(
-        session.scalars(
-            select(UserLLMPreference).where(UserLLMPreference.user_id == user_id)
-        ).all()
+        session.scalars(select(UserLLMPreference).where(UserLLMPreference.user_id == user_id)).all()
     )
 
 

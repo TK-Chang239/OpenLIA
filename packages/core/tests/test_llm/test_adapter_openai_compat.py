@@ -3,7 +3,6 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-
 from openlia.llm.adapters.openai_compat import OpenAICompatAdapter
 from openlia.llm.exceptions import CapabilityError, ModelNotFoundError
 from openlia.llm.types import (
@@ -74,12 +73,8 @@ async def test_generate_includes_auth_header() -> None:
         )
 
     with respx.mock() as mock:
-        mock.post("https://deepseek.example.com/v1/chat/completions").mock(
-            side_effect=_capture
-        )
-        await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        mock.post("https://deepseek.example.com/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert captured["headers"]["authorization"] == "Bearer dsk-test"
 
 
@@ -103,12 +98,8 @@ async def test_generate_omits_auth_if_no_key() -> None:
         )
 
     with respx.mock() as mock:
-        mock.post("https://deepseek.example.com/v1/chat/completions").mock(
-            side_effect=_capture
-        )
-        await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        mock.post("https://deepseek.example.com/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert "authorization" not in captured["headers"]
 
 
@@ -119,6 +110,4 @@ async def test_generate_model_not_found() -> None:
             404, json={"error": {"message": "not found"}}
         )
         with pytest.raises(ModelNotFoundError):
-            await adapter.generate(
-                LLMRequest(messages=[Message(role="user", content="hi")])
-            )
+            await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))

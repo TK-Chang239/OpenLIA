@@ -3,7 +3,6 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-
 from openlia.llm.adapters.ollama import OllamaAdapter
 from openlia.llm.exceptions import ModelNotFoundError
 from openlia.llm.types import (
@@ -44,9 +43,7 @@ async def test_generate_uses_chat_endpoint() -> None:
                 "eval_count": 1,
             },
         )
-        resp = await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.text == "hello"
     assert resp.finish_reason == "stop"
     assert resp.input_tokens == 3
@@ -59,6 +56,7 @@ async def test_generate_disables_streaming_on_payload() -> None:
 
     def _capture(request):
         import json
+
         captured["body"] = json.loads(request.read())
         return httpx.Response(
             200,
@@ -72,9 +70,7 @@ async def test_generate_disables_streaming_on_payload() -> None:
 
     with respx.mock() as mock:
         mock.post("http://localhost:11434/api/chat").mock(side_effect=_capture)
-        await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert captured["body"]["stream"] is False
     assert captured["body"]["model"] == "llama3.1:8b"
 
@@ -84,9 +80,7 @@ async def test_generate_model_not_found() -> None:
     with respx.mock() as mock:
         mock.post("http://localhost:11434/api/chat").respond(404, text="model not found")
         with pytest.raises(ModelNotFoundError):
-            await adapter.generate(
-                LLMRequest(messages=[Message(role="user", content="hi")])
-            )
+            await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
 
 
 async def test_test_connection_ok() -> None:

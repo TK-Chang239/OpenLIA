@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia_server.db.models.config import LLMModel, LLMProvider, UserLLMPreference
 from openlia_server.services import llm_providers as svc
 
@@ -72,9 +71,7 @@ def test_get_provider_api_key_falls_back_to_decrypted(_env_secret, db_session) -
     assert key == "sk-db"
 
 
-def test_update_provider_rewrites_encryption_when_api_key_changes(
-    _env_secret, db_session
-) -> None:
+def test_update_provider_rewrites_encryption_when_api_key_changes(_env_secret, db_session) -> None:
     created = svc.create_provider(
         db_session,
         kind="openai",
@@ -164,11 +161,7 @@ def test_set_user_preference_upserts(_env_secret, db_session) -> None:
         is_tier_default=True,
     )
     svc.set_user_preference(db_session, user_id="u-1", tier="everyday", model_id=model.id)
-    row = (
-        db_session.query(UserLLMPreference)
-        .filter_by(user_id="u-1", tier="everyday")
-        .one()
-    )
+    row = db_session.query(UserLLMPreference).filter_by(user_id="u-1", tier="everyday").one()
     assert row.model_id == model.id
     model2 = svc.create_model(
         db_session,
@@ -179,9 +172,7 @@ def test_set_user_preference_upserts(_env_secret, db_session) -> None:
         is_tier_default=False,
     )
     svc.set_user_preference(db_session, user_id="u-1", tier="everyday", model_id=model2.id)
-    rows = (
-        db_session.query(UserLLMPreference).filter_by(user_id="u-1", tier="everyday").all()
-    )
+    rows = db_session.query(UserLLMPreference).filter_by(user_id="u-1", tier="everyday").all()
     assert len(rows) == 1
     assert rows[0].model_id == model2.id
 
@@ -197,13 +188,9 @@ def test_capability_override_roundtrip(_env_secret, db_session) -> None:
         db_session, provider_kind="anthropic", model="claude-opus-4-6"
     )
     assert got == {"tool_calling": False}
-    svc.clear_capability_override(
-        db_session, provider_kind="anthropic", model="claude-opus-4-6"
-    )
+    svc.clear_capability_override(db_session, provider_kind="anthropic", model="claude-opus-4-6")
     assert (
-        svc.get_capability_override(
-            db_session, provider_kind="anthropic", model="claude-opus-4-6"
-        )
+        svc.get_capability_override(db_session, provider_kind="anthropic", model="claude-opus-4-6")
         is None
     )
 

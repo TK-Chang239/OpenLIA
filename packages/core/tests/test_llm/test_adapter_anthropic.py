@@ -3,11 +3,8 @@ from __future__ import annotations
 import json
 
 import httpx
-import pytest
 import respx
-
 from openlia.llm.adapters.anthropic import AnthropicAdapter
-from openlia.llm.exceptions import AuthError
 from openlia.llm.types import (
     Capabilities,
     LLMRequest,
@@ -90,9 +87,7 @@ async def test_generate_includes_api_key_header() -> None:
 
     with respx.mock() as mock:
         mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
-        await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert captured["headers"]["x-api-key"] == "sk-ant"
     assert captured["headers"]["anthropic-version"] == "2023-06-01"
 

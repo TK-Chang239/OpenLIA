@@ -1,11 +1,8 @@
 from __future__ import annotations
 
 import httpx
-import pytest
 import respx
-
 from openlia.llm.adapters.openrouter import OpenRouterAdapter
-from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.types import (
     Capabilities,
     LLMRequest,
@@ -43,9 +40,7 @@ async def test_generate_uses_openai_compat_endpoint() -> None:
                 "usage": {"prompt_tokens": 3, "completion_tokens": 1},
             },
         )
-        resp = await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.text == "ok"
     assert resp.input_tokens == 3
 
@@ -70,12 +65,8 @@ async def test_generate_includes_bearer_token() -> None:
         )
 
     with respx.mock() as mock:
-        mock.post("https://openrouter.ai/api/v1/chat/completions").mock(
-            side_effect=_capture
-        )
-        await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        mock.post("https://openrouter.ai/api/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert captured["headers"]["authorization"] == "Bearer or-test"
 
 

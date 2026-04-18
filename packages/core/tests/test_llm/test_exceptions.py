@@ -1,7 +1,6 @@
 """Typed-exception tests for the LLM provider surface."""
-from __future__ import annotations
 
-import pytest
+from __future__ import annotations
 
 from openlia.llm.exceptions import (
     AuthError,

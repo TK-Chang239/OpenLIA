@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.resolver import resolve
 from openlia.llm.types import ModelTier
 from openlia_server.services import llm_providers as svc
@@ -39,9 +38,7 @@ def test_get_user_preference_joins_provider_and_decrypts(
 ) -> None:
     user = make_user(email="u@openlia.local", password="pw-12345678", is_admin=False)
     _, model_id = _seed_openai(db_session)
-    svc.set_user_preference(
-        db_session, user_id=user.id, tier="thinking", model_id=model_id
-    )
+    svc.set_user_preference(db_session, user_id=user.id, tier="thinking", model_id=model_id)
     reg = SQLModelRegistry(db_session)
     row = reg.get_user_preference(user.id, ModelTier.THINKING)
     assert row is not None
@@ -128,9 +125,7 @@ def test_get_any_in_tier_skips_disabled(_env_secret, db_session) -> None:
     assert row.model_id == enabled.id
 
 
-def test_get_department_tier_override_reads_config_store(
-    _env_secret, db_session
-) -> None:
+def test_get_department_tier_override_reads_config_store(_env_secret, db_session) -> None:
     svc.set_department_tier_override(db_session, "equity_research", "quick")
     reg = SQLModelRegistry(db_session)
     assert reg.get_department_tier_override("equity_research") is ModelTier.QUICK
@@ -158,7 +153,5 @@ def test_capability_override_is_applied_via_resolver(_env_secret, db_session) ->
         override={"tool_calling": False},
     )
     reg = SQLModelRegistry(db_session)
-    resolved = resolve(
-        department_id="equity_research", registry=reg, user_id=None
-    )
+    resolved = resolve(department_id="equity_research", registry=reg, user_id=None)
     assert resolved.capabilities.tool_calling is False

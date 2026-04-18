@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import httpx
 import pytest
 import respx
-
 from openlia.llm.adapters.openai import OpenAIAdapter
 from openlia.llm.exceptions import AuthError, ModelNotFoundError, RateLimitError
 from openlia.llm.types import (
@@ -63,9 +61,7 @@ async def test_generate_happy_path() -> None:
                 "usage": {"prompt_tokens": 5, "completion_tokens": 2},
             },
         )
-        resp = await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.text == "hello"
     assert resp.finish_reason == "stop"
     assert resp.input_tokens == 5
@@ -79,9 +75,7 @@ async def test_generate_rate_limit_extracts_retry_after() -> None:
             429, json={"error": {"message": "slow"}}, headers={"retry-after": "9"}
         )
         with pytest.raises(RateLimitError) as excinfo:
-            await adapter.generate(
-                LLMRequest(messages=[Message(role="user", content="hi")])
-            )
+            await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
         assert excinfo.value.retry_after_seconds == 9
 
 
@@ -92,9 +86,7 @@ async def test_generate_model_not_found() -> None:
             404, json={"error": {"message": "model not found"}}
         )
         with pytest.raises(ModelNotFoundError):
-            await adapter.generate(
-                LLMRequest(messages=[Message(role="user", content="hi")])
-            )
+            await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
 
 
 async def test_test_connection_ok() -> None:
@@ -131,7 +123,5 @@ async def test_test_connection_returns_structured_failure_on_auth() -> None:
 async def test_stream_raises_not_implemented() -> None:
     adapter = _adapter()
     with pytest.raises(NotImplementedError):
-        agen = adapter.stream(
-            LLMRequest(messages=[Message(role="user", content="hi")])
-        )
+        agen = adapter.stream(LLMRequest(messages=[Message(role="user", content="hi")]))
         await agen.__anext__()

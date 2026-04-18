@@ -5,7 +5,6 @@ import json
 import httpx
 import pytest
 import respx
-
 from openlia.llm.adapters.gemini import GeminiAdapter
 from openlia.llm.exceptions import AuthError
 from openlia.llm.types import (
@@ -96,9 +95,7 @@ async def test_generate_auth_error() -> None:
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
         ).respond(403, json={"error": {"message": "forbidden"}})
         with pytest.raises(AuthError):
-            await adapter.generate(
-                LLMRequest(messages=[Message(role="user", content="hi")])
-            )
+            await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
 
 
 async def test_test_connection_ok() -> None:
