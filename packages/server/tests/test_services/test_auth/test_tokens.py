@@ -1,4 +1,5 @@
 """Tests for services.auth.tokens — opaque token generation + hashing."""
+
 from __future__ import annotations
 
 from openlia_server.services.auth import tokens

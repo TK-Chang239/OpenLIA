@@ -1,8 +1,9 @@
 """Admin-approved password reset + direct admin reset + self-serve change."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session as DBSession
@@ -40,7 +41,7 @@ def request_reset(db: DBSession, *, email: str, ip_address: str | None = None) -
             id=str(uuid.uuid4()),
             user_id=user.id,
             status="pending",
-            requested_at=datetime.now(timezone.utc),
+            requested_at=datetime.now(UTC),
             requested_ip=ip_address,
         )
     )
@@ -61,10 +62,10 @@ def approve_request(db: DBSession, *, request_id: str, admin_user_id: str) -> st
 
     raw = tokens.generate_opaque_token()
     req.token_hash = tokens.hash_token(raw)
-    req.expires_at = datetime.now(timezone.utc) + APPROVED_TTL
+    req.expires_at = datetime.now(UTC) + APPROVED_TTL
     req.status = "approved"
     req.approved_by_user_id = admin_user_id
-    req.approved_at = datetime.now(timezone.utc)
+    req.approved_at = datetime.now(UTC)
     db.commit()
 
     events.log_auth_event(
@@ -99,7 +100,7 @@ def consume_token(db: DBSession, *, token: str, new_password: str) -> None:
     if req is None or req.status != "approved":
         raise TokenInvalidError("Reset token is invalid.")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if req.expires_at is None or req.expires_at <= now:
         req.status = "expired"
         db.commit()
@@ -138,7 +139,7 @@ def admin_direct_reset(
 
     user.password_hash = passwords.hash_password(new_password)
     user.must_change_password = True
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(UTC)
     db.commit()
     sessions.revoke_all_sessions(db, user_id=user.id)
 
@@ -160,6 +161,6 @@ def change_password(
 
     user.password_hash = passwords.hash_password(new_password)
     user.must_change_password = False
-    user.updated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(UTC)
     db.commit()
     events.log_auth_event(db, event_type="password_changed", user_id=user.id, actor_user_id=user.id)

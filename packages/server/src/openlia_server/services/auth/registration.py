@@ -1,8 +1,9 @@
 """Invite-gated, email/password registration."""
+
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
@@ -54,7 +55,7 @@ def register(
     if existing is not None:
         raise RegistrationFailedError("Registration failed.")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     user = User(
         id=str(uuid.uuid4()),
         email=email_norm,
@@ -78,7 +79,7 @@ def register(
 def _validate_invite(invite: SignupInvite | None) -> None:
     if invite is None:
         raise InviteInvalidError("Invite is invalid.")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if invite.revoked_at is not None:
         raise InviteInvalidError("Invite is invalid.")
     if invite.expires_at is not None and invite.expires_at <= now:

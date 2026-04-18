@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import ClassVar
 
-from sqlalchemy import MetaData, func, types
-from sqlalchemy import DateTime  # kept for TypeDecorator impl
+from sqlalchemy import (
+    DateTime,  # kept for TypeDecorator impl
+    MetaData,
+    func,
+    types,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 NAMING_CONVENTION = {
@@ -30,20 +35,20 @@ class UTCDateTime(types.TypeDecorator):
         if value is None:
             return None
         if value.tzinfo is not None:
-            return value.astimezone(timezone.utc).replace(tzinfo=None)
+            return value.astimezone(UTC).replace(tzinfo=None)
         return value
 
     def process_result_value(self, value: datetime | None, dialect) -> datetime | None:
         if value is None:
             return None
         if value.tzinfo is None:
-            return value.replace(tzinfo=timezone.utc)
+            return value.replace(tzinfo=UTC)
         return value
 
 
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
-    type_annotation_map = {
+    type_annotation_map: ClassVar[dict] = {
         datetime: UTCDateTime(),
     }
 

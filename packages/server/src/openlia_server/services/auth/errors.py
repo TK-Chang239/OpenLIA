@@ -1,4 +1,5 @@
 """Auth-service error hierarchy."""
+
 from __future__ import annotations
 
 

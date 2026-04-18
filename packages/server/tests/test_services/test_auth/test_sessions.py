@@ -1,9 +1,8 @@
 """Tests for services.auth.sessions — create, validate, revoke, prune."""
+
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-import pytest
+from datetime import UTC, datetime, timedelta
 
 from openlia_server.services.auth import sessions
 
@@ -20,19 +19,19 @@ class TestCreateSession:
         )
         assert len(result.raw_token) > 40
         assert result.session.user_id == user.id
-        assert result.session.expires_at > datetime.now(timezone.utc) + timedelta(days=29)
+        assert result.session.expires_at > datetime.now(UTC) + timedelta(days=29)
         assert result.session.revoked_at is None
 
     def test_persistent_sets_30d_ttl(self, db_session, make_user):
         user = make_user()
         r = sessions.create_session(db_session, user_id=user.id, persistent=True)
-        delta = r.session.expires_at - datetime.now(timezone.utc)
+        delta = r.session.expires_at - datetime.now(UTC)
         assert timedelta(days=29, hours=23) <= delta <= timedelta(days=30, hours=1)
 
     def test_non_persistent_sets_12h_ttl(self, db_session, make_user):
         user = make_user()
         r = sessions.create_session(db_session, user_id=user.id, persistent=False)
-        delta = r.session.expires_at - datetime.now(timezone.utc)
+        delta = r.session.expires_at - datetime.now(UTC)
         assert timedelta(hours=11) <= delta <= timedelta(hours=13)
 
     def test_token_hash_is_stored_not_plaintext(self, db_session, make_user):
@@ -62,7 +61,7 @@ class TestValidateSession:
     def test_returns_none_for_expired_session(self, db_session, make_user):
         user = make_user()
         r = sessions.create_session(db_session, user_id=user.id, persistent=False)
-        r.session.expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+        r.session.expires_at = datetime.now(UTC) - timedelta(seconds=1)
         db_session.commit()
         assert sessions.validate_session(db_session, r.raw_token) is None
 
@@ -104,7 +103,7 @@ class TestRevoke:
     def test_prune_expired(self, db_session, make_user):
         user = make_user()
         r = sessions.create_session(db_session, user_id=user.id, persistent=False)
-        r.session.expires_at = datetime.now(timezone.utc) - timedelta(days=10)
+        r.session.expires_at = datetime.now(UTC) - timedelta(days=10)
         db_session.commit()
 
         removed = sessions.prune_expired(db_session, older_than_days=7)

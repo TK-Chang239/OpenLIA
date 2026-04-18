@@ -1,10 +1,10 @@
 """Tests for services.auth.passwords — Argon2id hashing + dummy verify."""
+
 from __future__ import annotations
 
 import time
 
 import pytest
-
 from openlia_server.services.auth import passwords
 
 
