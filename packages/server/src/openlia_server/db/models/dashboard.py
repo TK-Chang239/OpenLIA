@@ -1,0 +1,217 @@
+"""Dashboard and formula-engine tables from database-design.md § 7.
+
+Rows:
+  pt_user_configs, pt_presets — Panic Thermometer.
+  mr_dashboard_state, mr_assessment_cache — Macro Research Dalio dashboards.
+  rs_user_config, rs_snapshots — Retail Sentiment.
+  fe_saved_formulas — shared formula-engine DSL rows.
+
+Notes:
+  - pt_presets.user_id is nullable: NULL rows are shipped library presets.
+  - pt_user_configs.active_preset_id uses SET NULL so deleting a preset
+    demotes the active config to "custom unsaved."
+  - mr_assessment_cache is global (no user_id) — assessments depend on
+    market data + thresholds, not user identity.
+  - rs_snapshots is also global — one row per ticker per refresh cycle.
+  - fe_saved_formulas.expression is stored as Text; Plan 17 (formula engine)
+    validates the DSL at the service layer on write.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
+from sqlalchemy.orm import Mapped, mapped_column
+
+from openlia_server.db.base import Base, TimestampMixin
+
+# ---------- Panic Thermometer ----------
+
+
+class PtUserConfig(Base, TimestampMixin):
+    """Per-user PT dashboard configuration. Replaces window.storage."""
+
+    __tablename__ = "pt_user_configs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    active_preset_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("pt_presets.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    panel_config: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    composite_settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+
+class PtPreset(Base, TimestampMixin):
+    """Named configuration snapshots. Shipped library presets + user-created."""
+
+    __tablename__ = "pt_presets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_shipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    panel_config: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
+    composite_settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_pt_presets_user_name"),
+        # Partial unique over shipped rows: SQLAlchemy lets us declare this as
+        # an Index with `unique=True` + `sqlite_where=` (the migration uses the
+        # same trick). Declaring here so create_all() mirrors the migration.
+        Index(
+            "uq_pt_presets_shipped_name",
+            "name",
+            unique=True,
+            sqlite_where=text("user_id IS NULL"),
+        ),
+    )
+
+
+# ---------- Macro Research ----------
+
+
+class MrDashboardState(Base):
+    """Per-user state for Dalio dashboards. One row per user per dashboard."""
+
+    __tablename__ = "mr_dashboard_state"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
+    view_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    threshold_overrides: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "dashboard", name="uq_mr_dashboard_user_dashboard"),
+    )
+
+
+class MrAssessmentCache(Base):
+    """Cached T4/T5 LLM assessment results. Global, not per-user."""
+
+    __tablename__ = "mr_assessment_cache"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
+    assessment_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "dashboard",
+            "assessment_type",
+            "input_hash",
+            name="uq_mr_assessment_dash_type_hash",
+        ),
+    )
+
+
+# ---------- Retail Sentiment ----------
+
+
+class RsUserConfig(Base):
+    """Per-user Retail Sentiment dashboard configuration."""
+
+    __tablename__ = "rs_user_config"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
+    active_tab: Mapped[str] = mapped_column(String(32), nullable=False, default="overview")
+    metric_settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    filter_presets: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    refresh_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class RsSnapshot(Base):
+    """Point-in-time sentiment metric snapshots. Global, per ticker per cycle."""
+
+    __tablename__ = "rs_snapshots"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
+    snapshot_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    source_breakdown: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index(
+            "ix_rs_snapshots_ticker_captured",
+            "ticker",
+            "captured_at",
+        ),
+    )
+
+
+# ---------- Formula engine ----------
+
+
+class FeSavedFormula(Base, TimestampMixin):
+    """User-created formulas for PT custom panels and MR T1/T2 overrides."""
+
+    __tablename__ = "fe_saved_formulas"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    expression: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    department_scope: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    __table_args__ = (UniqueConstraint("user_id", "name", name="uq_fe_formulas_user_name"),)
