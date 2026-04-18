@@ -10,10 +10,20 @@ from openlia.data.errors import (
     DataSourceError,
     RateLimitError,
 )
+from openlia.data.types import (
+    ProviderCategory,
+    ProviderEntry,
+    ProviderMode,
+    ToolResult,
+)
 
 __all__ = [
     "DataNotAvailable",
     "DataProviderError",
     "DataSourceError",
+    "ProviderCategory",
+    "ProviderEntry",
+    "ProviderMode",
     "RateLimitError",
+    "ToolResult",
 ]
