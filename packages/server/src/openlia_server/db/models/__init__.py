@@ -1,5 +1,9 @@
-"""SQLAlchemy models, grouped by database-design.md category."""
+"""SQLAlchemy models for the server.
 
-from openlia_server.db.models import auth, config, content
+Importing this package registers every model on Base.metadata. Alembic's
+env.py and the bootstrap routine rely on this side effect.
+"""
 
-__all__ = ["auth", "config", "content"]
+from openlia_server.db.models import auth, config, content, infrastructure
+
+__all__ = ["auth", "config", "content", "infrastructure"]
