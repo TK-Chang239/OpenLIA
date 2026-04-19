@@ -12,8 +12,6 @@ from typing import Any, Callable
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
-from sqlalchemy.orm import Session
-
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import (
@@ -35,10 +33,9 @@ from openlia_server.scheduler.settings import SchedulerSettings
 
 log = logging.getLogger(__name__)
 
-_DAY_NAMES = {
-    "mon": "mon", "tue": "tue", "wed": "wed", "thu": "thu",
-    "fri": "fri", "sat": "sat", "sun": "sun",
-}
+_VALID_DAY_NAMES: frozenset[str] = frozenset(
+    {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+)
 
 
 @dataclass
@@ -158,7 +155,7 @@ class SchedulerService:
             try:
                 await self.scheduler.remove_schedule(job_key(jt, user_id))
             except Exception:
-                pass
+                log.debug("remove_schedule failed for %s/%s (may not be registered)", jt, user_id)
 
     # ------------------------------------------------------------
     # Job callback (invoked by APScheduler at trigger time)
@@ -269,7 +266,10 @@ class SchedulerService:
     def _cron_trigger_for(schedule: MbSchedule | EuSchedule) -> CronTrigger:
         hour, minute = [int(p) for p in schedule.time.split(":")]
         days_raw = json.loads(schedule.days_of_week)
-        days = ",".join(_DAY_NAMES[d] for d in days_raw)
+        invalid = set(days_raw) - _VALID_DAY_NAMES
+        if invalid:
+            raise ValueError(f"invalid day names: {invalid!r}")
+        days = ",".join(days_raw)
         return CronTrigger(
             hour=hour,
             minute=minute,
@@ -284,5 +284,8 @@ class SchedulerService:
         """croniter-compatible 5-field string. Used only by should_catch_up."""
         hour, minute = [int(p) for p in schedule.time.split(":")]
         days_raw = json.loads(schedule.days_of_week)
-        days = ",".join(_DAY_NAMES[d] for d in days_raw)
+        invalid = set(days_raw) - _VALID_DAY_NAMES
+        if invalid:
+            raise ValueError(f"invalid day names: {invalid!r}")
+        days = ",".join(days_raw)
         return f"{minute} {hour} * * {days}"
