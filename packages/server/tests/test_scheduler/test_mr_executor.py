@@ -98,7 +98,7 @@ async def test_mr_happy_path_runs_t4_then_t5_and_caches_result(
         assert len(notifs) == 1
         assert notifs[0].type == "assessment_ready"
         assert notifs[0].department == "macro_research"
-        assert "debt_cycle" in notifs[0].message.lower() or "Debt" in notifs[0].message
+        assert "debt_cycle" in notifs[0].message.lower()
 
     assert len(batch_runner.calls) == 1
     call = batch_runner.calls[0]
