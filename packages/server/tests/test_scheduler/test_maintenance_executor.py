@@ -1,0 +1,244 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from _fakes import FakeSleep
+from openlia_server.db.models.auth import PasswordResetRequest, User
+from openlia_server.db.models.auth import Session as AuthSession
+from openlia_server.db.models.dashboard import (
+    MrAssessmentCache,
+    RsSnapshot,
+)
+from openlia_server.db.models.scheduler import JobRun, UserNotification
+from openlia_server.scheduler.executors.maintenance import (
+    MaintenanceExecutor,
+    run_maintenance_once,
+)
+from openlia_server.scheduler.registry import JobStatus, JobType
+from sqlalchemy.orm import Session
+
+
+def _seed(session: Session) -> dict[str, list[str]]:
+    now = datetime.now(UTC)
+
+    user = User(
+        id="u_1",
+        email="u@e.com",
+        display_name="u",
+        password_hash="h",
+        is_admin=False,
+        is_disabled=False,
+    )
+    session.add(user)
+    session.flush()
+
+    s_old = AuthSession(
+        id="s_old",
+        user_id="u_1",
+        token_hash="h_old",
+        created_at=now - timedelta(days=9),
+        last_seen_at=now - timedelta(days=9),
+        expires_at=now - timedelta(days=8),
+    )
+    s_new = AuthSession(
+        id="s_new",
+        user_id="u_1",
+        token_hash="h_new",
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(days=1),
+    )
+    session.add_all([s_old, s_new])
+
+    r_flip = PasswordResetRequest(
+        id="r_flip",
+        user_id="u_1",
+        status="approved",
+        requested_at=now - timedelta(days=2),
+        expires_at=now - timedelta(hours=1),
+    )
+    r_old = PasswordResetRequest(
+        id="r_old",
+        user_id="u_1",
+        status="consumed",
+        requested_at=now - timedelta(days=100),
+        expires_at=now - timedelta(days=99),
+    )
+    r_live = PasswordResetRequest(
+        id="r_live",
+        user_id="u_1",
+        status="pending",
+        requested_at=now,
+        expires_at=now + timedelta(days=1),
+    )
+    session.add_all([r_flip, r_old, r_live])
+
+    c_old = MrAssessmentCache(
+        id="c_old",
+        dashboard="debt_cycle",
+        assessment_type="t4",
+        input_hash="h1",
+        result={},
+        model_ref="m",
+        token_usage=None,
+        generated_at=now - timedelta(days=40),
+        expires_at=now - timedelta(days=31),
+    )
+    c_new = MrAssessmentCache(
+        id="c_new",
+        dashboard="debt_cycle",
+        assessment_type="t4",
+        input_hash="h2",
+        result={},
+        model_ref="m",
+        token_usage=None,
+        generated_at=now - timedelta(days=1),
+        expires_at=now + timedelta(days=6),
+    )
+    session.add_all([c_old, c_new])
+
+    rs_old = RsSnapshot(
+        id="rs_old",
+        ticker="AAPL",
+        snapshot_data={},
+        source_breakdown={},
+        captured_at=now - timedelta(days=100),
+    )
+    rs_new = RsSnapshot(
+        id="rs_new",
+        ticker="AAPL",
+        snapshot_data={},
+        source_breakdown={},
+        captured_at=now - timedelta(days=10),
+    )
+    session.add_all([rs_old, rs_new])
+
+    n_old = UserNotification(
+        id="n_old",
+        user_id="u_1",
+        type="report_ready",
+        department="morning_briefing",
+        message="m",
+        job_run_id=None,
+        created_at=now - timedelta(days=40),
+        read_at=None,
+    )
+    n_new = UserNotification(
+        id="n_new",
+        user_id="u_1",
+        type="report_ready",
+        department="morning_briefing",
+        message="m",
+        job_run_id=None,
+        created_at=now - timedelta(days=1),
+        read_at=None,
+    )
+    session.add_all([n_old, n_new])
+
+    j_old_ok = JobRun(
+        id="j_old_ok",
+        user_id="u_1",
+        job_type="mb_briefing",
+        schedule_id="s",
+        status=JobStatus.COMPLETED.value,
+        started_at=now - timedelta(days=120),
+        completed_at=now - timedelta(days=120),
+        attempt=1,
+    )
+    j_old_cancel = JobRun(
+        id="j_old_cancel",
+        user_id="u_1",
+        job_type="mb_briefing",
+        schedule_id="s",
+        status=JobStatus.CANCELLED.value,
+        started_at=now - timedelta(days=95),
+        completed_at=now - timedelta(days=95),
+        attempt=1,
+    )
+    j_old_failed = JobRun(
+        id="j_old_failed",
+        user_id="u_1",
+        job_type="mb_briefing",
+        schedule_id="s",
+        status=JobStatus.FAILED.value,
+        started_at=now - timedelta(days=200),
+        completed_at=now - timedelta(days=200),
+        error_message="x",
+        attempt=1,
+    )
+    j_new_ok = JobRun(
+        id="j_new_ok",
+        user_id="u_1",
+        job_type="mb_briefing",
+        schedule_id="s",
+        status=JobStatus.COMPLETED.value,
+        started_at=now - timedelta(days=2),
+        completed_at=now - timedelta(days=2),
+        attempt=1,
+    )
+    session.add_all([j_old_ok, j_old_cancel, j_old_failed, j_new_ok])
+
+    session.commit()
+
+    return {
+        "sessions": ["s_new"],
+        "password_reset_requests": ["r_flip", "r_live"],
+        "mr_assessment_cache": ["c_new"],
+        "rs_snapshots": ["rs_new"],
+        "user_notifications": ["n_new"],
+        "job_runs": ["j_old_failed", "j_new_ok"],
+    }
+
+
+def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
+    expected = _seed(db_session)
+
+    summary = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary["sessions_deleted"] == 1
+    assert summary["password_resets_expired"] == 1
+    assert summary["password_resets_deleted"] == 1
+    assert summary["mr_cache_deleted"] == 1
+    assert summary["rs_snapshots_deleted"] == 1
+    assert summary["notifications_deleted"] == 1
+    assert summary["job_runs_deleted"] == 2
+
+    surviving_sessions = {s.id for s in db_session.query(AuthSession).all()}
+    assert surviving_sessions == set(expected["sessions"])
+
+    prrs = {r.id: r.status for r in db_session.query(PasswordResetRequest).all()}
+    assert prrs == {"r_flip": "expired", "r_live": "pending"}
+
+    caches = {c.id for c in db_session.query(MrAssessmentCache).all()}
+    assert caches == set(expected["mr_assessment_cache"])
+
+    snaps = {r.id for r in db_session.query(RsSnapshot).all()}
+    assert snaps == set(expected["rs_snapshots"])
+
+    notifs = {n.id for n in db_session.query(UserNotification).all()}
+    assert notifs == set(expected["user_notifications"])
+
+    runs = {j.id for j in db_session.query(JobRun).all()}
+    assert runs == set(expected["job_runs"])
+
+
+@pytest.mark.asyncio
+async def test_maintenance_executor_writes_completed_job_run(session_factory) -> None:
+    with session_factory() as s:
+        _seed(s)
+
+    ex = MaintenanceExecutor(session_factory=session_factory, sleep=FakeSleep())
+    run_id = await ex.execute(user_id=None, schedule_id=None)
+
+    with session_factory() as s:
+        row = s.get(JobRun, run_id)
+        assert row is not None
+        assert row.status == JobStatus.COMPLETED.value
+        assert row.job_type == JobType.SYSTEM_MAINTENANCE.value
+        import json
+
+        summary = json.loads(row.result_summary)
+        assert summary["sessions_deleted"] == 1
+        assert s.query(UserNotification).filter_by(job_run_id=run_id).count() == 0
