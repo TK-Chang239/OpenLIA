@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
+from typing import Any
 
 import pytest
 from sqlalchemy.orm import Session
@@ -68,7 +70,7 @@ class _ScriptedMultiRunner:
         self._streams = list(streams)
         self.calls: list[dict] = []
 
-    async def run(self, *, department_id, user_id, request, cancel_token=None):
+    async def run(self, *, department_id: str, user_id: str, request: Any, cancel_token: Any = None) -> AsyncGenerator[Any, None]:
         self.calls.append(
             {"department_id": department_id, "user_id": user_id, "request": request}
         )
@@ -135,10 +137,9 @@ async def test_eu_scan_runs_each_target_sequentially_and_notifies_each(
         ]
     )
     store = FakeReportStore()
-    # Return distinct IDs per save.
     saved_ids: list[str] = []
 
-    def _save(*, session, user_id, department, payload):
+    def _save(*, session: Any, user_id: str, department: str, payload: Any) -> str:
         saved_ids.append(f"rep_{len(saved_ids)+1}")
         store.saves.append(
             {
@@ -181,7 +182,6 @@ async def test_eu_scan_runs_each_target_sequentially_and_notifies_each(
             assert n.type == "report_ready"
             assert n.department == "earnings_update"
 
-    # The runner must be called once per target, in order.
     tickers_called = [c["request"].user_input for c in runner.calls]
     assert tickers_called == ["AAPL", "MSFT", "NVDA"]
 
@@ -227,8 +227,6 @@ async def test_eu_mid_scan_transient_error_triggers_retry(
         ),
     ]
 
-    # First attempt: AAPL succeeds, MSFT hits a RateLimitError.
-    # Second attempt: both succeed.
     first_attempt = [
         _ok_events("r_aapl_1", "AAPL"),
         [

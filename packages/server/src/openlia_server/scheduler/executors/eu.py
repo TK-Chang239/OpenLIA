@@ -3,7 +3,7 @@ ticker the planner returns; one notification per completed report."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, ReportError
@@ -31,7 +31,7 @@ class EUScanExecutor(BaseExecutor):
         *,
         session_factory: SessionFactory,
         eu_planner: EUScanPlanner,
-        report_runner,
+        report_runner: Any,
         report_store: ReportStore,
         sleep: AsyncSleep | None = None,
     ) -> None:
@@ -51,7 +51,6 @@ class EUScanExecutor(BaseExecutor):
         assert user_id is not None
         assert schedule_id is not None
 
-        # Read last_run_at + resolve targets in one session.
         with self._session_factory() as session:
             schedule = session.get(EuSchedule, schedule_id)
             since = schedule.last_run_at if schedule is not None else None
@@ -66,7 +65,7 @@ class EUScanExecutor(BaseExecutor):
         notifications: list[NotificationSpec] = []
 
         for target in targets:
-            payload: dict | None = None
+            payload: dict[str, Any] | None = None
             async for event in self._report_runner.run(
                 department_id=DEPARTMENT,
                 user_id=user_id,
@@ -100,7 +99,6 @@ class EUScanExecutor(BaseExecutor):
                 )
             )
 
-        # Update schedule.last_run_at once at the end of a successful scan.
         with self._session_factory() as session:
             schedule = session.get(EuSchedule, schedule_id)
             if schedule is not None:
