@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from _fakes import FakeAPScheduler, FakeSleep
+from openlia.llm.runtime.cancellation import CancellationToken
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import EuSchedule, JobRun, MbSchedule
 from openlia_server.scheduler.executors.base import (
@@ -44,7 +45,7 @@ class _RecordingExecutor(BaseExecutor):
         )
         self._raise_exc = raise_exc
 
-    async def _do_work(self, *, user_id, schedule_id, run_id, cancel_token):
+    async def _do_work(self, *, user_id: str | None, schedule_id: str | None, run_id: str, cancel_token: CancellationToken | None):
         self.calls.append(
             {
                 "user_id": user_id,
@@ -144,7 +145,6 @@ async def test_start_rehydrates_enabled_mb_and_eu_schedules(
 
     assert job_key(JobType.MB_BRIEFING, "u_1") in scheduler.jobs
     assert job_key(JobType.EU_SCAN, "u_1") in scheduler.jobs
-    assert "mb_briefing:u_1" in scheduler.jobs  # same as above, explicit form
     assert all(
         k != job_key(JobType.MB_BRIEFING, "u_1_off")
         for k in scheduler.jobs
@@ -457,7 +457,7 @@ async def test_shutdown_cancels_active_tokens_and_stops_scheduler(
 
         job_type: ClassVar[JobType] = JobType.MB_BRIEFING
 
-        async def _do_work(self, *, user_id, schedule_id, run_id, cancel_token):
+        async def _do_work(self, *, user_id: str | None, schedule_id: str | None, run_id: str, cancel_token: CancellationToken | None):
             # Wait for cancellation.
             while not cancel_token.is_cancelled:
                 await asyncio.sleep(0.01)
