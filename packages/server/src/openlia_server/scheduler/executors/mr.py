@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, ReportError
-from openlia.llm.runtime.messages import BatchResult
+from openlia.llm.runtime.messages import BatchResult, ReportRequest
 from openlia_server.scheduler.executors.base import (
     AsyncSleep,
     BaseExecutor,
@@ -50,7 +50,7 @@ class MRAssessmentExecutor(BaseExecutor):
         self._mr_cache_store = mr_cache_store
         # Cached T4 results — populated on first successful BatchRunner call so
         # transient T5 retries skip re-running T4.
-        self._cached_t4: tuple[list[BatchResult], Any] | None = None  # (results, synth_request)
+        self._cached_t4: tuple[list[BatchResult], ReportRequest] | None = None
 
     async def _do_work(
         self,
@@ -62,7 +62,7 @@ class MRAssessmentExecutor(BaseExecutor):
     ) -> JobOutcome:
         assert user_id is not None
         assert schedule_id is not None
-        dashboard = schedule_id
+        dashboard = schedule_id  # MR jobs are keyed by dashboard name, not a schedule row ID
 
         if self._cached_t4 is not None:
             batch_results, synth_request = self._cached_t4
