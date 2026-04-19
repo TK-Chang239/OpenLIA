@@ -1,0 +1,69 @@
+"""Canonical enums + job-key helpers used throughout the scheduler.
+
+Job keys serve two purposes:
+  1. APScheduler schedule id — uniqueness prevents double-registration.
+  2. max_instances=1 per key enforces the "no overlap for a given
+     user + job type" rule in the spec.
+"""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class JobType(StrEnum):
+    MB_BRIEFING = "mb_briefing"
+    EU_SCAN = "eu_scan"
+    MR_ASSESSMENT = "mr_assessment"
+    SYSTEM_MAINTENANCE = "system_maintenance"
+
+
+class JobStatus(StrEnum):
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class NotificationType(StrEnum):
+    REPORT_READY = "report_ready"
+    ASSESSMENT_READY = "assessment_ready"
+    JOB_FAILED = "job_failed"
+
+
+MAINTENANCE_JOB_KEY = "system_maintenance"
+
+
+_DEPARTMENT_BY_JOB: dict[JobType, str] = {
+    JobType.MB_BRIEFING: "morning_briefing",
+    JobType.EU_SCAN: "earnings_update",
+    JobType.MR_ASSESSMENT: "macro_research",
+}
+
+
+def department_for_job_type(job_type: JobType) -> str:
+    try:
+        return _DEPARTMENT_BY_JOB[job_type]
+    except KeyError as exc:
+        raise ValueError(f"no department mapping for {job_type!r}") from exc
+
+
+def job_key(job_type: JobType, *, user_id: str | None) -> str:
+    if job_type is JobType.SYSTEM_MAINTENANCE:
+        return MAINTENANCE_JOB_KEY
+    if not user_id:
+        raise ValueError(f"user_id required for job_type={job_type.value}")
+    return f"{job_type.value}:{user_id}"
+
+
+def parse_job_key(key: str) -> tuple[JobType, str | None]:
+    if key == MAINTENANCE_JOB_KEY:
+        return (JobType.SYSTEM_MAINTENANCE, None)
+    prefix, _, user_id = key.partition(":")
+    try:
+        job_type = JobType(prefix)
+    except ValueError as exc:
+        raise ValueError(f"unknown job type in key {key!r}") from exc
+    if not user_id:
+        raise ValueError(f"missing user_id in key {key!r}")
+    return (job_type, user_id)
