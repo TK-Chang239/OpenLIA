@@ -36,8 +36,8 @@ def _parse_int(raw: str | None, default: int, name: str) -> int:
 @dataclass(frozen=True)
 class SchedulerSettings:
     enabled: bool
-    misfire_grace_seconds: int
-    shutdown_grace_seconds: int
+    misfire_grace_seconds: int = 21_600
+    shutdown_grace_seconds: int = 30
 
     @classmethod
     def from_env(cls) -> SchedulerSettings:

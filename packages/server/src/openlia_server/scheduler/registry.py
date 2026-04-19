@@ -48,7 +48,7 @@ def department_for_job_type(job_type: JobType) -> str:
         raise ValueError(f"no department mapping for {job_type!r}") from exc
 
 
-def job_key(job_type: JobType, *, user_id: str | None) -> str:
+def job_key(job_type: JobType, user_id: str | None = None) -> str:
     if job_type is JobType.SYSTEM_MAINTENANCE:
         return MAINTENANCE_JOB_KEY
     if not user_id:
