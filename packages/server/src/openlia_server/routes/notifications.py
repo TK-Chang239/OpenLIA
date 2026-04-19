@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from openlia_server.auth.deps import get_current_user
 from openlia_server.db.models.auth import User
@@ -20,7 +20,7 @@ class UnreadOut(BaseModel):
 
 
 class MarkReadIn(BaseModel):
-    department: str
+    department: str = Field(min_length=1)
 
 
 class MarkReadOut(BaseModel):
@@ -54,5 +54,6 @@ def mark_read(
             user_id=user.id,
             department=body.department,
         )
+        # mark_department_read does not commit; callers own transaction boundaries.
         session.commit()
     return MarkReadOut(marked_read=count)
