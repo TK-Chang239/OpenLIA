@@ -31,20 +31,6 @@ class BatchResult:
     error: str | None
 
 
-@dataclass
-class CancellationToken:
-    """Simple cancellation flag. Call cancel() to signal; check cancelled property."""
-
-    _cancelled: bool = field(default=False, init=False)
-
-    def cancel(self) -> None:
-        self._cancelled = True
-
-    @property
-    def cancelled(self) -> bool:
-        return self._cancelled
-
-
 @dataclass(frozen=True)
 class Attachment:
     kind: str
