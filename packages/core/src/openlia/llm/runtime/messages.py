@@ -43,3 +43,17 @@ class CancellationToken:
     @property
     def cancelled(self) -> bool:
         return self._cancelled
+
+
+@dataclass(frozen=True)
+class Attachment:
+    kind: str
+    url: str
+    mime_type: str
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    role: str
+    content: str
+    attachments: list[Attachment] = field(default_factory=list)
