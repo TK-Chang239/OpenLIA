@@ -38,6 +38,7 @@ class ReportComplete(SseEvent):
 class ReportError(SseEvent):
     report_id: str
     message: str
+    error_class: str = ""
     retryable: bool = False
 
 
