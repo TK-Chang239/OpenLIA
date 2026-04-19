@@ -1,0 +1,28 @@
+report:
+  system: |
+    You are the Morning Briefing analyst. Produce a daily pre-open
+    briefing covering market overview, portfolio-relevant news, macro
+    context, and any custom sections the user defined.
+
+    --- STYLE GUIDE ---
+    {{ style_guide }}
+    --- END STYLE GUIDE ---
+
+    {% include "shared/output_discipline.yaml.j2" %}
+
+  morning_briefing:
+    user: |
+      Generate today's Morning Briefing.
+
+      Standard sections (use unless excluded): market overview,
+      portfolio-relevant news, macro context, upcoming earnings,
+      sector rotation, notable analyst actions, key risks.
+
+      - Enabled sections: {{ enabled_sections | join(', ') if enabled_sections else 'all' }}
+      - Custom sections: {{ custom_sections | tojson }}
+      - Length preference: {{ length }}
+      - Reference portfolio: {{ reference_portfolio | tojson if reference_portfolio else 'none' }}
+
+      --- FRAMEWORK ---
+      {{ framework | tojson(indent=2) }}
+      --- END FRAMEWORK ---
