@@ -19,6 +19,8 @@ from openlia_server.db.base import Base
 from openlia_server.db.session import SessionLocal, configure_engine, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
+from openlia_server.routes.jobs import router as jobs_router
+from openlia_server.routes.notifications import router as notifications_router
 from openlia_server.routes.settings import (
     build_data_providers_router,
     build_llm_providers_admin_router,
@@ -168,6 +170,8 @@ def create_app(
 
     app.include_router(build_data_providers_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
+    app.include_router(jobs_router)
+    app.include_router(notifications_router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

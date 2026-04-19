@@ -150,6 +150,29 @@ class SchedulerService:
     ) -> None:
         await self.scheduler.remove_schedule(job_key(job_type, user_id))
 
+    async def run_retry(self, *, run_id: str) -> None:
+        """Fire a one-shot re-run of a prior job_runs row. Looks up the
+        original (job_type, user_id, schedule_id) and schedules a
+        DateTrigger for `now + 1s`."""
+        from openlia_server.db.models.scheduler import JobRun
+
+        with self.session_factory() as session:
+            original = session.get(JobRun, run_id)
+            if original is None:
+                raise LookupError(f"job_run {run_id!r} not found")
+            job_type = JobType(original.job_type)
+            user_id = original.user_id
+            schedule_id = original.schedule_id
+
+        run_time = self.clock() + timedelta(seconds=1)
+        await self.scheduler.add_schedule(
+            self._run_job,
+            DateTrigger(run_time=run_time),
+            id=f"{job_key(job_type, user_id or '')}:retry:{run_id}",
+            args=(job_type, user_id, schedule_id),
+            misfire_grace_time=self.settings.misfire_grace_seconds,
+        )
+
     async def remove_all_for_user(self, user_id: str) -> None:
         for jt in (JobType.MB_BRIEFING, JobType.EU_SCAN, JobType.MR_ASSESSMENT):
             try:

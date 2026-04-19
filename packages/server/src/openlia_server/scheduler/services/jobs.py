@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.scheduler import JobRun
@@ -110,6 +110,28 @@ def list_for_user(
         stmt = stmt.where(JobRun.started_at >= since)
     stmt = stmt.order_by(JobRun.started_at.desc()).offset(offset).limit(limit)
     return list(session.execute(stmt).scalars())
+
+
+def count_for_user(
+    session: Session,
+    *,
+    user_id: str,
+    job_type: JobType | None = None,
+    status: JobStatus | None = None,
+    since: datetime | None = None,
+) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(JobRun)
+        .where(JobRun.user_id == user_id)
+    )
+    if job_type is not None:
+        stmt = stmt.where(JobRun.job_type == job_type.value)
+    if status is not None:
+        stmt = stmt.where(JobRun.status == status.value)
+    if since is not None:
+        stmt = stmt.where(JobRun.started_at >= since)
+    return int(session.execute(stmt).scalar_one())
 
 
 def _require(session: Session, run_id: str) -> JobRun:
