@@ -487,3 +487,43 @@ async def test_shutdown_cancels_active_tokens_and_stops_scheduler(
     # Let the job task unwind.
     with pytest.raises(asyncio.CancelledError):
         await task
+
+
+@pytest.mark.asyncio
+async def test_run_retry_fires_original_schedule_as_one_shot(
+    session_factory,
+) -> None:
+    from apscheduler.triggers.date import DateTrigger
+    from openlia_server.db.models.scheduler import JobRun
+
+    with session_factory() as s:
+        _seed_user(s)
+        s.add(_mb_schedule())
+        s.add(
+            JobRun(
+                id="run_failed",
+                job_type=JobType.MB_BRIEFING.value,
+                user_id="u_1",
+                schedule_id="sch_mb",
+                attempt=3,
+                status=JobStatus.FAILED.value,
+                started_at=datetime.now(timezone.utc) - timedelta(hours=2),
+                completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                error_message="429",
+            )
+        )
+        s.commit()
+
+    scheduler = FakeAPScheduler()
+    svc = SchedulerService(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        settings=SchedulerSettings(enabled=True),
+    )
+    await svc.start()
+
+    await svc.run_retry(run_id="run_failed")
+
+    retry_key = f"{job_key(JobType.MB_BRIEFING, 'u_1')}:retry:run_failed"
+    assert retry_key in scheduler.jobs
+    assert isinstance(scheduler.jobs[retry_key].trigger, DateTrigger)
