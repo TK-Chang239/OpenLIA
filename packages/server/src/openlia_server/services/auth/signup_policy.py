@@ -59,5 +59,3 @@ def assert_registration_open(db: DBSession) -> None:
     policy = get_policy(db)
     if policy.mode == "closed":
         raise SignupClosedError("Registration is closed.")
-    if policy.mode == "open":
-        raise SignupClosedError("Open mode is not supported in v1.", code="signup_closed")

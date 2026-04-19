@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from openlia.llm.resolver import ModelRegistry, ResolvedModelRow
+from openlia.llm.resolver import ResolvedModelRow
 from openlia.llm.types import ModelTier, ProviderCredentials
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,7 +9,7 @@ from openlia_server.db.models.config import LLMModel, LLMProvider
 from openlia_server.services import llm_providers as svc
 
 
-class SQLModelRegistry(ModelRegistry):
+class SQLModelRegistry:
     def __init__(self, db: Session) -> None:
         self._db = db
 

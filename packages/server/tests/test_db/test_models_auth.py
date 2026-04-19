@@ -92,8 +92,8 @@ def test_auth_events_user_id_set_null_on_user_delete(create_tables, db_session: 
 def test_signup_invites_token_unique(create_tables, db_session: Session) -> None:
     from openlia_server.db.models.auth import SignupInvite
 
-    db_session.add(SignupInvite(id="i1", token="tok-a"))
-    db_session.add(SignupInvite(id="i2", token="tok-a"))
+    db_session.add(SignupInvite(id="i1", token_hash="tok-a"))
+    db_session.add(SignupInvite(id="i2", token_hash="tok-a"))
     with pytest.raises(IntegrityError):
         db_session.commit()
 

@@ -42,7 +42,8 @@ class EODHDAdapter(ProviderAdapter):
 
     def __init__(self, entry: ProviderEntry) -> None:
         super().__init__(entry)
-        assert entry.base_url is not None
+        if entry.base_url is None:
+            raise ValueError("EODHDAdapter requires entry.base_url")
         self._base_url = entry.base_url.rstrip("/")
 
     async def fetch(

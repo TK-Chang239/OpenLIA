@@ -502,16 +502,16 @@ Pure data types only. No network, no SQLAlchemy, no FastAPI.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 
-class ModelTier(str, Enum):
+class ModelTier(StrEnum):
     THINKING = "thinking"
     EVERYDAY = "everyday"
     QUICK = "quick"
 
 
-class Capability(str, Enum):
+class Capability(StrEnum):
     STREAMING = "streaming"
     TOOL_CALLING = "tool_calling"
     STRUCTURED_OUTPUT = "structured_output"

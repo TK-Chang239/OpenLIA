@@ -22,6 +22,20 @@
 
 ---
 
+## Implementation divergence (post-merge)
+
+The shipped code has evolved past the pristine Phase 0 skeleton. Differences preserved for later phases:
+
+- `packages/server/src/openlia_server/app.py` — imports `db.session` + `routes.{admin,auth,settings}` and registers the data-provider, LLM admin, auth, and admin routers. Added by Phases 1A/2/3/4.
+- `packages/server/src/openlia_server/cli.py` — imports `db.bootstrap` and runs it before `uvicorn.run`. Added by Phase 1A.
+- `packages/server/pyproject.toml` — gained `sqlalchemy`, `alembic`, `argon2-cffi`, `cryptography`, `email-validator` (Phases 1A/2).
+- `packages/core/pyproject.toml` — gained `httpx>=0.28.1` (used by LLM/data adapters, Phases 3/4) and `pyyaml>=6.0` (prompt templates). Neither imports FastAPI; the core↔server layering rule still holds.
+- Root `pyproject.toml` dev deps — `pytest-asyncio`, `respx` (async/HTTP mock tooling for adapter tests).
+
+These are not regressions. The Phase 0 code blocks in this plan describe the original scaffolding state; current files are the accumulated baseline.
+
+---
+
 ## File Structure
 
 Files created in this plan:

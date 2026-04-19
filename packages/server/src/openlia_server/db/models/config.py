@@ -91,9 +91,12 @@ class DataProvider(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     env_var_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mcp_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     extra_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_user_id: Mapped[str | None] = mapped_column(

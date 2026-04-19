@@ -72,6 +72,8 @@ def create_provider(
         id=new_id,
         kind=kind,
         label=label,
+        category=category.value,
+        mode=mode.value,
         api_key_encrypted=(
             encrypt_for_row(row_id=new_id, plaintext=api_key) if api_key is not None else None
         ),
@@ -82,8 +84,6 @@ def create_provider(
         created_by_user_id=created_by_user_id,
     )
     session.add(row)
-    del category
-    del mode
     session.flush()
     return ProviderCreated(id=new_id)
 
@@ -149,18 +149,15 @@ def _row_to_entry(row: DataProvider, *, priority: int) -> ProviderEntry:
     elif row.api_key_encrypted:
         api_key = decrypt_for_row(row_id=row.id, token=row.api_key_encrypted)
 
-    adapter_cls = ADAPTERS.get(row.kind)
-    category = adapter_cls.category if adapter_cls is not None else ProviderCategory.FINANCIAL
-    mode = ProviderMode.API_KEY if row.base_url else ProviderMode.MCP
     return ProviderEntry(
         id=row.id,
         kind=row.kind,
         label=row.label,
-        category=category,
-        mode=mode,
+        category=ProviderCategory(row.category),
+        mode=ProviderMode(row.mode),
         api_key=api_key,
         base_url=row.base_url,
-        mcp_url=None,
+        mcp_url=row.mcp_url,
         extra_config=row.extra_config or {},
         is_enabled=row.is_enabled,
         priority=priority,

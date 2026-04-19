@@ -600,7 +600,13 @@ def build_llm_providers_admin_router(
     @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_model(model_id: str, _=require_admin) -> None:
         db = db_session_factory()
-        llm_svc.delete_model(db, model_id)
+        try:
+            llm_svc.delete_model(db, model_id)
+        except llm_svc.ModelNotFoundInDBError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"error": "model not found"},
+            ) from exc
 
     @router.post("/department/{department_id}")
     def set_department_tier(

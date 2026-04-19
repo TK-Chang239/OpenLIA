@@ -28,7 +28,7 @@ async def with_retries[T](
 
             schedule = _BACKOFFS[min(attempt - 1, len(_BACKOFFS) - 1)] * base_delay_s
             if isinstance(exc, RateLimitError) and exc.retry_after_seconds is not None:
-                schedule = max(schedule, float(exc.retry_after_seconds) * base_delay_s)
+                schedule = max(schedule, float(exc.retry_after_seconds))
             if base_delay_s > 0:
                 jitter = schedule * random.uniform(-0.2, 0.2)
                 await asyncio.sleep(max(0.0, schedule + jitter))

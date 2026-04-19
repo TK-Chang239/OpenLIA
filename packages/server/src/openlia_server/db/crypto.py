@@ -74,8 +74,10 @@ def _load_or_create_file_key() -> bytes:
         return raw
 
     raw = secrets.token_bytes(KEY_LENGTH_BYTES)
-    key_path.write_bytes(base64.b64encode(raw))
-    key_path.chmod(KEY_FILE_MODE)
+    tmp_path = key_path.with_suffix(key_path.suffix + ".tmp")
+    tmp_path.write_bytes(base64.b64encode(raw))
+    tmp_path.chmod(KEY_FILE_MODE)
+    os.replace(tmp_path, key_path)
     return raw
 
 

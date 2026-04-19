@@ -28,7 +28,7 @@ def create_app(
 ) -> FastAPI:
     factory = db_session_factory or _default_session_factory
     mode = os.environ.get("OPENLIA_MODE", "personal").lower()
-    app = FastAPI(title="OpenLIA", version="0.0.0")
+    app = FastAPI(title="OpenLIA", version="0.1.0")
 
     if mode == "company":
         app.include_router(build_auth_router(db_session_factory=factory))

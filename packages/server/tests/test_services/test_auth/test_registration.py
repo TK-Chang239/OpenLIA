@@ -12,15 +12,18 @@ from openlia_server.services.auth.errors import AuthError
 
 @pytest.fixture
 def make_invite(db_session):
+    from openlia_server.services.auth import tokens
+
     def _make(token: str = "invite-tok", **kwargs) -> SignupInvite:
         row = SignupInvite(
             id=f"inv-{token}",
-            token=token,
+            token_hash=tokens.hash_token(token),
             created_at=datetime.now(UTC),
             **kwargs,
         )
         db_session.add(row)
         db_session.commit()
+        row.token = token  # expose raw token for test assertions
         return row
 
     return _make

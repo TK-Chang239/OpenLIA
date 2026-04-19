@@ -28,7 +28,7 @@ class UTCDateTime(types.TypeDecorator):
     comparisons uniformly.
     """
 
-    impl = DateTime
+    impl = DateTime(timezone=True)
     cache_ok = True
 
     def process_bind_param(self, value: datetime | None, dialect) -> datetime | None:
