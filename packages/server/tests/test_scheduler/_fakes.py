@@ -229,3 +229,64 @@ def make_chat_message(text: str = "hi") -> ChatMessage:
 
 def make_attachment() -> Attachment:
     return Attachment(kind="image", url="u", mime_type="image/png")
+
+
+# ------------------------------------------------------------------
+# FakeAPScheduler — stand-in for APScheduler AsyncScheduler in tests
+# ------------------------------------------------------------------
+
+
+@dataclass
+class _ScheduledJob:
+    id: str
+    func: Any  # Callable
+    trigger: Any
+    args: tuple
+    kwargs: dict
+    misfire_grace_time: float | None
+
+
+@dataclass
+class FakeAPScheduler:
+    started: bool = False
+    stopped: bool = False
+    jobs: dict[str, _ScheduledJob] = field(default_factory=dict)
+
+    def start_in_background(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+    async def add_schedule(
+        self,
+        func,
+        trigger,
+        *,
+        id: str,
+        args: tuple = (),
+        kwargs: dict | None = None,
+        misfire_grace_time: float | None = None,
+    ) -> str:
+        if id in self.jobs:
+            raise ValueError(f"duplicate schedule id: {id}")
+        self.jobs[id] = _ScheduledJob(
+            id=id,
+            func=func,
+            trigger=trigger,
+            args=args,
+            kwargs=kwargs or {},
+            misfire_grace_time=misfire_grace_time,
+        )
+        return id
+
+    async def remove_schedule(self, id: str) -> None:
+        self.jobs.pop(id, None)
+
+    async def get_schedules(self) -> list[_ScheduledJob]:
+        return list(self.jobs.values())
+
+    async def fire(self, id: str) -> Any:
+        """Test helper: run a scheduled job's callback synchronously."""
+        job = self.jobs[id]
+        return await job.func(*job.args, **job.kwargs)
