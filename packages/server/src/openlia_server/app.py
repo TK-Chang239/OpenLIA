@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
 import os
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
@@ -24,6 +26,8 @@ from openlia_server.routes.settings import (
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+
+log = logging.getLogger(__name__)
 
 
 class _SchedulerAdapter:
@@ -63,8 +67,10 @@ class _SchedulerAdapter:
             self._bg_task.cancel()
             try:
                 await self._bg_task
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError:
                 pass
+            except Exception:
+                log.debug("error during scheduler teardown (ignored)", exc_info=True)
 
     async def add_schedule(self, *args: Any, **kwargs: Any) -> Any:
         return await self._sched.add_schedule(*args, **kwargs)
@@ -83,12 +89,9 @@ def _default_session_factory() -> DBSession:
 
 def _make_lifespan(
     db_session_factory: Callable[[], DBSession] | None,
-) -> Callable:
+) -> Callable[[FastAPI], AsyncGenerator[None, None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        # ------------------------------------------------------------------
-        # Database — ensure the engine is configured for the lifespan.
-        # ------------------------------------------------------------------
         db_url = os.environ.get("OPENLIA_DATABASE_URL")
         if db_url:
             engine = configure_engine(db_url)
@@ -97,9 +100,6 @@ def _make_lifespan(
             if engine.url.drivername == "sqlite":
                 Base.metadata.create_all(engine)
 
-        # ------------------------------------------------------------------
-        # Scheduler
-        # ------------------------------------------------------------------
         scheduler_settings = SchedulerSettings.from_env()
         scheduler_svc: SchedulerService | None = None
 
@@ -115,8 +115,6 @@ def _make_lifespan(
                     expire_on_commit=False,
                 )
             else:
-                import contextlib
-
                 _sf = db_session_factory or _default_session_factory
 
                 @contextlib.contextmanager
@@ -172,11 +170,11 @@ def create_app(
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
-    def healthz():
+    def healthz() -> dict[str, str]:
         return {"status": "ok", "mode": mode}
 
     @app.get("/health")
-    def health():
+    def health() -> dict[str, str]:
         return {"status": "ok"}
 
     return app
