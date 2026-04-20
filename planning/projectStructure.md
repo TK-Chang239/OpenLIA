@@ -207,7 +207,7 @@ openlia/
 │       │   └── openlia_server/
 │       │       ├── __init__.py
 │       │       ├── app.py              # FastAPI app factory (lifespan-managed scheduler)
-│       │       ├── cli.py              # Typer CLI entry point (see cli-surface-design.md)
+│       │       ├── cli.py                  # Typer app: serve, admin, wizard, secrets, maintenance
 │       │       │
 │       │       ├── routes/             # API endpoints — thin handlers, delegate to core/services
 │       │       │   ├── __init__.py
@@ -245,7 +245,7 @@ openlia/
 │       │       │
 │       │       └── services/           # Business logic between routes and core
 │       │           ├── __init__.py
-│       │           ├── auth.py             # Argon2id, lockout, sessions, invites, password resets
+│       │           ├── auth/               # Package: passwords, tokens, sessions, registration, login, password_reset, events, signup_policy
 │       │           ├── chat.py             # Chat history persistence + retrieval
 │       │           ├── portfolio.py
 │       │           ├── repository.py       # Saved-report repository service

@@ -14,7 +14,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 4 | 2 | LLM provider system | Done (2026-04-19) | `2026-04-16-phase-4-llm-provider-system.md` |
 | 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Done (2026-04-19) | `2026-04-17-phase-5-llm-runtime.md` |
 | 6 | 3 | Background task scheduling | Done (2026-04-20) | `2026-04-17-phase-6-background-task-scheduling.md` |
-| 7 | 3 | CLI surface (`admin`, `wizard reset`, `secrets rotate-key`, `maintenance`) | Draft | `2026-04-17-phase-7-cli-surface.md` |
+| 7 | 3 | CLI surface (`admin`, `wizard reset`, `secrets rotate-key`, `maintenance`) | Done (2026-04-20) | `2026-04-17-phase-7-cli-surface.md` |
 | 8 | 4 | Frontend shell (routing, auth context, layout, design tokens) | Draft | `2026-04-17-phase-8-frontend-shell.md` |
 | 9 | 4 | Login + Account Management UI | Draft | `2026-04-17-phase-9-login-and-account-ui.md` |
 | 10 | 4 | Setup Wizard | Draft | `2026-04-17-phase-10-setup-wizard.md` |
