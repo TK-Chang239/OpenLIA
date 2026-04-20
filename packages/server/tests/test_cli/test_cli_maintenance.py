@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select
-
 from openlia_server.cli import app
-from openlia_server.db.models.auth import Session as AuthSession, User
+from openlia_server.db.models.auth import Session as AuthSession
+from openlia_server.db.models.auth import User
+from sqlalchemy import select
 
 
 @pytest.fixture
 def expired_sessions(cli_session):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     user = User(
         id="u_1",
         email="u@e.com",
@@ -45,9 +45,7 @@ def expired_sessions(cli_session):
 
 
 class TestMaintenance:
-    def test_real_run_deletes_expired(
-        self, cli_runner, cli_engine, cli_session, expired_sessions
-    ):
+    def test_real_run_deletes_expired(self, cli_runner, cli_engine, cli_session, expired_sessions):
         result = cli_runner.invoke(app, ["maintenance"])
         assert result.exit_code == 0, result.output
         assert "sessions:" in result.output
@@ -56,9 +54,7 @@ class TestMaintenance:
         remaining = cli_session.execute(select(AuthSession)).scalars().all()
         assert {s.id for s in remaining} == {"s_fresh"}
 
-    def test_dry_run_does_not_delete(
-        self, cli_runner, cli_engine, cli_session, expired_sessions
-    ):
+    def test_dry_run_does_not_delete(self, cli_runner, cli_engine, cli_session, expired_sessions):
         result = cli_runner.invoke(app, ["maintenance", "--dry-run"])
         assert result.exit_code == 0, result.output
         for line in [line for line in result.output.splitlines() if line.strip()]:
@@ -67,9 +63,7 @@ class TestMaintenance:
         remaining = cli_session.execute(select(AuthSession)).scalars().all()
         assert len(remaining) == 4
 
-    def test_fresh_database_reports_all_zeros(
-        self, cli_runner, cli_engine
-    ):
+    def test_fresh_database_reports_all_zeros(self, cli_runner, cli_engine):
         result = cli_runner.invoke(app, ["maintenance"])
         assert result.exit_code == 0
         assert "deleted 0" in result.output or "0 expired" in result.output

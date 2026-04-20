@@ -131,9 +131,7 @@ def decrypt_for_row(row_id: str, token: str) -> str:
 
 def _validate_key(key: bytes) -> None:
     if len(key) != KEY_LENGTH_BYTES:
-        raise SecretKeyError(
-            f"key must be exactly {KEY_LENGTH_BYTES} bytes, got {len(key)}"
-        )
+        raise SecretKeyError(f"key must be exactly {KEY_LENGTH_BYTES} bytes, got {len(key)}")
 
 
 def encrypt_with_key(key: bytes, row_id: str, plaintext: str) -> str:

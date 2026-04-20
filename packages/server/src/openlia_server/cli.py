@@ -550,7 +550,6 @@ app.add_typer(admin_app, name="admin")
 # ---------------------------------------------------------------------------
 # wizard sub-app
 # ---------------------------------------------------------------------------
-from datetime import timezone  # noqa: E402
 
 from openlia_server.db.models.infrastructure import WizardState  # noqa: E402
 
@@ -580,7 +579,7 @@ def wizard_reset(
     db = build_session(ctx.obj["db_url"])
     try:
         state = db.execute(select(WizardState)).scalar_one_or_none()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if state is None:
             db.add(
                 WizardState(
@@ -703,9 +702,7 @@ def secrets_rotate_key(
             )
             for row in rows:
                 row_id = getattr(row, pk_attr)
-                plaintext = crypto_module.decrypt_with_key(
-                    old_key, row_id, row.api_key_encrypted
-                )
+                plaintext = crypto_module.decrypt_with_key(old_key, row_id, row.api_key_encrypted)
                 row.api_key_encrypted = crypto_module.encrypt_with_key(
                     new_key_bytes, row_id, plaintext
                 )

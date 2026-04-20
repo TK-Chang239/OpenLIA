@@ -3,8 +3,6 @@ from __future__ import annotations
 import base64
 
 import pytest
-from sqlalchemy import select
-
 from openlia_server.cli import app
 from openlia_server.db import crypto
 from openlia_server.db.models.config import (
@@ -12,6 +10,7 @@ from openlia_server.db.models.config import (
     LLMProvider,
     WebSearchProvider,
 )
+from sqlalchemy import select
 
 
 @pytest.fixture
@@ -55,9 +54,7 @@ class TestRotateKey:
         new_key = b"\x33" * 32
         new_key_b64 = base64.b64encode(new_key).decode()
 
-        result = cli_runner.invoke(
-            app, ["secrets", "rotate-key", "--new-key", new_key_b64]
-        )
+        result = cli_runner.invoke(app, ["secrets", "rotate-key", "--new-key", new_key_b64])
         assert result.exit_code == 0, result.output
         assert "3 values re-encrypted" in result.output
         assert "Update your OPENLIA_SECRET_KEY" in result.output
@@ -71,8 +68,12 @@ class TestRotateKey:
             llm = s.execute(select(LLMProvider)).scalar_one()
             data = s.execute(select(DataProvider)).scalar_one()
             ws = s.execute(select(WebSearchProvider)).scalar_one()
-            assert crypto.decrypt_with_key(new_key, "llm_1", llm.api_key_encrypted) == "sk-llm-secret"
-            assert crypto.decrypt_with_key(new_key, "data_1", data.api_key_encrypted) == "eodhd-secret"
+            assert (
+                crypto.decrypt_with_key(new_key, "llm_1", llm.api_key_encrypted) == "sk-llm-secret"
+            )
+            assert (
+                crypto.decrypt_with_key(new_key, "data_1", data.api_key_encrypted) == "eodhd-secret"
+            )
             assert crypto.decrypt_with_key(new_key, "ws_1", ws.api_key_encrypted) == "brave-secret"
         finally:
             s.close()
@@ -110,9 +111,7 @@ class TestRotateKey:
 
         new_key = b"\x44" * 32
         new_key_b64 = base64.b64encode(new_key).decode()
-        result = cli_runner.invoke(
-            app, ["secrets", "rotate-key", "--new-key", new_key_b64]
-        )
+        result = cli_runner.invoke(app, ["secrets", "rotate-key", "--new-key", new_key_b64])
         assert result.exit_code == 0, result.output
         assert "3 values re-encrypted" in result.output
         assert "New key written to" in result.output
@@ -133,9 +132,7 @@ class TestRotateKey:
         holder.execute("BEGIN IMMEDIATE")
 
         new_key_b64 = base64.b64encode(b"\x55" * 32).decode()
-        result = cli_runner.invoke(
-            app, ["secrets", "rotate-key", "--new-key", new_key_b64]
-        )
+        result = cli_runner.invoke(app, ["secrets", "rotate-key", "--new-key", new_key_b64])
         holder.close()
 
         assert result.exit_code == 1
@@ -144,9 +141,7 @@ class TestRotateKey:
     def test_invalid_new_key_exits_1(
         self, cli_runner, cli_engine, cli_secret_key, seeded_encrypted_rows
     ):
-        result = cli_runner.invoke(
-            app, ["secrets", "rotate-key", "--new-key", "not-valid-base64!"]
-        )
+        result = cli_runner.invoke(app, ["secrets", "rotate-key", "--new-key", "not-valid-base64!"])
         assert result.exit_code == 1
 
     def test_no_encrypted_rows_reports_zero(
@@ -157,8 +152,6 @@ class TestRotateKey:
         cli_home,
     ):
         new_key_b64 = base64.b64encode(b"\x66" * 32).decode()
-        result = cli_runner.invoke(
-            app, ["secrets", "rotate-key", "--new-key", new_key_b64]
-        )
+        result = cli_runner.invoke(app, ["secrets", "rotate-key", "--new-key", new_key_b64])
         assert result.exit_code == 0
         assert "0 values re-encrypted" in result.output
