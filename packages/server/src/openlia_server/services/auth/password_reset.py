@@ -130,7 +130,7 @@ def consume_token(db: DBSession, *, token: str, new_password: str) -> None:
 
 
 def admin_direct_reset(
-    db: DBSession, *, user_id: str, new_password: str, admin_user_id: str
+    db: DBSession, *, user_id: str, new_password: str, admin_user_id: str | None
 ) -> None:
     passwords.validate_password_policy(new_password)
     user = db.get(User, user_id)
