@@ -12,7 +12,8 @@ from typing import Any
 
 from apscheduler import AsyncScheduler
 from fastapi import FastAPI
-from sqlalchemy.orm import Session as DBSession, sessionmaker
+from sqlalchemy.orm import Session as DBSession
+from sqlalchemy.orm import sessionmaker
 
 import openlia_server.db.models  # noqa: F401 — registers all models on Base.metadata
 from openlia_server.db.base import Base
@@ -50,7 +51,7 @@ class _SchedulerAdapter:
         self._sched = AsyncScheduler()
         self._bg_task: asyncio.Task | None = None
 
-    async def __aenter__(self) -> "_SchedulerAdapter":
+    async def __aenter__(self) -> _SchedulerAdapter:
         await self._sched.__aenter__()
         return self
 
@@ -59,9 +60,7 @@ class _SchedulerAdapter:
 
     def start_in_background(self) -> None:
         """Launch the APScheduler event loop in a background task."""
-        self._bg_task = asyncio.ensure_future(
-            self._sched.start_in_background()
-        )
+        self._bg_task = asyncio.ensure_future(self._sched.start_in_background())
 
     async def stop(self) -> None:
         await self._sched.stop()

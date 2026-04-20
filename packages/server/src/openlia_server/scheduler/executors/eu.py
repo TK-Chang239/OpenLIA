@@ -1,12 +1,14 @@
 """Earnings Update executor. Runs ReportRunner sequentially for every
 ticker the planner returns; one notification per completed report."""
+
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, ReportError
+
 from openlia_server.db.models.scheduler import EuSchedule
 from openlia_server.scheduler.executors.base import (
     AsyncSleep,
@@ -18,7 +20,6 @@ from openlia_server.scheduler.executors.base import (
 from openlia_server.scheduler.executors.mb import _raise_from_report_error
 from openlia_server.scheduler.payloads import EUScanPlanner, ReportStore
 from openlia_server.scheduler.registry import JobType, NotificationType
-
 
 DEPARTMENT = "earnings_update"
 
@@ -102,7 +103,7 @@ class EUScanExecutor(BaseExecutor):
         with self._session_factory() as session:
             schedule = session.get(EuSchedule, schedule_id)
             if schedule is not None:
-                schedule.last_run_at = datetime.now(timezone.utc)
+                schedule.last_run_at = datetime.now(UTC)
                 session.commit()
 
         return JobOutcome(

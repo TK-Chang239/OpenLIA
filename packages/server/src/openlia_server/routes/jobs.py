@@ -1,4 +1,5 @@
 """Job history + manual retry endpoints."""
+
 from __future__ import annotations
 
 from typing import Annotated
@@ -11,7 +12,6 @@ from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import JobRun
 from openlia_server.scheduler.registry import JobStatus
 from openlia_server.scheduler.services import jobs as jobs_service
-
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 

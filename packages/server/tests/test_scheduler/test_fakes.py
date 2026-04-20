@@ -5,7 +5,7 @@ service / route test file."""
 from __future__ import annotations
 
 import pytest
-from _fakes import (
+from _scheduler_fakes import (
     FakeEUPlanner,
     FakeMBBuilder,
     FakeMRBuilder,

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy.orm import Session
-
-from _fakes import (
+from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
     FakeMBBuilder,
@@ -38,17 +36,24 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
     with session_factory() as s:
         s.add(
             User(
-                id="u_1", email="u@e.com", display_name="u",
-                password_hash="h", is_admin=False, is_disabled=False,
+                id="u_1",
+                email="u@e.com",
+                display_name="u",
+                password_hash="h",
+                is_admin=False,
+                is_disabled=False,
             )
         )
         s.add(
             MbSchedule(
-                id="sch_mb", user_id="u_1",
-                time="07:00", timezone="UTC",
+                id="sch_mb",
+                user_id="u_1",
+                time="07:00",
+                timezone="UTC",
                 days_of_week='["mon","tue","wed","thu","fri"]',
-                label="Pre-Market", is_enabled=True,
-                created_at=datetime.now(timezone.utc),
+                label="Pre-Market",
+                is_enabled=True,
+                created_at=datetime.now(UTC),
                 last_run_at=None,
             )
         )
@@ -63,8 +68,10 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
         report_runner=FakeReportRunner(
             events=[
                 ReportStart(
-                    report_id="r_1", department="morning_briefing",
-                    mode="mb", section_titles=["Overnight"],
+                    report_id="r_1",
+                    department="morning_briefing",
+                    mode="mb",
+                    section_titles=["Overnight"],
                 ),
                 ReportComplete(
                     report_id="r_1",
@@ -73,9 +80,7 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
             ]
         ),
         batch_runner=FakeBatchRunner(results=[]),
-        mb_builder=FakeMBBuilder(
-            request=ReportRequest(mode="morning_briefing", user_input="go")
-        ),
+        mb_builder=FakeMBBuilder(request=ReportRequest(mode="morning_briefing", user_input="go")),
         report_store=FakeReportStore(next_id="rep_final"),
     )
     await svc.start()

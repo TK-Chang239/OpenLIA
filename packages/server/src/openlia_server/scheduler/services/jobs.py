@@ -120,11 +120,7 @@ def count_for_user(
     status: JobStatus | None = None,
     since: datetime | None = None,
 ) -> int:
-    stmt = (
-        select(func.count())
-        .select_from(JobRun)
-        .where(JobRun.user_id == user_id)
-    )
+    stmt = select(func.count()).select_from(JobRun).where(JobRun.user_id == user_id)
     if job_type is not None:
         stmt = stmt.where(JobRun.job_type == job_type.value)
     if status is not None:

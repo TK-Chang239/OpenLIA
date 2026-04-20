@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from _fakes import FakeMBBuilder, FakeReportRunner, FakeReportStore, FakeSleep
+from _scheduler_fakes import FakeMBBuilder, FakeReportRunner, FakeReportStore, FakeSleep
 from openlia.llm.runtime.events import (
     ReportComplete,
     ReportError,

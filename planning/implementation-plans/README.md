@@ -11,9 +11,9 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 1b | 1 | Database baseline — dashboard/scheduler/notifications (11 tables) | Complete | `2026-04-17-phase-1b-database-dashboard-scheduler-notifications.md` |
 | 2 | 1 | Secrets encryption + auth primitives | Complete | `2026-04-16-phase-2-auth-and-secrets.md` |
 | 3 | 2 | Data provider adapter system | Complete | `2026-04-16-phase-3-data-provider-adapter-system.md` |
-| 4 | 2 | LLM provider system | Draft | `2026-04-16-phase-4-llm-provider-system.md` |
-| 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Draft | `2026-04-17-phase-5-llm-runtime.md` |
-| 6 | 3 | Background task scheduling | Draft | `2026-04-17-phase-6-background-task-scheduling.md` |
+| 4 | 2 | LLM provider system | Complete (2026-04-19) | `2026-04-16-phase-4-llm-provider-system.md` |
+| 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Complete (2026-04-19) | `2026-04-17-phase-5-llm-runtime.md` |
+| 6 | 3 | Background task scheduling | Complete (2026-04-20) | `2026-04-17-phase-6-background-task-scheduling.md` |
 | 7 | 3 | CLI surface (`admin`, `wizard reset`, `secrets rotate-key`, `maintenance`) | Draft | `2026-04-17-phase-7-cli-surface.md` |
 | 8 | 4 | Frontend shell (routing, auth context, layout, design tokens) | Draft | `2026-04-17-phase-8-frontend-shell.md` |
 | 9 | 4 | Login + Account Management UI | Draft | `2026-04-17-phase-9-login-and-account-ui.md` |
@@ -31,6 +31,31 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 21 | 7 | Portfolio page | Not started | — |
 | 22 | 7 | Repository page | Not started | — |
 | 23 | 7 | Docker packaging + production build + final acceptance | Not started | — |
+
+---
+
+## Standing rules (apply to every plan)
+
+These are cross-plan conventions. Every plan implicitly requires them; do not merge a phase branch that violates them.
+
+### Merge gate (non-negotiable, applies to every PR into `main`)
+
+Before merging any phase PR:
+
+1. `uv run ruff check .` passes (zero errors — run `--fix` first and inspect the diff).
+2. `uv run ruff format --check .` passes.
+3. `uv run pytest` passes on the **full aggregate suite**, not just the new tests. Running tests only in the directory you added is not sufficient — import/fixture collisions only surface when everything runs together.
+4. The `CI` workflow on GitHub Actions is green for the PR head commit.
+5. Status table in `planning/implementation-plans/README.md` updated to mark the plan Complete with merge date.
+
+Recommended hardening: enable GitHub branch protection on `main` requiring the `CI / Python — lint + test` and `CI / Frontend — test + build` checks before merge. Historical incident: phases 5 and 6 both merged to `main` with failing CI, breaking the aggregate test collection (see "Test conventions" below).
+
+### Test conventions
+
+- **Unique names for shared test helpers.** Any test-only helper module that is not named `conftest.py` must have a name unique across the whole test tree — prefix with the package being tested (`_scheduler_fakes.py`, `_runtime_fakes.py`), never a generic `_fakes.py`. With `--import-mode=importlib` (our pytest config) two files named `_fakes.py` in different directories collide at collection time.
+- **Every test directory gets an `__init__.py`.** Enforces package semantics and keeps fixture discovery predictable.
+- **Shared helpers go through `conftest.py` where possible.** Only reach for a free-standing `_xxx_helpers.py` when the helper is a class/dataclass that needs to be imported by name across multiple test modules.
+- **One-line sanity command before opening a PR:** `uv run ruff check . && uv run ruff format --check . && uv run pytest -q`. If that fails locally, CI will fail too.
 
 ---
 

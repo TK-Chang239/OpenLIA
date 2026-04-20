@@ -2,23 +2,22 @@ from __future__ import annotations
 
 import json
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+import openlia_server.db.models  # noqa: F401 — register all models
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from openlia_server.auth.deps import get_current_user
 from openlia_server.db.base import Base
-import openlia_server.db.models  # noqa: F401 — register all models
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import JobRun
 from openlia_server.routes.jobs import router as jobs_router
 from openlia_server.routes.notifications import router as notifications_router
 from openlia_server.scheduler.registry import JobStatus, JobType
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 @pytest.fixture
@@ -50,15 +49,19 @@ def route_session_factory(route_engine):
 @pytest.fixture
 def client_with_user(route_session_factory):
     """Stand up a minimal app with stubbed scheduler and a logged-in user."""
-    from _fakes import FakeAPScheduler, FakeBatchRunner, FakeReportRunner
+    from _scheduler_fakes import FakeAPScheduler, FakeBatchRunner, FakeReportRunner
     from openlia_server.scheduler import wiring as wiring_mod
     from openlia_server.scheduler.settings import SchedulerSettings
 
     with route_session_factory() as s:
         s.add(
             User(
-                id="u_1", email="u@e.com", display_name="u",
-                password_hash="h", is_admin=False, is_disabled=False,
+                id="u_1",
+                email="u@e.com",
+                display_name="u",
+                password_hash="h",
+                is_admin=False,
+                is_disabled=False,
             )
         )
         s.commit()
@@ -101,7 +104,7 @@ def _seed_run(
     job_type: JobType = JobType.MB_BRIEFING,
     user_id: str = "u_1",
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     session.add(
         JobRun(
             id=id,
@@ -127,8 +130,12 @@ def test_jobs_history_returns_current_users_runs_newest_first(
         _seed_run(s, id="run_3", status=JobStatus.COMPLETED)
         s.add(
             User(
-                id="u_other", email="x@e.com", display_name="x",
-                password_hash="h", is_admin=False, is_disabled=False,
+                id="u_other",
+                email="x@e.com",
+                display_name="x",
+                password_hash="h",
+                is_admin=False,
+                is_disabled=False,
             )
         )
         _seed_run(s, id="run_other", status=JobStatus.COMPLETED, user_id="u_other")
@@ -155,9 +162,7 @@ def test_jobs_history_pagination(client_with_user, route_session_factory) -> Non
     assert r.json()["total"] == 5
 
 
-def test_retry_endpoint_schedules_new_run(
-    client_with_user, route_session_factory
-) -> None:
+def test_retry_endpoint_schedules_new_run(client_with_user, route_session_factory) -> None:
     with route_session_factory() as s:
         _seed_run(s, id="run_fail", status=JobStatus.FAILED)
         s.commit()
@@ -169,14 +174,16 @@ def test_retry_endpoint_schedules_new_run(
     assert body["retry_scheduled"] is True
 
 
-def test_retry_refuses_someone_elses_run(
-    client_with_user, route_session_factory
-) -> None:
+def test_retry_refuses_someone_elses_run(client_with_user, route_session_factory) -> None:
     with route_session_factory() as s:
         s.add(
             User(
-                id="u_other", email="x@e.com", display_name="x",
-                password_hash="h", is_admin=False, is_disabled=False,
+                id="u_other",
+                email="x@e.com",
+                display_name="x",
+                password_hash="h",
+                is_admin=False,
+                is_disabled=False,
             )
         )
         _seed_run(s, id="run_other", status=JobStatus.FAILED, user_id="u_other")

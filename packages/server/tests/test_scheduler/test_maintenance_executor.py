@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from _fakes import FakeSleep
+from _scheduler_fakes import FakeSleep
 from openlia_server.db.models.auth import PasswordResetRequest, User
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.dashboard import (

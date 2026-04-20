@@ -3,6 +3,7 @@
 Chains BatchRunner (T4, per-metric analyses) -> mr_builder.synthesize()
 -> ReportRunner (T5, synthesis). Persists the combined result into
 mr_assessment_cache and emits one `assessment_ready` notification."""
+
 from __future__ import annotations
 
 from dataclasses import asdict
@@ -11,6 +12,7 @@ from typing import Any, ClassVar
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, ReportError
 from openlia.llm.runtime.messages import BatchResult, ReportRequest
+
 from openlia_server.scheduler.executors.base import (
     AsyncSleep,
     BaseExecutor,
@@ -21,7 +23,6 @@ from openlia_server.scheduler.executors.base import (
 from openlia_server.scheduler.executors.mb import _raise_from_report_error
 from openlia_server.scheduler.payloads import MRAssessmentBuilder, MRCacheStore
 from openlia_server.scheduler.registry import JobType, NotificationType
-
 
 DEPARTMENT = "macro_research"
 

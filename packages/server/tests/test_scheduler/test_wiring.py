@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import pytest
-
-from _fakes import (
+from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
     FakeReportRunner,
@@ -51,6 +50,4 @@ def test_build_scheduler_service_uses_stubs_when_builders_unprovided(
     mb_exec = svc.executors[JobType.MB_BRIEFING]
     with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 16"):
         # MBBriefingExecutor grabs the builder on _do_work; call directly.
-        mb_exec._mb_builder.build(
-            session=None, user_id="u_1", schedule_id="s_1"
-        )
+        mb_exec._mb_builder.build(session=None, user_id="u_1", schedule_id="s_1")

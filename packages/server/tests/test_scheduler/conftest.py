@@ -1,5 +1,5 @@
 """Expose this test directory on sys.path so sibling test modules can
-`from _fakes import ...` without relying on a tests.* package (which
+`from _scheduler_fakes import ...` without relying on a tests.* package (which
 does not exist under --import-mode=importlib)."""
 
 from __future__ import annotations
