@@ -71,7 +71,7 @@ def cli_session(cli_engine):
 def cli_runner():
     from typer.testing import CliRunner
 
-    return CliRunner(mix_stderr=False)
+    return CliRunner()
 
 
 @pytest.fixture
