@@ -20,10 +20,11 @@ def _clear_rate_limiter():
 @pytest.fixture
 def company_client(db_session, monkeypatch):
     monkeypatch.setenv("OPENLIA_MODE", "company")
+    from openlia_server.db import session as session_mod
     from openlia_server.services.auth import signup_policy
 
     signup_policy.seed_signup_policy(db_session, mode_flag="company")
-    app = create_app(db_session_factory=lambda: db_session)
+    app = create_app(db_session_factory=session_mod.SessionLocal)
     return TestClient(app)
 
 
@@ -31,6 +32,7 @@ def company_client(db_session, monkeypatch):
 def personal_client(db_session, make_user, monkeypatch):
     from datetime import datetime
 
+    from openlia_server.db import session as session_mod
     from openlia_server.db.models.auth import User
 
     user = User(
@@ -45,5 +47,5 @@ def personal_client(db_session, make_user, monkeypatch):
     db_session.add(user)
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
-    app = create_app(db_session_factory=lambda: db_session)
+    app = create_app(db_session_factory=session_mod.SessionLocal)
     return TestClient(app)

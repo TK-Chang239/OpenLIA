@@ -8,12 +8,13 @@ import os
 from collections.abc import Callable
 from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from openlia.data.types import ProviderCategory, ProviderMode
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.config import DataProviderRequirementMapping
 from openlia_server.middleware.auth import build_require_admin
 from openlia_server.services import data_providers as svc
@@ -76,6 +77,7 @@ def build_data_providers_router(
     """
     mode = os.environ.get("OPENLIA_MODE", "personal")
     require_admin = build_require_admin(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(
         prefix="/settings/data-providers",
         tags=["settings", "data-providers"],
@@ -84,14 +86,16 @@ def build_data_providers_router(
     # --- collection routes (static paths first) ---
 
     @router.get("")
-    def list_providers(_admin=require_admin) -> dict:
-        session = db_session_factory()
+    def list_providers(_admin=require_admin, session: DBSession = Depends(session_dep)) -> dict:
         rows = svc.list_providers(session)
         return {"providers": [_row_to_out(r).model_dump() for r in rows]}
 
     @router.post("", status_code=status.HTTP_201_CREATED)
-    def create_provider(body: _CreateDataProviderIn, _admin=require_admin) -> dict:
-        session = db_session_factory()
+    def create_provider(
+        body: _CreateDataProviderIn,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
         try:
             created = svc.create_provider(
                 session,
@@ -118,10 +122,9 @@ def build_data_providers_router(
         return _row_to_out(row).model_dump()
 
     @router.post("/auto-map")
-    def auto_map_endpoint(_admin=require_admin) -> dict:
+    def auto_map_endpoint(_admin=require_admin, session: DBSession = Depends(session_dep)) -> dict:
         from openlia.data.manifest import load_manifest
 
-        session = db_session_factory()
         summary = svc.auto_map(session, manifest=load_manifest())
         return {
             "mapped": [
@@ -135,8 +138,7 @@ def build_data_providers_router(
         }
 
     @router.get("/mappings")
-    def list_mappings(_admin=require_admin) -> dict:
-        session = db_session_factory()
+    def list_mappings(_admin=require_admin, session: DBSession = Depends(session_dep)) -> dict:
         rows = list(
             session.scalars(
                 select(DataProviderRequirementMapping).order_by(
@@ -157,8 +159,12 @@ def build_data_providers_router(
         }
 
     @router.put("/mappings/{requirement_type}")
-    def set_mapping(requirement_type: str, body: dict, _admin=require_admin) -> dict:
-        session = db_session_factory()
+    def set_mapping(
+        requirement_type: str,
+        body: dict,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
         provider_id = body.get("provider_id")
         priority = body.get("priority")
         if not isinstance(provider_id, str) or not isinstance(priority, int):
@@ -189,8 +195,12 @@ def build_data_providers_router(
         "/mappings/{requirement_type}/{provider_id}",
         status_code=status.HTTP_204_NO_CONTENT,
     )
-    def delete_mapping(requirement_type: str, provider_id: str, _admin=require_admin) -> Response:
-        session = db_session_factory()
+    def delete_mapping(
+        requirement_type: str,
+        provider_id: str,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
+    ) -> Response:
         svc.delete_requirement_mapping(
             session,
             requirement_type=requirement_type,
@@ -202,9 +212,11 @@ def build_data_providers_router(
 
     @router.patch("/{provider_id}")
     def update_provider(
-        provider_id: str, body: _UpdateDataProviderIn, _admin=require_admin
+        provider_id: str,
+        body: _UpdateDataProviderIn,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
     ) -> dict:
-        session = db_session_factory()
         try:
             svc.update_provider(
                 session,
@@ -222,8 +234,11 @@ def build_data_providers_router(
         return _row_to_out(row).model_dump()
 
     @router.delete("/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_provider(provider_id: str, _admin=require_admin) -> Response:
-        session = db_session_factory()
+    def delete_provider(
+        provider_id: str,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
+    ) -> Response:
         try:
             svc.delete_provider(session, provider_id)
         except svc.ProviderNotFoundError as exc:
@@ -231,8 +246,11 @@ def build_data_providers_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.post("/{provider_id}/test-connection")
-    async def test_connection(provider_id: str, _admin=require_admin) -> dict:
-        session = db_session_factory()
+    async def test_connection(
+        provider_id: str,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
         try:
             entry = svc.load_provider_entry(session, provider_id)
         except svc.ProviderNotFoundError as exc:
@@ -386,13 +404,13 @@ def build_llm_providers_admin_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/settings/admin/llm", tags=["llm-admin"])
     require_admin = build_require_admin(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     # NOTE: static sub-paths (/providers/test, /models) must be registered before
     # dynamic paths (/providers/{provider_id}) to avoid mis-routing.
 
     @router.get("/providers", response_model=list[_ProviderOut])
-    def list_providers(_=require_admin) -> list[_ProviderOut]:
-        db = db_session_factory()
+    def list_providers(_=require_admin, db: DBSession = Depends(session_dep)) -> list[_ProviderOut]:
         return [_provider_to_out(r) for r in llm_svc.list_providers(db)]
 
     @router.post("/providers/test", response_model=_TestOut)
@@ -410,7 +428,11 @@ def build_llm_providers_admin_router(
         response_model=_ProviderOut,
         status_code=status.HTTP_201_CREATED,
     )
-    async def create_provider(payload: _ProviderIn, _=require_admin) -> _ProviderOut:
+    async def create_provider(
+        payload: _ProviderIn,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
+    ) -> _ProviderOut:
         test_result: _TestOut | None = None
         if payload.run_test:
             if not payload.test_model:
@@ -433,7 +455,6 @@ def build_llm_providers_admin_router(
                         "test": test_result.model_dump(),
                     },
                 )
-        db = db_session_factory()
         created = llm_svc.create_provider(
             db,
             kind=payload.kind,
@@ -449,9 +470,11 @@ def build_llm_providers_admin_router(
 
     @router.put("/providers/{provider_id}", response_model=_ProviderOut)
     def update_provider(
-        provider_id: str, payload: _ProviderUpdate, _=require_admin
+        provider_id: str,
+        payload: _ProviderUpdate,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
     ) -> _ProviderOut:
-        db = db_session_factory()
         try:
             llm_svc.update_provider(
                 db,
@@ -471,8 +494,11 @@ def build_llm_providers_admin_router(
         return _provider_to_out(llm_svc.get_provider(db, provider_id))
 
     @router.delete("/providers/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_provider(provider_id: str, _=require_admin) -> None:
-        db = db_session_factory()
+    def delete_provider(
+        provider_id: str,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
+    ) -> None:
         try:
             llm_svc.delete_provider(db, provider_id)
         except llm_svc.ProviderHasModelsError as exc:
@@ -482,8 +508,11 @@ def build_llm_providers_admin_router(
             ) from exc
 
     @router.get("/providers/{provider_id}/models", response_model=list[_ModelOut])
-    def list_models_for_provider(provider_id: str, _=require_admin) -> list[_ModelOut]:
-        db = db_session_factory()
+    def list_models_for_provider(
+        provider_id: str,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
+    ) -> list[_ModelOut]:
         try:
             llm_svc.get_provider(db, provider_id)
         except llm_svc.ProviderNotFoundError as exc:
@@ -506,8 +535,11 @@ def build_llm_providers_admin_router(
         ]
 
     @router.get("/providers/{provider_id}/remote-models", response_model=list[dict])
-    async def remote_models(provider_id: str, _=require_admin) -> list[dict]:
-        db = db_session_factory()
+    async def remote_models(
+        provider_id: str,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
+    ) -> list[dict]:
         try:
             row = llm_svc.get_provider(db, provider_id)
         except llm_svc.ProviderNotFoundError as exc:
@@ -533,10 +565,13 @@ def build_llm_providers_admin_router(
         ]
 
     @router.post("/models", response_model=_ModelOut, status_code=status.HTTP_201_CREATED)
-    def create_model(payload: _ModelIn, _=require_admin) -> _ModelOut:
+    def create_model(
+        payload: _ModelIn,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
+    ) -> _ModelOut:
         from openlia_server.db.models.config import LLMModel
 
-        db = db_session_factory()
         try:
             llm_svc.get_provider(db, payload.provider_id)
         except llm_svc.ProviderNotFoundError as exc:
@@ -567,10 +602,14 @@ def build_llm_providers_admin_router(
         )
 
     @router.put("/models/{model_id}", response_model=_ModelOut)
-    def update_model(model_id: str, payload: _ModelIn, _=require_admin) -> _ModelOut:
+    def update_model(
+        model_id: str,
+        payload: _ModelIn,
+        _=require_admin,
+        db: DBSession = Depends(session_dep),
+    ) -> _ModelOut:
         from openlia_server.db.models.config import LLMModel
 
-        db = db_session_factory()
         try:
             llm_svc.update_model(
                 db,
@@ -598,8 +637,7 @@ def build_llm_providers_admin_router(
         )
 
     @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
-    def delete_model(model_id: str, _=require_admin) -> None:
-        db = db_session_factory()
+    def delete_model(model_id: str, _=require_admin, db: DBSession = Depends(session_dep)) -> None:
         llm_svc.delete_model(db, model_id)
 
     @router.post("/department/{department_id}")
@@ -607,8 +645,8 @@ def build_llm_providers_admin_router(
         department_id: str,
         payload: _DepartmentTierIn,
         _=require_admin,
+        db: DBSession = Depends(session_dep),
     ) -> dict:
-        db = db_session_factory()
         if payload.tier is None:
             llm_svc.clear_department_tier_override(db, department_id)
         else:
@@ -621,8 +659,8 @@ def build_llm_providers_admin_router(
         model: str,
         payload: dict | None = None,
         _=require_admin,
+        db: DBSession = Depends(session_dep),
     ) -> dict:
-        db = db_session_factory()
         if payload is None:
             llm_svc.clear_capability_override(db, provider_kind=provider_kind, model=model)
         else:

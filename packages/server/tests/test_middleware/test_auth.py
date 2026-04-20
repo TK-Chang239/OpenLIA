@@ -13,9 +13,11 @@ from openlia_server.services.auth import sessions
 
 @pytest.fixture
 def app_factory(db_session):
+    from openlia_server.db import session as session_mod
+
     def _make(mode: str) -> FastAPI:
         app = FastAPI()
-        require_auth = build_require_auth(db_session_factory=lambda: db_session, mode=mode)
+        require_auth = build_require_auth(db_session_factory=session_mod.SessionLocal, mode=mode)
 
         @app.get("/whoami")
         def whoami(user=require_auth):  # type: ignore[assignment]

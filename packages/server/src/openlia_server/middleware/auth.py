@@ -32,25 +32,28 @@ def build_require_auth(
         openlia_session: str | None = Cookie(default=None, alias=COOKIE_NAME),
     ) -> User:
         db = db_session_factory()
-        if mode == "personal":
-            user = db.execute(select(User).where(User.id == LOCAL_USER_ID)).scalar_one_or_none()
-            if user is None:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="local user not seeded; bootstrap did not run",
-                )
-            return user
+        try:
+            if mode == "personal":
+                user = db.execute(select(User).where(User.id == LOCAL_USER_ID)).scalar_one_or_none()
+                if user is None:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail="local user not seeded; bootstrap did not run",
+                    )
+                return user
 
-        if not openlia_session:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated"
-            )
-        validated = session_service.validate_session(db, openlia_session)
-        if validated is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated"
-            )
-        return validated.user
+            if not openlia_session:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated"
+                )
+            validated = session_service.validate_session(db, openlia_session)
+            if validated is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail="not authenticated"
+                )
+            return validated.user
+        finally:
+            db.close()
 
     return Depends(require_auth)
 
