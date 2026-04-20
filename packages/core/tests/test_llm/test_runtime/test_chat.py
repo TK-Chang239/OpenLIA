@@ -1,0 +1,271 @@
+from __future__ import annotations
+
+from pathlib import Path
+from textwrap import dedent
+from typing import Any
+
+import pytest
+from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
+from openlia.llm.exceptions import TierNotConfiguredError
+from openlia.llm.runtime.cancellation import CancellationToken
+from openlia.llm.runtime.chat import ChatRunner
+from openlia.llm.runtime.events import (
+    ChatDone,
+    ChatError,
+    ChatStart,
+    ChatToken,
+    ChatToolCallResult,
+    ChatToolCallStart,
+)
+from openlia.llm.runtime.messages import ChatMessage
+from openlia.llm.runtime.prompts import PromptLoader
+from openlia.llm.runtime.tools import ToolDispatcher
+from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.llm.types import (
+    Capabilities,
+    ModelTier,
+    ProviderCredentials,
+    ResolvedModel,
+    ToolCall,
+)
+
+pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture
+def prompts_root(tmp_path: Path) -> Path:
+    root = tmp_path / "prompts"
+    root.mkdir()
+    (root / "secretary.yaml").write_text(
+        dedent(
+            """\
+            chat:
+              system: You are the Secretary.
+            """
+        )
+    )
+    return root
+
+
+def _resolved() -> ResolvedModel:
+    return ResolvedModel(
+        provider_kind="fake",
+        provider_id="p1",
+        model_id="m1",
+        model_ref="fake-1",
+        tier=ModelTier.EVERYDAY,
+        credentials=ProviderCredentials(api_key="k", base_url=None),
+        capabilities=Capabilities(
+            streaming=True, tool_calling=True, structured_output=True
+        ),
+        overrides={},
+    )
+
+
+class _Registry:
+    def __init__(self, *, raises: bool = False) -> None:
+        self._raises = raises
+
+    def get_department_tier_override(self, department_id: str):
+        return None
+
+    def get_user_preference(self, user_id, tier):
+        return None
+
+    def get_tier_default(self, tier):
+        return None
+
+    def get_any_in_tier(self, tier):
+        return None
+
+
+def _always_resolved(*, resolved: ResolvedModel):
+    def _resolve(*, department_id, user_id, registry, tier_override=None):
+        return resolved
+
+    return _resolve
+
+
+def _always_raises():
+    def _resolve(*, department_id, user_id, registry, tier_override=None):
+        raise TierNotConfiguredError("everyday")
+
+    return _resolve
+
+
+async def _collect(it):
+    return [e async for e in it]
+
+
+async def test_streams_simple_reply_with_no_tools(prompts_root: Path) -> None:
+    provider = FakeProvider(script=FakeProviderScript(turns=[("tokens", ["Hi", " there"])]))
+    data = FakeDataDispatcher(manifest={"secretary": {}})
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="hello")],
+        )
+    )
+    types = [type(e) for e in events]
+    assert types[0] is ChatStart
+    assert ChatToken in types
+    assert types[-1] is ChatDone
+    tokens = [e.text for e in events if isinstance(e, ChatToken)]
+    assert "".join(tokens) == "Hi there"
+
+
+async def test_tool_calling_turn_emits_tool_events(prompts_root: Path) -> None:
+    call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [call]),
+                ("tokens", ["AAPL", " is", " up"]),
+            ]
+        )
+    )
+    manifest = {
+        "secretary": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Stock quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(
+        manifest=manifest,
+        results={"stock_quote": {"symbol": "AAPL", "price": 190}},
+    )
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL?")],
+        )
+    )
+    types = [type(e) for e in events]
+    assert ChatToolCallStart in types
+    assert ChatToolCallResult in types
+    assert ChatDone in types
+
+
+async def test_tier_not_configured_emits_chat_error_and_stops(prompts_root: Path) -> None:
+    provider = FakeProvider(script=FakeProviderScript(turns=[]))
+    data = FakeDataDispatcher(manifest={"secretary": {}})
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_raises(),
+        registry=_Registry(raises=True),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="hi")],
+        )
+    )
+    types = [type(e) for e in events]
+    assert types == [ChatStart, ChatError]
+    err = events[-1]
+    assert isinstance(err, ChatError)
+    assert err.error_class == "TierNotConfiguredError"
+    assert "everyday" in err.message
+
+
+async def test_cancellation_stops_yielding_without_terminal_event(
+    prompts_root: Path,
+) -> None:
+    provider = FakeProvider(
+        script=FakeProviderScript(turns=[("tokens", ["A", "B", "C", "D", "E"])])
+    )
+    data = FakeDataDispatcher(manifest={"secretary": {}})
+    token = CancellationToken()
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events: list[Any] = []
+    async for e in runner.run(
+        department_id="secretary",
+        user_id="u_1",
+        messages=[ChatMessage(role="user", content="hi")],
+        cancel_token=token,
+    ):
+        events.append(e)
+        if isinstance(e, ChatToken) and e.text == "B":
+            token.cancel()
+    assert ChatDone not in [type(e) for e in events]
+    assert ChatError not in [type(e) for e in events]
+    tokens_seen = [e.text for e in events if isinstance(e, ChatToken)]
+    assert "E" not in tokens_seen
+
+
+async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
+    provider = FakeProvider(script=FakeProviderScript(turns=[("tokens", ["ok"])]))
+    data = FakeDataDispatcher(manifest={"secretary": {}})
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[
+                ChatMessage(role="user", content="hi"),
+                ChatMessage(role="assistant", content="hello"),
+                ChatMessage(role="user", content="what's up?"),
+            ],
+        )
+    )
+    req = provider.captured_requests[0]
+    contents = [m.content for m in req.messages]
+    assert contents == ["hi", "hello", "what's up?"]

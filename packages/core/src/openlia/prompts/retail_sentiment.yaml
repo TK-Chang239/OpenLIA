@@ -1,0 +1,19 @@
+batch:
+  classify_sentiment:
+    system: |
+      You classify a single social media post's sentiment toward a
+      ticker. Return strict JSON matching the response schema.
+
+      Sentiment is one of: bullish, bearish, neutral.
+      Confidence is a float in [0.0, 1.0].
+
+      {% include "shared/output_discipline.yaml.j2" %}
+    user: |
+      Ticker: {{ ticker }}
+      Source: {{ source }}
+      Post text:
+      ---
+      {{ text }}
+      ---
+
+      Classify this post's sentiment toward {{ ticker }}.
