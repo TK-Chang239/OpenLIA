@@ -21,12 +21,8 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("signup_invites", schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column("token", sa.String(length=64), nullable=True)
-        )
-        batch_op.create_unique_constraint(
-            op.f("uq_signup_invites_token"), ["token"]
-        )
+        batch_op.add_column(sa.Column("token", sa.String(length=64), nullable=True))
+        batch_op.create_unique_constraint(op.f("uq_signup_invites_token"), ["token"])
 
 
 def downgrade() -> None:
