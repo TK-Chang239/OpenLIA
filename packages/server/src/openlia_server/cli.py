@@ -547,6 +547,238 @@ admin_app.add_typer(lockout_app, name="lockout")
 app.add_typer(admin_app, name="admin")
 
 
+# ---------------------------------------------------------------------------
+# wizard sub-app
+# ---------------------------------------------------------------------------
+from datetime import timezone  # noqa: E402
+
+from openlia_server.db.models.infrastructure import WizardState  # noqa: E402
+
+wizard_app = typer.Typer(
+    name="wizard",
+    help="Setup-wizard operations.",
+    no_args_is_help=True,
+)
+
+
+@wizard_app.command("reset")
+def wizard_reset(
+    ctx: typer.Context,
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+) -> None:
+    """Reset the setup wizard to run from step 1 on next visit."""
+    if not yes:
+        confirmed = typer.confirm(
+            "This will reset the setup wizard. Existing configuration "
+            "(API keys, providers, user accounts) is preserved — only the "
+            "wizard completion flag is cleared. Continue?",
+            default=False,
+        )
+        if not confirmed:
+            raise typer.Exit(code=1)
+
+    db = build_session(ctx.obj["db_url"])
+    try:
+        state = db.execute(select(WizardState)).scalar_one_or_none()
+        now = datetime.now(timezone.utc)
+        if state is None:
+            db.add(
+                WizardState(
+                    id=1,
+                    status="not_started",
+                    current_step=1,
+                    mode=None,
+                )
+            )
+        else:
+            state.status = "not_started"
+            state.current_step = 1
+            state.updated_at = now
+        wc = db.execute(
+            select(ConfigStore).where(ConfigStore.key == "wizard.completed")
+        ).scalar_one_or_none()
+        if wc is None:
+            db.add(ConfigStore(key="wizard.completed", value=False))
+        else:
+            wc.value = False
+        db.commit()
+        typer.echo("Wizard state reset. The setup wizard will run on next visit.")
+    finally:
+        db.close()
+
+
+app.add_typer(wizard_app, name="wizard")
+
+
+# ---------------------------------------------------------------------------
+# secrets sub-app
+# ---------------------------------------------------------------------------
+import base64  # noqa: E402
+import secrets as secrets_module  # noqa: E402
+
+import sqlalchemy  # noqa: E402
+from sqlalchemy.exc import OperationalError  # noqa: E402
+
+from openlia_server.db import crypto as crypto_module  # noqa: E402
+from openlia_server.db.bootstrap import openlia_home  # noqa: E402
+from openlia_server.db.models.config import (  # noqa: E402
+    DataProvider,
+    LLMProvider,
+    WebSearchProvider,
+)
+
+secrets_app = typer.Typer(
+    name="secrets",
+    help="Manage encryption keys for stored provider API keys.",
+    no_args_is_help=True,
+)
+
+
+def _decode_new_key(raw: str) -> bytes:
+    try:
+        key = base64.b64decode(raw, validate=True)
+    except Exception as exc:
+        raise typer.BadParameter(
+            "--new-key must be valid base64 decoding to 32 bytes.",
+        ) from exc
+    if len(key) != crypto_module.KEY_LENGTH_BYTES:
+        raise typer.BadParameter(
+            f"--new-key must decode to exactly {crypto_module.KEY_LENGTH_BYTES} bytes "
+            f"(got {len(key)})."
+        )
+    return key
+
+
+@secrets_app.command("rotate-key")
+def secrets_rotate_key(
+    ctx: typer.Context,
+    new_key: str | None = typer.Option(
+        None,
+        "--new-key",
+        help="Base64-encoded 32-byte key. Omit to generate a random one.",
+    ),
+) -> None:
+    """Re-encrypt every stored API key with a new AES-256-GCM key."""
+    try:
+        old_key = crypto_module.load_secret_key()
+    except crypto_module.SecretKeyError as exc:
+        echo_error(str(exc))
+        raise typer.Exit(code=1) from exc
+
+    try:
+        new_key_bytes = (
+            _decode_new_key(new_key)
+            if new_key is not None
+            else secrets_module.token_bytes(crypto_module.KEY_LENGTH_BYTES)
+        )
+    except typer.BadParameter as exc:
+        echo_error(str(exc))
+        raise typer.Exit(code=1) from exc
+
+    if new_key_bytes == old_key:
+        echo_error("new key must differ from the current key.")
+        raise typer.Exit(code=1)
+
+    db = build_session(ctx.obj["db_url"])
+    try:
+        try:
+            db.execute(sqlalchemy.text("BEGIN EXCLUSIVE"))
+        except OperationalError as exc:
+            if "locked" in str(exc).lower():
+                echo_error("stop the server before rotating keys.")
+                db.rollback()
+                raise typer.Exit(code=1) from exc
+            raise
+
+        total = 0
+        for model, pk_attr in (
+            (LLMProvider, "id"),
+            (DataProvider, "id"),
+            (WebSearchProvider, "id"),
+        ):
+            rows = (
+                db.execute(select(model).where(model.api_key_encrypted.is_not(None)))
+                .scalars()
+                .all()
+            )
+            for row in rows:
+                row_id = getattr(row, pk_attr)
+                plaintext = crypto_module.decrypt_with_key(
+                    old_key, row_id, row.api_key_encrypted
+                )
+                row.api_key_encrypted = crypto_module.encrypt_with_key(
+                    new_key_bytes, row_id, plaintext
+                )
+                total += 1
+        db.commit()
+    except crypto_module.DecryptError as exc:
+        db.rollback()
+        echo_error(f"failed to decrypt an existing row with the current key: {exc}")
+        raise typer.Exit(code=1) from exc
+    finally:
+        db.close()
+
+    key_file = openlia_home() / crypto_module.KEY_FILE_NAME
+    new_key_b64 = base64.b64encode(new_key_bytes).decode("ascii")
+    typer.echo(f"Rotated encryption key. {total} values re-encrypted.")
+    if key_file.exists():
+        key_file.write_bytes(base64.b64encode(new_key_bytes))
+        key_file.chmod(crypto_module.KEY_FILE_MODE)
+        typer.echo(f"New key written to {key_file}")
+    else:
+        typer.echo("Update your OPENLIA_SECRET_KEY env var to: " + new_key_b64)
+
+    crypto_module._reset_cached_key()
+
+
+app.add_typer(secrets_app, name="secrets")
+
+
+# ---------------------------------------------------------------------------
+# top-level maintenance command
+# ---------------------------------------------------------------------------
+from openlia_server.scheduler.executors.maintenance import run_maintenance_once  # noqa: E402
+
+
+@app.command()
+def maintenance(
+    ctx: typer.Context,
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Print what would be pruned without deleting."
+    ),
+) -> None:
+    """Run the nightly pruning sweep manually."""
+    db = build_session(ctx.obj["db_url"])
+    try:
+        counts = run_maintenance_once(db)
+        if dry_run:
+            db.rollback()
+        else:
+            db.commit()
+    finally:
+        db.close()
+
+    prefix = "[dry-run] " if dry_run else ""
+    lines = [
+        ("sessions:", f"deleted {counts['sessions_deleted']} expired rows"),
+        (
+            "password_reset_requests:",
+            f"expired {counts['password_resets_expired']} rows, "
+            f"deleted {counts['password_resets_deleted']} old rows",
+        ),
+        ("mr_assessment_cache:", f"deleted {counts['mr_cache_deleted']} stale rows"),
+        ("rs_snapshots:", f"deleted {counts['rs_snapshots_deleted']} old snapshots"),
+        (
+            "user_notifications:",
+            f"deleted {counts['notifications_deleted']} old notifications",
+        ),
+        ("job_runs:", f"deleted {counts['job_runs_deleted']} old completed runs"),
+    ]
+    width = max(len(label) for label, _ in lines)
+    for label, detail in lines:
+        typer.echo(f"{prefix}{label.ljust(width)} {detail}")
+
+
 def main() -> None:
     """Console-script entry point."""
     app()
