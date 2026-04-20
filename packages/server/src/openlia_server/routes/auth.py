@@ -9,11 +9,12 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 
-from fastapi import APIRouter, Cookie, Request, Response
+from fastapi import APIRouter, Cookie, Depends, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.middleware.auth import COOKIE_NAME, build_require_auth
 from openlia_server.middleware.rate_limit import LIMITS, limiter
 from openlia_server.services.auth import login as login_service
@@ -52,6 +53,7 @@ class ChangePasswordIn(BaseModel):
 def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
     router = APIRouter(prefix="/auth")
     require_auth = build_require_auth(db_session_factory=db_session_factory, mode="company")
+    session_dep = make_session_dependency(db_session_factory)
 
     def _cookie_secure() -> bool:
         # Default off so http://testserver (TestClient) works; set OPENLIA_COOKIE_SECURE=true
@@ -70,7 +72,12 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         return request.client.host if request.client else None
 
     @router.post("/register", status_code=201)
-    def register(body: RegisterIn, request: Request, response: Response):
+    def register(
+        body: RegisterIn,
+        request: Request,
+        response: Response,
+        db: DBSession = Depends(session_dep),
+    ):
         ip = _ip(request)
         rl_limit, rl_window = LIMITS["register_ip"]
         if not limiter().check_and_tick(
@@ -81,7 +88,6 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
                 content={"code": "rate_limited", "message": "Too many requests."},
             )
 
-        db = db_session_factory()
         try:
             user = registration.register(
                 db,
@@ -107,7 +113,12 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         return {"user_id": user.id, "email": user.email, "display_name": user.display_name}
 
     @router.post("/login")
-    def login(body: LoginIn, request: Request, response: Response):
+    def login(
+        body: LoginIn,
+        request: Request,
+        response: Response,
+        db: DBSession = Depends(session_dep),
+    ):
         ip = _ip(request)
         lim = limiter()
         ip_limit, ip_window = LIMITS["login_ip"]
@@ -121,7 +132,6 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         ):
             return JSONResponse(status_code=429, content={"code": "rate_limited"})
 
-        db = db_session_factory()
         try:
             auth = login_service.authenticate(
                 db,
@@ -169,9 +179,9 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
     def logout(
         response: Response,
         openlia_session: str | None = Cookie(default=None, alias=COOKIE_NAME),
+        db: DBSession = Depends(session_dep),
     ):
         if openlia_session:
-            db = db_session_factory()
             validated = sessions.validate_session(db, openlia_session)
             if validated is not None:
                 sessions.revoke_session(db, validated.session.id)
@@ -179,8 +189,11 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         return Response(status_code=204)
 
     @router.post("/logout-all", status_code=204)
-    def logout_all(response: Response, user=require_auth):
-        db = db_session_factory()
+    def logout_all(
+        response: Response,
+        user=require_auth,
+        db: DBSession = Depends(session_dep),
+    ):
         sessions.revoke_all_sessions(db, user_id=user.id)
         response.delete_cookie(COOKIE_NAME, path="/")
         return Response(status_code=204)
@@ -195,8 +208,7 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         }
 
     @router.get("/signup-policy")
-    def get_signup_policy():
-        db = db_session_factory()
+    def get_signup_policy(db: DBSession = Depends(session_dep)):
         policy = signup_policy.get_policy(db)
         return {
             "mode": policy.mode,
@@ -204,7 +216,11 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         }
 
     @router.post("/password-reset/request")
-    def password_reset_request(body: PasswordResetRequestIn, request: Request):
+    def password_reset_request(
+        body: PasswordResetRequestIn,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+    ):
         ip = _ip(request)
         rl_limit, rl_window = LIMITS["password_reset_ip"]
         if not limiter().check_and_tick(
@@ -212,13 +228,14 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         ):
             return JSONResponse(status_code=429, content={"code": "rate_limited"})
 
-        db = db_session_factory()
         reset_service.request_reset(db, email=body.email, ip_address=ip)
         return {"status": "ok"}
 
     @router.post("/password-reset/consume")
-    def password_reset_consume(body: PasswordResetConsumeIn):
-        db = db_session_factory()
+    def password_reset_consume(
+        body: PasswordResetConsumeIn,
+        db: DBSession = Depends(session_dep),
+    ):
         try:
             reset_service.consume_token(db, token=body.token, new_password=body.new_password)
         except AuthError as exc:
@@ -229,8 +246,11 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
         return {"status": "ok"}
 
     @router.post("/change-password")
-    def change_password(body: ChangePasswordIn, user=require_auth):
-        db = db_session_factory()
+    def change_password(
+        body: ChangePasswordIn,
+        user=require_auth,
+        db: DBSession = Depends(session_dep),
+    ):
         try:
             reset_service.change_password(
                 db,

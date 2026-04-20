@@ -27,7 +27,9 @@ def personal_client(db_session, monkeypatch):
     db_session.add(user)
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
-    app = create_app(db_session_factory=lambda: db_session)
+    from openlia_server.db import session as session_mod
+
+    app = create_app(db_session_factory=session_mod.SessionLocal)
     with TestClient(app) as c:
         yield c
 
