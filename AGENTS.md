@@ -36,3 +36,12 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+
+<claude-mem-context>
+# Memory Context
+
+# [OpenLIA] recent context, 2026-04-19 10:19pm PDT
+
+No previous sessions found.
+</claude-mem-context>
