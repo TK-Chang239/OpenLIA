@@ -55,9 +55,7 @@ def _resolved() -> ResolvedModel:
         model_ref="fake-1",
         tier=ModelTier.EVERYDAY,
         credentials=ProviderCredentials(api_key="k", base_url=None),
-        capabilities=Capabilities(
-            streaming=True, tool_calling=True, structured_output=True
-        ),
+        capabilities=Capabilities(streaming=True, tool_calling=True, structured_output=True),
         overrides={},
     )
 

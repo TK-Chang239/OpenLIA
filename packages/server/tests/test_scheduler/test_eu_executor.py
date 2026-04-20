@@ -2,15 +2,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from sqlalchemy.orm import Session
-
-from _fakes import (
+from _scheduler_fakes import (
     FakeEUPlanner,
-    FakeReportRunner,
     FakeReportStore,
     FakeSleep,
 )
@@ -29,22 +26,31 @@ from openlia_server.db.models.scheduler import (
 from openlia_server.scheduler.executors.eu import EUScanExecutor
 from openlia_server.scheduler.payloads import EUScanTarget
 from openlia_server.scheduler.registry import JobStatus
+from sqlalchemy.orm import Session
 
 
 def _seed(session: Session) -> None:
     session.add(
         User(
-            id="u_1", email="u@e.com", display_name="u",
-            password_hash="h", is_admin=False, is_disabled=False,
+            id="u_1",
+            email="u@e.com",
+            display_name="u",
+            password_hash="h",
+            is_admin=False,
+            is_disabled=False,
         )
     )
     session.add(
         EuSchedule(
-            id="sch_eu", user_id="u_1",
-            time="16:30", timezone="America/New_York",
+            id="sch_eu",
+            user_id="u_1",
+            time="16:30",
+            timezone="America/New_York",
             days_of_week='["mon","tue","wed","thu","fri"]',
-            label="Post-Market", is_enabled=True,
-            created_at=datetime.now(timezone.utc), last_run_at=None,
+            label="Post-Market",
+            is_enabled=True,
+            created_at=datetime.now(UTC),
+            last_run_at=None,
         )
     )
     session.commit()
@@ -53,8 +59,10 @@ def _seed(session: Session) -> None:
 def _ok_events(report_id: str, ticker: str) -> list:
     return [
         ReportStart(
-            report_id=report_id, department="earnings_update",
-            mode="stock_update", section_titles=["Scorecard"],
+            report_id=report_id,
+            department="earnings_update",
+            mode="stock_update",
+            section_titles=["Scorecard"],
         ),
         ReportComplete(
             report_id=report_id,
@@ -70,10 +78,15 @@ class _ScriptedMultiRunner:
         self._streams = list(streams)
         self.calls: list[dict] = []
 
-    async def run(self, *, department_id: str, user_id: str, request: Any, cancel_token: Any = None) -> AsyncGenerator[Any, None]:
-        self.calls.append(
-            {"department_id": department_id, "user_id": user_id, "request": request}
-        )
+    async def run(
+        self,
+        *,
+        department_id: str,
+        user_id: str,
+        request: Any,
+        cancel_token: Any = None,
+    ) -> AsyncGenerator[Any, None]:
+        self.calls.append({"department_id": department_id, "user_id": user_id, "request": request})
         stream = self._streams.pop(0)
         for ev in stream:
             yield ev
@@ -140,7 +153,7 @@ async def test_eu_scan_runs_each_target_sequentially_and_notifies_each(
     saved_ids: list[str] = []
 
     def _save(*, session: Any, user_id: str, department: str, payload: Any) -> str:
-        saved_ids.append(f"rep_{len(saved_ids)+1}")
+        saved_ids.append(f"rep_{len(saved_ids) + 1}")
         store.saves.append(
             {
                 "user_id": user_id,
@@ -170,9 +183,7 @@ async def test_eu_scan_runs_each_target_sequentially_and_notifies_each(
             "report_ids": ["rep_1", "rep_2", "rep_3"],
         }
 
-        notifs = sorted(
-            s.query(UserNotification).all(), key=lambda n: n.message
-        )
+        notifs = sorted(s.query(UserNotification).all(), key=lambda n: n.message)
         assert len(notifs) == 3
         messages = [n.message for n in notifs]
         assert "AAPL" in messages[0]
@@ -192,7 +203,7 @@ async def test_eu_planner_receives_last_run_at_as_since(
 ) -> None:
     with session_factory() as s:
         _seed(s)
-        previous = datetime(2026, 4, 16, 12, 0, tzinfo=timezone.utc)
+        previous = datetime(2026, 4, 16, 12, 0, tzinfo=UTC)
         s.get(EuSchedule, "sch_eu").last_run_at = previous
         s.commit()
 
@@ -231,8 +242,10 @@ async def test_eu_mid_scan_transient_error_triggers_retry(
         _ok_events("r_aapl_1", "AAPL"),
         [
             ReportStart(
-                report_id="r_msft_1", department="earnings_update",
-                mode="stock_update", section_titles=[],
+                report_id="r_msft_1",
+                department="earnings_update",
+                mode="stock_update",
+                section_titles=[],
             ),
             ReportError(
                 report_id="r_msft_1",

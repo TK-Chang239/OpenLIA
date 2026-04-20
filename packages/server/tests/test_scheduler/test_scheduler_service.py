@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 import pytest
-from sqlalchemy.orm import Session
-
-from _fakes import FakeAPScheduler, FakeSleep
+from _scheduler_fakes import FakeAPScheduler, FakeSleep
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import EuSchedule, JobRun, MbSchedule
@@ -16,16 +14,17 @@ from openlia_server.scheduler.executors.base import (
     SessionFactory,
 )
 from openlia_server.scheduler.registry import (
+    MAINTENANCE_JOB_KEY,
     JobStatus,
     JobType,
-    MAINTENANCE_JOB_KEY,
     job_key,
 )
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
-
+from sqlalchemy.orm import Session
 
 # --- Minimal recording executor for dispatch tests -----------------
+
 
 class _RecordingExecutor(BaseExecutor):
     def __init__(
@@ -40,12 +39,17 @@ class _RecordingExecutor(BaseExecutor):
         # BaseExecutor has job_type as ClassVar — override on the instance.
         self.job_type = job_type  # type: ignore[misc]
         self.calls: list[dict] = []
-        self._outcome = outcome or JobOutcome(
-            result_summary={"ok": True}, notifications=[]
-        )
+        self._outcome = outcome or JobOutcome(result_summary={"ok": True}, notifications=[])
         self._raise_exc = raise_exc
 
-    async def _do_work(self, *, user_id: str | None, schedule_id: str | None, run_id: str, cancel_token: CancellationToken | None):
+    async def _do_work(
+        self,
+        *,
+        user_id: str | None,
+        schedule_id: str | None,
+        run_id: str,
+        cancel_token: CancellationToken | None,
+    ):
         self.calls.append(
             {
                 "user_id": user_id,
@@ -62,8 +66,12 @@ class _RecordingExecutor(BaseExecutor):
 def _seed_user(session: Session) -> None:
     session.add(
         User(
-            id="u_1", email="u@e.com", display_name="u",
-            password_hash="h", is_admin=False, is_disabled=False,
+            id="u_1",
+            email="u@e.com",
+            display_name="u",
+            password_hash="h",
+            is_admin=False,
+            is_disabled=False,
         )
     )
     session.commit()
@@ -79,11 +87,14 @@ def _mb_schedule(
     last_run_at: datetime | None = None,
 ) -> MbSchedule:
     return MbSchedule(
-        id=id, user_id=user_id,
-        time=time, timezone=tz,
+        id=id,
+        user_id=user_id,
+        time=time,
+        timezone=tz,
         days_of_week='["mon","tue","wed","thu","fri"]',
-        label="Pre-Market", is_enabled=enabled,
-        created_at=datetime.now(timezone.utc),
+        label="Pre-Market",
+        is_enabled=enabled,
+        created_at=datetime.now(UTC),
         last_run_at=last_run_at,
     )
 
@@ -95,16 +106,20 @@ def _eu_schedule(
     enabled: bool = True,
 ) -> EuSchedule:
     return EuSchedule(
-        id=id, user_id=user_id,
-        time="16:30", timezone="America/New_York",
+        id=id,
+        user_id=user_id,
+        time="16:30",
+        timezone="America/New_York",
         days_of_week='["mon","tue","wed","thu","fri"]',
-        label="Post-Market", is_enabled=enabled,
-        created_at=datetime.now(timezone.utc),
+        label="Post-Market",
+        is_enabled=enabled,
+        created_at=datetime.now(UTC),
         last_run_at=None,
     )
 
 
 # --- Tests ---------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_start_registers_maintenance_job(session_factory) -> None:
@@ -145,10 +160,7 @@ async def test_start_rehydrates_enabled_mb_and_eu_schedules(
 
     assert job_key(JobType.MB_BRIEFING, "u_1") in scheduler.jobs
     assert job_key(JobType.EU_SCAN, "u_1") in scheduler.jobs
-    assert all(
-        k != job_key(JobType.MB_BRIEFING, "u_1_off")
-        for k in scheduler.jobs
-    )
+    assert all(k != job_key(JobType.MB_BRIEFING, "u_1_off") for k in scheduler.jobs)
 
 
 @pytest.mark.asyncio
@@ -158,8 +170,12 @@ async def test_start_skips_schedules_for_disabled_users(
     with session_factory() as s:
         s.add(
             User(
-                id="u_bad", email="x@e.com", display_name="x",
-                password_hash="h", is_admin=False, is_disabled=True,
+                id="u_bad",
+                email="x@e.com",
+                display_name="x",
+                password_hash="h",
+                is_admin=False,
+                is_disabled=True,
             )
         )
         s.add(_mb_schedule(id="sch_bad", user_id="u_bad"))
@@ -269,9 +285,7 @@ async def test_remove_schedule_unregisters_job(session_factory) -> None:
     await svc.start()
     await svc.add_schedule(_mb_schedule())
 
-    await svc.remove_schedule(
-        job_type=JobType.MB_BRIEFING, user_id="u_1"
-    )
+    await svc.remove_schedule(job_type=JobType.MB_BRIEFING, user_id="u_1")
     assert job_key(JobType.MB_BRIEFING, "u_1") not in scheduler.jobs
 
 
@@ -336,14 +350,14 @@ async def test_startup_backfills_missed_tick_within_grace(
     6h if startup is <=13:00 — so a catch-up run must be queued."""
     from apscheduler.triggers.date import DateTrigger
 
-    now = datetime(2026, 4, 17, 10, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 17, 10, 0, tzinfo=UTC)
     with session_factory() as s:
         _seed_user(s)
         s.add(
             _mb_schedule(
                 time="07:00",
                 tz="UTC",
-                last_run_at=datetime(2026, 4, 16, 7, 0, tzinfo=timezone.utc),
+                last_run_at=datetime(2026, 4, 16, 7, 0, tzinfo=UTC),
             )
         )
         s.commit()
@@ -356,9 +370,7 @@ async def test_startup_backfills_missed_tick_within_grace(
     svc = SchedulerService(
         session_factory=session_factory,
         scheduler=scheduler,
-        settings=SchedulerSettings(
-            enabled=True, misfire_grace_seconds=6 * 3600
-        ),
+        settings=SchedulerSettings(enabled=True, misfire_grace_seconds=6 * 3600),
         executors={JobType.MB_BRIEFING: mb_exec},
         clock=lambda: now,
     )
@@ -379,14 +391,14 @@ async def test_startup_does_not_backfill_when_tick_outside_grace(
     """Daily 07:00 UTC, last ran 5 days ago, grace is 6 hours, startup is
     18:00 UTC. The most recent tick was 07:00 today — 11h ago — outside
     6h. No backfill."""
-    now = datetime(2026, 4, 17, 18, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 4, 17, 18, 0, tzinfo=UTC)
     with session_factory() as s:
         _seed_user(s)
         s.add(
             _mb_schedule(
                 time="07:00",
                 tz="UTC",
-                last_run_at=datetime(2026, 4, 12, 7, 0, tzinfo=timezone.utc),
+                last_run_at=datetime(2026, 4, 12, 7, 0, tzinfo=UTC),
             )
         )
         s.commit()
@@ -395,9 +407,7 @@ async def test_startup_does_not_backfill_when_tick_outside_grace(
     svc = SchedulerService(
         session_factory=session_factory,
         scheduler=scheduler,
-        settings=SchedulerSettings(
-            enabled=True, misfire_grace_seconds=6 * 3600
-        ),
+        settings=SchedulerSettings(enabled=True, misfire_grace_seconds=6 * 3600),
         clock=lambda: now,
     )
     await svc.start()
@@ -421,7 +431,7 @@ async def test_startup_marks_running_jobs_as_cancelled(
                 schedule_id="sch_mb",
                 attempt=1,
                 status=JobStatus.RUNNING.value,
-                started_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                started_at=datetime.now(UTC) - timedelta(hours=1),
             )
         )
         s.commit()
@@ -457,7 +467,14 @@ async def test_shutdown_cancels_active_tokens_and_stops_scheduler(
 
         job_type: ClassVar[JobType] = JobType.MB_BRIEFING
 
-        async def _do_work(self, *, user_id: str | None, schedule_id: str | None, run_id: str, cancel_token: CancellationToken | None):
+        async def _do_work(
+            self,
+            *,
+            user_id: str | None,
+            schedule_id: str | None,
+            run_id: str,
+            cancel_token: CancellationToken | None,
+        ):
             # Wait for cancellation.
             while not cancel_token.is_cancelled:
                 await asyncio.sleep(0.01)
@@ -507,8 +524,8 @@ async def test_run_retry_fires_original_schedule_as_one_shot(
                 schedule_id="sch_mb",
                 attempt=3,
                 status=JobStatus.FAILED.value,
-                started_at=datetime.now(timezone.utc) - timedelta(hours=2),
-                completed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+                started_at=datetime.now(UTC) - timedelta(hours=2),
+                completed_at=datetime.now(UTC) - timedelta(hours=1),
                 error_message="429",
             )
         )

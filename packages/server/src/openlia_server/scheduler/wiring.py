@@ -4,6 +4,7 @@ Each Plan that ships a real department builder will update this module
 to inject its real implementation. Until then, stubs raise
 DepartmentPayloadBuilderNotWired when fired — which the executor logs
 as a failed job_runs row but does NOT treat as a crash."""
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,18 +1,21 @@
 """SchedulerService — APScheduler wrapper that owns the lifecycle
 (startup rehydration, hot-reload add/modify/remove, graceful shutdown)
 for the four job types defined in registry.JobType."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.date import DateTrigger
 from openlia.llm.runtime.cancellation import CancellationToken
+
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import (
     EuSchedule,
@@ -24,18 +27,15 @@ from openlia_server.scheduler.recovery import (
     should_catch_up,
 )
 from openlia_server.scheduler.registry import (
-    JobType,
     MAINTENANCE_JOB_KEY,
+    JobType,
     job_key,
 )
 from openlia_server.scheduler.settings import SchedulerSettings
 
-
 log = logging.getLogger(__name__)
 
-_VALID_DAY_NAMES: frozenset[str] = frozenset(
-    {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
-)
+_VALID_DAY_NAMES: frozenset[str] = frozenset({"mon", "tue", "wed", "thu", "fri", "sat", "sun"})
 
 
 @dataclass
@@ -44,14 +44,10 @@ class SchedulerService:
     scheduler: Any  # APScheduler AsyncScheduler (or FakeAPScheduler in tests)
     settings: SchedulerSettings
     executors: dict[JobType, BaseExecutor] = field(default_factory=dict)
-    clock: Callable[[], datetime] = field(
-        default_factory=lambda: (lambda: datetime.now(timezone.utc))
-    )
+    clock: Callable[[], datetime] = field(default_factory=lambda: lambda: datetime.now(UTC))
 
     is_running: bool = field(init=False, default=False)
-    _active_tokens: dict[str, CancellationToken] = field(
-        init=False, default_factory=dict
-    )
+    _active_tokens: dict[str, CancellationToken] = field(init=False, default_factory=dict)
 
     # ------------------------------------------------------------
     # Lifecycle
@@ -74,39 +70,22 @@ class SchedulerService:
 
         with self.session_factory() as session:
             enabled_user_ids = {
-                u.id
-                for u in session.query(User).filter(User.is_disabled.is_(False))
+                u.id for u in session.query(User).filter(User.is_disabled.is_(False))
             }
-            mb_rows = (
-                session.query(MbSchedule)
-                .filter(MbSchedule.is_enabled.is_(True))
-                .all()
-            )
-            eu_rows = (
-                session.query(EuSchedule)
-                .filter(EuSchedule.is_enabled.is_(True))
-                .all()
-            )
+            mb_rows = session.query(MbSchedule).filter(MbSchedule.is_enabled.is_(True)).all()
+            eu_rows = session.query(EuSchedule).filter(EuSchedule.is_enabled.is_(True)).all()
 
         for row in mb_rows:
             if row.user_id not in enabled_user_ids:
                 continue
-            await self._register_schedule(
-                job_type=JobType.MB_BRIEFING, schedule=row
-            )
-            await self._maybe_backfill(
-                job_type=JobType.MB_BRIEFING, schedule=row
-            )
+            await self._register_schedule(job_type=JobType.MB_BRIEFING, schedule=row)
+            await self._maybe_backfill(job_type=JobType.MB_BRIEFING, schedule=row)
 
         for row in eu_rows:
             if row.user_id not in enabled_user_ids:
                 continue
-            await self._register_schedule(
-                job_type=JobType.EU_SCAN, schedule=row
-            )
-            await self._maybe_backfill(
-                job_type=JobType.EU_SCAN, schedule=row
-            )
+            await self._register_schedule(job_type=JobType.EU_SCAN, schedule=row)
+            await self._maybe_backfill(job_type=JobType.EU_SCAN, schedule=row)
 
     async def shutdown(self) -> None:
         """Cancel all in-flight jobs, wait up to `shutdown_grace_seconds`
@@ -117,9 +96,7 @@ class SchedulerService:
         for token in list(self._active_tokens.values()):
             token.cancel()
 
-        deadline = self.clock() + timedelta(
-            seconds=self.settings.shutdown_grace_seconds
-        )
+        deadline = self.clock() + timedelta(seconds=self.settings.shutdown_grace_seconds)
         while self._active_tokens and self.clock() < deadline:
             await asyncio.sleep(0.05)
 
@@ -133,21 +110,15 @@ class SchedulerService:
     async def add_schedule(self, schedule: MbSchedule | EuSchedule) -> None:
         job_type = self._job_type_for(schedule)
         if job_type not in self.executors:
-            raise RuntimeError(
-                f"no executor registered for job_type={job_type.value!r}"
-            )
+            raise RuntimeError(f"no executor registered for job_type={job_type.value!r}")
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
     async def modify_schedule(self, schedule: MbSchedule | EuSchedule) -> None:
         job_type = self._job_type_for(schedule)
-        await self.remove_schedule(
-            job_type=job_type, user_id=schedule.user_id
-        )
+        await self.remove_schedule(job_type=job_type, user_id=schedule.user_id)
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
-    async def remove_schedule(
-        self, *, job_type: JobType, user_id: str
-    ) -> None:
+    async def remove_schedule(self, *, job_type: JobType, user_id: str) -> None:
         await self.scheduler.remove_schedule(job_key(job_type, user_id))
 
     async def run_retry(self, *, run_id: str) -> None:
@@ -241,7 +212,7 @@ class SchedulerService:
     async def _register_maintenance_job(self) -> None:
         # Always register the maintenance schedule; if no executor is
         # configured _run_job will log and return without doing work.
-        trigger = CronTrigger(hour=3, minute=0, timezone=timezone.utc)
+        trigger = CronTrigger(hour=3, minute=0, timezone=UTC)
         await self.scheduler.add_schedule(
             self._run_job,
             trigger,

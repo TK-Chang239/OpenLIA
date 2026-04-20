@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 
 import pytest
-from sqlalchemy.orm import Session
-
-from _fakes import (
+from _scheduler_fakes import (
     FakeBatchRunner,
     FakeMRBuilder,
     FakeMRCacheStore,
@@ -27,13 +24,18 @@ from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.mr import MRAssessmentExecutor
 from openlia_server.scheduler.registry import JobStatus
+from sqlalchemy.orm import Session
 
 
 def _seed(session: Session) -> None:
     session.add(
         User(
-            id="u_1", email="u@e.com", display_name="u",
-            password_hash="h", is_admin=False, is_disabled=False,
+            id="u_1",
+            email="u@e.com",
+            display_name="u",
+            password_hash="h",
+            is_admin=False,
+            is_disabled=False,
         )
     )
     session.commit()
@@ -42,8 +44,10 @@ def _seed(session: Session) -> None:
 def _t5_ok_events(report_id: str = "r_t5") -> list:
     return [
         ReportStart(
-            report_id=report_id, department="macro_research",
-            mode="mr_synthesis", section_titles=["Assessment"],
+            report_id=report_id,
+            department="macro_research",
+            mode="mr_synthesis",
+            section_titles=["Assessment"],
         ),
         ReportComplete(
             report_id=report_id,
@@ -195,8 +199,10 @@ async def test_mr_t5_report_error_transient_triggers_retry(
             self.phase += 1
             if self.phase == 1:
                 yield ReportStart(
-                    report_id="r_1", department="macro_research",
-                    mode="mr_synthesis", section_titles=[],
+                    report_id="r_1",
+                    department="macro_research",
+                    mode="mr_synthesis",
+                    section_titles=[],
                 )
                 yield ReportError(
                     report_id="r_1",

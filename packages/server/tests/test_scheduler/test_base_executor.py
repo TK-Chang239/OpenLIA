@@ -4,7 +4,7 @@ import asyncio
 from typing import ClassVar
 
 import pytest
-from _fakes import FakeSleep
+from _scheduler_fakes import FakeSleep
 from openlia.llm.exceptions import (
     AuthError,
     RateLimitError,
