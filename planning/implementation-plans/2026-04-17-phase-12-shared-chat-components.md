@@ -2,6 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - `ChatSession` fields are `is_pinned: bool`, `is_archived: bool`, `context: dict | None`. There is **no** `pinned` column and **no** `archived_at` column. Service code must construct `ChatSession(user_id=..., department=..., title=..., is_pinned=False)` and filter with `.where(ChatSession.is_archived.is_(False))`. If archive timestamps are required by the UI, add a migration deliberately in Task 0 — don't rely on `archived_at`.
+> - All IDs are UUID strings (`String(36)`). `user_id`, `session_id`, `report_id`, `repo_item_id` are `str` at every service boundary and path param.
+> - Backend imports: `ChatSession`, `ChatMessage`, `Report`, `RepoItem` from `openlia_server.db.models.content`; auth via `build_require_auth(...)` router factories — no bare `current_user` / `require_user`. `RepoItem` creation stays in this plan's Task 0 per the README cross-plan contract.
+> - SSE consumption: the server-side serializer is `from openlia.llm.runtime.events import to_wire` — there is no `serialize_sse`. `ReportRequest` lives at `openlia.llm.runtime.messages`.
+> - API prefix normalization (already applied 2026-04-20): frontend hits `/api/chat/sessions`, `/api/repo/items`; backend mounts bare `/chat/sessions`, `/repo`. Keep this; do not revert.
+
 **Goal:** Build the shared frontend chat stack — `ChatInterface` (SSE streaming, message rendering, welcome, input), `ChatHistory` (session list + persistence routes), `FileViewer` (side panel with per-type renderers), `FileDownload`, and `SaveToRepo` — along with the minimal backend endpoints they depend on (`/chat/sessions`, `/chat/sessions/{id}/messages`, `/repo/items`, `/reports/{id}/download`).
 
 **Architecture:** Chat state is driven by a single `useChatStream` hook that owns the SSE event-stream state machine (`chat.start` → `chat.tool_call.*` → `chat.token` → `chat.done`/`chat.error`/disconnect). Message/session persistence happens server-side on terminal events; the client just reads rendered sessions from REST. The `FileViewer` is a single persistent side panel whose content swaps when a different attachment chip is clicked. `SaveToRepo` and `FileDownload` each ship as dual-surface components (chip-variant + viewer-header-variant) that share core logic.
@@ -9,7 +16,7 @@
 **Tech Stack:** React 18 + TypeScript strict, react-router-dom v6, Framer Motion (animations), Tailwind v3 (design tokens as CSS custom properties), lucide-react (icons), react-markdown + remark-gfm (markdown rendering), pdfjs-dist (PDF rendering), vitest + @testing-library/react. Backend: FastAPI, SQLAlchemy 2.x, Pydantic v2, StreamingResponse for download.
 
 **Dependencies:**
-- Plan 1A (tables `chat_sessions`, `chat_messages`, `chat_attachments`, `repo_items`, `reports`)
+- Plan 1A (tables `chat_sessions`, `chat_messages`, `chat_attachments`, `reports`). Note: `repo_items` is **not** in Plan 1A — this plan creates it in Task 0 below.
 - Plan 2 (auth / session cookies)
 - Plan 5 (SSE event taxonomy `chat.*` already documented; this plan consumes but does not emit)
 - Plan 8 (AppShell, design tokens, router, API client base)
@@ -89,6 +96,7 @@
 
 ## Task Overview
 
+0. `repo_items` table + SQLAlchemy model + Alembic migration (prerequisite — not created by Plan 1A).
 1. Chat sessions service + routes (GET /chat/sessions, GET /chat/sessions/{id}/messages, PATCH/DELETE).
 2. Repo service + routes (list/save/unsave, idempotent).
 3. File download routes with StreamingResponse.
@@ -109,6 +117,91 @@
 18. `SaveToRepoButton` (chip + viewer-header variants).
 19. `FileDownloadButton` (chip + viewer-header variants).
 20. Smoke test + docs update.
+
+---
+
+### Task 0: `repo_items` table + model + migration
+
+**Context.** Plan 1A did **not** create `repo_items`. It must be added here before Task 2 can use it.
+
+**Files:**
+- Create: `packages/server/src/openlia_server/db/models/repo.py` (or append to an existing content-models module)
+- Create: `packages/server/migrations/versions/<next>_add_repo_items.py`
+- Test: `packages/server/tests/test_db/test_repo_items_model.py`
+
+- [ ] **Step 1: Write failing model test**
+
+```python
+# packages/server/tests/test_db/test_repo_items_model.py
+"""Verify repo_items enforces (user_id, report_id) uniqueness and cascades on report delete."""
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+def test_repo_items_unique_per_user_report(create_tables, db_session, user_factory, report_factory):
+    from openlia_server.db.models.repo import RepoItem
+    u = user_factory()
+    r = report_factory(user_id=u.id)
+    db_session.add(RepoItem(user_id=u.id, report_id=r.id))
+    db_session.commit()
+    db_session.add(RepoItem(user_id=u.id, report_id=r.id))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `uv run pytest packages/server/tests/test_db/test_repo_items_model.py -v`
+Expected: FAIL — `RepoItem` not defined / table missing.
+
+- [ ] **Step 3: Implement the model**
+
+```python
+# packages/server/src/openlia_server/db/models/repo.py
+from datetime import datetime
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from openlia_server.db.models.base import Base
+
+
+class RepoItem(Base):
+    __tablename__ = "repo_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    report_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "report_id", name="uq_repo_items_user_report"),
+        Index("ix_repo_items_user_id_created_at", "user_id", "created_at"),
+    )
+```
+
+- [ ] **Step 4: Create and run the migration**
+
+```bash
+uv run alembic -c packages/server/alembic.ini revision -m "add_repo_items"
+# edit the file under packages/server/migrations/versions/ to create the table matching the model,
+# then:
+uv run alembic -c packages/server/alembic.ini upgrade head
+uv run pytest packages/server/tests/test_db/test_repo_items_model.py -v
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/server/src/openlia_server/db/models/repo.py \
+        packages/server/migrations/versions/*_add_repo_items.py \
+        packages/server/tests/test_db/test_repo_items_model.py
+git commit -m "feat(db): add repo_items table + model for saved-report repo"
+```
 
 ---
 
@@ -313,8 +406,8 @@ from fastapi.testclient import TestClient
 def test_list_returns_sessions_for_user(client: TestClient, user_factory, login_as):
     u = user_factory()
     login_as(u)
-    client.post("/api/chat/sessions", json={"department": "secretary", "title": "first"})
-    r = client.get("/api/chat/sessions")
+    client.post("/chat/sessions", json={"department": "secretary", "title": "first"})
+    r = client.get("/chat/sessions")
     assert r.status_code == 200
     items = r.json()["items"]
     assert len(items) == 1
@@ -322,51 +415,51 @@ def test_list_returns_sessions_for_user(client: TestClient, user_factory, login_
 
 def test_list_hides_other_users_sessions(client: TestClient, user_factory, login_as):
     a = user_factory(); b = user_factory()
-    login_as(a); client.post("/api/chat/sessions", json={"department": "secretary", "title": "A"})
+    login_as(a); client.post("/chat/sessions", json={"department": "secretary", "title": "A"})
     login_as(b)
-    assert client.get("/api/chat/sessions").json()["items"] == []
+    assert client.get("/chat/sessions").json()["items"] == []
 
 def test_create_session_returns_id(client: TestClient, user_factory, login_as):
     login_as(user_factory())
-    r = client.post("/api/chat/sessions", json={"department": "secretary", "title": "hi"})
+    r = client.post("/chat/sessions", json={"department": "secretary", "title": "hi"})
     assert r.status_code == 201
     body = r.json()
     assert body["id"] > 0 and body["title"] == "hi" and body["department"] == "secretary"
 
 def test_rename_session(client: TestClient, user_factory, login_as):
     login_as(user_factory())
-    sid = client.post("/api/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
-    r = client.patch(f"/api/chat/sessions/{sid}", json={"title": "renamed"})
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    r = client.patch(f"/chat/sessions/{sid}", json={"title": "renamed"})
     assert r.status_code == 200
-    assert client.get("/api/chat/sessions").json()["items"][0]["title"] == "renamed"
+    assert client.get("/chat/sessions").json()["items"][0]["title"] == "renamed"
 
 def test_pin_and_archive_via_patch(client: TestClient, user_factory, login_as):
     login_as(user_factory())
-    sid = client.post("/api/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
-    assert client.patch(f"/api/chat/sessions/{sid}", json={"pinned": True}).status_code == 200
-    assert client.patch(f"/api/chat/sessions/{sid}", json={"archived": True}).status_code == 200
-    assert client.get("/api/chat/sessions?include_archived=true").json()["items"][0]["archived_at"] is not None
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    assert client.patch(f"/chat/sessions/{sid}", json={"pinned": True}).status_code == 200
+    assert client.patch(f"/chat/sessions/{sid}", json={"archived": True}).status_code == 200
+    assert client.get("/chat/sessions?include_archived=true").json()["items"][0]["archived_at"] is not None
 
 def test_delete_session(client: TestClient, user_factory, login_as):
     login_as(user_factory())
-    sid = client.post("/api/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
-    assert client.delete(f"/api/chat/sessions/{sid}").status_code == 204
-    assert client.get("/api/chat/sessions").json()["items"] == []
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    assert client.delete(f"/chat/sessions/{sid}").status_code == 204
+    assert client.get("/chat/sessions").json()["items"] == []
 
 def test_list_messages(client: TestClient, user_factory, login_as, seed_message):
     u = user_factory(); login_as(u)
-    sid = client.post("/api/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
     seed_message(session_id=sid, role="user", content="hello")
-    r = client.get(f"/api/chat/sessions/{sid}/messages")
+    r = client.get(f"/chat/sessions/{sid}/messages")
     assert r.status_code == 200
     items = r.json()["items"]
     assert items == [{"id": items[0]["id"], "role": "user", "content": "hello", "tool_calls": None, "stopped_at": None, "created_at": items[0]["created_at"]}]
 
 def test_list_messages_rejects_other_users(client: TestClient, user_factory, login_as):
     a = user_factory(); login_as(a)
-    sid = client.post("/api/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
     b = user_factory(); login_as(b)
-    assert client.get(f"/api/chat/sessions/{sid}/messages").status_code == 403
+    assert client.get(f"/chat/sessions/{sid}/messages").status_code == 403
 ```
 
 - [ ] **Step 6: Run route tests to verify they fail**
@@ -429,7 +522,7 @@ class MessageListOut(BaseModel):
 
 
 def build_chat_sessions_router() -> APIRouter:
-    router = APIRouter(prefix="/api/chat/sessions", tags=["chat-sessions"])
+    router = APIRouter(prefix="/chat/sessions", tags=["chat-sessions"])
 
     @router.get("", response_model=SessionListOut)
     def list_sessions_ep(
@@ -647,28 +740,28 @@ Expected: all pass.
 def test_save_then_list(client, user_factory, login_as, report_factory):
     u = user_factory(); login_as(u)
     r = report_factory(user_id=u.id)
-    resp = client.post(f"/api/repo/items", json={"report_id": r.id})
+    resp = client.post(f"/repo/items", json={"report_id": r.id})
     assert resp.status_code == 201
-    assert client.get("/api/repo/items").json()["items"][0]["report_id"] == r.id
+    assert client.get("/repo/items").json()["items"][0]["report_id"] == r.id
 
 def test_save_twice_is_idempotent(client, user_factory, login_as, report_factory):
     u = user_factory(); login_as(u)
     r = report_factory(user_id=u.id)
-    first = client.post("/api/repo/items", json={"report_id": r.id}).json()
-    second = client.post("/api/repo/items", json={"report_id": r.id}).json()
+    first = client.post("/repo/items", json={"report_id": r.id}).json()
+    second = client.post("/repo/items", json={"report_id": r.id}).json()
     assert first["id"] == second["id"]
 
 def test_delete_by_report_id(client, user_factory, login_as, report_factory):
     u = user_factory(); login_as(u)
     r = report_factory(user_id=u.id)
-    client.post("/api/repo/items", json={"report_id": r.id})
-    assert client.delete(f"/api/repo/items?report_id={r.id}").status_code == 204
-    assert client.get("/api/repo/items").json()["items"] == []
+    client.post("/repo/items", json={"report_id": r.id})
+    assert client.delete(f"/repo/items?report_id={r.id}").status_code == 204
+    assert client.get("/repo/items").json()["items"] == []
 
 def test_delete_when_absent_is_idempotent(client, user_factory, login_as, report_factory):
     u = user_factory(); login_as(u)
     r = report_factory(user_id=u.id)
-    assert client.delete(f"/api/repo/items?report_id={r.id}").status_code == 204
+    assert client.delete(f"/repo/items?report_id={r.id}").status_code == 204
 ```
 
 - [ ] **Step 6: Implement routes**
@@ -705,7 +798,7 @@ class RepoListOut(BaseModel):
 
 
 def build_repo_router() -> APIRouter:
-    router = APIRouter(prefix="/api/repo", tags=["repo"])
+    router = APIRouter(prefix="/repo", tags=["repo"])
 
     @router.get("/items", response_model=RepoListOut)
     def list_items_ep(
@@ -781,7 +874,7 @@ def test_download_report_returns_binary_with_filename_header(client, user_factor
     path = tmp_path / "hello.pdf"
     path.write_bytes(b"%PDF-1.4\nhello")
     r = report_factory(user_id=u.id, file_path=str(path), filename="hello.pdf")
-    resp = client.get(f"/api/reports/{r.id}/download")
+    resp = client.get(f"/reports/{r.id}/download")
     assert resp.status_code == 200
     assert resp.content == b"%PDF-1.4\nhello"
     assert 'filename="hello.pdf"' in resp.headers["content-disposition"]
@@ -791,16 +884,16 @@ def test_download_report_forbids_other_users(client, user_factory, login_as, rep
     path = tmp_path / "x.pdf"; path.write_bytes(b"x")
     r = report_factory(user_id=a.id, file_path=str(path), filename="x.pdf")
     login_as(b)
-    assert client.get(f"/api/reports/{r.id}/download").status_code == 403
+    assert client.get(f"/reports/{r.id}/download").status_code == 403
 
 def test_download_report_404_when_missing(client, user_factory, login_as):
     login_as(user_factory())
-    assert client.get("/api/reports/99999/download").status_code == 404
+    assert client.get("/reports/99999/download").status_code == 404
 
 def test_download_report_410_when_file_missing_on_disk(client, user_factory, login_as, report_factory):
     u = user_factory(); login_as(u)
     r = report_factory(user_id=u.id, file_path="/tmp/does-not-exist-xyz.pdf", filename="x.pdf")
-    assert client.get(f"/api/reports/{r.id}/download").status_code == 410
+    assert client.get(f"/reports/{r.id}/download").status_code == 410
 ```
 
 - [ ] **Step 2: Run test to verify it fails**

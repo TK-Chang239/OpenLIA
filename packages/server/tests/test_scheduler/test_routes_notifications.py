@@ -13,7 +13,7 @@ def _seed_notif(
     *,
     id: str,
     department: str,
-    user_id: str = "u_1",
+    user_id: str = "local",
     read_at=None,
 ) -> None:
     session.add(

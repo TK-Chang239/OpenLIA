@@ -74,8 +74,26 @@ def _load_or_create_file_key() -> bytes:
         return raw
 
     raw = secrets.token_bytes(KEY_LENGTH_BYTES)
-    key_path.write_bytes(base64.b64encode(raw))
-    key_path.chmod(KEY_FILE_MODE)
+    # Write to a sibling tempfile opened with O_EXCL|0600, then atomically
+    # replace the final path. This guarantees the key material never exists
+    # on disk with broader-than-0600 permissions, regardless of umask, and
+    # avoids the write-then-chmod race.
+    tmp_path = key_path.with_name(f".{key_path.name}.{os.getpid()}.tmp")
+    fd = os.open(
+        tmp_path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        KEY_FILE_MODE,
+    )
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(base64.b64encode(raw))
+        os.replace(tmp_path, key_path)
+    except BaseException:
+        try:
+            tmp_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
     return raw
 
 

@@ -139,8 +139,6 @@ class ChatRunner:
             for r in results:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
             tools = await self._tools.build(department_id, has_web_search=True)
-            # v1: break after one round of tool dispatch; stream() handles the final text.
-            break
 
         # Final text turn — stream tokens.
         if cancel_token is not None and cancel_token.is_cancelled:
