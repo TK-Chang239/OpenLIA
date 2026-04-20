@@ -2,11 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - Runtime imports: `from openlia.llm.runtime.messages import ReportRequest` and `from openlia.llm.runtime.events import to_wire` (SSE serialization). There is no `openlia.runtime.*` package and no `serialize_sse` function — any such import in this plan is pre-audit drift.
+> - `ReportRequest` fields are frozen by Plan 5: `mode`, `user_input`, `enabled_sections`, `custom_sections`, `length` (`"brief"|"standard"|"long"`). Do not pass `report_length` directly — map at the call site.
+> - SSE event shapes are frozen: `ReportStart(report_id, department, mode, section_titles)` and `ReportComplete(report_id, schema)`. Title lives in `schema["title"]`; no top-level `title` attribute on either event.
+> - `reports` table schema is Plan 1A's (`report_type`, `title`, `content_markdown`, `content_structured`, `model_ref`, `TimestampMixin`). Do not add `mode`/`schema_json`/`generated_at`/`status` columns; persist the `ReportSchema` JSON into `content_structured` and the rendered markdown into `content_markdown`.
+> - All IDs (`report_id`, `user_id`, `session_id`) are UUID strings.
+> - Auth: router-factory `build_require_auth(...)` with `db_session_factory` + `mode`. No bare `current_user` / `require_user` / `get_db` imports.
+
 **Goal:** Ship the cross-department report rendering pipeline (schema, assembler, block renderers, PDF export) and the Secretary department — the simplest, chat-only department that validates the Phase-4 frontend shell + Plan 12 chat components end-to-end.
 
 **Architecture:**
 - **Core** holds a pure-Python report layer (`openlia/reports/schema.py`, `assembler.py`, `validator.py`, `frameworks/loader.py`) and a per-department prompt registry (`openlia/prompts/secretary.yaml`). No web imports.
-- **Server** exposes two HTTP endpoints: `GET /api/reports/{id}` returns the stored `ReportSchema`; `POST /api/reports/{id}/export/pdf` streams a Playwright-rendered PDF. A third surface — `POST /api/departments/secretary/chat` — is thin: it routes to `ChatRunner` from Plan 5 with the Secretary prompt.
+- **Server** exposes two HTTP endpoints: `GET /reports/{id}` returns the stored `ReportSchema`; `POST /reports/{id}/export/pdf` streams a Playwright-rendered PDF. A third surface — `POST /departments/secretary/chat` — is thin: it routes to `ChatRunner` from Plan 5 with the Secretary prompt. (Frontend reaches all three via `/api/...` through the Vite proxy, which rewrites `/api/*` → `/*`; see Plan 0.)
 - **Frontend** ships a `ReportRenderer` component tree that reads a schema and renders styled HTML using ECharts, TanStack Table, Framer Motion, and react-markdown. Reports open inside the `FileViewer` from Plan 12. The Secretary page reuses `ChatInterface` from Plan 12 and adds a `RedirectCard` message block that the Secretary prompt emits via a `suggest_redirect` tool.
 
 **Tech Stack:**
@@ -14,7 +22,7 @@
 - Frontend: React 18 + TypeScript strict, ECharts 5 (`echarts-for-react`), TanStack Table v8 + TanStack Virtual, Framer Motion, react-markdown + remark-gfm, KaTeX, react-loading-skeleton, react-intersection-observer, file-saver, date-fns.
 
 **Dependencies:**
-- Plan 1A: `reports` table columns (`id`, `user_id`, `department`, `mode`, `schema_json`, `generated_at`, `status`).
+- Plan 1A: `reports` table columns as defined in Plan 1A — `id`, `user_id`, `department`, `report_type`, `title`, `content_markdown`, `content_structured` (JSON — stores the canonical ReportSchema), `model_ref`, `source_session_id`, `token_usage`, `generation_duration_ms`, `is_starred`, `tags`, plus `created_at`/`updated_at` from `TimestampMixin`. Plan 13 uses `report_type` for what earlier drafts called `mode`, `content_structured` for `schema_json`, and `created_at` for `generated_at`; lifecycle `status` is not stored — a row exists only after `ReportComplete`.
 - Plan 2: session middleware (all endpoints authenticated).
 - Plan 3: data requirement adapters (Secretary needs `stock_quote`, `company_profile`, `company_news`, `historical_prices`, `economic_events`).
 - Plan 4: LLM provider system (Thinking/Everyday/Quick tiers; Secretary defaults to the Everyday tier).
@@ -27,7 +35,7 @@
 ## Design Rules
 
 1. **LLM decides content; frontend decides chrome.** Chart titles, types, data, row styles — the LLM. Colors, fonts, spacing, animations — the theme.
-2. **Schema is canonical.** Reports are stored as `schema_json`. Re-rendering never re-calls the LLM. Validation happens at write time, not at render time.
+2. **Schema is canonical.** Reports are stored as JSON in the `reports.content_structured` column (the canonical `ReportSchema`). Re-rendering never re-calls the LLM. Validation happens at write time, not at render time.
 3. **One schema version.** v1 ships `schema_version: "1.0"`. The validator rejects anything else — future plans bump the version and migrate in place.
 4. **All chart blocks have `title` and `options`.** Uniform across block types keeps the block dispatcher simple.
 5. **Group block is a block.** No special cases in `BlockRenderer` — it recurses on `group.blocks`.
@@ -79,10 +87,10 @@ departments/
 
 ```
 routes/
-├── reports.py                      # GET /api/reports/{id}; POST /api/reports/{id}/export/pdf
+├── reports.py                      # GET /reports/{id}; POST /reports/{id}/export/pdf
 └── departments/
     ├── __init__.py
-    └── secretary.py                # POST /api/departments/secretary/chat (SSE)
+    └── secretary.py                # POST /departments/secretary/chat (SSE)
 services/
 ├── report_store.py                 # fetch/store ReportSchema rows
 └── report_export.py                # Playwright singleton + PDF render
@@ -144,8 +152,8 @@ styles/report/
 5. Core: `prompts/secretary.yaml` + `SecretaryDepartment` class.
 6. Server: `report_store.py` service (fetch + create).
 7. Server: `report_export.py` Playwright service with singleton browser.
-8. Server: `/api/reports/{id}` + `/api/reports/{id}/export/pdf` routes.
-9. Server: `/api/departments/secretary/chat` SSE route.
+8. Server: `/reports/{id}` + `/reports/{id}/export/pdf` routes.
+9. Server: `/departments/secretary/chat` SSE route.
 10. Frontend: `api/reports.ts` + `api/secretary.ts` typed clients.
 11. Frontend: report theme CSS (`theme-light.css` + `theme-dark.css`).
 12. Frontend: `TextBlock` (markdown + inline colored numbers).
@@ -1561,7 +1569,7 @@ def get_report(session: Session, *, report_id: str, user_id: str) -> ReportSchem
     ).scalar_one_or_none()
     if row is None:
         raise ReportNotFoundError(report_id)
-    return validate_report_payload(row.schema_json)
+    return validate_report_payload(row.content_structured)
 
 
 def create_report(
@@ -1571,16 +1579,24 @@ def create_report(
     department: str,
     mode: str,
     schema: ReportSchema,
+    model_ref: str,
+    content_markdown: str = "",
 ) -> str:
+    # Plan 1A's `reports` table is the source of truth. Map Plan 13 concepts onto it:
+    #   mode         -> report_type
+    #   schema_json  -> content_structured (JSON blob holding the canonical ReportSchema)
+    #   generated_at -> created_at (from TimestampMixin; populated server-side)
+    # `status` is intentionally absent: a row is only persisted after ReportComplete.
     report_id = str(uuid.uuid4())
     row = Report(
         id=report_id,
         user_id=user_id,
         department=department,
-        mode=mode,
-        schema_json=schema.model_dump(mode="json"),
-        generated_at=schema.generated_at,
-        status="complete",
+        report_type=mode,
+        title=schema.title,
+        content_markdown=content_markdown,
+        content_structured=schema.model_dump(mode="json"),
+        model_ref=model_ref,
     )
     session.add(row)
     session.flush()
@@ -1786,8 +1802,8 @@ git commit -m "feat(reports): add Playwright PDF export service with lifespan ho
 ### Task 8: Server — reports routes
 
 Two endpoints, both session-authenticated:
-- `GET /api/reports/{report_id}` → `{schema: ReportSchema}` JSON.
-- `POST /api/reports/{report_id}/export/pdf` → streaming PDF via `Content-Disposition`. For v1, the route renders HTML by calling a helper that serialises the schema into a minimal HTML skeleton (the rich renderer is the frontend's job, but for PDF we fetch the rendered HTML from the frontend's server-rendered route in a later plan; in v1 the backend sends a basic HTML shell with embedded JSON and a `<script src="/static/report-renderer.js">` placeholder). For this plan we ship the backend route and accept a server-rendered HTML fallback that embeds `schema_json` inside a `<pre>` — enough to prove end-to-end wiring. The richer PDF styling ships in Plan 14.
+- `GET /reports/{report_id}` → `{schema: ReportSchema}` JSON (frontend reaches it via `/api/reports/{id}` through the Vite proxy).
+- `POST /reports/{report_id}/export/pdf` → streaming PDF via `Content-Disposition`. For v1, the route renders HTML by calling a helper that serialises the schema into a minimal HTML skeleton (the rich renderer is the frontend's job, but for PDF we fetch the rendered HTML from the frontend's server-rendered route in a later plan; in v1 the backend sends a basic HTML shell with embedded JSON and a `<script src="/static/report-renderer.js">` placeholder). For this plan we ship the backend route and accept a server-rendered HTML fallback that embeds the `content_structured` payload inside a `<pre>` — enough to prove end-to-end wiring. The richer PDF styling ships in Plan 14.
 
 **Files:**
 - Create: `packages/server/src/openlia_server/routes/reports.py`
@@ -1848,28 +1864,28 @@ def _seed_report(db_session, user_id: str) -> str:
 def test_get_report_returns_schema(client_auth, db_session, seeded_user):
     rid = _seed_report(db_session, seeded_user.id)
     db_session.commit()
-    r = client_auth.get(f"/api/reports/{rid}")
+    r = client_auth.get(f"/reports/{rid}")
     assert r.status_code == 200
     body = r.json()
     assert body["schema"]["cover"]["ticker"] == "AAPL"
 
 
 def test_get_report_404_when_missing(client_auth):
-    r = client_auth.get("/api/reports/does-not-exist")
+    r = client_auth.get("/reports/does-not-exist")
     assert r.status_code == 404
 
 
 def test_get_report_403_when_other_user(client_auth_other, db_session, seeded_user):
     rid = _seed_report(db_session, seeded_user.id)
     db_session.commit()
-    r = client_auth_other.get(f"/api/reports/{rid}")
+    r = client_auth_other.get(f"/reports/{rid}")
     assert r.status_code == 404  # owner scoping returns 404, not 403
 
 
 def test_export_pdf_streams_pdf_bytes(client_auth, db_session, seeded_user):
     rid = _seed_report(db_session, seeded_user.id)
     db_session.commit()
-    r = client_auth.post(f"/api/reports/{rid}/export/pdf")
+    r = client_auth.post(f"/reports/{rid}/export/pdf")
     assert r.status_code == 200
     assert r.headers["content-type"] == "application/pdf"
     assert "attachment" in r.headers["content-disposition"]
@@ -1877,7 +1893,7 @@ def test_export_pdf_streams_pdf_bytes(client_auth, db_session, seeded_user):
 
 
 def test_get_report_requires_auth(client):
-    r = client.get("/api/reports/anything")
+    r = client.get("/reports/anything")
     assert r.status_code == 401
 ```
 
@@ -1890,7 +1906,7 @@ Expected: FAIL — routes not registered.
 
 ```python
 # packages/server/src/openlia_server/routes/reports.py
-"""GET /api/reports/{id} and POST /api/reports/{id}/export/pdf."""
+"""GET /reports/{id} and POST /reports/{id}/export/pdf."""
 
 from __future__ import annotations
 
@@ -1907,7 +1923,7 @@ from openlia_server.services.report_store import (
 )
 
 
-router = APIRouter(prefix="/api/reports", tags=["reports"])
+router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 def _html_shell(title: str, body: str) -> str:
@@ -2039,7 +2055,7 @@ def _consume_sse(iter_lines) -> list[dict]:
 def test_secretary_chat_streams_start_token_done(client_auth, fake_llm):
     fake_llm.queue_chat_response("Hello there\!")
     r = client_auth.post(
-        "/api/departments/secretary/chat",
+        "/departments/secretary/chat",
         json={"message": "hi"},
         headers={"accept": "text/event-stream"},
     )
@@ -2061,7 +2077,7 @@ def test_secretary_chat_emits_tool_call_for_suggest_redirect(client_auth, fake_l
         },
     )
     r = client_auth.post(
-        "/api/departments/secretary/chat",
+        "/departments/secretary/chat",
         json={"message": "Do a full AAPL report"},
         headers={"accept": "text/event-stream"},
     )
@@ -2073,7 +2089,7 @@ def test_secretary_chat_emits_tool_call_for_suggest_redirect(client_auth, fake_l
 
 def test_secretary_chat_requires_auth(client):
     r = client.post(
-        "/api/departments/secretary/chat",
+        "/departments/secretary/chat",
         json={"message": "hi"},
     )
     assert r.status_code == 401
@@ -2107,7 +2123,7 @@ from openlia_server.db.session import get_session
 from openlia_server.runtime.chat import ChatRunner, sse_stream
 
 
-router = APIRouter(prefix="/api/departments/secretary", tags=["secretary"])
+router = APIRouter(prefix="/departments/secretary", tags=["secretary"])
 
 
 class SecretaryChatRequest(BaseModel):
@@ -2157,7 +2173,7 @@ Expected: all pass.
 git add packages/server/src/openlia_server/routes/departments \
         packages/server/tests/routes/departments \
         packages/server/src/openlia_server/app.py
-git commit -m "feat(secretary): add /api/departments/secretary/chat SSE route"
+git commit -m "feat(secretary): add /departments/secretary/chat SSE route"
 ```
 
 ---

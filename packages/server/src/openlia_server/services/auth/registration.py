@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.auth import SignupInvite, User
-from openlia_server.services.auth import passwords, signup_policy
+from openlia_server.services.auth import passwords, signup_policy, tokens
 from openlia_server.services.auth.errors import AuthError
 
 
@@ -43,7 +43,7 @@ def register(
         raise InviteRequiredError("An invite token is required to register.")
 
     invite = db.execute(
-        select(SignupInvite).where(SignupInvite.token == invite_token)
+        select(SignupInvite).where(SignupInvite.token_hash == tokens.hash_token(invite_token))
     ).scalar_one_or_none()
     _validate_invite(invite)
 

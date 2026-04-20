@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - Frontend calls `/api/...`; the Vite proxy rewrite is already shipped (`frontend/vite.config.ts` strips `/api`). Do not change the proxy.
+> - `GET /auth/session` and `POST /auth/login` return a **flat** payload: `{user_id, email, display_name, is_admin, must_change_password}`. There is no `{user: ...}` envelope and no `role` column. `AuthProvider` / `fetchJson` must map at the boundary: `{id: user_id, email, display_name, role: is_admin ? "admin" : "user"}`.
+> - `must_change_password` is present on login; add it to `/auth/session` or default it to `false` after a session refresh — do not assume the session endpoint returns it today.
+> - `notifications_router` is still wired to a placeholder 401 dependency in the shipped app. Sidebar polling will 401 until audit Task "Wire jobs/notifications routes to real auth" lands; build the client assuming the real contract and let the server-side fix unblock it.
+
 **Goal:** Ship the React shell — router, auth context, API client, Sidebar with notification polling, design tokens, and base primitives — so every downstream page plan (Login, Wizard, Settings, department UIs) can plug in against a stable layout.
 
 **Architecture:** Vite + React 18 + TypeScript + react-router-dom v6 data-router pattern. A single `AuthProvider` owns user/mode state derived from `GET /auth/session` (404 → personal mode, 401 → unauthenticated, 200 → company-authenticated). The `Sidebar` reads a data-driven nav list, polls `GET /notifications/unread` every 60 s, and renders per-department dots. Tailwind v3 with CSS custom properties carries design tokens.

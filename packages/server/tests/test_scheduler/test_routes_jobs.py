@@ -8,12 +8,11 @@ import openlia_server.db.models  # noqa: F401 — register all models
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from openlia_server.auth.deps import get_current_user
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import JobRun
-from openlia_server.routes.jobs import router as jobs_router
-from openlia_server.routes.notifications import router as notifications_router
+from openlia_server.routes.jobs import build_jobs_router
+from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.scheduler.registry import JobStatus, JobType
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -56,7 +55,7 @@ def client_with_user(route_session_factory):
     with route_session_factory() as s:
         s.add(
             User(
-                id="u_1",
+                id="local",
                 email="u@e.com",
                 display_name="u",
                 password_hash="h",
@@ -83,14 +82,10 @@ def client_with_user(route_session_factory):
         await svc.shutdown()
 
     app = FastAPI(lifespan=lifespan)
-    app.include_router(jobs_router)
-    app.include_router(notifications_router)
-
-    def _fake_user():
-        with route_session_factory() as s:
-            return s.get(User, "u_1")
-
-    app.dependency_overrides[get_current_user] = _fake_user
+    app.include_router(build_jobs_router(db_session_factory=route_session_factory, mode="personal"))
+    app.include_router(
+        build_notifications_router(db_session_factory=route_session_factory, mode="personal")
+    )
 
     with TestClient(app) as client:
         yield client
@@ -102,7 +97,7 @@ def _seed_run(
     id: str,
     status: JobStatus,
     job_type: JobType = JobType.MB_BRIEFING,
-    user_id: str = "u_1",
+    user_id: str = "local",
 ) -> None:
     now = datetime.now(UTC)
     session.add(

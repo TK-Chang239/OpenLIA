@@ -41,7 +41,6 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         return [
             {
                 "id": r.id,
-                "token": r.token,
                 "label": r.label,
                 "use_count": r.use_count,
                 "max_uses": r.max_uses,
@@ -55,9 +54,10 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
     @router.post("/invites", status_code=201)
     def create_invite(body: CreateInviteIn, admin=require_admin):
         db = db_session_factory()
+        raw_token = tokens.generate_opaque_token()
         invite = SignupInvite(
             id=str(uuid.uuid4()),
-            token=tokens.generate_opaque_token(),
+            token_hash=tokens.hash_token(raw_token),
             label=body.label,
             max_uses=body.max_uses,
             use_count=0,
@@ -68,7 +68,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         db.add(invite)
         db.commit()
         db.refresh(invite)
-        return {"id": invite.id, "token": invite.token, "label": invite.label}
+        return {"id": invite.id, "token": raw_token, "label": invite.label}
 
     @router.post("/invites/{invite_id}/revoke", status_code=204)
     def revoke_invite(invite_id: str, admin=require_admin):

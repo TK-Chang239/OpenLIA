@@ -17,11 +17,12 @@ from sqlalchemy.orm import sessionmaker
 
 import openlia_server.db.models  # noqa: F401 — registers all models on Base.metadata
 from openlia_server.db.base import Base
+from openlia_server.db.bootstrap import resolve_db_url
 from openlia_server.db.session import SessionLocal, configure_engine, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
-from openlia_server.routes.jobs import router as jobs_router
-from openlia_server.routes.notifications import router as notifications_router
+from openlia_server.routes.jobs import build_jobs_router
+from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.settings import (
     build_data_providers_router,
     build_llm_providers_admin_router,
@@ -93,7 +94,11 @@ def _make_lifespan(
 ) -> Callable[[FastAPI], AsyncGenerator[None, None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-        db_url = os.environ.get("OPENLIA_DATABASE_URL")
+        # Resolve the DB URL via the same helper the CLI bootstrap uses so
+        # `openlia serve` and direct ASGI/factory deployments agree on the
+        # effective database (single source of truth: OPENLIA_DB_URL).
+        configured_explicit_url = bool(os.environ.get("OPENLIA_DB_URL"))
+        db_url = resolve_db_url() if configured_explicit_url else None
         if db_url:
             engine = configure_engine(db_url)
             # For SQLite (dev/test), create tables automatically — production
@@ -169,8 +174,8 @@ def create_app(
 
     app.include_router(build_data_providers_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
-    app.include_router(jobs_router)
-    app.include_router(notifications_router)
+    app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

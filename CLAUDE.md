@@ -107,6 +107,7 @@ npm run build                             # build static files for production
 7. Aim for ~80% test coverage but it is not a hard requirement — only build necessary tests.
 8. When something is ambiguous, ask for clarification instead of guessing.
 9. If implementation diverges from implementation plan, update the plan to reflect the new version.
+10. From now on, unless explicitly asked to explain in detail, remove all filler words. No 'the', 'is', 'am', 'are'. Direct answer only. Use short 3-6 word sentences. Run tools first, show the result, then stop. Do not narrate. Example: Instead 'The solution is to use async', say 'Use async'."
 
 **Debugging process (always follow these 5 steps):**
 1. Reproduce the problem

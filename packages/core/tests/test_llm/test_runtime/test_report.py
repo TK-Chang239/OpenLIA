@@ -196,6 +196,7 @@ async def test_report_tool_loop_emits_tool_events(
         script=FakeProviderScript(
             turns=[
                 ("tool_calls", [call]),
+                ("final", ""),
                 ("final_json", json.dumps(filled)),
             ]
         )

@@ -2,11 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - All IDs are UUID strings (`String(36)`). `user_id`, `schedule_id`, `report_id`, `watchlist_entry_id` are `str` at every service boundary, path param, and FK.
+> - Backend imports: `User` from `openlia_server.db.models.auth` (not `.users`/`.user`). `EUSchedule` (from Plan 1B) lives in the shipped scheduler tables — confirm the module path in `db/models/infrastructure.py` before coding. Auth via `build_require_auth(...)` router factories; no bare `current_user`/`require_user`.
+> - Runtime imports: `from openlia.llm.runtime.messages import ReportRequest`, `from openlia.llm.runtime.events import to_wire`. `ReportRequest.length` is `"brief"|"standard"|"long"` — map `eu_user_configs.report_length` (`concise`/`normal`/`elaborative`) at the call site.
+> - `ReportStart` / `ReportComplete` field shapes are frozen (see Plan 13 normalizations).
+> - `reports` table schema is Plan 1A's — persist `ReportSchema` into `content_structured`, rendered markdown into `content_markdown`. No ad-hoc report columns.
+
 **Goal:** Ship the Earnings Update (EU) department so users can maintain a per-user watchlist of tickers, let the background scheduler scan that watchlist on cron-configured times to auto-generate earnings analysis reports, generate on-demand reports for the most recent earnings release of any company, browse all generated reports in an EU Cabinet, and customize report sections + length.
 
 **Architecture:**
 - **Core** gets an `EarningsUpdateDepartment` class (one report mode: `earnings_analysis`) plus a single `earnings_update.yaml` prompt that branches by `report_length` via Jinja. The `earnings_update.json` framework + style guide already live at `packages/core/src/openlia/reports/frameworks/` after Plan 13.
-- **Server** adds two new tables — `eu_watchlist` (per-user ticker entries with cached next-earnings metadata) and `eu_user_configs` (sections + length preferences) — a watchlist service (which uses the `earnings_data` adapter from Plan 3 to look up the next earnings date on add), a config service, an `EUScanPlanner` implementation that fulfills the Plan 6 Protocol, a `/schedules` CRUD surface built on the `eu_schedules` table from Plan 1B, an `/api/departments/earnings-update/report` SSE route for on-demand generation, and a `/reports` listing endpoint. The real `EUScanPlanner` is wired into `build_scheduler_service()` via a setting at app startup.
+- **Server** adds two new tables — `eu_watchlist` (per-user ticker entries with cached next-earnings metadata) and `eu_user_configs` (sections + length preferences) — a watchlist service (which uses the `earnings_data` adapter from Plan 3 to look up the next earnings date on add), a config service, an `EUScanPlanner` implementation that fulfills the Plan 6 Protocol, a `/schedules` CRUD surface built on the `eu_schedules` table from Plan 1B, a `/departments/earnings-update/report` SSE route for on-demand generation, and a `/reports` listing endpoint. The real `EUScanPlanner` is wired into `build_scheduler_service()` via a setting at app startup.
 - **Frontend** ships `EarningsUpdatePage` with a header, a horizontally scrollable `WatchlistRow` (with add/remove), a `RecentReportsList`, an `EUCabinet` overlay with search + date-grouping, an `OnDemandReportModal`, an `AddTickerPopover`, a `ScheduleManager` subview for CRUD on scan schedules, and a `ReportSettingsModal` for sections + length. Reports open in the Plan 12 `FileViewer`.
 
 **Tech Stack:**
@@ -1734,7 +1741,8 @@ def test_plan_builds_report_request_with_ticker_and_config(create_tables, db_ses
     assert req.custom_sections == [
         {"id": "custom_extra_1", "title": "Model update", "description": "Update base case"}
     ]
-    assert req.report_length == "concise"
+    # Config column holds "concise"; planner maps to ReportRequest.length "brief".
+    assert req.length == "brief"
 
 
 def test_plan_is_user_scoped(create_tables, db_session: Session) -> None:
@@ -1817,13 +1825,17 @@ class EuScanPlannerImpl:
             released_at = self.adapter.latest_release(row.ticker, since=since)
             if released_at is None:
                 continue
+            # See Plan 14 Step 3 for the same mapping rationale: Plan 5's
+            # ReportRequest.length accepts ("brief", "standard", "long"); our
+            # config column uses ("concise", "normal", "elaborative").
+            _LENGTH_MAP = {"concise": "brief", "normal": "standard", "elaborative": "long"}
             request = ReportRequest(
                 mode="earnings_analysis",
                 user_input=f"Analyze {row.ticker} ({row.company_name}) "
                            f"earnings released at {released_at.isoformat()}.",
                 enabled_sections=list(cfg.enabled_section_ids),
                 custom_sections=list(cfg.custom_sections),
-                report_length=cfg.report_length,
+                length=_LENGTH_MAP.get(cfg.report_length, "standard"),
             )
             targets.append(EUScanTarget(ticker=row.ticker, request=request))
         return targets
@@ -1901,7 +1913,7 @@ class FakeReportStore:
 @pytest.mark.asyncio
 async def test_on_demand_forwards_events_and_persists(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
-    complete = ReportComplete(report_id="r_1", title="AAPL Q1 FY2026")
+    complete = ReportComplete(report_id="r_1", schema={"title": "AAPL Q1 FY2026", "sections": []})
     runner = ScriptedRunner(events=[
         ReportStart(report_id="r_1", department="earnings_update",
                     mode="earnings_analysis", section_titles=["Quick Take"]),
@@ -1930,7 +1942,7 @@ async def test_on_demand_forwards_events_and_persists(create_tables, db_session:
 @pytest.mark.asyncio
 async def test_on_demand_uppercases_ticker(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
-    complete = ReportComplete(report_id="r_2", title="x")
+    complete = ReportComplete(report_id="r_2", schema={"title": "x", "sections": []})
     runner = ScriptedRunner(events=[complete])
     store = FakeReportStore()
 
@@ -1952,7 +1964,7 @@ async def test_on_demand_pulls_user_config(create_tables, db_session: Session) -
     ))
     db_session.commit()
 
-    complete = ReportComplete(report_id="r_3", title="x")
+    complete = ReportComplete(report_id="r_3", schema={"title": "x", "sections": []})
     runner = ScriptedRunner(events=[complete])
     store = FakeReportStore()
     async for _ in run_on_demand(
@@ -1961,7 +1973,8 @@ async def test_on_demand_pulls_user_config(create_tables, db_session: Session) -
     ):
         pass
     req = runner.received[0][2]
-    assert req.report_length == "elaborative"
+    # Config column holds "elaborative"; service maps to ReportRequest.length "long".
+    assert req.length == "long"
     assert req.enabled_sections == ["quick_take"]
 ```
 
@@ -2016,12 +2029,14 @@ async def run_on_demand(
         raise ValueError("ticker required")
 
     cfg = eu_config_svc.get_config(session, user_id=user_id)
+    # Plan 5 ReportRequest.length ∈ {"brief","standard","long"}; map from config vocab.
+    _LENGTH_MAP = {"concise": "brief", "normal": "standard", "elaborative": "long"}
     request = ReportRequest(
         mode="earnings_analysis",
         user_input=f"Generate an earnings analysis report for {t} on its most recent earnings release.",
         enabled_sections=list(cfg.enabled_section_ids),
         custom_sections=list(cfg.custom_sections),
-        report_length=cfg.report_length,
+        length=_LENGTH_MAP.get(cfg.report_length, "standard"),
     )
 
     async for event in report_runner.run(
@@ -2052,13 +2067,13 @@ git commit -m "feat(server): add eu_runner for on-demand EU report generation"
 
 ### Task 10: Server — Watchlist routes
 
-`GET /api/departments/earnings-update/watchlist` — list the current user's watchlist entries.
-`POST /api/departments/earnings-update/watchlist` — body `{ticker: string}`, returns the created entry. 409 if duplicate, 404 if ticker not found.
-`DELETE /api/departments/earnings-update/watchlist/{entry_id}` — removes the entry.
+`GET /departments/earnings-update/watchlist` — list the current user's watchlist entries.
+`POST /departments/earnings-update/watchlist` — body `{ticker: string}`, returns the created entry. 409 if duplicate, 404 if ticker not found.
+`DELETE /departments/earnings-update/watchlist/{entry_id}` — removes the entry.
 
 **Files:**
 - Create: `packages/server/src/openlia_server/routes/departments/earnings_update.py` (watchlist + empty stubs for other sections; later tasks fill them in).
-- Modify: `packages/server/src/openlia_server/app.py` to include the EU router at `/api/departments/earnings-update`.
+- Modify: `packages/server/src/openlia_server/app.py` to include the EU router at `/departments/earnings-update` (frontend reaches it via `/api/...` through the Vite proxy).
 - Test: `packages/server/tests/routes/departments/test_earnings_update_watchlist.py`
 
 - [ ] **Step 1: Write the failing test**
@@ -2101,14 +2116,14 @@ def eu_client(client_factory, monkeypatch):
 
 
 def test_get_watchlist_empty(eu_client: TestClient) -> None:
-    resp = eu_client.get("/api/departments/earnings-update/watchlist")
+    resp = eu_client.get("/departments/earnings-update/watchlist")
     assert resp.status_code == 200
     assert resp.json() == {"entries": []}
 
 
 def test_post_adds_entry(eu_client: TestClient) -> None:
     resp = eu_client.post(
-        "/api/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
+        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
     )
     assert resp.status_code == 201
     body = resp.json()
@@ -2120,47 +2135,47 @@ def test_post_adds_entry(eu_client: TestClient) -> None:
 
 def test_post_rejects_empty_ticker(eu_client: TestClient) -> None:
     resp = eu_client.post(
-        "/api/departments/earnings-update/watchlist", json={"ticker": ""},
+        "/departments/earnings-update/watchlist", json={"ticker": ""},
     )
     assert resp.status_code == 422
 
 
 def test_post_409_on_duplicate(eu_client: TestClient) -> None:
-    eu_client.post("/api/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
+    eu_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
     resp = eu_client.post(
-        "/api/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
+        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
     )
     assert resp.status_code == 409
 
 
 def test_post_404_on_unknown(eu_client: TestClient) -> None:
     resp = eu_client.post(
-        "/api/departments/earnings-update/watchlist", json={"ticker": "ZZZZ"},
+        "/departments/earnings-update/watchlist", json={"ticker": "ZZZZ"},
     )
     assert resp.status_code == 404
 
 
 def test_get_lists_after_add(eu_client: TestClient) -> None:
-    eu_client.post("/api/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
-    eu_client.post("/api/departments/earnings-update/watchlist", json={"ticker": "TSLA"})
-    resp = eu_client.get("/api/departments/earnings-update/watchlist")
+    eu_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
+    eu_client.post("/departments/earnings-update/watchlist", json={"ticker": "TSLA"})
+    resp = eu_client.get("/departments/earnings-update/watchlist")
     entries = resp.json()["entries"]
     assert [e["ticker"] for e in entries] == ["TSLA", "AAPL"]  # ordered by date
 
 
 def test_delete_removes_entry(eu_client: TestClient) -> None:
     created = eu_client.post(
-        "/api/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
+        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
     ).json()
     resp = eu_client.delete(
-        f"/api/departments/earnings-update/watchlist/{created['id']}",
+        f"/departments/earnings-update/watchlist/{created['id']}",
     )
     assert resp.status_code == 204
-    assert eu_client.get("/api/departments/earnings-update/watchlist").json() == {"entries": []}
+    assert eu_client.get("/departments/earnings-update/watchlist").json() == {"entries": []}
 
 
 def test_delete_404_on_missing(eu_client: TestClient) -> None:
-    resp = eu_client.delete("/api/departments/earnings-update/watchlist/nope")
+    resp = eu_client.delete("/departments/earnings-update/watchlist/nope")
     assert resp.status_code == 404
 ```
 
@@ -2188,7 +2203,7 @@ from openlia_server.middleware.auth import require_user
 from openlia_server.services import eu_watchlist as watchlist_svc
 
 
-router = APIRouter(prefix="/api/departments/earnings-update", tags=["earnings-update"])
+router = APIRouter(prefix="/departments/earnings-update", tags=["earnings-update"])
 
 
 # ---------- Dependency injection hooks ----------
@@ -2293,8 +2308,8 @@ git commit -m "feat(server): EU watchlist routes (GET/POST/DELETE)"
 
 ### Task 11: Server — Config routes
 
-`GET /api/departments/earnings-update/config` — returns `{report_length, enabled_section_ids, custom_sections}`.
-`PUT /api/departments/earnings-update/config` — upserts the config.
+`GET /departments/earnings-update/config` — returns `{report_length, enabled_section_ids, custom_sections}`.
+`PUT /departments/earnings-update/config` — upserts the config.
 
 **Files:**
 - Modify: `packages/server/src/openlia_server/routes/departments/earnings_update.py` (append)
@@ -2309,7 +2324,7 @@ from fastapi.testclient import TestClient
 
 def test_get_config_returns_defaults(client_factory) -> None:
     c = client_factory(user_id="u_1")
-    resp = c.get("/api/departments/earnings-update/config")
+    resp = c.get("/departments/earnings-update/config")
     assert resp.status_code == 200
     body = resp.json()
     assert body["report_length"] == "normal"
@@ -2320,7 +2335,7 @@ def test_get_config_returns_defaults(client_factory) -> None:
 def test_put_config_updates(client_factory) -> None:
     c = client_factory(user_id="u_1")
     resp = c.put(
-        "/api/departments/earnings-update/config",
+        "/departments/earnings-update/config",
         json={
             "report_length": "elaborative",
             "enabled_section_ids": ["quick_take", "key_financials"],
@@ -2333,14 +2348,14 @@ def test_put_config_updates(client_factory) -> None:
     body = resp.json()
     assert body["report_length"] == "elaborative"
     # verify persistence
-    roundtrip = c.get("/api/departments/earnings-update/config").json()
+    roundtrip = c.get("/departments/earnings-update/config").json()
     assert roundtrip == body
 
 
 def test_put_config_rejects_invalid_length(client_factory) -> None:
     c = client_factory(user_id="u_1")
     resp = c.put(
-        "/api/departments/earnings-update/config",
+        "/departments/earnings-update/config",
         json={
             "report_length": "tiny",
             "enabled_section_ids": [],
@@ -2353,7 +2368,7 @@ def test_put_config_rejects_invalid_length(client_factory) -> None:
 def test_put_config_rejects_custom_without_title(client_factory) -> None:
     c = client_factory(user_id="u_1")
     resp = c.put(
-        "/api/departments/earnings-update/config",
+        "/departments/earnings-update/config",
         json={
             "report_length": "normal",
             "enabled_section_ids": [],
@@ -2366,11 +2381,11 @@ def test_put_config_rejects_custom_without_title(client_factory) -> None:
 def test_config_is_user_scoped(client_factory) -> None:
     c1 = client_factory(user_id="u_1")
     c2 = client_factory(user_id="u_2")
-    c1.put("/api/departments/earnings-update/config", json={
+    c1.put("/departments/earnings-update/config", json={
         "report_length": "concise", "enabled_section_ids": ["quick_take"],
         "custom_sections": [],
     })
-    assert c2.get("/api/departments/earnings-update/config").json()["report_length"] == "normal"
+    assert c2.get("/departments/earnings-update/config").json()["report_length"] == "normal"
 ```
 
 - [ ] **Step 2: Run the test to confirm it fails**
@@ -2481,7 +2496,7 @@ def eu_sched_client(client_factory, fake_scheduler):
 
 def test_post_schedule_creates(eu_sched_client, fake_scheduler) -> None:
     resp = eu_sched_client.post(
-        "/api/departments/earnings-update/schedules",
+        "/departments/earnings-update/schedules",
         json={
             "time": "06:00",
             "timezone": "America/New_York",
@@ -2497,7 +2512,7 @@ def test_post_schedule_creates(eu_sched_client, fake_scheduler) -> None:
 
 def test_post_invalid_time(eu_sched_client) -> None:
     resp = eu_sched_client.post(
-        "/api/departments/earnings-update/schedules",
+        "/departments/earnings-update/schedules",
         json={"time": "25:00", "timezone": "America/New_York",
               "days_of_week": ["mon"], "label": "bad"},
     )
@@ -2505,27 +2520,27 @@ def test_post_invalid_time(eu_sched_client) -> None:
 
 
 def test_get_lists_schedules(eu_sched_client) -> None:
-    eu_sched_client.post("/api/departments/earnings-update/schedules", json={
+    eu_sched_client.post("/departments/earnings-update/schedules", json={
         "time": "06:00", "timezone": "America/New_York",
         "days_of_week": ["mon"], "label": "a",
     })
-    eu_sched_client.post("/api/departments/earnings-update/schedules", json={
+    eu_sched_client.post("/departments/earnings-update/schedules", json={
         "time": "17:00", "timezone": "America/New_York",
         "days_of_week": ["mon"], "label": "b",
     })
-    resp = eu_sched_client.get("/api/departments/earnings-update/schedules")
+    resp = eu_sched_client.get("/departments/earnings-update/schedules")
     assert resp.status_code == 200
     assert [s["label"] for s in resp.json()["schedules"]] == ["a", "b"]
 
 
 def test_put_updates_schedule(eu_sched_client) -> None:
     created = eu_sched_client.post(
-        "/api/departments/earnings-update/schedules",
+        "/departments/earnings-update/schedules",
         json={"time": "06:00", "timezone": "America/New_York",
               "days_of_week": ["mon"], "label": "a"},
     ).json()
     resp = eu_sched_client.put(
-        f"/api/departments/earnings-update/schedules/{created['id']}",
+        f"/departments/earnings-update/schedules/{created['id']}",
         json={"time": "07:00", "timezone": "America/New_York",
               "days_of_week": ["mon", "tue"], "label": "a2",
               "is_enabled": True},
@@ -2538,15 +2553,15 @@ def test_put_updates_schedule(eu_sched_client) -> None:
 
 def test_delete_removes(eu_sched_client) -> None:
     created = eu_sched_client.post(
-        "/api/departments/earnings-update/schedules",
+        "/departments/earnings-update/schedules",
         json={"time": "06:00", "timezone": "America/New_York",
               "days_of_week": ["mon"], "label": "a"},
     ).json()
     resp = eu_sched_client.delete(
-        f"/api/departments/earnings-update/schedules/{created['id']}"
+        f"/departments/earnings-update/schedules/{created['id']}"
     )
     assert resp.status_code == 204
-    assert eu_sched_client.get("/api/departments/earnings-update/schedules").json() == {"schedules": []}
+    assert eu_sched_client.get("/departments/earnings-update/schedules").json() == {"schedules": []}
 ```
 
 - [ ] **Step 2: Run the test to confirm it fails**
@@ -2675,8 +2690,8 @@ git commit -m "feat(server): EU schedule routes (GET/POST/PUT/DELETE) with hot-r
 
 ### Task 13: Server — Report SSE route + recent reports list
 
-`POST /api/departments/earnings-update/report` (SSE) — body `{ticker: string}`, streams `report.*` events, persists report on complete.
-`GET /api/departments/earnings-update/reports?limit=N` — returns recent reports for the user.
+`POST /departments/earnings-update/report` (SSE) — body `{ticker: string}`, streams `report.*` events, persists report on complete.
+`GET /departments/earnings-update/reports?limit=N` — returns recent reports for the user.
 
 **Files:**
 - Modify: `packages/server/src/openlia_server/routes/departments/earnings_update.py`
@@ -2709,13 +2724,13 @@ def test_post_report_streams_sse_events(client_factory) -> None:
         ReportStart(report_id="r_1", department="earnings_update",
                     mode="earnings_analysis", section_titles=["Quick Take"]),
         ReportDelta(report_id="r_1", section_id="quick_take", delta="Beat..."),
-        ReportComplete(report_id="r_1", title="AAPL Q1 FY2026"),
+        ReportComplete(report_id="r_1", schema={"title": "AAPL Q1 FY2026", "sections": []}),
     ]
     runner = _ScriptedRunner(events=events)
     c = client_factory(user_id="u_1", report_runner=runner)
 
     with c.stream("POST",
-                  "/api/departments/earnings-update/report",
+                  "/departments/earnings-update/report",
                   json={"ticker": "AAPL"}) as resp:
         assert resp.status_code == 200
         body = "".join(chunk for chunk in resp.iter_text())
@@ -2728,7 +2743,7 @@ def test_post_report_streams_sse_events(client_factory) -> None:
 def test_post_report_rejects_empty_ticker(client_factory) -> None:
     runner = _ScriptedRunner(events=[])
     c = client_factory(user_id="u_1", report_runner=runner)
-    resp = c.post("/api/departments/earnings-update/report", json={"ticker": ""})
+    resp = c.post("/departments/earnings-update/report", json={"ticker": ""})
     assert resp.status_code == 422
 
 
@@ -2743,7 +2758,7 @@ def test_recent_reports_returns_user_reports(client_factory, seed_reports) -> No
         department="earnings_update", report_type="earnings_update",
     )
     c = client_factory(user_id="u_1")
-    resp = c.get("/api/departments/earnings-update/reports?limit=5")
+    resp = c.get("/departments/earnings-update/reports?limit=5")
     assert resp.status_code == 200
     body = resp.json()
     assert len(body["reports"]) == 3
@@ -5151,6 +5166,6 @@ Searched each step: every code block is fully written; every test case names a c
 - `DEPARTMENT_DEFAULT_TIERS["earnings_update"] = EVERYDAY` from Plan 4 matches `EarningsUpdateDepartment.tier_for()` returning `"everyday"` (Task 1).
 - `eu_schedules` table is owned by Plan 1B; Plan 15 writes to it but does not redefine it.
 - `EUScanPlanner` Protocol signature `plan(session, user_id, schedule_id, since) -> list[EUScanTarget]` (Plan 6) is implemented exactly in Task 8. `EUScanTarget(ticker, request)` dataclass matches.
-- `ReportRequest` fields used in Task 8 (`mode, user_input, enabled_sections, custom_sections, report_length`) match the Plan 14 ER plan — which confirms Plan 5's `ReportRequest` was already extended with `custom_sections` + `report_length`. If Plan 5 did not ship those fields, Task 8 Step 3 notes the mismatch and the executor should update `packages/core/src/openlia/llm/runtime/messages.py`.
+- `ReportRequest` fields used in Task 8/9 are the ones Plan 5 **actually ships**: `mode`, `user_input`, `enabled_sections`, `custom_sections`, `length` (allowed set `("brief", "standard", "long")`). Plan 15's user-facing `report_length` column (`concise`/`normal`/`elaborative`) is mapped to `length` inside each `ReportRequest(...)` call-site — the mapping layer lives in the service, not in core. Do not retroactively edit `packages/core/src/openlia/llm/runtime/messages.py`.
 - `report_store.save_from_event(user_id, department, report_type, event)` (Task 9) matches Plan 13's `report_store` API.
 - Framework files `earnings_update.json` + `earnings_update_style_guide.md` are relocated to `packages/core/src/openlia/reports/frameworks/` by Plan 13.
