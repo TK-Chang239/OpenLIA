@@ -15,6 +15,20 @@ select = [
 [lint.per-file-ignores]
 "**/tests/**" = ["B011"]  # allow `assert False` patterns in tests
 
+[lint.flake8-bugbear]
+# FastAPI idiom: `def handler(db = Depends(dep))` — the framework expects the
+# call in the default. Same for Query/Path/Header/Cookie/Form/File/Body helpers.
+extend-immutable-calls = [
+  "fastapi.Depends",
+  "fastapi.Query",
+  "fastapi.Path",
+  "fastapi.Header",
+  "fastapi.Cookie",
+  "fastapi.Form",
+  "fastapi.File",
+  "fastapi.Body",
+]
+
 [format]
 quote-style = "double"
 indent-style = "space"

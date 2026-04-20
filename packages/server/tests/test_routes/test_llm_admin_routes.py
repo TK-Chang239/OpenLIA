@@ -158,6 +158,7 @@ def test_delete_provider_blocks_with_models(
         display_name="x",
         is_tier_default=True,
     )
+    db_session.commit()
     resp = company_client.delete(f"/settings/admin/llm/providers/{p.id}")
     assert resp.status_code == 409
 

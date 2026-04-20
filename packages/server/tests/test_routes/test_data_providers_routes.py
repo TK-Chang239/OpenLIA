@@ -31,7 +31,9 @@ def personal_client(db_session, monkeypatch):
     db_session.add(user)
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
-    app = create_app(db_session_factory=lambda: db_session)
+    from openlia_server.db import session as session_mod
+
+    app = create_app(db_session_factory=session_mod.SessionLocal)
     with TestClient(app) as client:
         yield client
 
@@ -143,7 +145,9 @@ def test_delete_missing_provider_returns_404(personal_client) -> None:
 
 def test_company_mode_without_session_returns_401(db_session, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_MODE", "company")
-    app = create_app(db_session_factory=lambda: db_session)
+    from openlia_server.db import session as session_mod
+
+    app = create_app(db_session_factory=session_mod.SessionLocal)
     with TestClient(app) as client:
         resp = client.get("/settings/data-providers")
         assert resp.status_code == 401

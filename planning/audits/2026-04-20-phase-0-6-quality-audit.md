@@ -449,7 +449,24 @@ Recommended regression tests:
 
 ### 7. Medium - HTTP Routes Leak SQLAlchemy Sessions
 
-Status: open.
+Status: resolved (2026-04-20, branch `fix/route-session-lifecycle`).
+
+Resolution:
+
+- Introduced `openlia_server.db.deps.make_session_dependency(factory)` —
+  yields a session, commits on success, rolls back on exception, always
+  closes. Unit-tested in `tests/test_db/test_deps.py`.
+- Migrated every handler in `routes/auth.py`, `routes/admin.py`, and
+  `routes/settings.py` (data-providers + LLM admin) to take
+  `db: DBSession = Depends(session_dep)` instead of calling
+  `db_session_factory()` directly.
+- `middleware/auth.py`'s `require_auth` now wraps its factory call in
+  `try/finally` so the per-request auth session closes on every path.
+- Test fixtures that previously injected `lambda: db_session` now pass
+  `session_mod.SessionLocal` so close() does not invalidate the shared
+  fixture session.
+- `ruff.toml` adds `flake8-bugbear.extend-immutable-calls` for FastAPI's
+  `Depends`/`Query`/... so the idiomatic default-arg form lints clean.
 
 Affected files:
 
