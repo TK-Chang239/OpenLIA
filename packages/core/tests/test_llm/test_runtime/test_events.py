@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from openlia.llm.runtime.events import (
     ChatDone,
     ChatError,

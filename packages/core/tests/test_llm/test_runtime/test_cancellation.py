@@ -4,7 +4,6 @@ import asyncio
 import time
 
 import pytest
-
 from openlia.llm.runtime.cancellation import (
     CancellationToken,
     await_with_grace,
@@ -31,7 +30,7 @@ async def test_wait_returns_on_cancel() -> None:
         await asyncio.sleep(0.01)
         tok.cancel()
 
-    asyncio.create_task(flip())
+    asyncio.create_task(flip())  # noqa: RUF006
     await asyncio.wait_for(tok.wait(), timeout=1.0)
     assert tok.is_cancelled is True
 
