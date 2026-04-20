@@ -4,7 +4,6 @@ from pathlib import Path
 from textwrap import dedent
 
 import pytest
-
 from openlia.llm.runtime.prompts import (
     PromptLoader,
     PromptSlotNotFound,
@@ -104,7 +103,7 @@ def test_validate_department_slots_passes_when_all_declared(prompts_dir: Path) -
 
 def test_validate_department_slots_raises_on_missing(prompts_dir: Path) -> None:
     loader = PromptLoader(root=prompts_dir)
-    with pytest.raises(PromptSlotNotFound, match="chat.nope"):
+    with pytest.raises(PromptSlotNotFound, match=r"chat\.nope"):
         loader.validate_department_slots("secretary", expected=["chat.system", "chat.nope"])
 
 

@@ -3,10 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
-
 from openlia.llm.runtime.web_search import (
     WebSearchAdapter,
-    WebSearchResolution,
     WebSearchResult,
     resolve_web_search,
 )
