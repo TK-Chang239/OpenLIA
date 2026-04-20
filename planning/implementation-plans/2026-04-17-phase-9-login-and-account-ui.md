@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - Backend login/session responses are **flat**: `{user_id, email, display_name, is_admin, must_change_password}`. Test fixtures that mock `{user: {id, email, role}, must_change_password}` are pre-audit drift — replace with the flat shape and map at the frontend boundary (`id = user_id`, `role = is_admin ? "admin" : "user"`).
+> - The auth error payload `{code, message, field?, metadata?}` assumed in this plan is correct; keep it.
+> - Admin gating uses `is_admin`, not `role`. Any `user.role === "admin"` check must become `user.role === "admin"` post-mapping or `is_admin === true` pre-mapping — do not read `role` off the raw response.
+
 **Goal:** Ship the company-mode authentication UI on top of the Phase 8 shell — Login, invite-gated Registration, Forgot Password (in-place), Reset Password (standalone route), Must-Change-Password gate, and the Account section (profile, change password, sessions/logout-all) that Plan 11 will slot into Settings.
 
 **Architecture:** A single `AuthLayout` centers an `AuthCard` for every unauthenticated view. `LoginPage` owns three in-place sub-views (`login` / `register` / `forgot`) selected by URL (`/login`, `/register`, `/forgot-password`) so browser back/forward works. `/reset-password?token=...` is a separate route because it's reached via a one-time link. `MustChangePasswordGate` is a wrapper component mounted inside `ProtectedRoute` — when `useAuth().mustChangePassword` is true it replaces the outlet with a forced change-password screen. The Account section ships as pure components (`AccountProfile`, `ChangePasswordForm`, `SessionsPanel`) that Plan 11 composes into `/settings`. All forms are uncontrolled + `useState`-driven; no form libraries. Password strength uses a tiny in-house heuristic — zxcvbn is not pulled in.

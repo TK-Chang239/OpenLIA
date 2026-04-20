@@ -356,7 +356,7 @@ def upgrade() -> None:
     op.create_table(
         "signup_invites",
         sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("token", sa.String(length=64), nullable=False),
+        sa.Column("token_hash", sa.String(length=64), nullable=False),
         sa.Column("label", sa.String(length=128), nullable=True),
         sa.Column("created_by_user_id", sa.String(length=36), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
@@ -382,7 +382,7 @@ def upgrade() -> None:
             ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_signup_invites")),
-        sa.UniqueConstraint("token", name=op.f("uq_signup_invites_token")),
+        sa.UniqueConstraint("token_hash", name=op.f("uq_signup_invites_token_hash")),
     )
     op.create_table(
         "signup_policy",

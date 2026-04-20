@@ -8,13 +8,14 @@ import pytest
 from fastapi.testclient import TestClient
 from openlia_server.db.models.auth import SignupInvite
 from openlia_server.middleware.auth import COOKIE_NAME
+from openlia_server.services.auth import tokens
 
 
 @pytest.fixture
 def seeded_invite(db_session):
     row = SignupInvite(
         id="inv-1",
-        token="valid-invite",
+        token_hash=tokens.hash_token("valid-invite"),
         created_at=datetime.now(UTC),
     )
     db_session.add(row)

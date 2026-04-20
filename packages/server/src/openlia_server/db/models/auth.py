@@ -80,7 +80,7 @@ class SignupInvite(Base, TimestampMixin):
     __tablename__ = "signup_invites"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_by_user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True

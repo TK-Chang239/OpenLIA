@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - Follow the README "Current backend contract" block for every import. Specifically: `User` is in `openlia_server.db.models.auth` (not `.user`/`.users`); `LLMModel` is in `openlia_server.db.models.config` (not `.llm`); password hashing is `openlia_server.services.auth.passwords.hash_password` (not `argon2_hash` and not `openlia_server.security.passwords`); there is no `get_db_session`/`get_db`/`current_user`/`require_user` — use the router-factory `build_require_auth(...)` pattern and accept `db_session_factory` in the router factory.
+> - All IDs are UUID strings (`String(36)`). Wizard DTOs, path params, and review IDs must be `str`.
+> - `services/llm_providers.py` does **not** export `test_provider`, `clear_all_providers`, `add_model`, or `list_data_provider_rows`. Rewrite every call site against the shipped surface: `create_provider`, `get_provider`, `list_providers`, `update_provider`, `delete_provider`, `create_model`, `list_models_for_provider`, `set_user_preference`. If wizard flow genuinely needs a helper that doesn't exist, add it as a typed service helper in the Task that first uses it — do not assume it's already there.
+> - `wizard_state` shape (Task 1): `current_step: String` (named step id like `"mode"`, `"account"`, `"models"`, `"data_providers"`, `"policy"`, `"review"`, `"done"`), `completed_steps: JSON[]`, `active_session_token: String(64) nullable`. Add a Task to also patch `openlia wizard reset` in `cli.py` to write this shape.
+> - `config_store["wizard.completed"]` is seeded by bootstrap as a Python `bool`. Readers must type-guard: `isinstance(v, bool) ? v : (v or "").lower() == "true"`. Never call `.lower()` on the raw value directly.
+> - `must_change_password` is enforced by Plan 11 on non-password routes; the wizard runs pre-auth and is unaffected — document this explicitly so the gate isn't accidentally applied to `/setup/*`.
+
 **Goal:** Ship the first-run Setup Wizard — the resumable, DB-backed, mode-aware flow (5 steps personal / 6 steps company) that collects deployment mode, identity/admin account, three LLM tiers, data providers, access-control policy, and a Quick-tier AI review mapping providers to department requirements — before routing the user into `/` (personal) or `/login` (company).
 
 **Architecture:**
@@ -156,30 +164,41 @@ planning/projectStructure.md            # MODIFY — reflect setup/ directories
 
 ---
 
-## Task 1: Add `active_session_token` column + migration to `wizard_state`
+## Task 1: Reshape `wizard_state` for the wizard runtime — migrate `current_step`, add `completed_steps` + `active_session_token`
+
+**Context.** Plan 1A shipped `wizard_state` with `current_step: Integer NOT NULL DEFAULT 1` and no `completed_steps` column. The wizard runtime this plan implements expects `current_step` to be a named step identifier (e.g., `"mode"`, `"admin"`, `"providers"`) and needs a `completed_steps` JSON array to track progress across visits. Task 1 migrates all three pieces at once so later tasks can assume the new shape.
 
 **Files:**
 - Modify: `packages/server/src/openlia_server/db/models/infrastructure.py` (wizard_state model)
-- Create: `packages/server/migrations/versions/<next>_add_wizard_session_token.py`
-- Test: `packages/server/tests/test_db/test_wizard_state_token.py`
+- Create: `packages/server/migrations/versions/<next>_reshape_wizard_state.py`
+- Test: `packages/server/tests/test_db/test_wizard_state_shape.py`
 
 - [ ] **Step 1: Write the failing test**
 
 ```python
-# packages/server/tests/test_db/test_wizard_state_token.py
-"""Verify wizard_state carries the active_session_token column."""
+# packages/server/tests/test_db/test_wizard_state_shape.py
+"""Verify wizard_state shape after the reshape migration: current_step is a string,
+completed_steps is a JSON array, and active_session_token is nullable text."""
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.infrastructure import WizardState
 
 
-def test_wizard_state_has_active_session_token_column(create_tables, db_session: Session) -> None:
-    row = WizardState(id=1, current_step="mode", completed_steps=[], step_data={}, active_session_token="abc")
+def test_wizard_state_accepts_named_step_and_completed_list(create_tables, db_session: Session) -> None:
+    row = WizardState(
+        id=1,
+        current_step="mode",
+        completed_steps=[],
+        step_data={},
+        active_session_token="abc",
+    )
     db_session.add(row)
     db_session.commit()
 
     fetched = db_session.get(WizardState, 1)
     assert fetched is not None
+    assert fetched.current_step == "mode"
+    assert fetched.completed_steps == []
     assert fetched.active_session_token == "abc"
 
 
@@ -191,29 +210,60 @@ def test_wizard_state_active_session_token_nullable(create_tables, db_session: S
     fetched = db_session.get(WizardState, 1)
     assert fetched is not None
     assert fetched.active_session_token is None
+
+
+def test_wizard_state_completed_steps_round_trips_entries(create_tables, db_session: Session) -> None:
+    row = WizardState(
+        id=1,
+        current_step="providers",
+        completed_steps=["mode", "admin"],
+        step_data={},
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    fetched = db_session.get(WizardState, 1)
+    assert fetched is not None
+    assert fetched.completed_steps == ["mode", "admin"]
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `uv run pytest packages/server/tests/test_db/test_wizard_state_token.py -v`
-Expected: FAIL — `active_session_token` attribute not on `WizardState`.
+Run: `uv run pytest packages/server/tests/test_db/test_wizard_state_shape.py -v`
+Expected: FAIL — `current_step` is int-typed, `completed_steps` + `active_session_token` do not exist on the model.
 
-- [ ] **Step 3: Add the column to the model**
+- [ ] **Step 3: Update the model**
 
-In `packages/server/src/openlia_server/db/models/infrastructure.py`, add to the `WizardState` class (after the existing columns, before the `CheckConstraint`):
+In `packages/server/src/openlia_server/db/models/infrastructure.py`, change the `WizardState` class so that:
 
 ```python
+class WizardState(Base):
+    __tablename__ = "wizard_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Plan 1A shipped current_step as Integer default 1. Plan 10 keeps a string
+    # step identifier instead ("mode", "admin", "providers", "data-providers",
+    # "portfolio", "review"). Default is the first step.
+    current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="mode")
+    completed_steps: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    step_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     active_session_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+    )
 ```
+
+Adjust imports as needed (`JSON`, `CheckConstraint`).
 
 - [ ] **Step 4: Create the Alembic migration**
 
-Run: `uv run alembic -c packages/server/alembic.ini revision -m "add_wizard_session_token"`
+Run: `uv run alembic -c packages/server/alembic.ini revision -m "reshape_wizard_state"`
 
 Then edit the generated file under `packages/server/migrations/versions/` to:
 
 ```python
-"""add_wizard_session_token
+"""reshape_wizard_state — current_step -> String, add completed_steps + active_session_token
 
 Revision ID: <generated>
 Revises: <prior>
@@ -228,33 +278,61 @@ branch_labels = None
 depends_on = None
 
 
+_STEP_ORDER = ["mode", "admin", "providers", "data-providers", "portfolio", "review"]
+
+
 def upgrade() -> None:
+    # SQLite requires batch mode for most ALTERs. Rewrite current_step from
+    # Integer -> String, defaulting existing rows to the first named step.
     with op.batch_alter_table("wizard_state") as batch_op:
+        batch_op.add_column(sa.Column("completed_steps", sa.JSON(), nullable=False, server_default="[]"))
         batch_op.add_column(sa.Column("active_session_token", sa.String(length=64), nullable=True))
+        batch_op.alter_column(
+            "current_step",
+            existing_type=sa.Integer(),
+            type_=sa.String(length=32),
+            existing_nullable=False,
+            server_default="mode",
+            postgresql_using="'mode'",
+        )
+    # Data fix-up: any prior int values become "mode".
+    op.execute("UPDATE wizard_state SET current_step = 'mode' WHERE current_step NOT IN ("
+               + ",".join(f"'{s}'" for s in _STEP_ORDER) + ")")
 
 
 def downgrade() -> None:
     with op.batch_alter_table("wizard_state") as batch_op:
+        batch_op.alter_column(
+            "current_step",
+            existing_type=sa.String(length=32),
+            type_=sa.Integer(),
+            existing_nullable=False,
+            server_default="1",
+            postgresql_using="1",
+        )
         batch_op.drop_column("active_session_token")
+        batch_op.drop_column("completed_steps")
+    op.execute("UPDATE wizard_state SET current_step = 1")
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `uv run pytest packages/server/tests/test_db/test_wizard_state_token.py -v`
+Run: `uv run pytest packages/server/tests/test_db/test_wizard_state_shape.py -v`
 Expected: PASS.
 
 - [ ] **Step 6: Run the full DB test suite to catch regressions**
 
 Run: `uv run pytest packages/server/tests/test_db/ -v`
-Expected: all pass.
+Expected: all pass (Plan 1A's existing `test_wizard_state_defaults` may need updating to assert `current_step == "mode"` instead of `== 1` — update it in this task if so).
 
 - [ ] **Step 7: Commit**
 
 ```bash
 git add packages/server/src/openlia_server/db/models/infrastructure.py \
-        packages/server/migrations/versions/*add_wizard_session_token* \
-        packages/server/tests/test_db/test_wizard_state_token.py
-git commit -m "feat(db): add active_session_token column to wizard_state for single-session enforcement"
+        packages/server/migrations/versions/*reshape_wizard_state* \
+        packages/server/tests/test_db/test_wizard_state_shape.py \
+        packages/server/tests/test_db/test_wizard_state_model.py  # if updated
+git commit -m "feat(db): reshape wizard_state — string current_step + completed_steps + active_session_token"
 ```
 
 ---

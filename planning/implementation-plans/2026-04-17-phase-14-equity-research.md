@@ -2,11 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - Runtime imports: `from openlia.llm.runtime.messages import ReportRequest`, `from openlia.llm.runtime.events import to_wire`. Reject any `openlia.runtime.*` or `serialize_sse` references.
+> - `ReportRequest.length` uses the Plan 5 enum `("brief", "standard", "long")`. `er_user_configs.report_length` may use department-local values (`concise`/`normal`/`elaborative`) — map at the call site when invoking `ReportRunner`; do not retrofit Plan 5.
+> - `ReportStart` / `ReportComplete` field lists are frozen (see Plan 13 normalizations). Title lives in `schema["title"]`.
+> - All IDs are UUID strings — `user_id`, `report_id`, `session_id` — at DTO, path, and FK level.
+> - Auth + DB: router-factory `build_require_auth(...)`, `db_session_factory`. Models from `openlia_server.db.models.auth` / `.content` / `.config`. No `current_user`/`get_db_session` helpers assumed.
+
 **Goal:** Ship the Equity Research department (three report modes: Stock Initiation, Stock Update, Sector Research) on top of the Plan 13 report pipeline, with per-user section/length configuration, a chat surface for follow-up questions, and a settings modal that matches the spec.
 
 **Architecture:**
 - **Core** gets a single `equity_research.yaml` prompt that branches by `mode` + `report_length` via Jinja, plus an `EquityResearchDepartment` class that advertises its data requirements and tier to `ReportRunner`/`ChatRunner` from Plan 5. The three framework JSONs + style guides already live at `packages/core/src/openlia/reports/frameworks/` after Plan 13.
-- **Server** adds a new `er_user_configs` table (one row per user) for report mode, report length, sections-per-mode, and custom-sections-per-mode, a config service, and three authenticated routes: `GET/PUT /api/departments/equity-research/config`, `POST /api/departments/equity-research/report` (SSE, calls `ReportRunner`, persists the resulting `ReportSchema` to `reports`), and `POST /api/departments/equity-research/chat` (SSE, calls `ChatRunner` for follow-ups).
+- **Server** adds a new `er_user_configs` table (one row per user) for report mode, report length, sections-per-mode, and custom-sections-per-mode, a config service, and three authenticated routes: `GET/PUT /departments/equity-research/config`, `POST /departments/equity-research/report` (SSE, calls `ReportRunner`, persists the resulting `ReportSchema` to `reports`), and `POST /departments/equity-research/chat` (SSE, calls `ChatRunner` for follow-ups). Frontend reaches these via `/api/...` through the Vite proxy (Plan 0 rewrite strips `/api`).
 - **Frontend** ships `EquityResearchPage` with a Welcome state (suggestion chips + "From Portfolio" picker) and an Active state (chat + report cards), a `ReportSettingsModal` that switches sections per mode and supports custom sections, and a `ReportCard` chat block that opens the generated report in the Plan 12 `FileViewer`.
 
 **Tech Stack:**
@@ -97,10 +104,10 @@ hooks/
 4. Server — `er_user_configs` SQLAlchemy model.
 5. Server — Alembic migration for `er_user_configs`.
 6. Server — `equity_research_config` service.
-7. Server — `GET/PUT /api/departments/equity-research/config` routes.
+7. Server — `GET/PUT /departments/equity-research/config` routes.
 8. Server — `equity_research_runner` orchestrator service.
-9. Server — `POST /api/departments/equity-research/report` SSE route.
-10. Server — `POST /api/departments/equity-research/chat` SSE route.
+9. Server — `POST /departments/equity-research/report` SSE route.
+10. Server — `POST /departments/equity-research/chat` SSE route.
 11. Frontend — `api/equity-research.ts` typed client.
 12. Frontend — `useErConfig` hook + `ModeToggle` primitive.
 13. Frontend — `ReportSettingsModal` + `CustomSectionRow`.
@@ -1301,7 +1308,7 @@ Thin FastAPI wrappers around `EquityResearchConfigService`. Requires authenticat
 ```python
 # packages/server/tests/routes/departments/test_equity_research_config_route.py
 def test_get_config_returns_defaults(client_auth):
-    r = client_auth.get("/api/departments/equity-research/config")
+    r = client_auth.get("/departments/equity-research/config")
     assert r.status_code == 200
     body = r.json()
     assert body["report_mode"] == "stock_initiation"
@@ -1311,9 +1318,9 @@ def test_get_config_returns_defaults(client_auth):
 
 
 def test_put_config_partial_update_length_only(client_auth):
-    client_auth.get("/api/departments/equity-research/config")
+    client_auth.get("/departments/equity-research/config")
     r = client_auth.put(
-        "/api/departments/equity-research/config",
+        "/departments/equity-research/config",
         json={"report_length": "elaborative"},
     )
     assert r.status_code == 200
@@ -1321,9 +1328,9 @@ def test_put_config_partial_update_length_only(client_auth):
 
 
 def test_put_config_updates_sections_for_mode(client_auth):
-    client_auth.get("/api/departments/equity-research/config")
+    client_auth.get("/departments/equity-research/config")
     r = client_auth.put(
-        "/api/departments/equity-research/config",
+        "/departments/equity-research/config",
         json={
             "sections_by_mode": {
                 "stock_update": ["investment_thesis", "event_analysis"]
@@ -1338,9 +1345,9 @@ def test_put_config_updates_sections_for_mode(client_auth):
 
 
 def test_put_config_rejects_unknown_section_id(client_auth):
-    client_auth.get("/api/departments/equity-research/config")
+    client_auth.get("/departments/equity-research/config")
     r = client_auth.put(
-        "/api/departments/equity-research/config",
+        "/departments/equity-research/config",
         json={"sections_by_mode": {"stock_update": ["bogus"]}},
     )
     assert r.status_code == 400
@@ -1348,9 +1355,9 @@ def test_put_config_rejects_unknown_section_id(client_auth):
 
 
 def test_put_config_adds_custom_section(client_auth):
-    client_auth.get("/api/departments/equity-research/config")
+    client_auth.get("/departments/equity-research/config")
     r = client_auth.put(
-        "/api/departments/equity-research/config",
+        "/departments/equity-research/config",
         json={
             "custom_sections_by_mode": {
                 "stock_update": [
@@ -1369,7 +1376,7 @@ def test_put_config_adds_custom_section(client_auth):
 
 
 def test_config_requires_auth(client):
-    r = client.get("/api/departments/equity-research/config")
+    r = client.get("/departments/equity-research/config")
     assert r.status_code == 401
 ```
 
@@ -1399,7 +1406,7 @@ from openlia_server.services.equity_research_config import (
 
 
 router = APIRouter(
-    prefix="/api/departments/equity-research", tags=["equity-research"]
+    prefix="/departments/equity-research", tags=["equity-research"]
 )
 
 
@@ -1514,7 +1521,7 @@ Wires `EquityResearchConfigService` + `ReportRunner` (Plan 5) + `ReportStore` (P
 # packages/server/tests/services/test_equity_research_runner.py
 import pytest
 
-from openlia.runtime.events import ReportComplete, ReportStart
+from openlia.llm.runtime.events import ReportComplete, ReportStart
 from openlia_server.db.models import User
 from openlia_server.services.equity_research_runner import (
     EquityResearchRunner,
@@ -1535,8 +1542,8 @@ async def test_runner_yields_report_saved_after_complete(
 ):
     fake_report_runner.queue_events(
         [
-            ReportStart(department="equity_research", mode="stock_update", section_titles=["t"]),
-            ReportComplete(schema={"title": "T", "sections": []}),
+            ReportStart(report_id="r_1", department="equity_research", mode="stock_update", section_titles=["t"]),
+            ReportComplete(report_id="r_1", schema={"title": "T", "sections": []}),
         ]
     )
     runner = EquityResearchRunner(
@@ -1577,7 +1584,7 @@ async def test_runner_rejects_invalid_mode(db_session, user, fake_report_runner)
 async def test_runner_forwards_active_config_to_inner(
     db_session, user, fake_report_runner
 ):
-    fake_report_runner.queue_events([ReportComplete(schema={"title": "t", "sections": []})])
+    fake_report_runner.queue_events([ReportComplete(report_id="r_1", schema={"title": "t", "sections": []})])
     runner = EquityResearchRunner(
         db_session=db_session, inner=fake_report_runner
     )
@@ -1657,7 +1664,7 @@ from typing import AsyncIterator, Protocol
 from sqlalchemy.orm import Session
 
 from openlia.departments.equity_research import EquityResearchDepartment
-from openlia.runtime.events import Event, ReportComplete
+from openlia.llm.runtime.events import Event, ReportComplete
 from openlia.runtime.requests import ReportRequest
 from openlia_server.services.equity_research_config import (
     EquityResearchConfigService,
@@ -1705,13 +1712,17 @@ class EquityResearchRunner:
         cfg = self._config.get_config(user_id)
         active = self._config.resolve_active(cfg, mode=mode)  # type: ignore[arg-type]
 
+        # Plan 14 stores a user-facing `report_length` in its own config table, but
+        # Plan 5's `ReportRequest` uses `length` with allowed values
+        # ("brief", "standard", "long"). Map here — the config row stays in its
+        # own vocabulary and the runtime contract stays locked.
+        _LENGTH_MAP = {"concise": "brief", "normal": "standard", "elaborative": "long"}
         request = ReportRequest(
             mode=active.mode,
             user_input=user_input,
             enabled_sections=list(active.enabled_section_ids),
             custom_sections=list(active.custom_sections),
-            report_length=active.report_length,
-            session_id=session_id,
+            length=_LENGTH_MAP.get(active.report_length, "standard"),
         )
 
         last_complete: ReportComplete | None = None
@@ -1734,26 +1745,25 @@ class EquityResearchRunner:
             yield ReportSavedEvent(report_id=report_id)
 ```
 
-Note: the `ReportRequest` surface used here (mode, enabled_sections, custom_sections, report_length, session_id) must exist in `packages/core/src/openlia/runtime/requests.py`. Plan 5 ships mode + enabled_sections + user_input. If `custom_sections` / `report_length` / `session_id` are not yet on `ReportRequest`, extend that dataclass in this task and update Plan 5's file (it already imports `ReportRequest` but does not yet constrain these fields).
+Note: Plan 5 is shipped and locks the `ReportRequest` dataclass at
+`openlia.llm.runtime.messages.ReportRequest`. Its fields are `mode`,
+`user_input`, `enabled_sections`, `custom_sections`, `length` (allowed set
+`("brief", "standard", "long")`). **Do not modify Plan 5 retroactively** — this
+plan instead:
+1. Keeps its own `er_user_configs.report_length` column (values `concise` /
+   `normal` / `elaborative`) as the user-facing vocabulary.
+2. Maps those values to `ReportRequest.length` at call-time via `_LENGTH_MAP`
+   in `run_report` (see Step 3 above).
+3. Does **not** add a `session_id` field to `ReportRequest`; the chat surface
+   carries session state through `ChatRequest`, not `ReportRequest`.
 
-- [ ] **Step 4: Extend `ReportRequest` if needed**
+- [ ] **Step 4: Do NOT extend `ReportRequest`**
 
-Inspect `packages/core/src/openlia/runtime/requests.py` and add any missing fields:
-
-```python
-from dataclasses import dataclass, field
-from openlia.reports.frameworks.loader import CustomSection
-
-
-@dataclass(frozen=True)
-class ReportRequest:
-    mode: str
-    user_input: str
-    enabled_sections: list[str] = field(default_factory=list)
-    custom_sections: list[CustomSection] = field(default_factory=list)
-    report_length: str = "normal"
-    session_id: str | None = None
-```
+Plan 5 is already shipped. Its `ReportRequest` at
+`packages/core/src/openlia/llm/runtime/messages.py` is the single source of
+truth and is **frozen** for Plans 14+. The mapping layer in Step 3 absorbs all
+Plan 14 vocabulary (`report_length` → `length`). Chat session state lives on
+`ChatRequest`, not `ReportRequest`. Skip this step.
 
 - [ ] **Step 5: Run tests**
 
@@ -1765,8 +1775,7 @@ Expected: all pass.
 ```bash
 git add packages/server/src/openlia_server/services/equity_research_runner.py \
         packages/server/tests/services/test_equity_research_runner.py \
-        packages/server/tests/conftest.py \
-        packages/core/src/openlia/runtime/requests.py
+        packages/server/tests/conftest.py
 git commit -m "feat(equity-research): add orchestrator that wires config + runner + store"
 ```
 
@@ -1813,7 +1822,7 @@ def test_report_route_streams_start_complete_saved(client_auth, fake_llm):
         }
     )
     r = client_auth.post(
-        "/api/departments/equity-research/report",
+        "/departments/equity-research/report",
         json={"mode": "stock_update", "user_input": "AAPL event"},
         headers={"accept": "text/event-stream"},
     )
@@ -1828,7 +1837,7 @@ def test_report_route_streams_start_complete_saved(client_auth, fake_llm):
 
 def test_report_route_rejects_invalid_mode(client_auth):
     r = client_auth.post(
-        "/api/departments/equity-research/report",
+        "/departments/equity-research/report",
         json={"mode": "bogus", "user_input": "x"},
     )
     assert r.status_code == 400
@@ -1836,7 +1845,7 @@ def test_report_route_rejects_invalid_mode(client_auth):
 
 def test_report_route_requires_auth(client):
     r = client.post(
-        "/api/departments/equity-research/report",
+        "/departments/equity-research/report",
         json={"mode": "stock_update", "user_input": "x"},
     )
     assert r.status_code == 401
@@ -1964,7 +1973,7 @@ def _consume_sse(iter_lines):
 def test_chat_route_streams_start_token_done(client_auth, fake_llm):
     fake_llm.queue_chat_response("AAPL guidance was in line.")
     r = client_auth.post(
-        "/api/departments/equity-research/chat",
+        "/departments/equity-research/chat",
         json={"message": "What did guidance look like?"},
         headers={"accept": "text/event-stream"},
     )
@@ -1978,7 +1987,7 @@ def test_chat_route_streams_start_token_done(client_auth, fake_llm):
 
 def test_chat_route_requires_auth(client):
     r = client.post(
-        "/api/departments/equity-research/chat",
+        "/departments/equity-research/chat",
         json={"message": "hi"},
     )
     assert r.status_code == 401
@@ -3580,10 +3589,10 @@ curl -s -c cookies.txt -b cookies.txt \
   -H 'content-type: application/json' \
   -d '{"email":"admin@example.com","password":"<dev_password>"}' | head
 
-curl -s -b cookies.txt http://localhost:8000/api/departments/equity-research/config | jq .
+curl -s -b cookies.txt http://localhost:8000/departments/equity-research/config | jq .
 
 curl -s -b cookies.txt -XPUT \
-  http://localhost:8000/api/departments/equity-research/config \
+  http://localhost:8000/departments/equity-research/config \
   -H 'content-type: application/json' \
   -d '{"report_length":"elaborative"}' | jq .
 

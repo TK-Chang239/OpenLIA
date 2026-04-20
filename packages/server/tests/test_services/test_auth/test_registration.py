@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from openlia_server.db.models.auth import SignupInvite
-from openlia_server.services.auth import registration, signup_policy
+from openlia_server.services.auth import registration, signup_policy, tokens
 from openlia_server.services.auth.errors import AuthError
 
 
@@ -15,12 +15,14 @@ def make_invite(db_session):
     def _make(token: str = "invite-tok", **kwargs) -> SignupInvite:
         row = SignupInvite(
             id=f"inv-{token}",
-            token=token,
+            token_hash=tokens.hash_token(token),
             created_at=datetime.now(UTC),
             **kwargs,
         )
         db_session.add(row)
         db_session.commit()
+        # Stash raw token on the instance so tests can pass it back to register().
+        row.raw_token = token  # type: ignore[attr-defined]
         return row
 
     return _make
@@ -51,7 +53,7 @@ class TestRegister:
             email="alice@example.com",
             password="correct-horse-battery-staple",
             display_name="Alice",
-            invite_token=invite.token,
+            invite_token=invite.raw_token,
         )
         assert user.email == "alice@example.com"
         db_session.refresh(invite)
@@ -89,7 +91,7 @@ class TestRegister:
                 email="alice@example.com",
                 password="12345678",
                 display_name="Alice",
-                invite_token=invite.token,
+                invite_token=invite.raw_token,
             )
         assert exc.value.code == "invite_invalid"
 
@@ -101,7 +103,7 @@ class TestRegister:
                 email="alice@example.com",
                 password="12345678",
                 display_name="Alice",
-                invite_token=invite.token,
+                invite_token=invite.raw_token,
             )
         assert exc.value.code == "invite_invalid"
 
@@ -113,7 +115,7 @@ class TestRegister:
                 email="alice@example.com",
                 password="12345678",
                 display_name="Alice",
-                invite_token=invite.token,
+                invite_token=invite.raw_token,
             )
 
     def test_duplicate_email_returns_generic_error(self, db_session, make_invite, make_user):
@@ -125,7 +127,7 @@ class TestRegister:
                 email="alice@example.com",
                 password="12345678",
                 display_name="Alice",
-                invite_token=invite.token,
+                invite_token=invite.raw_token,
             )
         assert exc.value.code == "registration_failed"
 
@@ -137,7 +139,7 @@ class TestRegister:
                 email="alice@example.com",
                 password="short",
                 display_name="Alice",
-                invite_token=invite.token,
+                invite_token=invite.raw_token,
             )
         assert exc.value.code == "weak_password"
 
@@ -152,6 +154,6 @@ class TestRegister:
                 email="alice@example.com",
                 password="12345678",
                 display_name="Alice",
-                invite_token=invite.token,
+                invite_token=invite.raw_token,
             )
         assert exc.value.code == "signup_closed"

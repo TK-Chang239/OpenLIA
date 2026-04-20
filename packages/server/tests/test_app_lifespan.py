@@ -13,7 +13,7 @@ def test_lifespan_sets_scheduler_on_app_state_when_enabled() -> None:
         os.environ,
         {
             "OPENLIA_SCHEDULER_ENABLED": "1",
-            "OPENLIA_DATABASE_URL": "sqlite:///:memory:",
+            "OPENLIA_DB_URL": "sqlite:///:memory:",
         },
         clear=False,
     ):
@@ -31,7 +31,7 @@ def test_lifespan_skips_scheduler_when_disabled() -> None:
         os.environ,
         {
             "OPENLIA_SCHEDULER_ENABLED": "0",
-            "OPENLIA_DATABASE_URL": "sqlite:///:memory:",
+            "OPENLIA_DB_URL": "sqlite:///:memory:",
         },
         clear=False,
     ):

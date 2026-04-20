@@ -2,6 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Audit 2026-04-20 normalizations (apply before executing this plan):**
+> - **Do not create `routes/admin_invites.py`, `routes/admin_users.py`, `routes/admin_password_reset_requests.py` or their `services/admin_*` counterparts.** Those surfaces already ship in `packages/server/src/openlia_server/routes/admin.py` + `services/auth/*`. Extend the existing router in place; add typed frontend clients that hit the shipped paths: `GET/POST /admin/invites`, `POST /admin/invites/{invite_id}/revoke`, `GET /admin/users`, `POST /admin/users/{user_id}/disable|enable|reset-password`, `GET /admin/password-reset-requests`, `POST /admin/password-reset-requests/{request_id}/approve|reject`.
+> - LLM admin CRUD ships at `/settings/admin/llm/*` — **not** `/settings/models/*`. Point Plan 11's Models-section admin client at `/api/settings/admin/llm/...`. Per-user tier preferences (`user_llm_preferences` setter from Plan 4) stay wherever the Plan 4 routes mounted them; verify before coding.
+> - All IDs are UUID strings (`String(36)`). Invite, user, reset-request DTOs + path params must be typed `str`. Any `id: int` / `user_id: int` / `invite_id: int` in this plan is pre-audit drift.
+> - Backend imports: `User` from `db.models.auth`; `LLMModel` from `db.models.config`; `hash_password` from `services.auth.passwords`. Auth gating via `build_require_auth(...)` / `build_require_admin(...)` router factories — not a bare `current_user` / `require_user`.
+> - Auth response shape for the Account section is flat: `{user_id, email, display_name, is_admin, must_change_password}`. Admin gating reads `is_admin === true` (pre-map) or `role === "admin"` (post-map in `AuthContext`).
+> - `user_prefs` table is created by Plan 11 Task 1 (already fixed in this plan's dependency list on 2026-04-20).
+
 **Goal:** Ship the four-section Settings page (General / Models / Account / Admin) with a secondary left nav, dirty-state tracking, unsaved-changes guard, a per-user model tier picker, and the full admin panel covering invites, users, password-reset requests, the LLM model roster, and data providers.
 
 **Architecture:**
@@ -16,7 +24,7 @@
 
 **Depends on:**
 
-- Plan 1A (tables `users`, `user_prefs`, `signup_invites`, `password_reset_requests`, `llm_providers`, `llm_models`, `user_llm_preferences`, `data_providers`, `data_provider_requirement_mapping`, `sessions`, `auth_events`).
+- Plan 1A (tables `users`, `signup_invites`, `password_reset_requests`, `llm_providers`, `llm_models`, `user_llm_preferences`, `data_providers`, `data_provider_requirement_mapping`, `sessions`, `auth_events`). Note: `user_prefs` is **not** in Plan 1A — this plan creates it in Task 1.
 - Plan 2 (session middleware, `require_auth`, `require_admin`, `argon2_hash`, `argon2_verify`, session revocation).
 - Plan 3 (data-provider admin CRUD under `/settings/data-providers/*`).
 - Plan 4 (LLM admin CRUD under `/settings/models/*`; `DEPARTMENT_DEFAULT_TIERS`; `resolve()`).
