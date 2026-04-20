@@ -8,12 +8,12 @@ This directory holds the per-feature implementation plans that turn the specs in
 |---|---|---|---|---|
 | 0 | 0 | Workspace scaffolding | **Done** (2026-04-16) | `2026-04-16-phase-0-scaffolding.md` |
 | 1a | 1 | Database baseline — auth/config/content/infrastructure (22 tables) | Done (2026-04-18) | `2026-04-16-phase-1a-database-baseline.md` |
-| 1b | 1 | Database baseline — dashboard/scheduler/notifications (11 tables) | Complete | `2026-04-17-phase-1b-database-dashboard-scheduler-notifications.md` |
-| 2 | 1 | Secrets encryption + auth primitives | Complete | `2026-04-16-phase-2-auth-and-secrets.md` |
-| 3 | 2 | Data provider adapter system | Complete | `2026-04-16-phase-3-data-provider-adapter-system.md` |
-| 4 | 2 | LLM provider system | Complete (2026-04-19) | `2026-04-16-phase-4-llm-provider-system.md` |
-| 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Complete (2026-04-19) | `2026-04-17-phase-5-llm-runtime.md` |
-| 6 | 3 | Background task scheduling | Complete (2026-04-20) | `2026-04-17-phase-6-background-task-scheduling.md` |
+| 1b | 1 | Database baseline — dashboard/scheduler/notifications (11 tables) | Done | `2026-04-17-phase-1b-database-dashboard-scheduler-notifications.md` |
+| 2 | 1 | Secrets encryption + auth primitives | Done | `2026-04-16-phase-2-auth-and-secrets.md` |
+| 3 | 2 | Data provider adapter system | Done | `2026-04-16-phase-3-data-provider-adapter-system.md` |
+| 4 | 2 | LLM provider system | Done (2026-04-19) | `2026-04-16-phase-4-llm-provider-system.md` |
+| 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Done (2026-04-19) | `2026-04-17-phase-5-llm-runtime.md` |
+| 6 | 3 | Background task scheduling | Done (2026-04-20) | `2026-04-17-phase-6-background-task-scheduling.md` |
 | 7 | 3 | CLI surface (`admin`, `wizard reset`, `secrets rotate-key`, `maintenance`) | Draft | `2026-04-17-phase-7-cli-surface.md` |
 | 8 | 4 | Frontend shell (routing, auth context, layout, design tokens) | Draft | `2026-04-17-phase-8-frontend-shell.md` |
 | 9 | 4 | Login + Account Management UI | Draft | `2026-04-17-phase-9-login-and-account-ui.md` |
@@ -56,6 +56,77 @@ Recommended hardening: enable GitHub branch protection on `main` requiring the `
 - **Every test directory gets an `__init__.py`.** Enforces package semantics and keeps fixture discovery predictable.
 - **Shared helpers go through `conftest.py` where possible.** Only reach for a free-standing `_xxx_helpers.py` when the helper is a class/dataclass that needs to be imported by name across multiple test modules.
 - **One-line sanity command before opening a PR:** `uv run ruff check . && uv run ruff format --check . && uv run pytest -q`. If that fails locally, CI will fail too.
+
+### Cross-plan contracts (locked after the 2026-04-20 audit)
+
+These eight contracts were drifting across plan files before Phase 7 began. They are now normalized; do not reintroduce the old shapes in new plans or edits.
+
+1. **HTTP prefixes.** Backend FastAPI routers use **bare prefixes** (`/auth`, `/notifications`, `/chat/sessions`, `/repo`, `/reports`, `/departments/<slug>/...`). The Vite dev proxy strips `/api` (`rewrite: (p) => p.replace(/^\/api/, "")` — see Plan 0). Frontend code hits `/api/...`; backend TestClient tests hit bare paths.
+2. **`reports` table.** Plan 1A's schema is the single source of truth: `report_type`, `title`, `content_markdown`, `content_structured` (JSON — holds the canonical `ReportSchema`), `model_ref`, timestamps from `TimestampMixin`. No `mode`/`schema_json`/`generated_at`/`status` columns — Plan 13+ map onto the existing columns.
+3. **`repo_items` table.** Not in Plan 1A. Created by Plan 12 Task 0 before Task 2 uses it.
+4. **`wizard_state` shape.** Reshaped by Plan 10 Task 1: `current_step: String` (named step id), `completed_steps: JSON[]`, `active_session_token: String(64) nullable`. Plan 1A's legacy `Integer` `current_step` is migrated in-place.
+5. **Runtime event imports.** Always `from openlia.llm.runtime.events import ...` — never `openlia.runtime.events`.
+6. **Runtime event fields.** `ReportStart(report_id, department, mode, section_titles)` and `ReportComplete(report_id, schema)` are frozen as shipped in Plan 5. Title lives inside `schema["title"]`; no top-level `title` attribute.
+7. **`ReportRequest`.** Plan 5 owns the shape: `mode`, `user_input`, `enabled_sections`, `custom_sections`, `length` (allowed set `("brief", "standard", "long")`). Departments that use `report_length` (`concise`/`normal`/`elaborative`) in their own config tables must map at call-site; do not retroactively extend Plan 5.
+8. **`user_prefs` table.** Not in Plan 1A. Created by Plan 11 Task 1. Plan 11's dependency list documents this explicitly.
+
+### Current backend contract (authoritative import paths + shapes)
+
+Locked after the 2026-04-20 Phase 7+ plan audit. Plans 7–15 drifted against the actual Phase 0–6 implementation; the shapes below are what the shipped code exposes. New or revised plans must use these names verbatim.
+
+**Model imports.**
+
+- `from openlia_server.db.models.auth import User, Session, SignupInvite, PasswordResetRequest, LoginAttempt`
+- `from openlia_server.db.models.config import LLMProvider, LLMModel, DataProvider, ConfigStore, WizardState`
+- `from openlia_server.db.models.content import ChatSession, ChatMessage, Report, RepoItem` (RepoItem created by Plan 12 Task 0)
+- `from openlia_server.db.models.infrastructure import JobRun, Notification`
+
+**Auth dependencies.** Router-factory pattern only — do not import a bare `get_current_user`:
+
+```python
+from openlia_server.middleware.auth import build_require_auth, build_require_admin
+
+def build_foo_router(*, db_session_factory, mode: str) -> APIRouter:
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    router = APIRouter(prefix="/foo")
+    @router.get("/bar")
+    def bar(user: User = Depends(require_auth)): ...
+    return router
+```
+
+Mount in `app.py` with `app.include_router(build_foo_router(db_session_factory=factory, mode=mode))`.
+
+**Password hashing.** `from openlia_server.services.auth.passwords import hash_password, verify_password` (not `openlia_server.security.passwords`).
+
+**DB session access.** No `get_db_session` / `get_db` helper ships today. Use `SessionLocal()` as a context manager, or add a `session_dependency()` inside the router factory that yields from `db_session_factory()` and closes on exit. Plans that need it must include the helper in their own Task 0.
+
+**Auth HTTP response shape (flat).** Backend returns:
+
+```json
+{
+  "user_id": "<uuid>",
+  "email": "...",
+  "display_name": "...",
+  "is_admin": true,
+  "must_change_password": false
+}
+```
+
+Frontend maps at the boundary: `role = is_admin ? "admin" : "user"`, `id = user_id`. There is no nested `{user: ...}` envelope and no `role` column in the DB.
+
+**IDs are UUID strings.** `User.id`, `SignupInvite.id`, `ChatSession.id`, `Report.id`, `RepoItem.id`, and all FKs to them are `String(36)`. Plans must type DTOs and path parameters as `str`; generate with `uuid.uuid4().hex`-style strings.
+
+**ChatSession fields.** `is_pinned: bool`, `is_archived: bool`, `context: dict | None`. There is no `pinned` or `archived_at` column; add a migration deliberately if archive timestamps are needed.
+
+**`config_store["wizard.completed"]`.** Bootstrap seeds a Python `bool`. Readers must tolerate both `bool` and `"true"`/`"false"` strings — never call `.lower()` on the raw value without a type guard.
+
+**LLM admin route prefix.** `/settings/admin/llm/*` (not `/settings/models/*`). Frontend clients in Plan 11 hit `/api/settings/admin/llm/...`.
+
+**LLM provider service surface.** `packages/server/src/openlia_server/services/llm_providers.py` exposes `create_provider`, `get_provider`, `list_providers`, `update_provider`, `delete_provider`, `create_model`, `list_models_for_provider`, `set_user_preference`. There is no `test_provider`, `clear_all_providers`, `add_model`, or `list_data_provider_rows` — Plan 10's wizard flow must use the shipped CRUD or add helpers in its own Task 0.
+
+**Runtime imports.** `from openlia.llm.runtime.messages import ReportRequest` and `from openlia.llm.runtime.events import to_wire` (SSE serialization). `serialize_sse` does not exist.
+
+**Frontend `/api` proxy.** Already shipped in `frontend/vite.config.ts`: target `http://localhost:8000`, `changeOrigin: true`, `rewrite: (p) => p.replace(/^\/api/, "")`. Backend routes remain unprefixed; tests using `TestClient` hit bare paths.
 
 ---
 
@@ -263,7 +334,7 @@ Goal: the four departments that render computed metrics + LLM assessments, not n
 
 ## Conventions
 
-- **Filenames:** `YYYY-MM-DD-phase-N-<slug>.md` where slug describes the plan's scope (e.g., `phase-1-database-baseline`).
-- **Status values:** `Not started` | `Draft` (written but not reviewed) | `Ready` (reviewed and ready to execute) | `In progress` | `Done`.
+- **Filenames:** `YYYY-MM-DD-phase-N-<slug>.md` where `N` is the **plan number** (column `#` in the status table above), not the phase bucket. Historic artifact: the slug reuses the word "phase" for plan numbers, so `phase-3-data-provider-adapter-system.md` is Plan 3, which belongs to **Phase 2** per the status table. When in doubt, the status-table `#` and `Phase` columns are authoritative; the filename is a historical alias.
+- **Status values:** `Not started` | `Draft` (written but not reviewed) | `Ready` (reviewed and ready to execute) | `In progress` | `Done`. ("Complete" is a legacy alias for `Done` — use `Done` for new edits.)
 - **Branch names:** one branch per plan, `feat/phase-N-<slug>`.
 - **Commits:** one commit per task (or per atomic sub-step) within the plan.

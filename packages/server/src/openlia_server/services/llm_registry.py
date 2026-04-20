@@ -31,9 +31,11 @@ class SQLModelRegistry(ModelRegistry):
     def get_tier_default(self, tier: ModelTier) -> ResolvedModelRow | None:
         stmt = (
             select(LLMModel)
+            .join(LLMProvider, LLMProvider.id == LLMModel.provider_id)
             .where(LLMModel.tier == tier.value)
             .where(LLMModel.is_tier_default.is_(True))
             .where(LLMModel.is_enabled.is_(True))
+            .where(LLMProvider.is_enabled.is_(True))
             .limit(1)
         )
         model = self._db.execute(stmt).scalar_one_or_none()
@@ -44,8 +46,10 @@ class SQLModelRegistry(ModelRegistry):
     def get_any_in_tier(self, tier: ModelTier) -> ResolvedModelRow | None:
         stmt = (
             select(LLMModel)
+            .join(LLMProvider, LLMProvider.id == LLMModel.provider_id)
             .where(LLMModel.tier == tier.value)
             .where(LLMModel.is_enabled.is_(True))
+            .where(LLMProvider.is_enabled.is_(True))
             .order_by(LLMModel.created_at.asc())
             .limit(1)
         )
@@ -58,12 +62,15 @@ class SQLModelRegistry(ModelRegistry):
         model = self._db.get(LLMModel, model_id)
         if model is None or not model.is_enabled:
             return None
+        provider = self._db.get(LLMProvider, model.provider_id)
+        if provider is None or not provider.is_enabled:
+            return None
         return self._build_row(model)
 
     def _build_row(self, model: LLMModel) -> ResolvedModelRow:
         provider = self._db.get(LLMProvider, model.provider_id)
-        if provider is None or not provider.is_enabled:
-            raise RuntimeError(f"llm_models.{model.id} references missing/disabled provider")
+        if provider is None:
+            raise RuntimeError(f"llm_models.{model.id} references missing provider")
         api_key = svc.get_provider_api_key(self._db, provider.id)
         override = svc.get_capability_override(
             self._db, provider_kind=provider.kind, model=model.model_ref

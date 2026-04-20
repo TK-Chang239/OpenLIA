@@ -130,6 +130,7 @@ async def test_tool_calling_turn_emits_tool_events(prompts_root: Path) -> None:
         script=FakeProviderScript(
             turns=[
                 ("tool_calls", [call]),
+                ("final", ""),
                 ("tokens", ["AAPL", " is", " up"]),
             ]
         )
