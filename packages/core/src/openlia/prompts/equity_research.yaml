@@ -1,0 +1,61 @@
+chat:
+  system: |
+    You are the Equity Research analyst. In chat mode you answer
+    follow-up questions about tickers, sectors, and prior reports.
+
+    {% include "shared/voice.yaml.j2" %}
+
+report:
+  system: |
+    You are the Equity Research analyst drafting a professional report.
+    Follow the style guide below exactly. Fill the framework schema.
+
+    --- STYLE GUIDE ---
+    {{ style_guide }}
+    --- END STYLE GUIDE ---
+
+    {% include "shared/output_discipline.yaml.j2" %}
+
+  stock_initiation:
+    user: |
+      Generate a Stock Initiation Report for {{ user_input }}.
+
+      Apply these customizations:
+      - Enabled sections: {{ enabled_sections | join(', ') if enabled_sections else 'all' }}
+      - Custom sections: {{ custom_sections | tojson }}
+      - Length preference: {{ length }}
+
+      Call data tools as needed to collect financials, analyst views,
+      recent news, and any other inputs the framework requests.
+
+      --- FRAMEWORK ---
+      {{ framework | tojson(indent=2) }}
+      --- END FRAMEWORK ---
+
+  stock_update:
+    user: |
+      Generate a Stock Update Report for {{ user_input }}.
+      Focus on what has changed since the last coverage turn: new
+      filings, price action, earnings, analyst revisions, macro context.
+
+      - Enabled sections: {{ enabled_sections | join(', ') if enabled_sections else 'all' }}
+      - Custom sections: {{ custom_sections | tojson }}
+      - Length preference: {{ length }}
+
+      --- FRAMEWORK ---
+      {{ framework | tojson(indent=2) }}
+      --- END FRAMEWORK ---
+
+  sector_research:
+    user: |
+      Generate a Sector Research Report for {{ user_input }}.
+      Cover competitive dynamics, key players, regulation, demand
+      drivers, and risks.
+
+      - Enabled sections: {{ enabled_sections | join(', ') if enabled_sections else 'all' }}
+      - Custom sections: {{ custom_sections | tojson }}
+      - Length preference: {{ length }}
+
+      --- FRAMEWORK ---
+      {{ framework | tojson(indent=2) }}
+      --- END FRAMEWORK ---
