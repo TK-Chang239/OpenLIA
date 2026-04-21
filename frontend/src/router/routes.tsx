@@ -1,10 +1,14 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
+import { MustChangePasswordGate } from "./MustChangePasswordGate";
+import { LoginPage } from "../pages/LoginPage";
+import { RegisterPage } from "../pages/RegisterPage";
+import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
+import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import Home from "../pages/Home";
 import Repository from "../pages/Repository";
 import Settings from "../pages/Settings";
-import Login from "../pages/Login";
 import Setup from "../pages/Setup";
 import Secretary from "../pages/departments/Secretary";
 import EquityResearch from "../pages/departments/EquityResearch";
@@ -15,26 +19,34 @@ import MacroResearch from "../pages/departments/MacroResearch";
 import PanicThermometer from "../pages/departments/PanicThermometer";
 
 export const router = createBrowserRouter([
-  { path: "/login", element: <Login /> },
+  { path: "/login", element: <LoginPage /> },
+  { path: "/register", element: <RegisterPage /> },
+  { path: "/forgot-password", element: <ForgotPasswordPage /> },
+  { path: "/reset-password", element: <ResetPasswordPage /> },
   { path: "/setup", element: <Setup /> },
   {
     element: (
       <ProtectedRoute>
-        <AppLayout />
+        <MustChangePasswordGate />
       </ProtectedRoute>
     ),
     children: [
-      { path: "/", element: <Navigate to="/secretary" replace /> },
-      { path: "/repository", element: <Repository /> },
-      { path: "/settings", element: <Settings /> },
-      { path: "/home", element: <Home /> },
-      { path: "/secretary", element: <Secretary /> },
-      { path: "/equity-research", element: <EquityResearch /> },
-      { path: "/earnings-update", element: <EarningsUpdate /> },
-      { path: "/morning-briefing", element: <MorningBriefing /> },
-      { path: "/retail-sentiment", element: <RetailSentiment /> },
-      { path: "/macro-research", element: <MacroResearch /> },
-      { path: "/panic-thermometer", element: <PanicThermometer /> },
+      {
+        element: <AppLayout />,
+        children: [
+          { path: "/", element: <Navigate to="/secretary" replace /> },
+          { path: "/home", element: <Home /> },
+          { path: "/repository", element: <Repository /> },
+          { path: "/settings", element: <Settings /> },
+          { path: "/secretary", element: <Secretary /> },
+          { path: "/equity-research", element: <EquityResearch /> },
+          { path: "/earnings-update", element: <EarningsUpdate /> },
+          { path: "/morning-briefing", element: <MorningBriefing /> },
+          { path: "/retail-sentiment", element: <RetailSentiment /> },
+          { path: "/macro-research", element: <MacroResearch /> },
+          { path: "/panic-thermometer", element: <PanicThermometer /> },
+        ],
+      },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
