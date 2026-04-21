@@ -15,6 +15,7 @@ def make_invite(db_session):
     def _make(token: str = "invite-tok", **kwargs) -> SignupInvite:
         row = SignupInvite(
             id=f"inv-{token}",
+            token=token,
             token_hash=tokens.hash_token(token),
             created_at=datetime.now(UTC),
             **kwargs,

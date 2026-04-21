@@ -127,3 +127,37 @@ def decrypt_for_row(row_id: str, token: str) -> str:
     except Exception as exc:
         raise DecryptError("authenticated decryption failed") from exc
     return plaintext.decode("utf-8")
+
+
+def _validate_key(key: bytes) -> None:
+    if len(key) != KEY_LENGTH_BYTES:
+        raise SecretKeyError(f"key must be exactly {KEY_LENGTH_BYTES} bytes, got {len(key)}")
+
+
+def encrypt_with_key(key: bytes, row_id: str, plaintext: str) -> str:
+    """AES-256-GCM encrypt with an explicit key, bypassing the module cache.
+    Returns base64-encoded (nonce || ciphertext || tag)."""
+    _validate_key(key)
+    nonce = secrets.token_bytes(NONCE_LENGTH_BYTES)
+    aead = AESGCM(key)
+    blob = aead.encrypt(nonce, plaintext.encode("utf-8"), row_id.encode("utf-8"))
+    return base64.b64encode(nonce + blob).decode("ascii")
+
+
+def decrypt_with_key(key: bytes, row_id: str, token: str) -> str:
+    """AES-256-GCM decrypt with an explicit key. Counterpart of encrypt_with_key.
+    Raises DecryptError on any failure."""
+    _validate_key(key)
+    try:
+        raw = base64.b64decode(token, validate=True)
+    except Exception as exc:
+        raise DecryptError("invalid base64") from exc
+    if len(raw) < NONCE_LENGTH_BYTES + 16:
+        raise DecryptError("ciphertext too short")
+    nonce, blob = raw[:NONCE_LENGTH_BYTES], raw[NONCE_LENGTH_BYTES:]
+    aead = AESGCM(key)
+    try:
+        plaintext = aead.decrypt(nonce, blob, row_id.encode("utf-8"))
+    except Exception as exc:
+        raise DecryptError("decryption failed") from exc
+    return plaintext.decode("utf-8")
