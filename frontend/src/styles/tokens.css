@@ -1,23 +1,49 @@
 :root {
   color-scheme: light dark;
 
+  /* Backgrounds */
   --color-bg-app: #0f1115;
+  --color-bg-base: #0f1115;          /* alias for auth views */
   --color-bg-elevated: #161a22;
+  --color-bg-input: #12151c;
   --color-sidebar-bg: #12151c;
 
+  /* Surfaces */
   --color-surface-hover: rgba(255, 255, 255, 0.04);
   --color-surface-active: rgba(255, 255, 255, 0.06);
 
+  /* Accents */
   --color-accent-primary: #7c9cff;
+  --color-accent-hover: #94acff;
   --color-accent-subtle: rgba(124, 156, 255, 0.12);
 
+  /* Text */
   --color-text-primary: #e8eaf0;
   --color-text-secondary: #a8aec0;
   --color-text-tertiary: #6f758a;
 
+  /* Icons */
   --color-icon-primary: #a8aec0;
 
+  /* Borders */
   --color-border-subtle: rgba(255, 255, 255, 0.08);
+  --color-border-secondary: rgba(124, 156, 255, 0.55);
 
+  /* Feedback */
+  --color-feedback-error: #ef6b6b;
+  --color-feedback-success: #62c28b;
+  --color-feedback-warning: #e0b355;
+
+  /* Focus ring */
+  --focus-ring-color: rgba(124, 156, 255, 0.35);
+
+  /* Radii */
+  --radius-sm: 4px;
   --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
 }
