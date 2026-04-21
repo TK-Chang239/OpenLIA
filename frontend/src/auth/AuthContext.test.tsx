@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, renderHook } from "@testing-library/react";
 import { AuthProvider, useAuth } from "./AuthContext";
 import { ApiError } from "../api/client";
 
@@ -145,5 +145,80 @@ describe("AuthProvider", () => {
     await waitFor(() =>
       expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
     );
+  });
+
+  it("exposes mustChangePassword: false by default after session fetch", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("authenticated"));
+    expect(result.current.mustChangePassword).toBe(false);
+  });
+
+  it("login() sets mustChangePassword from server response", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            user: { id: "u1", email: "a", role: "user" },
+            must_change_password: true,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+
+    await act(async () => {
+      await result.current.login({
+        email: "a",
+        password: "p",
+        persistent: false,
+      });
+    });
+
+    expect(result.current.status).toBe("authenticated");
+    expect(result.current.mustChangePassword).toBe(true);
+  });
+
+  it("clearMustChangePassword() resets the flag", async () => {
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("authenticated"));
+
+    act(() => {
+      result.current.setMustChangePassword(true);
+    });
+    expect(result.current.mustChangePassword).toBe(true);
+
+    act(() => {
+      result.current.clearMustChangePassword();
+    });
+    expect(result.current.mustChangePassword).toBe(false);
   });
 });
