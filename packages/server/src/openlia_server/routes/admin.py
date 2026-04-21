@@ -61,6 +61,7 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         raw_token = tokens.generate_opaque_token()
         invite = SignupInvite(
             id=str(uuid.uuid4()),
+            token=raw_token,
             token_hash=tokens.hash_token(raw_token),
             label=body.label,
             max_uses=body.max_uses,
