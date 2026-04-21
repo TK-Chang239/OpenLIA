@@ -41,13 +41,13 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 <claude-mem-context>
 # Memory Context
 
-# [OpenLIA] recent context, 2026-04-20 9:33pm PDT
+# [OpenLIA] recent context, 2026-04-20 9:44pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (25,109t read) | 2,234,697t work | 99% savings
+Stats: 50 obs (27,172t read) | 2,603,571t work | 99% savings
 
 ### Apr 20, 2026
 S27 OpenLIA main branch post-merge code review — Phase 5 (LLM Runtime) and Phase 6 (Background Task Scheduling) quality assessment after git push/pull sync (Apr 20 at 9:32 AM)
@@ -55,23 +55,9 @@ S24 Switch to main branch to commit — Claude flagged risks before proceeding (
 S28 GitHub Branch Protection Ruleset Settings — Branch name pattern and recommended rules for protecting main (Apr 20 at 9:38 AM)
 S31 claude-mem:timeline-report — Generate "Journey Into OpenLIA" narrative report from 110 persistent memory observations (Apr 20 at 9:52 AM)
 S48 Create pull request for phase 0-6 audit remediation; note finding 9 deferred to next workflow (Apr 20 at 10:03 AM)
-340 2:31p 🔴 Auth middleware `require_auth` gets `try/finally: db.close()` to guarantee session cleanup
-341 2:32p ✅ Full server test suite green after complete session lifecycle refactor — 350 tests pass
-342 " ✅ Full monorepo test suite green — 584 tests pass after session lifecycle refactor
-343 2:33p 🔵 Ruff reports 40 B008 errors for `Depends()` in default arguments, plus 2 files need reformatting
-344 " 🔵 All 40 ruff errors are B008 for `Depends()` — `ruff.toml` has `B` selected with no B008 exemption
-345 2:34p ✅ ruff.toml updated to treat FastAPI `Depends`/`Query`/etc. as immutable calls, clearing all B008 errors
-346 " ✅ Audit document updated: finding #7 marked resolved with full resolution summary
-347 " 🔵 Full changeset for task 9: 12 modified + 3 new files, 290 insertions / 106 deletions on branch `fix/route-session-lifecycle`
-348 2:35p ✅ Task 9 committed: `fix(routes): close DB sessions per-request via FastAPI dependency` — commit 46c66f6
-349 " ✅ Branch `fix/route-session-lifecycle` pushed to GitHub — PR ready at TK-Chang239/OpenLIA
-350 2:36p ✅ PR #10 created: "fix(routes): close DB sessions per-request via FastAPI dependency"
 S49 Task 9: Route session lifecycle refactor — 38+ call sites across auth/admin/settings + test-fixture refactor (deferred from previous session) (Apr 20 at 2:36 PM)
-351 7:59p 🔵 OpenLIA Codebase Graph Context for Phase 7 & 8 Review
-352 8:01p 🔵 Phase 7 & 8 Change Set: 53 Frontend Files Committed to Main
 353 8:05p 🔵 OpenLIA Planning Structure: Phase 7 = CLI Surface, Phase 8 = Frontend Shell
 354 " 🔵 Phase 8 Frontend Shell: Full Source Review of All Implemented Modules
-355 " ✅ AGENTS.md Updated with Code-Review-Graph MCP Tool Instructions
 356 " 🔵 OpenLIA Codebase Community Structure: Backend-Dominant with Small Frontend Footprint
 357 8:06p 🔵 Phase 7 CLI Surface Partially Implemented: Only serve/main Exist, Admin Subcommands Missing
 358 " 🔵 Phase 8 Audit Note: Auth API Contract Mismatch Between Plan and Implementation
@@ -106,6 +92,20 @@ S49 Task 9: Route session lifecycle refactor — 38+ call sites across auth/admi
 387 " 🔵 Scheduler Architecture — APScheduler-Backed SchedulerService with Stubs for Unimplemented Departments
 388 " 🔵 OpenLIA Deployment Profile — No Docker, uv Workspace + Vite Proxy, Two Deployment Modes
 389 9:05p 🟣 OpenLIA Full-Stack Audit Documents Written — 7 Audit Files Committed
+390 9:34p 🔵 Phase 9 Login/Account UI Audit: Implementation Gap Found
+391 9:35p 🔵 Phase 9 Exists on origin/main — Local Branch 25 Commits Behind
+392 " 🔵 Phase 9 Implementation Scope: 52 Files Changed, 152 Functions, 49 Test Gaps Detected
+393 9:36p 🔵 Phase 9 Complete File Set Confirmed in origin/main
+394 " 🔴 Critical: Frontend api/auth.ts Uses Nested Shape But Backend Returns Flat Login Response
+395 " 🔵 LoginForm Implementation Quality: Matches Plan with Minor Deviation
+396 9:37p 🔴 Backend-Frontend Auth Shape Mismatch Confirmed Across All Three Endpoints
+397 " 🔵 LoginPage Skips Signup Policy Fetch — Deviates from Plan Design Rule 11
+398 " 🔵 Auth Form Components: High Implementation Quality with Minor Issues
+399 " 🔵 Test Suite Cannot Run in Worktree — Missing tailwindcss in node_modules
+400 9:38p 🔵 All Phase 9 Tests Use Wrong Backend Mock Shape — Systemic Test Fidelity Problem
+401 " 🔵 Three Additional Spec Deviations: ProtectedRoute ?next Param, ResetPassword Auto-Redirect, AccountChrome Missing
+402 9:40p 🔵 Phase 9 Login/Account UI Audit – Auth API Test Coverage
+403 " 🔵 Phase 9 Login Spec – Registration View Requires Invite Token
 
-Access 2235k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 2604k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
