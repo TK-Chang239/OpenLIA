@@ -1,0 +1,23 @@
+:root {
+  color-scheme: light dark;
+
+  --color-bg-app: #0f1115;
+  --color-bg-elevated: #161a22;
+  --color-sidebar-bg: #12151c;
+
+  --color-surface-hover: rgba(255, 255, 255, 0.04);
+  --color-surface-active: rgba(255, 255, 255, 0.06);
+
+  --color-accent-primary: #7c9cff;
+  --color-accent-subtle: rgba(124, 156, 255, 0.12);
+
+  --color-text-primary: #e8eaf0;
+  --color-text-secondary: #a8aec0;
+  --color-text-tertiary: #6f758a;
+
+  --color-icon-primary: #a8aec0;
+
+  --color-border-subtle: rgba(255, 255, 255, 0.08);
+
+  --radius-md: 6px;
+}
