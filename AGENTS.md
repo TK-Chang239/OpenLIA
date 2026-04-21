@@ -41,13 +41,13 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 <claude-mem-context>
 # Memory Context
 
-# [OpenLIA] recent context, 2026-04-20 9:44pm PDT
+# [OpenLIA] recent context, 2026-04-20 9:48pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (27,172t read) | 2,603,571t work | 99% savings
+Stats: 50 obs (25,979t read) | 2,503,531t work | 99% savings
 
 ### Apr 20, 2026
 S27 OpenLIA main branch post-merge code review — Phase 5 (LLM Runtime) and Phase 6 (Background Task Scheduling) quality assessment after git push/pull sync (Apr 20 at 9:32 AM)
@@ -56,12 +56,7 @@ S28 GitHub Branch Protection Ruleset Settings — Branch name pattern and recomm
 S31 claude-mem:timeline-report — Generate "Journey Into OpenLIA" narrative report from 110 persistent memory observations (Apr 20 at 9:52 AM)
 S48 Create pull request for phase 0-6 audit remediation; note finding 9 deferred to next workflow (Apr 20 at 10:03 AM)
 S49 Task 9: Route session lifecycle refactor — 38+ call sites across auth/admin/settings + test-fixture refactor (deferred from previous session) (Apr 20 at 2:36 PM)
-353 8:05p 🔵 OpenLIA Planning Structure: Phase 7 = CLI Surface, Phase 8 = Frontend Shell
-354 " 🔵 Phase 8 Frontend Shell: Full Source Review of All Implemented Modules
-356 " 🔵 OpenLIA Codebase Community Structure: Backend-Dominant with Small Frontend Footprint
 357 8:06p 🔵 Phase 7 CLI Surface Partially Implemented: Only serve/main Exist, Admin Subcommands Missing
-358 " 🔵 Phase 8 Audit Note: Auth API Contract Mismatch Between Plan and Implementation
-359 " 🔵 OpenLIA Full Backend Package Structure Confirmed Across Both Packages
 360 8:07p 🔵 Phase 7 CLI Fully Implemented: 980+ Lines with All Sub-Apps and Commands
 361 " 🔵 Phase 7 Wizard Reset: Uses Integer current_step=1 — Pre-Audit Drift Confirmed
 362 " 🔵 CONFIRMED: Phase 8 Auth API Contract Mismatch — Frontend Uses Envelope Shape, Backend Returns Flat
@@ -106,6 +101,11 @@ S49 Task 9: Route session lifecycle refactor — 38+ call sites across auth/admi
 401 " 🔵 Three Additional Spec Deviations: ProtectedRoute ?next Param, ResetPassword Auto-Redirect, AccountChrome Missing
 402 9:40p 🔵 Phase 9 Login/Account UI Audit – Auth API Test Coverage
 403 " 🔵 Phase 9 Login Spec – Registration View Requires Invite Token
+404 9:44p 🔵 Phase 9 Login and Account UI Already Merged to origin/main
+405 9:45p 🔵 Sandbox Network Policy Blocks git fetch in Audit Environment
+406 " 🔵 Git Rebase Requires Escalated Sandbox Permissions in OpenLIA Dev Environment
+407 9:46p 🟣 Phase 9 Audit Branch Pushed to GitHub with 3,236 Lines of Audit Documentation
+408 9:47p 🔵 Phase 9 Audit PR #17 Already Merged to origin/main During Session
 
-Access 2604k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 2504k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
