@@ -33,7 +33,9 @@ class TestInvites:
         assert invites[0]["label"] == "Q2"
 
     def test_revoke(self, admin_cookie: TestClient, db_session):
-        invite = SignupInvite(id="inv-x", token="tok-x", token_hash="tok-x", created_at=datetime.now(UTC))
+        invite = SignupInvite(
+            id="inv-x", token="tok-x", token_hash="tok-x", created_at=datetime.now(UTC)
+        )
         db_session.add(invite)
         db_session.commit()
         resp = admin_cookie.post(f"/admin/invites/{invite.id}/revoke")
