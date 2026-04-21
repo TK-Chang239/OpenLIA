@@ -273,17 +273,33 @@ openlia/
 │       ├── main.tsx
 │       ├── App.tsx
 │       │
-│       ├── api/                        # fetchJson + typed endpoint modules (auth, notifications, ...)
+│       ├── api/                        # fetchJson + typed endpoint modules
+│       │   ├── client.ts               # fetchJson wrapper
+│       │   ├── auth.ts                 # login, logout, logoutAll, register, getSignupPolicy, requestPasswordReset, consumePasswordReset, changePassword
+│       │   └── notifications.ts        # getUnread, markRead
 │       │
 │       ├── auth/                       # AuthProvider + useAuth + 4-state status machine
+│       │   ├── AuthContext.tsx         # status: loading|authenticated|unauthenticated|personal; mustChangePassword flag
+│       │   └── passwordStrength.ts     # pure fn: StrengthLevel 0–4
 │       │
-│       ├── router/                     # createBrowserRouter tree, ProtectedRoute
+│       ├── router/                     # createBrowserRouter tree
+│       │   ├── routes.tsx              # browser router: public auth routes + ProtectedRoute > MustChangePasswordGate > AppLayout
+│       │   ├── ProtectedRoute.tsx      # redirects unauthenticated to /login (children API)
+│       │   └── MustChangePasswordGate.tsx  # intercepts protected routes when mustChangePassword===true
 │       │
 │       ├── layouts/                    # AppLayout (Sidebar + Outlet)
 │       │
 │       ├── components/
 │       │   ├── sidebar/                # Sidebar shell, NavItem, useCollapsed, useNotificationPoll, navData
-│       │   ├── primitives/             # Button, Input, Card
+│       │   ├── primitives/             # Button, Input, Card, Banner, FormField, PasswordInput, PasswordStrengthMeter
+│       │   ├── auth/                   # Auth form components (Plan 9)
+│       │   │   ├── AuthLayout.tsx      # full-screen centered layout with LIA wordmark
+│       │   │   ├── AuthCard.tsx        # bordered card, max-width 420px
+│       │   │   ├── LoginForm.tsx
+│       │   │   ├── RegisterForm.tsx
+│       │   │   ├── ForgotPasswordForm.tsx
+│       │   │   ├── ResetPasswordForm.tsx
+│       │   │   └── MustChangePasswordForm.tsx
 │       │   ├── report/                 # Report renderer (see report-rendering-pipeline-design.md) — added Plan 13+
 │       │   │   ├── ReportRenderer.tsx
 │       │   │   ├── ReportCover.tsx
@@ -296,8 +312,16 @@ openlia/
 │       │   ├── MacroResearch/          # Scorecard, QuadrantMap, GradientBar, ForceRow, StageTimeline, ... — added Plan 19+
 │       │   └── RetailSentiment/        # MetricCard, GaugeArc, HeatMap, ScoreImpactBar, ... — added Plan 20+
 │       │
-│       ├── pages/                      # Placeholder page components; replaced by Plans 13–20
-│       │   └── departments/
+│       ├── pages/
+│       │   ├── LoginPage.tsx           # redirects if already authenticated
+│       │   ├── RegisterPage.tsx        # invite-gated; requires ?invite= param
+│       │   ├── ForgotPasswordPage.tsx
+│       │   ├── ResetPasswordPage.tsx   # requires ?token= param
+│       │   ├── account/                # Account section (Plan 9)
+│       │   │   ├── AccountProfile.tsx  # read-only user info from useAuth()
+│       │   │   ├── ChangePasswordForm.tsx
+│       │   │   └── SessionsPanel.tsx   # sign out all other devices
+│       │   └── departments/            # Department pages; replaced by Plans 13–20
 │       │
 │       └── styles/
 │           ├── tokens.css              # Design-system CSS variables (light + dark)
