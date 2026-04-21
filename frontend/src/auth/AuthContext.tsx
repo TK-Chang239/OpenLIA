@@ -25,9 +25,12 @@ export type AuthStatus =
 export interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
+  mustChangePassword: boolean;
   login: (input: LoginInput) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  setMustChangePassword: (v: boolean) => void;
+  clearMustChangePassword: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -41,6 +44,8 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [mustChangePassword, setMustChangePasswordState] =
+    useState<boolean>(false);
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -58,19 +63,30 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     }
   }, []);
 
-  const login = useCallback(
-    async (input: LoginInput): Promise<void> => {
-      const fetched = await loginRequest(input);
-      setUser(fetched);
-      setStatus("authenticated");
-    },
-    [],
-  );
+  const login = useCallback(async (input: LoginInput): Promise<void> => {
+    const result = await loginRequest(input);
+    setUser(result.user);
+    setMustChangePasswordState(result.must_change_password);
+    setStatus("authenticated");
+  }, []);
 
   const logout = useCallback(async (): Promise<void> => {
-    await logoutRequest();
+    try {
+      await logoutRequest();
+    } catch (err) {
+      console.warn("logout failed", err);
+    }
     setUser(null);
+    setMustChangePasswordState(false);
     setStatus("unauthenticated");
+  }, []);
+
+  const setMustChangePassword = useCallback((v: boolean) => {
+    setMustChangePasswordState(v);
+  }, []);
+
+  const clearMustChangePassword = useCallback(() => {
+    setMustChangePasswordState(false);
   }, []);
 
   useEffect(() => {
@@ -78,8 +94,26 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   }, [refresh]);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, login, logout, refresh }),
-    [status, user, login, logout, refresh],
+    () => ({
+      status,
+      user,
+      mustChangePassword,
+      login,
+      logout,
+      refresh,
+      setMustChangePassword,
+      clearMustChangePassword,
+    }),
+    [
+      status,
+      user,
+      mustChangePassword,
+      login,
+      logout,
+      refresh,
+      setMustChangePassword,
+      clearMustChangePassword,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
