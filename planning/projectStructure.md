@@ -273,60 +273,35 @@ openlia/
 │       ├── main.tsx
 │       ├── App.tsx
 │       │
-│       ├── pages/                      # One page per top-level destination
-│       │   ├── LoginPage.tsx
-│       │   ├── SetupWizardPage.tsx
-│       │   ├── SecretaryPage.tsx
-│       │   ├── EquityResearchPage.tsx
-│       │   ├── EarningsUpdatePage.tsx
-│       │   ├── MorningBriefingPage.tsx
-│       │   ├── RetailSentiment/            # Tabbed dashboard
-│       │   │   ├── index.tsx
-│       │   │   ├── OverviewTab.tsx
-│       │   │   ├── EvidenceTab.tsx
-│       │   │   ├── InsightsTab.tsx
-│       │   │   └── MetricsDeepDive.tsx
-│       │   ├── MacroResearch/              # Tabbed dashboard
-│       │   │   ├── index.tsx
-│       │   │   ├── SummaryTab.tsx
-│       │   │   ├── DebtCycleTab.tsx
-│       │   │   ├── FourSeasonsTab.tsx
-│       │   │   ├── AllWeatherTab.tsx
-│       │   │   ├── WorldOrderTab.tsx
-│       │   │   └── FiveForcesTab.tsx
-│       │   ├── PanicThermometerPage.tsx
-│       │   ├── PortfolioPage.tsx
-│       │   ├── RepositoryPage.tsx
-│       │   └── SettingsPage.tsx
+│       ├── api/                        # fetchJson + typed endpoint modules (auth, notifications, ...)
 │       │
-│       ├── components/                 # Shared UI components
-│       │   ├── Sidebar.tsx
-│       │   ├── ChatInterface.tsx
-│       │   ├── ChatHistory.tsx
-│       │   ├── FileViewer.tsx
-│       │   ├── FileDownloadButton.tsx
-│       │   ├── SaveToRepoButton.tsx
-│       │   ├── AccountManagement/          # Login flows, password reset, session list, change-password modal
-│       │   ├── report/                     # Report renderer (see report-rendering-pipeline-design.md)
+│       ├── auth/                       # AuthProvider + useAuth + 4-state status machine
+│       │
+│       ├── router/                     # createBrowserRouter tree, ProtectedRoute
+│       │
+│       ├── layouts/                    # AppLayout (Sidebar + Outlet)
+│       │
+│       ├── components/
+│       │   ├── sidebar/                # Sidebar shell, NavItem, useCollapsed, useNotificationPoll, navData
+│       │   ├── primitives/             # Button, Input, Card
+│       │   ├── report/                 # Report renderer (see report-rendering-pipeline-design.md) — added Plan 13+
 │       │   │   ├── ReportRenderer.tsx
 │       │   │   ├── ReportCover.tsx
 │       │   │   ├── TableOfContents.tsx
 │       │   │   ├── ReportSection.tsx
 │       │   │   ├── BlockRenderer.tsx
-│       │   │   ├── blocks/                 # TextBlock, TableBlock, MetricCardsBlock, GroupBlock, ...
-│       │   │   ├── charts/                 # ECharts wrappers for Line, Bar, Area, Pie, Candlestick, Waterfall, ...
-│       │   │   └── furniture/              # ReportHeader, ReportFooter, ScrollTracker, ReportSkeleton
-│       │   ├── MacroResearch/              # Scorecard, QuadrantMap, GradientBar, ForceRow, StageTimeline, ...
-│       │   └── RetailSentiment/            # MetricCard, GaugeArc, HeatMap, ScoreImpactBar, ...
+│       │   │   ├── blocks/             # TextBlock, TableBlock, MetricCardsBlock, GroupBlock, ...
+│       │   │   ├── charts/             # ECharts wrappers for Line, Bar, Area, Pie, Candlestick, Waterfall, ...
+│       │   │   └── furniture/          # ReportHeader, ReportFooter, ScrollTracker, ReportSkeleton
+│       │   ├── MacroResearch/          # Scorecard, QuadrantMap, GradientBar, ForceRow, StageTimeline, ... — added Plan 19+
+│       │   └── RetailSentiment/        # MetricCard, GaugeArc, HeatMap, ScoreImpactBar, ... — added Plan 20+
 │       │
-│       ├── api/                        # API client (axios/fetch wrappers)
-│       │   └── client.ts
+│       ├── pages/                      # Placeholder page components; replaced by Plans 13–20
+│       │   └── departments/
 │       │
 │       └── styles/
-│           ├── tokens.css                  # Design-system CSS variables (light + dark)
-│           └── report/
-│               ├── theme-light.css
-│               └── theme-dark.css
+│           ├── tokens.css              # Design-system CSS variables (light + dark)
+│           └── global.css             # Tailwind entry
 │
 │
 │   ============================================================
