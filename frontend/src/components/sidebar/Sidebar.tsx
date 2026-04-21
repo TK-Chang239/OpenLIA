@@ -1,15 +1,23 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Settings, User } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ChevronLeft, ChevronRight, LogOut, Settings, User } from "lucide-react";
 import { CORE_NAV, DEPARTMENT_NAV } from "./navData";
 import { NavItem } from "./NavItem";
 import { useCollapsed } from "./useCollapsed";
 import { useNotificationPoll } from "./useNotificationPoll";
+import { useAuth } from "../../auth/AuthContext";
 
 export function Sidebar(): JSX.Element {
   const [collapsed, setCollapsed] = useCollapsed();
   const { unreadByDepartment, markRead } = useNotificationPoll();
   const location = useLocation();
+  const { status, logout } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    await logout();
+    navigate("/login", { replace: true });
+  }
 
   useEffect(() => {
     const match = DEPARTMENT_NAV.find((entry) => entry.path === location.pathname);
@@ -108,6 +116,20 @@ export function Sidebar(): JSX.Element {
             <span className="text-sm text-text-secondary truncate">Account</span>
           )}
         </div>
+        {status === "authenticated" && (
+          <button
+            type="button"
+            onClick={() => { void handleSignOut(); }}
+            aria-label="Sign out"
+            className={[
+              "w-full flex items-center gap-2 px-2 py-[10px] text-sm text-text-secondary rounded-md hover:bg-surface-hover",
+              collapsed ? "justify-center" : "",
+            ].join(" ")}
+          >
+            <LogOut size={16} />
+            {collapsed ? null : <span>Sign out</span>}
+          </button>
+        )}
       </footer>
     </nav>
   );
