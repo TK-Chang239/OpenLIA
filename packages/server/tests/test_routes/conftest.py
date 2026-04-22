@@ -60,7 +60,7 @@ def auth_user(company_client: TestClient, db_session, make_user):
     from openlia_server.middleware.auth import COOKIE_NAME
     from openlia_server.services.auth import sessions
 
-    user = make_user()
+    user = make_user(password="CorrectHorseBattery9!")
     created = sessions.create_session(db_session, user_id=user.id, persistent=False)
     company_client.cookies.set(COOKIE_NAME, created.raw_token)
     return user
