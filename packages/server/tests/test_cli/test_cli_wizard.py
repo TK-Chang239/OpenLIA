@@ -7,14 +7,16 @@ from sqlalchemy import select
 
 class TestWizardReset:
     def test_yes_flag_skips_confirmation(self, cli_runner, cli_engine, cli_session):
-        cli_session.add(WizardState(
-            id=1,
-            status="completed",
-            current_step="done",
-            completed_steps=["mode", "account", "models", "data_providers", "review"],
-            active_session_token="old-token",
-            mode="personal",
-        ))
+        cli_session.add(
+            WizardState(
+                id=1,
+                status="completed",
+                current_step="done",
+                completed_steps=["mode", "account", "models", "data_providers", "review"],
+                active_session_token="old-token",
+                mode="personal",
+            )
+        )
         cli_session.add(ConfigStore(key="wizard.completed", value=True))
         cli_session.commit()
 
@@ -35,14 +37,16 @@ class TestWizardReset:
         assert wc.value is False
 
     def test_interactive_yes(self, cli_runner, cli_engine, cli_session):
-        cli_session.add(WizardState(
-            id=1,
-            status="completed",
-            current_step="done",
-            completed_steps=["mode", "account", "models", "data_providers", "policy", "review"],
-            active_session_token="old-token",
-            mode="company",
-        ))
+        cli_session.add(
+            WizardState(
+                id=1,
+                status="completed",
+                current_step="done",
+                completed_steps=["mode", "account", "models", "data_providers", "policy", "review"],
+                active_session_token="old-token",
+                mode="company",
+            )
+        )
         cli_session.commit()
 
         result = cli_runner.invoke(app, ["wizard", "reset"], input="y\n")
@@ -51,14 +55,16 @@ class TestWizardReset:
         assert cli_session.execute(select(WizardState)).scalar_one().status == "not_started"
 
     def test_interactive_abort(self, cli_runner, cli_engine, cli_session):
-        cli_session.add(WizardState(
-            id=1,
-            status="completed",
-            current_step="done",
-            completed_steps=["mode", "account", "models", "data_providers", "policy", "review"],
-            active_session_token="old-token",
-            mode="company",
-        ))
+        cli_session.add(
+            WizardState(
+                id=1,
+                status="completed",
+                current_step="done",
+                completed_steps=["mode", "account", "models", "data_providers", "policy", "review"],
+                active_session_token="old-token",
+                mode="company",
+            )
+        )
         cli_session.commit()
 
         result = cli_runner.invoke(app, ["wizard", "reset"], input="n\n")

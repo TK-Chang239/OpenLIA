@@ -53,9 +53,7 @@ class TestForcedPasswordBlocksProductRoutes:
 
     def test_notifications_read_blocked(self, forced_user_client):
         client, _ = forced_user_client
-        _assert_must_change(
-            client.post("/notifications/read", json={"notification_ids": []})
-        )
+        _assert_must_change(client.post("/notifications/read", json={"notification_ids": []}))
 
     def test_jobs_history_blocked(self, forced_user_client):
         client, _ = forced_user_client
