@@ -54,10 +54,10 @@ describe('AccountSection', () => {
     render(<AccountSection currentEmail="a@b.c" mustChangePassword={false} />);
     await waitFor(() => screen.getAllByRole('combobox')[0]);
     const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'zh-Hant' } });
+    fireEvent.change(selects[0], { target: { value: 'zh-TW' } });
     fireEvent.click(screen.getByRole('button', { name: /save languages/i }));
     await waitFor(() =>
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ display_language: 'zh-Hant' })),
+      expect(update).toHaveBeenCalledWith(expect.objectContaining({ display_language: 'zh-TW' })),
     );
   });
 });

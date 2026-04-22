@@ -35,25 +35,22 @@ describe('ModelsSection', () => {
     mockCatalog();
   });
 
-  it('lists all four tiers with model pickers', async () => {
-    vi.spyOn(settingsApi, 'getModelPreferences').mockResolvedValue({ items: [] });
+  it('lists all three tiers with model pickers', async () => {
+    vi.spyOn(settingsApi, 'getModelPreferences').mockResolvedValue({ preferences: {} as Record<settingsApi.Tier, string> });
     render(<ModelsSection />);
     await waitFor(() => expect(screen.getByText(/everyday/i)).toBeInTheDocument());
     expect(screen.getByText(/quick/i)).toBeInTheDocument();
     expect(screen.getByText(/thinking/i)).toBeInTheDocument();
-    expect(screen.getByText(/long context/i)).toBeInTheDocument();
   });
 
   it('saves per-tier preference via PUT', async () => {
-    vi.spyOn(settingsApi, 'getModelPreferences').mockResolvedValue({ items: [] });
+    vi.spyOn(settingsApi, 'getModelPreferences').mockResolvedValue({ preferences: {} as Record<settingsApi.Tier, string> });
     const put = vi.spyOn(settingsApi, 'putModelPreference').mockResolvedValue({ ok: true });
     render(<ModelsSection />);
     await waitFor(() => screen.getByText(/quick/i));
     const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[1], { target: { value: 'openai::gpt-4o-mini' } });
+    fireEvent.change(selects[1], { target: { value: 'gpt-4o-mini' } });
     fireEvent.click(screen.getAllByRole('button', { name: /save/i })[1]);
-    await waitFor(() =>
-      expect(put).toHaveBeenCalledWith('quick', { provider_id: 'openai', model_id: 'gpt-4o-mini' }),
-    );
+    await waitFor(() => expect(put).toHaveBeenCalledWith('quick', 'gpt-4o-mini'));
   });
 });

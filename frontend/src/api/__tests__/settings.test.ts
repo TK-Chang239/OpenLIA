@@ -44,21 +44,22 @@ describe('settings api', () => {
     });
   });
 
-  it('GET /settings/admin/llm/preferences returns list', async () => {
+  it('GET /settings/admin/llm/preferences returns preferences map', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ items: [{ tier: 'thinking', provider_id: 'openai', model_id: 'gpt-4o' }] }),
+      json: async () => ({ preferences: { thinking: 'gpt-4o' } }),
     });
     const prefs = await getModelPreferences();
-    expect(prefs.items[0].tier).toBe('thinking');
+    expect(prefs.preferences.thinking).toBe('gpt-4o');
   });
 
-  it('PUT /settings/admin/llm/preferences/{tier}', async () => {
+  it('PUT /settings/admin/llm/preferences with tier+model_id body', async () => {
     (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-    await putModelPreference('quick', { provider_id: 'openai', model_id: 'gpt-4o-mini' });
+    await putModelPreference('quick', 'gpt-4o-mini');
     const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/admin/llm/preferences/quick');
+    expect(url).toBe('/api/settings/admin/llm/preferences');
     expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body)).toEqual({ tier: 'quick', model_id: 'gpt-4o-mini' });
   });
 
   it('DELETE /settings/admin/llm/preferences/{tier}', async () => {

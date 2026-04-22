@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { deleteModelPreference, getModelPreferences, ModelPreference, putModelPreference, Tier, ApiError } from '../../../api/settings';
+import { deleteModelPreference, getModelPreferences, putModelPreference, Tier, ApiError } from '../../../api/settings';
 import { SaveButton, SaveState } from '../SaveButton';
 import { SettingGroup } from '../SettingGroup';
 import { InlineFeedback } from '../InlineFeedback';
@@ -19,7 +19,6 @@ const TIERS: { tier: Tier; title: string; desc: string }[] = [
   { tier: 'everyday', title: 'Everyday', desc: 'Default for Secretary and short chats.' },
   { tier: 'quick', title: 'Quick', desc: 'Fast reasoning for Retail Sentiment and wizard AI review.' },
   { tier: 'thinking', title: 'Thinking', desc: 'Deep reasoning for Equity Research and Panic Thermometer.' },
-  { tier: 'long_context', title: 'Long context', desc: 'Earnings Update, Morning Briefing, Macro Research.' },
 ];
 
 interface TierRowState {
@@ -27,16 +26,6 @@ interface TierRowState {
   state: SaveState;
   error: string | null;
   initial: string;
-}
-
-function encode(p: ModelPreference | undefined): string {
-  return p ? `${p.provider_id}::${p.model_id}` : '';
-}
-
-function decode(v: string): { provider_id: string; model_id: string } | null {
-  if (!v) return null;
-  const [p, m] = v.split('::');
-  return { provider_id: p, model_id: m };
 }
 
 export function ModelsSection(): JSX.Element {
@@ -52,11 +41,10 @@ export function ModelsSection(): JSX.Element {
     ])
       .then(([cat, prefs]) => {
         setCatalog(cat.items ?? []);
-        const byTier: Partial<Record<Tier, ModelPreference>> = {};
-        for (const p of prefs.items) byTier[p.tier] = p;
+        const byTier = prefs.preferences ?? {};
         const next = {} as Record<Tier, TierRowState>;
         for (const t of TIERS) {
-          const v = encode(byTier[t.tier]);
+          const v = byTier[t.tier] ?? '';
           next[t.tier] = { value: v, state: 'idle', error: null, initial: v };
         }
         setRows(next);
@@ -73,7 +61,7 @@ export function ModelsSection(): JSX.Element {
     for (const prov of catalog) {
       for (const m of prov.models) {
         if (m.tier === tier) {
-          opts.push({ value: `${prov.provider_id}::${m.id}`, label: `${prov.provider_label} — ${m.label}` });
+          opts.push({ value: m.id, label: `${prov.provider_label} — ${m.label}` });
         }
       }
     }
@@ -83,9 +71,9 @@ export function ModelsSection(): JSX.Element {
   const save = async (tier: Tier) => {
     setRows((r) => ({ ...r, [tier]: { ...r[tier], state: 'saving', error: null } }));
     try {
-      const decoded = decode(rows[tier].value);
-      if (decoded) {
-        await putModelPreference(tier, decoded);
+      const value = rows[tier].value;
+      if (value) {
+        await putModelPreference(tier, value);
       } else {
         await deleteModelPreference(tier);
       }
