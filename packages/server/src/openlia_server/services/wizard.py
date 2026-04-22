@@ -6,7 +6,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Literal
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.auth import SignupPolicy, User

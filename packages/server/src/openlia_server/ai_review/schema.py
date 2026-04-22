@@ -1,12 +1,12 @@
 """Pydantic schema for AI review output."""
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel
 
 
-class ReadinessState(str, Enum):
+class ReadinessState(StrEnum):
     READY = "ready"
     GAPS = "gaps"
     DISABLED = "disabled"

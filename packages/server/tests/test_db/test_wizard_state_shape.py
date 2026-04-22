@@ -3,9 +3,8 @@ completed_steps is a JSON array, and active_session_token is nullable text."""
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.infrastructure import WizardState
+from sqlalchemy.orm import Session
 
 
 @pytest.fixture
@@ -18,7 +17,9 @@ def create_tables(engine):
     Base.metadata.drop_all(engine)
 
 
-def test_wizard_state_accepts_named_step_and_completed_list(create_tables, db_session: Session) -> None:
+def test_wizard_state_accepts_named_step_and_completed_list(
+    create_tables, db_session: Session
+) -> None:
     row = WizardState(
         id=1,
         current_step="mode",
@@ -46,7 +47,9 @@ def test_wizard_state_active_session_token_nullable(create_tables, db_session: S
     assert fetched.active_session_token is None
 
 
-def test_wizard_state_completed_steps_round_trips_entries(create_tables, db_session: Session) -> None:
+def test_wizard_state_completed_steps_round_trips_entries(
+    create_tables, db_session: Session
+) -> None:
     row = WizardState(
         id=1,
         current_step="providers",

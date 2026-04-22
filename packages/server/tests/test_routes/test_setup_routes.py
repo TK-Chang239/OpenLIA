@@ -1,9 +1,7 @@
 """Tests for /setup/* routes."""
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
-
 
 # ---------------------------------------------------------------------------
 # Task 4: GET /setup/status
@@ -135,7 +133,11 @@ def test_post_admin_creates_first_admin(wizard_company_client: TestClient, db_se
     wizard_company_client.post("/setup/mode", json={"mode": "company"})
     resp = wizard_company_client.post(
         "/setup/admin",
-        json={"email": "boss@example.com", "password": "CorrectHorseBattery9!", "display_name": "Boss"},
+        json={
+            "email": "boss@example.com",
+            "password": "CorrectHorseBattery9!",
+            "display_name": "Boss",
+        },
     )
     assert resp.status_code == 200
 
@@ -148,11 +150,19 @@ def test_post_admin_rejects_second_admin(wizard_company_client: TestClient) -> N
     wizard_company_client.post("/setup/mode", json={"mode": "company"})
     wizard_company_client.post(
         "/setup/admin",
-        json={"email": "first@example.com", "password": "CorrectHorseBattery9!", "display_name": "A"},
+        json={
+            "email": "first@example.com",
+            "password": "CorrectHorseBattery9!",
+            "display_name": "A",
+        },
     )
     resp = wizard_company_client.post(
         "/setup/admin",
-        json={"email": "second@example.com", "password": "CorrectHorseBattery9!", "display_name": "B"},
+        json={
+            "email": "second@example.com",
+            "password": "CorrectHorseBattery9!",
+            "display_name": "B",
+        },
     )
     assert resp.status_code == 409
     assert resp.json()["detail"]["code"] == "admin_exists"

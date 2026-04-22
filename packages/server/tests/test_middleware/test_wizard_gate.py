@@ -4,7 +4,6 @@ from __future__ import annotations
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
-
 from openlia_server.db.models.infrastructure import ConfigStore
 from openlia_server.middleware.wizard_gate import require_wizard_active
 

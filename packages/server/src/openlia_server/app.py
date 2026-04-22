@@ -25,11 +25,11 @@ from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.notifications import build_notifications_router
-from openlia_server.routes.setup import build_setup_router
 from openlia_server.routes.settings import (
     build_data_providers_router,
     build_llm_providers_admin_router,
 )
+from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
