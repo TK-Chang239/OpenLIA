@@ -179,11 +179,13 @@ def create_app(
         lifespan=_make_lifespan(db_session_factory),
     )
 
-    app.include_router(build_setup_router(
-        db_session_factory=factory,
-        mode=mode,
-        is_loopback_request=is_loopback_request or _is_loopback_request,
-    ))
+    app.include_router(
+        build_setup_router(
+            db_session_factory=factory,
+            mode=mode,
+            is_loopback_request=is_loopback_request or _is_loopback_request,
+        )
+    )
 
     if mode == "company":
         app.include_router(build_auth_router(db_session_factory=factory))
@@ -193,6 +195,10 @@ def create_app(
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
+
+    from openlia_server.routes.settings_general import build_settings_general_router
+
+    app.include_router(build_settings_general_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
