@@ -16,6 +16,8 @@ from openlia_server.middleware.wizard_gate import require_wizard_active, require
 from openlia_server.services import wizard as wizard_svc
 
 # Departments and their basic data requirements for the AI review step.
+_background_tasks: set[asyncio.Task[Any]] = set()
+
 _DEPT_REQS: dict[str, list[str]] = {
     "secretary": [],
     "equity_research": ["stock_quote", "company_profile", "financial_statements"],
@@ -148,7 +150,10 @@ def build_setup_router() -> APIRouter:
         except wizard_svc.AdminExistsError as exc:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "admin_exists", "message": "An administrator is already configured."},
+                detail={
+                    "code": "admin_exists",
+                    "message": "An administrator is already configured.",
+                },
             ) from exc
         wizard_svc.advance_step(db, "admin", "company")
         return {"email": payload.email}
@@ -181,14 +186,18 @@ def build_setup_router() -> APIRouter:
         from openlia.llm.adapters import build_adapter
         from openlia.llm.capabilities import capabilities_for
         from openlia.llm.types import ModelTier
-        from openlia_server.services.llm_registry import SQLModelRegistry
+
         from openlia_server.services.data_providers import list_providers as list_dp
+        from openlia_server.services.llm_registry import SQLModelRegistry
 
         store = review_store_mod.DEFAULT_STORE
         review_id = store.create()
 
         registry = SQLModelRegistry(db)
-        row = registry.get_tier_default(ModelTier.QUICK) or registry.get_any_in_tier(ModelTier.QUICK)
+        row = (
+            registry.get_tier_default(ModelTier.QUICK)
+            or registry.get_any_in_tier(ModelTier.QUICK)
+        )
 
         departments = list(_DEPT_REQS.items())
         dp_rows = list_dp(db)
@@ -204,10 +213,12 @@ def build_setup_router() -> APIRouter:
                 kind=row.provider_kind,
                 credentials=row.credentials,
                 model=row.model_ref,
-                capabilities=capabilities_for(row.provider_kind, row.model_ref, row.capability_override),
+                capabilities=capabilities_for(
+                    row.provider_kind, row.model_ref, row.capability_override
+                ),
             )
             llm_wrapper = _ReviewLLMWrapper(adapter)
-            asyncio.create_task(
+            task = asyncio.create_task(
                 _run_review(
                     review_id=review_id,
                     db=db,
@@ -217,6 +228,8 @@ def build_setup_router() -> APIRouter:
                     store=store,
                 )
             )
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
 
         return {"review_id": review_id}
 

@@ -14,7 +14,12 @@ class ReviewStore:
     def create(self) -> str:
         review_id = str(uuid.uuid4())
         with self._lock:
-            self._entries[review_id] = {"state": "running", "progress": 0, "result": None, "error": None}
+            self._entries[review_id] = {
+                "state": "running",
+                "progress": 0,
+                "result": None,
+                "error": None,
+            }
         return review_id
 
     def update(self, review_id: str, **fields: Any) -> None:

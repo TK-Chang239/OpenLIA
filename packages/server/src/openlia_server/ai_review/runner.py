@@ -32,5 +32,5 @@ async def run_review(
             return
         result = ReviewResult.model_validate(payload)
         store.update(review_id, state="complete", progress=100, result=result.model_dump())
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         store.update(review_id, state="failed", error=str(exc))

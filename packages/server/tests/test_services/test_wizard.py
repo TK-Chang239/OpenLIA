@@ -1,12 +1,13 @@
 """Tests for WizardService.get_status and env-override resolution."""
 from __future__ import annotations
 
+from openlia_server.services import wizard as svc
 from sqlalchemy.orm import Session
 
-from openlia_server.services import wizard as svc
 
-
-def test_get_status_fresh_install_returns_personal_step_mode(create_tables, db_session: Session) -> None:
+def test_get_status_fresh_install_returns_personal_step_mode(
+    create_tables, db_session: Session
+) -> None:
     status = svc.get_status(db_session, env={})
     assert status.mode == "personal"
     assert status.wizard_completed is False

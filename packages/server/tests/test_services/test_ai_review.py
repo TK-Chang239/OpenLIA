@@ -1,13 +1,13 @@
 """Tests for the AI review schema, prompt builder, runner, and store."""
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock
 
-from openlia_server.ai_review.schema import DepartmentReadiness, ReadinessState, ReviewResult
+import pytest
 from openlia_server.ai_review.prompt import build_review_prompt
-from openlia_server.ai_review.store import ReviewStore
 from openlia_server.ai_review.runner import run_review
+from openlia_server.ai_review.schema import DepartmentReadiness, ReadinessState, ReviewResult
+from openlia_server.ai_review.store import ReviewStore
 
 
 def test_readiness_state_values() -> None:

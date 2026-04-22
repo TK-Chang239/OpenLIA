@@ -44,7 +44,6 @@ def SessionLocal() -> Session:
 
 def get_db_session():  # type: ignore[return]
     """FastAPI dependency that yields a session, commits on success, rolls back on error."""
-    from collections.abc import Iterator
 
     session = SessionLocal()
     try:
