@@ -159,7 +159,7 @@ Source findings:
 
 ### REM-P0-004 - Rewrite stale Plan 9-15 executable snippets
 
-Status: `[~]` (Plan 10 rewritten 2026-04-21 on branch `fix/phase-9-audit-findings`; Plans 9, 11-15 still pending)
+Status: `[x]` (Plan 10 rewritten 2026-04-21 on branch `fix/phase-9-audit-findings`; Plans 9, 11-15 rewritten 2026-04-21 on branch `openai/rem-p0-004-clean-plan-11-15`)
 
 Affected plans:
 
@@ -210,7 +210,7 @@ Source findings:
 
 ### REM-P0-005 - Define endpoint contract matrix
 
-Status: `[~]` (framework landed; placeholder Plan 10-23 rows harden as each plan rewrites under REM-P0-004 — see `planning/implementation-plans/endpoint-contract-matrix.md`)
+Status: `[~]` (framework landed; Plan 9-15 rows hardened via REM-P0-004 cleanup on 2026-04-21/22; Plan 16-23 rows remain placeholders until those plans are rewritten — see `planning/implementation-plans/endpoint-contract-matrix.md`)
 
 Affected implementation:
 
@@ -243,7 +243,7 @@ Source findings:
 
 ### REM-P0-006 - Define route authorization matrix
 
-Status: `[~]` (framework landed; must-change-password gate (REM-P1-001) still needed to fully enforce — see `planning/implementation-plans/route-authorization-matrix.md`)
+Status: `[x]` (matrix covers every shipped and planned route; REM-P1-001 must-change-password gate enforced 2026-04-21 on branch `fix/phase-9-audit-findings` — see `planning/implementation-plans/route-authorization-matrix.md`)
 
 Affected implementation:
 
@@ -1098,12 +1098,12 @@ Source findings:
 - `[x]` REM-P0-001
 - `[x]` REM-P0-002
 - `[x]` REM-P0-003
-- `[ ]` REM-P0-004 for Plan 9 snippets
+- `[x]` REM-P0-004 for Plan 9 snippets (2026-04-22)
 
 ### Before Plan 10 Implementation
 
 - `[~]` REM-P0-005
-- `[~]` REM-P0-006
+- `[x]` REM-P0-006 (2026-04-22)
 - `[ ]` REM-P0-007
 - `[x]` REM-P1-006 (2026-04-21)
 - `[x]` REM-P0-004 for Plan 10 snippets (2026-04-21)
@@ -1115,12 +1115,14 @@ Source findings:
 - `[ ]` REM-P1-003
 - `[x]` REM-P1-004
 - `[ ]` REM-P1-005 for user preferences
+- `[x]` REM-P0-004 for Plan 11 snippets (2026-04-22)
 
 ### Before Plan 12 Implementation
 
 - `[ ]` REM-P1-007
 - `[ ]` REM-P1-008
 - `[ ]` REM-P1-009
+- `[x]` REM-P0-004 for Plan 12 snippets (2026-04-22)
 
 ### Before Plan 13-15 Implementation
 
@@ -1130,6 +1132,7 @@ Source findings:
 - `[ ]` REM-P1-013
 - `[x]` REM-P1-014
 - `[ ]` REM-P1-015
+- `[x]` REM-P0-004 for Plan 13-15 snippets (2026-04-22)
 
 ### Before Final Product Acceptance
 
