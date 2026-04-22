@@ -7,13 +7,38 @@ export interface AuthUser {
   role: "admin" | "user";
 }
 
-interface SessionResponse {
-  user: AuthUser;
+interface BackendUser {
+  user_id: string;
+  email: string | null;
+  display_name?: string | null;
+  is_admin?: boolean;
+  must_change_password?: boolean;
 }
 
-export async function getSession(): Promise<AuthUser> {
-  const resp = await fetchJson<SessionResponse>("/api/auth/session");
-  return resp.user;
+interface BackendLoginResponse extends BackendUser {
+  must_change_password?: boolean;
+}
+
+function toAuthUser(raw: BackendUser): AuthUser {
+  return {
+    id: raw.user_id,
+    email: raw.email,
+    display_name: raw.display_name ?? null,
+    role: raw.is_admin ? "admin" : "user",
+  };
+}
+
+export interface SessionResult {
+  user: AuthUser;
+  must_change_password: boolean;
+}
+
+export async function getSession(): Promise<SessionResult> {
+  const resp = await fetchJson<BackendUser>("/api/auth/session");
+  return {
+    user: toAuthUser(resp),
+    must_change_password: Boolean(resp.must_change_password),
+  };
 }
 
 export interface LoginInput {
@@ -28,15 +53,12 @@ export interface LoginResult {
 }
 
 export async function login(input: LoginInput): Promise<LoginResult> {
-  const resp = await fetchJson<{
-    user: AuthUser;
-    must_change_password?: boolean;
-  }>("/api/auth/login", {
+  const resp = await fetchJson<BackendLoginResponse>("/api/auth/login", {
     method: "POST",
     json: input,
   });
   return {
-    user: resp.user,
+    user: toAuthUser(resp),
     must_change_password: Boolean(resp.must_change_password),
   };
 }
@@ -57,15 +79,12 @@ export interface RegisterInput {
 }
 
 export async function register(input: RegisterInput): Promise<LoginResult> {
-  const resp = await fetchJson<{
-    user: AuthUser;
-    must_change_password?: boolean;
-  }>("/api/auth/register", {
+  const resp = await fetchJson<BackendLoginResponse>("/api/auth/register", {
     method: "POST",
     json: input,
   });
   return {
-    user: resp.user,
+    user: toAuthUser(resp),
     must_change_password: Boolean(resp.must_change_password),
   };
 }

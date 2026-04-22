@@ -116,11 +116,11 @@ class TestLogCliEvent:
         assert row.actor_user_id is None
         assert row.event_metadata == {"note": "ran from terminal", "source": "cli"}
 
-    def test_metadata_source_preserved_when_already_set(self, cli_session) -> None:
+    def test_metadata_source_cannot_be_overridden_by_caller(self, cli_session) -> None:
         support.log_cli_event(
             cli_session, event_type="user_disabled", metadata={"source": "script"}
         )
         from openlia_server.db.models.auth import AuthEvent
 
         row = cli_session.query(AuthEvent).one()
-        assert row.event_metadata["source"] == "script"
+        assert row.event_metadata["source"] == "cli"
