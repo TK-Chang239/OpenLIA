@@ -398,7 +398,7 @@ Source findings:
 
 ### REM-P1-003 - Resolve invite token transitional storage
 
-Status: `[ ]`
+Status: `[x]` (raw `SignupInvite.token` column dropped 2026-04-22 on branch `fix/phase-11-blockers`; `token_hash` is sole source of truth; CLI list/revoke lookups now use invite id / id-prefix)
 
 Affected implementation:
 
@@ -463,7 +463,7 @@ Source findings:
 
 ### REM-P1-005 - Sequence future schema migrations
 
-Status: `[ ]`
+Status: `[~]` (Plan 10 wizard state and Plan 11 `user_prefs` landed with single-head migrations; Plan 12/14/15 tables remain deferred — Plan 11 scope cleared 2026-04-22 on branch `fix/phase-11-blockers`)
 
 Affected plans:
 
@@ -1123,9 +1123,9 @@ Source findings:
 
 - `[x]` REM-P1-001
 - `[x]` REM-P1-002
-- `[ ]` REM-P1-003
+- `[x]` REM-P1-003 (2026-04-22)
 - `[x]` REM-P1-004
-- `[ ]` REM-P1-005 for user preferences
+- `[x]` REM-P1-005 for user preferences (2026-04-22)
 - `[x]` REM-P0-004 for Plan 11 snippets (2026-04-22)
 
 ### Before Plan 12 Implementation

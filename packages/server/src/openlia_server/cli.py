@@ -349,7 +349,6 @@ def admin_create_invite(
         raw_token = tokens_service.generate_opaque_token()
         invite = SignupInvite(
             id=str(uuid.uuid4()),
-            token=raw_token,
             token_hash=tokens_service.hash_token(raw_token),
             label=label,
             max_uses=max_uses,
@@ -366,7 +365,8 @@ def admin_create_invite(
         db.commit()
         base_url = os.environ.get("OPENLIA_PUBLIC_URL", "http://localhost:8000")
         typer.echo("Invite created.")
-        typer.echo(f"URL:      {base_url}/register?invite={invite.token}")
+        typer.echo(f"URL:      {base_url}/register?invite={raw_token}")
+        typer.echo(f"ID:       {invite.id}")
         typer.echo(f"Label:    {label or '--'}")
         typer.echo(f"Max uses: {max_uses if max_uses is not None else 'unlimited'}")
         typer.echo(f"Expires:  {expires_at.strftime('%Y-%m-%d') if expires_at else '--'}")
@@ -407,7 +407,7 @@ def admin_list_invites(ctx: typer.Context) -> None:
             )
             rows.append(
                 [
-                    inv.token[:12],
+                    inv.id[:8],
                     inv.label or "--",
                     uses,
                     inv.created_at.strftime("%Y-%m-%d"),
@@ -417,7 +417,7 @@ def admin_list_invites(ctx: typer.Context) -> None:
             )
         typer.echo(
             format_table(
-                headers=["Token", "Label", "Uses", "Created", "Expires", "Status"],
+                headers=["ID", "Label", "Uses", "Created", "Expires", "Status"],
                 rows=rows,
             )
         )
@@ -431,22 +431,22 @@ def admin_list_invites(ctx: typer.Context) -> None:
 @admin_app.command("revoke-invite")
 def admin_revoke_invite(
     ctx: typer.Context,
-    token: str = typer.Argument(..., help="Full token or 12-char prefix."),
+    invite_id: str = typer.Argument(..., help="Invite ID (full UUID or 8-char prefix)."),
 ) -> None:
-    """Revoke an invite by full token or first 12-char prefix."""
+    """Revoke an invite by ID (full UUID or first 8-char prefix)."""
     db = build_session(ctx.obj["db_url"])
     try:
         candidates = (
-            db.execute(select(SignupInvite).where(SignupInvite.token.like(f"{token}%")))
+            db.execute(select(SignupInvite).where(SignupInvite.id.like(f"{invite_id}%")))
             .scalars()
             .all()
         )
         if not candidates:
-            exit_not_found("invite", token)
+            exit_not_found("invite", invite_id)
         if len(candidates) > 1:
             echo_error(
-                f"prefix {token!r} matches multiple invites "
-                f"({len(candidates)}). Use the full token."
+                f"prefix {invite_id!r} matches multiple invites "
+                f"({len(candidates)}). Use the full ID."
             )
             raise typer.Exit(code=1)
         invite = candidates[0]
@@ -458,7 +458,7 @@ def admin_revoke_invite(
                 metadata={"invite_id": invite.id},
             )
             db.commit()
-        typer.echo(f"Invite revoked: {invite.token[:12]}...")
+        typer.echo(f"Invite revoked: {invite.id[:8]}...")
     finally:
         db.close()
 
