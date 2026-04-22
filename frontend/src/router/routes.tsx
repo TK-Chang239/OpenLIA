@@ -8,7 +8,7 @@ import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
 import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import Home from "../pages/Home";
 import Repository from "../pages/Repository";
-import Settings from "../pages/Settings";
+import { SettingsPage } from "../pages/SettingsPage";
 import { SetupPage } from "../pages/SetupPage";
 import Secretary from "../pages/departments/Secretary";
 import EquityResearch from "../pages/departments/EquityResearch";
@@ -37,7 +37,7 @@ export const routes: RouteObject[] = [
           { path: "/", element: <Navigate to="/secretary" replace /> },
           { path: "/home", element: <Home /> },
           { path: "/repository", element: <Repository /> },
-          { path: "/settings", element: <Settings /> },
+          { path: "/settings/*", element: <SettingsPage /> },
           { path: "/secretary", element: <Secretary /> },
           { path: "/equity-research", element: <EquityResearch /> },
           { path: "/earnings-update", element: <EarningsUpdate /> },
