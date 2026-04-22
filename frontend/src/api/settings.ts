@@ -1,5 +1,5 @@
 export type Theme = 'system' | 'light' | 'dark';
-export type LangCode = 'en' | 'zh-TW' | 'both';
+export type LangCode = 'en' | 'zh-TW' | 'zh-Hant' | 'zh-Hans' | 'both';
 export type Tier = 'everyday' | 'quick' | 'thinking' | 'long_context';
 
 export interface Prefs {
