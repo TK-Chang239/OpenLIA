@@ -144,8 +144,9 @@ packages/server/src/openlia_server/
 └── db/models/infrastructure.py         # MODIFY — add `active_session_token` col to wizard_state (migration)
 
 frontend/src/
-├── router.tsx                          # MODIFY — add /setup/* route group + SetupRedirect gate
-└── App.tsx                             # MODIFY — render SetupRedirect before AuthProvider when wizard incomplete
+├── router/routes.tsx                   # MODIFY — replace /setup placeholder with <SetupPage />
+├── pages/Setup.tsx                     # DELETE — placeholder superseded by pages/SetupPage.tsx
+└── App.tsx                             # MODIFY — wrap content with SetupGate so an incomplete wizard redirects to /setup
 
 planning/implementation-plans/README.md # MODIFY — flip Plan 10 row to Draft
 planning/projectStructure.md            # MODIFY — reflect setup/ directories
@@ -1321,15 +1322,13 @@ git commit -m "feat(setup): implement POST /setup/admin with first-admin check +
 
 ```python
 def test_models_test_route_pings_provider(personal_client: TestClient, respx_mock) -> None:
-    from respx import MockRouter
-
     personal_client.post("/setup/mode", json={"mode": "personal"})
     respx_mock.post("https://api.openai.com/v1/chat/completions").respond(
         200, json={"choices": [{"message": {"content": "ok"}}]}
     )
     resp = personal_client.post(
         "/setup/models/test",
-        json={"provider": "openai", "model": "gpt-5.4", "api_key": "sk-test"},
+        json={"kind": "openai", "model_ref": "gpt-5.4", "api_key": "sk-test"},
     )
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
@@ -1345,16 +1344,20 @@ def test_models_save_rejects_when_required_tier_empty(
             "thinking": [],  # required by equity_research + macro_research
             "everyday": [
                 {
-                    "provider": "openai",
-                    "model": "gpt-5.4",
+                    "kind": "openai",
+                    "label": "OpenAI",
+                    "model_ref": "gpt-5.4",
+                    "display_name": "GPT-5.4",
                     "api_key": "sk-test",
                     "is_tier_default": True,
                 }
             ],
             "quick": [
                 {
-                    "provider": "openai",
-                    "model": "gpt-5.4-mini",
+                    "kind": "openai",
+                    "label": "OpenAI",
+                    "model_ref": "gpt-5.4-mini",
+                    "display_name": "GPT-5.4 Mini",
                     "api_key": "sk-test",
                     "is_tier_default": True,
                 }
@@ -1373,20 +1376,25 @@ Expected: FAIL — routes don't exist.
 
 - [ ] **Step 3: Add the routes wrapping Plan 4 services**
 
+Rewritten 2026-04-22 to match the shipped `llm_providers` service surface — there is no `test_provider`, `clear_all_providers`, or `add_model` function. The wizard reuses `build_adapter` + `adapter.test_connection(...)` directly (the same pattern `_run_connection_test` uses in `routes/settings.py`) and calls `create_provider` / `create_model` / `delete_model` / `delete_provider` with their real signatures.
+
 In `routes/setup.py`:
 
 ```python
+from openlia.llm.adapters import build_adapter
 from openlia.llm.department_defaults import DEPARTMENT_DEFAULT_TIERS
-from openlia.llm.types import ModelTier
+from openlia.llm.types import Capabilities, ModelTier, ProviderCredentials
 from openlia_server.services import llm_providers as llm_svc
 
 
 class TierEntryIn(BaseModel):
-    provider: str
-    model: str
+    kind: str                       # adapter kind: "openai", "anthropic", "gemini", ...
+    label: str                      # human-readable provider label shown in Settings
+    model_ref: str                  # vendor model id, e.g. "gpt-5.4"
+    display_name: str               # human-readable model name shown in tier slots
     api_key: str | None = None
     base_url: str | None = None
-    capabilities: dict[str, bool] | None = None
+    env_var_name: str | None = None
     is_tier_default: bool = False
 
 
@@ -1397,10 +1405,11 @@ class ModelsIn(BaseModel):
 
 
 class ModelsTestIn(BaseModel):
-    provider: str
-    model: str
+    kind: str
+    model_ref: str
     api_key: str | None = None
     base_url: str | None = None
+    env_var_name: str | None = None
 
 
 def _required_tiers(enabled_depts: list[str]) -> set[ModelTier]:
@@ -1410,28 +1419,65 @@ def _required_tiers(enabled_depts: list[str]) -> set[ModelTier]:
 ENABLED_DEPARTMENTS_V1 = list(DEPARTMENT_DEFAULT_TIERS.keys())
 
 
+async def _test_llm_connection(
+    *,
+    kind: str,
+    api_key: str | None,
+    base_url: str | None,
+    env_var_name: str | None,
+    model_ref: str,
+) -> dict[str, object]:
+    effective_key = api_key
+    if env_var_name:
+        effective_key = os.environ.get(env_var_name) or api_key
+    try:
+        adapter = build_adapter(
+            kind=kind,
+            credentials=ProviderCredentials(api_key=effective_key, base_url=base_url),
+            model=model_ref,
+            capabilities=Capabilities(),
+        )
+    except Exception as exc:  # noqa: BLE001 — surface adapter-construction failures verbatim
+        return {
+            "ok": False,
+            "latency_ms": 0,
+            "error_class": type(exc).__name__,
+            "error_msg": str(exc),
+        }
+    result = await adapter.test_connection(model_ref)
+    return {
+        "ok": result.ok,
+        "latency_ms": result.latency_ms,
+        "error_class": result.error_class,
+        "error_msg": result.error_msg,
+    }
+
+
 @router.post("/models/test")
 async def post_models_test(
     payload: ModelsTestIn,
-    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
-    result = await llm_svc.test_provider(
-        provider=payload.provider,
-        model=payload.model,
+    return await _test_llm_connection(
+        kind=payload.kind,
         api_key=payload.api_key,
         base_url=payload.base_url,
+        env_var_name=payload.env_var_name,
+        model_ref=payload.model_ref,
     )
-    return {"ok": result.ok, "latency_ms": result.latency_ms, "error": result.error}
 
 
 @router.post("/models")
-async def post_models(
+def post_models(
     payload: ModelsIn,
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
-    tier_payloads = {"thinking": payload.thinking, "everyday": payload.everyday, "quick": payload.quick}
+    tier_payloads: dict[str, list[TierEntryIn]] = {
+        "thinking": payload.thinking,
+        "everyday": payload.everyday,
+        "quick": payload.quick,
+    }
 
     required = _required_tiers(ENABLED_DEPARTMENTS_V1)
     missing = [tier.value for tier in required if not tier_payloads[tier.value]]
@@ -1445,21 +1491,30 @@ async def post_models(
             },
         )
 
-    llm_svc.clear_all_providers(db)
+    # Wipe prior provider/model state (wizard owns this slot before completion).
+    # The shipped service has no bulk clear — delete models first (FK-safe),
+    # then providers.
+    for model_row in llm_svc.list_all_models(db):
+        llm_svc.delete_model(db, model_row.id)
+    for provider_row in llm_svc.list_providers(db):
+        llm_svc.delete_provider(db, provider_row.id)
+
     for tier_name, entries in tier_payloads.items():
         for entry in entries:
-            provider = llm_svc.create_provider(
+            created = llm_svc.create_provider(
                 db,
-                provider=entry.provider,
+                kind=entry.kind,
+                label=entry.label,
                 api_key=entry.api_key,
                 base_url=entry.base_url,
-                capabilities=entry.capabilities,
+                env_var_name=entry.env_var_name,
             )
-            llm_svc.add_model(
+            llm_svc.create_model(
                 db,
-                provider_id=provider.id,
-                model=entry.model,
-                tier=ModelTier(tier_name),
+                provider_id=created.id,
+                tier=ModelTier(tier_name).value,
+                model_ref=entry.model_ref,
+                display_name=entry.display_name,
                 is_tier_default=entry.is_tier_default,
             )
 
@@ -1467,6 +1522,14 @@ async def post_models(
     wizard_svc.advance_step(db, "models", mode)
     return {"ok": True}
 ```
+
+**Notes for the executor:**
+
+- `create_provider` returns a `ProviderCreated` dataclass with only `.id`; use it for the subsequent `create_model` call.
+- `create_model`'s `tier` parameter is the string value of the enum (`"thinking"` / `"everyday"` / `"quick"`), not the enum instance — the model column is a plain `String`.
+- `post_models` is synchronous: every call inside it is a sync DB op. Keep it non-`async` (mixing a blocking session with `async def` can starve the event loop in tests).
+- `post_models_test` stays `async def` because `adapter.test_connection(...)` is awaitable.
+- The Step 1 test must be updated to send the new DTO field names (`kind`, `model_ref`, `display_name`) instead of the old `provider` / `model` names — update the test bodies before running Step 2.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -4690,7 +4753,7 @@ git commit -m "feat(frontend): add Step 6 ReviewStep with polling + readiness ca
 
 **Files:**
 - Create: `frontend/src/pages/SetupPage.tsx`
-- Modify: `frontend/src/router.tsx`
+- Modify: `frontend/src/router/routes.tsx`
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/index.css` (add `--color-surface-info` token)
 
@@ -4775,16 +4838,18 @@ export function SetupPage() {
 }
 ```
 
-- [ ] **Step 3: Add `/setup` route to `router.tsx`**
+- [ ] **Step 3: Add `/setup` route to `router/routes.tsx`**
 
-In `frontend/src/router.tsx`, add to the `createBrowserRouter` tree (before the protected routes):
+Replace the existing `/setup` placeholder row in `frontend/src/router/routes.tsx` (`{ path: "/setup", element: <Setup /> }`) with the real page. The route already lives outside the `ProtectedRoute` tree — leave it there so the wizard keeps running pre-auth.
 
 ```typescript
-import { SetupPage } from "./pages/SetupPage";
+import { SetupPage } from "../pages/SetupPage";
 
 // inside createBrowserRouter children:
   { path: "/setup", element: <SetupPage /> },
 ```
+
+Remove the now-unused placeholder import of `Setup` from `../pages/Setup` (and delete `frontend/src/pages/Setup.tsx` if it contains only the placeholder).
 
 - [ ] **Step 4: Add a `SetupRedirect` gate at app root**
 
@@ -4830,8 +4895,9 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/pages/SetupPage.tsx frontend/src/router.tsx frontend/src/App.tsx \
+git add frontend/src/pages/SetupPage.tsx frontend/src/router/routes.tsx frontend/src/App.tsx \
         frontend/src/index.css
+git rm frontend/src/pages/Setup.tsx  # placeholder removed when SetupPage replaces it
 git commit -m "feat(frontend): wire /setup route + SetupGate redirect for incomplete wizard"
 ```
 
