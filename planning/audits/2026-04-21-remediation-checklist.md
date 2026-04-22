@@ -277,7 +277,7 @@ Source findings:
 
 ### REM-P0-007 - Implement setup status and first-run gate
 
-Status: `[ ]`
+Status: `[folded into Plan 10]` (2026-04-22)
 
 Affected implementation:
 
@@ -290,12 +290,23 @@ Affected plans:
 
 - Plan 10
 
-Problem:
+Resolution:
+
+Review on 2026-04-22 determined REM-P0-007's required work is a strict subset
+of Plan 10's shipping scope: `/setup/status` is Plan 10 Task 2, the
+`require_wizard_session` dependency is Task 6, the `410 Gone` + loopback gate
+is Task 5, and the frontend bootstrap that renders `/setup` outside
+`AuthProvider` is in Tasks 10+. A separate remediation branch would build the
+same scaffolding Plan 10 would then replace. This item is therefore closed as
+"resolved by Plan 10 execution" — acceptance criteria are satisfied when Plan
+10 merges. The Plan 10 branch (`feat/phase-10-setup-wizard`) carries the work.
+
+Original problem:
 
 The app seeds `wizard.completed=false`, but `/setup` is a placeholder, no
 backend setup routes exist, and no setup status gate runs before the app shell.
 
-Required work:
+Original required work (now Plan 10 scope):
 
 - Implement `/setup/status` first.
 - Render setup flow outside `AuthProvider` if setup remains pre-auth.
@@ -303,7 +314,7 @@ Required work:
 - Return `410 Gone` for completed wizard write routes, except status.
 - Reject non-loopback personal-mode setup writes if that remains the design.
 
-Acceptance criteria:
+Acceptance criteria (verified at Plan 10 merge):
 
 - Fresh personal DB sends user to setup before shell.
 - Completed wizard sends user to app shell.
@@ -1104,7 +1115,7 @@ Source findings:
 
 - `[~]` REM-P0-005
 - `[x]` REM-P0-006 (2026-04-22)
-- `[ ]` REM-P0-007
+- `[folded]` REM-P0-007 — scope is a subset of Plan 10 itself; closed by Plan 10 execution (2026-04-22)
 - `[x]` REM-P1-006 (2026-04-21)
 - `[x]` REM-P0-004 for Plan 10 snippets (2026-04-21)
 
