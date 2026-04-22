@@ -20,7 +20,7 @@ export function SaveButton({ state, isDirty, onClick }: Props): JSX.Element {
       onClick={onClick}
       disabled={disabled}
       aria-busy={state === 'saving'}
-      className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-primary-hover"
+      className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-accent-hover"
     >
       {label}
     </button>
