@@ -125,7 +125,7 @@ These are invariants every task below respects. Read them once before starting.
 7. **PasswordInput is controlled.** It takes `value`, `onChange`, `id`, and optional `autoComplete`. The show/hide toggle is internal state only — parents don't opt into it.
 8. **Password strength is deterministic.** `passwordStrength(pw)` returns `0 | 1 | 2 | 3 | 4`. Pure function, unit-tested with a table of fixtures. Empty string → `0` (treated as "no bars"). Length < 8 → `1`. Otherwise count among {lowercase, uppercase, digit, symbol}: 2 classes → `2`, 3 classes → `3`, 4 classes → `4`.
 9. **Must-Change-Password is a render gate, not a route.** `MustChangePasswordGate` sits between `ProtectedRoute` and the outlet. When `useAuth().mustChangePassword === true`, it renders `<MustChangePasswordForm />` inside `AuthLayout` regardless of the current path. On success the gate clears the flag in context and re-renders the outlet — no navigate() needed.
-10. **Login response drives both auth state and the must-change flag.** `/api/auth/login` returns `{user, must_change_password}`. `AuthContext.login()` calls the API and stores both. If the UI sees `must_change_password: true`, `AuthProvider` persists it across re-mounts until `changePassword()` succeeds or `logout()` is called.
+10. **Login response drives both auth state and the must-change flag.** `/api/auth/login` returns flat backend fields: `{user_id, email, display_name, is_admin, must_change_password}`. `api/auth.ts` maps that boundary shape into `{user: AuthUser, must_change_password}` for `AuthContext`. If the UI sees `must_change_password: true`, `AuthProvider` persists it across re-mounts until `changePassword()` succeeds or `logout()` is called.
 11. **Signup policy is fetched once per `LoginPage` mount, with a 401/404 fallback.** The registration link only renders when `signupPolicy.invite_required === true` *and* `?invite=<token>` is present in the URL. 404 on `/auth/signup-policy` → treat as `invite_required: true, mode: "invite_only"` (the v1 default per `AccountManagementSpec.md` §2).
 12. **`/reset-password` is the only auth route that doesn't share `LoginPage`.** The token is a one-time URL sent out-of-band; direct-linking semantics demand its own page component.
 13. **Sessions panel shows only counts, not a list.** Per `AccountManagementSpec.md` §15 Open Q2, a full sessions-UI is a non-goal in v1 — we surface just "1 active session" and a "Sign out all other devices" button. The server's `/auth/logout-all` endpoint is what we hit.
@@ -372,7 +372,10 @@ Append to `frontend/src/api/auth.test.ts` (before the closing `});` of the outer
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: { id: "u1", email: "a", role: "user" },
+          user_id: "u1",
+          email: "a",
+          display_name: "A",
+          is_admin: false,
           must_change_password: true,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -388,7 +391,10 @@ Append to `frontend/src/api/auth.test.ts` (before the closing `});` of the outer
     const spy = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: { id: "u2", email: "b", role: "user" },
+          user_id: "u2",
+          email: "b",
+          display_name: "B",
+          is_admin: false,
           must_change_password: false,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -518,12 +524,25 @@ export interface AuthUser {
 }
 
 interface SessionResponse {
-  user: AuthUser;
+  user_id: string;
+  email: string | null;
+  display_name?: string | null;
+  is_admin: boolean;
+  must_change_password?: boolean;
+}
+
+function mapAuthUser(resp: SessionResponse): AuthUser {
+  return {
+    id: resp.user_id,
+    email: resp.email,
+    display_name: resp.display_name,
+    role: resp.is_admin ? "admin" : "user",
+  };
 }
 
 export async function getSession(): Promise<AuthUser> {
   const resp = await fetchJson<SessionResponse>("/api/auth/session");
-  return resp.user;
+  return mapAuthUser(resp);
 }
 
 export interface LoginInput {
@@ -538,15 +557,12 @@ export interface LoginResult {
 }
 
 export async function login(input: LoginInput): Promise<LoginResult> {
-  const resp = await fetchJson<{
-    user: AuthUser;
-    must_change_password?: boolean;
-  }>("/api/auth/login", {
+  const resp = await fetchJson<SessionResponse>("/api/auth/login", {
     method: "POST",
     json: input,
   });
   return {
-    user: resp.user,
+    user: mapAuthUser(resp),
     must_change_password: Boolean(resp.must_change_password),
   };
 }
@@ -567,15 +583,12 @@ export interface RegisterInput {
 }
 
 export async function register(input: RegisterInput): Promise<LoginResult> {
-  const resp = await fetchJson<{
-    user: AuthUser;
-    must_change_password?: boolean;
-  }>("/api/auth/register", {
+  const resp = await fetchJson<SessionResponse>("/api/auth/register", {
     method: "POST",
     json: input,
   });
   return {
-    user: resp.user,
+    user: mapAuthUser(resp),
     must_change_password: Boolean(resp.must_change_password),
   };
 }
@@ -656,7 +669,12 @@ Append to `frontend/src/auth/AuthContext.test.tsx`:
 ```tsx
   it("exposes mustChangePassword: false by default after session fetch", async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }), {
+      new Response(JSON.stringify({
+        user_id: "u1",
+        email: "a",
+        display_name: "A",
+        is_admin: true,
+      }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -679,7 +697,10 @@ Append to `frontend/src/auth/AuthContext.test.tsx`:
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            user: { id: "u1", email: "a", role: "user" },
+            user_id: "u1",
+            email: "a",
+            display_name: "A",
+            is_admin: false,
             must_change_password: true,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -709,7 +730,12 @@ Append to `frontend/src/auth/AuthContext.test.tsx`:
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }),
+          JSON.stringify({
+            user_id: "u1",
+            email: "a",
+            display_name: "A",
+            is_admin: false,
+          }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       ) as unknown as typeof fetch;
@@ -2733,7 +2759,12 @@ describe("MustChangePasswordForm", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 })) // change-password
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }),
+          JSON.stringify({
+            user_id: "u1",
+            email: "a",
+            display_name: "A",
+            is_admin: false,
+          }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       ) as unknown as typeof fetch;
@@ -3287,7 +3318,12 @@ describe("MustChangePasswordGate", () => {
 
   it("renders outlet when flag is false", async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }), {
+      new Response(JSON.stringify({
+        user_id: "u1",
+        email: "a",
+        display_name: "A",
+        is_admin: false,
+      }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -3313,7 +3349,10 @@ describe("MustChangePasswordGate", () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: { id: "u1", email: "a", role: "user" },
+          user_id: "u1",
+          email: "a",
+          display_name: "A",
+          is_admin: false,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
@@ -4046,7 +4085,12 @@ it("calls signOut when the sign-out button is clicked", async () => {
     .fn()
     .mockResolvedValueOnce(
       new Response(
-        JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }),
+        JSON.stringify({
+          user_id: "u1",
+          email: "a",
+          display_name: "A",
+          is_admin: true,
+        }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     )

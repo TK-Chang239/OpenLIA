@@ -81,7 +81,7 @@
 2. **Terminal events are mutually exclusive.** `chat.done`, `chat.error`, and disconnect each finalize a turn in exactly one way. Never transition from `error` back to streaming.
 3. **No new events after terminal.** Any event received after the terminal event is dropped with a console warning.
 4. **Client-side cancellation = connection close.** `Stop` button calls `EventSource.close()` or aborts the fetch; server observes and stops streaming. UI renders "Response stopped."
-5. **Persistence is a server concern.** The frontend does not write chat messages to any DB — the server persists on `chat.done` or on disconnect with `stopped_at`. Client re-fetches `/messages` to rehydrate after reload.
+5. **Persistence is a server concern.** The frontend does not write chat messages to any DB. Client re-fetches `/messages` to rehydrate after reload.
 6. **FileViewer is a singleton.** Exactly one panel exists app-wide; opening a different chip swaps content in place. Managed by `FileViewerProvider`.
 7. **Design tokens only.** All colors, spacing, shadows, radii reference CSS custom properties from Plan 8. Never hardcode hex or rgb.
 8. **Reuse across surfaces.** `SaveToRepoButton` and `FileDownloadButton` ship as a single component with a `variant` prop; no duplicated state logic per surface.
@@ -135,15 +135,16 @@
 # packages/server/tests/test_db/test_repo_items_model.py
 """Verify repo_items enforces (user_id, report_id) uniqueness and cascades on report delete."""
 import pytest
+import uuid
 from sqlalchemy.exc import IntegrityError
 
 def test_repo_items_unique_per_user_report(create_tables, db_session, user_factory, report_factory):
-    from openlia_server.db.models.repo import RepoItem
+    from openlia_server.db.models.content import RepoItem
     u = user_factory()
     r = report_factory(user_id=u.id)
-    db_session.add(RepoItem(user_id=u.id, report_id=r.id))
+    db_session.add(RepoItem(id=str(uuid.uuid4()), user_id=u.id, report_id=r.id))
     db_session.commit()
-    db_session.add(RepoItem(user_id=u.id, report_id=r.id))
+    db_session.add(RepoItem(id=str(uuid.uuid4()), user_id=u.id, report_id=r.id))
     with pytest.raises(IntegrityError):
         db_session.commit()
 ```
@@ -156,12 +157,12 @@ Expected: FAIL — `RepoItem` not defined / table missing.
 - [ ] **Step 3: Implement the model**
 
 ```python
-# packages/server/src/openlia_server/db/models/repo.py
+# packages/server/src/openlia_server/db/models/content.py
 from datetime import datetime
-from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint, func
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openlia_server.db.models.base import Base
+from openlia_server.db.base import Base, UTCDateTime
 
 
 class RepoItem(Base):
@@ -175,7 +176,7 @@ class RepoItem(Base):
         String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
 
     __table_args__ = (
@@ -197,7 +198,7 @@ uv run pytest packages/server/tests/test_db/test_repo_items_model.py -v
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/server/src/openlia_server/db/models/repo.py \
+git add packages/server/src/openlia_server/db/models/content.py \
         packages/server/migrations/versions/*_add_repo_items.py \
         packages/server/tests/test_db/test_repo_items_model.py
 git commit -m "feat(db): add repo_items table + model for saved-report repo"
@@ -218,9 +219,12 @@ git commit -m "feat(db): add repo_items table + model for saved-report repo"
 
 ```python
 # packages/server/tests/test_services/test_chat_sessions.py
+import uuid
+
 import pytest
 from openlia_server.services import chat_sessions as svc
-from openlia_server.db.models import ChatSession, ChatMessage, User
+from openlia_server.db.models.auth import User
+from openlia_server.db.models.content import ChatMessage, ChatSession
 
 def test_create_session_returns_row(db_session, user_factory):
     u: User = user_factory()
@@ -228,8 +232,8 @@ def test_create_session_returns_row(db_session, user_factory):
     assert row.id is not None
     assert row.user_id == u.id
     assert row.department == "secretary"
-    assert row.pinned is False
-    assert row.archived_at is None
+    assert row.is_pinned is False
+    assert row.is_archived is False
 
 def test_list_sessions_excludes_other_users(db_session, user_factory):
     a, b = user_factory(), user_factory()
@@ -265,19 +269,19 @@ def test_pin_toggle(db_session, user_factory):
     s = svc.create_session(db_session, user_id=u.id, department="secretary", title="x")
     svc.set_pinned(db_session, session_id=s.id, user_id=u.id, pinned=True)
     db_session.refresh(s)
-    assert s.pinned is True
+    assert s.is_pinned is True
 
-def test_archive_sets_timestamp(db_session, user_factory):
+def test_archive_sets_flag(db_session, user_factory):
     u = user_factory()
     s = svc.create_session(db_session, user_id=u.id, department="secretary", title="x")
     svc.archive_session(db_session, session_id=s.id, user_id=u.id)
     db_session.refresh(s)
-    assert s.archived_at is not None
+    assert s.is_archived is True
 
 def test_delete_cascades_messages(db_session, user_factory):
     u = user_factory()
     s = svc.create_session(db_session, user_id=u.id, department="secretary", title="x")
-    db_session.add(ChatMessage(session_id=s.id, role="user", content="hi"))
+    db_session.add(ChatMessage(id=str(uuid.uuid4()), session_id=s.id, role="user", content="hi"))
     db_session.commit()
     svc.delete_session(db_session, session_id=s.id, user_id=u.id)
     assert db_session.query(ChatMessage).filter_by(session_id=s.id).count() == 0
@@ -285,7 +289,7 @@ def test_delete_cascades_messages(db_session, user_factory):
 def test_list_messages_scopes_to_session_owner(db_session, user_factory):
     a, b = user_factory(), user_factory()
     s = svc.create_session(db_session, user_id=a.id, department="secretary", title="x")
-    db_session.add(ChatMessage(session_id=s.id, role="user", content="hi"))
+    db_session.add(ChatMessage(id=str(uuid.uuid4()), session_id=s.id, role="user", content="hi"))
     db_session.commit()
     rows = svc.list_messages(db_session, session_id=s.id, user_id=a.id)
     assert len(rows) == 1
@@ -303,23 +307,30 @@ Expected: FAIL with `ModuleNotFoundError: openlia_server.services.chat_sessions`
 ```python
 # packages/server/src/openlia_server/services/chat_sessions.py
 from __future__ import annotations
-from datetime import datetime, timezone
+import uuid
 
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models import ChatMessage, ChatSession
+from openlia_server.db.models.content import ChatMessage, ChatSession
 
 
-def create_session(db: Session, *, user_id: int, department: str, title: str) -> ChatSession:
-    row = ChatSession(user_id=user_id, department=department, title=title, pinned=False)
+def create_session(db: Session, *, user_id: str, department: str, title: str) -> ChatSession:
+    row = ChatSession(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        department=department,
+        title=title,
+        is_pinned=False,
+        is_archived=False,
+    )
     db.add(row)
     db.commit()
     db.refresh(row)
     return row
 
 
-def list_sessions(db: Session, *, user_id: int, include_archived: bool = False) -> list[ChatSession]:
+def list_sessions(db: Session, *, user_id: str, include_archived: bool = False) -> list[ChatSession]:
     last_activity = (
         select(ChatMessage.session_id, func.max(ChatMessage.created_at).label("last_at"))
         .group_by(ChatMessage.session_id)
@@ -330,16 +341,16 @@ def list_sessions(db: Session, *, user_id: int, include_archived: bool = False) 
         .outerjoin(last_activity, ChatSession.id == last_activity.c.session_id)
         .where(ChatSession.user_id == user_id)
         .order_by(
-            ChatSession.pinned.desc(),
+            ChatSession.is_pinned.desc(),
             func.coalesce(last_activity.c.last_at, ChatSession.created_at).desc(),
         )
     )
     if not include_archived:
-        stmt = stmt.where(ChatSession.archived_at.is_(None))
+        stmt = stmt.where(ChatSession.is_archived.is_(False))
     return list(db.execute(stmt).scalars())
 
 
-def get_session(db: Session, *, session_id: int, user_id: int) -> ChatSession:
+def get_session(db: Session, *, session_id: str, user_id: str) -> ChatSession:
     row = db.get(ChatSession, session_id)
     if row is None:
         raise LookupError(f"session {session_id} not found")
@@ -348,7 +359,7 @@ def get_session(db: Session, *, session_id: int, user_id: int) -> ChatSession:
     return row
 
 
-def rename_session(db: Session, *, session_id: int, user_id: int, new_title: str) -> None:
+def rename_session(db: Session, *, session_id: str, user_id: str, new_title: str) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
     if not new_title.strip():
         raise ValueError("title cannot be empty")
@@ -356,32 +367,32 @@ def rename_session(db: Session, *, session_id: int, user_id: int, new_title: str
     db.commit()
 
 
-def set_pinned(db: Session, *, session_id: int, user_id: int, pinned: bool) -> None:
+def set_pinned(db: Session, *, session_id: str, user_id: str, pinned: bool) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
-    row.pinned = pinned
+    row.is_pinned = pinned
     db.commit()
 
 
-def archive_session(db: Session, *, session_id: int, user_id: int) -> None:
+def archive_session(db: Session, *, session_id: str, user_id: str) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
-    row.archived_at = datetime.now(timezone.utc)
+    row.is_archived = True
     db.commit()
 
 
-def unarchive_session(db: Session, *, session_id: int, user_id: int) -> None:
+def unarchive_session(db: Session, *, session_id: str, user_id: str) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
-    row.archived_at = None
+    row.is_archived = False
     db.commit()
 
 
-def delete_session(db: Session, *, session_id: int, user_id: int) -> None:
+def delete_session(db: Session, *, session_id: str, user_id: str) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
     db.query(ChatMessage).filter(ChatMessage.session_id == row.id).delete()
     db.delete(row)
     db.commit()
 
 
-def list_messages(db: Session, *, session_id: int, user_id: int) -> list[ChatMessage]:
+def list_messages(db: Session, *, session_id: str, user_id: str) -> list[ChatMessage]:
     get_session(db, session_id=session_id, user_id=user_id)  # authz
     stmt = (
         select(ChatMessage)
@@ -438,7 +449,7 @@ def test_pin_and_archive_via_patch(client: TestClient, user_factory, login_as):
     sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
     assert client.patch(f"/chat/sessions/{sid}", json={"pinned": True}).status_code == 200
     assert client.patch(f"/chat/sessions/{sid}", json={"archived": True}).status_code == 200
-    assert client.get("/chat/sessions?include_archived=true").json()["items"][0]["archived_at"] is not None
+    assert client.get("/chat/sessions?include_archived=true").json()["items"][0]["is_archived"] is True
 
 def test_delete_session(client: TestClient, user_factory, login_as):
     login_as(user_factory())
@@ -453,7 +464,7 @@ def test_list_messages(client: TestClient, user_factory, login_as, seed_message)
     r = client.get(f"/chat/sessions/{sid}/messages")
     assert r.status_code == 200
     items = r.json()["items"]
-    assert items == [{"id": items[0]["id"], "role": "user", "content": "hello", "tool_calls": None, "stopped_at": None, "created_at": items[0]["created_at"]}]
+    assert items == [{"id": items[0]["id"], "role": "user", "content": "hello", "tool_calls": None, "model_ref": None, "token_usage": None, "created_at": items[0]["created_at"]}]
 
 def test_list_messages_rejects_other_users(client: TestClient, user_factory, login_as):
     a = user_factory(); login_as(a)
@@ -478,18 +489,18 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_user
+from openlia_server.db.models.auth import User
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
 
 
 class SessionOut(BaseModel):
-    id: int
+    id: str
     department: str
     title: str
-    pinned: bool
-    archived_at: datetime | None
+    is_pinned: bool
+    is_archived: bool
     created_at: datetime
 
 
@@ -509,11 +520,12 @@ class SessionPatchIn(BaseModel):
 
 
 class MessageOut(BaseModel):
-    id: int
+    id: str
     role: str
     content: str
     tool_calls: list[dict] | None = None
-    stopped_at: datetime | None = None
+    model_ref: str | None = None
+    token_usage: dict | None = None
     created_at: datetime
 
 
@@ -521,14 +533,16 @@ class MessageListOut(BaseModel):
     items: list[MessageOut]
 
 
-def build_chat_sessions_router() -> APIRouter:
+def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/chat/sessions", tags=["chat-sessions"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     @router.get("", response_model=SessionListOut)
     def list_sessions_ep(
         include_archived: bool = False,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> SessionListOut:
         rows = svc.list_sessions(db, user_id=user.id, include_archived=include_archived)
         return SessionListOut(items=[SessionOut.model_validate(r, from_attributes=True) for r in rows])
@@ -536,18 +550,18 @@ def build_chat_sessions_router() -> APIRouter:
     @router.post("", response_model=SessionOut, status_code=status.HTTP_201_CREATED)
     def create_session_ep(
         body: SessionCreateIn,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> SessionOut:
         row = svc.create_session(db, user_id=user.id, department=body.department, title=body.title)
         return SessionOut.model_validate(row, from_attributes=True)
 
     @router.patch("/{session_id}")
     def patch_session_ep(
-        session_id: int,
+        session_id: str,
         body: SessionPatchIn,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> dict[str, bool]:
         try:
             if body.title is not None:
@@ -568,9 +582,9 @@ def build_chat_sessions_router() -> APIRouter:
 
     @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_session_ep(
-        session_id: int,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        session_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> None:
         try:
             svc.delete_session(db, session_id=session_id, user_id=user.id)
@@ -581,9 +595,9 @@ def build_chat_sessions_router() -> APIRouter:
 
     @router.get("/{session_id}/messages", response_model=MessageListOut)
     def list_messages_ep(
-        session_id: int,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        session_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> MessageListOut:
         try:
             rows = svc.list_messages(db, session_id=session_id, user_id=user.id)
@@ -595,7 +609,8 @@ def build_chat_sessions_router() -> APIRouter:
             items=[
                 MessageOut(
                     id=r.id, role=r.role, content=r.content,
-                    tool_calls=r.tool_calls, stopped_at=r.stopped_at, created_at=r.created_at,
+                    tool_calls=r.tool_calls, model_ref=r.model_ref,
+                    token_usage=r.token_usage, created_at=r.created_at,
                 )
                 for r in rows
             ]
@@ -608,7 +623,7 @@ def build_chat_sessions_router() -> APIRouter:
 
 ```python
 from openlia_server.routes.chat_sessions import build_chat_sessions_router
-app.include_router(build_chat_sessions_router())
+app.include_router(build_chat_sessions_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 9: Run route tests to verify they pass**
@@ -691,10 +706,10 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models import RepoItem, Report
+from openlia_server.db.models.content import RepoItem, Report
 
 
-def save_to_repo(db: Session, *, user_id: int, report_id: int) -> RepoItem:
+def save_to_repo(db: Session, *, user_id: str, report_id: str) -> RepoItem:
     existing = db.execute(
         select(RepoItem).where(RepoItem.user_id == user_id, RepoItem.report_id == report_id)
     ).scalar_one_or_none()
@@ -716,14 +731,14 @@ def save_to_repo(db: Session, *, user_id: int, report_id: int) -> RepoItem:
     return item
 
 
-def unsave_from_repo(db: Session, *, user_id: int, report_id: int) -> None:
+def unsave_from_repo(db: Session, *, user_id: str, report_id: str) -> None:
     db.query(RepoItem).filter(
         RepoItem.user_id == user_id, RepoItem.report_id == report_id
     ).delete()
     db.commit()
 
 
-def list_items(db: Session, *, user_id: int) -> list[RepoItem]:
+def list_items(db: Session, *, user_id: str) -> list[RepoItem]:
     stmt = select(RepoItem).where(RepoItem.user_id == user_id).order_by(RepoItem.saved_at.desc())
     return list(db.execute(stmt).scalars())
 ```
@@ -775,19 +790,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_user
+from openlia_server.db.models.auth import User
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import repo as svc
 
 
 class RepoSaveIn(BaseModel):
-    report_id: int
+    report_id: str
 
 
 class RepoItemOut(BaseModel):
-    id: int
-    report_id: int
+    id: str
+    report_id: str
     filename: str
     department: str
     saved_at: datetime
@@ -797,13 +812,15 @@ class RepoListOut(BaseModel):
     items: list[RepoItemOut]
 
 
-def build_repo_router() -> APIRouter:
+def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/repo", tags=["repo"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/items", response_model=RepoListOut)
     def list_items_ep(
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> RepoListOut:
         rows = svc.list_items(db, user_id=user.id)
         return RepoListOut(items=[RepoItemOut.model_validate(r, from_attributes=True) for r in rows])
@@ -811,8 +828,8 @@ def build_repo_router() -> APIRouter:
     @router.post("/items", response_model=RepoItemOut, status_code=status.HTTP_201_CREATED)
     def save_ep(
         body: RepoSaveIn,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> RepoItemOut:
         try:
             item = svc.save_to_repo(db, user_id=user.id, report_id=body.report_id)
@@ -822,9 +839,9 @@ def build_repo_router() -> APIRouter:
 
     @router.delete("/items", status_code=status.HTTP_204_NO_CONTENT)
     def delete_ep(
-        report_id: int,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        report_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> None:
         svc.unsave_from_repo(db, user_id=user.id, report_id=report_id)
 
@@ -835,7 +852,7 @@ def build_repo_router() -> APIRouter:
 
 ```python
 from openlia_server.routes.repo import build_repo_router
-app.include_router(build_repo_router())
+app.include_router(build_repo_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 8: Run route tests to verify they pass**
@@ -912,23 +929,26 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models import ChatAttachment, Report, User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_user
+from openlia_server.db.models.auth import User
+from openlia_server.db.models.content import ChatAttachment, Report
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_auth
 
 
 def _safe_filename(name: str) -> str:
     return name.replace('"', "").replace("\r", "").replace("\n", "")
 
 
-def build_files_router() -> APIRouter:
-    router = APIRouter(prefix="/api", tags=["files"])
+def build_files_router(*, db_session_factory, mode: str) -> APIRouter:
+    router = APIRouter(prefix="", tags=["files"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/reports/{report_id}/download")
     def download_report(
-        report_id: int,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        report_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> FileResponse:
         row = db.get(Report, report_id)
         if row is None:
@@ -946,9 +966,9 @@ def build_files_router() -> APIRouter:
 
     @router.get("/chat/attachments/{attachment_id}/download")
     def download_attachment(
-        attachment_id: int,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_user),
+        attachment_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> FileResponse:
         row = db.get(ChatAttachment, attachment_id)
         if row is None:
@@ -971,7 +991,7 @@ def build_files_router() -> APIRouter:
 
 ```python
 from openlia_server.routes.files import build_files_router
-app.include_router(build_files_router())
+app.include_router(build_files_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1013,7 +1033,7 @@ describe('chat api', () => {
   it('GET /api/chat/sessions returns typed list', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ items: [{ id: 1, department: 'secretary', title: 'x', pinned: false, archived_at: null, created_at: '2026-04-01T00:00:00Z' }] }),
+      json: async () => ({ items: [{ id: '00000000-0000-4000-8000-000000000001', department: 'secretary', title: 'x', is_pinned: false, is_archived: false, created_at: '2026-04-01T00:00:00Z' }] }),
     });
     const r = await listSessions();
     expect(r.items[0].department).toBe('secretary');
@@ -1022,7 +1042,7 @@ describe('chat api', () => {
   it('POST /api/chat/sessions returns new session', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ id: 2, department: 'secretary', title: 'y', pinned: false, archived_at: null, created_at: '2026-04-01T00:00:00Z' }),
+      json: async () => ({ id: '00000000-0000-4000-8000-000000000002', department: 'secretary', title: 'y', is_pinned: false, is_archived: false, created_at: '2026-04-01T00:00:00Z' }),
     });
     const r = await createSession({ department: 'secretary', title: 'y' });
     expect(r.id).toBe(2);
@@ -1043,7 +1063,7 @@ describe('chat api', () => {
   it('GET messages', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ items: [{ id: 9, role: 'user', content: 'hi', tool_calls: null, stopped_at: null, created_at: '2026-04-01T00:00:00Z' }] }),
+      json: async () => ({ items: [{ id: '00000000-0000-4000-8000-000000000009', role: 'user', content: 'hi', tool_calls: null, model_ref: null, token_usage: null, created_at: '2026-04-01T00:00:00Z' }] }),
     });
     const r = await listMessages(7);
     expect(r.items[0].role).toBe('user');
@@ -1056,7 +1076,7 @@ describe('repo api', () => {
   it('saveToRepo POSTs report_id', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ id: 1, report_id: 5, filename: 'r.pdf', department: 'secretary', saved_at: '2026-04-01T00:00:00Z' }),
+      json: async () => ({ id: '00000000-0000-4000-8000-000000000001', report_id: '00000000-0000-4000-8000-000000000005', filename: 'r.pdf', department: 'secretary', saved_at: '2026-04-01T00:00:00Z' }),
     });
     const r = await saveToRepo(5);
     expect(r.id).toBe(1);
@@ -1100,20 +1120,21 @@ export type Department = 'secretary' | 'equity_research';
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
 export interface ChatSession {
-  id: number;
+  id: string;
   department: Department;
   title: string;
-  pinned: boolean;
-  archived_at: string | null;
+  is_pinned: boolean;
+  is_archived: boolean;
   created_at: string;
 }
 
 export interface ChatMessage {
-  id: number;
+  id: string;
   role: MessageRole;
   content: string;
   tool_calls: unknown[] | null;
-  stopped_at: string | null;
+  model_ref: string | null;
+  token_usage: Record<string, unknown> | null;
   created_at: string;
 }
 
@@ -1140,10 +1161,10 @@ export const listSessions = (includeArchived = false) =>
 export const createSession = (body: { department: Department; title: string }) =>
   request<ChatSession>('/api/chat/sessions', { method: 'POST', body: JSON.stringify(body) });
 
-export const patchSession = (id: number, patch: { title?: string; pinned?: boolean; archived?: boolean }) =>
+export const patchSession = (id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }) =>
   request<{ ok: true }>(`/api/chat/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
 
-export const deleteSession = (id: number) =>
+export const deleteSession = (id: string) =>
   request<void>(`/api/chat/sessions/${id}`, { method: 'DELETE' });
 
 export const listMessages = (sessionId: number) =>
@@ -1158,8 +1179,8 @@ import { ApiError } from './settings';
 import { Department } from './chat';
 
 export interface RepoItem {
-  id: number;
-  report_id: number;
+  id: string;
+  report_id: string;
   filename: string;
   department: Department;
   saved_at: string;
@@ -1228,7 +1249,7 @@ interface StreamState {
   status: 'idle' | 'opening' | 'thinking' | 'streaming' | 'done' | 'error' | 'stopped';
   message: string;            // accumulated assistant text
   toolCalls: ToolCallView[];  // chip narrations
-  reportThumbnails: Array<{ report_id: number; filename: string }>;
+  reportThumbnails: Array<{ report_id: string; filename: string }>;
   errorMessage: string | null;
 }
 ```
@@ -1350,8 +1371,8 @@ describe('useChatStream', () => {
   it('chat.report_thumbnail records thumbnails', () => {
     const { result } = renderHook(() => useChatStream({ sessionId: 1 }));
     act(() => result.current.send('x'));
-    act(() => lastSource().emit('chat.report_thumbnail', { report_id: 42, filename: 'r.pdf' }));
-    expect(result.current.state.reportThumbnails[0]).toEqual({ report_id: 42, filename: 'r.pdf' });
+    act(() => lastSource().emit('chat.report_thumbnail', { report_id: '00000000-0000-4000-8000-000000000042', filename: 'r.pdf' }));
+    expect(result.current.state.reportThumbnails[0]).toEqual({ report_id: '00000000-0000-4000-8000-000000000042', filename: 'r.pdf' });
   });
 });
 ```
@@ -1380,7 +1401,7 @@ export type ChatStreamEvent =
   | { type: 'chat.tool_call.start'; data: { call_id: string; tool_name: string; args_preview: string } }
   | { type: 'chat.tool_call.result'; data: { call_id: string; ok: boolean; summary: string } }
   | { type: 'chat.token'; data: { text: string } }
-  | { type: 'chat.report_thumbnail'; data: { report_id: number; filename: string } }
+  | { type: 'chat.report_thumbnail'; data: { report_id: string; filename: string } }
   | { type: 'chat.done'; data: Record<string, unknown> }
   | { type: 'chat.error'; data: { message: string } };
 
@@ -1397,7 +1418,7 @@ export interface StreamState {
   status: StreamStatus;
   message: string;
   toolCalls: ToolCallView[];
-  reportThumbnails: Array<{ report_id: number; filename: string }>;
+  reportThumbnails: Array<{ report_id: string; filename: string }>;
   errorMessage: string | null;
 }
 
@@ -2267,8 +2288,8 @@ describe('ChatInterface', () => {
   it('renders persisted messages from the backend', async () => {
     vi.spyOn(chatApi, 'listMessages').mockResolvedValue({
       items: [
-        { id: 1, role: 'user', content: 'hi', tool_calls: null, stopped_at: null, created_at: '2026-04-01T00:00:00Z' },
-        { id: 2, role: 'assistant', content: 'hello', tool_calls: null, stopped_at: null, created_at: '2026-04-01T00:00:00Z' },
+        { id: '00000000-0000-4000-8000-000000000001', role: 'user', content: 'hi', tool_calls: null, model_ref: null, token_usage: null, created_at: '2026-04-01T00:00:00Z' },
+        { id: '00000000-0000-4000-8000-000000000002', role: 'assistant', content: 'hello', tool_calls: null, model_ref: null, token_usage: null, created_at: '2026-04-01T00:00:00Z' },
       ],
     });
     render(<ChatInterface sessionId={1} greeting="x" subtext="" chips={[]} inputPlaceholder="Ask" />);
@@ -2334,7 +2355,7 @@ export function ChatInterface({ sessionId, greeting, subtext, chips, inputPlaceh
         role: 'user',
         content: text,
         tool_calls: null,
-        stopped_at: null,
+        model_ref: null, token_usage: null,
         created_at: new Date().toISOString(),
       },
     ]);
@@ -2365,7 +2386,7 @@ export function ChatInterface({ sessionId, greeting, subtext, chips, inputPlaceh
               m.role === 'user' ? (
                 <UserBubble key={m.id} content={m.content} />
               ) : (
-                <AssistantMessage key={m.id} content={m.content} streaming={false} stopped={\!\!m.stopped_at} />
+                <AssistantMessage key={m.id} content={m.content} streaming={false} stopped={false} />
               ),
             )}
             {state.status === 'thinking' ? <ThinkingIndicator /> : null}
@@ -2447,8 +2468,8 @@ describe('ChatHistoryDrawer', () => {
   beforeEach(() => {
     vi.spyOn(chatApi, 'listSessions').mockResolvedValue({
       items: [
-        { id: 1, department: 'secretary', title: 'Pinned', pinned: true, archived_at: null, created_at: '2026-04-01T00:00:00Z' },
-        { id: 2, department: 'secretary', title: 'Recent', pinned: false, archived_at: null, created_at: '2026-04-01T00:00:00Z' },
+        { id: '00000000-0000-4000-8000-000000000001', department: 'secretary', title: 'Pinned', is_pinned: true, is_archived: false, created_at: '2026-04-01T00:00:00Z' },
+        { id: '00000000-0000-4000-8000-000000000002', department: 'secretary', title: 'Recent', is_pinned: false, is_archived: false, created_at: '2026-04-01T00:00:00Z' },
       ],
     });
   });
@@ -2470,7 +2491,7 @@ describe('ChatHistoryDrawer', () => {
   it('creates a new session', async () => {
     const onCreate = vi.fn();
     vi.spyOn(chatApi, 'createSession').mockResolvedValue({
-      id: 99, department: 'secretary', title: 'New', pinned: false, archived_at: null, created_at: '2026-04-01T00:00:00Z',
+      id: '00000000-0000-4000-8000-000000000009'9, department: 'secretary', title: 'New', is_pinned: false, is_archived: false, created_at: '2026-04-01T00:00:00Z',
     });
     render(<ChatHistoryDrawer department="secretary" activeSessionId={1} onSelect={() => {}} onCreate={onCreate} />);
     await waitFor(() => screen.getByText('Recent'));
@@ -2518,8 +2539,8 @@ export function ChatHistoryDrawer({ department, activeSessionId, onSelect, onCre
     onCreate(row.id);
   };
 
-  const pinned = (items ?? []).filter((i) => i.pinned);
-  const recent = (items ?? []).filter((i) => \!i.pinned);
+  const pinned = (items ?? []).filter((i) => i.is_pinned);
+  const recent = (items ?? []).filter((i) => \!i.is_pinned);
 
   const SessionRow = ({ s }: { s: ChatSession }) => {
     const active = s.id === activeSessionId;
@@ -2569,9 +2590,9 @@ export function ChatHistoryDrawer({ department, activeSessionId, onSelect, onCre
           </button>
           <button
             type="button"
-            aria-label={s.pinned ? 'Unpin' : 'Pin'}
+            aria-label={s.is_pinned ? 'Unpin' : 'Pin'}
             onClick={async () => {
-              await patchSession(s.id, { pinned: \!s.pinned });
+              await patchSession(s.id, { pinned: \!s.is_pinned });
               refresh();
             }}
             className="rounded p-1 hover:bg-[--color-surface-hover]"
