@@ -46,7 +46,7 @@ Source audits:
 
 ### REM-P0-001 - Fix frontend auth DTO mapping
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -91,7 +91,7 @@ Source findings:
 
 ### REM-P0-002 - Implement Vite `/api` proxy rewrite
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -123,7 +123,7 @@ Source findings:
 
 ### REM-P0-003 - Patch roadmap README authoritative contracts
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -159,7 +159,7 @@ Source findings:
 
 ### REM-P0-004 - Rewrite stale Plan 9-15 executable snippets
 
-Status: `[ ]`
+Status: `[~]` (Plan 10 rewritten 2026-04-21 on branch `fix/phase-9-audit-findings`; Plans 9, 11-15 still pending)
 
 Affected plans:
 
@@ -210,7 +210,7 @@ Source findings:
 
 ### REM-P0-005 - Define endpoint contract matrix
 
-Status: `[ ]`
+Status: `[~]` (framework landed; placeholder Plan 10-23 rows harden as each plan rewrites under REM-P0-004 — see `planning/implementation-plans/endpoint-contract-matrix.md`)
 
 Affected implementation:
 
@@ -243,7 +243,7 @@ Source findings:
 
 ### REM-P0-006 - Define route authorization matrix
 
-Status: `[ ]`
+Status: `[~]` (framework landed; must-change-password gate (REM-P1-001) still needed to fully enforce — see `planning/implementation-plans/route-authorization-matrix.md`)
 
 Affected implementation:
 
@@ -355,7 +355,7 @@ Source findings:
 
 ### REM-P1-002 - Fix company-mode cookie secure default
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -421,7 +421,7 @@ Source findings:
 
 ### REM-P1-004 - Fix CLI audit attribution drift
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -490,7 +490,7 @@ Source findings:
 
 ### REM-P1-006 - Migrate `wizard_state` and CLI reset together
 
-Status: `[ ]`
+Status: `[x]` (migration `5d41c9a7e812`, model reshape, CLI rewrite, and tests landed 2026-04-21 on branch `fix/phase-9-audit-findings`)
 
 Affected implementation:
 
@@ -766,7 +766,7 @@ Source findings:
 
 ### REM-P1-014 - Handle scheduler-disabled route behavior
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -827,7 +827,7 @@ Source findings:
 
 ### REM-P1-016 - Fix `.env.example`
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -1037,7 +1037,7 @@ Source findings:
 
 ### REM-P2-003 - Wire or remove documented host/port env vars
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -1105,7 +1105,8 @@ Source findings:
 - `[ ]` REM-P0-005
 - `[ ]` REM-P0-006
 - `[ ]` REM-P0-007
-- `[ ]` REM-P1-006
+- `[x]` REM-P1-006 (2026-04-21)
+- `[x]` REM-P0-004 for Plan 10 snippets (2026-04-21)
 
 ### Before Plan 11 Implementation
 

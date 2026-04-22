@@ -585,13 +585,21 @@ def wizard_reset(
                 WizardState(
                     id=1,
                     status="not_started",
-                    current_step=1,
+                    current_step="mode",
+                    completed_steps=[],
+                    active_session_token=None,
                     mode=None,
                 )
             )
         else:
             state.status = "not_started"
-            state.current_step = 1
+            state.current_step = "mode"
+            state.completed_steps = []
+            state.active_session_token = None
+            state.mode = None
+            state.step_data = {}
+            state.started_at = None
+            state.completed_at = None
             state.updated_at = now
         wc = db.execute(
             select(ConfigStore).where(ConfigStore.key == "wizard.completed")
