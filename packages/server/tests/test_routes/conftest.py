@@ -22,7 +22,10 @@ def wizard_personal_client(db_session):
     """App for wizard route tests — no pre-existing local user, no OPENLIA_MODE override."""
     from openlia_server.db import session as session_mod
 
-    app = create_app(db_session_factory=session_mod.SessionLocal)
+    app = create_app(
+        db_session_factory=session_mod.SessionLocal,
+        is_loopback_request=lambda _: True,
+    )
     return TestClient(app)
 
 
@@ -31,7 +34,10 @@ def wizard_company_client(db_session):
     """App for wizard company route tests — no pre-existing users, no OPENLIA_MODE override."""
     from openlia_server.db import session as session_mod
 
-    app = create_app(db_session_factory=session_mod.SessionLocal)
+    app = create_app(
+        db_session_factory=session_mod.SessionLocal,
+        is_loopback_request=lambda _: True,
+    )
     return TestClient(app)
 
 

@@ -3,15 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from openlia_server.ai_review import store as review_store_mod
 from openlia_server.ai_review.runner import run_review as _run_review
-from openlia_server.db.session import get_db_session
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.middleware.wizard_gate import require_wizard_active, require_wizard_session
 from openlia_server.services import wizard as wizard_svc
 
@@ -92,11 +93,27 @@ class AccessControlIn(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def build_setup_router() -> APIRouter:
+def build_setup_router(
+    *,
+    db_session_factory: Callable[[], Session],
+    mode: str,
+    is_loopback_request: Callable[[Request], bool],
+) -> APIRouter:
     router = APIRouter(prefix="/setup", tags=["setup"])
+    session_dep = make_session_dependency(db_session_factory)
+
+    def require_loopback_if_personal(request: Request) -> None:
+        if mode == "personal" and not is_loopback_request(request):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "loopback_required",
+                    "message": "Setup writes require a local connection in personal mode.",
+                },
+            )
 
     @router.get("/status", response_model=StatusOut)
-    def get_status(db: Session = Depends(get_db_session)) -> StatusOut:
+    def get_status(db: Session = Depends(session_dep)) -> StatusOut:
         s = wizard_svc.get_status(db, env=dict(os.environ))
         return StatusOut(
             mode=s.mode,
@@ -106,11 +123,13 @@ def build_setup_router() -> APIRouter:
             env_overrides=s.env_overrides,
         )
 
-    @router.post("/mode", dependencies=[Depends(require_wizard_active)])
+    @router.post("/mode", dependencies=[
+        Depends(require_loopback_if_personal), Depends(require_wizard_active)
+    ])
     def post_mode(
         payload: ModeIn,
         response: Response,
-        db: Session = Depends(get_db_session),
+        db: Session = Depends(session_dep),
     ) -> dict[str, str]:
         if os.environ.get("OPENLIA_MODE"):
             raise HTTPException(
@@ -123,26 +142,30 @@ def build_setup_router() -> APIRouter:
         _set_wizard_cookie(response, token)
         return {"mode": payload.mode}
 
-    @router.post("/takeover")
-    def post_takeover(response: Response, db: Session = Depends(get_db_session)) -> dict[str, bool]:
+    @router.post("/takeover", dependencies=[Depends(require_loopback_if_personal)])
+    def post_takeover(response: Response, db: Session = Depends(session_dep)) -> dict[str, bool]:
         token = wizard_svc.rotate_session_token(db)
         _set_wizard_cookie(response, token)
         return {"ok": True}
 
-    @router.post("/identity", dependencies=[Depends(require_wizard_active)])
+    @router.post("/identity", dependencies=[
+        Depends(require_loopback_if_personal), Depends(require_wizard_active)
+    ])
     def post_identity(
         payload: IdentityIn,
-        db: Session = Depends(get_db_session),
+        db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, str]:
         wizard_svc.upsert_local_user(db, payload.display_name)
         wizard_svc.advance_step(db, "identity", "personal")
         return {"display_name": payload.display_name}
 
-    @router.post("/admin", dependencies=[Depends(require_wizard_active)])
+    @router.post("/admin", dependencies=[
+        Depends(require_loopback_if_personal), Depends(require_wizard_active)
+    ])
     def post_admin(
         payload: AdminIn,
-        db: Session = Depends(get_db_session),
+        db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, str]:
         try:
@@ -158,10 +181,12 @@ def build_setup_router() -> APIRouter:
         wizard_svc.advance_step(db, "admin", "company")
         return {"email": payload.email}
 
-    @router.post("/access_control", dependencies=[Depends(require_wizard_active)])
+    @router.post("/access_control", dependencies=[
+        Depends(require_loopback_if_personal), Depends(require_wizard_active)
+    ])
     def post_access_control(
         payload: AccessControlIn,
-        db: Session = Depends(get_db_session),
+        db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, bool]:
         mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
@@ -178,9 +203,11 @@ def build_setup_router() -> APIRouter:
         wizard_svc.advance_step(db, "access_control", "company")
         return {"ok": True}
 
-    @router.post("/review/run", dependencies=[Depends(require_wizard_active)])
+    @router.post("/review/run", dependencies=[
+        Depends(require_loopback_if_personal), Depends(require_wizard_active)
+    ])
     async def post_review_run(
-        db: Session = Depends(get_db_session),
+        db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, str]:
         from openlia.llm.adapters import build_adapter
@@ -233,7 +260,7 @@ def build_setup_router() -> APIRouter:
 
         return {"review_id": review_id}
 
-    @router.get("/review/{review_id}", dependencies=[Depends(require_wizard_active)])
+    @router.get("/review/{review_id}")
     def get_review(
         review_id: str,
         _: None = Depends(require_wizard_session),
@@ -246,9 +273,11 @@ def build_setup_router() -> APIRouter:
             )
         return entry
 
-    @router.post("/finish", dependencies=[Depends(require_wizard_active)])
+    @router.post("/finish", dependencies=[
+        Depends(require_loopback_if_personal), Depends(require_wizard_active)
+    ])
     def post_finish(
-        db: Session = Depends(get_db_session),
+        db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, str]:
         mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
