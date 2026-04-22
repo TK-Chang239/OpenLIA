@@ -34,7 +34,7 @@ class TestInvites:
 
     def test_revoke(self, admin_cookie: TestClient, db_session):
         invite = SignupInvite(
-            id="inv-x", token="tok-x", token_hash="tok-x", created_at=datetime.now(UTC)
+            id="inv-x", token_hash="tok-x", created_at=datetime.now(UTC)
         )
         db_session.add(invite)
         db_session.commit()
