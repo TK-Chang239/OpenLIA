@@ -53,9 +53,7 @@ def upgrade() -> None:
             {"v": mapped, "id": row.id},
         )
     conn.execute(
-        sa.text(
-            "UPDATE wizard_state SET completed_steps = :v WHERE completed_steps IS NULL"
-        ),
+        sa.text("UPDATE wizard_state SET completed_steps = :v WHERE completed_steps IS NULL"),
         {"v": "[]"},
     )
 

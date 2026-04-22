@@ -232,10 +232,6 @@ def _mount_frontend(app: FastAPI) -> None:
         if head in _API_PREFIXES:
             raise HTTPException(status_code=404)
         candidate = os.path.normpath(os.path.join(dist_dir, full_path))
-        if (
-            full_path
-            and candidate.startswith(dist_dir + os.sep)
-            and os.path.isfile(candidate)
-        ):
+        if full_path and candidate.startswith(dist_dir + os.sep) and os.path.isfile(candidate):
             return FileResponse(candidate)
         return FileResponse(index_html)
