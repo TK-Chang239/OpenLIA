@@ -3,3 +3,4 @@ export { InlineFeedback } from './InlineFeedback';
 export { SettingGroup } from './SettingGroup';
 export { ToggleSwitch } from './ToggleSwitch';
 export { OneTimeSecretModal } from './OneTimeSecretModal';
+export { SettingsShell } from './SettingsShell';
