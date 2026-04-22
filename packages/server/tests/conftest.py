@@ -57,6 +57,22 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
+def create_tables(engine: Engine) -> Iterator[None]:
+    import openlia_server.db.models  # noqa: F401 — register all models
+    from openlia_server.db.base import Base
+
+    Base.metadata.create_all(engine)
+    yield
+
+
+@pytest.fixture
+def db_session_factory(engine: Engine):
+    from openlia_server.db import session as session_mod
+
+    return session_mod.SessionLocal
+
+
+@pytest.fixture
 def make_user(db_session):
     from openlia_server.db.models.auth import User
     from openlia_server.services.auth import passwords

@@ -42,6 +42,20 @@ def SessionLocal() -> Session:
     return _SessionFactory()
 
 
+def get_db_session():  # type: ignore[return]
+    """FastAPI dependency that yields a session, commits on success, rolls back on error."""
+
+    session = SessionLocal()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
 def dispose_engine() -> None:
     global _engine, _SessionFactory
 

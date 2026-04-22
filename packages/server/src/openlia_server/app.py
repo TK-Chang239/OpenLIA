@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from apscheduler import AsyncScheduler
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DBSession
@@ -29,6 +29,7 @@ from openlia_server.routes.settings import (
     build_data_providers_router,
     build_llm_providers_admin_router,
 )
+from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
@@ -84,6 +85,13 @@ class _SchedulerAdapter:
 
     async def get_schedules(self) -> list:
         return await self._sched.get_schedules()
+
+
+def _is_loopback_request(request: Request) -> bool:
+    client = request.client
+    if client is None:
+        return True
+    return client.host in ("127.0.0.1", "::1", "localhost")
 
 
 def _default_session_factory() -> DBSession:
@@ -161,6 +169,7 @@ def _make_lifespan(
 def create_app(
     *,
     db_session_factory: Callable[[], DBSession] | None = None,
+    is_loopback_request: Callable[[Request], bool] | None = None,
 ) -> FastAPI:
     factory = db_session_factory or _default_session_factory
     mode = os.environ.get("OPENLIA_MODE", "personal").lower()
@@ -169,6 +178,12 @@ def create_app(
         version="0.0.0",
         lifespan=_make_lifespan(db_session_factory),
     )
+
+    app.include_router(build_setup_router(
+        db_session_factory=factory,
+        mode=mode,
+        is_loopback_request=is_loopback_request or _is_loopback_request,
+    ))
 
     if mode == "company":
         app.include_router(build_auth_router(db_session_factory=factory))
@@ -196,6 +211,7 @@ _API_PREFIXES = (
     "auth",
     "admin",
     "settings",
+    "setup",
     "jobs",
     "notifications",
     "healthz",

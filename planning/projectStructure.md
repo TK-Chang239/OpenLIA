@@ -211,6 +211,7 @@ openlia/
 │       │       │
 │       │       ├── routes/             # API endpoints — thin handlers, delegate to core/services
 │       │       │   ├── __init__.py
+│       │       │   ├── setup.py            # /setup/* wizard endpoints (Plan 10)
 │       │       │   ├── auth.py             # login, logout, password change, password reset request/redeem
 │       │       │   ├── admin.py            # invites, user CRUD, lockout settings, audit log views
 │       │       │   ├── settings.py         # user/admin settings + setup wizard API
@@ -228,7 +229,8 @@ openlia/
 │       │       ├── middleware/         # Request processing
 │       │       │   ├── __init__.py
 │       │       │   ├── auth.py             # Session cookie validation; toggleable for personal mode
-│       │       │   └── rate_limit.py       # Login/registration brute-force throttling
+│       │       │   ├── rate_limit.py       # Login/registration brute-force throttling
+│       │       │   └── wizard_gate.py      # require_wizard_active / require_wizard_session (Plan 10)
 │       │       │
 │       │       ├── db/                 # Persistence layer (see database-design.md)
 │       │       │   ├── __init__.py
@@ -243,8 +245,16 @@ openlia/
 │       │       │   ├── executors.py        # Job executors: mb_briefing, eu_scan, mr_assessment, system_maintenance
 │       │       │   └── recovery.py         # Crash recovery + missed-job catch-up
 │       │       │
+│       │       ├── ai_review/          # AI review runner + prompt builder for wizard Step 6 (Plan 10)
+│       │       │   ├── __init__.py
+│       │       │   ├── runner.py           # async run_review — calls Quick-tier LLM + parses result
+│       │       │   ├── prompt.py           # build_review_prompt(departments, providers) -> str
+│       │       │   ├── schema.py           # ReviewResult, DepartmentReadiness, ReadinessState
+│       │       │   └── store.py            # in-memory ReviewStore keyed by review_id
+│       │       │
 │       │       └── services/           # Business logic between routes and core
 │       │           ├── __init__.py
+│       │           ├── wizard.py           # WizardService — status, token, mode, identity, finish (Plan 10)
 │       │           ├── auth/               # Package: passwords, tokens, sessions, registration, login, password_reset, events, signup_policy
 │       │           ├── chat.py             # Chat history persistence + retrieval
 │       │           ├── portfolio.py
@@ -312,7 +322,15 @@ openlia/
 │       │   ├── MacroResearch/          # Scorecard, QuadrantMap, GradientBar, ForceRow, StageTimeline, ... — added Plan 19+
 │       │   └── RetailSentiment/        # MetricCard, GaugeArc, HeatMap, ScoreImpactBar, ... — added Plan 20+
 │       │
+│       ├── setup/                      # Setup Wizard — WizardShell, steps, WizardContext (Plan 10)
+│       │   ├── WizardContext.tsx       # WizardProvider + useWizard hook
+│       │   ├── WizardShell.tsx         # card + header + progress bar chrome
+│       │   ├── WizardFooter.tsx        # Back / Next buttons
+│       │   ├── WizardProgress.tsx      # progress bar
+│       │   └── steps/                  # one file per wizard step
+│       │
 │       ├── pages/
+│       │   ├── SetupPage.tsx           # /setup route — picks step from WizardContext
 │       │   ├── LoginPage.tsx           # redirects if already authenticated
 │       │   ├── RegisterPage.tsx        # invite-gated; requires ?invite= param
 │       │   ├── ForgotPasswordPage.tsx
