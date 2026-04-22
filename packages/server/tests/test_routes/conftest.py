@@ -18,6 +18,24 @@ def _clear_rate_limiter():
 
 
 @pytest.fixture
+def wizard_personal_client(db_session):
+    """App for wizard route tests — no pre-existing local user, no OPENLIA_MODE override."""
+    from openlia_server.db import session as session_mod
+
+    app = create_app(db_session_factory=session_mod.SessionLocal)
+    return TestClient(app)
+
+
+@pytest.fixture
+def wizard_company_client(db_session):
+    """App for wizard company route tests — no pre-existing users, no OPENLIA_MODE override."""
+    from openlia_server.db import session as session_mod
+
+    app = create_app(db_session_factory=session_mod.SessionLocal)
+    return TestClient(app)
+
+
+@pytest.fixture
 def company_client(db_session, monkeypatch):
     monkeypatch.setenv("OPENLIA_MODE", "company")
     # TestClient speaks http://testserver, so Secure cookies would be dropped
