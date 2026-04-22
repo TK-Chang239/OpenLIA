@@ -11,6 +11,7 @@
   /* Surfaces */
   --color-surface-hover: rgba(255, 255, 255, 0.04);
   --color-surface-active: rgba(255, 255, 255, 0.06);
+  --color-surface-info: #5a9bff;
 
   /* Accents */
   --color-accent-primary: #7c9cff;

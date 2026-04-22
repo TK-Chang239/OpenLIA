@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { finish, pollReview, runReview } from "../../api/setup";
-import type { Mode, ReviewPoll } from "../../api/setup";
+import type { ReviewPoll } from "../../api/setup";
 
 interface ReviewResult {
   summary: string;
@@ -18,11 +18,9 @@ interface ReviewResult {
 
 export function ReviewStep({
   totalSteps,
-  mode,
   onBack,
 }: {
   totalSteps: number;
-  mode: Mode;
   onBack: () => void;
 }) {
   const [state, setState] = useState<"starting" | "running" | "complete" | "failed">("starting");

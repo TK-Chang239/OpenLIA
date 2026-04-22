@@ -34,7 +34,7 @@ describe("ReviewStep", () => {
       )
       .mockResolvedValueOnce(json({ redirect: "/", mode: "personal" }));
 
-    render(<ReviewStep totalSteps={5} mode="personal" onBack={vi.fn()} />);
+    render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
     await waitFor(() => screen.getByText(/1 of 1 ready/i));
     expect(screen.getByText(/secretary/i)).toBeInTheDocument();
   });
@@ -63,7 +63,7 @@ describe("ReviewStep", () => {
         }),
       );
 
-    render(<ReviewStep totalSteps={5} mode="personal" onBack={vi.fn()} />);
+    render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
     await waitFor(() => screen.getByText(/0 of 1 ready/i));
     expect(screen.getByRole("button", { name: /finish/i })).toBeDisabled();
   });

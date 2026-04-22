@@ -9,7 +9,7 @@ import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import Home from "../pages/Home";
 import Repository from "../pages/Repository";
 import Settings from "../pages/Settings";
-import Setup from "../pages/Setup";
+import { SetupPage } from "../pages/SetupPage";
 import Secretary from "../pages/departments/Secretary";
 import EquityResearch from "../pages/departments/EquityResearch";
 import EarningsUpdate from "../pages/departments/EarningsUpdate";
@@ -23,7 +23,7 @@ export const routes: RouteObject[] = [
   { path: "/register", element: <RegisterPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
   { path: "/reset-password", element: <ResetPasswordPage /> },
-  { path: "/setup", element: <Setup /> },
+  { path: "/setup", element: <SetupPage /> },
   {
     element: (
       <ProtectedRoute>
