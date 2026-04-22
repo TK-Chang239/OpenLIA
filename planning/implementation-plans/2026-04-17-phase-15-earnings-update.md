@@ -4,7 +4,7 @@
 
 > **Audit 2026-04-20 normalizations (apply before executing this plan):**
 > - All IDs are UUID strings (`String(36)`). `user_id`, `schedule_id`, `report_id`, `watchlist_entry_id` are `str` at every service boundary, path param, and FK.
-> - Backend imports: `User` from `openlia_server.db.models.auth` (not `.users`/`.user`). `EUSchedule` (from Plan 1B) lives in the shipped scheduler tables — confirm the module path in `db/models/infrastructure.py` before coding. Auth via `build_require_auth(...)` router factories; no bare `current_user`/`require_user`.
+> - Backend imports: `User` from `openlia_server.db.models.auth` (not `.users`/`.user`). `EuSchedule` (from Plan 1B) lives in `openlia_server.db.models.scheduler`. Auth via `build_require_auth(...)` router factories; no bare `require_user` helper.
 > - Runtime imports: `from openlia.llm.runtime.messages import ReportRequest`, `from openlia.llm.runtime.events import to_wire`. `ReportRequest.length` is `"brief"|"standard"|"long"` — map `eu_user_configs.report_length` (`concise`/`normal`/`elaborative`) at the call site.
 > - `ReportStart` / `ReportComplete` field shapes are frozen (see Plan 13 normalizations).
 > - `reports` table schema is Plan 1A's — persist `ReportSchema` into `content_structured`, rendered markdown into `content_markdown`. No ad-hoc report columns.
@@ -457,11 +457,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.departments import EuUserConfig, EuWatchlistEntry
-from openlia_server.db.models.users import User
+from openlia_server.db.models.auth import User
 
 
 def _mk_user(db: Session, email: str = "u@x") -> User:
-    u = User(id="u_eu_1", email=email, password_hash="x", is_admin=False)
+    u = User(id="u_eu_1", email=email, display_name="EU User", password_hash="x", is_admin=False)
     db.add(u)
     db.commit()
     return u
@@ -804,13 +804,13 @@ Per-user config with merged defaults. Mirrors Plan 14's `equity_research_config`
 import pytest
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.users import User
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.departments import EuUserConfig
 from openlia_server.services import eu_config as svc
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", password_hash="x", is_admin=False)
+    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
     db.add(u)
     db.commit()
     return u
@@ -1019,13 +1019,13 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.users import User
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.departments import EuWatchlistEntry
 from openlia_server.services import eu_watchlist as svc
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", password_hash="x", is_admin=False)
+    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
     db.add(u)
     db.commit()
     return u
@@ -1321,14 +1321,14 @@ from dataclasses import dataclass, field
 import pytest
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.users import User
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import EuSchedule
 from openlia_server.scheduler.registry import JobType
 from openlia_server.services import eu_schedules as svc
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", password_hash="x", is_admin=False)
+    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
     db.add(u)
     db.commit()
     return u
@@ -1647,13 +1647,13 @@ from sqlalchemy.orm import Session
 
 from openlia.llm.runtime.messages import ReportRequest
 
-from openlia_server.db.models.users import User
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.departments import EuWatchlistEntry, EuUserConfig
 from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", password_hash="x", is_admin=False)
+    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
     db.add(u)
     db.commit()
     return u
@@ -1877,12 +1877,12 @@ from sqlalchemy.orm import Session
 from openlia.llm.runtime.events import ReportComplete, ReportDelta, ReportStart, SseEvent
 from openlia.llm.runtime.messages import ReportRequest
 
-from openlia_server.db.models.users import User
+from openlia_server.db.models.auth import User
 from openlia_server.services.eu_runner import run_on_demand
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", password_hash="x", is_admin=False)
+    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
     db.add(u)
     db.commit()
     return u
@@ -2065,159 +2065,73 @@ git commit -m "feat(server): add eu_runner for on-demand EU report generation"
 
 ---
 
-### Task 10: Server — Watchlist routes
+### Task 10: Server — Department route factory
 
-`GET /departments/earnings-update/watchlist` — list the current user's watchlist entries.
-`POST /departments/earnings-update/watchlist` — body `{ticker: string}`, returns the created entry. 409 if duplicate, 404 if ticker not found.
-`DELETE /departments/earnings-update/watchlist/{entry_id}` — removes the entry.
+Create one route module for the Earnings Update department. All watchlist,
+config, schedule, report, and recent-report endpoints belong inside this
+factory so they share the shipped auth dependency and database-session cleanup.
+Do not define a module-level `router` that captures undefined `require_auth` or
+`session_dep` symbols.
 
 **Files:**
-- Create: `packages/server/src/openlia_server/routes/departments/earnings_update.py` (watchlist + empty stubs for other sections; later tasks fill them in).
-- Modify: `packages/server/src/openlia_server/app.py` to include the EU router at `/departments/earnings-update` (frontend reaches it via `/api/...` through the Vite proxy).
-- Test: `packages/server/tests/routes/departments/test_earnings_update_watchlist.py`
+- Create: `packages/server/src/openlia_server/routes/departments/earnings_update.py`
+- Modify: `packages/server/src/openlia_server/app.py`
+- Tests: `packages/server/tests/routes/departments/test_earnings_update_*.py`
 
-- [ ] **Step 1: Write the failing test**
-
-```python
-# packages/server/tests/routes/departments/test_earnings_update_watchlist.py
-from datetime import date
-
-import pytest
-from fastapi.testclient import TestClient
-
-from openlia_server.services import eu_watchlist as svc
-
-
-class _FakeAdapter:
-    def __init__(self, known: dict[str, dict]) -> None:
-        self.known = known
-
-    def next_earnings(self, ticker: str):
-        return self.known.get(ticker)
-
-
-@pytest.fixture
-def eu_client(client_factory, monkeypatch):
-    """client_factory is the canonical test helper from conftest.py:
-    creates an authenticated TestClient for a user (cookie session)."""
-    known = {
-        "AAPL": {"ticker": "AAPL", "company_name": "Apple Inc.",
-                 "date": date(2026, 4, 25), "release_timing": "post_market"},
-        "TSLA": {"ticker": "TSLA", "company_name": "Tesla Inc.",
-                 "date": date(2026, 4, 22), "release_timing": "pre_market"},
-    }
-    adapter = _FakeAdapter(known)
-
-    # Replace the dependency-injected earnings adapter with the fake.
-    from openlia_server.routes.departments import earnings_update as route_mod
-    monkeypatch.setattr(route_mod, "_earnings_adapter_dep", lambda: adapter)
-
-    return client_factory(user_id="u_1")
-
-
-def test_get_watchlist_empty(eu_client: TestClient) -> None:
-    resp = eu_client.get("/departments/earnings-update/watchlist")
-    assert resp.status_code == 200
-    assert resp.json() == {"entries": []}
-
-
-def test_post_adds_entry(eu_client: TestClient) -> None:
-    resp = eu_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
-    )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["ticker"] == "AAPL"
-    assert body["company_name"] == "Apple Inc."
-    assert body["next_earnings_date"] == "2026-04-25"
-    assert body["release_timing"] == "post_market"
-
-
-def test_post_rejects_empty_ticker(eu_client: TestClient) -> None:
-    resp = eu_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": ""},
-    )
-    assert resp.status_code == 422
-
-
-def test_post_409_on_duplicate(eu_client: TestClient) -> None:
-    eu_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
-    resp = eu_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
-    )
-    assert resp.status_code == 409
-
-
-def test_post_404_on_unknown(eu_client: TestClient) -> None:
-    resp = eu_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "ZZZZ"},
-    )
-    assert resp.status_code == 404
-
-
-def test_get_lists_after_add(eu_client: TestClient) -> None:
-    eu_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
-    eu_client.post("/departments/earnings-update/watchlist", json={"ticker": "TSLA"})
-    resp = eu_client.get("/departments/earnings-update/watchlist")
-    entries = resp.json()["entries"]
-    assert [e["ticker"] for e in entries] == ["TSLA", "AAPL"]  # ordered by date
-
-
-def test_delete_removes_entry(eu_client: TestClient) -> None:
-    created = eu_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"},
-    ).json()
-    resp = eu_client.delete(
-        f"/departments/earnings-update/watchlist/{created['id']}",
-    )
-    assert resp.status_code == 204
-    assert eu_client.get("/departments/earnings-update/watchlist").json() == {"entries": []}
-
-
-def test_delete_404_on_missing(eu_client: TestClient) -> None:
-    resp = eu_client.delete("/departments/earnings-update/watchlist/nope")
-    assert resp.status_code == 404
-```
-
-- [ ] **Step 2: Run the test to confirm it fails**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_watchlist.py -v`
-Expected: FAIL (`ModuleNotFoundError` on the route module).
-
-- [ ] **Step 3: Create the router file with watchlist endpoints**
+- [ ] **Step 1: Create the factory skeleton**
 
 ```python
 # packages/server/src/openlia_server/routes/departments/earnings_update.py
-"""Earnings Update HTTP routes: watchlist, config, schedules, report, reports."""
-
+"""Earnings Update HTTP routes."""
 from __future__ import annotations
 
+import json
 from datetime import date
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from openlia_server.db.session import get_db
-from openlia_server.middleware.auth import require_user
+from openlia.llm.runtime.events import to_wire
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.db.models.auth import User
+from openlia_server.db.models.content import Report
+from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import eu_config as config_svc
+from openlia_server.services import eu_runner
+from openlia_server.services import eu_schedules as schedules_svc
 from openlia_server.services import eu_watchlist as watchlist_svc
 
 
-router = APIRouter(prefix="/departments/earnings-update", tags=["earnings-update"])
-
-
-# ---------- Dependency injection hooks ----------
-
 def _earnings_adapter_dep(request: Request):
-    """Resolves the data-adapter for earnings_data. Wired at app startup to
-    `app.state.earnings_adapter`. Tests monkeypatch this symbol directly."""
     adapter = getattr(request.app.state, "earnings_adapter", None)
     if adapter is None:
-        raise HTTPException(500, "earnings adapter not configured")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "earnings adapter not configured")
     return adapter
 
 
-# ---------- Watchlist ----------
+def _scheduler_dep(request: Request):
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "scheduler not initialized")
+    return scheduler
+
+
+def _report_runner_dep(request: Request):
+    runner = getattr(request.app.state, "report_runner", None)
+    if runner is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "report runner not initialized")
+    return runner
+
+
+def _report_store_dep(request: Request):
+    store = getattr(request.app.state, "report_store", None)
+    if store is None:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, "report store not initialized")
+    return store
+
 
 class _WatchlistEntryOut(BaseModel):
     id: str
@@ -2233,174 +2147,6 @@ class _WatchlistListOut(BaseModel):
 
 class _AddEntryIn(BaseModel):
     ticker: str = Field(min_length=1, max_length=16)
-
-
-@router.get("/watchlist", response_model=_WatchlistListOut)
-def get_watchlist(
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-) -> _WatchlistListOut:
-    entries = watchlist_svc.list_entries(db, user_id=user.id)
-    return _WatchlistListOut(entries=[_WatchlistEntryOut(
-        id=e.id, ticker=e.ticker, company_name=e.company_name,
-        next_earnings_date=e.next_earnings_date, release_timing=e.release_timing,
-    ) for e in entries])
-
-
-@router.post("/watchlist", status_code=201, response_model=_WatchlistEntryOut)
-def add_to_watchlist(
-    payload: _AddEntryIn,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-    adapter=Depends(_earnings_adapter_dep),
-) -> _WatchlistEntryOut:
-    try:
-        entry = watchlist_svc.add_entry(
-            db, user_id=user.id, ticker=payload.ticker, adapter=adapter,
-        )
-    except watchlist_svc.AlreadyOnWatchlistError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "already on watchlist")
-    except watchlist_svc.TickerNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "ticker not found")
-    return _WatchlistEntryOut(
-        id=entry.id, ticker=entry.ticker, company_name=entry.company_name,
-        next_earnings_date=entry.next_earnings_date, release_timing=entry.release_timing,
-    )
-
-
-@router.delete("/watchlist/{entry_id}", status_code=204)
-def remove_from_watchlist(
-    entry_id: str,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-) -> None:
-    try:
-        watchlist_svc.remove_entry(db, user_id=user.id, entry_id=entry_id)
-    except watchlist_svc.WatchlistEntryNotFoundError:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
-```
-
-- [ ] **Step 4: Register the router**
-
-In `packages/server/src/openlia_server/app.py`, where routers are included:
-
-```python
-from openlia_server.routes.departments import earnings_update as eu_routes
-
-app.include_router(eu_routes.router)
-```
-
-- [ ] **Step 5: Run the tests**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_watchlist.py -v`
-Expected: PASS (8 tests).
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/server/src/openlia_server/routes/departments/earnings_update.py \
-        packages/server/src/openlia_server/app.py \
-        packages/server/tests/routes/departments/test_earnings_update_watchlist.py
-git commit -m "feat(server): EU watchlist routes (GET/POST/DELETE)"
-```
-
----
-
-### Task 11: Server — Config routes
-
-`GET /departments/earnings-update/config` — returns `{report_length, enabled_section_ids, custom_sections}`.
-`PUT /departments/earnings-update/config` — upserts the config.
-
-**Files:**
-- Modify: `packages/server/src/openlia_server/routes/departments/earnings_update.py` (append)
-- Test: `packages/server/tests/routes/departments/test_earnings_update_config.py`
-
-- [ ] **Step 1: Write the failing test**
-
-```python
-# packages/server/tests/routes/departments/test_earnings_update_config.py
-from fastapi.testclient import TestClient
-
-
-def test_get_config_returns_defaults(client_factory) -> None:
-    c = client_factory(user_id="u_1")
-    resp = c.get("/departments/earnings-update/config")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["report_length"] == "normal"
-    assert len(body["enabled_section_ids"]) == 8
-    assert body["custom_sections"] == []
-
-
-def test_put_config_updates(client_factory) -> None:
-    c = client_factory(user_id="u_1")
-    resp = c.put(
-        "/departments/earnings-update/config",
-        json={
-            "report_length": "elaborative",
-            "enabled_section_ids": ["quick_take", "key_financials"],
-            "custom_sections": [
-                {"id": "custom_abc_123", "title": "Model update", "description": "x"},
-            ],
-        },
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["report_length"] == "elaborative"
-    # verify persistence
-    roundtrip = c.get("/departments/earnings-update/config").json()
-    assert roundtrip == body
-
-
-def test_put_config_rejects_invalid_length(client_factory) -> None:
-    c = client_factory(user_id="u_1")
-    resp = c.put(
-        "/departments/earnings-update/config",
-        json={
-            "report_length": "tiny",
-            "enabled_section_ids": [],
-            "custom_sections": [],
-        },
-    )
-    assert resp.status_code == 422
-
-
-def test_put_config_rejects_custom_without_title(client_factory) -> None:
-    c = client_factory(user_id="u_1")
-    resp = c.put(
-        "/departments/earnings-update/config",
-        json={
-            "report_length": "normal",
-            "enabled_section_ids": [],
-            "custom_sections": [{"id": "custom_x", "title": "", "description": "y"}],
-        },
-    )
-    assert resp.status_code == 422
-
-
-def test_config_is_user_scoped(client_factory) -> None:
-    c1 = client_factory(user_id="u_1")
-    c2 = client_factory(user_id="u_2")
-    c1.put("/departments/earnings-update/config", json={
-        "report_length": "concise", "enabled_section_ids": ["quick_take"],
-        "custom_sections": [],
-    })
-    assert c2.get("/departments/earnings-update/config").json()["report_length"] == "normal"
-```
-
-- [ ] **Step 2: Run the test to confirm it fails**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_config.py -v`
-Expected: FAIL (404 on GET, route not registered).
-
-- [ ] **Step 3: Append config routes**
-
-In `packages/server/src/openlia_server/routes/departments/earnings_update.py`:
-
-```python
-from typing import Literal
-
-from openlia_server.services import eu_config as config_svc
 
 
 class _CustomSectionIn(BaseModel):
@@ -2419,169 +2165,6 @@ class _ConfigOut(BaseModel):
     report_length: str
     enabled_section_ids: list[str]
     custom_sections: list[dict]
-
-
-@router.get("/config", response_model=_ConfigOut)
-def get_config(
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-) -> _ConfigOut:
-    cfg = config_svc.get_config(db, user_id=user.id)
-    return _ConfigOut(
-        report_length=cfg.report_length,
-        enabled_section_ids=list(cfg.enabled_section_ids),
-        custom_sections=list(cfg.custom_sections),
-    )
-
-
-@router.put("/config", response_model=_ConfigOut)
-def put_config(
-    payload: _ConfigIn,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-) -> _ConfigOut:
-    try:
-        cfg = config_svc.update_config(
-            db, user_id=user.id,
-            report_length=payload.report_length,
-            enabled_section_ids=list(payload.enabled_section_ids),
-            custom_sections=[cs.model_dump() for cs in payload.custom_sections],
-        )
-    except ValueError as e:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
-    return _ConfigOut(
-        report_length=cfg.report_length,
-        enabled_section_ids=list(cfg.enabled_section_ids),
-        custom_sections=list(cfg.custom_sections),
-    )
-```
-
-- [ ] **Step 4: Run the tests**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_config.py -v`
-Expected: PASS (5 tests).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/server/src/openlia_server/routes/departments/earnings_update.py \
-        packages/server/tests/routes/departments/test_earnings_update_config.py
-git commit -m "feat(server): EU config routes (GET/PUT) with section + length validation"
-```
-
----
-
-### Task 12: Server — Schedules routes
-
-`GET /schedules` — list the current user's EU scan schedules.
-`POST /schedules` — create a new schedule (validates time/tz/days, hot-reloads scheduler).
-`PUT /schedules/{schedule_id}` — update.
-`DELETE /schedules/{schedule_id}` — remove.
-
-**Files:**
-- Modify: `packages/server/src/openlia_server/routes/departments/earnings_update.py`
-- Test: `packages/server/tests/routes/departments/test_earnings_update_schedules.py`
-
-- [ ] **Step 1: Write the failing test**
-
-```python
-# packages/server/tests/routes/departments/test_earnings_update_schedules.py
-import pytest
-
-
-@pytest.fixture
-def eu_sched_client(client_factory, fake_scheduler):
-    return client_factory(user_id="u_1", scheduler=fake_scheduler)
-
-
-def test_post_schedule_creates(eu_sched_client, fake_scheduler) -> None:
-    resp = eu_sched_client.post(
-        "/departments/earnings-update/schedules",
-        json={
-            "time": "06:00",
-            "timezone": "America/New_York",
-            "days_of_week": ["mon", "tue", "wed", "thu", "fri"],
-            "label": "Pre-Market Scan",
-        },
-    )
-    assert resp.status_code == 201
-    body = resp.json()
-    assert body["time"] == "06:00"
-    assert fake_scheduler.added[-1]["user_id"] == "u_1"
-
-
-def test_post_invalid_time(eu_sched_client) -> None:
-    resp = eu_sched_client.post(
-        "/departments/earnings-update/schedules",
-        json={"time": "25:00", "timezone": "America/New_York",
-              "days_of_week": ["mon"], "label": "bad"},
-    )
-    assert resp.status_code == 422
-
-
-def test_get_lists_schedules(eu_sched_client) -> None:
-    eu_sched_client.post("/departments/earnings-update/schedules", json={
-        "time": "06:00", "timezone": "America/New_York",
-        "days_of_week": ["mon"], "label": "a",
-    })
-    eu_sched_client.post("/departments/earnings-update/schedules", json={
-        "time": "17:00", "timezone": "America/New_York",
-        "days_of_week": ["mon"], "label": "b",
-    })
-    resp = eu_sched_client.get("/departments/earnings-update/schedules")
-    assert resp.status_code == 200
-    assert [s["label"] for s in resp.json()["schedules"]] == ["a", "b"]
-
-
-def test_put_updates_schedule(eu_sched_client) -> None:
-    created = eu_sched_client.post(
-        "/departments/earnings-update/schedules",
-        json={"time": "06:00", "timezone": "America/New_York",
-              "days_of_week": ["mon"], "label": "a"},
-    ).json()
-    resp = eu_sched_client.put(
-        f"/departments/earnings-update/schedules/{created['id']}",
-        json={"time": "07:00", "timezone": "America/New_York",
-              "days_of_week": ["mon", "tue"], "label": "a2",
-              "is_enabled": True},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["time"] == "07:00"
-    assert body["label"] == "a2"
-
-
-def test_delete_removes(eu_sched_client) -> None:
-    created = eu_sched_client.post(
-        "/departments/earnings-update/schedules",
-        json={"time": "06:00", "timezone": "America/New_York",
-              "days_of_week": ["mon"], "label": "a"},
-    ).json()
-    resp = eu_sched_client.delete(
-        f"/departments/earnings-update/schedules/{created['id']}"
-    )
-    assert resp.status_code == 204
-    assert eu_sched_client.get("/departments/earnings-update/schedules").json() == {"schedules": []}
-```
-
-- [ ] **Step 2: Run the test to confirm it fails**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_schedules.py -v`
-Expected: FAIL (404 on endpoints).
-
-- [ ] **Step 3: Append schedule routes**
-
-In the same router module:
-
-```python
-from openlia_server.services import eu_schedules as schedules_svc
-
-
-def _scheduler_dep(request: Request):
-    sched = getattr(request.app.state, "scheduler", None)
-    if sched is None:
-        raise HTTPException(500, "scheduler not initialized")
-    return sched
 
 
 class _ScheduleIn(BaseModel):
@@ -2608,219 +2191,8 @@ class _ScheduleListOut(BaseModel):
     schedules: list[_ScheduleOut]
 
 
-@router.get("/schedules", response_model=_ScheduleListOut)
-def list_schedules(
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-) -> _ScheduleListOut:
-    items = schedules_svc.list_schedules(db, user_id=user.id)
-    return _ScheduleListOut(schedules=[_ScheduleOut(**i.__dict__) for i in items])
-
-
-@router.post("/schedules", status_code=201, response_model=_ScheduleOut)
-def create_schedule(
-    payload: _ScheduleIn,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-    scheduler=Depends(_scheduler_dep),
-) -> _ScheduleOut:
-    try:
-        dto = schedules_svc.create_schedule(
-            db, user_id=user.id, time=payload.time, timezone=payload.timezone,
-            days_of_week=list(payload.days_of_week), label=payload.label,
-            scheduler=scheduler,
-        )
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-    return _ScheduleOut(**dto.__dict__)
-
-
-@router.put("/schedules/{schedule_id}", response_model=_ScheduleOut)
-def update_schedule(
-    schedule_id: str,
-    payload: _ScheduleUpdateIn,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-    scheduler=Depends(_scheduler_dep),
-) -> _ScheduleOut:
-    try:
-        dto = schedules_svc.update_schedule(
-            db, user_id=user.id, schedule_id=schedule_id,
-            time=payload.time, timezone=payload.timezone,
-            days_of_week=list(payload.days_of_week),
-            label=payload.label, is_enabled=payload.is_enabled,
-            scheduler=scheduler,
-        )
-    except schedules_svc.ScheduleNotFoundError:
-        raise HTTPException(404, "schedule not found")
-    except ValueError as e:
-        raise HTTPException(422, str(e))
-    return _ScheduleOut(**dto.__dict__)
-
-
-@router.delete("/schedules/{schedule_id}", status_code=204)
-def delete_schedule(
-    schedule_id: str,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-    scheduler=Depends(_scheduler_dep),
-) -> None:
-    try:
-        schedules_svc.delete_schedule(
-            db, user_id=user.id, schedule_id=schedule_id, scheduler=scheduler,
-        )
-    except schedules_svc.ScheduleNotFoundError:
-        raise HTTPException(404, "schedule not found")
-```
-
-- [ ] **Step 4: Run the tests**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_schedules.py -v`
-Expected: PASS (5 tests).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/server/src/openlia_server/routes/departments/earnings_update.py \
-        packages/server/tests/routes/departments/test_earnings_update_schedules.py
-git commit -m "feat(server): EU schedule routes (GET/POST/PUT/DELETE) with hot-reload"
-```
-
----
-
-### Task 13: Server — Report SSE route + recent reports list
-
-`POST /departments/earnings-update/report` (SSE) — body `{ticker: string}`, streams `report.*` events, persists report on complete.
-`GET /departments/earnings-update/reports?limit=N` — returns recent reports for the user.
-
-**Files:**
-- Modify: `packages/server/src/openlia_server/routes/departments/earnings_update.py`
-- Test: `packages/server/tests/routes/departments/test_earnings_update_report.py`
-
-- [ ] **Step 1: Write the failing test**
-
-```python
-# packages/server/tests/routes/departments/test_earnings_update_report.py
-from typing import AsyncIterator
-
-import pytest
-from openlia.llm.runtime.events import ReportComplete, ReportDelta, ReportStart, SseEvent
-from openlia.llm.runtime.messages import ReportRequest
-
-
-class _ScriptedRunner:
-    def __init__(self, events: list[SseEvent]) -> None:
-        self.events = events
-        self.seen: list[ReportRequest] = []
-
-    async def run(self, *, department_id, user_id, request) -> AsyncIterator[SseEvent]:
-        self.seen.append(request)
-        for e in self.events:
-            yield e
-
-
-def test_post_report_streams_sse_events(client_factory) -> None:
-    events = [
-        ReportStart(report_id="r_1", department="earnings_update",
-                    mode="earnings_analysis", section_titles=["Quick Take"]),
-        ReportDelta(report_id="r_1", section_id="quick_take", delta="Beat..."),
-        ReportComplete(report_id="r_1", schema={"title": "AAPL Q1 FY2026", "sections": []}),
-    ]
-    runner = _ScriptedRunner(events=events)
-    c = client_factory(user_id="u_1", report_runner=runner)
-
-    with c.stream("POST",
-                  "/departments/earnings-update/report",
-                  json={"ticker": "AAPL"}) as resp:
-        assert resp.status_code == 200
-        body = "".join(chunk for chunk in resp.iter_text())
-    assert "event: report.start" in body
-    assert "event: report.delta" in body
-    assert "event: report.complete" in body
-    assert '"report_id": "r_1"' in body
-
-
-def test_post_report_rejects_empty_ticker(client_factory) -> None:
-    runner = _ScriptedRunner(events=[])
-    c = client_factory(user_id="u_1", report_runner=runner)
-    resp = c.post("/departments/earnings-update/report", json={"ticker": ""})
-    assert resp.status_code == 422
-
-
-def test_recent_reports_returns_user_reports(client_factory, seed_reports) -> None:
-    # Seed 3 earnings_update reports for u_1 + 1 for u_2.
-    seed_reports(
-        user_id="u_1", count=3,
-        department="earnings_update", report_type="earnings_update",
-    )
-    seed_reports(
-        user_id="u_2", count=1,
-        department="earnings_update", report_type="earnings_update",
-    )
-    c = client_factory(user_id="u_1")
-    resp = c.get("/departments/earnings-update/reports?limit=5")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert len(body["reports"]) == 3
-    for r in body["reports"]:
-        assert r["report_type"] == "earnings_update"
-```
-
-- [ ] **Step 2: Run the test to confirm it fails**
-
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_report.py -v`
-Expected: FAIL (404 on routes).
-
-- [ ] **Step 3: Append report + reports list routes**
-
-In the router module:
-
-```python
-from fastapi.responses import StreamingResponse
-
-from openlia.llm.runtime.events import serialize_sse
-from openlia_server.services import eu_runner
-
-
-def _report_runner_dep(request: Request):
-    runner = getattr(request.app.state, "report_runner", None)
-    if runner is None:
-        raise HTTPException(500, "report runner not initialized")
-    return runner
-
-
-def _report_store_dep(request: Request):
-    store = getattr(request.app.state, "report_store", None)
-    if store is None:
-        raise HTTPException(500, "report store not initialized")
-    return store
-
-
 class _ReportIn(BaseModel):
     ticker: str = Field(min_length=1, max_length=16)
-
-
-@router.post("/report")
-async def generate_report(
-    payload: _ReportIn,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-    runner=Depends(_report_runner_dep),
-    store=Depends(_report_store_dep),
-):
-    async def gen():
-        async for event in eu_runner.run_on_demand(
-            session=db, user_id=user.id, ticker=payload.ticker,
-            report_runner=runner, report_store=store,
-        ):
-            yield serialize_sse(event)
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
-
-
-# ---------- Recent reports list ----------
-
-from openlia_server.db.models.reports import Report
 
 
 class _RecentReportOut(BaseModel):
@@ -2835,40 +2207,225 @@ class _ReportsListOut(BaseModel):
     reports: list[_RecentReportOut]
 
 
-@router.get("/reports", response_model=_ReportsListOut)
-def list_recent_reports(
-    limit: int = 5,
-    user=Depends(require_user),
-    db: Session = Depends(get_db),
-) -> _ReportsListOut:
-    limit = max(1, min(limit, 200))
-    rows = (
-        db.query(Report)
-        .filter_by(user_id=user.id, department="earnings_update")
-        .order_by(Report.created_at.desc())
-        .limit(limit)
-        .all()
-    )
-    return _ReportsListOut(reports=[_RecentReportOut(
-        id=r.id, title=r.title, subject=r.subject, report_type=r.report_type,
-        created_at=r.created_at.isoformat(),
-    ) for r in rows])
+def build_earnings_update_router(*, db_session_factory, mode: str) -> APIRouter:
+    router = APIRouter(prefix="/departments/earnings-update", tags=["earnings-update"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
+
+    @router.get("/watchlist", response_model=_WatchlistListOut)
+    def get_watchlist(user: User = require_auth, db: Session = Depends(session_dep)) -> _WatchlistListOut:
+        entries = watchlist_svc.list_entries(db, user_id=user.id)
+        return _WatchlistListOut(entries=[_WatchlistEntryOut.model_validate(e, from_attributes=True) for e in entries])
+
+    @router.post("/watchlist", status_code=status.HTTP_201_CREATED, response_model=_WatchlistEntryOut)
+    def add_to_watchlist(
+        payload: _AddEntryIn,
+        user: User = require_auth,
+        db: Session = Depends(session_dep),
+        adapter=Depends(_earnings_adapter_dep),
+    ) -> _WatchlistEntryOut:
+        try:
+            entry = watchlist_svc.add_entry(db, user_id=user.id, ticker=payload.ticker, adapter=adapter)
+        except watchlist_svc.AlreadyOnWatchlistError as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, "already on watchlist") from exc
+        except watchlist_svc.TickerNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "ticker not found") from exc
+        return _WatchlistEntryOut.model_validate(entry, from_attributes=True)
+
+    @router.delete("/watchlist/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def remove_from_watchlist(entry_id: str, user: User = require_auth, db: Session = Depends(session_dep)) -> None:
+        try:
+            watchlist_svc.remove_entry(db, user_id=user.id, entry_id=entry_id)
+        except watchlist_svc.WatchlistEntryNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "not found") from exc
+
+    @router.get("/config", response_model=_ConfigOut)
+    def get_config(user: User = require_auth, db: Session = Depends(session_dep)) -> _ConfigOut:
+        cfg = config_svc.get_config(db, user_id=user.id)
+        return _ConfigOut(
+            report_length=cfg.report_length,
+            enabled_section_ids=list(cfg.enabled_section_ids),
+            custom_sections=list(cfg.custom_sections),
+        )
+
+    @router.put("/config", response_model=_ConfigOut)
+    def put_config(payload: _ConfigIn, user: User = require_auth, db: Session = Depends(session_dep)) -> _ConfigOut:
+        try:
+            cfg = config_svc.update_config(
+                db,
+                user_id=user.id,
+                report_length=payload.report_length,
+                enabled_section_ids=list(payload.enabled_section_ids),
+                custom_sections=[section.model_dump() for section in payload.custom_sections],
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        return _ConfigOut(
+            report_length=cfg.report_length,
+            enabled_section_ids=list(cfg.enabled_section_ids),
+            custom_sections=list(cfg.custom_sections),
+        )
+
+    @router.get("/schedules", response_model=_ScheduleListOut)
+    def list_schedules(user: User = require_auth, db: Session = Depends(session_dep)) -> _ScheduleListOut:
+        items = schedules_svc.list_schedules(db, user_id=user.id)
+        return _ScheduleListOut(schedules=[_ScheduleOut(**item.__dict__) for item in items])
+
+    @router.post("/schedules", status_code=status.HTTP_201_CREATED, response_model=_ScheduleOut)
+    def create_schedule(
+        payload: _ScheduleIn,
+        user: User = require_auth,
+        db: Session = Depends(session_dep),
+        scheduler=Depends(_scheduler_dep),
+    ) -> _ScheduleOut:
+        try:
+            dto = schedules_svc.create_schedule(
+                db,
+                user_id=user.id,
+                time=payload.time,
+                timezone=payload.timezone,
+                days_of_week=list(payload.days_of_week),
+                label=payload.label,
+                scheduler=scheduler,
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        return _ScheduleOut(**dto.__dict__)
+
+    @router.put("/schedules/{schedule_id}", response_model=_ScheduleOut)
+    def update_schedule(
+        schedule_id: str,
+        payload: _ScheduleUpdateIn,
+        user: User = require_auth,
+        db: Session = Depends(session_dep),
+        scheduler=Depends(_scheduler_dep),
+    ) -> _ScheduleOut:
+        try:
+            dto = schedules_svc.update_schedule(
+                db,
+                user_id=user.id,
+                schedule_id=schedule_id,
+                time=payload.time,
+                timezone=payload.timezone,
+                days_of_week=list(payload.days_of_week),
+                label=payload.label,
+                is_enabled=payload.is_enabled,
+                scheduler=scheduler,
+            )
+        except schedules_svc.ScheduleNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "schedule not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        return _ScheduleOut(**dto.__dict__)
+
+    @router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_schedule(
+        schedule_id: str,
+        user: User = require_auth,
+        db: Session = Depends(session_dep),
+        scheduler=Depends(_scheduler_dep),
+    ) -> None:
+        try:
+            schedules_svc.delete_schedule(db, user_id=user.id, schedule_id=schedule_id, scheduler=scheduler)
+        except schedules_svc.ScheduleNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "schedule not found") from exc
+
+    @router.post("/report")
+    async def generate_report(
+        payload: _ReportIn,
+        user: User = require_auth,
+        db: Session = Depends(session_dep),
+        runner=Depends(_report_runner_dep),
+        store=Depends(_report_store_dep),
+    ) -> StreamingResponse:
+        async def gen():
+            async for event in eu_runner.run_on_demand(
+                session=db,
+                user_id=user.id,
+                ticker=payload.ticker,
+                report_runner=runner,
+                report_store=store,
+            ):
+                yield f"data: {json.dumps(to_wire(event))}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @router.get("/reports", response_model=_ReportsListOut)
+    def list_recent_reports(
+        limit: int = 5,
+        user: User = require_auth,
+        db: Session = Depends(session_dep),
+    ) -> _ReportsListOut:
+        limit = max(1, min(limit, 200))
+        rows = (
+            db.query(Report)
+            .filter_by(user_id=user.id, department="earnings_update")
+            .order_by(Report.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return _ReportsListOut(
+            reports=[
+                _RecentReportOut(
+                    id=row.id,
+                    title=row.title,
+                    subject=row.subject,
+                    report_type=row.report_type,
+                    created_at=row.created_at.isoformat(),
+                )
+                for row in rows
+            ]
+        )
+
+    return router
 ```
 
-- [ ] **Step 4: Run the tests**
+- [ ] **Step 2: Register the router**
 
-Run: `uv run pytest packages/server/tests/routes/departments/test_earnings_update_report.py -v`
-Expected: PASS (3 tests).
+In `packages/server/src/openlia_server/app.py`, where routers are included:
 
-- [ ] **Step 5: Commit**
+```python
+from openlia_server.routes.departments.earnings_update import build_earnings_update_router
+
+app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
+```
+
+### Task 11: Server — Watchlist, config, and schedule route tests
+
+Write and run the route tests originally scoped to Tasks 10-12:
+
+- `packages/server/tests/routes/departments/test_earnings_update_watchlist.py`
+- `packages/server/tests/routes/departments/test_earnings_update_config.py`
+- `packages/server/tests/routes/departments/test_earnings_update_schedules.py`
+
+Acceptance coverage:
+
+- Watchlist `GET/POST/DELETE` is user-scoped and handles duplicate / unknown ticker errors.
+- Config `GET/PUT` returns defaults, persists per user, and validates report length/custom section titles.
+- Schedule `GET/POST/PUT/DELETE` is user-scoped, validates time/timezone/days, and calls scheduler hot-reload methods.
+
+### Task 12: Server — Report SSE route + recent reports tests
+
+Write and run `packages/server/tests/routes/departments/test_earnings_update_report.py`.
+
+Acceptance coverage:
+
+- `POST /departments/earnings-update/report` rejects empty tickers.
+- The route streams `to_wire(event)` payloads as SSE `data: ...\n\n` chunks.
+- `ReportRequest.length` maps EU config values (`concise`/`normal`/`elaborative`) to runtime values (`brief`/`standard`/`long`) inside `eu_runner.run_on_demand`, not by changing Plan 5.
+- `GET /departments/earnings-update/reports?limit=N` returns only the current user's `department="earnings_update"` reports.
+
+### Task 13: Server — Route factory commit
 
 ```bash
 git add packages/server/src/openlia_server/routes/departments/earnings_update.py \
+        packages/server/src/openlia_server/app.py \
+        packages/server/tests/routes/departments/test_earnings_update_watchlist.py \
+        packages/server/tests/routes/departments/test_earnings_update_config.py \
+        packages/server/tests/routes/departments/test_earnings_update_schedules.py \
         packages/server/tests/routes/departments/test_earnings_update_report.py
-git commit -m "feat(server): EU on-demand SSE report endpoint + recent reports list"
+git commit -m "feat(server): add earnings update department routes"
 ```
-
----
 
 ### Task 14: Server — Wire real `EuScanPlannerImpl` into `build_scheduler_service`
 

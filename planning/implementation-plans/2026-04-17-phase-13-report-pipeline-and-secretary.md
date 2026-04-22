@@ -1556,7 +1556,7 @@ from sqlalchemy.orm import Session
 
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import validate_report_payload
-from openlia_server.db.models import Report
+from openlia_server.db.models.content import Report
 
 
 class ReportNotFoundError(LookupError):
@@ -1914,16 +1914,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from openlia_server.auth import current_user, CurrentUser
-from openlia_server.db.session import get_session
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.db.models.auth import User
+from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services.report_export import export_report_pdf
 from openlia_server.services.report_store import (
     ReportNotFoundError,
     get_report,
 )
-
-
-router = APIRouter(prefix="/reports", tags=["reports"])
 
 
 def _html_shell(title: str, body: str) -> str:
@@ -1956,43 +1954,49 @@ def _schema_to_basic_html(schema: dict) -> str:
     return "".join(body)
 
 
-@router.get("/{report_id}")
-async def read_report(
-    report_id: str,
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> dict:
-    try:
-        schema = get_report(session, report_id=report_id, user_id=user.id)
-    except ReportNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
-    return {"schema": schema.model_dump(mode="json")}
+def build_reports_router(*, db_session_factory, mode: str) -> APIRouter:
+    router = APIRouter(prefix="/reports", tags=["reports"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
+    @router.get("/{report_id}")
+    async def read_report(
+        report_id: str,
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> dict:
+        try:
+            schema = get_report(session, report_id=report_id, user_id=user.id)
+        except ReportNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
+        return {"schema": schema.model_dump(mode="json")}
 
-@router.post("/{report_id}/export/pdf")
-async def export_report_pdf_route(
-    report_id: str,
-    request: Request,
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> Response:
-    try:
-        schema = get_report(session, report_id=report_id, user_id=user.id)
-    except ReportNotFoundError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
-    payload = schema.model_dump(mode="json")
-    html = _html_shell(
-        title=payload["cover"].get("title", "Report"),
-        body=_schema_to_basic_html(payload),
-    )
-    launcher = request.app.state.browser_launcher
-    pdf = await export_report_pdf(launcher, html)
-    filename = f"report-{report_id}.pdf"
-    return Response(
-        content=pdf,
-        media_type="application/pdf",
-        headers={"content-disposition": f'attachment; filename="{filename}"'},
-    )
+    @router.post("/{report_id}/export/pdf")
+    async def export_report_pdf_route(
+        report_id: str,
+        request: Request,
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> Response:
+        try:
+            schema = get_report(session, report_id=report_id, user_id=user.id)
+        except ReportNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
+        payload = schema.model_dump(mode="json")
+        html = _html_shell(
+            title=payload["cover"].get("title", "Report"),
+            body=_schema_to_basic_html(payload),
+        )
+        launcher = request.app.state.browser_launcher
+        pdf = await export_report_pdf(launcher, html)
+        filename = f"report-{report_id}.pdf"
+        return Response(
+            content=pdf,
+            media_type="application/pdf",
+            headers={"content-disposition": f'attachment; filename="{filename}"'},
+        )
+
+    return router
 ```
 
 - [ ] **Step 4: Mount the router in `app.py`**
@@ -2000,8 +2004,8 @@ async def export_report_pdf_route(
 Locate the route registration block in `packages/server/src/openlia_server/app.py` and add:
 
 ```python
-from openlia_server.routes.reports import router as reports_router
-app.include_router(reports_router)
+from openlia_server.routes.reports import build_reports_router
+app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run the tests and confirm they pass**
@@ -2112,18 +2116,19 @@ Expected: FAIL — route not registered.
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from openlia.llm.runtime.events import to_wire
 from openlia.departments.secretary import SecretaryDepartment
-from openlia_server.auth import current_user, CurrentUser
-from openlia_server.db.session import get_session
-from openlia_server.runtime.chat import ChatRunner, sse_stream
-
-
-router = APIRouter(prefix="/departments/secretary", tags=["secretary"])
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.db.models.auth import User
+from openlia_server.middleware.auth import build_require_auth
+from openlia_server.runtime.chat import ChatRunner
 
 
 class SecretaryChatRequest(BaseModel):
@@ -2131,35 +2136,46 @@ class SecretaryChatRequest(BaseModel):
     session_id: str | None = None
 
 
-@router.post("/chat")
-async def secretary_chat(
-    payload: SecretaryChatRequest,
-    request: Request,
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> StreamingResponse:
-    runner = ChatRunner(
-        department=SecretaryDepartment(),
-        db_session=session,
-        user=user,
-    )
-    stream = runner.run(
-        message=payload.message,
-        session_id=payload.session_id,
-        client_disconnected=request.is_disconnected,
-    )
-    return StreamingResponse(
-        sse_stream(stream),
-        media_type="text/event-stream",
-        headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
-    )
+def build_secretary_router(*, db_session_factory, mode: str) -> APIRouter:
+    router = APIRouter(prefix="/departments/secretary", tags=["secretary"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
+
+    @router.post("/chat")
+    async def secretary_chat(
+        payload: SecretaryChatRequest,
+        request: Request,
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> StreamingResponse:
+        runner = ChatRunner(
+            department=SecretaryDepartment(),
+            db_session=session,
+            user=user,
+        )
+
+        async def stream():
+            async for event in runner.run(
+                message=payload.message,
+                session_id=payload.session_id,
+                client_disconnected=request.is_disconnected,
+            ):
+                yield f"data: {json.dumps(to_wire(event))}\n\n"
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+        )
+
+    return router
 ```
 
 - [ ] **Step 4: Mount the router in `app.py`**
 
 ```python
-from openlia_server.routes.departments.secretary import router as secretary_router
-app.include_router(secretary_router)
+from openlia_server.routes.departments.secretary import build_secretary_router
+app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run the tests and confirm they pass**
