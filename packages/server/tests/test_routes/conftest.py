@@ -80,6 +80,44 @@ def company_client_anon(db_session, monkeypatch):
 
 
 @pytest.fixture
+def seed_admin_roster(db_session, create_tables):
+    import uuid
+    from datetime import UTC, datetime
+
+    from openlia_server.db.models.config import LLMModel, LLMProvider
+
+    provider = LLMProvider(
+        id=str(uuid.uuid4()),
+        kind="openai",
+        label="OpenAI",
+        is_enabled=True,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    db_session.add(provider)
+    db_session.flush()
+
+    tiers = {}
+    for tier in ("thinking", "everyday", "quick"):
+        model = LLMModel(
+            id=str(uuid.uuid4()),
+            provider_id=provider.id,
+            tier=tier,
+            model_ref=f"gpt-4-{tier}",
+            display_name=f"GPT-4 {tier.title()}",
+            is_tier_default=True,
+            is_enabled=True,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        db_session.add(model)
+        tiers[tier] = [model]
+
+    db_session.commit()
+    return tiers
+
+
+@pytest.fixture
 def personal_client(db_session, make_user, monkeypatch):
     from datetime import datetime
 
