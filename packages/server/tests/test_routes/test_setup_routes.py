@@ -212,6 +212,35 @@ def test_access_control_rejects_personal_mode(wizard_personal_client: TestClient
 
 
 # ---------------------------------------------------------------------------
+# Task 14: /setup/review/* routes
+# ---------------------------------------------------------------------------
+
+
+def test_review_run_kicks_off_task_and_poll_returns_state(
+    wizard_personal_client: TestClient, monkeypatch
+) -> None:
+    from openlia_server.ai_review import store as store_mod
+
+    fresh_store = store_mod.ReviewStore()
+    monkeypatch.setattr(store_mod, "DEFAULT_STORE", fresh_store)
+
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    resp = wizard_personal_client.post("/setup/review/run")
+    assert resp.status_code == 200
+    review_id = resp.json()["review_id"]
+
+    poll = wizard_personal_client.get(f"/setup/review/{review_id}")
+    assert poll.status_code == 200
+    assert poll.json()["state"] in ("running", "complete", "failed")
+
+
+def test_review_poll_unknown_id_returns_404(wizard_personal_client: TestClient) -> None:
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    resp = wizard_personal_client.get("/setup/review/nope")
+    assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # Task 15: POST /setup/finish
 # ---------------------------------------------------------------------------
 
