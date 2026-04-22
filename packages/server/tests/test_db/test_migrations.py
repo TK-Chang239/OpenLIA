@@ -51,6 +51,8 @@ EXPECTED_TABLES = {
     "eu_schedules",
     "job_runs",
     "user_notifications",
+    # --- Plan 11 additions ---
+    "user_prefs",
 }
 
 
