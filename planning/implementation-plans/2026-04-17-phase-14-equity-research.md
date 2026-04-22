@@ -639,7 +639,7 @@ import pytest
 from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
-from openlia_server.db.models import User
+from openlia_server.db.models.auth import User
 from openlia_server.db.models.departments import ErUserConfig
 
 
@@ -760,16 +760,15 @@ from datetime import datetime
 
 from sqlalchemy import (
     CheckConstraint,
-    DateTime,
     ForeignKey,
     Index,
+    JSON,
     String,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from openlia_server.db.models.base import Base
-from openlia_server.db.models.types import JsonDict
+from openlia_server.db.base import Base, UTCDateTime
 
 
 class ErUserConfig(Base):
@@ -797,13 +796,13 @@ class ErUserConfig(Base):
     )
     report_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     report_length: Mapped[str] = mapped_column(String(16), nullable=False)
-    sections_by_mode: Mapped[dict] = mapped_column(JsonDict, nullable=False, default=dict)
-    custom_sections_by_mode: Mapped[dict] = mapped_column(JsonDict, nullable=False, default=dict)
+    sections_by_mode: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    custom_sections_by_mode: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        UTCDateTime(), nullable=False, server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+        UTCDateTime(),
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
@@ -1005,7 +1004,8 @@ CRUD service with defaults. On first `get_config()` for a user, the row is creat
 import pytest
 
 from openlia.reports.frameworks.loader import load_framework
-from openlia_server.db.models import User, ErUserConfig
+from openlia_server.db.models.auth import User
+from openlia_server.db.models.departments import ErUserConfig
 from openlia_server.services.equity_research_config import (
     EquityResearchConfigService,
     ErConfigDTO,
@@ -1120,7 +1120,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from openlia.reports.frameworks.loader import CustomSection, load_framework
-from openlia_server.db.models import ErUserConfig
+from openlia_server.db.models.departments import ErUserConfig
 
 
 ReportMode = Literal["stock_initiation", "stock_update", "sector_research"]
@@ -1397,16 +1397,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from openlia_server.auth import current_user, CurrentUser
-from openlia_server.db.session import get_session
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.db.models.auth import User
+from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services.equity_research_config import (
     CustomSectionDTO,
     EquityResearchConfigService,
-)
-
-
-router = APIRouter(
-    prefix="/departments/equity-research", tags=["equity-research"]
 )
 
 
@@ -1438,45 +1434,49 @@ def _serialize(cfg) -> dict:
     }
 
 
-@router.get("/config")
-def get_config(
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> dict:
-    svc = EquityResearchConfigService(session)
-    return _serialize(svc.get_config(user.id))
+def build_equity_research_router(*, db_session_factory, mode: str) -> APIRouter:
+    router = APIRouter(prefix="/departments/equity-research", tags=["equity-research"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
+    @router.get("/config")
+    def get_config(
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchConfigService(session)
+        return _serialize(svc.get_config(user.id))
 
-@router.put("/config")
-def put_config(
-    patch: ErConfigPatch,
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> dict:
-    svc = EquityResearchConfigService(session)
-    try:
-        updated = svc.update_config(
-            user.id,
-            report_mode=patch.report_mode,  # type: ignore[arg-type]
-            report_length=patch.report_length,  # type: ignore[arg-type]
-            sections_by_mode=patch.sections_by_mode,
-            custom_sections_by_mode=(
-                {
-                    mode: [
-                        CustomSectionDTO(
-                            id=c.id, title=c.title, description=c.description
-                        )
-                        for c in customs
-                    ]
-                    for mode, customs in patch.custom_sections_by_mode.items()
-                }
-                if patch.custom_sections_by_mode is not None
-                else None
-            ),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _serialize(updated)
+    @router.put("/config")
+    def put_config(
+        patch: ErConfigPatch,
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchConfigService(session)
+        try:
+            updated = svc.update_config(
+                user.id,
+                report_mode=patch.report_mode,  # type: ignore[arg-type]
+                report_length=patch.report_length,  # type: ignore[arg-type]
+                sections_by_mode=patch.sections_by_mode,
+                custom_sections_by_mode=(
+                    {
+                        mode: [
+                            CustomSectionDTO(id=c.id, title=c.title, description=c.description)
+                            for c in customs
+                        ]
+                        for mode, customs in patch.custom_sections_by_mode.items()
+                    }
+                    if patch.custom_sections_by_mode is not None
+                    else None
+                ),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _serialize(updated)
+
+    return router
 ```
 
 - [ ] **Step 4: Mount in `app.py`**
@@ -1484,11 +1484,8 @@ def put_config(
 Add to `packages/server/src/openlia_server/app.py`:
 
 ```python
-from openlia_server.routes.departments.equity_research import (
-    router as equity_research_router,
-)
-
-app.include_router(equity_research_router)
+from openlia_server.routes.departments.equity_research import build_equity_research_router
+app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run tests**
@@ -1522,7 +1519,7 @@ Wires `EquityResearchConfigService` + `ReportRunner` (Plan 5) + `ReportStore` (P
 import pytest
 
 from openlia.llm.runtime.events import ReportComplete, ReportStart
-from openlia_server.db.models import User
+from openlia_server.db.models.auth import User
 from openlia_server.services.equity_research_runner import (
     EquityResearchRunner,
     ReportSavedEvent,
@@ -1665,7 +1662,7 @@ from sqlalchemy.orm import Session
 
 from openlia.departments.equity_research import EquityResearchDepartment
 from openlia.llm.runtime.events import Event, ReportComplete
-from openlia.runtime.requests import ReportRequest
+from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.services.equity_research_config import (
     EquityResearchConfigService,
 )
@@ -1858,13 +1855,15 @@ Expected: FAIL — route not yet defined.
 
 - [ ] **Step 3: Extend the router**
 
-Append to `packages/server/src/openlia_server/routes/departments/equity_research.py`:
+Add module-level imports and helpers to `packages/server/src/openlia_server/routes/departments/equity_research.py`:
 
 ```python
+import json
+
 from fastapi import Request
 from fastapi.responses import StreamingResponse
 
-from openlia.runtime.sse import sse_stream
+from openlia.llm.runtime.events import to_wire
 from openlia_server.runtime.factory import build_report_runner
 from openlia_server.services.equity_research_runner import (
     EquityResearchRunner,
@@ -1889,38 +1888,41 @@ def _serialize_event(ev) -> dict:
         data.setdefault("type", type(ev).__name__.lower())
         return data
     return {"type": "unknown"}
+```
 
+Then add the route **inside `build_equity_research_router`**, before the `return router` line (so it closes over `router`, `require_auth`, and `session_dep`):
 
-@router.post("/report")
-async def post_report(
-    payload: ReportPayload,
-    request: Request,
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> StreamingResponse:
-    inner = build_report_runner(session=session)
-    runner = EquityResearchRunner(db_session=session, inner=inner)
+```python
+    @router.post("/report")
+    async def post_report(
+        payload: ReportPayload,
+        request: Request,
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> StreamingResponse:
+        inner = build_report_runner(session=session)
+        runner = EquityResearchRunner(db_session=session, inner=inner)
 
-    async def stream():
+        async def stream():
+            try:
+                async for ev in runner.run_report(
+                    user_id=user.id,
+                    mode=payload.mode,
+                    user_input=payload.user_input,
+                    session_id=payload.session_id,
+                ):
+                    yield f"data: {json.dumps(_serialize_event(ev))}\n\n"
+            except ValueError as exc:
+                yield f"data: {json.dumps({'type': 'report.error', 'message': str(exc)})}\n\n"
+
         try:
-            async for ev in runner.run_report(
-                user_id=user.id,
-                mode=payload.mode,
-                user_input=payload.user_input,
-                session_id=payload.session_id,
-            ):
-                yield _serialize_event(ev)
+            return StreamingResponse(
+                stream(),
+                media_type="text/event-stream",
+                headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+            )
         except ValueError as exc:
-            yield {"type": "report.error", "message": str(exc)}
-
-    try:
-        return StreamingResponse(
-            sse_stream(stream()),
-            media_type="text/event-stream",
-            headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 ```
 
 The `build_report_runner(session)` factory is provided by Plan 5 at `packages/server/src/openlia_server/runtime/factory.py`. If that file does not yet exist, create it as a thin wrapper that instantiates `ReportRunner` with the production provider factory, tool dispatcher, and prompt loader.
@@ -2000,9 +2002,12 @@ Expected: FAIL — route missing.
 
 - [ ] **Step 3: Extend the router**
 
-Append to `packages/server/src/openlia_server/routes/departments/equity_research.py`:
+Add module-level imports and payload model to `packages/server/src/openlia_server/routes/departments/equity_research.py`:
 
 ```python
+import json
+
+from openlia.llm.runtime.events import to_wire
 from openlia.departments.equity_research import EquityResearchDepartment
 from openlia_server.runtime.chat import ChatRunner
 
@@ -2010,30 +2015,36 @@ from openlia_server.runtime.chat import ChatRunner
 class ChatPayload(BaseModel):
     message: str
     session_id: str | None = None
+```
 
+Then add the route **inside `build_equity_research_router`**, before the `return router` line:
 
-@router.post("/chat")
-async def post_chat(
-    payload: ChatPayload,
-    request: Request,
-    user: CurrentUser = Depends(current_user),
-    session: Session = Depends(get_session),
-) -> StreamingResponse:
-    runner = ChatRunner(
-        department=EquityResearchDepartment(),
-        db_session=session,
-        user=user,
-    )
-    stream = runner.run(
-        message=payload.message,
-        session_id=payload.session_id,
-        client_disconnected=request.is_disconnected,
-    )
-    return StreamingResponse(
-        sse_stream(stream),
-        media_type="text/event-stream",
-        headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
-    )
+```python
+    @router.post("/chat")
+    async def post_chat(
+        payload: ChatPayload,
+        request: Request,
+        user: User = require_auth,
+        session: Session = Depends(session_dep),
+    ) -> StreamingResponse:
+        runner = ChatRunner(
+            department=EquityResearchDepartment(),
+            db_session=session,
+            user=user,
+        )
+        async def stream():
+            async for event in runner.run(
+                message=payload.message,
+                session_id=payload.session_id,
+                client_disconnected=request.is_disconnected,
+            ):
+                yield f"data: {json.dumps(to_wire(event))}\n\n"
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+        )
 ```
 
 - [ ] **Step 4: Run tests**

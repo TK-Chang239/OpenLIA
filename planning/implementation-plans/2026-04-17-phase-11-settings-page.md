@@ -14,7 +14,7 @@
 
 **Architecture:**
 
-- **Backend (`packages/server/`).** Each section gets a thin route module: `routes/settings_general.py` (display name, notifications, appearance, language), `routes/settings_email.py` (email change with password confirmation), `routes/settings_models.py` (per-user tier preferences), and `routes/admin_*.py` (invites, users, password-reset requests). Models + data-providers admin CRUD routes already exist in Plans 3/4 under `/settings/models/*` and `/settings/data-providers/*`; Plan 11 only adds the missing endpoints and the admin-only wrapper. A `must_change_password` gate rejects every non-password-change route when the flag is set for the current user.
+- **Backend (`packages/server/`).** Add thin route factories for `routes/settings_general.py` (display name, notifications, appearance, language), `routes/settings_email.py` (email change with password confirmation), and `routes/settings_models.py` (per-user tier preferences under `/settings/admin/llm/preferences`). Do **not** create duplicate `routes/admin_*.py` modules; invite, user, and reset-request management already ships in `routes/admin.py` and should be extended there if Plan 11 needs additional fields. LLM admin CRUD already ships under `/settings/admin/llm/*`; data-provider admin CRUD ships under `/settings/data-providers/*`. A `must_change_password` gate rejects every non-password-change route when the flag is set for the current user.
 - **Frontend (`frontend/src/`).** A `SettingsPage` route renders `SettingsShell` (sidebar + content panel). Each section is a self-contained component with its own Save button, dirty-state tracking via `useDirtyForm`, and inline save feedback. The Admin section uses a horizontal tab bar with five subsections, each a separate component; every list view fetches on mount and re-fetches on mutation. `MustChangePasswordGate` from Plan 9 forces the Account → Change Password section when the flag is set.
 - **Reuse.** Plan 9 provides `ChangePasswordForm`, `AccountProfile`, `SessionsPanel`, `Banner`, `FormField`, `PasswordInput`, `PasswordStrengthMeter`. Plan 10 provides `TierSlotCard` (admin view), `AddProviderForm`, `ProviderRow`, `MCPInfoCard` — these get re-exported from `setup/steps/` and imported from Settings with no duplication.
 
@@ -25,9 +25,9 @@
 **Depends on:**
 
 - Plan 1A (tables `users`, `signup_invites`, `password_reset_requests`, `llm_providers`, `llm_models`, `user_llm_preferences`, `data_providers`, `data_provider_requirement_mapping`, `sessions`, `auth_events`). Note: `user_prefs` is **not** in Plan 1A — this plan creates it in Task 1.
-- Plan 2 (session middleware, `require_auth`, `require_admin`, `argon2_hash`, `argon2_verify`, session revocation).
+- Plan 2 (session middleware, `build_require_auth`, `build_require_admin`, `hash_password`, `verify_password`, session revocation).
 - Plan 3 (data-provider admin CRUD under `/settings/data-providers/*`).
-- Plan 4 (LLM admin CRUD under `/settings/models/*`; `DEPARTMENT_DEFAULT_TIERS`; `resolve()`).
+- Plan 4 (LLM admin CRUD under `/settings/admin/llm/*`; `DEPARTMENT_DEFAULT_TIERS`; `resolve()`).
 - Plan 7 (CLI admin commands — for invite + user workflows; Settings adds the UI).
 - Plan 8 (router, design tokens, `api/client.ts`, `AuthProvider`).
 - Plan 9 (`ChangePasswordForm`, `AccountProfile`, `SessionsPanel`, `Banner`, `FormField`, `PasswordInput`, `PasswordStrengthMeter`, `MustChangePasswordGate`).
@@ -60,16 +60,15 @@ packages/server/src/openlia_server/
 ├── routes/
 │   ├── settings_general.py             # /settings/prefs (display_name, notifications, theme, language)
 │   ├── settings_email.py               # /settings/email (PATCH with current_password)
-│   ├── settings_models.py              # /settings/models/preferences (per-user tier picker)
-│   ├── admin_invites.py                # /admin/invites
-│   ├── admin_users.py                  # /admin/users
-│   └── admin_password_reset_requests.py # /admin/password-reset-requests
+│   └── settings_models.py              # /settings/admin/llm/preferences (per-user tier picker)
 └── services/
-    ├── user_prefs.py                   # CRUD for user_prefs singleton per user
-    ├── admin_invites.py                # create/list/revoke invites
-    ├── admin_users.py                  # list/disable/enable/reset-password
-    └── admin_password_reset.py         # approve/reject + token generation
+    └── user_prefs.py                   # CRUD for user_prefs singleton per user
 ```
+
+Admin invite, user, and reset-request work extends
+`packages/server/src/openlia_server/routes/admin.py` and
+`packages/server/src/openlia_server/services/auth/*`; do not add duplicate
+admin route or service stacks.
 
 ### New backend tests
 
@@ -161,9 +160,9 @@ planning/projectStructure.md            # MODIFY — record Settings structure
 3. **Unsaved-changes guard.** `useDirtyForm` exposes a prompt hook; `SettingsShell` intercepts sidebar navigation when any section is dirty.
 4. **Must-change-password.** `MustChangePasswordGate` (Plan 9) wraps `SettingsPage` so the page redirects to Account → Change Password when the flag is set; all other nav buttons disabled until cleared.
 5. **Admin-only API key writes.** Per user memory + spec non-goal, only admins create/edit/delete LLM or data provider credentials. Non-admin users only pick from the roster.
-6. **One-time secrets.** Invite tokens and temp passwords are shown in a modal with explicit "won't be shown again" copy; never leaked through the list endpoint.
+6. **One-time secrets.** Invite tokens and password-reset approval tokens are shown in a modal with explicit "won't be shown again" copy; never leaked through list endpoints.
 7. **Disable = session revoke.** Disabling a user sets `users.is_disabled=true` + deletes all their sessions + logs an `auth_events` row.
-8. **Password reset approval.** Admin approval generates a one-time token (24h expiry) and shows the reset link exactly once.
+8. **Password reset approval.** Admin approval generates a one-time token (24h expiry) and shows the token exactly once.
 9. **TDD every task.** Failing test → verify fail → implementation → verify pass → commit.
 10. **No placeholders.** Every code block complete.
 11. **Design tokens only.** `[--color-*]` classes, no raw hex.
@@ -186,14 +185,16 @@ planning/projectStructure.md            # MODIFY — record Settings structure
 # packages/server/tests/test_db/test_user_prefs_model.py
 """Verify user_prefs row with defaults, FK to users, and one-to-one constraint."""
 import pytest
+import uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.user import User, UserPrefs
+from openlia_server.db.models.auth import User
+from openlia_server.db.models.config import UserPrefs
 
 
 def test_user_prefs_defaults(create_tables, db_session: Session) -> None:
-    user = User(email="a@b.com", password_hash="x", display_name="A", role="user")
+    user = User(id=str(uuid.uuid4()), email="a@b.com", password_hash="x", display_name="A")
     db_session.add(user)
     db_session.flush()
     prefs = UserPrefs(user_id=user.id)
@@ -209,7 +210,7 @@ def test_user_prefs_defaults(create_tables, db_session: Session) -> None:
 
 
 def test_user_prefs_one_per_user(create_tables, db_session: Session) -> None:
-    user = User(email="a@b.com", password_hash="x", display_name="A", role="user")
+    user = User(id=str(uuid.uuid4()), email="a@b.com", password_hash="x", display_name="A")
     db_session.add(user)
     db_session.flush()
     db_session.add(UserPrefs(user_id=user.id))
@@ -225,17 +226,16 @@ Expected: FAIL — `UserPrefs` not defined.
 
 - [ ] **Step 3: Add the model**
 
-Append to `packages/server/src/openlia_server/db/models/user.py`:
+Append to `packages/server/src/openlia_server/db/models/config.py`:
 
 ```python
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 
 class UserPrefs(Base):
     __tablename__ = "user_prefs"
     __table_args__ = (
-        UniqueConstraint("user_id", name="uq_user_prefs_user_id"),
         CheckConstraint(
             "theme IN ('system','light','dark')", name="ck_user_prefs_theme"
         ),
@@ -246,8 +246,9 @@ class UserPrefs(Base):
         ),
     )
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     theme: Mapped[str] = mapped_column(String(16), nullable=False, default="system")
     notify_inapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     notify_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -276,15 +277,13 @@ depends_on = None
 def upgrade() -> None:
     op.create_table(
         "user_prefs",
-        sa.Column("id", sa.Integer, primary_key=True, autoincrement=True),
-        sa.Column("user_id", sa.Integer, sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("theme", sa.String(16), nullable=False, server_default="system"),
         sa.Column("notify_inapp", sa.Boolean, nullable=False, server_default=sa.text("1")),
         sa.Column("notify_email", sa.Boolean, nullable=False, server_default=sa.text("0")),
         sa.Column("display_language", sa.String(8), nullable=False, server_default="en"),
         sa.Column("response_language", sa.String(8), nullable=False, server_default="en"),
         sa.Column("report_language", sa.String(8), nullable=False, server_default="en"),
-        sa.UniqueConstraint("user_id", name="uq_user_prefs_user_id"),
         sa.CheckConstraint("theme IN ('system','light','dark')", name="ck_user_prefs_theme"),
         sa.CheckConstraint(
             "display_language IN ('en','zh-TW') AND response_language IN ('en','zh-TW') "
@@ -306,7 +305,7 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/server/src/openlia_server/db/models/user.py \
+git add packages/server/src/openlia_server/db/models/config.py \
         packages/server/migrations/versions/*add_user_prefs* \
         packages/server/tests/test_db/test_user_prefs_model.py
 git commit -m "feat(db): add user_prefs table for display/notification/language preferences"
@@ -326,14 +325,15 @@ git commit -m "feat(db): add user_prefs table for display/notification/language 
 # packages/server/tests/test_services/test_user_prefs.py
 """Tests for UserPrefsService.get_or_create + update."""
 import pytest
+import uuid
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.user import User
+from openlia_server.db.models.auth import User
 from openlia_server.services import user_prefs as svc
 
 
 def test_get_or_create_creates_defaults(create_tables, db_session: Session) -> None:
-    user = User(email="a@b.com", password_hash="x", display_name="A", role="user")
+    user = User(id=str(uuid.uuid4()), email="a@b.com", password_hash="x", display_name="A")
     db_session.add(user)
     db_session.flush()
 
@@ -343,7 +343,7 @@ def test_get_or_create_creates_defaults(create_tables, db_session: Session) -> N
 
 
 def test_update_persists_partial(create_tables, db_session: Session) -> None:
-    user = User(email="a@b.com", password_hash="x", display_name="A", role="user")
+    user = User(id=str(uuid.uuid4()), email="a@b.com", password_hash="x", display_name="A")
     db_session.add(user)
     db_session.flush()
 
@@ -361,7 +361,7 @@ def test_update_persists_partial(create_tables, db_session: Session) -> None:
 
 
 def test_update_rejects_invalid_theme(create_tables, db_session: Session) -> None:
-    user = User(email="a@b.com", password_hash="x", display_name="A", role="user")
+    user = User(id=str(uuid.uuid4()), email="a@b.com", password_hash="x", display_name="A")
     db_session.add(user)
     db_session.flush()
     svc.get_or_create(db_session, user_id=user.id)
@@ -387,7 +387,7 @@ from typing import Literal
 
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.user import UserPrefs
+from openlia_server.db.models.config import UserPrefs
 
 Theme = Literal["system", "light", "dark"]
 DisplayLang = Literal["en", "zh-TW"]
@@ -398,7 +398,7 @@ _VALID_DISPLAY_LANG = {"en", "zh-TW"}
 _VALID_REPORT_LANG = {"en", "zh-TW", "both"}
 
 
-def get_or_create(db: Session, *, user_id: int) -> UserPrefs:
+def get_or_create(db: Session, *, user_id: str) -> UserPrefs:
     prefs = db.query(UserPrefs).filter_by(user_id=user_id).one_or_none()
     if prefs is None:
         prefs = UserPrefs(user_id=user_id)
@@ -410,7 +410,7 @@ def get_or_create(db: Session, *, user_id: int) -> UserPrefs:
 def update(
     db: Session,
     *,
-    user_id: int,
+    user_id: str,
     theme: str | None = None,
     notify_inapp: bool | None = None,
     notify_email: bool | None = None,
@@ -522,9 +522,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.user import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_auth
+from openlia_server.db.models.auth import User
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import user_prefs as svc
 
 
@@ -560,13 +560,15 @@ def _to_out(user: User, prefs) -> PrefsOut:
     )
 
 
-def build_settings_general_router() -> APIRouter:
+def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/settings", tags=["settings"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/prefs", response_model=PrefsOut)
     def get_prefs(
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_auth),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> PrefsOut:
         prefs = svc.get_or_create(db, user_id=user.id)
         return _to_out(user, prefs)
@@ -574,8 +576,8 @@ def build_settings_general_router() -> APIRouter:
     @router.patch("/prefs", response_model=PrefsOut)
     def patch_prefs(
         payload: PrefsPatchIn,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_auth),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> PrefsOut:
         if payload.display_name is not None:
             user.display_name = payload.display_name
@@ -608,7 +610,7 @@ Add:
 ```python
 from openlia_server.routes.settings_general import build_settings_general_router
 
-app.include_router(build_settings_general_router())
+app.include_router(build_settings_general_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -644,7 +646,7 @@ from fastapi.testclient import TestClient
 
 
 def test_patch_email_success(company_client: TestClient, auth_user, db_session) -> None:
-    from openlia_server.db.models.user import User
+    from openlia_server.db.models.auth import User
 
     resp = company_client.patch(
         "/settings/email",
@@ -700,10 +702,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.user import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_auth
-from openlia_server.security.passwords import argon2_verify
+from openlia_server.db.models.auth import User
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services.auth.passwords import verify_password
 
 
 class EmailChangeIn(BaseModel):
@@ -711,16 +713,18 @@ class EmailChangeIn(BaseModel):
     current_password: str
 
 
-def build_settings_email_router() -> APIRouter:
+def build_settings_email_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/settings", tags=["settings"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     @router.patch("/email")
     def patch_email(
         payload: EmailChangeIn,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_auth),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> dict[str, str]:
-        if not argon2_verify(payload.current_password, user.password_hash):
+        if not verify_password(user.password_hash, payload.current_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail={"code": "invalid_credentials", "message": "Current password is incorrect."},
@@ -742,7 +746,7 @@ def build_settings_email_router() -> APIRouter:
 
 ```python
 from openlia_server.routes.settings_email import build_settings_email_router
-app.include_router(build_settings_email_router())
+app.include_router(build_settings_email_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -761,7 +765,7 @@ git commit -m "feat(settings): add PATCH /settings/email with password confirmat
 
 ---
 
-## Task 5: `/settings/models/preferences` (per-user tier picker)
+## Task 5: `/settings/admin/llm/preferences` (per-user tier picker)
 
 **Files:**
 - Create: `packages/server/src/openlia_server/routes/settings_models.py`
@@ -772,13 +776,13 @@ git commit -m "feat(settings): add PATCH /settings/email with password confirmat
 
 ```python
 # packages/server/tests/test_routes/test_settings_models_routes.py
-"""Tests for /settings/models/preferences."""
+"""Tests for /settings/admin/llm/preferences."""
 import pytest
 from fastapi.testclient import TestClient
 
 
 def test_get_preferences_returns_empty_when_none(company_client: TestClient) -> None:
-    resp = company_client.get("/settings/models/preferences")
+    resp = company_client.get("/settings/admin/llm/preferences")
     assert resp.status_code == 200
     assert resp.json()["preferences"] == {}
 
@@ -786,12 +790,12 @@ def test_get_preferences_returns_empty_when_none(company_client: TestClient) -> 
 def test_put_preference_persists(company_client: TestClient, seed_admin_roster) -> None:
     model = seed_admin_roster["thinking"][0]
     resp = company_client.put(
-        "/settings/models/preferences",
+        "/settings/admin/llm/preferences",
         json={"tier": "thinking", "model_id": model.id},
     )
     assert resp.status_code == 200
 
-    listed = company_client.get("/settings/models/preferences").json()
+    listed = company_client.get("/settings/admin/llm/preferences").json()
     assert listed["preferences"]["thinking"] == model.id
 
 
@@ -800,17 +804,17 @@ def test_delete_preference_falls_back_to_default(
 ) -> None:
     model = seed_admin_roster["thinking"][0]
     company_client.put(
-        "/settings/models/preferences",
+        "/settings/admin/llm/preferences",
         json={"tier": "thinking", "model_id": model.id},
     )
-    resp = company_client.delete("/settings/models/preferences/thinking")
+    resp = company_client.delete("/settings/admin/llm/preferences/thinking")
     assert resp.status_code == 200
-    assert company_client.get("/settings/models/preferences").json()["preferences"] == {}
+    assert company_client.get("/settings/admin/llm/preferences").json()["preferences"] == {}
 
 
 def test_put_preference_rejects_unknown_model(company_client: TestClient) -> None:
     resp = company_client.put(
-        "/settings/models/preferences",
+        "/settings/admin/llm/preferences",
         json={"tier": "thinking", "model_id": "nope"},
     )
     assert resp.status_code == 404
@@ -833,10 +837,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.llm import LLMModel, UserLLMPreference
-from openlia_server.db.models.user import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_auth
+from openlia_server.db.models.config import LLMModel, UserLLMPreference
+from openlia_server.db.models.auth import User
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_auth
 
 
 class PreferenceIn(BaseModel):
@@ -848,13 +852,15 @@ class PreferenceListOut(BaseModel):
     preferences: dict[str, str]
 
 
-def build_settings_models_router() -> APIRouter:
-    router = APIRouter(prefix="/settings/models", tags=["settings"])
+def build_settings_models_router(*, db_session_factory, mode: str) -> APIRouter:
+    router = APIRouter(prefix="/settings/admin/llm", tags=["settings"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/preferences", response_model=PreferenceListOut)
     def list_preferences(
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_auth),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> PreferenceListOut:
         rows = db.query(UserLLMPreference).filter_by(user_id=user.id).all()
         return PreferenceListOut(preferences={row.tier: row.model_id for row in rows})
@@ -862,8 +868,8 @@ def build_settings_models_router() -> APIRouter:
     @router.put("/preferences")
     def put_preference(
         payload: PreferenceIn,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_auth),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> dict[str, bool]:
         model = db.query(LLMModel).filter_by(id=payload.model_id).first()
         if model is None:
@@ -894,8 +900,8 @@ def build_settings_models_router() -> APIRouter:
     @router.delete("/preferences/{tier}")
     def delete_preference(
         tier: str,
-        db: Session = Depends(get_db_session),
-        user: User = Depends(require_auth),
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
     ) -> dict[str, bool]:
         db.query(UserLLMPreference).filter_by(user_id=user.id, tier=tier).delete()
         db.flush()
@@ -908,7 +914,7 @@ def build_settings_models_router() -> APIRouter:
 
 ```python
 from openlia_server.routes.settings_models import build_settings_models_router
-app.include_router(build_settings_models_router())
+app.include_router(build_settings_models_router(db_session_factory=factory, mode=mode))
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -922,929 +928,23 @@ Expected: all pass.
 git add packages/server/src/openlia_server/routes/settings_models.py \
         packages/server/src/openlia_server/app.py \
         packages/server/tests/test_routes/test_settings_models_routes.py
-git commit -m "feat(settings): add /settings/models/preferences for per-user tier picks"
+git commit -m "feat(settings): add /settings/admin/llm/preferences for per-user tier picks"
 ```
 
 ---
 
-## Task 6: Admin invites service
+## Task 6: Extend shipped admin routes only
 
-**Files:**
-- Create: `packages/server/src/openlia_server/services/admin_invites.py`
-- Test: `packages/server/tests/test_services/test_admin_invites.py`
+Plan 2 already ships invite, user, and password-reset administration in `packages/server/src/openlia_server/routes/admin.py` and `packages/server/src/openlia_server/services/auth/*`. Do not create `routes/admin_invites.py`, `routes/admin_users.py`, `routes/admin_password_reset_requests.py`, or `services/admin_*` modules.
 
-- [ ] **Step 1: Write the failing test**
+Required backend work for the Settings Admin UI:
 
-```python
-# packages/server/tests/test_services/test_admin_invites.py
-"""Tests for AdminInvitesService — create, list, revoke."""
-import pytest
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.auth import SignupInvite, User
-from openlia_server.services import admin_invites as svc
-
-
-def test_create_invite_returns_token_once(create_tables, db_session: Session) -> None:
-    admin = User(email="a@b.com", password_hash="x", display_name="A", role="admin")
-    db_session.add(admin)
-    db_session.flush()
-
-    invite, token = svc.create_invite(
-        db_session, created_by_user_id=admin.id, label="Team onboarding", max_uses=5
-    )
-    assert len(token) >= 32
-    assert invite.label == "Team onboarding"
-    assert invite.max_uses == 5
-    assert invite.token_hash != token  # hashed
-
-
-def test_list_invites_returns_with_status(create_tables, db_session: Session) -> None:
-    admin = User(email="a@b.com", password_hash="x", display_name="A", role="admin")
-    db_session.add(admin)
-    db_session.flush()
-
-    svc.create_invite(db_session, created_by_user_id=admin.id, label="a")
-    svc.create_invite(
-        db_session,
-        created_by_user_id=admin.id,
-        label="b",
-        expires_at=datetime.now(timezone.utc) - timedelta(days=1),
-    )
-    rows = svc.list_invites(db_session)
-    statuses = {r.status for r in rows}
-    assert "active" in statuses
-    assert "expired" in statuses
-
-
-def test_revoke_invite_marks_revoked(create_tables, db_session: Session) -> None:
-    admin = User(email="a@b.com", password_hash="x", display_name="A", role="admin")
-    db_session.add(admin)
-    db_session.flush()
-
-    invite, _ = svc.create_invite(db_session, created_by_user_id=admin.id, label="a")
-    svc.revoke_invite(db_session, invite_id=invite.id)
-    fresh = db_session.query(SignupInvite).get(invite.id)
-    assert fresh.revoked_at is not None
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `uv run pytest packages/server/tests/test_services/test_admin_invites.py -v`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement the service**
-
-Create `packages/server/src/openlia_server/services/admin_invites.py`:
-
-```python
-"""Admin invites service — create (with one-time plaintext token), list, revoke."""
-from __future__ import annotations
-
-import hashlib
-import secrets
-from dataclasses import dataclass
-from datetime import datetime, timezone
-
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.auth import SignupInvite
-
-
-@dataclass(slots=True)
-class InviteRow:
-    id: int
-    label: str | None
-    created_at: datetime
-    expires_at: datetime | None
-    use_count: int
-    max_uses: int | None
-    revoked_at: datetime | None
-    status: str  # active | expired | revoked | at_capacity
-
-
-def _hash_token(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def create_invite(
-    db: Session,
-    *,
-    created_by_user_id: int,
-    label: str | None = None,
-    max_uses: int | None = None,
-    expires_at: datetime | None = None,
-) -> tuple[SignupInvite, str]:
-    token = secrets.token_urlsafe(32)
-    invite = SignupInvite(
-        token_hash=_hash_token(token),
-        label=label,
-        max_uses=max_uses,
-        expires_at=expires_at,
-        created_by_user_id=created_by_user_id,
-    )
-    db.add(invite)
-    db.flush()
-    return invite, token
-
-
-def _status_for(invite: SignupInvite) -> str:
-    if invite.revoked_at is not None:
-        return "revoked"
-    if invite.expires_at is not None and invite.expires_at.replace(tzinfo=timezone.utc) < datetime.now(
-        timezone.utc
-    ):
-        return "expired"
-    if invite.max_uses is not None and invite.use_count >= invite.max_uses:
-        return "at_capacity"
-    return "active"
-
-
-def list_invites(db: Session) -> list[InviteRow]:
-    rows = (
-        db.query(SignupInvite)
-        .order_by(SignupInvite.created_at.desc())
-        .all()
-    )
-    return [
-        InviteRow(
-            id=r.id,
-            label=r.label,
-            created_at=r.created_at,
-            expires_at=r.expires_at,
-            use_count=r.use_count,
-            max_uses=r.max_uses,
-            revoked_at=r.revoked_at,
-            status=_status_for(r),
-        )
-        for r in rows
-    ]
-
-
-def revoke_invite(db: Session, *, invite_id: int) -> None:
-    invite = db.query(SignupInvite).get(invite_id)
-    if invite is None:
-        return
-    if invite.revoked_at is None:
-        invite.revoked_at = datetime.now(timezone.utc)
-        db.flush()
-```
-
-- [ ] **Step 4: Run tests to verify they pass**
-
-Run: `uv run pytest packages/server/tests/test_services/test_admin_invites.py -v`
-Expected: all pass.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add packages/server/src/openlia_server/services/admin_invites.py \
-        packages/server/tests/test_services/test_admin_invites.py
-git commit -m "feat(admin): add invites service — create/list/revoke with computed status"
-```
-
----
-
-## Task 7: `/admin/invites` routes
-
-**Files:**
-- Create: `packages/server/src/openlia_server/routes/admin_invites.py`
-- Modify: `packages/server/src/openlia_server/app.py`
-- Test: `packages/server/tests/test_routes/test_admin_invites_routes.py`
-
-- [ ] **Step 1: Write the failing test**
-
-```python
-# packages/server/tests/test_routes/test_admin_invites_routes.py
-"""Tests for /admin/invites CRUD."""
-import pytest
-from fastapi.testclient import TestClient
-
-
-def test_list_invites_requires_admin(company_client_user: TestClient) -> None:
-    resp = company_client_user.get("/admin/invites")
-    assert resp.status_code == 403
-
-
-def test_create_invite_returns_token_once(company_client_admin: TestClient) -> None:
-    resp = company_client_admin.post(
-        "/admin/invites",
-        json={"label": "team", "max_uses": 5},
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "token" in body
-    assert len(body["token"]) >= 32
-
-    listed = company_client_admin.get("/admin/invites").json()
-    assert len(listed["invites"]) == 1
-    assert "token" not in listed["invites"][0]  # never leaked on list
-
-
-def test_revoke_invite(company_client_admin: TestClient) -> None:
-    created = company_client_admin.post("/admin/invites", json={"label": "a"}).json()
-    resp = company_client_admin.post(f"/admin/invites/{created['id']}/revoke")
-    assert resp.status_code == 200
-
-    listed = company_client_admin.get("/admin/invites").json()
-    assert listed["invites"][0]["status"] == "revoked"
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `uv run pytest packages/server/tests/test_routes/test_admin_invites_routes.py -v`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement the router**
-
-Create `packages/server/src/openlia_server/routes/admin_invites.py`:
-
-```python
-"""Admin routes for invite management."""
-from __future__ import annotations
-
-from datetime import datetime
-
-from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.user import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_admin
-from openlia_server.services import admin_invites as svc
-
-
-class InviteCreateIn(BaseModel):
-    label: str | None = Field(default=None, max_length=128)
-    max_uses: int | None = Field(default=None, ge=1)
-    expires_at: datetime | None = None
-
-
-class InviteOut(BaseModel):
-    id: int
-    label: str | None
-    created_at: datetime
-    expires_at: datetime | None
-    use_count: int
-    max_uses: int | None
-    revoked_at: datetime | None
-    status: str
-
-
-class InviteListOut(BaseModel):
-    invites: list[InviteOut]
-
-
-class InviteCreateOut(BaseModel):
-    id: int
-    token: str
-    status: str
-
-
-def build_admin_invites_router() -> APIRouter:
-    router = APIRouter(prefix="/admin/invites", tags=["admin"])
-
-    @router.get("", response_model=InviteListOut)
-    def list_invites(
-        db: Session = Depends(get_db_session),
-        _: User = Depends(require_admin),
-    ) -> InviteListOut:
-        rows = svc.list_invites(db)
-        return InviteListOut(
-            invites=[
-                InviteOut(
-                    id=r.id,
-                    label=r.label,
-                    created_at=r.created_at,
-                    expires_at=r.expires_at,
-                    use_count=r.use_count,
-                    max_uses=r.max_uses,
-                    revoked_at=r.revoked_at,
-                    status=r.status,
-                )
-                for r in rows
-            ]
-        )
-
-    @router.post("", response_model=InviteCreateOut)
-    def create_invite(
-        payload: InviteCreateIn,
-        db: Session = Depends(get_db_session),
-        admin: User = Depends(require_admin),
-    ) -> InviteCreateOut:
-        invite, token = svc.create_invite(
-            db,
-            created_by_user_id=admin.id,
-            label=payload.label,
-            max_uses=payload.max_uses,
-            expires_at=payload.expires_at,
-        )
-        return InviteCreateOut(id=invite.id, token=token, status="active")
-
-    @router.post("/{invite_id}/revoke")
-    def revoke_invite(
-        invite_id: int,
-        db: Session = Depends(get_db_session),
-        _: User = Depends(require_admin),
-    ) -> dict[str, bool]:
-        svc.revoke_invite(db, invite_id=invite_id)
-        return {"ok": True}
-
-    return router
-```
-
-- [ ] **Step 4: Wire into `app.py`**
-
-```python
-from openlia_server.routes.admin_invites import build_admin_invites_router
-app.include_router(build_admin_invites_router())
-```
-
-- [ ] **Step 5: Run tests to verify they pass**
-
-Run: `uv run pytest packages/server/tests/test_routes/test_admin_invites_routes.py -v`
-Expected: all pass.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/server/src/openlia_server/routes/admin_invites.py \
-        packages/server/src/openlia_server/app.py \
-        packages/server/tests/test_routes/test_admin_invites_routes.py
-git commit -m "feat(admin): add /admin/invites CRUD routes (token shown once)"
-```
-
----
-
-## Task 8: Admin users service + routes
-
-**Files:**
-- Create: `packages/server/src/openlia_server/services/admin_users.py`
-- Create: `packages/server/src/openlia_server/routes/admin_users.py`
-- Modify: `packages/server/src/openlia_server/app.py`
-- Test: `packages/server/tests/test_services/test_admin_users.py`
-- Test: `packages/server/tests/test_routes/test_admin_users_routes.py`
-
-- [ ] **Step 1: Write the failing service test**
-
-```python
-# packages/server/tests/test_services/test_admin_users.py
-"""Tests for AdminUsersService."""
-import pytest
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.auth import Session as DBSession
-from openlia_server.db.models.user import User
-from openlia_server.services import admin_users as svc
-
-
-def test_disable_user_revokes_sessions(create_tables, db_session: Session, make_user, make_session) -> None:
-    user = make_user(email="u@x.com")
-    make_session(user_id=user.id)
-    make_session(user_id=user.id)
-
-    svc.disable_user(db_session, user_id=user.id, admin_id=1)
-
-    user_fresh = db_session.query(User).get(user.id)
-    assert user_fresh.is_disabled is True
-    assert db_session.query(DBSession).filter_by(user_id=user.id).count() == 0
-
-
-def test_reset_password_sets_must_change_flag(create_tables, db_session: Session, make_user) -> None:
-    user = make_user(email="u@x.com")
-    temp = svc.admin_reset_password(db_session, user_id=user.id, admin_id=1)
-    assert len(temp) >= 12
-
-    user_fresh = db_session.query(User).get(user.id)
-    assert user_fresh.must_change_password is True
-
-
-def test_cannot_disable_self(create_tables, db_session: Session, make_user) -> None:
-    user = make_user(email="u@x.com")
-    with pytest.raises(svc.CannotDisableSelfError):
-        svc.disable_user(db_session, user_id=user.id, admin_id=user.id)
-```
-
-- [ ] **Step 2: Run tests to verify they fail**
-
-Run: `uv run pytest packages/server/tests/test_services/test_admin_users.py -v`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement the service**
-
-Create `packages/server/src/openlia_server/services/admin_users.py`:
-
-```python
-"""Admin users service — disable/enable/reset-password."""
-from __future__ import annotations
-
-import secrets
-import string
-from datetime import datetime, timezone
-
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.auth import AuthEvent, Session as DBSession
-from openlia_server.db.models.user import User
-from openlia_server.security.passwords import argon2_hash
-
-
-class CannotDisableSelfError(Exception):
-    pass
-
-
-def list_users(db: Session) -> list[User]:
-    return db.query(User).order_by(User.created_at.desc()).all()
-
-
-def disable_user(db: Session, *, user_id: int, admin_id: int) -> None:
-    if user_id == admin_id:
-        raise CannotDisableSelfError()
-    user = db.query(User).get(user_id)
-    if user is None:
-        return
-    user.is_disabled = True
-    db.query(DBSession).filter_by(user_id=user_id).delete()
-    db.add(AuthEvent(user_id=user_id, event_type="user_disabled", actor_user_id=admin_id))
-    db.flush()
-
-
-def enable_user(db: Session, *, user_id: int, admin_id: int) -> None:
-    user = db.query(User).get(user_id)
-    if user is None:
-        return
-    user.is_disabled = False
-    db.add(AuthEvent(user_id=user_id, event_type="user_enabled", actor_user_id=admin_id))
-    db.flush()
-
-
-def _generate_temp_password() -> str:
-    alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
-    return "".join(secrets.choice(alphabet) for _ in range(16))
-
-
-def admin_reset_password(db: Session, *, user_id: int, admin_id: int) -> str:
-    user = db.query(User).get(user_id)
-    if user is None:
-        raise ValueError("unknown user_id")
-    temp = _generate_temp_password()
-    user.password_hash = argon2_hash(temp)
-    user.must_change_password = True
-    db.query(DBSession).filter_by(user_id=user_id).delete()
-    db.add(AuthEvent(user_id=user_id, event_type="admin_password_reset", actor_user_id=admin_id))
-    db.flush()
-    return temp
-```
-
-- [ ] **Step 4: Run service tests to verify they pass**
-
-Run: `uv run pytest packages/server/tests/test_services/test_admin_users.py -v`
-Expected: all pass.
-
-- [ ] **Step 5: Write the route test**
-
-```python
-# packages/server/tests/test_routes/test_admin_users_routes.py
-import pytest
-from fastapi.testclient import TestClient
-
-
-def test_list_users_requires_admin(company_client_user: TestClient) -> None:
-    resp = company_client_user.get("/admin/users")
-    assert resp.status_code == 403
-
-
-def test_list_users(company_client_admin: TestClient, make_user) -> None:
-    make_user(email="x@y.com")
-    resp = company_client_admin.get("/admin/users")
-    assert resp.status_code == 200
-    emails = [u["email"] for u in resp.json()["users"]]
-    assert "x@y.com" in emails
-
-
-def test_disable_user(company_client_admin: TestClient, make_user) -> None:
-    user = make_user(email="to-disable@x.com")
-    resp = company_client_admin.post(f"/admin/users/{user.id}/disable")
-    assert resp.status_code == 200
-
-
-def test_reset_password_returns_temp(company_client_admin: TestClient, make_user) -> None:
-    user = make_user(email="needs-reset@x.com")
-    resp = company_client_admin.post(f"/admin/users/{user.id}/reset-password")
-    assert resp.status_code == 200
-    assert len(resp.json()["temp_password"]) >= 12
-
-
-def test_cannot_disable_self(company_client_admin: TestClient, admin_user) -> None:
-    resp = company_client_admin.post(f"/admin/users/{admin_user.id}/disable")
-    assert resp.status_code == 409
-    assert resp.json()["detail"]["code"] == "cannot_disable_self"
-```
-
-- [ ] **Step 6: Run route tests to verify they fail**
-
-Run: `uv run pytest packages/server/tests/test_routes/test_admin_users_routes.py -v`
-Expected: FAIL.
-
-- [ ] **Step 7: Implement the router**
-
-Create `packages/server/src/openlia_server/routes/admin_users.py`:
-
-```python
-"""Admin routes for user list / disable-enable / reset-password."""
-from __future__ import annotations
-
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.user import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_admin
-from openlia_server.services import admin_users as svc
-
-
-class UserOut(BaseModel):
-    id: int
-    email: str
-    display_name: str
-    role: str
-    is_disabled: bool
-    created_at: datetime
-
-
-class UserListOut(BaseModel):
-    users: list[UserOut]
-
-
-class TempPasswordOut(BaseModel):
-    temp_password: str
-
-
-def build_admin_users_router() -> APIRouter:
-    router = APIRouter(prefix="/admin/users", tags=["admin"])
-
-    @router.get("", response_model=UserListOut)
-    def list_users(
-        db: Session = Depends(get_db_session),
-        _: User = Depends(require_admin),
-    ) -> UserListOut:
-        return UserListOut(
-            users=[
-                UserOut(
-                    id=u.id,
-                    email=u.email,
-                    display_name=u.display_name,
-                    role=u.role,
-                    is_disabled=u.is_disabled,
-                    created_at=u.created_at,
-                )
-                for u in svc.list_users(db)
-            ]
-        )
-
-    @router.post("/{user_id}/disable")
-    def disable_user(
-        user_id: int,
-        db: Session = Depends(get_db_session),
-        admin: User = Depends(require_admin),
-    ) -> dict[str, bool]:
-        try:
-            svc.disable_user(db, user_id=user_id, admin_id=admin.id)
-        except svc.CannotDisableSelfError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={"code": "cannot_disable_self", "message": "You cannot disable your own account."},
-            ) from exc
-        return {"ok": True}
-
-    @router.post("/{user_id}/enable")
-    def enable_user(
-        user_id: int,
-        db: Session = Depends(get_db_session),
-        admin: User = Depends(require_admin),
-    ) -> dict[str, bool]:
-        svc.enable_user(db, user_id=user_id, admin_id=admin.id)
-        return {"ok": True}
-
-    @router.post("/{user_id}/reset-password", response_model=TempPasswordOut)
-    def reset_password(
-        user_id: int,
-        db: Session = Depends(get_db_session),
-        admin: User = Depends(require_admin),
-    ) -> TempPasswordOut:
-        temp = svc.admin_reset_password(db, user_id=user_id, admin_id=admin.id)
-        return TempPasswordOut(temp_password=temp)
-
-    return router
-```
-
-- [ ] **Step 8: Wire into `app.py`**
-
-```python
-from openlia_server.routes.admin_users import build_admin_users_router
-app.include_router(build_admin_users_router())
-```
-
-- [ ] **Step 9: Run route tests to verify they pass**
-
-Run: `uv run pytest packages/server/tests/test_routes/test_admin_users_routes.py -v`
-Expected: all pass.
-
-- [ ] **Step 10: Commit**
-
-```bash
-git add packages/server/src/openlia_server/services/admin_users.py \
-        packages/server/src/openlia_server/routes/admin_users.py \
-        packages/server/src/openlia_server/app.py \
-        packages/server/tests/test_services/test_admin_users.py \
-        packages/server/tests/test_routes/test_admin_users_routes.py
-git commit -m "feat(admin): add /admin/users with disable/enable/reset-password"
-```
-
----
-
-## Task 9: Admin password-reset-requests service + routes
-
-**Files:**
-- Create: `packages/server/src/openlia_server/services/admin_password_reset.py`
-- Create: `packages/server/src/openlia_server/routes/admin_password_reset_requests.py`
-- Modify: `packages/server/src/openlia_server/app.py`
-- Test: `packages/server/tests/test_services/test_admin_password_reset.py`
-- Test: `packages/server/tests/test_routes/test_admin_password_reset_routes.py`
-
-- [ ] **Step 1: Write the service test**
-
-```python
-# packages/server/tests/test_services/test_admin_password_reset.py
-import pytest
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.auth import PasswordResetRequest
-from openlia_server.services import admin_password_reset as svc
-
-
-def test_approve_generates_token_and_link(create_tables, db_session: Session, make_user) -> None:
-    user = make_user(email="u@x.com")
-    request = PasswordResetRequest(user_id=user.id, ip_address="127.0.0.1", status="pending")
-    db_session.add(request)
-    db_session.flush()
-
-    token, link = svc.approve_request(db_session, request_id=request.id, admin_id=1)
-    assert len(token) >= 32
-    assert "/reset-password?token=" in link
-
-    fresh = db_session.query(PasswordResetRequest).get(request.id)
-    assert fresh.status == "approved"
-    assert fresh.expires_at is not None
-
-
-def test_reject_request(create_tables, db_session: Session, make_user) -> None:
-    user = make_user(email="u@x.com")
-    request = PasswordResetRequest(user_id=user.id, ip_address="127.0.0.1", status="pending")
-    db_session.add(request)
-    db_session.flush()
-
-    svc.reject_request(db_session, request_id=request.id, admin_id=1)
-    fresh = db_session.query(PasswordResetRequest).get(request.id)
-    assert fresh.status == "rejected"
-```
-
-- [ ] **Step 2: Run to verify it fails**
-
-Run: `uv run pytest packages/server/tests/test_services/test_admin_password_reset.py -v`
-Expected: FAIL.
-
-- [ ] **Step 3: Implement the service**
-
-Create `packages/server/src/openlia_server/services/admin_password_reset.py`:
-
-```python
-"""Admin approval flow for password reset requests."""
-from __future__ import annotations
-
-import hashlib
-import secrets
-from datetime import datetime, timedelta, timezone
-
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.auth import PasswordResetRequest
-
-
-def _hash(token: str) -> str:
-    return hashlib.sha256(token.encode()).hexdigest()
-
-
-def approve_request(
-    db: Session, *, request_id: int, admin_id: int
-) -> tuple[str, str]:
-    request = db.query(PasswordResetRequest).get(request_id)
-    if request is None:
-        raise ValueError("unknown request_id")
-    if request.status != "pending":
-        raise ValueError(f"request not pending: {request.status}")
-
-    token = secrets.token_urlsafe(32)
-    request.token_hash = _hash(token)
-    request.status = "approved"
-    request.approved_by_user_id = admin_id
-    request.approved_at = datetime.now(timezone.utc)
-    request.expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    db.flush()
-
-    return token, f"/reset-password?token={token}"
-
-
-def reject_request(db: Session, *, request_id: int, admin_id: int) -> None:
-    request = db.query(PasswordResetRequest).get(request_id)
-    if request is None:
-        raise ValueError("unknown request_id")
-    request.status = "rejected"
-    request.approved_by_user_id = admin_id
-    request.approved_at = datetime.now(timezone.utc)
-    db.flush()
-
-
-def list_requests(db: Session, *, status_filter: str | None = None) -> list[PasswordResetRequest]:
-    q = db.query(PasswordResetRequest).order_by(PasswordResetRequest.requested_at.desc())
-    if status_filter is not None:
-        q = q.filter_by(status=status_filter)
-    return q.all()
-```
-
-- [ ] **Step 4: Write the route test**
-
-```python
-# packages/server/tests/test_routes/test_admin_password_reset_routes.py
-import pytest
-from fastapi.testclient import TestClient
-
-
-def test_list_reset_requests_requires_admin(company_client_user: TestClient) -> None:
-    resp = company_client_user.get("/admin/password-reset-requests")
-    assert resp.status_code == 403
-
-
-def test_approve_reset_request_returns_link_once(
-    company_client_admin: TestClient, make_reset_request
-) -> None:
-    req = make_reset_request()
-    resp = company_client_admin.post(f"/admin/password-reset-requests/{req.id}/approve")
-    assert resp.status_code == 200
-    assert "reset_link" in resp.json()
-    assert len(resp.json()["token"]) >= 32
-
-
-def test_reject_reset_request(
-    company_client_admin: TestClient, make_reset_request
-) -> None:
-    req = make_reset_request()
-    resp = company_client_admin.post(f"/admin/password-reset-requests/{req.id}/reject")
-    assert resp.status_code == 200
-
-
-def test_list_filters_by_status(company_client_admin: TestClient, make_reset_request) -> None:
-    make_reset_request()
-    make_reset_request()
-    resp = company_client_admin.get("/admin/password-reset-requests?status=pending")
-    assert resp.status_code == 200
-    assert all(r["status"] == "pending" for r in resp.json()["requests"])
-```
-
-- [ ] **Step 5: Run tests to verify they fail**
-
-Run: `uv run pytest packages/server/tests/test_routes/test_admin_password_reset_routes.py -v`
-Expected: FAIL.
-
-- [ ] **Step 6: Implement the router**
-
-Create `packages/server/src/openlia_server/routes/admin_password_reset_requests.py`:
-
-```python
-"""Admin routes for password-reset-request approval flow."""
-from __future__ import annotations
-
-from datetime import datetime
-
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
-
-from openlia_server.db.models.user import User
-from openlia_server.db.session import get_db_session
-from openlia_server.middleware.auth import require_admin
-from openlia_server.services import admin_password_reset as svc
-
-
-class RequestRowOut(BaseModel):
-    id: int
-    user_id: int
-    user_email: str
-    requested_at: datetime
-    ip_address: str | None
-    status: str
-    expires_at: datetime | None
-
-
-class RequestListOut(BaseModel):
-    requests: list[RequestRowOut]
-
-
-class ApprovalOut(BaseModel):
-    token: str
-    reset_link: str
-    expires_at: datetime
-
-
-def build_admin_password_reset_router() -> APIRouter:
-    router = APIRouter(prefix="/admin/password-reset-requests", tags=["admin"])
-
-    @router.get("", response_model=RequestListOut)
-    def list_requests(
-        status_filter: str | None = None,
-        db: Session = Depends(get_db_session),
-        _: User = Depends(require_admin),
-    ) -> RequestListOut:
-        rows = svc.list_requests(db, status_filter=status_filter)
-        return RequestListOut(
-            requests=[
-                RequestRowOut(
-                    id=r.id,
-                    user_id=r.user_id,
-                    user_email=r.user.email,
-                    requested_at=r.requested_at,
-                    ip_address=r.ip_address,
-                    status=r.status,
-                    expires_at=r.expires_at,
-                )
-                for r in rows
-            ]
-        )
-
-    @router.post("/{request_id}/approve", response_model=ApprovalOut)
-    def approve(
-        request_id: int,
-        db: Session = Depends(get_db_session),
-        admin: User = Depends(require_admin),
-    ) -> ApprovalOut:
-        try:
-            token, link = svc.approve_request(db, request_id=request_id, admin_id=admin.id)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={"code": "not_pending", "message": str(exc)},
-            ) from exc
-        row = db.query(svc.PasswordResetRequest).get(request_id)
-        return ApprovalOut(token=token, reset_link=link, expires_at=row.expires_at)
-
-    @router.post("/{request_id}/reject")
-    def reject(
-        request_id: int,
-        db: Session = Depends(get_db_session),
-        admin: User = Depends(require_admin),
-    ) -> dict[str, bool]:
-        try:
-            svc.reject_request(db, request_id=request_id, admin_id=admin.id)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={"code": "not_found", "message": str(exc)},
-            ) from exc
-        return {"ok": True}
-
-    return router
-```
-
-- [ ] **Step 7: Wire into `app.py`**
-
-```python
-from openlia_server.routes.admin_password_reset_requests import build_admin_password_reset_router
-app.include_router(build_admin_password_reset_router())
-```
-
-- [ ] **Step 8: Run tests to verify they pass**
-
-Run: `uv run pytest packages/server/tests/test_routes/test_admin_password_reset_routes.py -v`
-Expected: all pass.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add packages/server/src/openlia_server/services/admin_password_reset.py \
-        packages/server/src/openlia_server/routes/admin_password_reset_requests.py \
-        packages/server/src/openlia_server/app.py \
-        packages/server/tests/test_services/test_admin_password_reset.py \
-        packages/server/tests/test_routes/test_admin_password_reset_routes.py
-git commit -m "feat(admin): add /admin/password-reset-requests approve/reject flow"
-```
-
----
+- Reuse `build_admin_router(db_session_factory=...)`, mounted by `create_app()` in company mode.
+- Keep the existing shipped paths: `GET/POST /admin/invites`, `POST /admin/invites/{invite_id}/revoke`, `GET /admin/users`, `POST /admin/users/{user_id}/disable|enable|reset-password`, `GET /admin/password-reset-requests`, and `POST /admin/password-reset-requests/{request_id}/approve|reject`.
+- Keep all path params typed as UUID `str`.
+- Import `User`, `SignupInvite`, and `PasswordResetRequest` from `openlia_server.db.models.auth`.
+- Use `build_require_admin(...)` and `make_session_dependency(...)`; no bare auth or DB helpers.
+- Extend `routes/admin.py` in place only if the frontend needs additional response fields.
 
 ### Task 10: Typed API clients for settings + admin
 
@@ -1903,7 +1003,7 @@ describe('settings api', () => {
     });
   });
 
-  it('GET /settings/models/preferences returns list', async () => {
+  it('GET /settings/admin/llm/preferences returns list', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ items: [{ tier: 'thinking', provider_id: 'openai', model_id: 'gpt-4o' }] }),
@@ -1912,19 +1012,19 @@ describe('settings api', () => {
     expect(prefs.items[0].tier).toBe('thinking');
   });
 
-  it('PUT /settings/models/preferences/{tier}', async () => {
+  it('PUT /settings/admin/llm/preferences/{tier}', async () => {
     (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
     await putModelPreference('quick', { provider_id: 'openai', model_id: 'gpt-4o-mini' });
     const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/models/preferences/quick');
+    expect(url).toBe('/api/settings/admin/llm/preferences/quick');
     expect(init.method).toBe('PUT');
   });
 
-  it('DELETE /settings/models/preferences/{tier}', async () => {
+  it('DELETE /settings/admin/llm/preferences/{tier}', async () => {
     (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
     await deleteModelPreference('quick');
     const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/models/preferences/quick');
+    expect(url).toBe('/api/settings/admin/llm/preferences/quick');
     expect(init.method).toBe('DELETE');
   });
 });
@@ -2010,16 +1110,16 @@ export const updateEmail = (body: EmailUpdateIn) =>
   request<{ ok: true }>('/api/settings/email', { method: 'PATCH', body: JSON.stringify(body) });
 
 export const getModelPreferences = () =>
-  request<{ items: ModelPreference[] }>('/api/settings/models/preferences');
+  request<{ items: ModelPreference[] }>('/api/settings/admin/llm/preferences');
 
 export const putModelPreference = (tier: Tier, body: { provider_id: string; model_id: string }) =>
-  request<{ ok: true }>(`/api/settings/models/preferences/${tier}`, {
+  request<{ ok: true }>(`/api/settings/admin/llm/preferences/${tier}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   });
 
 export const deleteModelPreference = (tier: Tier) =>
-  request<{ ok: true }>(`/api/settings/models/preferences/${tier}`, { method: 'DELETE' });
+  request<{ ok: true }>(`/api/settings/admin/llm/preferences/${tier}`, { method: 'DELETE' });
 ```
 
 - [ ] **Step 4: Implement `admin.ts`**
@@ -2029,40 +1129,37 @@ export const deleteModelPreference = (tier: Tier) =>
 import { ApiError } from './settings';
 
 export interface InviteSummary {
-  id: number;
+  id: string;
   label: string | null;
-  role: 'user' | 'admin';
-  expires_at: string;
-  max_uses: number;
-  used_count: number;
-  status: 'active' | 'expired' | 'revoked' | 'at_capacity';
+  expires_at: string | null;
+  max_uses: number | null;
+  use_count: number;
+  revoked_at: string | null;
   created_at: string;
 }
 
-export interface InviteCreated extends InviteSummary {
+export interface InviteCreated {
+  id: string;
   token: string;
-  invite_link: string;
+  label: string | null;
 }
 
 export interface AdminUserRow {
-  id: number;
+  id: string;
   email: string;
   display_name: string;
-  role: 'user' | 'admin';
-  is_enabled: boolean;
+  is_admin: boolean;
+  is_disabled: boolean;
   must_change_password: boolean;
   last_login_at: string | null;
-  created_at: string;
 }
 
 export interface ResetRequestRow {
-  id: number;
-  user_id: number;
-  user_email: string;
+  id: string;
+  user_id: string;
   requested_at: string;
-  ip_address: string | null;
+  requested_ip: string | null;
   status: 'pending' | 'approved' | 'rejected';
-  expires_at: string | null;
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -2076,45 +1173,46 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     const detail = body.detail ?? {};
     throw new ApiError(r.status, detail.code ?? 'http_error', detail.message ?? `HTTP ${r.status}`);
   }
+  if (r.status === 204) return undefined as T;
   return r.json();
 }
 
-export const listInvites = () => request<{ items: InviteSummary[] }>('/api/admin/invites');
+export const listInvites = () => request<InviteSummary[]>('/api/admin/invites');
 
 export const createInvite = (body: {
-  role: 'user' | 'admin';
   label?: string | null;
-  max_uses: number;
-  expires_in_hours: number;
+  max_uses?: number | null;
+  expires_at?: string | null;
 }) => request<InviteCreated>('/api/admin/invites', { method: 'POST', body: JSON.stringify(body) });
 
-export const revokeInvite = (id: number) =>
-  request<{ ok: true }>(`/api/admin/invites/${id}/revoke`, { method: 'POST' });
+export const revokeInvite = (id: string) =>
+  request<void>(`/api/admin/invites/${id}/revoke`, { method: 'POST' });
 
-export const listAdminUsers = () => request<{ items: AdminUserRow[] }>('/api/admin/users');
+export const listAdminUsers = () => request<AdminUserRow[]>('/api/admin/users');
 
-export const disableUser = (id: number) =>
-  request<{ ok: true }>(`/api/admin/users/${id}/disable`, { method: 'POST' });
+export const disableUser = (id: string) =>
+  request<void>(`/api/admin/users/${id}/disable`, { method: 'POST' });
 
-export const enableUser = (id: number) =>
-  request<{ ok: true }>(`/api/admin/users/${id}/enable`, { method: 'POST' });
+export const enableUser = (id: string) =>
+  request<void>(`/api/admin/users/${id}/enable`, { method: 'POST' });
 
-export const adminResetPassword = (id: number) =>
-  request<{ temp_password: string }>(`/api/admin/users/${id}/reset-password`, { method: 'POST' });
+export const adminResetPassword = (id: string, new_password: string) =>
+  request<void>(`/api/admin/users/${id}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ new_password }),
+  });
 
-export const listResetRequests = (status?: 'pending' | 'approved' | 'rejected') => {
-  const qs = status ? `?status=${status}` : '';
-  return request<{ items: ResetRequestRow[] }>(`/api/admin/password-reset-requests${qs}`);
-};
+export const listResetRequests = () =>
+  request<ResetRequestRow[]>('/api/admin/password-reset-requests');
 
-export const approveResetRequest = (id: number) =>
-  request<{ token: string; reset_link: string; expires_at: string }>(
+export const approveResetRequest = (id: string) =>
+  request<{ reset_token: string }>(
     `/api/admin/password-reset-requests/${id}/approve`,
     { method: 'POST' },
   );
 
-export const rejectResetRequest = (id: number) =>
-  request<{ ok: true }>(`/api/admin/password-reset-requests/${id}/reject`, { method: 'POST' });
+export const rejectResetRequest = (id: string) =>
+  request<void>(`/api/admin/password-reset-requests/${id}/reject`, { method: 'POST' });
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -2356,7 +1454,7 @@ describe('ToggleSwitch', () => {
 
 describe('OneTimeSecretModal', () => {
   it('shows secret and copy button when open', () => {
-    render(<OneTimeSecretModal open={true} title="Invite link" secret="abc123" onClose={() => {}} />);
+    render(<OneTimeSecretModal open={true} title="Invite token" secret="abc123" onClose={() => {}} />);
     expect(screen.getByText('abc123')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /copy/i })).toBeInTheDocument();
   });
@@ -3576,7 +2674,7 @@ git commit -m "feat(settings): add AdminSection tab bar for admin subsections"
 
 ---
 
-### Task 18: InvitesPanel (create + list + revoke + one-time link)
+### Task 18: InvitesPanel (create + list + revoke + one-time token)
 
 **Files:**
 - Create: `frontend/src/components/settings/admin/InvitesPanel.tsx`
@@ -3594,40 +2692,30 @@ import * as adminApi from '../../../../api/admin';
 describe('InvitesPanel', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(adminApi, 'listInvites').mockResolvedValue({
-      items: [
-        {
-          id: 1,
-          label: 'beta users',
-          role: 'user',
-          expires_at: '2026-05-17T00:00:00Z',
-          max_uses: 5,
-          used_count: 1,
-          status: 'active',
-          created_at: '2026-04-17T00:00:00Z',
-        },
-      ],
-    });
+    vi.spyOn(adminApi, 'listInvites').mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        label: 'beta users',
+        expires_at: '2026-05-17T00:00:00Z',
+        max_uses: 5,
+        use_count: 1,
+        revoked_at: null,
+        created_at: '2026-04-17T00:00:00Z',
+      },
+    ]);
   });
 
-  it('renders invite list with status pill', async () => {
+  it('renders invite list with usage count', async () => {
     render(<InvitesPanel />);
     await waitFor(() => screen.getByText(/beta users/i));
-    expect(screen.getByText(/active/i)).toBeInTheDocument();
+    expect(screen.getByText('1 / 5')).toBeInTheDocument();
   });
 
-  it('creates invite and shows one-time link modal', async () => {
+  it('creates invite and shows one-time token modal', async () => {
     vi.spyOn(adminApi, 'createInvite').mockResolvedValue({
-      id: 2,
+      id: '00000000-0000-4000-8000-000000000002',
       label: 'test',
-      role: 'user',
-      expires_at: '2026-05-17T00:00:00Z',
-      max_uses: 1,
-      used_count: 0,
-      status: 'active',
-      created_at: '2026-04-17T00:00:00Z',
       token: 'abc123',
-      invite_link: 'http://localhost:8000/signup?token=abc123',
     });
     render(<InvitesPanel />);
     await waitFor(() => screen.getByText(/beta users/i));
@@ -3635,17 +2723,17 @@ describe('InvitesPanel', () => {
     fireEvent.change(screen.getByLabelText(/label/i), { target: { value: 'test' } });
     fireEvent.click(screen.getByRole('button', { name: /create invite/i }));
     await waitFor(() =>
-      expect(screen.getByText(/http:\/\/localhost:8000\/signup\?token=abc123/)).toBeInTheDocument(),
+      expect(screen.getByText(/abc123/)).toBeInTheDocument(),
     );
   });
 
   it('revokes an invite after confirmation', async () => {
-    const revoke = vi.spyOn(adminApi, 'revokeInvite').mockResolvedValue({ ok: true });
+    const revoke = vi.spyOn(adminApi, 'revokeInvite').mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<InvitesPanel />);
     await waitFor(() => screen.getByText(/beta users/i));
     fireEvent.click(screen.getByRole('button', { name: /revoke/i }));
-    await waitFor(() => expect(revoke).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000001'));
   });
 });
 ```
@@ -3664,29 +2752,21 @@ import { ApiError, createInvite, InviteSummary, listInvites, revokeInvite } from
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
-const STATUS_CLASS: Record<InviteSummary['status'], string> = {
-  active: 'bg-success/10 text-success',
-  expired: 'bg-fg-muted/10 text-fg-muted',
-  revoked: 'bg-danger/10 text-danger',
-  at_capacity: 'bg-warning/10 text-warning',
-};
-
 export function InvitesPanel(): JSX.Element {
   const [items, setItems] = useState<InviteSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [linkModal, setLinkModal] = useState<string | null>(null);
+  const [tokenModal, setTokenModal] = useState<string | null>(null);
 
   const [label, setLabel] = useState('');
-  const [role, setRole] = useState<'user' | 'admin'>('user');
   const [maxUses, setMaxUses] = useState(1);
-  const [expiresInHours, setExpiresInHours] = useState(168);
+  const [expiresAt, setExpiresAt] = useState('');
   const [creating, setCreating] = useState(false);
 
   const refresh = async () => {
     try {
       const r = await listInvites();
-      setItems(r.items);
+      setItems(r);
     } catch (e) {
       setError((e as ApiError).message);
     }
@@ -3700,13 +2780,16 @@ export function InvitesPanel(): JSX.Element {
     setCreating(true);
     setError(null);
     try {
-      const r = await createInvite({ label: label || null, role, max_uses: maxUses, expires_in_hours: expiresInHours });
-      setLinkModal(r.invite_link);
+      const r = await createInvite({
+        label: label || null,
+        max_uses: maxUses,
+        expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
+      });
+      setTokenModal(r.token);
       setShowForm(false);
       setLabel('');
-      setRole('user');
       setMaxUses(1);
-      setExpiresInHours(168);
+      setExpiresAt('');
       await refresh();
     } catch (e) {
       setError((e as ApiError).message);
@@ -3715,7 +2798,7 @@ export function InvitesPanel(): JSX.Element {
     }
   };
 
-  const revoke = async (id: number) => {
+  const revoke = async (id: string) => {
     if (\!window.confirm('Revoke this invite? It will no longer work.')) return;
     try {
       await revokeInvite(id);
@@ -3751,17 +2834,6 @@ export function InvitesPanel(): JSX.Element {
               className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-fg"
             />
           </label>
-          <label className="block text-sm">
-            <span className="block font-medium text-fg">Role</span>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as 'user' | 'admin')}
-              className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-fg"
-            >
-              <option value="user">User</option>
-              <option value="admin">Admin</option>
-            </select>
-          </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm">
               <span className="block font-medium text-fg">Max uses</span>
@@ -3775,13 +2847,11 @@ export function InvitesPanel(): JSX.Element {
               />
             </label>
             <label className="block text-sm">
-              <span className="block font-medium text-fg">Expires in (hours)</span>
+              <span className="block font-medium text-fg">Expires at (optional)</span>
               <input
-                type="number"
-                min={1}
-                max={8760}
-                value={expiresInHours}
-                onChange={(e) => setExpiresInHours(Number(e.target.value))}
+                type="datetime-local"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border bg-surface px-3 py-1.5 text-fg"
               />
             </label>
@@ -3802,7 +2872,6 @@ export function InvitesPanel(): JSX.Element {
           <thead className="bg-surface-alt text-left text-xs uppercase text-fg-muted">
             <tr>
               <th className="px-3 py-2">Label</th>
-              <th className="px-3 py-2">Role</th>
               <th className="px-3 py-2">Uses</th>
               <th className="px-3 py-2">Expires</th>
               <th className="px-3 py-2">Status</th>
@@ -3811,23 +2880,26 @@ export function InvitesPanel(): JSX.Element {
           </thead>
           <tbody>
             {items === null ? (
-              <tr><td colSpan={6} className="px-3 py-4 text-fg-muted">Loading...</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-fg-muted">Loading...</td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={6} className="px-3 py-4 text-fg-muted">No invites yet.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-fg-muted">No invites yet.</td></tr>
             ) : (
               items.map((inv) => (
                 <tr key={inv.id} className="border-t border-border">
                   <td className="px-3 py-2 text-fg">{inv.label ?? '—'}</td>
-                  <td className="px-3 py-2 text-fg">{inv.role}</td>
-                  <td className="px-3 py-2 text-fg">{inv.used_count}/{inv.max_uses}</td>
-                  <td className="px-3 py-2 text-fg-muted">{new Date(inv.expires_at).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-fg">{inv.use_count} / {inv.max_uses ?? 'unlimited'}</td>
+                  <td className="px-3 py-2 text-fg-muted">
+                    {inv.expires_at ? new Date(inv.expires_at).toLocaleString() : 'Never'}
+                  </td>
                   <td className="px-3 py-2">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[inv.status]}`}>
-                      {inv.status.replace('_', ' ')}
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                      inv.revoked_at ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'
+                    }`}>
+                      {inv.revoked_at ? 'Revoked' : 'Active'}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {inv.status === 'active' ? (
+                    {inv.revoked_at === null ? (
                       <button
                         type="button"
                         onClick={() => revoke(inv.id)}
@@ -3845,11 +2917,11 @@ export function InvitesPanel(): JSX.Element {
       </div>
 
       <OneTimeSecretModal
-        open={linkModal \!== null}
-        title="Invite link"
-        secret={linkModal ?? ''}
-        description="Share this link with the invitee. You will not be able to see it again."
-        onClose={() => setLinkModal(null)}
+        open={tokenModal \!== null}
+        title="Invite token"
+        secret={tokenModal ?? ''}
+        description="Share this token through a secure channel. You will not be able to see it again."
+        onClose={() => setTokenModal(null)}
       />
     </div>
   );
@@ -3866,7 +2938,7 @@ Expected: all pass.
 ```bash
 git add frontend/src/components/settings/admin/InvitesPanel.tsx \
         frontend/src/components/settings/admin/__tests__/InvitesPanel.test.tsx
-git commit -m "feat(admin): add InvitesPanel with create/revoke/one-time link"
+git commit -m "feat(admin): add InvitesPanel with create/revoke/one-time token"
 ```
 
 ---
@@ -3889,45 +2961,46 @@ import * as adminApi from '../../../../api/admin';
 describe('UsersPanel', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(adminApi, 'listAdminUsers').mockResolvedValue({
-      items: [
-        { id: 1, email: 'alice@x.io', display_name: 'Alice', role: 'admin', is_enabled: true, must_change_password: false, last_login_at: null, created_at: '2026-04-01T00:00:00Z' },
-        { id: 2, email: 'bob@x.io', display_name: 'Bob', role: 'user', is_enabled: true, must_change_password: false, last_login_at: null, created_at: '2026-04-02T00:00:00Z' },
-      ],
-    });
+    vi.spyOn(adminApi, 'listAdminUsers').mockResolvedValue([
+      { id: '00000000-0000-4000-8000-000000000001', email: 'alice@x.io', display_name: 'Alice', is_admin: true, is_disabled: false, must_change_password: false, last_login_at: null },
+      { id: '00000000-0000-4000-8000-000000000002', email: 'bob@x.io', display_name: 'Bob', is_admin: false, is_disabled: false, must_change_password: false, last_login_at: null },
+    ]);
   });
 
   it('lists users', async () => {
-    render(<UsersPanel currentUserId={1} />);
+    render(<UsersPanel currentUserId="00000000-0000-4000-8000-000000000001" />);
     await waitFor(() => screen.getByText('alice@x.io'));
     expect(screen.getByText('bob@x.io')).toBeInTheDocument();
   });
 
   it('disables a user with confirmation', async () => {
-    const disable = vi.spyOn(adminApi, 'disableUser').mockResolvedValue({ ok: true });
+    const disable = vi.spyOn(adminApi, 'disableUser').mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<UsersPanel currentUserId={1} />);
+    render(<UsersPanel currentUserId="00000000-0000-4000-8000-000000000001" />);
     await waitFor(() => screen.getByText('bob@x.io'));
     const row = screen.getByText('bob@x.io').closest('tr')\!;
     fireEvent.click(row.querySelector('button[data-action="disable"]')\!);
-    await waitFor(() => expect(disable).toHaveBeenCalledWith(2));
+    await waitFor(() => expect(disable).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000002'));
   });
 
   it('blocks disabling self', async () => {
-    render(<UsersPanel currentUserId={1} />);
+    render(<UsersPanel currentUserId="00000000-0000-4000-8000-000000000001" />);
     await waitFor(() => screen.getByText('alice@x.io'));
     const row = screen.getByText('alice@x.io').closest('tr')\!;
     expect(row.querySelector('button[data-action="disable"]')).toBeNull();
   });
 
-  it('shows temporary password from admin reset', async () => {
-    vi.spyOn(adminApi, 'adminResetPassword').mockResolvedValue({ temp_password: 'tmpXYZ123' });
+  it('submits an admin-chosen replacement password', async () => {
+    const reset = vi.spyOn(adminApi, 'adminResetPassword').mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
-    render(<UsersPanel currentUserId={1} />);
+    vi.spyOn(window, 'prompt').mockReturnValue('NewPassw0rd!');
+    render(<UsersPanel currentUserId="00000000-0000-4000-8000-000000000001" />);
     await waitFor(() => screen.getByText('bob@x.io'));
     const row = screen.getByText('bob@x.io').closest('tr')\!;
     fireEvent.click(row.querySelector('button[data-action="reset"]')\!);
-    await waitFor(() => expect(screen.getByText('tmpXYZ123')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(reset).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000002', 'NewPassw0rd!'),
+    );
   });
 });
 ```
@@ -3943,22 +3016,20 @@ Expected: FAIL with "Cannot find module '../UsersPanel'"
 // frontend/src/components/settings/admin/UsersPanel.tsx
 import React, { useEffect, useState } from 'react';
 import { adminResetPassword, AdminUserRow, ApiError, disableUser, enableUser, listAdminUsers } from '../../../api/admin';
-import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
 interface Props {
-  currentUserId: number;
+  currentUserId: string;
 }
 
 export function UsersPanel({ currentUserId }: Props): JSX.Element {
   const [items, setItems] = useState<AdminUserRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tempPw, setTempPw] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
       const r = await listAdminUsers();
-      setItems(r.items);
+      setItems(r);
     } catch (e) {
       setError((e as ApiError).message);
     }
@@ -3967,11 +3038,11 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
   useEffect(() => { refresh(); }, []);
 
   const toggle = async (u: AdminUserRow) => {
-    const action = u.is_enabled ? 'disable' : 'enable';
+    const action = u.is_disabled ? 'enable' : 'disable';
     if (\!window.confirm(`${action === 'disable' ? 'Disable' : 'Enable'} ${u.email}?`)) return;
     try {
-      if (u.is_enabled) await disableUser(u.id);
-      else await enableUser(u.id);
+      if (u.is_disabled) await enableUser(u.id);
+      else await disableUser(u.id);
       await refresh();
     } catch (e) {
       setError((e as ApiError).message);
@@ -3980,9 +3051,10 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
 
   const reset = async (u: AdminUserRow) => {
     if (\!window.confirm(`Reset password for ${u.email}? They will be forced to change it on next login.`)) return;
+    const newPassword = window.prompt('Enter a temporary replacement password');
+    if (\!newPassword) return;
     try {
-      const r = await adminResetPassword(u.id);
-      setTempPw(r.temp_password);
+      await adminResetPassword(u.id, newPassword);
       await refresh();
     } catch (e) {
       setError((e as ApiError).message);
@@ -4012,12 +3084,12 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
               <tr key={u.id} className="border-t border-border">
                 <td className="px-3 py-2 text-fg">{u.email}</td>
                 <td className="px-3 py-2 text-fg">{u.display_name}</td>
-                <td className="px-3 py-2 text-fg">{u.role}</td>
+                <td className="px-3 py-2 text-fg">{u.is_admin ? 'admin' : 'user'}</td>
                 <td className="px-3 py-2">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    u.is_enabled ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'
+                    u.is_disabled ? 'bg-danger/10 text-danger' : 'bg-success/10 text-success'
                   }`}>
-                    {u.is_enabled ? 'Enabled' : 'Disabled'}
+                    {u.is_disabled ? 'Disabled' : 'Enabled'}
                   </span>
                   {u.must_change_password ? (
                     <span className="ml-1 inline-block rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
@@ -4043,9 +3115,9 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
                         type="button"
                         data-action="disable"
                         onClick={() => toggle(u)}
-                        className={`text-sm ${u.is_enabled ? 'text-danger' : 'text-success'} hover:underline`}
+                        className={`text-sm ${u.is_disabled ? 'text-success' : 'text-danger'} hover:underline`}
                       >
-                        {u.is_enabled ? 'Disable' : 'Enable'}
+                        {u.is_disabled ? 'Enable' : 'Disable'}
                       </button>
                     </>
                   ) : (
@@ -4058,13 +3130,6 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
         </table>
       </div>
 
-      <OneTimeSecretModal
-        open={tempPw \!== null}
-        title="Temporary password"
-        secret={tempPw ?? ''}
-        description="Send this to the user through a secure channel. They must change it on next login."
-        onClose={() => setTempPw(null)}
-      />
     </div>
   );
 }
@@ -4085,7 +3150,7 @@ git commit -m "feat(admin): add UsersPanel with disable/enable and admin passwor
 
 ---
 
-### Task 20: ResetRequestsPanel (approve/reject with 24h reset link)
+### Task 20: ResetRequestsPanel (approve/reject with 24h reset token)
 
 **Files:**
 - Create: `frontend/src/components/settings/admin/ResetRequestsPanel.tsx`
@@ -4103,36 +3168,30 @@ import * as adminApi from '../../../../api/admin';
 describe('ResetRequestsPanel', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    vi.spyOn(adminApi, 'listResetRequests').mockResolvedValue({
-      items: [
-        {
-          id: 1,
-          user_id: 5,
-          user_email: 'bob@x.io',
-          requested_at: '2026-04-17T00:00:00Z',
-          ip_address: '1.2.3.4',
-          status: 'pending',
-          expires_at: null,
-        },
-      ],
-    });
+    vi.spyOn(adminApi, 'listResetRequests').mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000001',
+        user_id: '00000000-0000-4000-8000-000000000005',
+        requested_at: '2026-04-17T00:00:00Z',
+        requested_ip: '1.2.3.4',
+        status: 'pending',
+      },
+    ]);
   });
 
   it('lists pending requests by default', async () => {
     render(<ResetRequestsPanel />);
-    await waitFor(() => screen.getByText('bob@x.io'));
+    await waitFor(() => screen.getByText('00000000-0000-4000-8000-000000000005'));
     expect(screen.getByText('1.2.3.4')).toBeInTheDocument();
   });
 
-  it('approves and shows one-time reset link', async () => {
+  it('approves and shows one-time reset token', async () => {
     vi.spyOn(adminApi, 'approveResetRequest').mockResolvedValue({
-      token: 'tok123',
-      reset_link: 'http://localhost:8000/reset-password?token=tok123',
-      expires_at: '2026-04-18T00:00:00Z',
+      reset_token: 'tok123',
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<ResetRequestsPanel />);
-    await waitFor(() => screen.getByText('bob@x.io'));
+    await waitFor(() => screen.getByText('00000000-0000-4000-8000-000000000005'));
     fireEvent.click(screen.getByRole('button', { name: /approve/i }));
     await waitFor(() =>
       expect(screen.getByText(/tok123/)).toBeInTheDocument(),
@@ -4140,12 +3199,12 @@ describe('ResetRequestsPanel', () => {
   });
 
   it('rejects a request', async () => {
-    const reject = vi.spyOn(adminApi, 'rejectResetRequest').mockResolvedValue({ ok: true });
+    const reject = vi.spyOn(adminApi, 'rejectResetRequest').mockResolvedValue(undefined);
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     render(<ResetRequestsPanel />);
-    await waitFor(() => screen.getByText('bob@x.io'));
+    await waitFor(() => screen.getByText('00000000-0000-4000-8000-000000000005'));
     fireEvent.click(screen.getByRole('button', { name: /reject/i }));
-    await waitFor(() => expect(reject).toHaveBeenCalledWith(1));
+    await waitFor(() => expect(reject).toHaveBeenCalledWith('00000000-0000-4000-8000-000000000001'));
   });
 });
 ```
@@ -4164,37 +3223,34 @@ import { ApiError, approveResetRequest, listResetRequests, rejectResetRequest, R
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
-type Filter = 'pending' | 'approved' | 'rejected' | 'all';
-
 export function ResetRequestsPanel(): JSX.Element {
-  const [filter, setFilter] = useState<Filter>('pending');
   const [items, setItems] = useState<ResetRequestRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
-      const r = await listResetRequests(filter === 'all' ? undefined : filter);
-      setItems(r.items);
+      const r = await listResetRequests();
+      setItems(r);
     } catch (e) {
       setError((e as ApiError).message);
     }
   };
 
-  useEffect(() => { refresh(); }, [filter]);
+  useEffect(() => { refresh(); }, []);
 
-  const approve = async (id: number, email: string) => {
-    if (\!window.confirm(`Approve password reset for ${email}? A single-use 24h link will be generated.`)) return;
+  const approve = async (id: string, email: string) => {
+    if (\!window.confirm(`Approve password reset for ${email}? A single-use 24h token will be generated.`)) return;
     try {
       const r = await approveResetRequest(id);
-      setResetLink(r.reset_link);
+      setResetLink(r.reset_token);
       await refresh();
     } catch (e) {
       setError((e as ApiError).message);
     }
   };
 
-  const reject = async (id: number, email: string) => {
+  const reject = async (id: string, email: string) => {
     if (\!window.confirm(`Reject password reset for ${email}?`)) return;
     try {
       await rejectResetRequest(id);
@@ -4206,19 +3262,7 @@ export function ResetRequestsPanel(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-fg">Password reset requests</h2>
-        <select
-          value={filter}
-          onChange={(e) => setFilter(e.target.value as Filter)}
-          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-fg"
-        >
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="all">All</option>
-        </select>
-      </div>
+      <h2 className="text-base font-semibold text-fg">Pending password reset requests</h2>
 
       <InlineFeedback kind={error ? 'error' : null} message={error ?? ''} />
 
@@ -4237,26 +3281,26 @@ export function ResetRequestsPanel(): JSX.Element {
             {items === null ? (
               <tr><td colSpan={5} className="px-3 py-4 text-fg-muted">Loading...</td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={5} className="px-3 py-4 text-fg-muted">No matching requests.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-fg-muted">No pending requests.</td></tr>
             ) : items.map((r) => (
               <tr key={r.id} className="border-t border-border">
-                <td className="px-3 py-2 text-fg">{r.user_email}</td>
+                <td className="px-3 py-2 text-fg">{r.user_id}</td>
                 <td className="px-3 py-2 text-fg-muted">{new Date(r.requested_at).toLocaleString()}</td>
-                <td className="px-3 py-2 text-fg-muted">{r.ip_address ?? '—'}</td>
+                <td className="px-3 py-2 text-fg-muted">{r.requested_ip ?? '—'}</td>
                 <td className="px-3 py-2 text-fg">{r.status}</td>
                 <td className="px-3 py-2 text-right space-x-3">
                   {r.status === 'pending' ? (
                     <>
                       <button
                         type="button"
-                        onClick={() => approve(r.id, r.user_email)}
+                        onClick={() => approve(r.id, r.user_id)}
                         className="text-sm text-primary hover:underline"
                       >
                         Approve
                       </button>
                       <button
                         type="button"
-                        onClick={() => reject(r.id, r.user_email)}
+                        onClick={() => reject(r.id, r.user_id)}
                         className="text-sm text-danger hover:underline"
                       >
                         Reject
@@ -4272,7 +3316,7 @@ export function ResetRequestsPanel(): JSX.Element {
 
       <OneTimeSecretModal
         open={resetLink \!== null}
-        title="Password reset link"
+        title="Password reset token"
         secret={resetLink ?? ''}
         description="Share with the user through a secure channel. Valid for 24 hours, single-use."
         onClose={() => setResetLink(null)}
@@ -4292,7 +3336,7 @@ Expected: all pass.
 ```bash
 git add frontend/src/components/settings/admin/ResetRequestsPanel.tsx \
         frontend/src/components/settings/admin/__tests__/ResetRequestsPanel.test.tsx
-git commit -m "feat(admin): add ResetRequestsPanel with approve/reject flow and one-time link"
+git commit -m "feat(admin): add ResetRequestsPanel with approve/reject flow and one-time token"
 ```
 
 ---
@@ -4476,7 +3520,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { SettingsPage } from '../SettingsPage';
 
 vi.mock('../../auth/useCurrentUser', () => ({
-  useCurrentUser: () => ({ id: 1, email: 'alice@x.io', role: 'admin', display_name: 'Alice', must_change_password: false }),
+  useCurrentUser: () => ({ id: '00000000-0000-4000-8000-000000000001', email: 'alice@x.io', role: 'admin', display_name: 'Alice', must_change_password: false }),
 }));
 
 describe('SettingsPage', () => {
@@ -4600,7 +3644,7 @@ import { useCurrentUser } from '../../auth/useCurrentUser';
 
 describe('MustChangePasswordGate', () => {
   it('renders children when flag is false', () => {
-    (useCurrentUser as any).mockReturnValue({ id: 1, role: 'user', must_change_password: false, email: 'a@b.c' });
+    (useCurrentUser as any).mockReturnValue({ id: '00000000-0000-4000-8000-000000000001', role: 'user', must_change_password: false, email: 'a@b.c' });
     render(
       <MemoryRouter>
         <MustChangePasswordGate><div>app</div></MustChangePasswordGate>
@@ -4610,7 +3654,7 @@ describe('MustChangePasswordGate', () => {
   });
 
   it('renders gate screen when flag is true and path is not /settings/account', () => {
-    (useCurrentUser as any).mockReturnValue({ id: 1, role: 'user', must_change_password: true, email: 'a@b.c' });
+    (useCurrentUser as any).mockReturnValue({ id: '00000000-0000-4000-8000-000000000001', role: 'user', must_change_password: true, email: 'a@b.c' });
     render(
       <MemoryRouter initialEntries={['/']}>
         <MustChangePasswordGate><div>app</div></MustChangePasswordGate>
@@ -4621,7 +3665,7 @@ describe('MustChangePasswordGate', () => {
   });
 
   it('renders children when on /settings/account even if flag is true', () => {
-    (useCurrentUser as any).mockReturnValue({ id: 1, role: 'user', must_change_password: true, email: 'a@b.c' });
+    (useCurrentUser as any).mockReturnValue({ id: '00000000-0000-4000-8000-000000000001', role: 'user', must_change_password: true, email: 'a@b.c' });
     render(
       <MemoryRouter initialEntries={['/settings/account']}>
         <MustChangePasswordGate><div>app</div></MustChangePasswordGate>
@@ -4722,9 +3766,9 @@ In the browser:
 3. Navigate to `/settings/models`. Pick a Quick-tier model, click Save, verify success feedback.
 4. Navigate to `/settings/account`. Change email (using current password). Verify new email appears.
 5. On `/settings/account`, use the Password form. Verify session revocation message.
-6. Navigate to `/settings/admin/invites`. Create an invite. Copy the one-time link from the modal. Verify the token no longer appears in the list.
-7. Navigate to `/settings/admin/users`. Reset another user's password. Verify the temporary password appears once.
-8. Navigate to `/settings/admin/reset-requests`. Approve a pending request. Verify the link appears in modal and the request flips to approved.
+6. Navigate to `/settings/admin/invites`. Create an invite. Copy the one-time token from the modal. Verify the token no longer appears in the list.
+7. Navigate to `/settings/admin/users`. Reset another user's password by entering the replacement password. Verify the API call uses that password and no generated password is displayed.
+8. Navigate to `/settings/admin/reset-requests`. Approve a pending request. Verify the reset token appears in the modal.
 9. Navigate to `/settings/admin/data-providers`. Add a built-in provider.
 10. Log in as the user whose password was reset. Verify they land on `/settings/account` with the must-change-password banner and cannot navigate away until they set a new password.
 
