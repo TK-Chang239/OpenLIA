@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -120,6 +121,29 @@ class DataProviderRequirementMapping(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+
+
+class UserPrefs(Base):
+    __tablename__ = "user_prefs"
+    __table_args__ = (
+        CheckConstraint("theme IN ('system','light','dark')", name="ck_user_prefs_theme"),
+        CheckConstraint(
+            "display_language IN ('en','zh-TW') "
+            "AND response_language IN ('en','zh-TW') "
+            "AND report_language IN ('en','zh-TW','both')",
+            name="ck_user_prefs_language",
+        ),
+    )
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    theme: Mapped[str] = mapped_column(String(16), nullable=False, default="system")
+    notify_inapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notify_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    display_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    response_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    report_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
 
 
 class WebSearchProvider(Base, TimestampMixin):
