@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.config import DataProviderRequirementMapping
-from openlia_server.middleware.auth import build_require_admin
+from openlia_server.middleware.auth import build_require_active_admin
 from openlia_server.services import data_providers as svc
 
 
@@ -76,7 +76,7 @@ def build_data_providers_router(
     FastAPI matching the static segments as provider IDs.
     """
     mode = os.environ.get("OPENLIA_MODE", "personal")
-    require_admin = build_require_admin(db_session_factory=db_session_factory, mode=mode)
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(
         prefix="/settings/data-providers",
@@ -403,7 +403,7 @@ def build_llm_providers_admin_router(
     mode: Literal["personal", "company"],
 ) -> APIRouter:
     router = APIRouter(prefix="/settings/admin/llm", tags=["llm-admin"])
-    require_admin = build_require_admin(db_session_factory=db_session_factory, mode=mode)
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     # NOTE: static sub-paths (/providers/test, /models) must be registered before

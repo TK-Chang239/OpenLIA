@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import PasswordResetRequest, SignupInvite, User
-from openlia_server.middleware.auth import build_require_admin
+from openlia_server.middleware.auth import build_require_active_admin
 from openlia_server.services.auth import password_reset as reset_service
 from openlia_server.services.auth import sessions, tokens
 from openlia_server.services.auth.errors import AuthError
@@ -31,7 +31,7 @@ class DirectResetIn(BaseModel):
 
 def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
     router = APIRouter(prefix="/admin")
-    require_admin = build_require_admin(db_session_factory=db_session_factory, mode="company")
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode="company")
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/invites")

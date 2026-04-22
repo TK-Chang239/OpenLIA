@@ -132,6 +132,17 @@ class TestResetPassword:
         assert refreshed.password_hash != "original"
         assert passwords.verify_password(refreshed.password_hash, "NewStrongP@ssw0rd1")
 
+        from openlia_server.db.models.auth import AuthEvent
+
+        event = (
+            cli_session.query(AuthEvent)
+            .filter(AuthEvent.event_type == "password_reset_by_admin")
+            .one()
+        )
+        assert event.event_metadata is not None
+        assert event.event_metadata.get("source") == "cli"
+        assert event.actor_user_id is None
+
     def test_interactive_prompt_accepts_password(
         self, cli_runner, company_mode, cli_engine, cli_session
     ):

@@ -50,15 +50,18 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
   const refresh = useCallback(async (): Promise<void> => {
     try {
       const fetched = await getSession();
-      setUser(fetched);
+      setUser(fetched.user);
+      setMustChangePasswordState(fetched.must_change_password);
       setStatus("authenticated");
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         setUser(LOCAL_USER);
+        setMustChangePasswordState(false);
         setStatus("personal");
         return;
       }
       setUser(null);
+      setMustChangePasswordState(false);
       setStatus("unauthenticated");
     }
   }, []);

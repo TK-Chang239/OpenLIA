@@ -320,7 +320,7 @@ Source findings:
 
 ### REM-P1-001 - Enforce must-change-password globally
 
-Status: `[ ]`
+Status: `[x]` (active auth/admin dependencies now gate all currently mounted non-auth routes; `/auth/session` exposes `must_change_password`; frontend protected routes render the forced-change UI, landed 2026-04-21 on branch `fix/phase-9-audit-findings`)
 
 Affected implementation:
 
@@ -857,7 +857,7 @@ Source findings:
 
 ### REM-P1-017 - Add production static frontend serving
 
-Status: `[ ]`
+Status: `[~]` (env-gated `OPENLIA_FRONTEND_DIST` mount with SPA fallback + API-prefix guard landed 2026-04-21 on branch `fix/phase-9-audit-findings`; packaging/container bundling still pending — see REM-P1-018)
 
 Affected implementation:
 
@@ -1095,25 +1095,25 @@ Source findings:
 
 ### Before Plan 9 Implementation
 
-- `[ ]` REM-P0-001
-- `[ ]` REM-P0-002
-- `[ ]` REM-P0-003
+- `[x]` REM-P0-001
+- `[x]` REM-P0-002
+- `[x]` REM-P0-003
 - `[ ]` REM-P0-004 for Plan 9 snippets
 
 ### Before Plan 10 Implementation
 
-- `[ ]` REM-P0-005
-- `[ ]` REM-P0-006
+- `[~]` REM-P0-005
+- `[~]` REM-P0-006
 - `[ ]` REM-P0-007
 - `[x]` REM-P1-006 (2026-04-21)
 - `[x]` REM-P0-004 for Plan 10 snippets (2026-04-21)
 
 ### Before Plan 11 Implementation
 
-- `[ ]` REM-P1-001
-- `[ ]` REM-P1-002
+- `[x]` REM-P1-001
+- `[x]` REM-P1-002
 - `[ ]` REM-P1-003
-- `[ ]` REM-P1-004
+- `[x]` REM-P1-004
 - `[ ]` REM-P1-005 for user preferences
 
 ### Before Plan 12 Implementation
@@ -1128,18 +1128,18 @@ Source findings:
 - `[ ]` REM-P1-011
 - `[ ]` REM-P1-012
 - `[ ]` REM-P1-013
-- `[ ]` REM-P1-014
+- `[x]` REM-P1-014
 - `[ ]` REM-P1-015
 
 ### Before Final Product Acceptance
 
-- `[ ]` REM-P1-016
-- `[ ]` REM-P1-017
+- `[x]` REM-P1-016
+- `[~]` REM-P1-017
 - `[ ]` REM-P1-018
 - `[ ]` REM-P1-019
 - `[ ]` REM-P2-001
 - `[ ]` REM-P2-002
-- `[ ]` REM-P2-003
+- `[x]` REM-P2-003
 - `[ ]` REM-P2-004
 
 ## Recommended Next Commit Sequence

@@ -56,9 +56,13 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
     session_dep = make_session_dependency(db_session_factory)
 
     def _cookie_secure() -> bool:
-        # Default off so http://testserver (TestClient) works; set OPENLIA_COOKIE_SECURE=true
-        # in production behind TLS.
-        return os.environ.get("OPENLIA_COOKIE_SECURE", "false").lower() in ("1", "true", "yes")
+        # Default to true in company mode (production-safe), false otherwise so
+        # TestClient and local personal mode work over http://testserver.
+        # Explicit OPENLIA_COOKIE_SECURE overrides either default.
+        override = os.environ.get("OPENLIA_COOKIE_SECURE")
+        if override is not None:
+            return override.lower() in ("1", "true", "yes")
+        return os.environ.get("OPENLIA_MODE", "personal").lower() == "company"
 
     def _ip(request: Request) -> str | None:
         if os.environ.get("OPENLIA_TRUST_PROXY_HEADERS", "false").lower() in (
@@ -205,6 +209,7 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
             "email": user.email,
             "display_name": user.display_name,
             "is_admin": user.is_admin,
+            "must_change_password": user.must_change_password,
         }
 
     @router.get("/signup-policy")
