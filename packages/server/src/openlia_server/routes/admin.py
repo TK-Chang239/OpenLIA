@@ -31,7 +31,9 @@ class DirectResetIn(BaseModel):
 
 def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
     router = APIRouter(prefix="/admin")
-    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode="company")
+    require_admin = build_require_active_admin(
+        db_session_factory=db_session_factory, mode="company"
+    )
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/invites")
