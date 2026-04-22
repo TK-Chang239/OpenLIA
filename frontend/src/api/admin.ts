@@ -1,4 +1,4 @@
-import { ApiError } from './settings';
+export { ApiError } from './settings';
 
 export interface InviteSummary {
   id: string;
