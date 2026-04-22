@@ -89,9 +89,8 @@ def log_cli_event(
     metadata: dict[str, Any] | None = None,
 ) -> None:
     """Audit wrapper. Guarantees actor_user_id=None and metadata.source=cli."""
-    merged: dict[str, Any] = {"source": "cli"}
-    if metadata:
-        merged = {**merged, **metadata}
+    merged: dict[str, Any] = dict(metadata) if metadata else {}
+    merged["source"] = "cli"
     events_service.log_auth_event(
         db,
         event_type=event_type,

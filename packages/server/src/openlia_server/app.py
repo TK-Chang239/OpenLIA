@@ -11,7 +11,9 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from apscheduler import AsyncScheduler
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.orm import sessionmaker
 
@@ -185,4 +187,51 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    _mount_frontend(app)
+
     return app
+
+
+_API_PREFIXES = (
+    "auth",
+    "admin",
+    "settings",
+    "jobs",
+    "notifications",
+    "healthz",
+    "health",
+    "docs",
+    "redoc",
+    "openapi.json",
+)
+
+
+def _mount_frontend(app: FastAPI) -> None:
+    """Serve `frontend/dist` with SPA fallback when configured.
+
+    Skips silently if `OPENLIA_FRONTEND_DIST` is unset or the directory does
+    not yet exist, so dev servers and tests don't need a built bundle.
+    """
+    dist_env = os.environ.get("OPENLIA_FRONTEND_DIST")
+    if not dist_env:
+        return
+    dist_dir = os.path.abspath(dist_env)
+    if not os.path.isdir(dist_dir):
+        return
+    index_html = os.path.join(dist_dir, "index.html")
+    if not os.path.isfile(index_html):
+        return
+
+    assets_dir = os.path.join(dist_dir, "assets")
+    if os.path.isdir(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa_fallback(full_path: str) -> FileResponse:
+        head = full_path.split("/", 1)[0]
+        if head in _API_PREFIXES:
+            raise HTTPException(status_code=404)
+        candidate = os.path.normpath(os.path.join(dist_dir, full_path))
+        if full_path and candidate.startswith(dist_dir + os.sep) and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        return FileResponse(index_html)

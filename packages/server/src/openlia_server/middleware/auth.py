@@ -73,3 +73,49 @@ def build_require_admin(
         return user
 
     return Depends(require_admin)
+
+
+def build_require_active_user(
+    *,
+    db_session_factory: Callable[[], DBSession],
+    mode: Literal["personal", "company"],
+):
+    """Like `require_auth`, but rejects users with `must_change_password=true`.
+
+    Use on every authenticated product route. The auth router intentionally
+    keeps `require_auth` for `/session`, `/logout`, `/logout-all`, and
+    `/change-password` so a forced-reset user can read their state, change
+    their password, and sign out.
+    """
+
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+
+    def require_active_user(user: User = require_auth) -> User:  # type: ignore[assignment]
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "must_change_password"},
+            )
+        return user
+
+    return Depends(require_active_user)
+
+
+def build_require_active_admin(
+    *,
+    db_session_factory: Callable[[], DBSession],
+    mode: Literal["personal", "company"],
+):
+    """Admin-only equivalent of `build_require_active_user`."""
+
+    require_admin = build_require_admin(db_session_factory=db_session_factory, mode=mode)
+
+    def require_active_admin(user: User = require_admin) -> User:  # type: ignore[assignment]
+        if user.must_change_password:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "must_change_password"},
+            )
+        return user
+
+    return Depends(require_active_admin)

@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate, type RouteObject } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { MustChangePasswordGate } from "./MustChangePasswordGate";
@@ -18,7 +18,7 @@ import RetailSentiment from "../pages/departments/RetailSentiment";
 import MacroResearch from "../pages/departments/MacroResearch";
 import PanicThermometer from "../pages/departments/PanicThermometer";
 
-export const router = createBrowserRouter([
+export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
   { path: "/register", element: <RegisterPage /> },
   { path: "/forgot-password", element: <ForgotPasswordPage /> },
@@ -50,4 +50,6 @@ export const router = createBrowserRouter([
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
-]);
+];
+
+export const router = createBrowserRouter(routes);

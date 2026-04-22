@@ -20,6 +20,9 @@ def _clear_rate_limiter():
 @pytest.fixture
 def company_client(db_session, monkeypatch):
     monkeypatch.setenv("OPENLIA_MODE", "company")
+    # TestClient speaks http://testserver, so Secure cookies would be dropped
+    # by httpx. Override the production-safe default to keep tests plain-http.
+    monkeypatch.setenv("OPENLIA_COOKIE_SECURE", "false")
     from openlia_server.db import session as session_mod
     from openlia_server.services.auth import signup_policy
 

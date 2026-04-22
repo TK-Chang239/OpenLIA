@@ -16,12 +16,10 @@ describe("AccountProfile", () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: {
-            id: "u1",
-            email: "x@y.com",
-            role: "admin",
-            display_name: "Alice",
-          },
+          user_id: "u1",
+          email: "x@y.com",
+          is_admin: true,
+          display_name: "Alice",
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),

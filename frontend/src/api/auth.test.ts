@@ -23,18 +23,28 @@ describe("auth api", () => {
     global.fetch = originalFetch;
   });
 
-  it("getSession returns the user on 200", async () => {
+  it("getSession returns the user + must_change_password on 200", async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: { id: "u1", email: "a@x.com", role: "admin" },
+          user_id: "u1",
+          email: "a@x.com",
+          display_name: null,
+          is_admin: true,
+          must_change_password: true,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     ) as unknown as typeof fetch;
 
-    const user = await getSession();
-    expect(user).toEqual({ id: "u1", email: "a@x.com", role: "admin" });
+    const result = await getSession();
+    expect(result.user).toEqual({
+      id: "u1",
+      email: "a@x.com",
+      display_name: null,
+      role: "admin",
+    });
+    expect(result.must_change_password).toBe(true);
   });
 
   it("getSession re-throws ApiError on 401/404 so callers can branch", async () => {
@@ -47,10 +57,13 @@ describe("auth api", () => {
 
   it("login posts credentials and returns the user", async () => {
     const spy = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+      new Response(
+        JSON.stringify({ user_id: "u1", email: "a", is_admin: false }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
     );
     global.fetch = spy as unknown as typeof fetch;
 
@@ -79,7 +92,9 @@ describe("auth api", () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: { id: "u1", email: "a", role: "user" },
+          user_id: "u1",
+          email: "a",
+          is_admin: false,
           must_change_password: true,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
@@ -95,7 +110,9 @@ describe("auth api", () => {
     const spy = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
-          user: { id: "u2", email: "b", role: "user" },
+          user_id: "u2",
+          email: "b",
+          is_admin: false,
           must_change_password: false,
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },

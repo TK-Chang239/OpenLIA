@@ -2,6 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-04-21 rewrite (REM-P0-004 / REM-P1-006 — read first):**
+> - **Task 1 is already shipped.** The `wizard_state` reshape (`current_step` String, `completed_steps` JSON array, `active_session_token` String(64) nullable) landed as migration `5d41c9a7e812` on the current branch, together with the model change and the `openlia wizard reset` CLI rewrite. Executors must **not** author another migration — verify, run the test suite, and proceed to Task 2.
+> - **No `get_db_session` / `get_db` helper exists.** Every snippet below that shows `from openlia_server.db.session import get_db_session` or `db: Session = Depends(get_db_session)` is stale. Replace with the factory pattern: inside `build_setup_router(...)`, bind `session_dep = make_session_dependency(db_session_factory)` (from `openlia_server.db.deps`) and use `db: Session = Depends(session_dep)` on each route handler. The middleware-style `require_wizard_active` / `require_wizard_session` dependencies accept the same `session_dep` from the factory's closure; do not import a bare helper at module scope.
+> - **Routers are factory functions.** `build_setup_router(*, db_session_factory, mode, is_loopback_request)` — not a zero-arg function. `db_session_factory: Callable[[], Session]`, `mode: Literal["personal", "company"]`, `is_loopback_request: Callable[[Request], bool]` (used by the personal-mode loopback gate — Design Rule 3). Mount from `app.py` with `app.include_router(build_setup_router(db_session_factory=factory, mode=mode, is_loopback_request=is_loopback))`. See `routes/notifications.py` / `routes/jobs.py` for the canonical template.
+> - **Password hashing.** Import from `openlia_server.services.auth.passwords` (`hash_password`). There is no `openlia_server.security.passwords` module and no `argon2_hash` symbol. `create_user` already hashes internally — call `create_user(db, email=..., password=..., display_name=..., is_admin=...)` rather than hashing manually.
+> - **Loopback gate (Design Rule 3).** Personal-mode non-loopback clients get `403`. The gate runs as a FastAPI dependency on every `/setup/*` write route (not `GET /setup/status`). The factory builds `require_loopback_if_personal(request: Request)` from the closure's `mode` and `is_loopback_request(request)`; on mismatch raise `HTTPException(403, detail={"code": "loopback_only", ...})`.
+> - **Wizard is pre-auth, unaffected by must-change-password.** Setup routes never wire `build_require_auth` / `build_require_admin`. The Plan 11 must-change-password gate must explicitly exempt `/setup/*`.
+> - **UUID string IDs.** `User.id`, `SignupInvite.id`, `review_id`, etc. are `String(36)`. Every DTO and path param is `str`; every comparison / insert uses `uuid.uuid4().hex`.
+>
 > **Audit 2026-04-20 normalizations (apply before executing this plan):**
 > - Follow the README "Current backend contract" block for every import. Specifically: `User` is in `openlia_server.db.models.auth` (not `.user`/`.users`); `LLMModel` is in `openlia_server.db.models.config` (not `.llm`); password hashing is `openlia_server.services.auth.passwords.hash_password` (not `argon2_hash` and not `openlia_server.security.passwords`); there is no `get_db_session`/`get_db`/`current_user`/`require_user` — use the router-factory `build_require_auth(...)` pattern and accept `db_session_factory` in the router factory.
 > - All IDs are UUID strings (`String(36)`). Wizard DTOs, path params, and review IDs must be `str`.
@@ -25,7 +34,7 @@
 **Depends on:**
 
 - Plan 1A (tables `wizard_state`, `config_store`, `signup_policy`, `users`, `llm_providers`, `llm_models`, `data_providers`, `data_provider_requirement_mapping`, `web_search_providers`).
-- Plan 2 (`argon2_hash`, `create_user`, session helpers — wizard creates first admin user).
+- Plan 2 (`services.auth.passwords.hash_password`, `services.auth.users.create_user`, session helpers — wizard creates first admin user).
 - Plan 3 (data-provider service + EODHD adapter + `auto_map` routine).
 - Plan 4 (LLM provider service + `resolve()` + `DEPARTMENT_DEFAULT_TIERS` + `SHIPPED_TIER_DEFAULTS`).
 - Plan 5 (LLM runtime — adapter `generate()` used by AI review).
@@ -164,14 +173,33 @@ planning/projectStructure.md            # MODIFY — reflect setup/ directories
 
 ---
 
-## Task 1: Reshape `wizard_state` for the wizard runtime — migrate `current_step`, add `completed_steps` + `active_session_token`
+## Task 1: Reshape `wizard_state` — **already shipped (REM-P1-006)**
 
-**Context.** Plan 1A shipped `wizard_state` with `current_step: Integer NOT NULL DEFAULT 1` and no `completed_steps` column. The wizard runtime this plan implements expects `current_step` to be a named step identifier (e.g., `"mode"`, `"admin"`, `"providers"`) and needs a `completed_steps` JSON array to track progress across visits. Task 1 migrates all three pieces at once so later tasks can assume the new shape.
+**Status:** Shipped on this branch. Do not re-run.
 
-**Files:**
-- Modify: `packages/server/src/openlia_server/db/models/infrastructure.py` (wizard_state model)
-- Create: `packages/server/migrations/versions/<next>_reshape_wizard_state.py`
-- Test: `packages/server/tests/test_db/test_wizard_state_shape.py`
+**What shipped:**
+- Model update in `packages/server/src/openlia_server/db/models/infrastructure.py`: `current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="mode")`, `completed_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)`, `active_session_token: Mapped[str | None] = mapped_column(String(64), nullable=True)`.
+- Migration `packages/server/src/openlia_server/db/migrations/versions/2026-04-21-0001_reshape_wizard_state.py` (revision `5d41c9a7e812`, down_revision `3c8e1a2b4d9f`). Migrates int→string via a helper column; maps legacy int `1..8` to named steps; preserves existing row data.
+- `openlia wizard reset` CLI (`packages/server/src/openlia_server/cli.py`) now writes `current_step="mode"`, `completed_steps=[]`, `active_session_token=None`, `mode=None`, `step_data={}`.
+- Test updates: `packages/server/tests/test_db/test_models_infrastructure.py` (`test_wizard_state_defaults` asserts the new defaults; new `test_wizard_state_accepts_named_step_and_session_token`). `packages/server/tests/test_cli/test_cli_wizard.py` fixture rows use the new shape; reset assertions check `current_step == "mode"`, `completed_steps == []`, `active_session_token is None`.
+
+**Executor action (verify-only):**
+
+- [ ] **Step 1: Confirm revision chain is linear**
+  Run: `uv run alembic heads`
+  Expected: `5d41c9a7e812 (head)` — exactly one head.
+- [ ] **Step 2: Confirm the reshape tests pass**
+  Run: `uv run pytest packages/server/tests/test_db/test_models_infrastructure.py packages/server/tests/test_cli/test_cli_wizard.py -q`
+  Expected: all pass.
+- [ ] **Step 3: Confirm aggregate server suite still green**
+  Run: `uv run pytest packages/server/tests/ -q`
+  Expected: all pass.
+
+If any step fails, do not re-author Task 1 — fix the shipped code in place and re-run.
+
+<details><summary>Historical (pre-REM-P1-006) snippet — do not execute.</summary>
+
+The original Task 1 below was authored before the shape landed; it is retained only for auditability.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -334,6 +362,8 @@ git add packages/server/src/openlia_server/db/models/infrastructure.py \
         packages/server/tests/test_db/test_wizard_state_model.py  # if updated
 git commit -m "feat(db): reshape wizard_state — string current_step + completed_steps + active_session_token"
 ```
+
+</details>
 
 ---
 
@@ -519,23 +549,22 @@ git commit -m "feat(wizard): add WizardService.get_status with env-override reso
 # packages/server/tests/test_middleware/test_wizard_gate.py
 """Tests for wizard_gate dependency — 410 Gone after completion."""
 import pytest
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.infrastructure import ConfigStore
-from openlia_server.middleware.wizard_gate import require_wizard_active
+from openlia_server.middleware.wizard_gate import build_require_wizard_active
 
 
 @pytest.fixture
 def app_with_gate(db_session_factory):
     app = FastAPI()
+    session_dep = make_session_dependency(db_session_factory)
+    require_wizard_active = build_require_wizard_active(session_dep)
 
-    def _db():
-        with db_session_factory() as db:
-            yield db
-
-    @app.get("/setup/mode")
-    def setup_mode(db=Depends(_db), _=Depends(require_wizard_active)):
+    @app.get("/setup/mode", dependencies=[require_wizard_active])
+    def setup_mode():
         return {"ok": True}
 
     return TestClient(app)
@@ -547,7 +576,7 @@ def test_wizard_active_allows_request(app_with_gate) -> None:
 
 
 def test_wizard_completed_returns_410(app_with_gate, db_session) -> None:
-    db_session.add(ConfigStore(key="wizard.completed", value="true"))
+    db_session.add(ConfigStore(key="wizard.completed", value=True))
     db_session.commit()
 
     resp = app_with_gate.get("/setup/mode")
@@ -560,34 +589,96 @@ def test_wizard_completed_returns_410(app_with_gate, db_session) -> None:
 Run: `uv run pytest packages/server/tests/test_middleware/test_wizard_gate.py -v`
 Expected: FAIL — `openlia_server.middleware.wizard_gate` import error.
 
-- [ ] **Step 3: Create the dependency**
+- [ ] **Step 3: Create the dependency factories**
 
 Create `packages/server/src/openlia_server/middleware/wizard_gate.py`:
 
 ```python
-"""Dependency that rejects /setup/* paths after wizard completion."""
+"""Dependencies guarding /setup/* routes.
+
+- `build_require_wizard_active(session_dep)` — returns 410 Gone after wizard
+  completion (Design Rule 4). Attach to every `/setup/*` path except
+  `GET /setup/status` (spec requires status to always respond).
+- `build_require_wizard_session(session_dep)` — enforces the single-session
+  cookie (Design Rule 2). Attach to every write route except
+  `POST /setup/mode` (issues the token) and `POST /setup/takeover`
+  (rotates the token).
+- `build_require_loopback_if_personal(mode, is_loopback_request)` — Design
+  Rule 3. Attach to every `/setup/*` write route.
+
+All three are factories so they close over the router's `session_dep` and
+`is_loopback_request`. No module-level `get_db_session` import — there is no
+such helper in source; use `make_session_dependency(db_session_factory)` from
+`openlia_server.db.deps`.
+"""
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from collections.abc import Callable, Iterator
+from typing import Literal
+
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.infrastructure import ConfigStore
-from openlia_server.db.session import get_db_session
+from openlia_server.services import wizard as wizard_svc
 
 
-def _is_completed(db: Session) -> bool:
+def _is_completed(db: DBSession) -> bool:
     value = db.scalar(select(ConfigStore.value).where(ConfigStore.key == "wizard.completed"))
+    # Bootstrap seeds a Python bool; older rows may hold "true"/"false" strings.
+    if isinstance(value, bool):
+        return value
     return (value or "").lower() == "true"
 
 
-def require_wizard_active(db: Session = Depends(get_db_session)) -> None:
-    if _is_completed(db):
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail={"code": "wizard_completed", "message": "Setup has already been completed."},
-        )
+def build_require_wizard_active(session_dep: Callable[[], Iterator[DBSession]]):
+    def require_wizard_active(db: DBSession = Depends(session_dep)) -> None:
+        if _is_completed(db):
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail={"code": "wizard_completed", "message": "Setup has already been completed."},
+            )
+
+    return Depends(require_wizard_active)
+
+
+def build_require_wizard_session(session_dep: Callable[[], Iterator[DBSession]]):
+    def require_wizard_session(
+        openlia_wizard_session: str | None = Cookie(default=None),
+        db: DBSession = Depends(session_dep),
+    ) -> None:
+        if not wizard_svc.verify_session_token(db, openlia_wizard_session):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "wizard_session_active",
+                    "message": "Another setup session is active. Take over to continue here.",
+                },
+            )
+
+    return Depends(require_wizard_session)
+
+
+def build_require_loopback_if_personal(
+    *,
+    mode: Literal["personal", "company"],
+    is_loopback_request: Callable[[Request], bool],
+):
+    def require_loopback_if_personal(request: Request) -> None:
+        if mode == "personal" and not is_loopback_request(request):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "loopback_only",
+                    "message": "Personal-mode setup writes are only accepted from 127.0.0.1/::1.",
+                },
+            )
+
+    return Depends(require_loopback_if_personal)
 ```
+
+The test file (`packages/server/tests/test_middleware/test_wizard_gate.py`) must build a mini-app via the same factory pattern — construct a `db_session_factory`, pass it to a local `APIRouter`, and attach `build_require_wizard_active(make_session_dependency(db_session_factory))` to a test route.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -657,12 +748,14 @@ Create `packages/server/src/openlia_server/routes/setup.py`:
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
+from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as DBSession
 
-from openlia_server.db.session import get_db_session
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.services import wizard as wizard_svc
 
 
@@ -674,18 +767,32 @@ class StatusOut(BaseModel):
     env_overrides: dict[str, str]
 
 
-def build_setup_router() -> APIRouter:
+def build_setup_router(
+    *,
+    db_session_factory: Callable[[], DBSession],
+    mode: Literal["personal", "company"],
+    is_loopback_request: Callable[[Request], bool],
+) -> APIRouter:
+    """Factory for /setup/*.
+
+    `mode` and `is_loopback_request` are captured for the personal-mode
+    loopback gate (Design Rule 3). Subsequent tasks attach the gate, the
+    wizard-session cookie dep, and the 410-Gone gate via `build_require_*`
+    factories from `middleware/wizard_gate.py`.
+    """
+    session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(prefix="/setup", tags=["setup"])
 
     @router.get("/status", response_model=StatusOut)
-    def get_status(db: Session = Depends(get_db_session)) -> StatusOut:
-        status = wizard_svc.get_status(db, env=dict(os.environ))
+    def get_status(db: DBSession = Depends(session_dep)) -> StatusOut:
+        # GET /setup/status must always respond — no gates attached.
+        result = wizard_svc.get_status(db, env=dict(os.environ))
         return StatusOut(
-            mode=status.mode,
-            wizard_completed=status.wizard_completed,
-            current_step=status.current_step,
-            completed_steps=status.completed_steps,
-            env_overrides=status.env_overrides,
+            mode=result.mode,
+            wizard_completed=result.wizard_completed,
+            current_step=result.current_step,
+            completed_steps=result.completed_steps,
+            env_overrides=result.env_overrides,
         )
 
     return router
@@ -693,13 +800,29 @@ def build_setup_router() -> APIRouter:
 
 - [ ] **Step 4: Wire the router into `app.py`**
 
-In `packages/server/src/openlia_server/app.py`, inside `create_app(...)`, after existing router mounts add:
+In `packages/server/src/openlia_server/app.py`, inside `create_app(...)`, after existing router mounts:
 
 ```python
+from fastapi import Request
+
 from openlia_server.routes.setup import build_setup_router
 
-app.include_router(build_setup_router())
+
+def _is_loopback_request(request: Request) -> bool:
+    host = (request.client.host if request.client else "") or ""
+    return host in {"127.0.0.1", "::1", "localhost"}
+
+
+app.include_router(
+    build_setup_router(
+        db_session_factory=factory,
+        mode=mode,
+        is_loopback_request=_is_loopback_request,
+    )
+)
 ```
+
+`factory` (resolved from `db_session_factory or _default_session_factory`) and `mode` are the same values already passed to `build_auth_router`, `build_notifications_router`, etc. — they live in `create_app`'s scope. Use `factory`, not the raw `db_session_factory` parameter (which may be `None`).
 
 - [ ] **Step 5: Run the test to verify it passes**
 
@@ -805,7 +928,7 @@ class ModeIn(BaseModel):
 def post_mode(
     payload: ModeIn,
     response: Response,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
 ) -> dict[str, str]:
     if os.environ.get("OPENLIA_MODE"):
         raise HTTPException(
@@ -883,62 +1006,62 @@ def test_takeover_rotates_token(personal_client: TestClient) -> None:
 Run: `uv run pytest packages/server/tests/test_routes/test_setup_routes.py -v -k session`
 Expected: FAIL.
 
-- [ ] **Step 3: Add `require_wizard_session` dependency**
+- [ ] **Step 3: `build_require_wizard_session` already shipped in Task 3**
 
-Append to `packages/server/src/openlia_server/middleware/wizard_gate.py`:
+`build_require_wizard_session(session_dep)` was authored alongside `build_require_wizard_active` in Task 3 (single module, three factories). Verify the factory exists; do not re-author. The wizard-session cookie check closes over the same `session_dep` that the router factory binds.
 
-```python
-from fastapi import Cookie
+- [ ] **Step 4: Add the takeover endpoint inside `build_setup_router(...)`**
 
-from openlia_server.services import wizard as wizard_svc
-
-
-def require_wizard_session(
-    openlia_wizard_session: str | None = Cookie(default=None),
-    db: Session = Depends(get_db_session),
-) -> None:
-    if not wizard_svc.verify_session_token(db, openlia_wizard_session):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "wizard_session_active",
-                "message": "Another setup session is active. Take over to continue here.",
-            },
-        )
-```
-
-- [ ] **Step 4: Add the takeover endpoint + attach session guard to `POST /setup/mode` is optional (mode creates the token)**
-
-Append in `routes/setup.py`:
+Inside the router factory (same block that holds `GET /setup/status`), build the session and 410-gate dependencies from the closure, then add the takeover endpoint. Attach `require_wizard_active` and `require_loopback_if_personal` — takeover is a write and must respect Design Rules 3 and 4 — but **do not** attach `require_wizard_session`, since takeover's purpose is to rotate the token for a client that lacks one:
 
 ```python
-from openlia_server.middleware.wizard_gate import require_wizard_session
+from openlia_server.middleware.wizard_gate import (
+    build_require_loopback_if_personal,
+    build_require_wizard_active,
+    build_require_wizard_session,
+)
 
-@router.post("/takeover")
-def post_takeover(response: Response, db: Session = Depends(get_db_session)) -> dict[str, bool]:
+require_wizard_active = build_require_wizard_active(session_dep)
+require_wizard_session = build_require_wizard_session(session_dep)
+require_loopback = build_require_loopback_if_personal(
+    mode=mode, is_loopback_request=is_loopback_request
+)
+
+@router.post(
+    "/takeover",
+    dependencies=[require_wizard_active, require_loopback],
+)
+def post_takeover(response: Response, db: DBSession = Depends(session_dep)) -> dict[str, bool]:
     token = wizard_svc.rotate_session_token(db)
     response.set_cookie(
-        "openlia_wizard_session", token, httponly=True, samesite="lax", secure=False, path="/setup"
+        "openlia_wizard_session",
+        token,
+        httponly=True,
+        samesite="lax",
+        secure=(mode == "company"),
+        path="/setup",
     )
     return {"ok": True}
 ```
 
-(Subsequent step endpoints will add `Depends(require_wizard_session)`.)
+(`secure=(mode == "company")` mirrors the main auth-cookie default from REM-P1-002.)
 
 - [ ] **Step 5: Attach `require_wizard_session` to a placeholder `POST /setup/identity`**
 
-Add a stub `POST /setup/identity` now so the "rejected without cookie" test has something to hit:
+Add a stub `POST /setup/identity` now so the "rejected without cookie" test has something to hit. It must carry all three gates (active, session, loopback):
 
 ```python
 class IdentityIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=60)
 
 
-@router.post("/identity")
+@router.post(
+    "/identity",
+    dependencies=[require_wizard_active, require_wizard_session, require_loopback],
+)
 def post_identity(
     payload: IdentityIn,
-    db: Session = Depends(get_db_session),
-    _: None = Depends(require_wizard_session),
+    db: DBSession = Depends(session_dep),
 ) -> dict[str, str]:
     # Real impl lands in Task 7.
     return {"display_name": payload.display_name}
@@ -970,27 +1093,31 @@ git commit -m "feat(setup): add wizard session cookie guard + POST /setup/takeov
 - [ ] **Step 1: Write the failing test**
 
 ```python
-def test_post_identity_creates_local_user(personal_client: TestClient, db_session) -> None:
+def test_post_identity_updates_local_user(personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.bootstrap import LOCAL_USER_ID
     from openlia_server.db.models.auth import User
 
+    # Bootstrap has already seeded the local user with id="local".
     personal_client.post("/setup/mode", json={"mode": "personal"})
     resp = personal_client.post("/setup/identity", json={"display_name": "TK"})
     assert resp.status_code == 200
     assert resp.json()["display_name"] == "TK"
 
-    user = db_session.query(User).filter_by(email="local@openlia.local").one()
+    user = db_session.get(User, LOCAL_USER_ID)
+    assert user is not None
     assert user.display_name == "TK"
-    assert user.role == "user"
+    assert user.is_admin is False
 
 
 def test_post_identity_is_idempotent_on_display_name(personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.bootstrap import LOCAL_USER_ID
     from openlia_server.db.models.auth import User
 
     personal_client.post("/setup/mode", json={"mode": "personal"})
     personal_client.post("/setup/identity", json={"display_name": "A"})
     personal_client.post("/setup/identity", json={"display_name": "B"})
 
-    rows = db_session.query(User).filter_by(email="local@openlia.local").all()
+    rows = db_session.query(User).filter_by(id=LOCAL_USER_ID).all()
     assert len(rows) == 1
     assert rows[0].display_name == "B"
 ```
@@ -1005,21 +1132,22 @@ Expected: FAIL — no User row created, placeholder returns payload only.
 Append to `services/wizard.py`:
 
 ```python
+from openlia_server.db.bootstrap import LOCAL_USER_ID
 from openlia_server.db.models.auth import User
 
 
 def upsert_local_user(db: Session, display_name: str) -> User:
-    user = db.query(User).filter_by(email="local@openlia.local").one_or_none()
+    """Bootstrap already seeded the id='local' row; this only updates the display name.
+
+    User.id is String(36); do not create a second row by email filter — the
+    singleton local user is keyed by id, not email.
+    """
+    user = db.get(User, LOCAL_USER_ID)
     if user is None:
-        user = User(
-            email="local@openlia.local",
-            password_hash="",  # personal mode has no password
-            display_name=display_name,
-            role="user",
+        raise RuntimeError(
+            "local user missing; bootstrap did not run. See db/bootstrap.py."
         )
-        db.add(user)
-    else:
-        user.display_name = display_name
+    user.display_name = display_name
     db.flush()
     return user
 ```
@@ -1032,7 +1160,7 @@ In `routes/setup.py` replace the placeholder `post_identity` body with:
 @router.post("/identity")
 def post_identity(
     payload: IdentityIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, str]:
     wizard_svc.upsert_local_user(db, payload.display_name)
@@ -1077,7 +1205,7 @@ def test_post_admin_creates_first_admin(company_client: TestClient, db_session) 
     assert resp.status_code == 200
 
     user = db_session.query(User).filter_by(email="boss@example.com").one()
-    assert user.role == "admin"
+    assert user.is_admin is True
     assert user.password_hash.startswith("$argon2")
 
 
@@ -1114,7 +1242,8 @@ Expected: FAIL.
 Append to `services/wizard.py`:
 
 ```python
-from openlia_server.security.passwords import argon2_hash  # from Plan 2
+from openlia_server.db.models.auth import User
+from openlia_server.services.auth import users as user_service
 
 
 class AdminExistsError(Exception):
@@ -1122,18 +1251,21 @@ class AdminExistsError(Exception):
 
 
 def create_first_admin(db: Session, email: str, password: str, display_name: str) -> User:
-    if db.query(User).filter_by(role="admin").first() is not None:
+    # User.id is String(36); user_service.create_user generates a uuid4 hex and
+    # hashes the password via services.auth.passwords internally. No is_admin
+    # column on Plan 1A — the canonical shipped User has `is_admin: bool`.
+    if db.query(User).filter_by(is_admin=True).first() is not None:
         raise AdminExistsError()
-    user = User(
+    return user_service.create_user(
+        db,
         email=email,
-        password_hash=argon2_hash(password),
+        password=password,
         display_name=display_name,
-        role="admin",
+        is_admin=True,
     )
-    db.add(user)
-    db.flush()
-    return user
 ```
+
+If `services.auth.users.create_user` has not yet landed with this signature (check source before executing), fall back to the shipped primitive `openlia_server.services.auth.passwords.hash_password(password)` and build the row manually with `User(id=uuid.uuid4().hex, email=..., password_hash=..., display_name=..., is_admin=True)`.
 
 - [ ] **Step 4: Add the route**
 
@@ -1149,7 +1281,7 @@ class AdminIn(BaseModel):
 @router.post("/admin")
 def post_admin(
     payload: AdminIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, str]:
     try:
@@ -1281,7 +1413,7 @@ ENABLED_DEPARTMENTS_V1 = list(DEPARTMENT_DEFAULT_TIERS.keys())
 @router.post("/models/test")
 async def post_models_test(
     payload: ModelsTestIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
     result = await llm_svc.test_provider(
@@ -1296,7 +1428,7 @@ async def post_models_test(
 @router.post("/models")
 async def post_models(
     payload: ModelsIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
     tier_payloads = {"thinking": payload.thinking, "everyday": payload.everyday, "quick": payload.quick}
@@ -1433,7 +1565,7 @@ def _provider_out(row) -> dict[str, object]:
 
 @router.get("/providers")
 def get_providers(
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, list[dict[str, object]]]:
     rows = dp_svc.list_all(db)
@@ -1443,7 +1575,7 @@ def get_providers(
 @router.post("/providers")
 async def post_provider(
     payload: ProviderIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
     result = await dp_svc.create_and_test(db, category=payload.category, entry=payload.entry.model_dump())
@@ -1459,7 +1591,7 @@ async def post_provider(
 def patch_provider(
     entry_id: str,
     payload: ProviderPatchIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
     if payload.priority is not None:
@@ -1472,7 +1604,7 @@ def patch_provider(
 @router.delete("/providers/{entry_id}")
 def delete_provider(
     entry_id: str,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
     dp_svc.delete(db, entry_id)
@@ -1482,7 +1614,7 @@ def delete_provider(
 @router.post("/providers/{entry_id}/test")
 async def retest_provider(
     entry_id: str,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
     result = await dp_svc.retest(db, entry_id)
@@ -1560,6 +1692,8 @@ Expected: FAIL.
 Append to `services/wizard.py`:
 
 ```python
+from typing import Any
+
 from openlia_server.db.models.auth import SignupPolicy
 
 
@@ -1576,7 +1710,10 @@ def set_signup_policy(
     db.flush()
 
 
-def set_config(db: Session, key: str, value: str) -> None:
+def set_config(db: Session, key: str, value: Any) -> None:
+    # ConfigStore.value is typed JSON (see db/models/infrastructure.py) — pass
+    # native Python types (bool / str / int). Bootstrap seeds `wizard.completed`
+    # as a Python bool, so don't coerce to "true"/"false" strings here.
     row = db.query(ConfigStore).filter_by(key=key).one_or_none()
     if row is None:
         db.add(ConfigStore(key=key, value=value))
@@ -1600,7 +1737,7 @@ class AccessControlIn(BaseModel):
 @router.post("/access_control")
 def post_access_control(
     payload: AccessControlIn,
-    db: Session = Depends(get_db_session),
+    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
     mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
@@ -1805,8 +1942,14 @@ Append to `test_ai_review.py`:
 import pytest
 from unittest.mock import AsyncMock
 
+from openlia.llm.types import LLMResponse
+
 from openlia_server.ai_review.store import ReviewStore
 from openlia_server.ai_review.runner import run_review
+
+
+def _fake_response(text: str) -> LLMResponse:
+    return LLMResponse(text=text, finish_reason="stop", input_tokens=0, output_tokens=0)
 
 
 @pytest.mark.asyncio
@@ -1815,16 +1958,12 @@ async def test_run_review_populates_store_on_success(db_session) -> None:
     review_id = store.create()
 
     fake_llm = AsyncMock()
-    fake_llm.generate.return_value = type(
-        "Response",
-        (),
-        {
-            "text": '{"summary": "1 of 1 ready.", "departments": ['
-            '{"id": "secretary", "state": "ready", "note": null, '
-            '"basic": [{"type": "stock_quote", "provider": "eodhd", "confidence": 0.9}], '
-            '"advanced": [], "unmet": []}]}'
-        },
-    )()
+    fake_llm.generate.return_value = _fake_response(
+        '{"summary": "1 of 1 ready.", "departments": ['
+        '{"id": "secretary", "state": "ready", "note": null, '
+        '"basic": [{"type": "stock_quote", "provider": "eodhd", "confidence": 0.9}], '
+        '"advanced": [], "unmet": []}]}'
+    )
 
     await run_review(
         review_id=review_id,
@@ -1846,7 +1985,7 @@ async def test_run_review_marks_failure_on_bad_json() -> None:
     review_id = store.create()
 
     fake_llm = AsyncMock()
-    fake_llm.generate.return_value = type("R", (), {"text": "not json"})()
+    fake_llm.generate.return_value = _fake_response("not json")
 
     await run_review(
         review_id=review_id,
@@ -1912,29 +2051,33 @@ Create `packages/server/src/openlia_server/ai_review/runner.py`:
 from __future__ import annotations
 
 import json
-from typing import Any, Protocol
+from typing import Any
+
+from openlia.llm.base import LLMProvider
+from openlia.llm.types import LLMRequest, Message
 
 from openlia_server.ai_review.prompt import build_review_prompt
 from openlia_server.ai_review.schema import ReviewResult
 from openlia_server.ai_review.store import ReviewStore
 
 
-class _LLMProtocol(Protocol):
-    async def generate(self, *, prompt: str, max_tokens: int) -> Any: ...
-
-
 async def run_review(
     *,
     review_id: str,
     db: Any,
-    llm: _LLMProtocol,
+    llm: LLMProvider,
     departments: list[tuple[str, list[str]]],
     providers: list[dict[str, object]],
     store: ReviewStore,
 ) -> None:
     try:
         prompt = build_review_prompt(departments, providers)
-        response = await llm.generate(prompt=prompt, max_tokens=4096)
+        request = LLMRequest(
+            messages=[Message(role="user", content=prompt)],
+            max_tokens=4096,
+            temperature=0.2,
+        )
+        response = await llm.generate(request)
         try:
             payload = json.loads(response.text)
         except json.JSONDecodeError as exc:
@@ -1945,6 +2088,8 @@ async def run_review(
     except Exception as exc:  # noqa: BLE001 — surface any failure to polling client
         store.update(review_id, state="failed", error=str(exc))
 ```
+
+Note: `LLMProvider.generate` takes an `LLMRequest` dataclass (see `openlia/llm/base.py` + `openlia/llm/types.py`), not `prompt=` / `max_tokens=` kwargs. The `LLMRequest` constructor requires a `messages` list of `Message(role, content)`. If you need the JSON-only contract enforced by the adapter, also set `response_format=ResponseFormat(kind="json_object")` on supported providers — Gemini / OpenAI / Anthropic will honor it; OpenRouter is pass-through.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -2006,10 +2151,12 @@ In `routes/setup.py`:
 ```python
 import asyncio
 
+from openlia.llm.adapters import build_adapter
+from openlia.llm.resolver import resolve as resolve_llm  # sync — returns ResolvedModel
 from openlia_server.ai_review import store as review_store_mod
 from openlia_server.ai_review.runner import run_review as _run_review
-from openlia_server.services import llm_providers as llm_svc
-from openlia.llm.resolver import resolve as resolve_llm
+from openlia_server.services import data_providers as dp_svc
+from openlia_server.services.llm_registry import SQLModelRegistry
 
 
 ENABLED_DEPARTMENTS_REQS: dict[str, list[str]] = {
@@ -2023,31 +2170,45 @@ ENABLED_DEPARTMENTS_REQS: dict[str, list[str]] = {
 }
 
 
-@router.post("/review/run")
+@router.post(
+    "/review/run",
+    dependencies=[require_wizard_active, require_wizard_session, require_loopback],
+)
 async def post_review_run(
-    db: Session = Depends(get_db_session),
-    _: None = Depends(require_wizard_session),
+    db: DBSession = Depends(session_dep),
 ) -> dict[str, str]:
     store = review_store_mod.DEFAULT_STORE
     review_id = store.create()
 
-    quick_llm = await resolve_llm(
-        department_id="panic_thermometer",  # guarantees Quick tier
+    # resolve() is sync; it returns a ResolvedModel (provider_kind + credentials
+    # + model + capabilities). Build the adapter in the request path — we must
+    # not reuse the request-scoped db session inside the background task.
+    resolved = resolve_llm(
+        department_id="panic_thermometer",  # guarantees Quick tier per DEPARTMENT_DEFAULT_TIERS
         user_id=None,
-        registry=llm_svc.SQLModelRegistry(db),
+        registry=SQLModelRegistry(db),
+    )
+    llm = build_adapter(
+        kind=resolved.provider_kind,
+        credentials=resolved.credentials,
+        model=resolved.model_ref,
+        capabilities=resolved.capabilities,
     )
 
-    departments = [(d, reqs) for d, reqs in ENABLED_DEPARTMENTS_REQS.items()]
+    departments = list(ENABLED_DEPARTMENTS_REQS.items())
+    # list_providers returns DataProvider rows; IDs are String(36); only include
+    # enabled providers in the review input.
     providers = [
-        {"id": row.id, "category": row.category, "provider": row.provider}
-        for row in llm_svc.list_data_provider_rows(db)
+        {"id": row.id, "category": row.category, "provider": row.provider_kind}
+        for row in dp_svc.list_providers(db)
+        if row.is_enabled
     ]
 
     asyncio.create_task(
         _run_review(
             review_id=review_id,
-            db=db,
-            llm=quick_llm,
+            db=None,  # runner must open its own SessionLocal() if persistence is added later
+            llm=llm,
             departments=departments,
             providers=providers,
             store=store,
@@ -2059,7 +2220,6 @@ async def post_review_run(
 @router.get("/review/{review_id}")
 def get_review(
     review_id: str,
-    _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
     entry = review_store_mod.DEFAULT_STORE.get(review_id)
     if entry is None:
@@ -2069,6 +2229,10 @@ def get_review(
         )
     return entry
 ```
+
+Notes: the `get_review` route intentionally does **not** carry `require_wizard_session` — any client with a valid review_id can poll (ids are uuid4 hex, unguessable). The 410-gate is also omitted because the review is a terminal-step read that the UI continues polling after the wizard's in-memory `finish` step; if you want the gate, attach `require_wizard_active` to this route and move the last poll before `POST /setup/finish`.
+
+Notes for the runner (`ai_review/runner.py`): do **not** pass the request-scoped `db` into the background task — the route's `session_dep` closes the session on response. The runner must open a fresh `SessionLocal()` inside `run_review(...)` to persist mapping rows, and accept the `ResolvedModel` (not the open session) as its LLM handle.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2106,7 +2270,9 @@ def test_finish_writes_completed_and_returns_redirect(
     assert resp.json()["redirect"] == "/"
 
     completed = db_session.query(ConfigStore).filter_by(key="wizard.completed").one()
-    assert completed.value == "true"
+    # bootstrap seeds config_store.value as a Python bool; readers must tolerate
+    # both bool and legacy "true"/"false" strings (see README contract locks).
+    assert completed.value in (True, "true")
     state = db_session.get(WizardState, 1)
     assert state.active_session_token is None
 
@@ -2135,7 +2301,9 @@ Append to `services/wizard.py`:
 
 ```python
 def finalize(db: Session, mode: Mode) -> None:
-    set_config(db, "wizard.completed", "true")
+    # wizard.completed is stored as a Python bool (JSON column); wizard.mode is
+    # a short string. See Cross-plan contract lock 2026-04-20.
+    set_config(db, "wizard.completed", True)
     set_config(db, "wizard.mode", mode)
     state = _load_or_create_state(db)
     state.active_session_token = None
@@ -2147,13 +2315,12 @@ def finalize(db: Session, mode: Mode) -> None:
 
 - [ ] **Step 4: Add `require_wizard_active` to the router + the finish route**
 
-In `routes/setup.py`, add `from openlia_server.middleware.wizard_gate import require_wizard_active, require_wizard_session`, then:
+In `routes/setup.py`, inside `build_setup_router(...)` where gate factories are bound (see Task 3 / Task 4 rewrites), the local names `require_wizard_active`, `require_wizard_session`, and `require_loopback` are already in scope. Add the finish route alongside the others:
 
 ```python
-@router.post("/finish", dependencies=[Depends(require_wizard_active)])
+@router.post("/finish", dependencies=[require_wizard_active, require_wizard_session])
 def post_finish(
-    db: Session = Depends(get_db_session),
-    _: None = Depends(require_wizard_session),
+    db: DBSession = Depends(session_dep),
 ) -> dict[str, str]:
     mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
     wizard_svc.finalize(db, mode)
@@ -2161,7 +2328,7 @@ def post_finish(
     return {"redirect": redirect, "mode": mode}
 ```
 
-Attach `require_wizard_active` to every step route added in Tasks 5, 7, 8, 9, 10, 11, 14 using `dependencies=[Depends(require_wizard_active)]` on the `@router.<verb>` decorator so they return 410 after completion.
+Attach `require_wizard_active` to every step route added in Tasks 5, 7, 8, 9, 10, 11, 14 using `dependencies=[require_wizard_active, ...]` on the `@router.<verb>` decorator so they return 410 after completion. The gate dependencies are bound objects (already wrapped with `Depends(...)` inside the factory), not names to re-wrap.
 
 - [ ] **Step 5: Run tests to verify they pass**
 

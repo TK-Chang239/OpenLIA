@@ -25,7 +25,7 @@ describe("MustChangePasswordGate", () => {
 
   it("renders outlet when flag is false", async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }), {
+      new Response(JSON.stringify({ user_id: "u1", email: "a", is_admin: false }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -50,9 +50,7 @@ describe("MustChangePasswordGate", () => {
   it("renders the change-password form when flag is true", async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({
-          user: { id: "u1", email: "a", role: "user" },
-        }),
+        JSON.stringify({ user_id: "u1", email: "a", is_admin: false }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     ) as unknown as typeof fetch;

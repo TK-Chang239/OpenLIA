@@ -26,7 +26,7 @@ describe("AuthProvider", () => {
 
   it("200 → authenticated with user", async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }), {
+      new Response(JSON.stringify({ user_id: "u1", email: "a", is_admin: true }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -92,7 +92,7 @@ describe("AuthProvider", () => {
       // login() → 200
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ user: { id: "u2", email: "b", role: "user" } }),
+          JSON.stringify({ user_id: "u2", email: "b", is_admin: false }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       );
@@ -149,7 +149,7 @@ describe("AuthProvider", () => {
 
   it("exposes mustChangePassword: false by default after session fetch", async () => {
     global.fetch = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }), {
+      new Response(JSON.stringify({ user_id: "u1", email: "a", is_admin: true }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -170,7 +170,9 @@ describe("AuthProvider", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
-            user: { id: "u1", email: "a", role: "user" },
+            user_id: "u1",
+            email: "a",
+            is_admin: false,
             must_change_password: true,
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -200,7 +202,7 @@ describe("AuthProvider", () => {
       .fn()
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }),
+          JSON.stringify({ user_id: "u1", email: "a", is_admin: false }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       ) as unknown as typeof fetch;

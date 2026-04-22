@@ -50,7 +50,7 @@ describe("MustChangePasswordForm", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 })) // change-password
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ user: { id: "u1", email: "a", role: "user" } }),
+          JSON.stringify({ user_id: "u1", email: "a", is_admin: false }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       ) as unknown as typeof fetch;

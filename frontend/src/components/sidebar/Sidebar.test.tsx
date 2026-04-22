@@ -25,7 +25,7 @@ describe("Sidebar", () => {
       if (url.includes("/auth/session")) {
         return Promise.resolve(
           new Response(
-            JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }),
+            JSON.stringify({ user_id: "u1", email: "a", is_admin: true }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
         );
@@ -87,7 +87,7 @@ describe("Sidebar", () => {
       if (url.includes("/auth/session")) {
         return Promise.resolve(
           new Response(
-            JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }),
+            JSON.stringify({ user_id: "u1", email: "a", is_admin: true }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
         );

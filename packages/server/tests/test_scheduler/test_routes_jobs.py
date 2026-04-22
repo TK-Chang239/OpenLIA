@@ -186,3 +186,53 @@ def test_retry_refuses_someone_elses_run(client_with_user, route_session_factory
 
     r = client_with_user.post("/jobs/run_other/retry")
     assert r.status_code == 404
+
+
+@pytest.fixture
+def client_without_scheduler(route_session_factory):
+    """App where scheduler is disabled: app.state.scheduler is None."""
+    with route_session_factory() as s:
+        s.add(
+            User(
+                id="local",
+                email="u@e.com",
+                display_name="u",
+                password_hash="h",
+                is_admin=False,
+                is_disabled=False,
+            )
+        )
+        s.commit()
+
+    app = FastAPI()
+    app.state.scheduler = None
+    app.include_router(build_jobs_router(db_session_factory=route_session_factory, mode="personal"))
+    app.include_router(
+        build_notifications_router(db_session_factory=route_session_factory, mode="personal")
+    )
+    with TestClient(app) as client:
+        yield client
+
+
+def test_jobs_history_returns_503_when_scheduler_disabled(client_without_scheduler) -> None:
+    r = client_without_scheduler.get("/jobs/history")
+    assert r.status_code == 503
+
+
+def test_jobs_retry_returns_503_when_scheduler_disabled(client_without_scheduler) -> None:
+    r = client_without_scheduler.post("/jobs/whatever/retry")
+    assert r.status_code == 503
+
+
+def test_notifications_unread_returns_503_when_scheduler_disabled(
+    client_without_scheduler,
+) -> None:
+    r = client_without_scheduler.get("/notifications/unread")
+    assert r.status_code == 503
+
+
+def test_notifications_mark_read_returns_503_when_scheduler_disabled(
+    client_without_scheduler,
+) -> None:
+    r = client_without_scheduler.post("/notifications/read", json={"department": "mb"})
+    assert r.status_code == 503
