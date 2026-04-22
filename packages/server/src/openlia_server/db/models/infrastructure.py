@@ -22,17 +22,9 @@ class WizardState(Base):
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_started")
     current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="mode")
     completed_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    step_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     active_session_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    step_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
-    completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
-    updated_at: Mapped[datetime] = mapped_column(
-        UTCDateTime(),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
 
     __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
 

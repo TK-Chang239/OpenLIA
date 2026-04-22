@@ -144,8 +144,9 @@ packages/server/src/openlia_server/
 └── db/models/infrastructure.py         # MODIFY — add `active_session_token` col to wizard_state (migration)
 
 frontend/src/
-├── router.tsx                          # MODIFY — add /setup/* route group + SetupRedirect gate
-└── App.tsx                             # MODIFY — render SetupRedirect before AuthProvider when wizard incomplete
+├── router/routes.tsx                   # MODIFY — replace /setup placeholder with <SetupPage />
+├── pages/Setup.tsx                     # DELETE — placeholder superseded by pages/SetupPage.tsx
+└── App.tsx                             # MODIFY — wrap content with SetupGate so an incomplete wizard redirects to /setup
 
 planning/implementation-plans/README.md # MODIFY — flip Plan 10 row to Draft
 planning/projectStructure.md            # MODIFY — reflect setup/ directories
@@ -1239,11 +1240,18 @@ Expected: FAIL.
 
 - [ ] **Step 3: Extend service**
 
+Rewritten 2026-04-22: there is no `services.auth.users` module and no `create_user` helper shipped. The existing `services.auth.registration.register` requires an invite token and assumes `signup_policy` is active, neither of which fit the wizard's first-admin path. Build the `User` row directly from `passwords.hash_password` and `passwords.validate_password_policy`.
+
 Append to `services/wizard.py`:
 
 ```python
+import uuid
+from datetime import UTC, datetime
+
+from sqlalchemy.orm import Session
+
 from openlia_server.db.models.auth import User
-from openlia_server.services.auth import users as user_service
+from openlia_server.services.auth import passwords
 
 
 class AdminExistsError(Exception):
@@ -1251,21 +1259,37 @@ class AdminExistsError(Exception):
 
 
 def create_first_admin(db: Session, email: str, password: str, display_name: str) -> User:
-    # User.id is String(36); user_service.create_user generates a uuid4 hex and
-    # hashes the password via services.auth.passwords internally. No is_admin
-    # column on Plan 1A — the canonical shipped User has `is_admin: bool`.
+    # Wizard runs before any signup policy / invite exists. We construct the first
+    # admin row ourselves rather than routing through `registration.register`
+    # (which demands an invite token).
     if db.query(User).filter_by(is_admin=True).first() is not None:
         raise AdminExistsError()
-    return user_service.create_user(
-        db,
-        email=email,
-        password=password,
+    passwords.validate_password_policy(password)  # raises on short/weak input
+
+    now = datetime.now(UTC)
+    user = User(
+        id=uuid.uuid4().hex,
+        email=email.strip().lower(),
         display_name=display_name,
+        password_hash=passwords.hash_password(password),
         is_admin=True,
+        is_disabled=False,
+        must_change_password=False,
+        failed_login_attempts=0,
+        created_at=now,
+        updated_at=now,
     )
+    db.add(user)
+    db.flush()
+    return user
 ```
 
-If `services.auth.users.create_user` has not yet landed with this signature (check source before executing), fall back to the shipped primitive `openlia_server.services.auth.passwords.hash_password(password)` and build the row manually with `User(id=uuid.uuid4().hex, email=..., password_hash=..., display_name=..., is_admin=True)`.
+**Notes for the executor:**
+
+- `passwords.validate_password_policy(...)` is the shipped helper that raises a `WeakPasswordError` (or similar) on short/low-entropy input. Catch the specific exception at the route boundary and surface it as `422` — the plan's Step 4 currently relies on Pydantic `Field(min_length=12)` for rough enforcement, which is fine for the failing test case ("short"), but policy violations beyond length (blacklist, entropy) must still land.
+- Keep `is_admin=True` — there is no `role` column.
+- Emit a `flush`, not `commit`; the FastAPI session dependency commits on success (see `openlia_server.db.deps.make_session_dependency`).
+- The `.startswith("$argon2")` assertion in Step 1 verifies the hash is argon2id. `hash_password` shells through the shipped passlib config; no separate import needed.
 
 - [ ] **Step 4: Add the route**
 
@@ -1321,15 +1345,13 @@ git commit -m "feat(setup): implement POST /setup/admin with first-admin check +
 
 ```python
 def test_models_test_route_pings_provider(personal_client: TestClient, respx_mock) -> None:
-    from respx import MockRouter
-
     personal_client.post("/setup/mode", json={"mode": "personal"})
     respx_mock.post("https://api.openai.com/v1/chat/completions").respond(
         200, json={"choices": [{"message": {"content": "ok"}}]}
     )
     resp = personal_client.post(
         "/setup/models/test",
-        json={"provider": "openai", "model": "gpt-5.4", "api_key": "sk-test"},
+        json={"kind": "openai", "model_ref": "gpt-5.4", "api_key": "sk-test"},
     )
     assert resp.status_code == 200
     assert resp.json()["ok"] is True
@@ -1345,16 +1367,20 @@ def test_models_save_rejects_when_required_tier_empty(
             "thinking": [],  # required by equity_research + macro_research
             "everyday": [
                 {
-                    "provider": "openai",
-                    "model": "gpt-5.4",
+                    "kind": "openai",
+                    "label": "OpenAI",
+                    "model_ref": "gpt-5.4",
+                    "display_name": "GPT-5.4",
                     "api_key": "sk-test",
                     "is_tier_default": True,
                 }
             ],
             "quick": [
                 {
-                    "provider": "openai",
-                    "model": "gpt-5.4-mini",
+                    "kind": "openai",
+                    "label": "OpenAI",
+                    "model_ref": "gpt-5.4-mini",
+                    "display_name": "GPT-5.4 Mini",
                     "api_key": "sk-test",
                     "is_tier_default": True,
                 }
@@ -1373,20 +1399,25 @@ Expected: FAIL — routes don't exist.
 
 - [ ] **Step 3: Add the routes wrapping Plan 4 services**
 
+Rewritten 2026-04-22 to match the shipped `llm_providers` service surface — there is no `test_provider`, `clear_all_providers`, or `add_model` function. The wizard reuses `build_adapter` + `adapter.test_connection(...)` directly (the same pattern `_run_connection_test` uses in `routes/settings.py`) and calls `create_provider` / `create_model` / `delete_model` / `delete_provider` with their real signatures.
+
 In `routes/setup.py`:
 
 ```python
+from openlia.llm.adapters import build_adapter
 from openlia.llm.department_defaults import DEPARTMENT_DEFAULT_TIERS
-from openlia.llm.types import ModelTier
+from openlia.llm.types import Capabilities, ModelTier, ProviderCredentials
 from openlia_server.services import llm_providers as llm_svc
 
 
 class TierEntryIn(BaseModel):
-    provider: str
-    model: str
+    kind: str                       # adapter kind: "openai", "anthropic", "gemini", ...
+    label: str                      # human-readable provider label shown in Settings
+    model_ref: str                  # vendor model id, e.g. "gpt-5.4"
+    display_name: str               # human-readable model name shown in tier slots
     api_key: str | None = None
     base_url: str | None = None
-    capabilities: dict[str, bool] | None = None
+    env_var_name: str | None = None
     is_tier_default: bool = False
 
 
@@ -1397,10 +1428,11 @@ class ModelsIn(BaseModel):
 
 
 class ModelsTestIn(BaseModel):
-    provider: str
-    model: str
+    kind: str
+    model_ref: str
     api_key: str | None = None
     base_url: str | None = None
+    env_var_name: str | None = None
 
 
 def _required_tiers(enabled_depts: list[str]) -> set[ModelTier]:
@@ -1410,28 +1442,65 @@ def _required_tiers(enabled_depts: list[str]) -> set[ModelTier]:
 ENABLED_DEPARTMENTS_V1 = list(DEPARTMENT_DEFAULT_TIERS.keys())
 
 
+async def _test_llm_connection(
+    *,
+    kind: str,
+    api_key: str | None,
+    base_url: str | None,
+    env_var_name: str | None,
+    model_ref: str,
+) -> dict[str, object]:
+    effective_key = api_key
+    if env_var_name:
+        effective_key = os.environ.get(env_var_name) or api_key
+    try:
+        adapter = build_adapter(
+            kind=kind,
+            credentials=ProviderCredentials(api_key=effective_key, base_url=base_url),
+            model=model_ref,
+            capabilities=Capabilities(),
+        )
+    except Exception as exc:  # noqa: BLE001 — surface adapter-construction failures verbatim
+        return {
+            "ok": False,
+            "latency_ms": 0,
+            "error_class": type(exc).__name__,
+            "error_msg": str(exc),
+        }
+    result = await adapter.test_connection(model_ref)
+    return {
+        "ok": result.ok,
+        "latency_ms": result.latency_ms,
+        "error_class": result.error_class,
+        "error_msg": result.error_msg,
+    }
+
+
 @router.post("/models/test")
 async def post_models_test(
     payload: ModelsTestIn,
-    db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
-    result = await llm_svc.test_provider(
-        provider=payload.provider,
-        model=payload.model,
+    return await _test_llm_connection(
+        kind=payload.kind,
         api_key=payload.api_key,
         base_url=payload.base_url,
+        env_var_name=payload.env_var_name,
+        model_ref=payload.model_ref,
     )
-    return {"ok": result.ok, "latency_ms": result.latency_ms, "error": result.error}
 
 
 @router.post("/models")
-async def post_models(
+def post_models(
     payload: ModelsIn,
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
-    tier_payloads = {"thinking": payload.thinking, "everyday": payload.everyday, "quick": payload.quick}
+    tier_payloads: dict[str, list[TierEntryIn]] = {
+        "thinking": payload.thinking,
+        "everyday": payload.everyday,
+        "quick": payload.quick,
+    }
 
     required = _required_tiers(ENABLED_DEPARTMENTS_V1)
     missing = [tier.value for tier in required if not tier_payloads[tier.value]]
@@ -1445,21 +1514,30 @@ async def post_models(
             },
         )
 
-    llm_svc.clear_all_providers(db)
+    # Wipe prior provider/model state (wizard owns this slot before completion).
+    # The shipped service has no bulk clear — delete models first (FK-safe),
+    # then providers.
+    for model_row in llm_svc.list_all_models(db):
+        llm_svc.delete_model(db, model_row.id)
+    for provider_row in llm_svc.list_providers(db):
+        llm_svc.delete_provider(db, provider_row.id)
+
     for tier_name, entries in tier_payloads.items():
         for entry in entries:
-            provider = llm_svc.create_provider(
+            created = llm_svc.create_provider(
                 db,
-                provider=entry.provider,
+                kind=entry.kind,
+                label=entry.label,
                 api_key=entry.api_key,
                 base_url=entry.base_url,
-                capabilities=entry.capabilities,
+                env_var_name=entry.env_var_name,
             )
-            llm_svc.add_model(
+            llm_svc.create_model(
                 db,
-                provider_id=provider.id,
-                model=entry.model,
-                tier=ModelTier(tier_name),
+                provider_id=created.id,
+                tier=ModelTier(tier_name).value,
+                model_ref=entry.model_ref,
+                display_name=entry.display_name,
                 is_tier_default=entry.is_tier_default,
             )
 
@@ -1467,6 +1545,14 @@ async def post_models(
     wizard_svc.advance_step(db, "models", mode)
     return {"ok": True}
 ```
+
+**Notes for the executor:**
+
+- `create_provider` returns a `ProviderCreated` dataclass with only `.id`; use it for the subsequent `create_model` call.
+- `create_model`'s `tier` parameter is the string value of the enum (`"thinking"` / `"everyday"` / `"quick"`), not the enum instance — the model column is a plain `String`.
+- `post_models` is synchronous: every call inside it is a sync DB op. Keep it non-`async` (mixing a blocking session with `async def` can starve the event loop in tests).
+- `post_models_test` stays `async def` because `adapter.test_connection(...)` is awaitable.
+- The Step 1 test must be updated to send the new DTO field names (`kind`, `model_ref`, `display_name`) instead of the old `provider` / `model` names — update the test bodies before running Step 2.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1499,12 +1585,12 @@ def test_providers_crud_lifecycle(personal_client: TestClient, respx_mock) -> No
     resp = personal_client.post(
         "/setup/providers",
         json={
+            "kind": "eodhd",
+            "label": "EODHD",
             "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "eodhd",
-                "api_key": "demo",
-            },
+            "mode": "api_key",
+            "api_key": "demo",
+            "base_url": "https://eodhd.com",  # create_provider raises on api_key mode without base_url
         },
     )
     assert resp.status_code == 200
@@ -1512,8 +1598,9 @@ def test_providers_crud_lifecycle(personal_client: TestClient, respx_mock) -> No
 
     listed = personal_client.get("/setup/providers").json()
     assert any(p["id"] == pid for p in listed["providers"])
+    assert any(p["category"] == "financial" for p in listed["providers"])
 
-    patched = personal_client.patch(f"/setup/providers/{pid}", json={"priority": 0})
+    patched = personal_client.patch(f"/setup/providers/{pid}", json={"api_key": "new-demo"})
     assert patched.status_code == 200
 
     deleted = personal_client.delete(f"/setup/providers/{pid}")
@@ -1527,39 +1614,53 @@ Expected: FAIL.
 
 - [ ] **Step 3: Add the routes as wrappers around Plan 3's service**
 
+Rewritten 2026-04-22 to match the shipped `data_providers` surface — there is no `list_all`, `create_and_test`, `reorder`, `update_api_key`, `delete`, or `retest` function. The shipped signatures are: `create_provider(session, *, kind, label, category, mode, api_key, env_var_name, base_url, extra_config, created_by_user_id) -> ProviderCreated`; `list_providers / get_provider / update_provider / delete_provider / load_provider_entry`. Category is **not** persisted on `DataProvider` — it is a `ClassVar` on each adapter class (`ADAPTERS[kind].category`) and must be derived on read. Priority is not a provider-level column either; it lives on `data_provider_requirement_mapping` and is set via `set_provider_default_priority` or `set_requirement_mapping`. The wizard ships basic CRUD + connection test; request-level priority management is Plan 11's (Settings) concern.
+
 In `routes/setup.py`:
 
 ```python
+from openlia.data.adapters import ADAPTERS
+from openlia.data.types import ProviderCategory, ProviderMode
 from openlia_server.services import data_providers as dp_svc
 
 
-class ProviderEntryIn(BaseModel):
-    mode: str = Field(pattern="^(builtin|mcp|openapi)$")
-    provider: str | None = None
-    api_key: str | None = None
-    mcp_url: str | None = None
-    mcp_auth_header: str | None = None
-    openapi_spec_url: str | None = None
-
-
 class ProviderIn(BaseModel):
-    category: str = Field(pattern="^(financial|news|social|web_search)$")
-    entry: ProviderEntryIn
+    kind: str                                                   # registered adapter kind ("eodhd", ...)
+    label: str                                                  # display name
+    category: Literal["financial", "news", "social_media"]
+    mode: Literal["api_key", "mcp"]
+    api_key: str | None = None
+    env_var_name: str | None = None
+    base_url: str | None = None
+    extra_config: dict[str, object] | None = None
 
 
 class ProviderPatchIn(BaseModel):
-    priority: int | None = None
+    label: str | None = None
     api_key: str | None = None
+    env_var_name: str | None = None
+    base_url: str | None = None
+    extra_config: dict[str, object] | None = None
+    is_enabled: bool | None = None
 
 
-def _provider_out(row) -> dict[str, object]:
+def _category_for_kind(kind: str) -> str | None:
+    adapter_cls = ADAPTERS.get(kind)
+    if adapter_cls is None:
+        return None
+    return adapter_cls.category.value  # ProviderCategory is a StrEnum
+
+
+def _provider_row_to_out(row) -> dict[str, object]:
     return {
         "id": row.id,
-        "category": row.category,
-        "mode": row.mode,
-        "provider": row.provider,
-        "priority": row.priority,
-        "status": row.status,
+        "kind": row.kind,
+        "label": row.label,
+        "category": _category_for_kind(row.kind),
+        "base_url": row.base_url,
+        "env_var_name": row.env_var_name,
+        "has_api_key": row.api_key_encrypted is not None,
+        "is_enabled": row.is_enabled,
     }
 
 
@@ -1568,8 +1669,8 @@ def get_providers(
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, list[dict[str, object]]]:
-    rows = dp_svc.list_all(db)
-    return {"providers": [_provider_out(r) for r in rows]}
+    rows = dp_svc.list_providers(db)
+    return {"providers": [_provider_row_to_out(r) for r in rows]}
 
 
 @router.post("/providers")
@@ -1578,13 +1679,52 @@ async def post_provider(
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
-    result = await dp_svc.create_and_test(db, category=payload.category, entry=payload.entry.model_dump())
-    if not result.ok:
+    # Validate the adapter exists and matches the claimed category before creating.
+    adapter_cls = ADAPTERS.get(payload.kind)
+    if adapter_cls is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "unknown_provider_kind", "message": f"Unknown kind {payload.kind!r}."},
+        )
+    if adapter_cls.category.value != payload.category:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "category_mismatch",
+                "message": f"Adapter {payload.kind!r} is in category {adapter_cls.category.value!r}.",
+            },
+        )
+
+    try:
+        created = dp_svc.create_provider(
+            db,
+            kind=payload.kind,
+            label=payload.label,
+            category=ProviderCategory(payload.category),
+            mode=ProviderMode(payload.mode),
+            api_key=payload.api_key,
+            env_var_name=payload.env_var_name,
+            base_url=payload.base_url,
+            extra_config=payload.extra_config,
+        )
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={"code": "provider_test_failed", "message": result.error or "Test failed."},
-        )
-    return {"ok": True, "entry_id": result.provider_id}
+            detail={"code": "invalid_provider", "message": str(exc)},
+        ) from exc
+
+    # Best-effort connection test before advancing. A failed test does not roll
+    # back the row — the user may be configuring an MCP endpoint that goes live
+    # later. The frontend uses the response to show a yellow pill on the row.
+    entry = dp_svc.load_provider_entry(db, created.id)
+    ok = False
+    error: str | None = None
+    try:
+        ok = await adapter_cls(entry).health_check()
+    except Exception as exc:  # noqa: BLE001 — surface raw adapter failures
+        error = str(exc)
+
+    return {"ok": True, "entry_id": created.id, "health_check_ok": ok, "health_check_error": error}
 
 
 @router.patch("/providers/{entry_id}")
@@ -1594,20 +1734,32 @@ def patch_provider(
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
-    if payload.priority is not None:
-        dp_svc.reorder(db, entry_id, payload.priority)
-    if payload.api_key is not None:
-        dp_svc.update_api_key(db, entry_id, payload.api_key)
+    try:
+        dp_svc.update_provider(
+            db,
+            entry_id,
+            label=payload.label,
+            api_key=payload.api_key,
+            env_var_name=payload.env_var_name,
+            base_url=payload.base_url,
+            extra_config=payload.extra_config,
+            is_enabled=payload.is_enabled,
+        )
+    except dp_svc.ProviderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "not_found"}) from exc
     return {"ok": True}
 
 
 @router.delete("/providers/{entry_id}")
-def delete_provider(
+def delete_provider_row(
     entry_id: str,
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, bool]:
-    dp_svc.delete(db, entry_id)
+    try:
+        dp_svc.delete_provider(db, entry_id)
+    except dp_svc.ProviderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "not_found"}) from exc
     return {"ok": True}
 
 
@@ -1617,9 +1769,26 @@ async def retest_provider(
     db: DBSession = Depends(session_dep),
     _: None = Depends(require_wizard_session),
 ) -> dict[str, object]:
-    result = await dp_svc.retest(db, entry_id)
-    return {"ok": result.ok, "latency_ms": result.latency_ms, "error": result.error}
+    try:
+        entry = dp_svc.load_provider_entry(db, entry_id)
+    except dp_svc.ProviderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "not_found"}) from exc
+    adapter_cls = ADAPTERS.get(entry.kind)
+    if adapter_cls is None:
+        return {"ok": False, "error_class": "UnknownKind", "error_msg": f"no adapter for kind={entry.kind!r}"}
+    try:
+        ok = await adapter_cls(entry).health_check()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error_class": type(exc).__name__, "error_msg": str(exc)}
+    return {"ok": ok}
 ```
+
+**Notes for the executor:**
+
+- The wizard route handler names differ from the module-level `delete_provider` symbol imported from `dp_svc`. The endpoint function is `delete_provider_row` to avoid shadowing.
+- Category is not stored; it is inferred. The `list_providers` response carries category so the frontend can tab-group rows. Consumers that need to gate by category (e.g. the readiness scan in Task 14) must also use `_category_for_kind` or go through `ADAPTERS`.
+- Priority handling is **intentionally out of scope** for the wizard. If later feedback demands it during setup, add a separate `PATCH /setup/providers/{id}/priority` that calls `dp_svc.set_provider_default_priority` — do not cram it into `PATCH /providers/{id}`.
+- `health_check()` is the shipped method on data adapters — never `test_connection()` (that's the LLM adapter contract; they live in different subsystems).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2151,6 +2320,7 @@ In `routes/setup.py`:
 ```python
 import asyncio
 
+from openlia.data.adapters import ADAPTERS
 from openlia.llm.adapters import build_adapter
 from openlia.llm.resolver import resolve as resolve_llm  # sync — returns ResolvedModel
 from openlia_server.ai_review import store as review_store_mod
@@ -2196,13 +2366,24 @@ async def post_review_run(
     )
 
     departments = list(ENABLED_DEPARTMENTS_REQS.items())
-    # list_providers returns DataProvider rows; IDs are String(36); only include
+    # list_providers returns DataProvider rows; IDs are String(36). DataProvider
+    # has no category/provider_kind columns — category is derived from the
+    # adapter registry; the persisted discriminator is `kind`. Only include
     # enabled providers in the review input.
-    providers = [
-        {"id": row.id, "category": row.category, "provider": row.provider_kind}
-        for row in dp_svc.list_providers(db)
-        if row.is_enabled
-    ]
+    providers = []
+    for row in dp_svc.list_providers(db):
+        if not row.is_enabled:
+            continue
+        adapter_cls = ADAPTERS.get(row.kind)
+        if adapter_cls is None:
+            continue
+        providers.append(
+            {
+                "id": row.id,
+                "category": adapter_cls.category.value,
+                "provider": row.kind,
+            }
+        )
 
     asyncio.create_task(
         _run_review(
@@ -4690,7 +4871,7 @@ git commit -m "feat(frontend): add Step 6 ReviewStep with polling + readiness ca
 
 **Files:**
 - Create: `frontend/src/pages/SetupPage.tsx`
-- Modify: `frontend/src/router.tsx`
+- Modify: `frontend/src/router/routes.tsx`
 - Modify: `frontend/src/App.tsx`
 - Modify: `frontend/src/index.css` (add `--color-surface-info` token)
 
@@ -4775,16 +4956,18 @@ export function SetupPage() {
 }
 ```
 
-- [ ] **Step 3: Add `/setup` route to `router.tsx`**
+- [ ] **Step 3: Add `/setup` route to `router/routes.tsx`**
 
-In `frontend/src/router.tsx`, add to the `createBrowserRouter` tree (before the protected routes):
+Replace the existing `/setup` placeholder row in `frontend/src/router/routes.tsx` (`{ path: "/setup", element: <Setup /> }`) with the real page. The route already lives outside the `ProtectedRoute` tree — leave it there so the wizard keeps running pre-auth.
 
 ```typescript
-import { SetupPage } from "./pages/SetupPage";
+import { SetupPage } from "../pages/SetupPage";
 
 // inside createBrowserRouter children:
   { path: "/setup", element: <SetupPage /> },
 ```
+
+Remove the now-unused placeholder import of `Setup` from `../pages/Setup` (and delete `frontend/src/pages/Setup.tsx` if it contains only the placeholder).
 
 - [ ] **Step 4: Add a `SetupRedirect` gate at app root**
 
@@ -4830,8 +5013,9 @@ Expected: all pass.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add frontend/src/pages/SetupPage.tsx frontend/src/router.tsx frontend/src/App.tsx \
+git add frontend/src/pages/SetupPage.tsx frontend/src/router/routes.tsx frontend/src/App.tsx \
         frontend/src/index.css
+git rm frontend/src/pages/Setup.tsx  # placeholder removed when SetupPage replaces it
 git commit -m "feat(frontend): wire /setup route + SetupGate redirect for incomplete wizard"
 ```
 

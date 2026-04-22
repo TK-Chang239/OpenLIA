@@ -37,8 +37,8 @@ def test_wizard_state_defaults(create_tables, db_session: Session) -> None:
     assert w.status == "not_started"
     assert w.current_step == "mode"
     assert w.completed_steps == []
-    assert w.active_session_token is None
     assert w.step_data == {}
+    assert w.active_session_token is None
 
 
 def test_wizard_state_accepts_named_step_and_session_token(
