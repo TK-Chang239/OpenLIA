@@ -12,8 +12,8 @@ export function ToggleSwitch({ checked, onChange, label, description, disabled }
   return (
     <label className="flex items-start justify-between gap-4 py-1">
       <span>
-        <span className="block text-sm font-medium text-fg">{label}</span>
-        {description ? <span className="mt-0.5 block text-xs text-fg-muted">{description}</span> : null}
+        <span className="block text-sm font-medium text-text-primary">{label}</span>
+        {description ? <span className="mt-0.5 block text-xs text-text-secondary">{description}</span> : null}
       </span>
       <button
         type="button"
@@ -23,7 +23,7 @@ export function ToggleSwitch({ checked, onChange, label, description, disabled }
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-          checked ? 'bg-primary' : 'bg-surface-muted'
+          checked ? 'bg-accent-primary' : 'bg-bg-base'
         } disabled:opacity-50`}
       >
         <span
