@@ -56,6 +56,30 @@ def company_client(db_session, monkeypatch):
 
 
 @pytest.fixture
+def auth_user(company_client: TestClient, db_session, make_user):
+    from openlia_server.middleware.auth import COOKIE_NAME
+    from openlia_server.services.auth import sessions
+
+    user = make_user()
+    created = sessions.create_session(db_session, user_id=user.id, persistent=False)
+    company_client.cookies.set(COOKIE_NAME, created.raw_token)
+    return user
+
+
+@pytest.fixture
+def company_client_anon(db_session, monkeypatch):
+    monkeypatch.setenv("OPENLIA_MODE", "company")
+    monkeypatch.setenv("OPENLIA_COOKIE_SECURE", "false")
+    from openlia_server.app import create_app
+    from openlia_server.db import session as session_mod
+    from openlia_server.services.auth import signup_policy
+
+    signup_policy.seed_signup_policy(db_session, mode_flag="company")
+    app = create_app(db_session_factory=session_mod.SessionLocal)
+    return TestClient(app)
+
+
+@pytest.fixture
 def personal_client(db_session, make_user, monkeypatch):
     from datetime import datetime
 
