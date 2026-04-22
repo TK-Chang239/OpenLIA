@@ -20,7 +20,9 @@ class WizardState(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_started")
-    current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="mode")
+    completed_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    active_session_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
     step_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
