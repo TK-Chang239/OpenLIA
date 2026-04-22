@@ -15,6 +15,7 @@ const jsonResponse = (body: unknown) =>
 function Probe() {
   const wizard = useWizard();
   if (wizard.state === "loading") return <div>loading</div>;
+  if (wizard.state === "error") return <div>error</div>;
   return (
     <div>
       mode:{wizard.status.mode} step:{wizard.status.current_step}
