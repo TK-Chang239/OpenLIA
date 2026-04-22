@@ -10,8 +10,12 @@ interface Props {
 
 const LANGUAGES: { code: LangCode; label: string }[] = [
   { code: 'en', label: 'English' },
-  { code: 'zh-Hant', label: 'Traditional Chinese' },
-  { code: 'zh-Hans', label: 'Simplified Chinese' },
+  { code: 'zh-TW', label: 'Traditional Chinese' },
+];
+
+const REPORT_LANGUAGES: { code: LangCode; label: string }[] = [
+  ...LANGUAGES,
+  { code: 'both', label: 'Both' },
 ];
 
 export function AccountSection({ currentEmail, mustChangePassword }: Props): JSX.Element {
@@ -166,7 +170,7 @@ export function AccountSection({ currentEmail, mustChangePassword }: Props): JSX
               onChange={(e) => setReportLanguage(e.target.value as LangCode)}
               className="rounded border border-border-subtle bg-bg-elevated px-3 py-2 text-text-primary focus:border-border-secondary focus:outline-none"
             >
-              {LANGUAGES.map((l) => (
+              {REPORT_LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
                   {l.label}
                 </option>

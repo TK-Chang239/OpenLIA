@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 
-export interface DirtyForm<T extends Record<string, unknown>> {
+export interface DirtyForm<T extends object> {
   values: T;
   initial: T;
   isDirty: boolean;
@@ -10,15 +10,15 @@ export interface DirtyForm<T extends Record<string, unknown>> {
   markSaved: () => void;
 }
 
-function shallowEqual<T extends Record<string, unknown>>(a: T, b: T): boolean {
+function shallowEqual<T extends object>(a: T, b: T): boolean {
   const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
   for (const k of keys) {
-    if (a[k] !== b[k]) return false;
+    if ((a as Record<string, unknown>)[k] !== (b as Record<string, unknown>)[k]) return false;
   }
   return true;
 }
 
-export function useDirtyForm<T extends Record<string, unknown>>(initialValues: T): DirtyForm<T> {
+export function useDirtyForm<T extends object>(initialValues: T): DirtyForm<T> {
   const [initial, setInitial] = useState<T>(initialValues);
   const [values, setValuesState] = useState<T>(initialValues);
 

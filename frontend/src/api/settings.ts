@@ -1,6 +1,6 @@
 export type Theme = 'system' | 'light' | 'dark';
-export type LangCode = 'en' | 'zh-TW' | 'zh-Hant' | 'zh-Hans' | 'both';
-export type Tier = 'everyday' | 'quick' | 'thinking' | 'long_context';
+export type LangCode = 'en' | 'zh-TW' | 'both';
+export type Tier = 'everyday' | 'quick' | 'thinking';
 
 export interface Prefs {
   display_name: string;
@@ -27,10 +27,8 @@ export interface EmailUpdateIn {
   current_password: string;
 }
 
-export interface ModelPreference {
-  tier: Tier;
-  provider_id: string;
-  model_id: string;
+export interface ModelPreferences {
+  preferences: Record<Tier, string>;
 }
 
 export class ApiError extends Error {
@@ -67,15 +65,15 @@ export const updatePrefs = (patch: PrefsPatch) =>
   request<Prefs>('/api/settings/prefs', { method: 'PATCH', body: JSON.stringify(patch) });
 
 export const updateEmail = (body: EmailUpdateIn) =>
-  request<{ ok: true }>('/api/settings/email', { method: 'PATCH', body: JSON.stringify(body) });
+  request<{ email: string }>('/api/settings/email', { method: 'PATCH', body: JSON.stringify(body) });
 
 export const getModelPreferences = () =>
-  request<{ items: ModelPreference[] }>('/api/settings/admin/llm/preferences');
+  request<ModelPreferences>('/api/settings/admin/llm/preferences');
 
-export const putModelPreference = (tier: Tier, body: { provider_id: string; model_id: string }) =>
-  request<{ ok: true }>(`/api/settings/admin/llm/preferences/${tier}`, {
+export const putModelPreference = (tier: Tier, model_id: string) =>
+  request<{ ok: true }>('/api/settings/admin/llm/preferences', {
     method: 'PUT',
-    body: JSON.stringify(body),
+    body: JSON.stringify({ tier, model_id }),
   });
 
 export const deleteModelPreference = (tier: Tier) =>
