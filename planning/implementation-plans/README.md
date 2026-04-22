@@ -18,7 +18,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 8 | 4 | Frontend shell (routing, auth context, layout, design tokens) | Draft | `2026-04-17-phase-8-frontend-shell.md` |
 | 9 | 4 | Login + Account Management UI | Done (2026-04-21) | `2026-04-17-phase-9-login-and-account-ui.md` |
 | 10 | 4 | Setup Wizard | Draft | `2026-04-17-phase-10-setup-wizard.md` |
-| 11 | 4 | Settings page | Draft | `2026-04-17-phase-11-settings-page.md` |
+| 11 | 4 | Settings page | Done (2026-04-22) | `2026-04-17-phase-11-settings-page.md` |
 | 12 | 4 | Shared chat components (ChatInterface, ChatHistory, FileViewer, FileDownload, SaveToRepo) | Draft | `2026-04-17-phase-12-shared-chat-components.md` |
 | 13 | 5 | Report rendering pipeline + Secretary department | Draft | `2026-04-17-phase-13-report-pipeline-and-secretary.md` |
 | 14 | 5 | Equity Research department (initiation / update / sector) | Draft | `2026-04-17-phase-14-equity-research.md` |
