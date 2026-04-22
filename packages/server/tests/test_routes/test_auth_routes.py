@@ -15,7 +15,6 @@ from openlia_server.services.auth import tokens
 def seeded_invite(db_session):
     row = SignupInvite(
         id="inv-1",
-        token="valid-invite",
         token_hash=tokens.hash_token("valid-invite"),
         created_at=datetime.now(UTC),
     )
