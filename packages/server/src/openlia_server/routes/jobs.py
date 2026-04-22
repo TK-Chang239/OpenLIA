@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import JobRun
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.scheduler.registry import JobStatus
 from openlia_server.scheduler.services import jobs as jobs_service
 
@@ -37,6 +37,16 @@ class RetryAck(BaseModel):
     retry_scheduled: bool
 
 
+def _require_scheduler(request: Request):
+    svc = getattr(request.app.state, "scheduler", None)
+    if svc is None:
+        raise HTTPException(
+            status_code=503,
+            detail="scheduler is disabled; scheduler-backed actions are unavailable",
+        )
+    return svc
+
+
 def _serialize_run(run: JobRun) -> JobRunOut:
     return JobRunOut(
         id=run.id,
@@ -56,7 +66,7 @@ def build_jobs_router(
     mode: Literal["personal", "company"],
 ) -> APIRouter:
     """Factory for /jobs/*. Binds the real auth dependency for the given mode."""
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     router = APIRouter(prefix="/jobs", tags=["jobs"])
 
     @router.get("/history", response_model=JobsHistoryOut)
@@ -66,7 +76,7 @@ def build_jobs_router(
         offset: Annotated[int, Query(ge=0)] = 0,
         user: User = require_auth,
     ) -> JobsHistoryOut:
-        svc = request.app.state.scheduler
+        svc = _require_scheduler(request)
         with svc.session_factory() as session:
             runs = jobs_service.list_for_user(
                 session=session,
@@ -86,7 +96,7 @@ def build_jobs_router(
         request: Request,
         user: User = require_auth,
     ) -> RetryAck:
-        svc = request.app.state.scheduler
+        svc = _require_scheduler(request)
         with svc.session_factory() as session:
             run = session.get(JobRun, run_id)
             if run is None or run.user_id != user.id:

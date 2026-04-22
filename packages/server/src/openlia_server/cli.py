@@ -71,10 +71,25 @@ def _root(
     ctx.obj = {"no_color": no_color, "db_url": db_url, "version": version}
 
 
+def _default_host() -> str:
+    env = os.environ.get("OPENLIA_HOST")
+    if env:
+        return env
+    mode = os.environ.get("OPENLIA_MODE", "personal").lower()
+    return "0.0.0.0" if mode == "company" else "127.0.0.1"
+
+
+def _default_port() -> int:
+    env = os.environ.get("OPENLIA_PORT")
+    if env:
+        return int(env)
+    return 8000
+
+
 @app.command()
 def serve(
-    host: str = typer.Option("127.0.0.1", help="Bind address."),
-    port: int = typer.Option(8000, help="Bind port."),
+    host: str = typer.Option(None, help="Bind address (defaults to OPENLIA_HOST)."),
+    port: int = typer.Option(None, help="Bind port (defaults to OPENLIA_PORT)."),
     reload: bool = typer.Option(
         False, "--reload", help="Auto-reload on code changes (development only)."
     ),
@@ -90,8 +105,8 @@ def serve(
     bootstrap()
     uvicorn.run(
         "openlia_server.app:create_app",
-        host=host,
-        port=port,
+        host=host if host is not None else _default_host(),
+        port=port if port is not None else _default_port(),
         reload=reload,
         factory=True,
     )
@@ -198,7 +213,11 @@ def admin_reset_password(
             exit_not_found("user", email)
         try:
             password_reset_service.admin_direct_reset(
-                db, user_id=user.id, new_password=password, admin_user_id=None
+                db,
+                user_id=user.id,
+                new_password=password,
+                admin_user_id=None,
+                metadata={"source": "cli"},
             )
         except (AuthError, TokenInvalidError) as exc:
             echo_error(str(exc))
@@ -585,13 +604,21 @@ def wizard_reset(
                 WizardState(
                     id=1,
                     status="not_started",
-                    current_step=1,
+                    current_step="mode",
+                    completed_steps=[],
+                    active_session_token=None,
                     mode=None,
                 )
             )
         else:
             state.status = "not_started"
-            state.current_step = 1
+            state.current_step = "mode"
+            state.completed_steps = []
+            state.active_session_token = None
+            state.mode = None
+            state.step_data = {}
+            state.started_at = None
+            state.completed_at = None
             state.updated_at = now
         wc = db.execute(
             select(ConfigStore).where(ConfigStore.key == "wizard.completed")

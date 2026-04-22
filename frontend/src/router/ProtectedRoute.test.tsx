@@ -50,7 +50,7 @@ describe("ProtectedRoute", () => {
   it("renders children when authenticated", async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }),
+        JSON.stringify({ user_id: "u1", email: "a", is_admin: true }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     ) as unknown as typeof fetch;

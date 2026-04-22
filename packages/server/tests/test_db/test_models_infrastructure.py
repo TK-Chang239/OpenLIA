@@ -35,8 +35,30 @@ def test_wizard_state_defaults(create_tables, db_session: Session) -> None:
     db_session.refresh(w)
 
     assert w.status == "not_started"
-    assert w.current_step == 1
+    assert w.current_step == "mode"
+    assert w.completed_steps == []
+    assert w.active_session_token is None
     assert w.step_data == {}
+
+
+def test_wizard_state_accepts_named_step_and_session_token(
+    create_tables, db_session: Session
+) -> None:
+    from openlia_server.db.models.infrastructure import WizardState
+
+    w = WizardState(
+        id=1,
+        current_step="providers",
+        completed_steps=["mode", "account", "models"],
+        active_session_token="abc123",
+    )
+    db_session.add(w)
+    db_session.commit()
+    db_session.refresh(w)
+
+    assert w.current_step == "providers"
+    assert w.completed_steps == ["mode", "account", "models"]
+    assert w.active_session_token == "abc123"
 
 
 def test_config_store_roundtrip(create_tables, db_session: Session) -> None:

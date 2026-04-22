@@ -76,10 +76,14 @@ Locked after the 2026-04-20 Phase 7+ plan audit. Plans 7–15 drifted against th
 
 **Model imports.**
 
-- `from openlia_server.db.models.auth import User, Session, SignupInvite, PasswordResetRequest, LoginAttempt`
-- `from openlia_server.db.models.config import LLMProvider, LLMModel, DataProvider, ConfigStore, WizardState`
-- `from openlia_server.db.models.content import ChatSession, ChatMessage, Report, RepoItem` (RepoItem created by Plan 12 Task 0)
-- `from openlia_server.db.models.infrastructure import JobRun, Notification`
+- `from openlia_server.db.models.auth import User, Session, SignupInvite, SignupPolicy, PasswordResetRequest, AuthEvent`
+- `from openlia_server.db.models.config import LLMProvider, LLMModel, UserLLMPreference, DataProvider, DataProviderRequirementMapping, WebSearchProvider`
+- `from openlia_server.db.models.content import ChatSession, ChatMessage, ChatAttachment, Report, ReportVersion, PortfolioHolding, Watchlist, WatchlistItem` (RepoItem not yet in source — created by Plan 12 Task 0)
+- `from openlia_server.db.models.infrastructure import ConfigStore, WizardState`
+- `from openlia_server.db.models.scheduler import MbSchedule, EuSchedule, JobRun, UserNotification`
+- `from openlia_server.db.models.dashboard import PtUserConfig, PtPreset, MrDashboardState, MrAssessmentCache, RsUserConfig, RsSnapshot, FeSavedFormula`
+
+There is no `LoginAttempt` model — login throttling uses `AuthEvent` rows (`event_type = "login_failed"`). Notifications are named `UserNotification`, not `Notification`.
 
 **Auth dependencies.** Router-factory pattern only — do not import a bare `get_current_user`:
 
@@ -127,6 +131,13 @@ Frontend maps at the boundary: `role = is_admin ? "admin" : "user"`, `id = user_
 **Runtime imports.** `from openlia.llm.runtime.messages import ReportRequest` and `from openlia.llm.runtime.events import to_wire` (SSE serialization). `serialize_sse` does not exist.
 
 **Frontend `/api` proxy.** Already shipped in `frontend/vite.config.ts`: target `http://localhost:8000`, `changeOrigin: true`, `rewrite: (p) => p.replace(/^\/api/, "")`. Backend routes remain unprefixed; tests using `TestClient` hit bare paths.
+
+**Contract and authorization matrices.** The source of truth for every existing and planned route:
+
+- `planning/implementation-plans/endpoint-contract-matrix.md` — endpoint path, backend function, frontend client, auth dep, request/response DTO, owning plan, test file.
+- `planning/implementation-plans/route-authorization-matrix.md` — access level, owner scoping, must-change-password behavior, personal vs company mounting.
+
+No new route merges without rows in both.
 
 ---
 

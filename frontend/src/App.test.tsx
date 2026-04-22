@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { createMemoryRouter } from "react-router-dom";
 import App from "./App";
+import { routes } from "./router/routes";
 
 describe("App", () => {
   const originalFetch = global.fetch;
@@ -8,7 +10,7 @@ describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     const sessionOk = new Response(
-      JSON.stringify({ user: { id: "u1", email: "a", role: "admin" } }),
+      JSON.stringify({ user_id: "u1", email: "a", is_admin: true }),
       { status: 200, headers: { "Content-Type": "application/json" } },
     );
     const unreadOk = new Response(
@@ -31,7 +33,8 @@ describe("App", () => {
   });
 
   it("boots with the Sidebar visible when authenticated", async () => {
-    render(<App />);
+    const router = createMemoryRouter(routes, { initialEntries: ["/secretary"] });
+    render(<App router={router} />);
     await waitFor(() => {
       expect(
         screen.getByRole("navigation", { name: /main navigation/i }),

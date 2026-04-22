@@ -41,13 +41,13 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 <claude-mem-context>
 # Memory Context
 
-# [OpenLIA] recent context, 2026-04-20 9:44pm PDT
+# [OpenLIA] recent context, 2026-04-21 9:26pm PDT
 
 Legend: 🎯session 🔴bugfix 🟣feature 🔄refactor ✅change 🔵discovery ⚖️decision
 Format: ID TIME TYPE TITLE
 Fetch details: get_observations([IDs]) | Search: mem-search skill
 
-Stats: 50 obs (27,172t read) | 2,603,571t work | 99% savings
+Stats: 50 obs (20,498t read) | 983,109t work | 98% savings
 
 ### Apr 20, 2026
 S27 OpenLIA main branch post-merge code review — Phase 5 (LLM Runtime) and Phase 6 (Background Task Scheduling) quality assessment after git push/pull sync (Apr 20 at 9:32 AM)
@@ -55,57 +55,60 @@ S24 Switch to main branch to commit — Claude flagged risks before proceeding (
 S28 GitHub Branch Protection Ruleset Settings — Branch name pattern and recommended rules for protecting main (Apr 20 at 9:38 AM)
 S31 claude-mem:timeline-report — Generate "Journey Into OpenLIA" narrative report from 110 persistent memory observations (Apr 20 at 9:52 AM)
 S48 Create pull request for phase 0-6 audit remediation; note finding 9 deferred to next workflow (Apr 20 at 10:03 AM)
-S49 Task 9: Route session lifecycle refactor — 38+ call sites across auth/admin/settings + test-fixture refactor (deferred from previous session) (Apr 20 at 2:36 PM)
-353 8:05p 🔵 OpenLIA Planning Structure: Phase 7 = CLI Surface, Phase 8 = Frontend Shell
-354 " 🔵 Phase 8 Frontend Shell: Full Source Review of All Implemented Modules
-356 " 🔵 OpenLIA Codebase Community Structure: Backend-Dominant with Small Frontend Footprint
-357 8:06p 🔵 Phase 7 CLI Surface Partially Implemented: Only serve/main Exist, Admin Subcommands Missing
-358 " 🔵 Phase 8 Audit Note: Auth API Contract Mismatch Between Plan and Implementation
-359 " 🔵 OpenLIA Full Backend Package Structure Confirmed Across Both Packages
-360 8:07p 🔵 Phase 7 CLI Fully Implemented: 980+ Lines with All Sub-Apps and Commands
-361 " 🔵 Phase 7 Wizard Reset: Uses Integer current_step=1 — Pre-Audit Drift Confirmed
-362 " 🔵 CONFIRMED: Phase 8 Auth API Contract Mismatch — Frontend Uses Envelope Shape, Backend Returns Flat
-363 " 🔵 Phase 8 Roadmap Status and Cross-Plan Contract Audit Summary
-364 8:14p 🔵 OpenLIA Phase 7+ Plan Consistency Audit Reveals Critical Contract Drift
-365 " 🔵 OpenLIA Phase 0-6 Quality Audit Found 7 Production-Readiness Gaps
-366 8:15p 🟣 Phase 7-8 Implementation Review Audit Document Created
-367 8:17p 🔵 OpenLIA Project Has Comprehensive Implementation Plan Structure (Phases 0–15)
-368 8:29p 🔵 OpenLIA Phase 0-6 Quality Audit: Seven Critical Implementation Gaps
-369 " 🔵 Phase 7+ Plan Consistency Audit: Cross-Plan Contract Drift Across Plans 8-15
-370 " ⚖️ Cross-Plan Contracts Normalized and Locked in implementation-plans README
-371 " 🔵 Phase 7-8 Post-Implementation Review: Three High-Severity Gaps Remain After Phase 8 Landing
-372 8:31p 🔵 Plans 9-15 Body Code Still Contains Stale Patterns Despite Normalization Header Notes
-373 " 🔵 Several Phase 0-6 Audit Issues Have Been Fixed in the Current Codebase
-374 " 🔵 WizardState Model and CLI wizard reset Still Use Integer current_step Shape
-375 " 🔵 Phase 11 Plan Has Normalization Notes but Body Still Creates Duplicate Admin Routes with Wrong Imports
-376 " 🔵 LLM Admin Routes Are at /settings/admin/llm/* but Phase 11 Frontend Tests Hit /settings/models/*
-377 8:34p 🔵 OpenLIA Planning Audit History Discovered
-378 8:35p 🔵 OpenLIA Phase 0-8 vs Plan 9+ Consistency Audit: 7 High-Severity Blockers Found
-379 8:36p ✅ Audit Document Written and Confirmed on Disk (569 Lines, Untracked)
-380 8:59p 🔵 OpenLIA Codebase Architecture Overview via Code Review Graph
-381 " ⚖️ OpenLIA Full-Stack Audit Plan Initiated with 8-Step Sequence
-382 9:01p 🔵 OpenLIA Backend API Surface — Full Route Inventory
-383 " 🔵 Frontend API Contract Gap — Only Auth and Notifications Wired
-384 " 🔵 OpenLIA Database Schema — Full Model Inventory (3 Migrations, 30+ Tables)
-385 " 🔵 Auth Middleware — Cookie-Based Session Validation with Dual-Mode Factory Pattern
-386 " 🔵 LLM Runtime — ChatRunner and ReportRunner with Tool Loop and CancellationToken
-387 " 🔵 Scheduler Architecture — APScheduler-Backed SchedulerService with Stubs for Unimplemented Departments
-388 " 🔵 OpenLIA Deployment Profile — No Docker, uv Workspace + Vite Proxy, Two Deployment Modes
-389 9:05p 🟣 OpenLIA Full-Stack Audit Documents Written — 7 Audit Files Committed
-390 9:34p 🔵 Phase 9 Login/Account UI Audit: Implementation Gap Found
-391 9:35p 🔵 Phase 9 Exists on origin/main — Local Branch 25 Commits Behind
-392 " 🔵 Phase 9 Implementation Scope: 52 Files Changed, 152 Functions, 49 Test Gaps Detected
-393 9:36p 🔵 Phase 9 Complete File Set Confirmed in origin/main
-394 " 🔴 Critical: Frontend api/auth.ts Uses Nested Shape But Backend Returns Flat Login Response
-395 " 🔵 LoginForm Implementation Quality: Matches Plan with Minor Deviation
-396 9:37p 🔴 Backend-Frontend Auth Shape Mismatch Confirmed Across All Three Endpoints
-397 " 🔵 LoginPage Skips Signup Policy Fetch — Deviates from Plan Design Rule 11
-398 " 🔵 Auth Form Components: High Implementation Quality with Minor Issues
-399 " 🔵 Test Suite Cannot Run in Worktree — Missing tailwindcss in node_modules
-400 9:38p 🔵 All Phase 9 Tests Use Wrong Backend Mock Shape — Systemic Test Fidelity Problem
-401 " 🔵 Three Additional Spec Deviations: ProtectedRoute ?next Param, ResetPassword Auto-Redirect, AccountChrome Missing
-402 9:40p 🔵 Phase 9 Login/Account UI Audit – Auth API Test Coverage
-403 " 🔵 Phase 9 Login Spec – Registration View Requires Invite Token
+S49 Task 9: Route session lifecycle refactor — 38+ call sites across auth/admin/settings + test-fixture refactor (deferred from previous session) (Apr 20 at 1:59 PM)
+S50 REM-P0-006 Complete: Route Authorization Matrix Created (Apr 20 at 2:36 PM)
+### Apr 21, 2026
+449 4:29p 🔵 Existing WizardState tests assert integer current_step — must be updated alongside REM-P1-006 migration
+450 4:37p ✅ WizardState Model Migrated to String-Based Step Tracking
+451 4:40p 🟣 WizardState Model Migrated from Integer Steps to Named String Steps
+452 " 🔴 WizardState Reset Tests Updated to Assert Full Field Reset
+453 " 🔵 uv Cache Permission Error Blocking Test Execution
+454 4:41p ✅ WizardState Named-Step Schema Tests Pass
+455 " ✅ Full DB Test Suite Passes After WizardState Schema Changes
+456 " ✅ Full Server Test Suite Green After WizardState Migration
+457 " 🔵 Alembic Config Location in OpenLIA Server Package
+458 4:42p 🔵 OpenLIA Phase 10 Setup Wizard Implementation Plan Structure
+459 " 🔵 Phase 10 Tasks 2–3 Design: WizardService and wizard_gate Middleware
+460 4:43p 🔵 Phase 10 Tasks 4–6 Design: Setup Routes, Session Cookie, and Takeover Endpoint
+461 " ✅ Phase 10 Plan Updated with Critical Implementation Corrections (2026-04-21 Rewrite)
+462 6:42p 🔵 Phase 10 Setup Wizard Plan Structure — 28 Tasks Across Backend + Frontend
+463 " 🔵 OpenLIA LLM Adapter Interface — LLMProvider Protocol with LLMRequest/LLMResponse
+464 " 🔴 AI Review Runner Plan Corrected — LLMProvider Interface Mismatch Fixed
+465 6:43p 🔴 Task 13 Test Mock Further Corrected — Dynamic type() Objects Replaced with Real LLMResponse
+466 " 🔵 wizard.py Service Does Not Exist Yet — Phase 10 Tasks 2–15 Are Unimplemented
+467 6:56p ✅ WizardState Model Reshaped: Integer Steps → Named String Steps
+468 " 🟣 serve CLI: Environment-Variable-Driven Host/Port with Mode-Aware Defaults
+469 " 🔴 log_cli_event: source="cli" Is Now Enforced, Cannot Be Overridden by Callers
+470 " 🟣 Admin CLI Password Reset Now Emits Auditable AuthEvent with source="cli"
+471 " 🟣 Jobs Route Returns 503 When Scheduler Is Disabled
+472 7:36p ⚖️ Plan 10 Setup Wizard Doc Rewrite + wizard_state Migration Scoped Together
+S51 Plan 10 Setup Wizard Doc Rewrite + wizard_state Migration Scoped Together (Apr 21 at 7:36 PM)
+473 9:10p 🔵 Audit Remediation Status: 18 of 30 Items Still Not Started
+474 " 🔵 must-change-password Not Reliably Enforced in Auth Flow
+475 " 🔵 Setup First-Run Flow Absent: No Backend Setup Router Mounted
+476 " 🔵 Production Scheduler and Static Serving Wiring Still Stubbed or Missing
+477 " 🔵 Frontend Test Suite Exits Nonzero Due to AbortSignal Unhandled Rejection
+478 9:11p 🔴 Fixed: /auth/session Now Returns must_change_password Field
+479 9:12p 🔴 Frontend getSession() API Now Propagates must_change_password on Session Restore
+480 9:13p 🔵 OpenLIA Phase 9+ Remediation Checklist Implementation Status Audit
+482 9:14p 🔵 OpenLIA Phase 9+ Remediation Checklist Current Status Mapped
+481 " 🔵 Code Review Graph Index Does Not Reflect Unstaged Remediation Changes
+483 9:15p 🔵 Auth Middleware Gap: No must_change_password Enforcement in build_require_auth
+484 " 🔵 Verified Implementation of 7 Completed Remediation Items via Source Inspection
+485 " 🟣 REM-P1-001: build_require_active_user and build_require_active_admin Added to Auth Middleware
+487 9:16p 🔵 build_require_active_user Exists in Middleware But Is Not Wired to Any Route
+488 " 🔵 app.py Passes report_runner=None and batch_runner=None to Production Scheduler
+489 " 🔵 Plans 11-15 Executable Snippets Still Contain Stale Auth and Import Patterns
+490 " 🟣 Comprehensive Endpoint Contract Matrix and Route Authorization Matrix Created
+486 " 🟣 REM-P1-001 Complete: All Product Routes Migrated to must_change_password-Aware Dependencies
+491 9:18p 🔵 REM-P1-001 Must-Change-Password Enforcement Is Nearly Complete — Only Settings Data-Providers Gap Remains
+492 " 🔵 Frontend MustChangePasswordGate Is Fully Implemented and Wraps All Protected Routes
+493 " 🔵 72 Backend Tests and 20 Frontend Auth Tests Pass Clean on Branch fix/phase-9-audit-findings
+494 " 🔵 LLM Runtime Multi-Round Tool Loop and TierNotConfiguredError Error Events Are Fully Tested
+495 9:19p 🔵 REM-P1-011 Multi-Round Tool Loop Tests Cover Single-Round But Not Back-to-Back Two-Round Scenarios
+496 9:22p 🔵 Server Test Suite Passes 425 Tests After Auth Middleware Migration
+497 9:23p 🟣 REM-P1-017: Production Static Frontend Serving with SPA Fallback Added to app.py
+498 " 🔵 App.test.tsx Has Pre-existing Unhandled AbortSignal Rejection from React Router
 
-Access 2604k tokens of past work via get_observations([IDs]) or mem-search skill.
+Access 983k tokens of past work via get_observations([IDs]) or mem-search skill.
 </claude-mem-context>
