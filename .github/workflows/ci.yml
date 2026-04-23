@@ -24,6 +24,9 @@ jobs:
       - name: Sync workspace (all members)
         run: uv sync --all-packages
 
+      - name: Install Playwright browsers
+        run: uv run playwright install --with-deps chromium
+
       - name: Lint (ruff)
         run: uv run ruff check .
 

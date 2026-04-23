@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
 
 import openlia_server.db.models  # noqa: F401 — register all models
 import pytest

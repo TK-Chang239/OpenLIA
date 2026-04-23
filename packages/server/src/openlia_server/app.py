@@ -35,6 +35,7 @@ from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import build_chat_runner, build_report_runner
 
 log = logging.getLogger(__name__)
@@ -119,6 +120,9 @@ def _make_lifespan(
             if engine.url.drivername == "sqlite":
                 Base.metadata.create_all(engine)
 
+        browser_launcher = BrowserLauncher()
+        app.state.browser_launcher = browser_launcher
+
         scheduler_settings = SchedulerSettings.from_env()
         scheduler_svc: SchedulerService | None = None
 
@@ -157,14 +161,19 @@ def _make_lifespan(
 
                 app.state.scheduler = scheduler_svc
 
-                yield
-
-                await scheduler_svc.shutdown()
+                try:
+                    yield
+                finally:
+                    await scheduler_svc.shutdown()
+                    await browser_launcher.shutdown()
 
             return
 
         app.state.scheduler = scheduler_svc
-        yield
+        try:
+            yield
+        finally:
+            await browser_launcher.shutdown()
 
     return lifespan
 
