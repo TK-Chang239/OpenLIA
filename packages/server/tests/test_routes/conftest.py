@@ -138,7 +138,8 @@ def personal_client(db_session, make_user, monkeypatch):
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     app = create_app(db_session_factory=session_mod.SessionLocal)
-    return TestClient(app)
+    with TestClient(app) as client:
+        yield client
 
 
 @pytest.fixture
