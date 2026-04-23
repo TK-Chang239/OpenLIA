@@ -141,7 +141,10 @@ export function useChatStream({ sessionId }: Options) {
         ] as const
       ).forEach((t) => es.addEventListener(t, handler(t)));
       es.addEventListener("error", () => {
-        dispatch({ kind: "STOP" });
+        dispatch({
+          kind: "EVENT",
+          event: { type: "chat.error", data: { message: "Connection lost. Please try again." } },
+        });
         es.close();
       });
       sourceRef.current = es;

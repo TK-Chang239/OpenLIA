@@ -58,6 +58,7 @@ export function FileViewer(): JSX.Element | null {
             reportId={
               current.source.kind === "report" ? current.source.reportId : undefined
             }
+            initialSaved={current.initialSaved}
             onClose={close}
           />
           <div className="flex-1 overflow-y-auto">

@@ -19,7 +19,7 @@ function mockFetch(body: unknown, status = 200) {
 }
 
 describe("chat api", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it("listSessions fetches /api/chat/sessions", async () => {
     mockFetch({ items: [{ id: UUID1, department: "secretary", title: "x", is_pinned: false, is_archived: false, created_at: "2026-04-01T00:00:00Z" }] });
@@ -69,7 +69,7 @@ describe("chat api", () => {
 });
 
 describe("repo api", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it("saveToRepo POSTs report_id", async () => {
     mockFetch({ id: UUID1, report_id: UUID2, created_at: "2026-04-01T00:00:00Z" });

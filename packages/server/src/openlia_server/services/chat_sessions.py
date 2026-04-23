@@ -84,7 +84,6 @@ def unarchive_session(db: Session, *, session_id: str, user_id: str) -> None:
 
 def delete_session(db: Session, *, session_id: str, user_id: str) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
-    db.query(ChatMessage).filter(ChatMessage.session_id == row.id).delete()
     db.delete(row)
     db.commit()
 

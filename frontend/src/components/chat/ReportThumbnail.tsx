@@ -5,9 +5,10 @@ interface Props {
   reportId: string;
   filename: string;
   metadata?: string;
+  initialSaved?: boolean;
 }
 
-export function ReportThumbnail({ reportId, filename, metadata }: Props): JSX.Element {
+export function ReportThumbnail({ reportId, filename, metadata, initialSaved }: Props): JSX.Element {
   const kind = kindFromFilename(filename);
   return (
     <AttachmentChip
@@ -16,6 +17,7 @@ export function ReportThumbnail({ reportId, filename, metadata }: Props): JSX.El
       metadata={metadata ?? kind.toUpperCase()}
       source={{ kind: "report", reportId }}
       reportId={reportId}
+      initialSaved={initialSaved}
     />
   );
 }
