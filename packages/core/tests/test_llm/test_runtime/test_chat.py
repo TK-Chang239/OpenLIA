@@ -268,3 +268,153 @@ async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
     req = provider.captured_requests[0]
     contents = [m.content for m in req.messages]
     assert contents == ["hi", "hello", "what's up?"]
+
+
+async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> None:
+    call_a = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+    call_b = ToolCall(id="c2", name="stock_quote", arguments={"symbol": "MSFT"})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [call_a]),
+                ("tool_calls", [call_b]),
+                ("final", ""),
+                ("tokens", ["Both done"]),
+            ]
+        )
+    )
+    manifest = {
+        "secretary": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(
+        manifest=manifest,
+        results={"stock_quote": {"price": 100}},
+    )
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL and MSFT?")],
+        )
+    )
+    starts = [e for e in events if isinstance(e, ChatToolCallStart)]
+    assert len(starts) == 2
+    assert starts[0].call_id == "c1"
+    assert starts[1].call_id == "c2"
+    assert type(events[-1]) is ChatDone
+
+
+async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> None:
+    call = ToolCall(id="cx", name="stock_quote", arguments={"symbol": "X"})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[("tool_calls", [call])] * 10 + [("tokens", ["done"])]
+        )
+    )
+    manifest = {
+        "secretary": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 1}})
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="go")],
+        )
+    )
+    assert type(events[-1]) is ChatDone
+    tokens = [e.text for e in events if isinstance(e, ChatToken)]
+    assert "".join(tokens) == "done"
+
+
+async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) -> None:
+    from openlia.llm.exceptions import LLMProviderError
+    from openlia.llm.types import LLMRequest
+
+    call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+
+    class _LoopErrorProvider(FakeProvider):
+        async def generate(self, request: LLMRequest):
+            if self._turn_index >= 1:
+                raise LLMProviderError("mid-loop failure")
+            return await super().generate(request)
+
+    provider = _LoopErrorProvider(
+        script=FakeProviderScript(turns=[("tool_calls", [call])])
+    )
+    manifest = {
+        "secretary": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 1}})
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL?")],
+        )
+    )
+    assert type(events[-1]) is ChatError
+    assert "mid-loop failure" in events[-1].message

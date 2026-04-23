@@ -35,7 +35,7 @@ from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
-from openlia_server.services.runtime import build_chat_runner
+from openlia_server.services.runtime import build_chat_runner, build_report_runner
 
 log = logging.getLogger(__name__)
 
@@ -150,7 +150,7 @@ def _make_lifespan(
                     session_factory=_sm,
                     settings=scheduler_settings,
                     scheduler=adapter,
-                    report_runner=None,
+                    report_runner=build_report_runner(_sm),
                     batch_runner=None,
                 )
                 await scheduler_svc.start()
@@ -225,6 +225,10 @@ def create_app(
     from openlia_server.routes.settings_models import build_settings_models_router
 
     app.include_router(build_settings_models_router(db_session_factory=factory, mode=mode))
+
+    from openlia_server.routes.eu_schedules import build_eu_schedules_router
+
+    app.include_router(build_eu_schedules_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
