@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 import pytest
 from fastapi.testclient import TestClient
 from openlia.llm.exceptions import TierNotConfiguredError
-
 from openlia_server.db import session as session_mod
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
@@ -58,7 +57,7 @@ def test_raising_runner_emits_single_terminal_error_frame(stream_client: TestCli
     )
     assert r.status_code == 200
     frames = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in r.text.splitlines()
         if line.startswith("data: ")
     ]

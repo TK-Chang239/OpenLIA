@@ -35,14 +35,10 @@ def validate_report_schema(schema: Any) -> None:
             raise InvalidReportSchemaError(f"schema.sections[{i}] must be a dict")
         heading = section.get("heading")
         if not isinstance(heading, str):
-            raise InvalidReportSchemaError(
-                f"schema.sections[{i}].heading must be a str"
-            )
+            raise InvalidReportSchemaError(f"schema.sections[{i}].heading must be a str")
         content = section.get("content")
         if not isinstance(content, str):
-            raise InvalidReportSchemaError(
-                f"schema.sections[{i}].content must be a str"
-            )
+            raise InvalidReportSchemaError(f"schema.sections[{i}].content must be a str")
 
 
 def save_report(
@@ -81,9 +77,7 @@ def save_report(
     return report
 
 
-def get_report_for_user(
-    db: Session, *, user_id: str, report_id: str
-) -> Report | None:
+def get_report_for_user(db: Session, *, user_id: str, report_id: str) -> Report | None:
     """Return the report iff it exists and `user_id` is the owner."""
     stmt = select(Report).where(Report.id == report_id).where(Report.user_id == user_id)
     return db.execute(stmt).scalar_one_or_none()

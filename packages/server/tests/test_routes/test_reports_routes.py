@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.auth import User
+from sqlalchemy.orm import Session
 
 
 def _seed_user(db_session: Session, uid: str, email: str) -> User:

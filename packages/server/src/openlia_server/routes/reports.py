@@ -36,9 +36,7 @@ def build_reports_router(
     db_session_factory: Callable[[], DBSession],
     mode: Literal["personal", "company"],
 ) -> APIRouter:
-    require_auth = build_require_active_user(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     router = APIRouter(prefix="/reports", tags=["reports"])
 

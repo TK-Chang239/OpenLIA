@@ -21,9 +21,7 @@ class _InfiniteRunner:
     def __init__(self) -> None:
         self.captured_token: CancellationToken | None = None
 
-    async def run(
-        self, *, department_id, user_id, messages, attachments=None, cancel_token=None
-    ):
+    async def run(self, *, department_id, user_id, messages, attachments=None, cancel_token=None):
         self.captured_token = cancel_token
         yield ChatStart(message_id="m1")
         yield ChatToken(message_id="m1", text="hello")
@@ -43,9 +41,7 @@ async def test_cancel_token_flipped_on_task_cancellation() -> None:
         id = "local"
 
     runner = _InfiniteRunner()
-    payload = SecretaryChatRequest(
-        messages=[SecretaryChatMessage(role="user", content="hi")]
-    )
+    payload = SecretaryChatRequest(messages=[SecretaryChatMessage(role="user", content="hi")])
 
     consumed: list[bytes] = []
 

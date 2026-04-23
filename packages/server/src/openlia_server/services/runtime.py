@@ -31,9 +31,7 @@ class _EmptyDataDispatcher:
     async def dispatch_requirement(
         self, *, tool_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
-        raise RuntimeError(
-            f"no data-provider tools registered (attempted {tool_name!r})"
-        )
+        raise RuntimeError(f"no data-provider tools registered (attempted {tool_name!r})")
 
     async def find_more_data(
         self, *, department_id: str, description: str

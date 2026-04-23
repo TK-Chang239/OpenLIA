@@ -1,6 +1,6 @@
 """Consolidate saved-report persistence on repo_items.
 
-Creates `repo_items` (user_id × report_id) and drops the legacy
+Creates `repo_items` (user_id x report_id) and drops the legacy
 `Report.is_starred` and `Report.tags` columns. See spec
 docs/superpowers/specs/2026-04-22-plan-12-blockers-design.md.
 
@@ -52,9 +52,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     with op.batch_alter_table("reports", schema=None) as batch_op:
-        batch_op.add_column(
-            sa.Column("is_starred", sa.Boolean(), nullable=True)
-        )
+        batch_op.add_column(sa.Column("is_starred", sa.Boolean(), nullable=True))
         batch_op.add_column(sa.Column("tags", sa.JSON(), nullable=True))
 
     op.drop_index("ix_repo_items_user_id_created_at", table_name="repo_items")

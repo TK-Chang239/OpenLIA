@@ -23,11 +23,10 @@ from openlia_server.db.bootstrap import resolve_db_url
 from openlia_server.db.session import SessionLocal, configure_engine, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
+from openlia_server.routes.chat_stream import build_chat_stream_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.notifications import build_notifications_router
-from openlia_server.routes.chat_stream import build_chat_stream_router
 from openlia_server.routes.reports import build_reports_router
-from openlia_server.services.runtime import build_chat_runner
 from openlia_server.routes.settings import (
     build_data_providers_router,
     build_llm_providers_admin_router,
@@ -36,6 +35,7 @@ from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+from openlia_server.services.runtime import build_chat_runner
 
 log = logging.getLogger(__name__)
 
