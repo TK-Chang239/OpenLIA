@@ -1,0 +1,21 @@
+[data-report-theme='dark'] {
+  --report-text-primary: #f0f0f0;
+  --report-text-secondary: #9ca3af;
+  --report-text-tertiary: #6b7280;
+  --report-bg: #141414;
+  --report-bg-elevated: #1e1e1e;
+  --report-border: #2e2e2e;
+  --report-accent: #3b82f6;
+  --report-positive: #22c55e;
+  --report-negative: #ef4444;
+  --report-neutral: #9ca3af;
+
+  --report-chart-1: #3b82f6;
+  --report-chart-2: #8b5cf6;
+  --report-chart-3: #06b6d4;
+  --report-chart-4: #f97316;
+  --report-chart-5: #6366f1;
+  --report-chart-6: #14b8a6;
+  --report-chart-7: #ef4444;
+  --report-chart-8: #eab308;
+}
