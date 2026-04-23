@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { type FileSource } from "./FileViewerContext";
+import { sourceUrl } from "./renderers/sourceUrl";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { FileDownloadButton } from "../chat/FileDownloadButton";
 
@@ -26,9 +27,9 @@ export function ViewerHeader({
       </div>
       <div className="ml-2 flex flex-shrink-0 items-center gap-1.5">
         {reportId !== undefined ? (
-          <SaveToRepoButton variant="viewer-header" reportId={reportId} filename={filename} />
+          <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={false} />
         ) : null}
-        <FileDownloadButton variant="viewer-header" source={source} filename={filename} />
+        <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         <button
           type="button"
           aria-label="Close"
