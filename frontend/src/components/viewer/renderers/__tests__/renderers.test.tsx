@@ -17,7 +17,7 @@ function mockFetchText(body: string) {
 }
 
 describe("renderers", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it("Markdown renders headings and paragraphs", async () => {
     mockFetchText("# Hello\n\nThis is content.");

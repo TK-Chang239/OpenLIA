@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
@@ -35,6 +35,7 @@ export function ChatInterface({
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [sentOnce, setSentOnce] = useState(false);
+  const lastSentRef = useRef<string>("");
   const { state, send, stop } = useChatStream({ sessionId });
 
   useEffect(() => {
@@ -46,6 +47,7 @@ export function ChatInterface({
   }, [sessionId]);
 
   const onSend = (text: string) => {
+    lastSentRef.current = text;
     setSentOnce(true);
     setHistory((prev) => [
       ...prev,
@@ -119,7 +121,7 @@ export function ChatInterface({
             {state.status === "error" && state.errorMessage ? (
               <ErrorMessage
                 message={state.errorMessage}
-                onRetry={() => send(history[history.length - 1]?.content ?? "")}
+                onRetry={() => send(lastSentRef.current)}
               />
             ) : null}
           </MessageList>

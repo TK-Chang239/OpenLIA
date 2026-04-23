@@ -1,4 +1,4 @@
-import { FileText, Sheet, Image as ImageIcon, FileCode, File } from "lucide-react";
+import { type LucideProps, FileText, Sheet, Image as ImageIcon, FileCode, File } from "lucide-react";
 import { type FileKind, type FileSource, useFileViewer } from "../viewer/FileViewerContext";
 import { sourceUrl } from "../viewer/renderers/sourceUrl";
 import { SaveToRepoButton } from "./SaveToRepoButton";
@@ -10,9 +10,12 @@ interface Props {
   metadata: string;
   source: FileSource;
   reportId?: string;
+  initialSaved?: boolean;
 }
 
-const ICON: Record<FileKind, React.ComponentType<{ size: number }>> = {
+type LucideIcon = React.ForwardRefExoticComponent<Omit<LucideProps, "ref"> & React.RefAttributes<SVGSVGElement>>;
+
+const ICON: Record<FileKind, LucideIcon> = {
   pdf: FileText,
   markdown: FileText,
   text: FileText,
@@ -29,11 +32,12 @@ export function AttachmentChip({
   metadata,
   source,
   reportId,
+  initialSaved = false,
 }: Props): JSX.Element {
   const { open } = useFileViewer();
   const Icon = ICON[fileType];
 
-  const openViewer = () => open({ filename, kind: fileType, metadata, source });
+  const openViewer = () => open({ filename, kind: fileType, metadata, source, initialSaved });
 
   return (
     <div
@@ -66,7 +70,7 @@ export function AttachmentChip({
         data-chip-action=""
       >
         {reportId !== undefined ? (
-          <SaveToRepoButton variant="chip" reportId={reportId} initialSaved={false} />
+          <SaveToRepoButton variant="chip" reportId={reportId} initialSaved={initialSaved} />
         ) : null}
         <FileDownloadButton variant="chip" url={sourceUrl(source)} filename={filename} />
       </div>

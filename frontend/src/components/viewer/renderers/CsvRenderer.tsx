@@ -3,21 +3,56 @@ import { type FileSource } from "../FileViewerContext";
 import { sourceUrl } from "./sourceUrl";
 
 function parseCsv(text: string): string[][] {
-  return text
-    .split("\n")
-    .filter((l) => l.length > 0)
-    .map((line) => line.split(","));
+  const rows: string[][] = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    if (line.length === 0) continue;
+    const cells: string[] = [];
+    let i = 0;
+    while (i < line.length) {
+      if (line[i] === '"') {
+        let cell = "";
+        i++;
+        while (i < line.length) {
+          if (line[i] === '"' && line[i + 1] === '"') {
+            cell += '"';
+            i += 2;
+          } else if (line[i] === '"') {
+            i++;
+            break;
+          } else {
+            cell += line[i++];
+          }
+        }
+        cells.push(cell);
+        if (line[i] === ",") i++;
+      } else {
+        const end = line.indexOf(",", i);
+        if (end === -1) {
+          cells.push(line.slice(i));
+          break;
+        }
+        cells.push(line.slice(i, end));
+        i = end + 1;
+      }
+    }
+    rows.push(cells);
+  }
+  return rows;
 }
 
 export function CsvRenderer({ source }: { source: FileSource }): JSX.Element {
   const [rows, setRows] = useState<string[][] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch(sourceUrl(source), { credentials: "same-origin" })
-      .then((r) => r.text())
-      .then((t) => setRows(parseCsv(t)));
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((t) => setRows(parseCsv(t)))
+      .catch((e: unknown) => setError((e as Error).message));
   }, [source]);
 
+  if (error) return <div className="p-6 text-sm text-[--color-feedback-error]">{error}</div>;
   if (rows === null)
     return <div className="p-6 text-sm text-[--color-text-secondary]">Loading…</div>;
   const [header, ...data] = rows;

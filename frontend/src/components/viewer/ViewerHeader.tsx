@@ -9,6 +9,7 @@ interface Props {
   metadata: string;
   source: FileSource;
   reportId?: string;
+  initialSaved?: boolean;
   onClose: () => void;
 }
 
@@ -17,6 +18,7 @@ export function ViewerHeader({
   metadata,
   source,
   reportId,
+  initialSaved = false,
   onClose,
 }: Props): JSX.Element {
   return (
@@ -27,7 +29,7 @@ export function ViewerHeader({
       </div>
       <div className="ml-2 flex flex-shrink-0 items-center gap-1.5">
         {reportId !== undefined ? (
-          <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={false} />
+          <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={initialSaved} />
         ) : null}
         <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         <button

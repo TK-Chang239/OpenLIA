@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import RepoItem, Report
@@ -16,15 +19,19 @@ def save_to_repo(db: Session, *, user_id: str, report_id: str) -> RepoItem:
         return existing
     if db.get(Report, report_id) is None:
         raise LookupError(f"report {report_id} not found")
-    import uuid
-
     item = RepoItem(
         id=str(uuid.uuid4()),
         user_id=user_id,
         report_id=report_id,
     )
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return db.execute(
+            select(RepoItem).where(RepoItem.user_id == user_id, RepoItem.report_id == report_id)
+        ).scalar_one()
     db.refresh(item)
     return item
 

@@ -19,6 +19,7 @@ export interface FileViewerTarget {
   kind: FileKind;
   metadata: string;
   source: FileSource;
+  initialSaved?: boolean;
 }
 
 interface ContextShape {
