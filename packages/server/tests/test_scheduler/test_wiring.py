@@ -51,3 +51,24 @@ def test_build_scheduler_service_uses_stubs_when_builders_unprovided(
     with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 16"):
         # MBBriefingExecutor grabs the builder on _do_work; call directly.
         mb_exec._mb_builder.build(session=None, user_id="u_1", schedule_id="s_1")
+
+
+@pytest.mark.asyncio
+async def test_build_scheduler_service_with_real_report_runner(
+    session_factory,
+) -> None:
+    from openlia_server.services.runtime import build_report_runner
+
+    runner = build_report_runner(session_factory)
+    svc = build_scheduler_service(
+        session_factory=session_factory,
+        settings=SchedulerSettings(enabled=True),
+        scheduler=FakeAPScheduler(),
+        report_runner=runner,
+        batch_runner=None,
+    )
+
+    assert JobType.MB_BRIEFING in svc.executors
+    assert JobType.EU_SCAN in svc.executors
+    assert JobType.MR_ASSESSMENT in svc.executors
+    assert JobType.SYSTEM_MAINTENANCE in svc.executors
