@@ -1,24 +1,24 @@
-from datetime import datetime, timezone
-import pytest
-from pydantic import ValidationError
+from datetime import UTC, datetime
 
+import pytest
 from openlia.reports.schema import (
-    ReportSchema,
-    TextBlock,
-    TableBlock,
-    TableHeader,
-    MetricCardsBlock,
-    Metric,
-    GroupBlock,
-    KeyFindingBlock,
-    RatingBadgeBlock,
-    LineChartBlock,
     BarChartBlock,
     CandlestickBlock,
     Cover,
-    Section,
+    GroupBlock,
+    KeyFindingBlock,
+    LineChartBlock,
+    Metric,
+    MetricCardsBlock,
     PageFurniture,
+    RatingBadgeBlock,
+    ReportSchema,
+    Section,
+    TableBlock,
+    TableHeader,
+    TextBlock,
 )
+from pydantic import ValidationError
 
 
 def test_text_block_parses():
@@ -86,7 +86,7 @@ def test_full_schema_parses():
     schema = ReportSchema(
         schema_version="1.0",
         department="equity_research",
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
         page_furniture=PageFurniture(
             header={"left": "OpenLIA", "right": "Equity Research"},
             footer={"left": "Generated", "center": "Page {page}", "right": "Internal"},
@@ -117,7 +117,7 @@ def test_schema_rejects_unknown_version():
         ReportSchema(
             schema_version="2.0",
             department="equity_research",
-            generated_at=datetime.now(timezone.utc),
+            generated_at=datetime.now(UTC),
             cover=Cover(title="x", subtitle="x", ticker="AAPL", tagline="x"),
             sections=[],
         )
