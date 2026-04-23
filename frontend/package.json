@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-table": "^8.21.3",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.454.0",
     "pdfjs-dist": "^5.6.205",
