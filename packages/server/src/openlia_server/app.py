@@ -202,6 +202,10 @@ def create_app(
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
 
+    from openlia_server.routes.chat_sessions import build_chat_sessions_router
+
+    app.include_router(build_chat_sessions_router(db_session_factory=factory, mode=mode))
+
     from openlia_server.routes.settings_general import build_settings_general_router
 
     app.include_router(build_settings_general_router(db_session_factory=factory, mode=mode))
@@ -236,6 +240,8 @@ _API_PREFIXES = (
     "notifications",
     "reports",
     "departments",
+    "chat",
+    "repo",
     "healthz",
     "health",
     "docs",
