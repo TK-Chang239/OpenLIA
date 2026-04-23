@@ -1,4 +1,5 @@
 """Prompt builder for the wizard AI review step."""
+
 from __future__ import annotations
 
 import json

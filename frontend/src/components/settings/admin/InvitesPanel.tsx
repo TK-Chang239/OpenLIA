@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError, createInvite, InviteSummary, listInvites, revokeInvite } from '../../../api/admin';
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';

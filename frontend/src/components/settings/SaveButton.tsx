@@ -1,5 +1,3 @@
-import React from 'react';
-
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
 interface Props {

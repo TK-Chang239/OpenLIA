@@ -99,9 +99,6 @@ class Report(Base, TimestampMixin):
     model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     token_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     generation_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    is_starred: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-
     __table_args__ = (
         Index("ix_reports_user_id_department", "user_id", "department"),
         Index("ix_reports_user_id_created_at", "user_id", "created_at"),
@@ -184,4 +181,24 @@ class WatchlistItem(Base):
     ticker: Mapped[str] = mapped_column(String(16), primary_key=True)
     added_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
+    )
+
+
+class RepoItem(Base):
+    __tablename__ = "repo_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    report_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "report_id", name="uq_repo_items_user_report"),
+        Index("ix_repo_items_user_id_created_at", "user_id", "created_at"),
     )

@@ -1,4 +1,5 @@
 """Setup Wizard service — status resolution, step state, session token."""
+
 from __future__ import annotations
 
 import secrets
