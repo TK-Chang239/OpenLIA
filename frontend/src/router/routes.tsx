@@ -10,13 +10,23 @@ import Home from "../pages/Home";
 import Repository from "../pages/Repository";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SetupPage } from "../pages/SetupPage";
-import Secretary from "../pages/departments/Secretary";
+import { useAuth } from "../auth/AuthContext";
+import { SecretaryPage } from "../pages/SecretaryPage";
 import EquityResearch from "../pages/departments/EquityResearch";
 import EarningsUpdate from "../pages/departments/EarningsUpdate";
 import MorningBriefing from "../pages/departments/MorningBriefing";
 import RetailSentiment from "../pages/departments/RetailSentiment";
 import MacroResearch from "../pages/departments/MacroResearch";
 import PanicThermometer from "../pages/departments/PanicThermometer";
+
+function SecretaryRoute() {
+  const { user } = useAuth();
+  return (
+    <SecretaryPage
+      user={{ id: user?.id ?? 'local', display_name: user?.display_name ?? 'there' }}
+    />
+  );
+}
 
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
@@ -38,7 +48,7 @@ export const routes: RouteObject[] = [
           { path: "/home", element: <Home /> },
           { path: "/repository", element: <Repository /> },
           { path: "/settings/*", element: <SettingsPage /> },
-          { path: "/secretary", element: <Secretary /> },
+          { path: "/secretary", element: <SecretaryRoute /> },
           { path: "/equity-research", element: <EquityResearch /> },
           { path: "/earnings-update", element: <EarningsUpdate /> },
           { path: "/morning-briefing", element: <MorningBriefing /> },
