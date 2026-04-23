@@ -1,0 +1,55 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+
+vi.mock('echarts-for-react', () => ({
+  default: () => <div data-testid="echart" />,
+}));
+vi.mock('react-intersection-observer', () => ({
+  useInView: () => ({ ref: () => {}, inView: false }),
+}));
+
+import { ReportRenderer } from '../ReportRenderer';
+
+const schema = {
+  schema_version: '1.0' as const,
+  department: 'equity_research',
+  page_furniture: {
+    header: { left: 'OpenLIA', right: 'Equity Research' },
+    footer: { left: 'Gen', center: 'Page {page}', right: 'Internal' },
+    disclaimer: 'Not advice.',
+  },
+  cover: {
+    title: 'Apple Inc.',
+    subtitle: 'Q1 2026',
+    tagline: 'Strong.',
+    ticker: 'AAPL',
+  },
+  sections: [
+    {
+      id: 'fin',
+      title: 'Financial Overview',
+      blocks: [{ type: 'text', content: 'Apple reported...' }],
+    },
+  ],
+};
+
+describe('ReportRenderer', () => {
+  it('renders furniture, cover, TOC, and a section with blocks', () => {
+    render(<ReportRenderer schema={schema} />);
+    expect(screen.getByText('Apple Inc.')).toBeInTheDocument();
+    expect(screen.getByText('Equity Research')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Financial Overview/ })).toBeInTheDocument();
+    expect(screen.getByText('Apple reported...')).toBeInTheDocument();
+    expect(screen.getByText('Not advice.')).toBeInTheDocument();
+  });
+
+  it('shows the skeleton while loading', () => {
+    const { container } = render(<ReportRenderer loading sectionTitles={['a']} />);
+    expect(container.querySelector('.report-skeleton')).toBeTruthy();
+  });
+
+  it('applies the provided report theme attribute', () => {
+    const { container } = render(<ReportRenderer schema={schema} theme="dark" />);
+    expect(container.querySelector('[data-report-theme="dark"]')).toBeTruthy();
+  });
+});

@@ -40,6 +40,7 @@ export function ChatInterface({
 
   useEffect(() => {
     listMessages(sessionId).then((r) => {
+      if (!r) { setLoaded(true); return; }
       setHistory(r.items);
       if (r.items.length > 0) setSentOnce(true);
       setLoaded(true);

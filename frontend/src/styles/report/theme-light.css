@@ -1,0 +1,31 @@
+[data-report-theme='light'] {
+  --report-text-primary: #1a1a1a;
+  --report-text-secondary: #6b7280;
+  --report-text-tertiary: #9ca3af;
+  --report-bg: #ffffff;
+  --report-bg-elevated: #f9fafb;
+  --report-border: #e5e7eb;
+  --report-accent: #2563eb;
+  --report-positive: #16a34a;
+  --report-negative: #dc2626;
+  --report-neutral: #6b7280;
+
+  --report-chart-1: #2563eb;
+  --report-chart-2: #7c3aed;
+  --report-chart-3: #0891b2;
+  --report-chart-4: #ea580c;
+  --report-chart-5: #4f46e5;
+  --report-chart-6: #0d9488;
+  --report-chart-7: #b91c1c;
+  --report-chart-8: #ca8a04;
+
+  --report-max-width: 780px;
+  --report-padding-x: 48px;
+  --report-section-gap: 40px;
+  --report-block-gap: 24px;
+  --report-group-gap: 20px;
+  --report-radius-sm: 4px;
+  --report-radius-md: 8px;
+  --report-radius-lg: 12px;
+  --report-font-sans: 'Inter', system-ui, sans-serif;
+}
