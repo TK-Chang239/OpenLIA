@@ -535,7 +535,9 @@ Source findings:
 
 ### REM-P1-007 - Choose one repository persistence model
 
-Status: `[ ]`
+Status: `[x]`
+Completed: 2026-04-22 via `feat/plan-12-blockers` (see
+`docs/superpowers/specs/2026-04-22-plan-12-blockers-design.md`).
 
 Affected plans:
 
@@ -570,7 +572,9 @@ Source findings:
 
 ### REM-P1-008 - Add first runtime-backed SSE route
 
-Status: `[ ]`
+Status: `[x]`
+Completed: 2026-04-22 via `feat/plan-12-blockers` (see
+`docs/superpowers/specs/2026-04-22-plan-12-blockers-design.md`).
 
 Affected implementation:
 
@@ -604,7 +608,9 @@ Source findings:
 
 ### REM-P1-009 - Add report persistence and validation path
 
-Status: `[ ]`
+Status: `[x]`
+Completed: 2026-04-22 via `feat/plan-12-blockers` (see
+`docs/superpowers/specs/2026-04-22-plan-12-blockers-design.md`).
 
 Affected implementation:
 
@@ -1130,9 +1136,9 @@ Source findings:
 
 ### Before Plan 12 Implementation
 
-- `[ ]` REM-P1-007
-- `[ ]` REM-P1-008
-- `[ ]` REM-P1-009
+- `[x]` REM-P1-007
+- `[x]` REM-P1-008
+- `[x]` REM-P1-009
 - `[x]` REM-P0-004 for Plan 12 snippets (2026-04-22)
 
 ### Before Plan 13-15 Implementation

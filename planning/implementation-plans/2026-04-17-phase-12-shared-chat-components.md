@@ -122,6 +122,10 @@
 
 ### Task 0: `repo_items` table + model + migration
 
+> **Landed with REM-P1-007 on 2026-04-22.** The `repo_items` migration and
+> `RepoItem` model already exist on `main` (branch `feat/plan-12-blockers`).
+> Task 0 is a no-op for this plan; proceed to Task 1.
+
 **Context.** Plan 1A did **not** create `repo_items`. It must be added here before Task 2 can use it.
 
 **Files:**
