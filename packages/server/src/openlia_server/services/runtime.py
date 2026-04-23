@@ -14,6 +14,7 @@ from typing import Any
 from openlia.llm.adapters import build_adapter
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.chat import ChatRunner
+from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
@@ -67,3 +68,60 @@ def build_chat_runner(
         registry=registry,
         provider_factory=_provider_factory,
     )
+
+
+def _build_report_runner_with_registry(registry: SQLModelRegistry) -> ReportRunner:
+    prompts = PromptLoader()
+    tools = ToolDispatcher(
+        data_dispatcher=_EmptyDataDispatcher(),
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+
+    def _provider_factory(resolved):
+        return build_adapter(
+            kind=resolved.provider_kind,
+            credentials=resolved.credentials,
+            model=resolved.model_ref,
+            capabilities=resolved.capabilities,
+        )
+
+    return ReportRunner(
+        prompts=prompts,
+        tools=tools,
+        resolve=resolve,
+        registry=registry,
+        provider_factory=_provider_factory,
+    )
+
+
+class RefreshingReportRunner:
+    """Constructs a fresh ReportRunner (with fresh DB session and registry) per job run."""
+
+    def __init__(self, db_session_factory) -> None:
+        self._factory = db_session_factory
+
+    async def run(
+        self,
+        *,
+        department_id: str,
+        user_id: str,
+        request,
+        cancel_token=None,
+    ):
+        db = self._factory()
+        try:
+            registry = SQLModelRegistry(db)
+            runner = _build_report_runner_with_registry(registry)
+            async for event in runner.run(
+                department_id=department_id,
+                user_id=user_id,
+                request=request,
+                cancel_token=cancel_token,
+            ):
+                yield event
+        finally:
+            db.close()
+
+
+def build_report_runner(db_session_factory) -> RefreshingReportRunner:
+    return RefreshingReportRunner(db_session_factory)
