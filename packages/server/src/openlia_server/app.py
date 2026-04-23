@@ -25,6 +25,7 @@ from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.notifications import build_notifications_router
+from openlia_server.routes.reports import build_reports_router
 from openlia_server.routes.settings import (
     build_data_providers_router,
     build_llm_providers_admin_router,
@@ -195,6 +196,7 @@ def create_app(
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
 
     from openlia_server.routes.settings_general import build_settings_general_router
 
@@ -228,6 +230,7 @@ _API_PREFIXES = (
     "setup",
     "jobs",
     "notifications",
+    "reports",
     "healthz",
     "health",
     "docs",
