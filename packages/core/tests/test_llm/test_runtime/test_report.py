@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
-from openlia.llm.exceptions import CapabilityError, TierNotConfiguredError
+from openlia.llm.exceptions import CapabilityError, LLMProviderError, TierNotConfiguredError
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import (
     ReportComplete,
@@ -297,6 +297,153 @@ async def test_report_capability_error_terminates(
     )
     assert isinstance(events[-1], ReportError)
     assert events[-1].error_class == "CapabilityError"
+
+
+async def test_two_round_tool_loop_uses_both_results(
+    prompts_root: Path, frameworks_root: Path
+) -> None:
+    call_a = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+    call_b = ToolCall(id="c2", name="stock_quote", arguments={"symbol": "MSFT"})
+    filled = {"title": "AAPL Initiation", "sections": [{"id": "overview", "body": "..."}]}
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [call_a]),
+                ("tool_calls", [call_b]),
+                ("final", ""),
+                ("final_json", json.dumps(filled)),
+            ]
+        )
+    )
+    manifest = {
+        "equity_research": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 100}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+    tool_call_events = [e for e in events if isinstance(e, ReportToolCall)]
+    assert len(tool_call_events) == 2
+    assert isinstance(events[-1], ReportComplete)
+
+
+async def test_max_rounds_falls_through_to_writing(
+    prompts_root: Path, frameworks_root: Path
+) -> None:
+    call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+    filled = {"title": "AAPL Initiation", "sections": [{"id": "overview", "body": "..."}]}
+    turns: list[Any] = [("tool_calls", [call])] * 10 + [("final_json", json.dumps(filled))]
+    provider = FakeProvider(script=FakeProviderScript(turns=turns))
+    manifest = {
+        "equity_research": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 100}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+    assert isinstance(events[-1], ReportComplete)
+
+
+async def test_provider_error_in_report_tool_loop_emits_report_error(
+    prompts_root: Path, frameworks_root: Path
+) -> None:
+    class _LoopErrorProvider(FakeProvider):
+        async def generate(self, request):
+            if self._turn_index >= 1:
+                raise LLMProviderError("mid-loop failure")
+            return await super().generate(request)
+
+    call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+    provider = _LoopErrorProvider(
+        script=FakeProviderScript(turns=[("tool_calls", [call])])
+    )
+    manifest = {
+        "equity_research": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 100}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+    assert isinstance(events[-1], ReportError)
+    assert "mid-loop failure" in events[-1].message
 
 
 async def test_report_cancellation_stops_yielding(
