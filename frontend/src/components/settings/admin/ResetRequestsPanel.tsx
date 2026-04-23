@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ApiError, approveResetRequest, listResetRequests, rejectResetRequest, ResetRequestRow } from '../../../api/admin';
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';

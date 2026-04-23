@@ -1,5 +1,3 @@
-import React from 'react';
-
 interface Props {
   kind: 'success' | 'error' | null;
   message: string;

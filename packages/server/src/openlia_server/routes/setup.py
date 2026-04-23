@@ -1,4 +1,5 @@
 """Setup Wizard routes under /setup/*."""
+
 from __future__ import annotations
 
 import asyncio
@@ -123,9 +124,10 @@ def build_setup_router(
             env_overrides=s.env_overrides,
         )
 
-    @router.post("/mode", dependencies=[
-        Depends(require_loopback_if_personal), Depends(require_wizard_active)
-    ])
+    @router.post(
+        "/mode",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
     def post_mode(
         payload: ModeIn,
         response: Response,
@@ -148,9 +150,10 @@ def build_setup_router(
         _set_wizard_cookie(response, token)
         return {"ok": True}
 
-    @router.post("/identity", dependencies=[
-        Depends(require_loopback_if_personal), Depends(require_wizard_active)
-    ])
+    @router.post(
+        "/identity",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
     def post_identity(
         payload: IdentityIn,
         db: Session = Depends(session_dep),
@@ -160,9 +163,10 @@ def build_setup_router(
         wizard_svc.advance_step(db, "identity", "personal")
         return {"display_name": payload.display_name}
 
-    @router.post("/admin", dependencies=[
-        Depends(require_loopback_if_personal), Depends(require_wizard_active)
-    ])
+    @router.post(
+        "/admin",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
     def post_admin(
         payload: AdminIn,
         db: Session = Depends(session_dep),
@@ -181,9 +185,10 @@ def build_setup_router(
         wizard_svc.advance_step(db, "admin", "company")
         return {"email": payload.email}
 
-    @router.post("/access_control", dependencies=[
-        Depends(require_loopback_if_personal), Depends(require_wizard_active)
-    ])
+    @router.post(
+        "/access_control",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
     def post_access_control(
         payload: AccessControlIn,
         db: Session = Depends(session_dep),
@@ -203,9 +208,10 @@ def build_setup_router(
         wizard_svc.advance_step(db, "access_control", "company")
         return {"ok": True}
 
-    @router.post("/review/run", dependencies=[
-        Depends(require_loopback_if_personal), Depends(require_wizard_active)
-    ])
+    @router.post(
+        "/review/run",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
     async def post_review_run(
         db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
@@ -221,17 +227,13 @@ def build_setup_router(
         review_id = store.create()
 
         registry = SQLModelRegistry(db)
-        row = (
-            registry.get_tier_default(ModelTier.QUICK)
-            or registry.get_any_in_tier(ModelTier.QUICK)
+        row = registry.get_tier_default(ModelTier.QUICK) or registry.get_any_in_tier(
+            ModelTier.QUICK
         )
 
         departments = list(_DEPT_REQS.items())
         dp_rows = list_dp(db)
-        providers = [
-            {"id": r.id, "category": r.kind, "provider": r.kind}
-            for r in dp_rows
-        ]
+        providers = [{"id": r.id, "category": r.kind, "provider": r.kind} for r in dp_rows]
 
         if row is None:
             store.update(review_id, state="failed", error="No Quick-tier LLM configured.")
@@ -273,9 +275,10 @@ def build_setup_router(
             )
         return entry
 
-    @router.post("/finish", dependencies=[
-        Depends(require_loopback_if_personal), Depends(require_wizard_active)
-    ])
+    @router.post(
+        "/finish",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
     def post_finish(
         db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),

@@ -129,5 +129,3 @@ def test_numeric_columns_use_decimal(create_tables, db_session: Session) -> None
     db_session.commit()
     db_session.refresh(h)
     assert h.shares == Decimal("100.5")
-
-

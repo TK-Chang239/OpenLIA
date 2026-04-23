@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getPrefs, updatePrefs, Prefs, Theme, ApiError } from '../../../api/settings';
 import { useDirtyForm } from '../useDirtyForm';
 import { SaveButton, SaveState } from '../SaveButton';

@@ -1,4 +1,5 @@
 """Dependencies that gate /setup/* routes based on wizard completion and session."""
+
 from __future__ import annotations
 
 from fastapi import Cookie, Depends, HTTPException, status
