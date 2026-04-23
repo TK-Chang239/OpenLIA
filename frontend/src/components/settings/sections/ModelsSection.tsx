@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { deleteModelPreference, getModelPreferences, putModelPreference, Tier, ApiError } from '../../../api/settings';
 import { SaveButton, SaveState } from '../SaveButton';
 import { SettingGroup } from '../SettingGroup';
