@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
-
 from openlia.reports.schema import Cover, Metric, PageFurniture, ReportSchema, Section, TextBlock
 from openlia_server.services.report_store import create_report
+from sqlalchemy.orm import Session
 
 
 def _seed_report(db_session: Session, user_id: str) -> str:

@@ -159,12 +159,21 @@ def test_capability_override_is_applied_via_resolver(_env_secret, db_session) ->
 
 def test_get_tier_default_skips_disabled_provider(_env_secret, db_session) -> None:
     p = svc.create_provider(
-        db_session, kind="openai", label="main", api_key="sk-test",
-        base_url=None, env_var_name=None, extra_config=None,
+        db_session,
+        kind="openai",
+        label="main",
+        api_key="sk-test",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
     )
     svc.create_model(
-        db_session, provider_id=p.id, tier="thinking",
-        model_ref="gpt-5.4-pro", display_name="Pro", is_tier_default=True,
+        db_session,
+        provider_id=p.id,
+        tier="thinking",
+        model_ref="gpt-5.4-pro",
+        display_name="Pro",
+        is_tier_default=True,
     )
     svc.update_provider(db_session, p.id, is_enabled=False)
     reg = SQLModelRegistry(db_session)
@@ -173,22 +182,40 @@ def test_get_tier_default_skips_disabled_provider(_env_secret, db_session) -> No
 
 def test_get_any_in_tier_skips_disabled_provider(_env_secret, db_session) -> None:
     p1 = svc.create_provider(
-        db_session, kind="openai", label="p1", api_key="k1",
-        base_url=None, env_var_name=None, extra_config=None,
+        db_session,
+        kind="openai",
+        label="p1",
+        api_key="k1",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
     )
     svc.create_model(
-        db_session, provider_id=p1.id, tier="quick",
-        model_ref="fast-1", display_name="Fast1", is_tier_default=False,
+        db_session,
+        provider_id=p1.id,
+        tier="quick",
+        model_ref="fast-1",
+        display_name="Fast1",
+        is_tier_default=False,
     )
     svc.update_provider(db_session, p1.id, is_enabled=False)
 
     p2 = svc.create_provider(
-        db_session, kind="anthropic", label="p2", api_key="k2",
-        base_url=None, env_var_name=None, extra_config=None,
+        db_session,
+        kind="anthropic",
+        label="p2",
+        api_key="k2",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
     )
     enabled = svc.create_model(
-        db_session, provider_id=p2.id, tier="quick",
-        model_ref="fast-2", display_name="Fast2", is_tier_default=False,
+        db_session,
+        provider_id=p2.id,
+        tier="quick",
+        model_ref="fast-2",
+        display_name="Fast2",
+        is_tier_default=False,
     )
     reg = SQLModelRegistry(db_session)
     row = reg.get_any_in_tier(ModelTier.QUICK)
@@ -200,12 +227,21 @@ def test_user_preference_with_disabled_provider_returns_none(
     _env_secret, db_session, make_user
 ) -> None:
     p = svc.create_provider(
-        db_session, kind="openai", label="main", api_key="sk-test",
-        base_url=None, env_var_name=None, extra_config=None,
+        db_session,
+        kind="openai",
+        label="main",
+        api_key="sk-test",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
     )
     m = svc.create_model(
-        db_session, provider_id=p.id, tier="thinking",
-        model_ref="gpt-5.4-pro", display_name="Pro", is_tier_default=True,
+        db_session,
+        provider_id=p.id,
+        tier="thinking",
+        model_ref="gpt-5.4-pro",
+        display_name="Pro",
+        is_tier_default=True,
     )
     user = make_user(email="u@openlia.local", password="pw-12345678", is_admin=False)
     svc.set_user_preference(db_session, user_id=user.id, tier="thinking", model_id=m.id)
@@ -214,19 +250,26 @@ def test_user_preference_with_disabled_provider_returns_none(
     assert reg.get_user_preference(user.id, ModelTier.THINKING) is None
 
 
-def test_resolve_raises_tier_not_configured_when_all_disabled(
-    _env_secret, db_session
-) -> None:
+def test_resolve_raises_tier_not_configured_when_all_disabled(_env_secret, db_session) -> None:
     from openlia.llm.exceptions import TierNotConfiguredError
     from openlia.llm.resolver import resolve
 
     p = svc.create_provider(
-        db_session, kind="openai", label="main", api_key="sk-test",
-        base_url=None, env_var_name=None, extra_config=None,
+        db_session,
+        kind="openai",
+        label="main",
+        api_key="sk-test",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
     )
     m = svc.create_model(
-        db_session, provider_id=p.id, tier="thinking",
-        model_ref="gpt-5.4-pro", display_name="Pro", is_tier_default=True,
+        db_session,
+        provider_id=p.id,
+        tier="thinking",
+        model_ref="gpt-5.4-pro",
+        display_name="Pro",
+        is_tier_default=True,
     )
     svc.update_model(db_session, m.id, is_enabled=False)
     reg = SQLModelRegistry(db_session)

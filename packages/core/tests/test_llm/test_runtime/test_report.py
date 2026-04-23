@@ -406,9 +406,7 @@ async def test_provider_error_in_report_tool_loop_emits_report_error(
             return await super().generate(request)
 
     call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
-    provider = _LoopErrorProvider(
-        script=FakeProviderScript(turns=[("tool_calls", [call])])
-    )
+    provider = _LoopErrorProvider(script=FakeProviderScript(turns=[("tool_calls", [call])]))
     manifest = {
         "equity_research": {
             "stock_quote": {

@@ -1,9 +1,8 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 import pytest
-
-from openlia.reports.assembler import assemble_report, PageFurnitureConfig
+from openlia.reports.assembler import PageFurnitureConfig, assemble_report
 from openlia.reports.validator import ReportValidationError
-
 
 DEFAULT_FURNITURE = PageFurnitureConfig(
     header_left="OpenLIA",
@@ -43,7 +42,7 @@ def test_assemble_strips_instructions_and_applies_furniture():
         raw,
         department="equity_research",
         furniture=DEFAULT_FURNITURE,
-        now=datetime(2026, 4, 11, 9, 30, tzinfo=timezone.utc),
+        now=datetime(2026, 4, 11, 9, 30, tzinfo=UTC),
     )
     assert schema.page_furniture is not None
     assert schema.page_furniture.header["right"] == "Equity Research Department"
@@ -64,7 +63,7 @@ def test_assemble_overwrites_llm_supplied_furniture():
         raw,
         department="equity_research",
         furniture=DEFAULT_FURNITURE,
-        now=datetime(2026, 4, 11, 9, 30, tzinfo=timezone.utc),
+        now=datetime(2026, 4, 11, 9, 30, tzinfo=UTC),
     )
     assert schema.page_furniture.header["left"] == "OpenLIA"
     assert schema.page_furniture.disclaimer.startswith("This report is AI-generated")
@@ -78,7 +77,7 @@ def test_assemble_raises_on_invalid_payload():
             raw,
             department="equity_research",
             furniture=DEFAULT_FURNITURE,
-            now=datetime(2026, 4, 11, 9, 30, tzinfo=timezone.utc),
+            now=datetime(2026, 4, 11, 9, 30, tzinfo=UTC),
         )
 
 
@@ -89,6 +88,6 @@ def test_assemble_falls_back_to_default_header_for_unknown_department():
         raw,
         department="secretary",
         furniture=DEFAULT_FURNITURE,
-        now=datetime(2026, 4, 11, tzinfo=timezone.utc),
+        now=datetime(2026, 4, 11, tzinfo=UTC),
     )
     assert schema.page_furniture.header["right"] == "OpenLIA Report"

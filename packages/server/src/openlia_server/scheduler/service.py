@@ -37,7 +37,13 @@ log = logging.getLogger(__name__)
 
 _VALID_DAY_NAMES: frozenset[str] = frozenset({"mon", "tue", "wed", "thu", "fri", "sat", "sun"})
 _DAY_INDEX_TO_NAME: dict[int, str] = {
-    0: "mon", 1: "tue", 2: "wed", 3: "thu", 4: "fri", 5: "sat", 6: "sun"
+    0: "mon",
+    1: "tue",
+    2: "wed",
+    3: "thu",
+    4: "fri",
+    5: "sat",
+    6: "sun",
 }
 
 
@@ -261,7 +267,7 @@ class SchedulerService:
 
     @staticmethod
     def _days_to_names(days_raw: list[int | str]) -> list[str]:
-        """Normalize day values to APScheduler name strings (mon–sun).
+        """Normalize day values to APScheduler name strings (mon-sun).
 
         Accepts either integer indices (0=mon … 6=sun) or day-name strings.
         Raises ValueError for any unrecognised value.

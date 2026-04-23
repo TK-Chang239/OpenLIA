@@ -328,9 +328,7 @@ async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> N
 async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> None:
     call = ToolCall(id="cx", name="stock_quote", arguments={"symbol": "X"})
     provider = FakeProvider(
-        script=FakeProviderScript(
-            turns=[("tool_calls", [call])] * 10 + [("tokens", ["done"])]
-        )
+        script=FakeProviderScript(turns=[("tool_calls", [call])] * 10 + [("tokens", ["done"])])
     )
     manifest = {
         "secretary": {
@@ -381,9 +379,7 @@ async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) 
                 raise LLMProviderError("mid-loop failure")
             return await super().generate(request)
 
-    provider = _LoopErrorProvider(
-        script=FakeProviderScript(turns=[("tool_calls", [call])])
-    )
+    provider = _LoopErrorProvider(script=FakeProviderScript(turns=[("tool_calls", [call])]))
     manifest = {
         "secretary": {
             "stock_quote": {

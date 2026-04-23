@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import uuid
 
+from openlia.reports.schema import ReportSchema
+from openlia.reports.validator import validate_report_payload
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from openlia.reports.schema import ReportSchema
-from openlia.reports.validator import validate_report_payload
 from openlia_server.db.models.content import Report
 
 
