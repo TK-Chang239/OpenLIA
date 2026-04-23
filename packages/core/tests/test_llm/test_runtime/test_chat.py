@@ -270,7 +270,6 @@ async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
     assert contents == ["hi", "hello", "what's up?"]
 
 
-@pytest.mark.anyio
 async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> None:
     call_a = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     call_b = ToolCall(id="c2", name="stock_quote", arguments={"symbol": "MSFT"})
@@ -326,7 +325,6 @@ async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> N
     assert type(events[-1]) is ChatDone
 
 
-@pytest.mark.anyio
 async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> None:
     call = ToolCall(id="cx", name="stock_quote", arguments={"symbol": "X"})
     provider = FakeProvider(
@@ -371,7 +369,6 @@ async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> Non
     assert "".join(tokens) == "done"
 
 
-@pytest.mark.anyio
 async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) -> None:
     from openlia.llm.exceptions import LLMProviderError
     from openlia.llm.types import LLMRequest
