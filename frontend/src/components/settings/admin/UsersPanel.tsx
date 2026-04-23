@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { adminResetPassword, AdminUserRow, ApiError, disableUser, enableUser, listAdminUsers } from '../../../api/admin';
 import { InlineFeedback } from '../InlineFeedback';
 

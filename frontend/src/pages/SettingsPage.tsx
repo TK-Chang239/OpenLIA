@@ -1,4 +1,3 @@
-import React from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { SettingsShell } from '../components/settings/SettingsShell';
 import { GeneralSection } from '../components/settings/sections/GeneralSection';

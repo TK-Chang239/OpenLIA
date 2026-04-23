@@ -1,4 +1,5 @@
 """Tests for wizard_gate dependency — 410 Gone after completion."""
+
 from __future__ import annotations
 
 import pytest

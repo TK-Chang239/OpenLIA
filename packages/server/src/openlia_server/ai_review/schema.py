@@ -1,4 +1,5 @@
 """Pydantic schema for AI review output."""
+
 from __future__ import annotations
 
 from enum import StrEnum

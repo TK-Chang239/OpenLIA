@@ -1,4 +1,5 @@
 """Tests for WizardService.get_status and env-override resolution."""
+
 from __future__ import annotations
 
 from openlia_server.services import wizard as svc

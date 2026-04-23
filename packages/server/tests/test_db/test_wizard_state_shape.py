@@ -1,5 +1,6 @@
 """Verify wizard_state shape after the reshape migration: current_step is a string,
 completed_steps is a JSON array, and active_session_token is nullable text."""
+
 from __future__ import annotations
 
 import pytest

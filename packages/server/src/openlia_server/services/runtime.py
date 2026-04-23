@@ -1,0 +1,69 @@
+"""Build a `ChatRunner` wired to the server's LLM admin settings.
+
+Tests stub this entire factory — the route accepts `chat_runner_factory`
+as a parameter so the builder below is only exercised by the running
+application. Plan 13 will extend the builder with real tool wiring; for
+this blocker the Secretary tool dispatcher returns no tools.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from openlia.llm.adapters import build_adapter
+from openlia.llm.resolver import resolve
+from openlia.llm.runtime.chat import ChatRunner
+from openlia.llm.runtime.prompts import PromptLoader
+from openlia.llm.runtime.tools import ToolDispatcher
+from openlia.llm.runtime.web_search import WebSearchResolution
+from sqlalchemy.orm import Session as DBSession
+
+from openlia_server.services.llm_registry import SQLModelRegistry
+
+
+class _EmptyDataDispatcher:
+    """No data-provider tools wired in this blocker. Plan 13 replaces this."""
+
+    async def list_requirement_tools(self, department_id: str) -> list[dict[str, Any]]:
+        return []
+
+    async def dispatch_requirement(
+        self, *, tool_name: str, arguments: dict[str, Any]
+    ) -> dict[str, Any]:
+        raise RuntimeError(f"no data-provider tools registered (attempted {tool_name!r})")
+
+    async def find_more_data(
+        self, *, department_id: str, description: str
+    ) -> dict[str, Any] | None:
+        return None
+
+
+def build_chat_runner(
+    *,
+    db_session_factory: Callable[[], DBSession],
+) -> ChatRunner:
+    """Construct a `ChatRunner` using the current LLM admin config."""
+    db = db_session_factory()
+    registry = SQLModelRegistry(db)
+    prompts = PromptLoader()
+    tools = ToolDispatcher(
+        data_dispatcher=_EmptyDataDispatcher(),
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+
+    def _provider_factory(resolved):
+        return build_adapter(
+            kind=resolved.provider_kind,
+            credentials=resolved.credentials,
+            model=resolved.model_ref,
+            capabilities=resolved.capabilities,
+        )
+
+    return ChatRunner(
+        prompts=prompts,
+        tools=tools,
+        resolve=resolve,
+        registry=registry,
+        provider_factory=_provider_factory,
+    )
