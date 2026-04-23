@@ -647,7 +647,7 @@ Source findings:
 
 ### REM-P1-010 - Add runtime provider/model hardening tests
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -682,7 +682,7 @@ Source findings:
 
 ### REM-P1-011 - Protect multi-round tool loop behavior
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -716,7 +716,7 @@ Source findings:
 
 ### REM-P1-012 - Wire production scheduler dependencies
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -751,7 +751,7 @@ Source findings:
 
 ### REM-P1-013 - Use existing scheduler hot-reload API in Plan 15
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -811,7 +811,7 @@ Source findings:
 
 ### REM-P1-015 - Keep notification transaction ownership explicit
 
-Status: `[ ]`
+Status: `[x]`
 
 Affected implementation:
 
@@ -1143,12 +1143,12 @@ Source findings:
 
 ### Before Plan 13-15 Implementation
 
-- `[ ]` REM-P1-010
-- `[ ]` REM-P1-011
-- `[ ]` REM-P1-012
-- `[ ]` REM-P1-013
+- `[x]` REM-P1-010
+- `[x]` REM-P1-011
+- `[x]` REM-P1-012
+- `[x]` REM-P1-013
 - `[x]` REM-P1-014
-- `[ ]` REM-P1-015
+- `[x]` REM-P1-015
 - `[x]` REM-P0-004 for Plan 13-15 snippets (2026-04-22)
 
 ### Before Final Product Acceptance
