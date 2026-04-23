@@ -97,7 +97,7 @@ def _build_report_runner_with_registry(registry: SQLModelRegistry) -> ReportRunn
 class RefreshingReportRunner:
     """Constructs a fresh ReportRunner (with fresh DB session and registry) per job run."""
 
-    def __init__(self, db_session_factory) -> None:
+    def __init__(self, db_session_factory: Callable[[], DBSession]) -> None:
         self._factory = db_session_factory
 
     async def run(
@@ -123,5 +123,5 @@ class RefreshingReportRunner:
             db.close()
 
 
-def build_report_runner(db_session_factory) -> RefreshingReportRunner:
+def build_report_runner(db_session_factory: Callable[[], DBSession]) -> RefreshingReportRunner:
     return RefreshingReportRunner(db_session_factory)
