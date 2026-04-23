@@ -53,6 +53,8 @@ EXPECTED_TABLES = {
     "user_notifications",
     # --- Plan 11 additions ---
     "user_prefs",
+    # --- Plan 12 blockers ---
+    "repo_items",
 }
 
 

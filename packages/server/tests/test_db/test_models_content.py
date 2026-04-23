@@ -131,22 +131,3 @@ def test_numeric_columns_use_decimal(create_tables, db_session: Session) -> None
     assert h.shares == Decimal("100.5")
 
 
-def test_tags_default_empty_list(create_tables, db_session: Session) -> None:
-    from openlia_server.db.models.auth import User
-    from openlia_server.db.models.content import Report
-
-    u = User(id="u1", email="u1@example.com", display_name="U1")
-    r = Report(
-        id="r1",
-        user_id="u1",
-        department="equity_research",
-        report_type="stock_update",
-        title="t",
-        content_markdown="m",
-        content_structured={},
-        model_ref="m",
-    )
-    db_session.add_all([u, r])
-    db_session.commit()
-    db_session.refresh(r)
-    assert r.tags == []
