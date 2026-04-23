@@ -6,14 +6,12 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 from openlia.llm.runtime.events import ChatDone, ChatStart, ChatToken
-
 from openlia_server.db import session as session_mod
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
-
-import pytest
 
 
 class _ScriptedChatRunner:
@@ -88,7 +86,7 @@ def _parse_sse_frames(body: str) -> list[dict]:
     frames: list[dict] = []
     for line in body.splitlines():
         if line.startswith("data: "):
-            frames.append(json.loads(line[len("data: "):]))
+            frames.append(json.loads(line[len("data: ") :]))
     return frames
 
 

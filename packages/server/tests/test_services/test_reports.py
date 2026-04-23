@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import Report
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 
 def _valid_schema() -> dict:
@@ -103,9 +102,7 @@ def test_save_report_rejects_invalid_schema_without_writing(
     assert db_session.execute(select(Report)).scalar_one_or_none() is None
 
 
-def test_get_report_for_user_returns_owner_row(
-    create_tables, db_session: Session
-) -> None:
+def test_get_report_for_user_returns_owner_row(create_tables, db_session: Session) -> None:
     from openlia_server.services import reports as svc
 
     _seed_user(db_session, uid="u1")
@@ -127,9 +124,7 @@ def test_get_report_for_user_returns_owner_row(
     assert got.id == report.id
 
 
-def test_get_report_for_user_returns_none_for_non_owner(
-    create_tables, db_session: Session
-) -> None:
+def test_get_report_for_user_returns_none_for_non_owner(create_tables, db_session: Session) -> None:
     from openlia_server.services import reports as svc
 
     _seed_user(db_session, uid="u1")

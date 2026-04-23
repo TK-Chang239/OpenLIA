@@ -42,9 +42,7 @@ def build_chat_stream_router(
     The chat-runner factory is resolved from `request.app.state.chat_runner_factory`
     at each request so tests can swap it without rebuilding the app.
     """
-    require_auth = build_require_active_user(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     router = APIRouter(prefix="/departments/secretary", tags=["chat"])
 
     @router.post("/chat")
@@ -68,9 +66,7 @@ async def _event_source(
     factory: Callable[[], ChatRunner],
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
-    messages = [
-        RuntimeChatMessage(role=m.role, content=m.content) for m in payload.messages
-    ]
+    messages = [RuntimeChatMessage(role=m.role, content=m.content) for m in payload.messages]
     runner = factory()
 
     try:
@@ -84,7 +80,7 @@ async def _event_source(
     except asyncio.CancelledError:
         token.cancel()
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("chat stream terminated with error", exc_info=True)
         error_event = ChatError(
             message_id="",
