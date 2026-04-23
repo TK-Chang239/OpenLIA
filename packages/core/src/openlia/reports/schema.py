@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -169,7 +169,7 @@ class HeatmapBlock(_Strict):
 class TreemapNode(_Strict):
     name: str
     value: float
-    children: list["TreemapNode"] | None = None
+    children: list[TreemapNode] | None = None
 
 
 class TreemapBlock(_Strict):
@@ -190,23 +190,23 @@ class ComboChartBlock(_Strict):
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
-LeafBlock = Union[
-    TextBlock,
-    TableBlock,
-    MetricCardsBlock,
-    KeyFindingBlock,
-    RatingBadgeBlock,
-    LineChartBlock,
-    BarChartBlock,
-    AreaChartBlock,
-    PieChartBlock,
-    CandlestickBlock,
-    WaterfallBlock,
-    ScatterBlock,
-    HeatmapBlock,
-    TreemapBlock,
-    ComboChartBlock,
-]
+LeafBlock = (
+    TextBlock
+    | TableBlock
+    | MetricCardsBlock
+    | KeyFindingBlock
+    | RatingBadgeBlock
+    | LineChartBlock
+    | BarChartBlock
+    | AreaChartBlock
+    | PieChartBlock
+    | CandlestickBlock
+    | WaterfallBlock
+    | ScatterBlock
+    | HeatmapBlock
+    | TreemapBlock
+    | ComboChartBlock
+)
 
 
 class GroupBlock(_Strict):
@@ -216,7 +216,7 @@ class GroupBlock(_Strict):
 
 
 Block = Annotated[
-    Union[LeafBlock, GroupBlock],
+    LeafBlock | GroupBlock,
     Field(discriminator="type"),
 ]
 

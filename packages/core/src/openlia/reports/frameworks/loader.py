@@ -17,7 +17,9 @@ class FrameworkNotFoundError(FileNotFoundError):
 class CustomizationOptions:
     disabled_section_ids: frozenset[str] = field(default_factory=frozenset)
     section_order: tuple[str, ...] | list[str] | None = None
-    custom_sections: tuple[dict[str, Any], ...] | list[dict[str, Any]] = field(default_factory=tuple)
+    custom_sections: tuple[dict[str, Any], ...] | list[dict[str, Any]] = field(
+        default_factory=tuple
+    )
 
 
 def _read_resource(relative_name: str) -> str:

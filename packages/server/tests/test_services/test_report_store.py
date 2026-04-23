@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
-import pytest
+from datetime import UTC, datetime
 
+import pytest
 from openlia.reports.schema import (
     Cover,
     Metric,
@@ -20,7 +20,7 @@ def _sample_schema() -> ReportSchema:
     return ReportSchema(
         schema_version="1.0",
         department="equity_research",
-        generated_at=datetime(2026, 4, 11, tzinfo=timezone.utc),
+        generated_at=datetime(2026, 4, 11, tzinfo=UTC),
         page_furniture=PageFurniture(
             header={"left": "OpenLIA", "right": "ER"},
             footer={"left": "Gen", "center": "Page {page}", "right": "Internal"},

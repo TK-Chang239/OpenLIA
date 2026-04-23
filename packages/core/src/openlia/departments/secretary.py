@@ -5,7 +5,6 @@ from typing import Any
 
 from openlia.departments.base import Tier
 
-
 _SUGGEST_REDIRECT_TOOL: dict[str, Any] = {
     "name": "suggest_redirect",
     "description": (
@@ -56,6 +55,4 @@ class SecretaryDepartment:
         "historical_prices",
         "economic_events",
     )
-    extra_tools: tuple[dict[str, Any], ...] = (
-        _SUGGEST_REDIRECT_TOOL,
-    )
+    extra_tools: tuple[dict[str, Any], ...] = (_SUGGEST_REDIRECT_TOOL,)

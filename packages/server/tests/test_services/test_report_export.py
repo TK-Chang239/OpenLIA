@@ -1,5 +1,4 @@
 import pytest
-
 from openlia_server.services.report_export import (
     BrowserLauncher,
     export_report_pdf,

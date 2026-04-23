@@ -14,8 +14,8 @@ from typing import Any
 from openlia.llm.adapters import build_adapter
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.chat import ChatRunner
-from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.prompts import PromptLoader
+from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
 from sqlalchemy.orm import Session as DBSession

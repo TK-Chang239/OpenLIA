@@ -46,12 +46,10 @@ def test_secretary_exposes_suggest_redirect_tool():
 
 def test_prompt_file_loads_system_and_user_sections():
     from pathlib import Path
+
     import yaml
 
-    path = (
-        Path(__file__).resolve().parents[2]
-        / "src/openlia/prompts/secretary.yaml"
-    )
+    path = Path(__file__).resolve().parents[2] / "src/openlia/prompts/secretary.yaml"
     content = yaml.safe_load(path.read_text())
     assert "system" in content
     assert "user" in content
