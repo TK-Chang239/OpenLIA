@@ -1,5 +1,6 @@
 import { FileText, Sheet, Image as ImageIcon, FileCode, File } from "lucide-react";
 import { type FileKind, type FileSource, useFileViewer } from "../viewer/FileViewerContext";
+import { sourceUrl } from "../viewer/renderers/sourceUrl";
 import { SaveToRepoButton } from "./SaveToRepoButton";
 import { FileDownloadButton } from "./FileDownloadButton";
 
@@ -65,9 +66,9 @@ export function AttachmentChip({
         data-chip-action=""
       >
         {reportId !== undefined ? (
-          <SaveToRepoButton variant="chip" reportId={reportId} filename={filename} />
+          <SaveToRepoButton variant="chip" reportId={reportId} initialSaved={false} />
         ) : null}
-        <FileDownloadButton variant="chip" source={source} filename={filename} />
+        <FileDownloadButton variant="chip" url={sourceUrl(source)} filename={filename} />
       </div>
     </div>
   );
