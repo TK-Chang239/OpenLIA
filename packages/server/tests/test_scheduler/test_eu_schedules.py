@@ -201,6 +201,25 @@ def test_get_lists_user_schedules(eu_fixtures) -> None:
     assert times == {"07:00", "08:00"}
 
 
+def test_patch_with_is_enabled_false_removes_job(eu_fixtures) -> None:
+    client, fake_scheduler = eu_fixtures
+    r = client.post(
+        "/departments/earnings-update/schedules",
+        json={"time": "07:00", "timezone": "UTC", "days_of_week": [0], "is_enabled": True},
+    )
+    assert r.status_code == 201
+    schedule_id = r.json()["id"]
+    assert job_key(JobType.EU_SCAN, "local") in fake_scheduler.jobs
+
+    r = client.patch(
+        f"/departments/earnings-update/schedules/{schedule_id}",
+        json={"time": "07:00", "timezone": "UTC", "days_of_week": [0], "is_enabled": False},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_enabled"] is False
+    assert job_key(JobType.EU_SCAN, "local") not in fake_scheduler.jobs
+
+
 def test_post_with_scheduler_disabled_returns_503(client_no_scheduler) -> None:
     r = client_no_scheduler.post(
         "/departments/earnings-update/schedules",
