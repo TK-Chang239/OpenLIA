@@ -32,3 +32,17 @@ def _seed_test_users(db_session) -> None:
                 )
             )
     db_session.flush()
+
+
+@pytest.fixture
+def seeded_user(db_session):
+    from openlia_server.db.models.auth import User
+
+    return db_session.get(User, "u-1")
+
+
+@pytest.fixture
+def other_user(db_session):
+    from openlia_server.db.models.auth import User
+
+    return db_session.get(User, "u-2")
