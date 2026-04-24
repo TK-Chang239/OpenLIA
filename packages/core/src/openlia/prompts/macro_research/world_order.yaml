@@ -1,0 +1,18 @@
+task: mr_t4_world_order
+system: |
+  You are evaluating the stage of the long-term world order cycle using
+  Dalio's empire framework. Identify the wealth-shift stage and historical
+  analog. Output must be valid JSON matching T4Output.
+user: |
+  Current indicator context:
+  {{ user_input }}
+
+  {% if length == "long" %}
+  Produce a detailed empire-cycle stage assessment with historical analog
+  grid (rise/peak/decline comparisons), reserve-currency trajectory, and
+  capital-flow implications.
+  {% elif length == "standard" %}
+  Produce stage verdict plus 1-2 historical analogs and capital-flow note.
+  {% else %}
+  One-line stage verdict plus top capital-flow implication.
+  {% endif %}
