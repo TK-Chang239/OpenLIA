@@ -39,7 +39,7 @@ def test_er_user_configs_downgrade_drops_table(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{db}")
     cfg = _alembic_config(str(db))
     command.upgrade(cfg, "head")
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "c1f4e2d7a931")
     engine = create_engine(f"sqlite:///{db}")
     insp = inspect(engine)
     assert "er_user_configs" not in insp.get_table_names()
