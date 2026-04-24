@@ -1,0 +1,79 @@
+"""On-demand Morning Briefing report orchestrator.
+
+Wraps `ReportRunner.run()` with MB-specific defaults:
+- Builds a `ReportRequest` via `MbRequestBuilderImpl` (config + portfolio).
+- Forwards every SSE event to the caller.
+- Persists the report on `ReportComplete` via `report_store.create_report`
+  and yields a synthetic `ReportSavedEvent` per README pattern #3.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Protocol
+
+from openlia.llm.runtime.events import ReportComplete, SseEvent
+from openlia.llm.runtime.messages import ReportRequest
+from openlia.reports.validator import validate_report_payload
+from sqlalchemy.orm import Session
+
+from openlia_server.services import report_store
+from openlia_server.services.mb_request_builder import MbRequestBuilderImpl
+
+
+@dataclass(frozen=True)
+class ReportSavedEvent:
+    """Terminal event emitted after the report is persisted by report_store.
+
+    Mirrors README pattern #3: `report.saved {report_id}`.
+    """
+
+    TYPE = "report.saved"
+    report_id: str
+
+
+class ReportRunnerLike(Protocol):
+    def run(
+        self,
+        *,
+        department_id: str,
+        user_id: str,
+        request: ReportRequest,
+    ) -> AsyncIterator[SseEvent]: ...
+
+
+async def run_on_demand(
+    *,
+    session: Session,
+    user_id: str,
+    report_runner: ReportRunnerLike,
+) -> AsyncIterator[SseEvent | ReportSavedEvent]:
+    builder = MbRequestBuilderImpl()
+    request = builder.build(
+        session=session, user_id=user_id, schedule_id="on_demand"
+    )
+
+    last_complete: ReportComplete | None = None
+    async for event in report_runner.run(
+        department_id="morning_briefing",
+        user_id=user_id,
+        request=request,
+    ):
+        if isinstance(event, ReportComplete):
+            last_complete = event
+        yield event
+
+    if last_complete is None:
+        return
+
+    schema_obj = validate_report_payload(last_complete.schema)
+    report_id = report_store.create_report(
+        session,
+        user_id=user_id,
+        department="morning_briefing",
+        mode="morning_briefing",
+        schema=schema_obj,
+    )
+    session.commit()
+    yield ReportSavedEvent(report_id=report_id)
