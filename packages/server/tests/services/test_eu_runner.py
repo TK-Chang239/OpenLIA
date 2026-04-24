@@ -9,14 +9,16 @@ from openlia.llm.runtime.events import (
     SseEvent,
 )
 from openlia.llm.runtime.messages import ReportRequest
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.auth import User
 from openlia_server.services.eu_runner import run_on_demand
+from sqlalchemy.orm import Session
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
+    u = User(
+        id=user_id, email=f"{user_id}@x", display_name=user_id,
+        password_hash="x", is_admin=False,
+    )
     db.add(u)
     db.commit()
     return u
@@ -27,7 +29,9 @@ class ScriptedRunner:
     events: list[SseEvent]
     received: list[tuple[str, str, ReportRequest]] = field(default_factory=list)
 
-    async def run(self, *, department_id: str, user_id: str, request: ReportRequest) -> AsyncIterator[SseEvent]:
+    async def run(
+        self, *, department_id: str, user_id: str, request: ReportRequest,
+    ) -> AsyncIterator[SseEvent]:
         self.received.append((department_id, user_id, request))
         for e in self.events:
             yield e
@@ -37,7 +41,9 @@ class ScriptedRunner:
 class FakeReportStore:
     saved: list[dict] = field(default_factory=list)
 
-    def save_from_event(self, *, user_id: str, department: str, report_type: str, event: ReportComplete) -> str:
+    def save_from_event(
+        self, *, user_id: str, department: str, report_type: str, event: ReportComplete,
+    ) -> str:
         rid = event.report_id
         self.saved.append({"user_id": user_id, "report_id": rid,
                            "department": department, "report_type": report_type})
