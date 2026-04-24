@@ -17,3 +17,32 @@ batch:
       ---
 
       Classify this post's sentiment toward {{ ticker }}.
+
+  classify_batch:
+    system: |
+      You classify a batch of social media posts and news headlines about
+      a single ticker. Return strict JSON matching the response schema:
+      a single JSON object with key "items" holding a JSON array with
+      one entry per input post, in the same order.
+
+      Each entry must have:
+        - id: the string id of the input post, echoed back exactly
+        - classification: one of "bullish", "bearish", or "neutral"
+        - confidence: a float in [0.0, 1.0]
+        - key_phrases: array of short strings (<= 5) that drove the call
+
+      Neutral is the right answer when the post is off-topic, ambiguous,
+      or only tangentially mentions the ticker. Do not invent content;
+      classify only what the post says.
+
+      Do not emit any prose outside the JSON object.
+    user: |
+      Ticker: {{ ticker }}
+      Items ({{ items|length }} posts, JSON array):
+      ```json
+      {{ items_json }}
+      ```
+
+      Classify each item's sentiment toward {{ ticker }}. Return a JSON
+      object `{ "items": [...] }` with one classification per input,
+      matching the input order and echoing each `id` exactly.

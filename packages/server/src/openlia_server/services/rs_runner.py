@@ -3,6 +3,11 @@
 Fetches raw posts, produces classifications (via an injected classifier),
 computes the metric snapshot, and persists it. Also detects spikes from
 recent history and returns them alongside the snapshot.
+
+Classifiers return a `BatchClassifyResult` (items + audits). For the
+LLM-backed classifier each LLM call emits one `ClassificationAudit`,
+which the runner persists into `rs_classification_log`. The neutral
+stub emits no audits (no LLM call was made).
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from typing import Any, Protocol
 
 from openlia.retail_sentiment.metrics import compute_snapshot
 from openlia.retail_sentiment.schemas import (
+    BatchClassifyResult,
     ClassificationLabel,
     ClassifiedItem,
     MetricSnapshot,
@@ -23,6 +29,7 @@ from openlia.retail_sentiment.schemas import (
 from openlia.retail_sentiment.spike_detector import detect_spike
 from sqlalchemy.orm import Session
 
+from openlia_server.services.rs_classification_log import RsClassificationLogService
 from openlia_server.services.rs_snapshot import RsSnapshotService
 
 
@@ -33,20 +40,19 @@ class _DataProvider(Protocol):
 class _Classifier(Protocol):
     def classify_batch(
         self, *, ticker: str, posts: Sequence[RawSocialPost]
-    ) -> list[ClassifiedItem]: ...
+    ) -> BatchClassifyResult: ...
 
 
 class NeutralClassifier:
     """Fallback classifier used when no LLM-backed one is wired.
 
     Marks every post neutral with confidence 0.5. Allows the pipeline to
-    produce deterministic snapshots in dev/test without a live LLM.
+    produce deterministic snapshots in dev/test without a live LLM. No
+    audit rows are emitted because no LLM call was made.
     """
 
-    def classify_batch(
-        self, *, ticker: str, posts: Sequence[RawSocialPost]
-    ) -> list[ClassifiedItem]:
-        return [
+    def classify_batch(self, *, ticker: str, posts: Sequence[RawSocialPost]) -> BatchClassifyResult:
+        items = [
             ClassifiedItem(
                 id=p.id,
                 classification=ClassificationLabel.NEUTRAL,
@@ -55,6 +61,7 @@ class NeutralClassifier:
             )
             for p in posts
         ]
+        return BatchClassifyResult(items=items, audits=[])
 
 
 @dataclass
@@ -72,11 +79,15 @@ class RsRunner:
         data_provider: _DataProvider | None,
         classifier: _Classifier | None = None,
         snapshot_service: RsSnapshotService | None = None,
+        classification_log_service: RsClassificationLogService | None = None,
     ) -> None:
         self._factory = session_factory
         self._data = data_provider
         self._classifier = classifier or NeutralClassifier()
         self._snapshots = snapshot_service or RsSnapshotService(session_factory=session_factory)
+        self._classification_log = classification_log_service or RsClassificationLogService(
+            session_factory=session_factory
+        )
 
     def _fetch_posts(self, ticker: str) -> list[RawSocialPost]:
         if self._data is None:
@@ -94,14 +105,16 @@ class RsRunner:
 
     def run_ticker(self, ticker: str) -> RsRunResult:
         posts = self._fetch_posts(ticker)
-        classifications = self._classifier.classify_batch(ticker=ticker, posts=posts)
+        result = self._classifier.classify_batch(ticker=ticker, posts=posts)
+        for audit in result.audits:
+            self._classification_log.insert(audit)
         prior = self._snapshots.history(ticker, days=7, limit=50)
         now = datetime.now(UTC)
         snap = compute_snapshot(
             ticker=ticker,
             captured_at=now,
             posts=posts,
-            classifications=classifications,
+            classifications=result.items,
             prior_snapshots=prior,
         )
         snap_id = self._snapshots.write(snap)
