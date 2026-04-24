@@ -1,5 +1,12 @@
 # Retail Sentiment Department Implementation Plan
 
+> **Amendment (2026-04-24) -- this plan was partially executed.** A v1 subset shipped in the Phase 20 merge and the remainder is deferred. Before acting on any task below, read the "Shipped v1 Scope" matrix at the top of [`planning/specs/systems/retail-sentiment-dashboard-design.md`](../specs/systems/retail-sentiment-dashboard-design.md) -- it is the source of truth for what runs today. Tasks below fall into three buckets:
+> - **Shipped v1:** metrics engine (7 of 12), snapshot persistence, `rs_user_config`, the 7 REST endpoints under `/departments/retail_sentiment/*`, the `NeutralClassifier` stub, the 3-tab frontend shell with shipped metric cards.
+> - **v2 follow-on bundle** (~2 days, not yet scheduled): `rs_classification_log` migration, `batch_classify` prompt, `LlmClassifier` wrapper, audit writes from `rs_runner.py`. Covers Tasks 3, 4, 5 from this plan in reduced form.
+> - **v2 full:** `JobType.RS_SNAPSHOT` + scheduler executor + `/schedule` endpoints, Evidence Tab, Insights Tab, Settings drawer, Metrics Deep Dive panel, metrics 8-12, narrative synthesis prompt + call. Covers Tasks 6-9 and most of Tasks 10-15.
+>
+> Do not re-execute shipped tasks. The task body below is preserved as historical record of the original intent.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **Audit 2026-04-23 normalizations (apply before executing this plan):**

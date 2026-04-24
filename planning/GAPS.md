@@ -98,19 +98,20 @@ Department redesigned from chat-based report generator to five framework-driven 
 
 Department redesigned from a 3-metric dashboard into a 12-metric sentiment monitoring platform with 3 analytical tabs, batch LLM classification, and cross-source validation. Design spec: `planning/specs/systems/retail-sentiment-dashboard-design.md`.
 
+**Status (2026-04-24):** spec amended. v1 ships a subset of the design; full design is now the v2 target. The "Shipped v1 Scope" matrix at the top of the spec is the source of truth -- read it before planning any follow-up work here.
+
 ### Gaps
 
 - **No framework JSON or style guide needed**: RS is a dashboard department and does not generate text reports.
 - **X API v2 access tier unverified**: Need to verify which X API tier is required for hourly tweet volume the dashboard needs.
 - **FMP social sentiment endpoint availability**: The `/api/v4/historical/social-sentiment` endpoint may require a specific FMP plan.
-- **NLP batch classification accuracy**: Batch classification of 30 items per call may reduce accuracy vs per-item. Needs testing during implementation.
-- **Engagement weighting formula**: Exact formula for converting likes/retweets/follower count into contribution weights needs to be defined during implementation.
+- **NLP batch classification accuracy**: Batch classification of 30 items per call may reduce accuracy vs per-item. Needs testing during v2 implementation.
+- **Engagement weighting formula**: Exact formula for converting likes/retweets/follower count into contribution weights needs to be defined during v2 implementation.
 
 ### Remaining Tasks
 
-- Implementation plan for the dashboard design (pending user review of spec).
-- Build batch NLP classification pipeline with structured prompt template.
-- Build metrics computation engine (12 metrics, Pandas-based).
+- **v2 follow-on bundle (~2 days, next):** `rs_classification_log` migration, `batch_classify` prompt section, `LlmClassifier` wrapper, audit writes from `rs_runner.py`.
+- **v2 full (deferred):** `JobType.RS_SNAPSHOT` + scheduler executor + `/schedule` endpoints, Evidence Tab, Insights Tab, Settings drawer, Metrics Deep Dive panel, metrics 8-12, narrative synthesis prompt + LLM call.
 
 ### Open Questions
 
