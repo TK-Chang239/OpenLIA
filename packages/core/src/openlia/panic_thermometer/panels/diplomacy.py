@@ -12,7 +12,7 @@ _DEFAULT_RULESET: dict[str, Any] = {
     "rules": [
         {
             "status": "red",
-            "formula": "days_elapsed >= window_days AND escalation_detected",
+            "formula": "days_elapsed >= window_days and escalation_detected",
             "label": "Window lapsed + escalation",
         },
         {

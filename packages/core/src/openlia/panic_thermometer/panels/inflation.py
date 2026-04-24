@@ -22,7 +22,8 @@ _DEFAULT_RULESET: dict[str, Any] = {
         {
             "status": "red",
             "formula": (
-                "michigan_5y == null AND slope(tip_price, slope_lookback_days) > slope_threshold"
+                "michigan_5y_missing and "
+                "pct_change(tip_price, slope_lookback_days) > slope_threshold"
             ),
             "label": "TIP rising fast (no survey data)",
         },
@@ -105,6 +106,7 @@ class InflationPanel:
             scalars={
                 "michigan_5y": float(latest) if latest is not None else None,
                 "michigan_prev": float(prev) if prev is not None else None,
+                "michigan_5y_missing": latest is None,
                 "tip_price_latest": price,
                 "tip_prev_close": prev_close,
             },
