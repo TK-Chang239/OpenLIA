@@ -39,9 +39,7 @@ def _consume_sse(iter_lines):
         line = raw.decode() if isinstance(raw, bytes) else raw
         if line == "":
             if current_data:
-                events.append(
-                    (current_event, json.loads("".join(current_data)))
-                )
+                events.append((current_event, json.loads("".join(current_data))))
                 current_event = None
                 current_data = []
             continue
@@ -54,9 +52,7 @@ def _consume_sse(iter_lines):
     return events
 
 
-def test_report_streams_named_events_and_persists(
-    company_client, auth_user, db_session
-):
+def test_report_streams_named_events_and_persists(company_client, auth_user, db_session):
     from openlia_server.db.models.content import Report
 
     runner = _ScriptedRunner(
@@ -96,9 +92,7 @@ def test_report_streams_named_events_and_persists(
     assert req.mode == "morning_briefing"
 
 
-def test_report_uses_user_config_for_length_and_sections(
-    company_client, auth_user
-):
+def test_report_uses_user_config_for_length_and_sections(company_client, auth_user):
     company_client.put(
         "/departments/morning-briefing/config",
         json={
@@ -109,9 +103,7 @@ def test_report_uses_user_config_for_length_and_sections(
             "reference_portfolio": False,
         },
     )
-    runner = _ScriptedRunner(
-        events=[ReportComplete(report_id="r_2", schema=MINIMAL_SCHEMA)]
-    )
+    runner = _ScriptedRunner(events=[ReportComplete(report_id="r_2", schema=MINIMAL_SCHEMA)])
     company_client.app.state.report_runner = runner
 
     r = company_client.post("/departments/morning-briefing/report", json={})
@@ -123,7 +115,5 @@ def test_report_uses_user_config_for_length_and_sections(
 
 
 def test_report_requires_auth(company_client_anon):
-    r = company_client_anon.post(
-        "/departments/morning-briefing/report", json={}
-    )
+    r = company_client_anon.post("/departments/morning-briefing/report", json={})
     assert r.status_code == 401

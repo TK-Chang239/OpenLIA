@@ -50,9 +50,7 @@ async def run_on_demand(
     report_runner: ReportRunnerLike,
 ) -> AsyncIterator[SseEvent | ReportSavedEvent]:
     builder = MbRequestBuilderImpl()
-    request = builder.build(
-        session=session, user_id=user_id, schedule_id="on_demand"
-    )
+    request = builder.build(session=session, user_id=user_id, schedule_id="on_demand")
 
     last_complete: ReportComplete | None = None
     async for event in report_runner.run(

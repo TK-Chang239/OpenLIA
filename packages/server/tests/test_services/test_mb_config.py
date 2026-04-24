@@ -53,9 +53,7 @@ def test_update_persists(create_tables, db_session: Session) -> None:
         report_length="concise",
         enabled_section_ids=["executive_summary", "global_macro"],
         section_topics={"global_macro": [{"topic": "War", "notes": "Russia"}]},
-        custom_sections=[
-            {"id": "abc", "title": "My Macro Focus", "description": "FX crosses"}
-        ],
+        custom_sections=[{"id": "abc", "title": "My Macro Focus", "description": "FX crosses"}],
         reference_portfolio=True,
     )
     row = db_session.query(MbUserConfig).filter_by(user_id="u_1").one()
@@ -120,9 +118,7 @@ def test_update_rejects_unknown_section_id(create_tables, db_session: Session) -
         )
 
 
-def test_update_rejects_custom_section_without_title(
-    create_tables, db_session: Session
-) -> None:
+def test_update_rejects_custom_section_without_title(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     with pytest.raises(ValueError, match="title"):
         svc.update_config(
@@ -136,9 +132,7 @@ def test_update_rejects_custom_section_without_title(
         )
 
 
-def test_update_rejects_topic_without_name(
-    create_tables, db_session: Session
-) -> None:
+def test_update_rejects_topic_without_name(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     with pytest.raises(ValueError, match="topic"):
         svc.update_config(

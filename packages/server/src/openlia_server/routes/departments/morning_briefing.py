@@ -32,9 +32,7 @@ def _optional_scheduler(request: Request):
 def _report_runner_dep(request: Request):
     runner = getattr(request.app.state, "report_runner", None)
     if runner is None:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "report runner not initialized"
-        )
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "report runner not initialized")
     return runner
 
 
@@ -68,9 +66,9 @@ class _ConfigOut(BaseModel):
 class _ScheduleIn(BaseModel):
     time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     timezone: str = Field(min_length=3, max_length=64)
-    days_of_week: list[
-        Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-    ] = Field(min_length=1)
+    days_of_week: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] = Field(
+        min_length=1
+    )
     label: str = Field(default="", max_length=64)
 
 
@@ -97,12 +95,8 @@ def build_morning_briefing_router(
     db_session_factory: Callable[[], DBSession],
     mode: Literal["personal", "company"],
 ) -> APIRouter:
-    router = APIRouter(
-        prefix="/departments/morning-briefing", tags=["morning-briefing"]
-    )
-    require_auth = build_require_auth(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    router = APIRouter(prefix="/departments/morning-briefing", tags=["morning-briefing"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     # ----- Config -----
@@ -141,9 +135,7 @@ def build_morning_briefing_router(
                 reference_portfolio=bool(payload.reference_portfolio),
             )
         except ValueError as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
-            ) from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
         return _ConfigOut(
             report_length=cfg.report_length,
             enabled_section_ids=list(cfg.enabled_section_ids),
@@ -181,9 +173,7 @@ def build_morning_briefing_router(
         scheduler=Depends(_optional_scheduler),
     ) -> _ScheduleOut:
         if scheduler is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized"
-            )
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")
         try:
             dto = await schedules_svc.upsert_schedule(
                 db,
@@ -195,9 +185,7 @@ def build_morning_briefing_router(
                 scheduler=scheduler,
             )
         except ValueError as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
-            ) from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
         return _ScheduleOut(
             id=dto.id,
             time=dto.time,
@@ -214,12 +202,8 @@ def build_morning_briefing_router(
         scheduler=Depends(_optional_scheduler),
     ) -> None:
         if scheduler is None:
-            raise HTTPException(
-                status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized"
-            )
-        await schedules_svc.delete_schedule(
-            db, user_id=user.id, scheduler=scheduler
-        )
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")
+        await schedules_svc.delete_schedule(db, user_id=user.id, scheduler=scheduler)
 
     # ----- On-demand report (SSE, named events) -----
 
@@ -249,14 +233,10 @@ def build_morning_briefing_router(
                         }
                     else:
                         wire = to_wire(event)
-                    yield (
-                        f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n"
-                    ).encode()
+                    yield (f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n").encode()
             except ValueError as exc:
                 error_payload = {"type": "report.error", "message": str(exc)}
-                yield (
-                    f"event: report.error\ndata: {json.dumps(error_payload)}\n\n"
-                ).encode()
+                yield (f"event: report.error\ndata: {json.dumps(error_payload)}\n\n").encode()
 
         return StreamingResponse(
             gen(),

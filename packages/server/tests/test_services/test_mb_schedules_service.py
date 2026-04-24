@@ -41,18 +41,14 @@ class FakeScheduler:
 
 
 @pytest.mark.asyncio
-async def test_get_returns_none_when_no_schedule(
-    create_tables, db_session: Session
-) -> None:
+async def test_get_returns_none_when_no_schedule(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     dto = svc.get_schedule(db_session, user_id="u_1")
     assert dto is None
 
 
 @pytest.mark.asyncio
-async def test_upsert_creates_row_and_registers(
-    create_tables, db_session: Session
-) -> None:
+async def test_upsert_creates_row_and_registers(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     dto = await svc.upsert_schedule(
@@ -74,9 +70,7 @@ async def test_upsert_creates_row_and_registers(
 
 
 @pytest.mark.asyncio
-async def test_upsert_modifies_existing_row(
-    create_tables, db_session: Session
-) -> None:
+async def test_upsert_modifies_existing_row(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     await svc.upsert_schedule(
@@ -122,9 +116,7 @@ async def test_upsert_validates_time(create_tables, db_session: Session) -> None
 
 
 @pytest.mark.asyncio
-async def test_upsert_validates_timezone(
-    create_tables, db_session: Session
-) -> None:
+async def test_upsert_validates_timezone(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     with pytest.raises(ValueError, match="timezone"):
@@ -140,9 +132,7 @@ async def test_upsert_validates_timezone(
 
 
 @pytest.mark.asyncio
-async def test_upsert_validates_days_of_week(
-    create_tables, db_session: Session
-) -> None:
+async def test_upsert_validates_days_of_week(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     with pytest.raises(ValueError, match="days_of_week"):
@@ -158,9 +148,7 @@ async def test_upsert_validates_days_of_week(
 
 
 @pytest.mark.asyncio
-async def test_delete_removes_row_and_unregisters(
-    create_tables, db_session: Session
-) -> None:
+async def test_delete_removes_row_and_unregisters(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     await svc.upsert_schedule(
@@ -178,9 +166,7 @@ async def test_delete_removes_row_and_unregisters(
 
 
 @pytest.mark.asyncio
-async def test_delete_is_noop_when_missing(
-    create_tables, db_session: Session
-) -> None:
+async def test_delete_is_noop_when_missing(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     await svc.delete_schedule(db_session, user_id="u_1", scheduler=sched)

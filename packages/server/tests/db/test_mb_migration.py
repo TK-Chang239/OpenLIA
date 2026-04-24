@@ -47,9 +47,7 @@ def test_migration_has_unique_on_user(tmp_path, monkeypatch) -> None:
     uqs = insp.get_unique_constraints("mb_user_configs")
     has_uq = any("user_id" in uq.get("column_names", []) for uq in uqs)
     idxs = insp.get_indexes("mb_user_configs")
-    has_unique_idx = any(
-        i.get("unique") and i.get("column_names") == ["user_id"] for i in idxs
-    )
+    has_unique_idx = any(i.get("unique") and i.get("column_names") == ["user_id"] for i in idxs)
     assert has_uq or has_unique_idx
 
 
