@@ -17,8 +17,11 @@ document lists every task that was compressed or deferred during the Phase
   not shipped. API client + section catalog covered; hook behavior covered
   implicitly via page integration.
 - **`ChatInterface` / `ChatReportThumbnail` / `useReportStream` wiring inside
-  the MB page.** Page currently uses inline `OnDemandBriefingButton` SSE
-  stream. Shared chat surface from Plan 12 not wired for MB follow-up Q&A.
+  the MB page.** Shipped 2026-04-24 on branch `feat/phase-16-mb-chat`:
+  `OnDemandBriefingButton` now streams via the shared `useReportStream` hook;
+  MB page exposes a dedicated Chat tab bound to the MB `ChatSession`; opening
+  a briefing from the archive renders `ReportRenderer` + `ChatInterface`
+  side by side with a `ReportThumbnail` chip for the active report.
 - **Endpoint-contract-matrix + route-authorization-matrix rows.** MB routes
   not yet documented in the two planning matrices.
 - **Manual smoke test.** Not executed.
@@ -132,9 +135,8 @@ Ranked by what blocks shipping vs polish.
 - **Phase 20 NLP classification + `rs_classification_log`.** Retail
   Sentiment's documented behavior differs from what ships — decide whether
   to implement or amend the spec.
-- **Phase 16 `ChatInterface` + `ChatReportThumbnail` + `useReportStream`
-  wiring in MB page.** Users currently cannot follow-up chat about a
-  generated MB briefing.
+<!-- Phase 16 MB chat wiring shipped 2026-04-24 on branch feat/phase-16-mb-chat -->
+
 
 ### P2 — release hygiene
 
