@@ -11,6 +11,8 @@ Journeys covered:
     * Provider create / edit / delete (admin)
     * Password reset + must-change-password
     * Repository save / open / download / unsave
+    * Secretary chat stream (scripted runner, SSE frames + persistence)
+    * Morning Briefing follow-up chat session resolve + stream
 
 Individual route tests still live under tests/test_routes/*; these tests are
 deliberately coarse and assert the outward-visible contract only.
@@ -408,3 +410,153 @@ def test_journey_repo_save_open_unsave(db_session, monkeypatch, make_user) -> No
         == 200
     )
     assert client.get(f"/reports/{report_id}").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Journey 7: Secretary chat stream — scripted runner, SSE frames, persistence
+# ---------------------------------------------------------------------------
+
+
+class _ScriptedChatRunner:
+    """Minimal async-iterator stub matching ChatRunner.run(...)."""
+
+    def __init__(self, events: list) -> None:
+        self._events = events
+        self.captured: dict = {}
+
+    async def run(
+        self,
+        *,
+        department_id: str,
+        user_id: str | None,
+        messages,
+        attachments=None,
+        cancel_token=None,
+    ):
+        self.captured = {
+            "department_id": department_id,
+            "user_id": user_id,
+            "messages": messages,
+        }
+        for event in self._events:
+            yield event
+
+
+def _parse_sse_event_names(body: str) -> list[str]:
+    return [
+        line[len("event: ") :] for line in body.splitlines() if line.startswith("event: ")
+    ]
+
+
+def test_journey_secretary_chat_stream(db_session, monkeypatch, make_user) -> None:
+    from openlia.llm.runtime.events import ChatDone, ChatStart, ChatToken
+
+    user = make_user(password="CorrectHorseBattery9!")
+    client = _company_client(monkeypatch, db_session)
+    assert (
+        client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "CorrectHorseBattery9!"},
+        ).status_code
+        == 200
+    )
+
+    # Install a scripted ChatRunner so the test is deterministic — no LLM I/O.
+    runner = _ScriptedChatRunner(
+        events=[
+            ChatStart(message_id="m1"),
+            ChatToken(message_id="m1", text="hello"),
+            ChatToken(message_id="m1", text=" world"),
+            ChatDone(message_id="m1", stop_reason="stop"),
+        ]
+    )
+    client.app.state.chat_runner_factory = lambda: runner
+
+    # Create a Secretary chat session.
+    created = client.post(
+        "/chat/sessions", json={"department": "secretary", "title": "smoke chat"}
+    )
+    assert created.status_code in (200, 201)
+    session_id = created.json()["id"]
+
+    # Stream a response — named-event SSE with matching payload types.
+    resp = client.get(f"/chat/sessions/{session_id}/stream", params={"q": "hi there"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse_event_names(resp.text)
+    assert events[0] == "chat.start"
+    assert events[-1] == "chat.done"
+    assert events.count("chat.token") == 2
+
+    # Runner observed the right department + persisted history.
+    assert runner.captured["department_id"] == "secretary"
+    assert runner.captured["user_id"] == user.id
+    assert runner.captured["messages"][-1].content == "hi there"
+
+    # Both user + assistant messages are persisted on the session.
+    listing = client.get(f"/chat/sessions/{session_id}/messages")
+    assert listing.status_code == 200
+    items = listing.json()["items"]
+    roles = [m["role"] for m in items]
+    contents = [m["content"] for m in items]
+    assert roles == ["user", "assistant"]
+    assert contents[0] == "hi there"
+    assert contents[1] == "hello world"
+
+
+# ---------------------------------------------------------------------------
+# Journey 8: Morning Briefing follow-up chat — resolve-or-create session + stream
+# ---------------------------------------------------------------------------
+
+
+def test_journey_mb_followup_chat(db_session, monkeypatch, make_user) -> None:
+    from openlia.llm.runtime.events import ChatDone, ChatStart, ChatToken
+
+    user = make_user(password="CorrectHorseBattery9!")
+    client = _company_client(monkeypatch, db_session)
+    assert (
+        client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "CorrectHorseBattery9!"},
+        ).status_code
+        == 200
+    )
+
+    runner = _ScriptedChatRunner(
+        events=[
+            ChatStart(message_id="mb1"),
+            ChatToken(message_id="mb1", text="summary"),
+            ChatDone(message_id="mb1", stop_reason="stop"),
+        ]
+    )
+    client.app.state.chat_runner_factory = lambda: runner
+
+    # Resolve-or-create the user's single MB chat session.
+    resolved = client.post("/departments/morning-briefing/chat/session")
+    assert resolved.status_code == 200
+    session_id = resolved.json()["session_id"]
+    assert isinstance(session_id, str) and session_id
+
+    # Calling again returns the same session id (resolve, not duplicate).
+    again = client.post("/departments/morning-briefing/chat/session")
+    assert again.json()["session_id"] == session_id
+
+    # Send a follow-up question through the shared chat stream.
+    resp = client.get(
+        f"/chat/sessions/{session_id}/stream",
+        params={"q": "summarize today's briefing"},
+    )
+    assert resp.status_code == 200
+    events = _parse_sse_event_names(resp.text)
+    assert events[0] == "chat.start"
+    assert events[-1] == "chat.done"
+
+    # Runner saw the MB department wired through from the ChatSession.
+    assert runner.captured["department_id"] == "morning_briefing"
+    assert runner.captured["user_id"] == user.id
+
+    # The follow-up message persisted on the same resolve-or-create session.
+    listing = client.get(f"/chat/sessions/{session_id}/messages").json()["items"]
+    assert [m["role"] for m in listing] == ["user", "assistant"]
+    assert listing[0]["content"] == "summarize today's briefing"
+    assert listing[1]["content"] == "summary"
