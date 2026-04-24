@@ -18,6 +18,7 @@ from openlia_server.db.models import (
     config,
     content,
     dashboard,
+    departments,
     infrastructure,
     scheduler,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "config",
     "content",
     "dashboard",
+    "departments",
     "infrastructure",
     "scheduler",
 ]

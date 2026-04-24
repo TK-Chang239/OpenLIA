@@ -55,6 +55,8 @@ EXPECTED_TABLES = {
     "user_prefs",
     # --- Plan 12 blockers ---
     "repo_items",
+    # --- Plan 14 Equity Research ---
+    "er_user_configs",
 }
 
 
