@@ -940,7 +940,7 @@ Source findings:
 
 ### REM-P1-019 - Add end-to-end smoke matrix
 
-Status: `[~]` (Phase 23, 2026-04-24: ASGI-level smoke coverage added via `test_api_prefix_strip.py`, `test_trust_proxy_headers.py`, `test_frontend_mount.py`, plus existing `test_smoke.py`. Container-boot smoke (curl `/healthz` against a running `openlia:dev` image) deferred to a follow-up that runs with Docker daemon access; the Dockerfile itself is ready.)
+Status: `[~]` (Phase 23, 2026-04-24: ASGI-level smoke coverage added via `test_api_prefix_strip.py`, `test_trust_proxy_headers.py`, `test_frontend_mount.py`, plus existing `test_smoke.py`. 2026-04-24 follow-up: product-journey smoke matrix landed in `packages/server/tests/test_e2e_smoke_matrix.py` — 6 journeys (personal first-run setup, company invite→register→login, logout/reload, provider CRUD, password reset + must-change-password gate, repo save/open/unsave). Container-boot smoke (curl `/healthz` against a running `openlia:dev` image) still deferred — needs Docker daemon access; the Dockerfile itself is ready.)
 
 Affected implementation:
 
@@ -1157,7 +1157,7 @@ Source findings:
 - `[x]` REM-P1-017
 - `[x]` REM-P1-018
 - `[~]` REM-P1-019
-- `[ ]` REM-P2-001
+- `[x]` REM-P2-001
 - `[x]` REM-P2-002
 - `[x]` REM-P2-003
 - `[ ]` REM-P2-004
