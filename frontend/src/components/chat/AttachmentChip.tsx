@@ -41,7 +41,8 @@ export function AttachmentChip({
 
   return (
     <div
-      className="group inline-flex max-w-[320px] cursor-pointer items-center gap-3 rounded-[--radius-lg] border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-2.5 transition-all duration-fast hover:border-[--color-border-secondary] hover:shadow-sm"
+      className="group inline-flex max-w-[320px] cursor-pointer items-center gap-3 rounded-sm border border-border-subtle bg-bg-elevated px-3 py-2 transition-all duration-normal ease-out hover:border-yellow-600 hover:text-feedback-success"
+      style={{ fontFamily: "var(--font-mono)" }}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest("[data-chip-action]")) return;
         openViewer();
@@ -55,15 +56,15 @@ export function AttachmentChip({
         }
       }}
     >
-      <Icon size={20} />
+      <Icon size={14} strokeWidth={1.5} />
       <div className="min-w-0 flex-1">
         <p
-          className="truncate text-base font-medium text-[--color-text-primary]"
+          className="truncate text-[11px] font-medium text-text-primary"
           style={{ maxWidth: 160 }}
         >
           {filename}
         </p>
-        <p className="text-xs text-[--color-text-secondary]">{metadata}</p>
+        <p className="text-[10px] text-text-secondary">{metadata}</p>
       </div>
       <div
         className="ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"

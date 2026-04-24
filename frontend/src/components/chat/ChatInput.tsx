@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
+import type { JSX } from "react";
 import { ArrowUp, Square } from "lucide-react";
 
 interface Props {
@@ -10,7 +11,12 @@ interface Props {
 
 const MAX_HEIGHT = 120;
 
-export function ChatInput({ onSend, onStop, isStreaming, placeholder }: Props): JSX.Element {
+export function ChatInput({
+  onSend,
+  onStop,
+  isStreaming,
+  placeholder,
+}: Props): JSX.Element {
   const [value, setValue] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -36,28 +42,35 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: Props): 
   };
 
   return (
-    <div className="flex-shrink-0 border-t border-[--color-border-subtle] bg-[--color-bg-base] px-6 py-4">
-      <div className="mx-auto max-w-[720px]">
-        <div className="flex items-end gap-2 rounded-xl border border-[--color-border-subtle] bg-[--color-bg-input] px-4 py-3">
-          <textarea
-            ref={taRef}
-            aria-label="Chat message"
-            placeholder={placeholder}
-            rows={1}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            className="flex-1 resize-none bg-transparent text-md leading-relaxed text-[--color-text-primary] outline-none placeholder:text-[--color-text-tertiary]"
-            style={{ maxHeight: MAX_HEIGHT, overflowY: "auto" }}
-          />
+    <div className="flex-shrink-0 px-6 py-4 bg-bg-base">
+      <div className="mx-auto max-w-[720px] rounded-[10px] border border-border-subtle bg-bg-elevated p-1 transition-all duration-normal ease-out focus-within:border-yellow-600 focus-within:shadow-input-focus">
+        <textarea
+          ref={taRef}
+          aria-label="Chat message"
+          placeholder={placeholder}
+          rows={1}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          className="w-full min-h-[46px] resize-none border-0 bg-transparent px-3 pt-3 pb-[6px] font-display text-[14px] leading-[1.5] text-text-primary outline-none placeholder:text-text-tertiary"
+          style={{ maxHeight: MAX_HEIGHT, overflowY: "auto" }}
+        />
+        <div className="flex items-center gap-2 px-2 py-[6px] pl-[10px]">
+          <div className="flex-1" />
+          <span
+            className="font-mono text-[9px] text-text-tertiary"
+            style={{ letterSpacing: "var(--tracking-label)" }}
+          >
+            ⌘ + ENTER
+          </span>
           {isStreaming ? (
             <button
               type="button"
               aria-label="Stop generating"
               onClick={onStop}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[--color-surface-active] text-[--color-text-secondary]"
+              className="inline-flex items-center justify-center rounded-md p-[9px] text-text-secondary transition-colors duration-normal ease-out hover:bg-surface-hover"
             >
-              <Square size={14} />
+              <Square size={14} strokeWidth={2} />
             </button>
           ) : (
             <button
@@ -65,9 +78,13 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: Props): 
               aria-label="Send"
               onClick={submit}
               disabled={value.trim().length === 0}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-[--color-accent-primary] text-white disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex items-center justify-center rounded-md p-[9px] transition-colors duration-normal ease-out hover:bg-accent-hover active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
+              style={{
+                background: "var(--color-accent-primary)",
+                color: "var(--color-accent-on)",
+              }}
             >
-              <ArrowUp size={14} />
+              <ArrowUp size={15} strokeWidth={2} />
             </button>
           )}
         </div>
