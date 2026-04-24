@@ -1,50 +1,181 @@
+/* ============================================================
+   OpenLia Design Tokens — Wondermakers / Acid Yellow
+   Source: planning/design-system (fetched 2026-04-24).
+   Supersedes the retired dark-blue draft.
+   ============================================================ */
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
-  /* Backgrounds */
-  --color-bg-app: #0f1115;
-  --color-bg-base: #0f1115;          /* alias for auth views */
-  --color-bg-elevated: #161a22;
-  --color-bg-input: #12151c;
-  --color-sidebar-bg: #12151c;
+  /* ── Font families ───────────────────────────────────────── */
+  --font-display: "Geist", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", "Courier New", monospace;
+  --font-serif:   "DM Serif Display", Georgia, serif;
 
-  /* Surfaces */
-  --color-surface-hover: rgba(255, 255, 255, 0.04);
-  --color-surface-active: rgba(255, 255, 255, 0.06);
-  --color-surface-info: #5a9bff;
+  /* ── Type scale ──────────────────────────────────────────── */
+  --text-hero:     clamp(72px, 8vw, 96px);
+  --text-h1:       48px;
+  --text-h2:       32px;
+  --text-h3:       20px;
+  --text-body-lg:  16px;
+  --text-body:     14px;
+  --text-sm:       13px;
+  --text-xs:       12px;
+  --text-label:    11px;
+  --text-label-sm: 9px;
+  --text-data:     14px;
+  --text-data-lg:  48px;
+  --text-greeting: 30px;
 
-  /* Accents */
-  --color-accent-primary: #7c9cff;
-  --color-accent-hover: #94acff;
-  --color-accent-subtle: rgba(124, 156, 255, 0.12);
+  --leading-tight:   1.1;
+  --leading-snug:    1.2;
+  --leading-normal:  1.4;
+  --leading-relaxed: 1.65;
+  --leading-loose:   1.75;
 
-  /* Text */
-  --color-text-primary: #e8eaf0;
-  --color-text-secondary: #a8aec0;
-  --color-text-tertiary: #6f758a;
+  --tracking-tight:  -0.02em;
+  --tracking-normal: 0;
+  --tracking-label:  0.08em;
+  --tracking-micro:  0.10em;
 
-  /* Icons */
-  --color-icon-primary: #a8aec0;
+  /* ── Raw color scales ────────────────────────────────────── */
+  --yellow-50:  #FAFFD9;
+  --yellow-100: #F0FF99;
+  --yellow-200: #E8FF5A;
+  --yellow-400: #D4FF00;
+  --yellow-600: #A8CC00;
+  --yellow-800: #6B8200;
+  --yellow-900: #3D4D00;
 
-  /* Borders */
-  --color-border-subtle: rgba(255, 255, 255, 0.08);
-  --color-border-secondary: rgba(124, 156, 255, 0.55);
+  --neutral-50:  #F9F8F3;
+  --neutral-100: #F2F1E8;
+  --neutral-200: #E0DED5;
+  --neutral-400: #B0AEA6;
+  --neutral-600: #737268;
+  --neutral-800: #2E2E2A;
+  --neutral-900: #0D0D0B;
 
-  /* Feedback */
-  --color-feedback-error: #ef6b6b;
-  --color-feedback-success: #62c28b;
-  --color-feedback-warning: #e0b355;
+  /* ── Semantic — Background ───────────────────────────────── */
+  --color-bg-base:     #F2F1E8;
+  --color-bg-elevated: #FAFAF4;
+  --color-bg-input:    #F5F4EF;
+  --color-bg-code:     #EEECEA;
+  --color-sidebar-bg:  #0D0D0C;       /* sidebar is dark in both themes */
 
-  /* Focus ring */
-  --focus-ring-color: rgba(124, 156, 255, 0.35);
+  /* Back-compat alias — retired tokens.css exposed this name. */
+  --color-bg-app: var(--color-bg-base);
 
-  /* Radii */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 14px;
+  /* ── Semantic — Surface ──────────────────────────────────── */
+  --color-surface-hover:  #EEECEA;
+  --color-surface-active: #E6E4DB;
+  --color-surface-subtle: #F2F1E8;
 
-  /* Motion */
-  --duration-fast: 120ms;
-  --duration-base: 200ms;
+  /* ── Semantic — Border ───────────────────────────────────── */
+  --color-border-subtle:    #E0DED5;
+  --color-border-secondary: #D3D1C7;
+  --color-border-strong:    #B0AEA6;
+  --color-border-success:   #3D4D00;
+  --color-border-error:     #712B13;
+
+  /* ── Semantic — Text ─────────────────────────────────────── */
+  --color-text-primary:   #1A1A18;
+  --color-text-secondary: #737268;
+  --color-text-tertiary:  #B0AEA6;
+  --color-text-code:      #1A1A18;
+  --color-text-on-accent: #3D4D00;
+
+  /* ── Semantic — Icon ─────────────────────────────────────── */
+  --color-icon-primary: #737268;
+  --color-icon-active:  #D4FF00;
+  --color-icon-muted:   #B0AEA6;
+
+  /* ── Semantic — Accent ───────────────────────────────────── */
+  --color-accent-primary:     #D4FF00;
+  --color-accent-hover:       #E8FF5A;
+  --color-accent-subtle:      rgba(212, 255, 0, 0.08);
+  --color-accent-on:          #3D4D00;
+  --color-accent-primary-rgb: 212, 255, 0;
+
+  /* ── Semantic — Feedback ─────────────────────────────────── */
+  --color-feedback-success: #6B8200;
+  --color-feedback-error:   #E05C30;
+  --color-feedback-warning: #DC9614;
+  --color-feedback-info:    #6B8200;
+
+  --focus-ring-color: #D4FF00;
+
+  /* ── Radii ───────────────────────────────────────────────── */
+  --radius-xs:   2px;
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;
+  --radius-xl:   10px;
+  --radius-2xl:  12px;
+  --radius-full: 9999px;
+
+  /* ── Spacing (4px base) ──────────────────────────────────── */
+  --space-0_5: 2px;
+  --space-1:   4px;
+  --space-1_5: 6px;
+  --space-2:   8px;
+  --space-2_5: 10px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;
+  --space-10:  40px;
+  --space-12:  48px;
+
+  /* ── Shadows ─────────────────────────────────────────────── */
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.06);
+  --shadow-input-focus:
+    0 0 0 1px rgba(var(--color-accent-primary-rgb),0.12),
+    0 4px 20px rgba(var(--color-accent-primary-rgb),0.06);
+  --shadow-accent: 0 0 8px rgba(var(--color-accent-primary-rgb),0.4);
+
+  /* ── Motion ──────────────────────────────────────────────── */
+  --duration-instant: 80ms;
+  --duration-fast:    120ms;
+  --duration-normal:  200ms;
+  --duration-slow:    350ms;
+  --duration-xslow:   550ms;
+
+  /* Back-compat alias for the retired --duration-base. */
+  --duration-base: var(--duration-normal);
+
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:     cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.76, 0, 0.24, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-linear: linear;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --color-bg-base:     #111110;
+  --color-bg-elevated: #1C1C1A;
+  --color-bg-input:    #1C1C1A;
+  --color-bg-code:     #0D0D0C;
+  --color-sidebar-bg:  #0D0D0C;
+
+  --color-surface-hover:  #252522;
+  --color-surface-active: #2E2E2B;
+  --color-surface-subtle: #1C1C1A;
+
+  --color-border-subtle:    #2A2A27;
+  --color-border-secondary: #3A3A36;
+  --color-border-strong:    #4A4A46;
+
+  --color-text-primary:   #EDECEA;
+  --color-text-secondary: #8A8880;
+  --color-text-tertiary:  #6E6E68;
+  --color-text-code:      #E8E6DF;
+
+  --color-icon-primary: #7A7A74;
+  --color-icon-muted:   #4E4E4A;
 }
