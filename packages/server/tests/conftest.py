@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy.engine import Engine
@@ -98,3 +100,38 @@ def make_user(db_session):
         return user
 
     return _make
+
+
+@dataclass
+class _CapturedReportRequest:
+    mode: str
+    user_input: str
+    enabled_sections: list
+    custom_sections: list
+    length: str
+
+
+class FakeReportRunner:
+    def __init__(self) -> None:
+        self._queue: list = []
+        self.last_request: _CapturedReportRequest | None = None
+
+    def queue_events(self, events: list) -> None:
+        self._queue = list(events)
+
+    async def run(self, **kwargs: Any):
+        req = kwargs["request"]
+        self.last_request = _CapturedReportRequest(
+            mode=req.mode,
+            user_input=req.user_input,
+            enabled_sections=list(req.enabled_sections),
+            custom_sections=list(req.custom_sections),
+            length=req.length,
+        )
+        for e in self._queue:
+            yield e
+
+
+@pytest.fixture
+def fake_report_runner():
+    return FakeReportRunner()
