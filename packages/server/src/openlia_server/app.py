@@ -33,6 +33,9 @@ from openlia_server.routes.departments.equity_research import (
 from openlia_server.routes.departments.morning_briefing import (
     build_morning_briefing_router,
 )
+from openlia_server.routes.departments.panic_thermometer import (
+    build_panic_thermometer_router,
+)
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.reports import build_reports_router
@@ -45,8 +48,17 @@ from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
 from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
+from openlia_server.services.pt_config import PtConfigService
+from openlia_server.services.pt_runner import PtRunner
 from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import build_chat_runner, build_report_runner
+
+
+class _NoopPtDispatcher:
+    """Fallback PT data dispatcher used when no real adapter is wired."""
+
+    def fetch(self, *, requirement, panel_id, params):  # type: ignore[no-untyped-def]
+        return None
 
 
 class _NoopEarningsRecentAdapter:
@@ -249,6 +261,22 @@ def create_app(
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
+    # PT runner singleton (per-process) so the per-panel cache persists across
+    # requests within a process. Dispatcher defaults to a no-op; a real
+    # Plan 3 dispatcher can be installed on `app.state.pt_dispatcher` from an
+    # embedding process before the first request.
+    pt_dispatcher = getattr(app.state, "pt_dispatcher", None) or _NoopPtDispatcher()
+    app.state.pt_dispatcher = pt_dispatcher
+    app.state.pt_runner = PtRunner(session_factory=factory, dispatcher=pt_dispatcher)
+    # Seed shipped presets once at app-factory time.
+    try:
+        PtConfigService(session_factory=factory).seed_shipped_presets()
+    except Exception:
+        # Tables may not yet exist in some embed/test setups; lifespan
+        # create_all happens later, so skip silently and rely on a later
+        # seed call at first dashboard request.
+        pass
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
     # Report runner is consumed by per-department routes (equity_research, earnings_update).
     # `build_report_runner` returns a RefreshingReportRunner that opens a fresh DB session

@@ -86,8 +86,10 @@ class PtConfigService:
         panel_config: list[dict[str, Any]],
         composite_settings: dict[str, Any],
     ) -> PtUserConfig:
-        row = self.get_or_create_for_user(user_id)
+        # Ensure a row exists first (may be in a different session).
+        self.get_or_create_for_user(user_id)
         s = self._session()
+        row = s.query(PtUserConfig).filter_by(user_id=user_id).one()
         # Always rebind to fresh copies so SQLAlchemy's JSON type sees the
         # assignment as a change (in-place mutations are not tracked).
         row.panel_config = [dict(p) for p in panel_config]
@@ -95,7 +97,6 @@ class PtConfigService:
         row.active_preset_id = None
         flag_modified(row, "panel_config")
         flag_modified(row, "composite_settings")
-        s.add(row)
         s.commit()
         s.refresh(row)
         return row
@@ -198,6 +199,8 @@ class PtConfigService:
         Shipped presets carry exactly one panel's config; we merge by panel_id.
         User presets carry the full 5-panel snapshot; we overwrite wholesale.
         """
+        # Ensure a user config row exists before we grab a working session.
+        self.get_or_create_for_user(user_id)
         s = self._session()
         preset = (
             s.query(PtPreset)
@@ -209,7 +212,7 @@ class PtConfigService:
         )
         if preset is None:
             raise ValueError(f"preset {preset_id} not found")
-        cfg = self.get_or_create_for_user(user_id)
+        cfg = s.query(PtUserConfig).filter_by(user_id=user_id).one()
         current = {p["panel_id"]: p for p in cfg.panel_config}
         for incoming in preset.panel_config:
             current[incoming["panel_id"]] = incoming
@@ -222,7 +225,6 @@ class PtConfigService:
             cfg.composite_settings = dict(preset.composite_settings)
             flag_modified(cfg, "composite_settings")
         cfg.active_preset_id = preset.id
-        s.add(cfg)
         s.commit()
         s.refresh(cfg)
         return cfg
