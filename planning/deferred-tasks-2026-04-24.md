@@ -78,14 +78,19 @@ document lists every task that was compressed or deferred during the Phase
 
 ## Phase 23 — Docker packaging + final acceptance
 
-- **`.github/workflows/release.yml`.** GHCR image publish + PyPI publish not
-  wired.
+- **`.github/workflows/release.yml`.** Shipped 2026-04-24 on branch
+  `feat/phase-16-mb-chat`: tag-triggered workflow builds and pushes the
+  Docker image to GHCR (amd64 + arm64), builds and publishes
+  `openlia-core` + `openlia` wheels to PyPI via trusted publishing, and
+  creates a GitHub Release with generated notes.
 - **Dedicated Caddyfile.** One reverse-proxy compose example covers the
   Cloudflare Tunnel + Caddy variants the plan itemized.
 - **Container-runtime smoke.** `docker run openlia:dev && curl /healthz`
   needs a Docker daemon — not executed.
-- **CHANGELOG + PyPI metadata.** `[project.urls]`, classifiers, readme fields
-  not polished.
+- **CHANGELOG + PyPI metadata.** Shipped 2026-04-24: `CHANGELOG.md` added
+  at repo root (0.1.0 entry covers Phases 0-24); `[project.urls]`,
+  classifiers, keywords, and `readme` fields added to both `openlia-core`
+  and `openlia` pyproject.toml.
 - **Frontend `prodBase.test.ts` / `buildOutput.test.ts`.** The existing
   `frontend/dist` build verifies the same invariants; dedicated vitests not
   shipped.
@@ -140,13 +145,13 @@ Ranked by what blocks shipping vs polish.
 
 ### P2 — release hygiene
 
-- **`.github/workflows/release.yml`.** GHCR image publish + PyPI publish so
-  `pip install openlia` works.
-- **CHANGELOG + PyPI metadata polish.** `[project.urls]`, classifiers, long
-  description.
-- **Endpoint-contract-matrix + route-authorization-matrix rows** for Plans
-  16, 19, 20, 21, 22. Planning doc hygiene — every row the sprint added or
-  changed.
+<!-- All P2 items shipped 2026-04-24 on branch feat/phase-16-mb-chat:
+  - .github/workflows/release.yml (GHCR + PyPI trusted publish + GH Release)
+  - CHANGELOG.md + PyPI metadata polish on openlia-core and openlia
+  - endpoint-contract-matrix + route-authorization-matrix rows for Plans
+    16, 19, 20, 21, 22 (route-level detail matching shipped code)
+-->
+_Shipped 2026-04-24 — see above._
 
 ### P3 — UX polish
 
