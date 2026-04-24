@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { NavLink } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
 
@@ -23,40 +24,47 @@ export function NavItem({
       aria-label={collapsed ? label : undefined}
       className={({ isActive }) =>
         [
-          "relative flex items-center gap-[10px] rounded-md px-2 py-[10px] w-full",
-          "transition-colors duration-[120ms]",
-          collapsed ? "justify-center" : "",
-          isActive
-            ? "bg-accent-subtle text-text-primary"
-            : "text-text-secondary hover:bg-surface-hover hover:text-text-primary",
+          "relative flex items-center gap-[10px] rounded-md w-full",
+          "transition-colors duration-normal ease-out",
+          collapsed ? "justify-center px-0 py-[9px]" : "px-[10px] py-[9px]",
+          isActive ? "" : "",
         ]
           .filter(Boolean)
           .join(" ")
       }
+      style={({ isActive }: { isActive: boolean }) => ({
+        background: isActive ? "#252522" : "transparent",
+        color: isActive ? "#F2F1E8" : "#B5B3A8",
+      })}
     >
       {({ isActive }) => (
         <>
           {isActive ? (
             <span
               aria-hidden="true"
-              className="absolute left-0 top-2 bottom-2 w-[3px] rounded-full bg-accent-primary"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-[2px] h-5"
+              style={{ background: "var(--color-accent-primary)" }}
             />
           ) : null}
           <span className="relative inline-flex">
             <Icon
-              size={18}
+              size={16}
               strokeWidth={1.5}
-              className={isActive ? "text-accent-primary" : "text-icon-primary"}
+              style={{ stroke: isActive ? "var(--color-accent-primary)" : "currentColor" }}
             />
             {hasUnread ? (
               <span
                 data-testid="nav-item-dot"
-                className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-accent-primary"
+                className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full"
+                style={{
+                  background: "var(--color-accent-primary)",
+                  boxShadow: "0 0 6px rgba(212,255,0,0.7)",
+                }}
               />
             ) : null}
           </span>
           {collapsed ? null : (
-            <span className="text-sm font-medium truncate">{label}</span>
+            <span className="text-[13px] font-display truncate">{label}</span>
           )}
         </>
       )}
