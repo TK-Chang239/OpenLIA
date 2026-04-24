@@ -13,6 +13,9 @@ Journeys covered:
     * Repository save / open / download / unsave
     * Secretary chat stream (scripted runner, SSE frames + persistence)
     * Morning Briefing follow-up chat session resolve + stream
+    * Equity Research on-demand report generation (SSE + persistence)
+    * Earnings Update on-demand report generation (SSE + persistence)
+    * EU scheduled scan -> user notification (executor + /notifications/unread)
 
 Individual route tests still live under tests/test_routes/*; these tests are
 deliberately coarse and assert the outward-visible contract only.
@@ -443,9 +446,7 @@ class _ScriptedChatRunner:
 
 
 def _parse_sse_event_names(body: str) -> list[str]:
-    return [
-        line[len("event: ") :] for line in body.splitlines() if line.startswith("event: ")
-    ]
+    return [line[len("event: ") :] for line in body.splitlines() if line.startswith("event: ")]
 
 
 def test_journey_secretary_chat_stream(db_session, monkeypatch, make_user) -> None:
@@ -473,9 +474,7 @@ def test_journey_secretary_chat_stream(db_session, monkeypatch, make_user) -> No
     client.app.state.chat_runner_factory = lambda: runner
 
     # Create a Secretary chat session.
-    created = client.post(
-        "/chat/sessions", json={"department": "secretary", "title": "smoke chat"}
-    )
+    created = client.post("/chat/sessions", json={"department": "secretary", "title": "smoke chat"})
     assert created.status_code in (200, 201)
     session_id = created.json()["id"]
 
@@ -560,3 +559,259 @@ def test_journey_mb_followup_chat(db_session, monkeypatch, make_user) -> None:
     assert [m["role"] for m in listing] == ["user", "assistant"]
     assert listing[0]["content"] == "summarize today's briefing"
     assert listing[1]["content"] == "summary"
+
+
+# ---------------------------------------------------------------------------
+# Journey 9: Equity Research on-demand report generation (SSE + persistence)
+# ---------------------------------------------------------------------------
+
+
+_ER_SCHEMA = {
+    "schema_version": "1.0",
+    "department": "equity_research",
+    "generated_at": "2026-04-24T10:00:00Z",
+    "cover": {"title": "AAPL Update", "subtitle": "", "tagline": ""},
+    "sections": [],
+}
+
+
+class _ScriptedInner:
+    """Minimal stand-in for the equity-research inner runner."""
+
+    def __init__(self, events: list) -> None:
+        self._events = events
+
+    async def run(self, **kwargs):
+        for event in self._events:
+            yield event
+
+
+def test_journey_equity_research_report(db_session, monkeypatch, make_user) -> None:
+    from openlia.llm.runtime.events import ReportComplete, ReportStart
+    from openlia_server.db.models.content import Report
+
+    user = make_user(password="CorrectHorseBattery9!")
+    client = _company_client(monkeypatch, db_session)
+    assert (
+        client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "CorrectHorseBattery9!"},
+        ).status_code
+        == 200
+    )
+
+    events = [
+        ReportStart(
+            report_id="r_er_1",
+            department="equity_research",
+            mode="stock_update",
+            section_titles=["Quick Take"],
+        ),
+        ReportComplete(report_id="r_er_1", schema=_ER_SCHEMA),
+    ]
+    client.app.state.equity_research_inner_factory = lambda: _ScriptedInner(events)
+
+    resp = client.post(
+        "/departments/equity-research/report",
+        json={"mode": "stock_update", "user_input": "AAPL event"},
+        headers={"accept": "text/event-stream"},
+    )
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/event-stream")
+    frames = _parse_sse_event_names(resp.text)
+    assert "report.start" in frames
+    assert "report.complete" in frames
+    # EquityResearchRunner appends a report.saved frame after persisting the row.
+    assert frames[-1] == "report.saved"
+
+    # Report landed in the Report table under the authed user + right department.
+    saved = db_session.query(Report).filter_by(user_id=user.id).all()
+    assert len(saved) == 1
+    assert saved[0].department == "equity_research"
+
+
+# ---------------------------------------------------------------------------
+# Journey 10: Earnings Update on-demand report generation (SSE + persistence)
+# ---------------------------------------------------------------------------
+
+
+_EU_SCHEMA = {
+    "schema_version": "1.0",
+    "department": "earnings_update",
+    "generated_at": "2026-04-24T10:00:00Z",
+    "cover": {"title": "AAPL Q1 FY2026", "subtitle": "", "tagline": ""},
+    "sections": [],
+}
+
+
+class _ScriptedReportRunner:
+    """Stand-in for the top-level ReportRunner (scheduler + EU route path)."""
+
+    def __init__(self, events: list) -> None:
+        self._events = events
+        self.calls: list = []
+
+    async def run(self, *, department_id, user_id, request, cancel_token=None):
+        self.calls.append({"department_id": department_id, "user_id": user_id, "request": request})
+        for event in self._events:
+            yield event
+
+
+def test_journey_earnings_update_report(db_session, monkeypatch, make_user) -> None:
+    from openlia.llm.runtime.events import ReportComplete, ReportStart
+    from openlia_server.db.models.content import Report
+
+    user = make_user(password="CorrectHorseBattery9!")
+    client = _company_client(monkeypatch, db_session)
+    assert (
+        client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "CorrectHorseBattery9!"},
+        ).status_code
+        == 200
+    )
+
+    runner = _ScriptedReportRunner(
+        events=[
+            ReportStart(
+                report_id="r_eu_1",
+                department="earnings_update",
+                mode="earnings_analysis",
+                section_titles=["Quick Take"],
+            ),
+            ReportComplete(report_id="r_eu_1", schema=_EU_SCHEMA),
+        ]
+    )
+    client.app.state.report_runner = runner
+
+    resp = client.post(
+        "/departments/earnings-update/report",
+        json={"ticker": "aapl"},
+        headers={"accept": "text/event-stream"},
+    )
+    assert resp.status_code == 200
+    frames = _parse_sse_event_names(resp.text)
+    assert "report.start" in frames
+    assert "report.complete" in frames
+
+    # Ticker is uppercased into the runner request; mode resolves to earnings_analysis.
+    assert runner.calls[0]["department_id"] == "earnings_update"
+    assert runner.calls[0]["user_id"] == user.id
+    req = runner.calls[0]["request"]
+    assert "AAPL" in req.user_input
+    assert req.mode == "earnings_analysis"
+
+    # Row persists under the authed user + earnings_update department.
+    saved = db_session.query(Report).filter_by(user_id=user.id).all()
+    assert len(saved) == 1
+    assert saved[0].department == "earnings_update"
+    assert saved[0].report_type == "earnings_analysis"
+
+
+# ---------------------------------------------------------------------------
+# Journey 11: EU schedule -> notification (executor drives schedule to done)
+# ---------------------------------------------------------------------------
+
+
+class _NoopScheduler:
+    """Minimal stand-in for SchedulerService. The EU schedule route only calls
+    add/modify/remove, and /notifications/unread reads svc.session_factory."""
+
+    def __init__(self, session_factory) -> None:
+        self.session_factory = session_factory
+
+    async def add_schedule(self, row) -> None: ...
+
+    async def modify_schedule(self, row) -> None: ...
+
+    async def remove_schedule(self, *, job_type, user_id) -> None: ...
+
+
+def test_journey_eu_schedule_to_notification(db_session, monkeypatch, make_user) -> None:
+    import asyncio
+
+    from openlia.llm.runtime.events import ReportComplete, ReportStart
+    from openlia.llm.runtime.messages import ReportRequest
+    from openlia_server.db import session as session_mod
+    from openlia_server.scheduler.executors.eu import EUScanExecutor
+    from openlia_server.scheduler.payloads import EUScanTarget
+
+    user = make_user(password="CorrectHorseBattery9!")
+    client = _company_client(monkeypatch, db_session)
+    assert (
+        client.post(
+            "/auth/login",
+            json={"email": user.email, "password": "CorrectHorseBattery9!"},
+        ).status_code
+        == 200
+    )
+
+    # Install a no-op scheduler so the EU schedule route + notifications route work.
+    client.app.state.scheduler = _NoopScheduler(session_factory=session_mod.SessionLocal)
+
+    # Create a schedule through the real route.
+    create = client.post(
+        "/departments/earnings-update/schedules",
+        json={
+            "time": "16:30",
+            "timezone": "America/New_York",
+            "days_of_week": [0, 1, 2, 3, 4],
+            "label": "Post-Market",
+            "is_enabled": True,
+        },
+    )
+    assert create.status_code == 201
+    schedule_id = create.json()["id"]
+
+    # No notifications to start with.
+    pre = client.get("/notifications/unread")
+    assert pre.status_code == 200
+    assert pre.json()["total"] == 0
+
+    # Drive the executor directly with fakes that simulate a single ticker run.
+    target = EUScanTarget(
+        ticker="AAPL",
+        request=ReportRequest(mode="earnings_analysis", user_input="AAPL earnings"),
+    )
+
+    class _FakePlanner:
+        def plan(self, *, session, user_id, schedule_id, since):
+            return [target]
+
+    class _FakeReportStore:
+        def save(self, *, session, user_id, department, payload):
+            return "r_eu_sched_1"
+
+    runner = _ScriptedReportRunner(
+        events=[
+            ReportStart(
+                report_id="r_eu_sched_1",
+                department="earnings_update",
+                mode="earnings_analysis",
+                section_titles=[],
+            ),
+            ReportComplete(report_id="r_eu_sched_1", schema=_EU_SCHEMA),
+        ]
+    )
+
+    executor = EUScanExecutor(
+        session_factory=session_mod.SessionLocal,
+        eu_planner=_FakePlanner(),
+        report_runner=runner,
+        report_store=_FakeReportStore(),
+    )
+
+    asyncio.run(executor.execute(user_id=user.id, schedule_id=schedule_id))
+
+    # /notifications/unread must now surface the earnings_update notification.
+    post = client.get("/notifications/unread")
+    assert post.status_code == 200
+    body = post.json()
+    assert body["total"] == 1
+    assert body["by_department"]["earnings_update"] == 1
+
+    # Mark-read drains the unread counter.
+    read = client.post("/notifications/read", json={"department": "earnings_update"})
+    assert read.status_code == 200
+    assert read.json()["marked_read"] == 1
+    assert client.get("/notifications/unread").json()["total"] == 0
