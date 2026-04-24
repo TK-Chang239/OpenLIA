@@ -25,13 +25,8 @@ from openlia_server.services import mb_runner
 from openlia_server.services import mb_schedules as schedules_svc
 
 
-def _scheduler_dep(request: Request):
-    scheduler = getattr(request.app.state, "scheduler", None)
-    if scheduler is None:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized"
-        )
-    return scheduler
+def _optional_scheduler(request: Request):
+    return getattr(request.app.state, "scheduler", None)
 
 
 def _report_runner_dep(request: Request):
@@ -163,26 +158,32 @@ def build_morning_briefing_router(
     def get_schedule(
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
-    ) -> _ScheduleOut | None:
+    ) -> dict:
         dto = schedules_svc.get_schedule(db, user_id=user.id)
         if dto is None:
-            return None
-        return _ScheduleOut(
-            id=dto.id,
-            time=dto.time,
-            timezone=dto.timezone,
-            days_of_week=list(dto.days_of_week),
-            label=dto.label,
-            is_enabled=dto.is_enabled,
-        )
+            return {"schedule": None}
+        return {
+            "schedule": _ScheduleOut(
+                id=dto.id,
+                time=dto.time,
+                timezone=dto.timezone,
+                days_of_week=list(dto.days_of_week),
+                label=dto.label,
+                is_enabled=dto.is_enabled,
+            ).model_dump()
+        }
 
     @router.put("/schedule", response_model=_ScheduleOut)
     async def put_schedule(
         payload: _ScheduleIn,
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
-        scheduler=Depends(_scheduler_dep),
+        scheduler=Depends(_optional_scheduler),
     ) -> _ScheduleOut:
+        if scheduler is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized"
+            )
         try:
             dto = await schedules_svc.upsert_schedule(
                 db,
@@ -210,8 +211,12 @@ def build_morning_briefing_router(
     async def delete_schedule(
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
-        scheduler=Depends(_scheduler_dep),
+        scheduler=Depends(_optional_scheduler),
     ) -> None:
+        if scheduler is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized"
+            )
         await schedules_svc.delete_schedule(
             db, user_id=user.id, scheduler=scheduler
         )
