@@ -45,6 +45,7 @@ from openlia_server.routes.departments.retail_sentiment import (
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
+from openlia_server.routes.portfolio import build_portfolio_router
 from openlia_server.routes.reports import build_reports_router
 from openlia_server.routes.settings import (
     build_data_providers_router,
@@ -290,6 +291,7 @@ def create_app(
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_portfolio_router(db_session_factory=factory, mode=mode))
 
     # Macro Research — singletons for dashboard CRUD, cache, runner, schedule.
     from openlia_server.services.mr_cache import MRCacheStoreImpl
@@ -438,6 +440,7 @@ _API_PREFIXES = (
     "reports",
     "departments",
     "chat",
+    "portfolio",
     "repo",
     "healthz",
     "health",
