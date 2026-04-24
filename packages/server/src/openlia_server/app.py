@@ -213,6 +213,9 @@ def create_app(
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
+    app.state.equity_research_inner_factory = lambda: build_report_runner(
+        db_session_factory=factory
+    )
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
 
     from openlia_server.routes.chat_sessions import build_chat_sessions_router
