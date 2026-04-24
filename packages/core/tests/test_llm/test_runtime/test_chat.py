@@ -96,7 +96,11 @@ async def _collect(it):
 
 
 async def test_streams_simple_reply_with_no_tools(prompts_root: Path) -> None:
-    provider = FakeProvider(script=FakeProviderScript(turns=[("tokens", ["Hi", " there"])]))
+    # Secretary exposes the `suggest_redirect` extra tool, so the runner
+    # opens a tool-loop turn first; the model returns no calls -> streaming.
+    provider = FakeProvider(
+        script=FakeProviderScript(turns=[("final", ""), ("tokens", ["Hi", " there"])])
+    )
     data = FakeDataDispatcher(manifest={"secretary": {}})
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
@@ -209,7 +213,7 @@ async def test_cancellation_stops_yielding_without_terminal_event(
     prompts_root: Path,
 ) -> None:
     provider = FakeProvider(
-        script=FakeProviderScript(turns=[("tokens", ["A", "B", "C", "D", "E"])])
+        script=FakeProviderScript(turns=[("final", ""), ("tokens", ["A", "B", "C", "D", "E"])])
     )
     data = FakeDataDispatcher(manifest={"secretary": {}})
     token = CancellationToken()
@@ -241,7 +245,7 @@ async def test_cancellation_stops_yielding_without_terminal_event(
 
 
 async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
-    provider = FakeProvider(script=FakeProviderScript(turns=[("tokens", ["ok"])]))
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])]))
     data = FakeDataDispatcher(manifest={"secretary": {}})
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),

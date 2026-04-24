@@ -6,6 +6,7 @@ export interface ToolCallView {
   argsPreview: string;
   status: "running" | "done" | "failed";
   summary?: string;
+  structured?: Record<string, unknown> | null;
 }
 
 export type ChatStreamEvent =
@@ -14,7 +15,15 @@ export type ChatStreamEvent =
       type: "chat.tool_call.start";
       data: { call_id: string; tool_name: string; args_preview: string };
     }
-  | { type: "chat.tool_call.result"; data: { call_id: string; ok: boolean; summary: string } }
+  | {
+      type: "chat.tool_call.result";
+      data: {
+        call_id: string;
+        ok: boolean;
+        summary: string;
+        structured?: Record<string, unknown> | null;
+      };
+    }
   | { type: "chat.token"; data: { text: string } }
   | { type: "chat.report_thumbnail"; data: { report_id: string; filename: string } }
   | { type: "chat.done"; data: Record<string, unknown> }
@@ -83,7 +92,12 @@ function reducer(state: StreamState, action: Action): StreamState {
     case "chat.tool_call.result": {
       const next = state.toolCalls.map((c) =>
         c.callId === ev.data.call_id
-          ? { ...c, status: (ev.data.ok ? "done" : "failed") as "done" | "failed", summary: ev.data.summary }
+          ? {
+              ...c,
+              status: (ev.data.ok ? "done" : "failed") as "done" | "failed",
+              summary: ev.data.summary,
+              structured: ev.data.structured ?? null,
+            }
           : c,
       );
       return { ...state, toolCalls: next };
@@ -125,8 +139,8 @@ export function useChatStream({ sessionId }: Options) {
             const data = JSON.parse(e.data);
             dispatch({ kind: "EVENT", event: { type, data } as ChatStreamEvent });
             if (type === "chat.done" || type === "chat.error") es.close();
-          } catch {
-            // malformed event — ignore
+          } catch (err) {
+            console.warn(`malformed SSE frame for ${type}`, err, e.data);
           }
         };
       (
@@ -162,7 +176,14 @@ export function useChatStream({ sessionId }: Options) {
     dispatch({ kind: "RESET" });
   }, []);
 
-  useEffect(() => () => { sourceRef.current?.close(); }, []);
+  useEffect(() => {
+    // Close any in-flight stream and clear state when the bound session changes.
+    sourceRef.current?.close();
+    dispatch({ kind: "RESET" });
+    return () => {
+      sourceRef.current?.close();
+    };
+  }, [sessionId]);
 
   return { state, send, stop, reset };
 }

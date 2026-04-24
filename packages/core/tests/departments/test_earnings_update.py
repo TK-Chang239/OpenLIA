@@ -1,5 +1,4 @@
 import pytest
-
 from openlia.departments.earnings_update import (
     EarningsUpdateDepartment,
     EarningsUpdateMode,
@@ -54,4 +53,5 @@ def test_eu_has_no_extra_tools():
 
 def test_eu_mode_literal_type():
     from typing import get_args
+
     assert set(get_args(EarningsUpdateMode)) == {"earnings_analysis"}

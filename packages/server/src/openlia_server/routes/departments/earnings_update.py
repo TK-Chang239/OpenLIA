@@ -38,19 +38,8 @@ def _earnings_adapter_dep(request: Request):
 def _report_runner_dep(request: Request):
     runner = getattr(request.app.state, "report_runner", None)
     if runner is None:
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "report runner not initialized"
-        )
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "report runner not initialized")
     return runner
-
-
-def _report_store_dep(request: Request):
-    store = getattr(request.app.state, "report_store", None)
-    if store is None:
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR, "report store not initialized"
-        )
-    return store
 
 
 class _WatchlistEntryOut(BaseModel):
@@ -108,12 +97,8 @@ def build_earnings_update_router(
     db_session_factory: Callable[[], DBSession],
     mode: Literal["personal", "company"],
 ) -> APIRouter:
-    router = APIRouter(
-        prefix="/departments/earnings-update", tags=["earnings-update"]
-    )
-    require_auth = build_require_auth(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    router = APIRouter(prefix="/departments/earnings-update", tags=["earnings-update"])
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     # ----- Watchlist -----
@@ -153,13 +138,9 @@ def build_earnings_update_router(
                 db, user_id=user.id, ticker=payload.ticker, adapter=adapter
             )
         except watchlist_svc.AlreadyOnWatchlistError as exc:
-            raise HTTPException(
-                status.HTTP_409_CONFLICT, "already on watchlist"
-            ) from exc
+            raise HTTPException(status.HTTP_409_CONFLICT, "already on watchlist") from exc
         except watchlist_svc.TickerNotFoundError as exc:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, "ticker not found"
-            ) from exc
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "ticker not found") from exc
         return _WatchlistEntryOut(
             id=entry.id,
             ticker=entry.ticker,
@@ -168,9 +149,7 @@ def build_earnings_update_router(
             release_timing=entry.release_timing,
         )
 
-    @router.delete(
-        "/watchlist/{entry_id}", status_code=status.HTTP_204_NO_CONTENT
-    )
+    @router.delete("/watchlist/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
     def remove_from_watchlist(
         entry_id: str,
         user: User = require_auth,
@@ -207,14 +186,10 @@ def build_earnings_update_router(
                 user_id=user.id,
                 report_length=payload.report_length,
                 enabled_section_ids=list(payload.enabled_section_ids),
-                custom_sections=[
-                    section.model_dump() for section in payload.custom_sections
-                ],
+                custom_sections=[section.model_dump() for section in payload.custom_sections],
             )
         except ValueError as exc:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
-            ) from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
         return _ConfigOut(
             report_length=cfg.report_length,
             enabled_section_ids=list(cfg.enabled_section_ids),
@@ -230,7 +205,6 @@ def build_earnings_update_router(
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
         runner=Depends(_report_runner_dep),
-        store=Depends(_report_store_dep),
     ) -> StreamingResponse:
         user_id = user.id
 
@@ -241,14 +215,14 @@ def build_earnings_update_router(
                     user_id=user_id,
                     ticker=payload.ticker,
                     report_runner=runner,
-                    report_store=store,
                 ):
                     if await request.is_disconnected():
                         break
-                    yield f"data: {json.dumps(to_wire(event))}\n\n".encode()
+                    wire = to_wire(event)
+                    yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
             except ValueError as exc:
                 error_payload = {"type": "report.error", "message": str(exc)}
-                yield f"data: {json.dumps(error_payload)}\n\n".encode()
+                yield (f"event: report.error\ndata: {json.dumps(error_payload)}\n\n").encode()
 
         return StreamingResponse(
             gen(),

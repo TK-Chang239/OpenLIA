@@ -9,7 +9,13 @@ export function MessageList({ children, autoscrollKey }: Props): JSX.Element {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView?.({ block: "end", behavior: "smooth" });
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    endRef.current?.scrollIntoView?.({
+      block: "end",
+      behavior: reduce ? "auto" : "smooth",
+    });
   }, [autoscrollKey]);
 
   return (

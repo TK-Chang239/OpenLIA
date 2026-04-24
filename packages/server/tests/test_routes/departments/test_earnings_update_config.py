@@ -19,9 +19,7 @@ def test_put_config_persists(company_client, auth_user):
         json={
             "report_length": "elaborative",
             "enabled_section_ids": ["quick_take", "key_financials"],
-            "custom_sections": [
-                {"id": "cs_1", "title": "My Notes", "description": "scratch"}
-            ],
+            "custom_sections": [{"id": "cs_1", "title": "My Notes", "description": "scratch"}],
         },
     )
     assert r.status_code == 200

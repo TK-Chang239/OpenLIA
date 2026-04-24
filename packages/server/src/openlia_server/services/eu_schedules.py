@@ -34,8 +34,16 @@ class EuScheduleDTO:
 
 
 class SchedulerControl(Protocol):
-    def add_schedule(self, *, job_type, user_id: str, schedule_id: str,
-                     time: str, timezone: str, days_of_week: list[str]) -> None: ...
+    def add_schedule(
+        self,
+        *,
+        job_type,
+        user_id: str,
+        schedule_id: str,
+        time: str,
+        timezone: str,
+        days_of_week: list[str],
+    ) -> None: ...
     def remove_schedule(self, *, job_type, user_id: str, schedule_id: str) -> None: ...
 
 
@@ -64,27 +72,45 @@ def _decode_days(raw: str | list | None) -> list[str]:
 
 def _to_dto(row: EuSchedule) -> EuScheduleDTO:
     return EuScheduleDTO(
-        id=row.id, user_id=row.user_id, time=row.time,
-        timezone=row.timezone, days_of_week=_decode_days(row.days_of_week),
-        label=row.label or "", is_enabled=bool(row.is_enabled),
+        id=row.id,
+        user_id=row.user_id,
+        time=row.time,
+        timezone=row.timezone,
+        days_of_week=_decode_days(row.days_of_week),
+        label=row.label or "",
+        is_enabled=bool(row.is_enabled),
     )
 
 
 def create_schedule(
-    db: Session, *, user_id: str, time: str, timezone: str,
-    days_of_week: list[str], label: str, scheduler: SchedulerControl,
+    db: Session,
+    *,
+    user_id: str,
+    time: str,
+    timezone: str,
+    days_of_week: list[str],
+    label: str,
+    scheduler: SchedulerControl,
 ) -> EuScheduleDTO:
     _validate(time, timezone, days_of_week)
     row = EuSchedule(
-        id=f"eus_{uuid.uuid4().hex[:12]}",
-        user_id=user_id, time=time, timezone=timezone,
-        days_of_week=json.dumps(list(days_of_week)), label=label, is_enabled=True,
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        time=time,
+        timezone=timezone,
+        days_of_week=json.dumps(list(days_of_week)),
+        label=label,
+        is_enabled=True,
     )
     db.add(row)
     db.commit()
     scheduler.add_schedule(
-        job_type=JobType.EU_SCAN, user_id=user_id, schedule_id=row.id,
-        time=time, timezone=timezone, days_of_week=list(days_of_week),
+        job_type=JobType.EU_SCAN,
+        user_id=user_id,
+        schedule_id=row.id,
+        time=time,
+        timezone=timezone,
+        days_of_week=list(days_of_week),
     )
     return _to_dto(row)
 
@@ -95,14 +121,19 @@ def list_schedules(db: Session, *, user_id: str) -> list[EuScheduleDTO]:
 
 
 def update_schedule(
-    db: Session, *, user_id: str, schedule_id: str,
-    time: str, timezone: str, days_of_week: list[str],
-    label: str, is_enabled: bool, scheduler: SchedulerControl,
+    db: Session,
+    *,
+    user_id: str,
+    schedule_id: str,
+    time: str,
+    timezone: str,
+    days_of_week: list[str],
+    label: str,
+    is_enabled: bool,
+    scheduler: SchedulerControl,
 ) -> EuScheduleDTO:
     _validate(time, timezone, days_of_week)
-    row = (
-        db.query(EuSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
-    )
+    row = db.query(EuSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
     if row is None:
         raise ScheduleNotFoundError(schedule_id)
     row.time = time
@@ -112,26 +143,36 @@ def update_schedule(
     row.is_enabled = is_enabled
     db.commit()
     scheduler.remove_schedule(
-        job_type=JobType.EU_SCAN, user_id=user_id, schedule_id=schedule_id,
+        job_type=JobType.EU_SCAN,
+        user_id=user_id,
+        schedule_id=schedule_id,
     )
     if is_enabled:
         scheduler.add_schedule(
-            job_type=JobType.EU_SCAN, user_id=user_id, schedule_id=schedule_id,
-            time=time, timezone=timezone, days_of_week=list(days_of_week),
+            job_type=JobType.EU_SCAN,
+            user_id=user_id,
+            schedule_id=schedule_id,
+            time=time,
+            timezone=timezone,
+            days_of_week=list(days_of_week),
         )
     return _to_dto(row)
 
 
 def delete_schedule(
-    db: Session, *, user_id: str, schedule_id: str, scheduler: SchedulerControl,
+    db: Session,
+    *,
+    user_id: str,
+    schedule_id: str,
+    scheduler: SchedulerControl,
 ) -> None:
-    row = (
-        db.query(EuSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
-    )
+    row = db.query(EuSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
     if row is None:
         raise ScheduleNotFoundError(schedule_id)
     db.delete(row)
     db.commit()
     scheduler.remove_schedule(
-        job_type=JobType.EU_SCAN, user_id=user_id, schedule_id=schedule_id,
+        job_type=JobType.EU_SCAN,
+        user_id=user_id,
+        schedule_id=schedule_id,
     )

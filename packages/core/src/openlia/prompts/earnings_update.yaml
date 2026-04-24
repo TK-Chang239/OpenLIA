@@ -20,7 +20,22 @@ report:
 
       - Enabled sections: {{ enabled_sections | join(', ') if enabled_sections else 'all' }}
       - Custom sections: {{ custom_sections | tojson }}
-      - Length preference: {{ length }}
+
+      {% if length == 'brief' -%}
+      LENGTH: BRIEF. Keep the report tight — one short paragraph per section.
+      Surface only the scorecard highlights (beat/miss, guidance delta, one
+      analyst quote). Skip narrative prose; prefer bulleted key findings.
+      {%- elif length == 'long' -%}
+      LENGTH: LONG. Produce an in-depth report. For each section, include
+      multi-paragraph analysis: quarter-over-quarter and year-over-year
+      trends, segment-level breakdowns where available, management commentary
+      with quoted language, analyst reaction with contrasting views, and a
+      forward-looking scenario discussion.
+      {%- else -%}
+      LENGTH: STANDARD. Balanced coverage — one or two paragraphs per section
+      plus key numbers. Include guidance commentary and at least one analyst
+      reaction, but avoid section-by-section deep dives.
+      {%- endif %}
 
       --- FRAMEWORK ---
       {{ framework | tojson(indent=2) }}

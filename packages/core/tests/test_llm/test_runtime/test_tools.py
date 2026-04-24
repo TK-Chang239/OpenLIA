@@ -205,3 +205,64 @@ async def test_response_normalization_leaves_small_arrays_alone() -> None:
 
     out = _normalize_payload({"items": [1, 2, 3]}, max_array_len=10)
     assert out == {"items": [1, 2, 3]}
+
+
+async def test_build_appends_extra_tools() -> None:
+    data = FakeDataDispatcher(manifest={"secretary": {}})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    extra = (
+        {
+            "name": "suggest_redirect",
+            "description": "Suggest a specialist department.",
+            "parameters": {
+                "type": "object",
+                "properties": {"department": {"type": "string"}},
+                "required": ["department"],
+            },
+        },
+    )
+    tools = await disp.build("secretary", has_web_search=False, extra_tools=extra)
+    assert [t.name for t in tools] == ["suggest_redirect"]
+
+
+async def test_dispatch_extra_tool_echoes_arguments_into_structured() -> None:
+    data = FakeDataDispatcher(manifest={"secretary": {}})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    call = ToolCall(
+        id="c1",
+        name="suggest_redirect",
+        arguments={"department": "equity_research", "reason": "needs research"},
+    )
+    result: ToolCallResult = await disp.dispatch(
+        department_id="secretary",
+        call=call,
+        extra_tool_names=frozenset({"suggest_redirect"}),
+    )
+    assert result.ok is True
+    assert result.structured == {
+        "department": "equity_research",
+        "reason": "needs research",
+    }
+
+
+async def test_dispatch_known_data_tool_ignores_extra_tool_names() -> None:
+    # Ensure extra_tool_names only diverts calls that actually match.
+    data = FakeDataDispatcher(manifest=_MANIFEST, results={"stock_quote": {"symbol": "AAPL"}})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
+    result = await disp.dispatch(
+        department_id="equity_research",
+        call=call,
+        extra_tool_names=frozenset({"suggest_redirect"}),
+    )
+    assert result.ok is True
+    assert result.structured is None

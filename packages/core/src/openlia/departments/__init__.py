@@ -9,6 +9,22 @@ from openlia.departments.equity_research import (
 )
 from openlia.departments.secretary import SecretaryDepartment
 
+_REGISTRY: dict[str, Department] = {
+    "secretary": SecretaryDepartment(),
+    "equity_research": EquityResearchDepartment(),
+    "earnings_update": EarningsUpdateDepartment(),
+}
+
+
+def get_department(name: str) -> Department | None:
+    """Return the Department instance for a registered id, or None.
+
+    Used by the chat runtime to pull `extra_tools` (e.g., Secretary's
+    `suggest_redirect`) into the tool list and to route their dispatch.
+    """
+    return _REGISTRY.get(name)
+
+
 __all__ = [
     "Department",
     "EarningsUpdateDepartment",
@@ -16,4 +32,5 @@ __all__ = [
     "EquityResearchDepartment",
     "EquityResearchMode",
     "SecretaryDepartment",
+    "get_department",
 ]

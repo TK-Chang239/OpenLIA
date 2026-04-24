@@ -54,21 +54,15 @@ def test_add_duplicate_returns_409(company_client, auth_user):
         company_client,
         {"ticker": "AAPL", "company_name": "Apple Inc.", "date": None, "release_timing": None},
     )
-    r = company_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"}
-    )
+    r = company_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
     assert r.status_code == 201
-    r2 = company_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"}
-    )
+    r2 = company_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
     assert r2.status_code == 409
 
 
 def test_add_unknown_ticker_returns_404(company_client, auth_user):
     _install_adapter(company_client, None)
-    r = company_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "ZZZZ"}
-    )
+    r = company_client.post("/departments/earnings-update/watchlist", json={"ticker": "ZZZZ"})
     assert r.status_code == 404
 
 
@@ -77,9 +71,7 @@ def test_delete_entry(company_client, auth_user):
         company_client,
         {"ticker": "AAPL", "company_name": "Apple Inc.", "date": None, "release_timing": None},
     )
-    post = company_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"}
-    )
+    post = company_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
     entry_id = post.json()["id"]
     r = company_client.delete(f"/departments/earnings-update/watchlist/{entry_id}")
     assert r.status_code == 204
@@ -103,9 +95,7 @@ def test_watchlist_is_user_scoped(company_client, auth_user, user_factory, login
         company_client,
         {"ticker": "AAPL", "company_name": "Apple Inc.", "date": None, "release_timing": None},
     )
-    company_client.post(
-        "/departments/earnings-update/watchlist", json={"ticker": "AAPL"}
-    )
+    company_client.post("/departments/earnings-update/watchlist", json={"ticker": "AAPL"})
     # Different user via `client` fixture
     other = user_factory()
     login_as(other)

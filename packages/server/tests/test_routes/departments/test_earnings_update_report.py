@@ -4,7 +4,6 @@ GET /departments/earnings-update/reports."""
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -16,7 +15,6 @@ MINIMAL_SCHEMA = {
     "generated_at": "2026-04-23T00:00:00Z",
     "cover": {"title": "AAPL Q1 FY2026", "subtitle": "", "tagline": ""},
     "sections": [],
-    "title": "AAPL Q1 FY2026",
 }
 
 
@@ -29,23 +27,6 @@ class _ScriptedRunner:
         self.received.append((department_id, user_id, request))
         for e in self._events:
             yield e
-
-
-@dataclass
-class _FakeStore:
-    saved: list[dict] = field(default_factory=list)
-
-    def save_from_event(self, *, user_id, department, report_type, event):
-        rid = event.report_id
-        self.saved.append(
-            {
-                "user_id": user_id,
-                "report_id": rid,
-                "department": department,
-                "report_type": report_type,
-            }
-        )
-        return rid
 
 
 def _consume_sse(iter_lines):
@@ -65,7 +46,9 @@ def _consume_sse(iter_lines):
     return events
 
 
-def test_report_streams_events_and_persists(company_client, auth_user):
+def test_report_streams_events_and_persists(company_client, auth_user, db_session):
+    from openlia_server.db.models.content import Report
+
     runner = _ScriptedRunner(
         events=[
             ReportStart(
@@ -77,9 +60,7 @@ def test_report_streams_events_and_persists(company_client, auth_user):
             ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA),
         ]
     )
-    store = _FakeStore()
     company_client.app.state.report_runner = runner
-    company_client.app.state.report_store = store
 
     r = company_client.post(
         "/departments/earnings-update/report",
@@ -91,8 +72,12 @@ def test_report_streams_events_and_persists(company_client, auth_user):
     types = [e["type"] for e in events]
     assert "report.start" in types
     assert "report.complete" in types
-    assert store.saved[0]["report_id"] == "r_1"
-    assert store.saved[0]["department"] == "earnings_update"
+
+    saved = db_session.query(Report).filter_by(user_id=auth_user.id).all()
+    assert len(saved) == 1
+    assert saved[0].department == "earnings_update"
+    assert saved[0].report_type == "earnings_analysis"
+
     # Runner receives uppercased ticker and earnings_analysis mode.
     dept_id, _uid, req = runner.received[0]
     assert dept_id == "earnings_update"
@@ -101,16 +86,10 @@ def test_report_streams_events_and_persists(company_client, auth_user):
 
 
 def test_report_uppercases_ticker(company_client, auth_user):
-    runner = _ScriptedRunner(
-        events=[ReportComplete(report_id="r_2", schema=MINIMAL_SCHEMA)]
-    )
-    store = _FakeStore()
+    runner = _ScriptedRunner(events=[ReportComplete(report_id="r_2", schema=MINIMAL_SCHEMA)])
     company_client.app.state.report_runner = runner
-    company_client.app.state.report_store = store
 
-    r = company_client.post(
-        "/departments/earnings-update/report", json={"ticker": "tsla"}
-    )
+    r = company_client.post("/departments/earnings-update/report", json={"ticker": "tsla"})
     assert r.status_code == 200
     _consume_sse(r.iter_lines())
     _dept, _uid, req = runner.received[0]
@@ -126,16 +105,10 @@ def test_report_maps_length_from_user_config(company_client, auth_user):
             "custom_sections": [],
         },
     )
-    runner = _ScriptedRunner(
-        events=[ReportComplete(report_id="r_3", schema=MINIMAL_SCHEMA)]
-    )
-    store = _FakeStore()
+    runner = _ScriptedRunner(events=[ReportComplete(report_id="r_3", schema=MINIMAL_SCHEMA)])
     company_client.app.state.report_runner = runner
-    company_client.app.state.report_store = store
 
-    r = company_client.post(
-        "/departments/earnings-update/report", json={"ticker": "AAPL"}
-    )
+    r = company_client.post("/departments/earnings-update/report", json={"ticker": "AAPL"})
     assert r.status_code == 200
     _consume_sse(r.iter_lines())
     _dept, _uid, req = runner.received[0]
@@ -144,26 +117,19 @@ def test_report_maps_length_from_user_config(company_client, auth_user):
 
 
 def test_report_rejects_empty_ticker(company_client, auth_user):
-    # Wire minimal runner/store so the 500 path (missing wiring) isn't hit;
+    # Wire minimal runner so the 503 path (missing wiring) isn't hit;
     # empty ticker must be rejected by pydantic min_length.
     company_client.app.state.report_runner = _ScriptedRunner(events=[])
-    company_client.app.state.report_store = _FakeStore()
-    r = company_client.post(
-        "/departments/earnings-update/report", json={"ticker": ""}
-    )
+    r = company_client.post("/departments/earnings-update/report", json={"ticker": ""})
     assert r.status_code == 422
 
 
 def test_report_requires_auth(company_client_anon):
-    r = company_client_anon.post(
-        "/departments/earnings-update/report", json={"ticker": "AAPL"}
-    )
+    r = company_client_anon.post("/departments/earnings-update/report", json={"ticker": "AAPL"})
     assert r.status_code == 401
 
 
-def test_list_recent_reports_scoped_to_earnings_update(
-    company_client, auth_user, db_session
-):
+def test_list_recent_reports_scoped_to_earnings_update(company_client, auth_user, db_session):
     from openlia_server.db.models.content import Report
 
     def _mk(user_id: str, department: str, title: str) -> Report:

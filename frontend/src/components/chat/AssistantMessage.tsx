@@ -10,14 +10,12 @@ interface Props {
 export function AssistantMessage({ content, streaming, timestamp, stopped }: Props): JSX.Element {
   return (
     <article
-      role="article"
       aria-label="Assistant message"
       className="flex items-start gap-3"
     >
       <LiaBadge />
       <div className="min-w-0 flex-1">
         <div
-          aria-live="polite"
           className="whitespace-pre-wrap text-md leading-[1.75] text-[--color-text-primary]"
         >
           {content}
