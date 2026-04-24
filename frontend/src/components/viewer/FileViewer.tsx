@@ -47,8 +47,8 @@ export function FileViewer(): JSX.Element | null {
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="relative flex h-full flex-shrink-0 flex-col border-l border-[--color-border-subtle] bg-[--color-bg-elevated] shadow-lg"
-          style={{ width }}
+          className="relative flex h-full flex-shrink-0 flex-col border-l border-border-subtle bg-bg-elevated"
+          style={{ width, boxShadow: "-4px 0 24px rgba(0,0,0,0.06)" }}
         >
           <ResizeHandle onWidthChange={setWidth} viewportWidth={viewportWidth} />
           <ViewerHeader

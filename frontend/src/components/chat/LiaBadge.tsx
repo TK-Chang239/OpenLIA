@@ -1,10 +1,17 @@
+import type { JSX } from "react";
+
 export function LiaBadge(): JSX.Element {
   return (
-    <div
-      aria-hidden="true"
-      className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-[--color-accent-primary] text-xs font-semibold text-white shadow-sm"
+    <span
+      aria-label="LIA"
+      className="inline-flex shrink-0 items-center justify-center w-7 h-7 rounded-md font-display font-bold text-[10px]"
+      style={{
+        background: "var(--color-accent-primary)",
+        color: "var(--color-accent-on)",
+        boxShadow: "var(--shadow-accent)",
+      }}
     >
-      L
-    </div>
+      LIA
+    </span>
   );
 }

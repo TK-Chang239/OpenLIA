@@ -138,7 +138,7 @@ export default function Repository(): JSX.Element {
     <div className="repo-page" style={{ padding: "24px", maxWidth: "960px", margin: "0 auto" }}>
       <header style={{ marginBottom: "16px" }}>
         <h1 style={{ margin: 0 }}>Repository</h1>
-        <p style={{ color: "var(--color-text-muted, #666)", margin: "4px 0 0" }}>
+        <p style={{ color: "var(--color-text-secondary)", margin: "4px 0 0" }}>
           {facets.total} saved report{facets.total === 1 ? "" : "s"}
         </p>
       </header>
@@ -197,9 +197,11 @@ export default function Repository(): JSX.Element {
                   padding: "4px 10px",
                   borderRadius: "999px",
                   border: "1px solid",
-                  borderColor: active ? "var(--color-accent, #2563eb)" : "#ccc",
-                  background: active ? "var(--color-accent, #2563eb)" : "transparent",
-                  color: active ? "white" : "inherit",
+                  borderColor: active
+                    ? "var(--color-accent-primary)"
+                    : "var(--color-border-subtle)",
+                  background: active ? "var(--color-accent-primary)" : "transparent",
+                  color: active ? "var(--color-accent-on)" : "inherit",
                   cursor: "pointer",
                 }}
               >
@@ -211,7 +213,7 @@ export default function Repository(): JSX.Element {
       )}
 
       {error && (
-        <div role="alert" style={{ color: "#b91c1c", marginBottom: "12px" }}>
+        <div role="alert" style={{ color: "var(--color-feedback-error)", marginBottom: "12px" }}>
           {error}
         </div>
       )}
@@ -225,14 +227,14 @@ export default function Repository(): JSX.Element {
               alignItems: "center",
               gap: "12px",
               padding: "12px",
-              borderBottom: "1px solid #e5e7eb",
+              borderBottom: "1px solid var(--color-border-subtle)",
             }}
           >
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis" }}>
                 {row.filename}
               </div>
-              <div style={{ fontSize: "0.85rem", color: "#6b7280" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--color-text-secondary)" }}>
                 {row.department} · generated {formatDate(row.generated_at)} · saved{" "}
                 {formatDate(row.saved_at)}
               </div>
@@ -257,7 +259,7 @@ export default function Repository(): JSX.Element {
       </ul>
 
       {rows.length === 0 && !loading && (
-        <div style={{ padding: "48px 0", textAlign: "center", color: "#6b7280" }}>
+        <div style={{ padding: "48px 0", textAlign: "center", color: "var(--color-text-secondary)" }}>
           {hasActiveFilters ? "No reports match your filters." : "No saved reports yet."}
         </div>
       )}
@@ -273,7 +275,7 @@ export default function Repository(): JSX.Element {
       )}
 
       {!hasMore && rows.length > 0 && !loading && (
-        <div style={{ padding: "12px", textAlign: "center", color: "#9ca3af" }}>
+        <div style={{ padding: "12px", textAlign: "center", color: "var(--color-text-tertiary)" }}>
           All reports loaded
         </div>
       )}
@@ -292,7 +294,7 @@ export default function Repository(): JSX.Element {
             zIndex: 1000,
           }}
         >
-          <div style={{ background: "white", padding: "20px", borderRadius: "8px", maxWidth: "400px" }}>
+          <div style={{ background: "var(--color-bg-elevated)", padding: "20px", borderRadius: "8px", maxWidth: "400px", border: "1px solid var(--color-border-subtle)" }}>
             <h2 style={{ marginTop: 0 }}>Remove from Repository?</h2>
             <p>This will remove "{pendingRemove.filename}" from your Repository.</p>
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
@@ -315,8 +317,8 @@ export default function Repository(): JSX.Element {
             bottom: "24px",
             left: "50%",
             transform: "translateX(-50%)",
-            background: "#111827",
-            color: "white",
+            background: "var(--neutral-900)",
+            color: "var(--neutral-50)",
             padding: "10px 16px",
             borderRadius: "6px",
             display: "flex",
@@ -329,7 +331,7 @@ export default function Repository(): JSX.Element {
           <button
             type="button"
             onClick={undoRemove}
-            style={{ background: "transparent", color: "#93c5fd", border: "none", cursor: "pointer" }}
+            style={{ background: "transparent", color: "var(--color-accent-primary)", border: "none", cursor: "pointer" }}
           >
             Undo
           </button>
