@@ -13,6 +13,7 @@ import asyncio
 import pytest
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ChatStart, ChatToken
+from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 
 
 class _InfiniteRunner:
@@ -31,27 +32,28 @@ class _InfiniteRunner:
 @pytest.mark.asyncio
 async def test_cancel_token_flipped_on_task_cancellation() -> None:
     """CancelledError at the generator boundary must call token.cancel()."""
-    from openlia_server.routes.chat_stream import (
-        SecretaryChatMessage,
-        SecretaryChatRequest,
-        _event_source,
-    )
+    from openlia_server.routes.chat_stream import _event_source
 
     class _FakeUser:
         id = "local"
 
     runner = _InfiniteRunner()
-    payload = SecretaryChatRequest(messages=[SecretaryChatMessage(role="user", content="hi")])
+    messages = [RuntimeChatMessage(role="user", content="hi")]
 
     consumed: list[bytes] = []
 
     async def _consume() -> None:
-        async for chunk in _event_source(payload, _FakeUser(), lambda: runner):  # type: ignore[arg-type]
+        async for chunk in _event_source(
+            messages=messages,
+            user=_FakeUser(),  # type: ignore[arg-type]
+            factory=lambda: runner,
+            department="secretary",
+            persist=None,
+        ):
             consumed.append(chunk)
 
     task = asyncio.create_task(_consume())
 
-    # Yield control so the generator runs through the first two events.
     for _ in range(20):
         await asyncio.sleep(0)
         if runner.captured_token is not None:
@@ -65,5 +67,4 @@ async def test_cancel_token_flipped_on_task_cancellation() -> None:
 
     assert runner.captured_token is not None
     assert runner.captured_token.is_cancelled is True
-    # At least the two non-blocking events should have been emitted.
     assert len(consumed) >= 2

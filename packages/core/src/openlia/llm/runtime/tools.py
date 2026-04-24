@@ -80,12 +80,19 @@ class DataProviderDispatcher(Protocol):
 
 @dataclass(frozen=True)
 class ToolCallResult:
-    """Dispatcher output. `summary` is UI-ready; `payload` goes back to the LLM."""
+    """Dispatcher output. `summary` is UI-ready; `payload` goes back to the LLM.
+
+    `structured` carries JSON for UI-consumable tools (e.g. `suggest_redirect`
+    echoes `{department, reason, prefill}` so the frontend can render a
+    RedirectCard). It is `None` for data-provider tools whose `payload` is
+    meant for the LLM, not the UI.
+    """
 
     call_id: str
     ok: bool
     summary: str
     payload: dict[str, Any]
+    structured: dict[str, Any] | None = None
 
 
 def _normalize_payload(payload: Any, *, max_array_len: int = 50) -> dict[str, Any]:
@@ -135,7 +142,13 @@ class ToolDispatcher:
         self._web_search = web_search
         self._expanded: dict[str, list[ToolSchema]] = {}  # per-department
 
-    async def build(self, department_id: str, *, has_web_search: bool) -> list[ToolSchema]:
+    async def build(
+        self,
+        department_id: str,
+        *,
+        has_web_search: bool,
+        extra_tools: tuple[dict[str, Any], ...] = (),
+    ) -> list[ToolSchema]:
         mapped_raw = await self._data.list_requirement_tools(department_id)
         mapped: list[ToolSchema] = [
             ToolSchema(
@@ -152,10 +165,29 @@ class ToolDispatcher:
             tools.append(_FIND_MORE_DATA_SCHEMA)
         if has_web_search and self._web_search.available:
             tools.append(_WEB_SEARCH_SCHEMA)
+        # Department-provided structured tools (e.g. Secretary's suggest_redirect).
+        # Dispatch echoes their arguments back as `structured` data so the
+        # frontend can render UI cards without a separate event type.
+        for entry in extra_tools:
+            tools.append(
+                ToolSchema(
+                    name=entry["name"],
+                    description=entry["description"],
+                    parameters=entry["parameters"],
+                )
+            )
         return tools
 
-    async def dispatch(self, *, department_id: str, call: ToolCall) -> ToolCallResult:
+    async def dispatch(
+        self,
+        *,
+        department_id: str,
+        call: ToolCall,
+        extra_tool_names: frozenset[str] = frozenset(),
+    ) -> ToolCallResult:
         name = call.name
+        if name in extra_tool_names:
+            return self._dispatch_structured_echo(call)
         if name == "find_more_data":
             return await self._dispatch_find_more_data(department_id, call)
         if name == "web_search":
@@ -163,10 +195,31 @@ class ToolDispatcher:
         return await self._dispatch_requirement(call)
 
     async def dispatch_many(
-        self, *, department_id: str, calls: list[ToolCall]
+        self,
+        *,
+        department_id: str,
+        calls: list[ToolCall],
+        extra_tool_names: frozenset[str] = frozenset(),
     ) -> list[ToolCallResult]:
-        coros = [self.dispatch(department_id=department_id, call=c) for c in calls]
+        coros = [
+            self.dispatch(department_id=department_id, call=c, extra_tool_names=extra_tool_names)
+            for c in calls
+        ]
         return await asyncio.gather(*coros)
+
+    @staticmethod
+    def _dispatch_structured_echo(call: ToolCall) -> ToolCallResult:
+        """Echo the LLM's arguments back as a structured payload. Used for
+        UI-consumable tools (redirect cards, etc.) whose value IS the
+        argument dict — no backend work beyond surfacing it."""
+        args = dict(call.arguments)
+        return ToolCallResult(
+            call_id=call.id,
+            ok=True,
+            summary=f"{call.name} suggested",
+            payload={"ack": True},
+            structured=args,
+        )
 
     async def _dispatch_requirement(self, call: ToolCall) -> ToolCallResult:
         try:

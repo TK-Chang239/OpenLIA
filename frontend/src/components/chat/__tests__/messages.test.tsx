@@ -17,7 +17,8 @@ describe("AssistantMessage", () => {
   it("renders content and shows LIA badge", () => {
     render(<AssistantMessage content="Top movers" streaming={false} />);
     expect(screen.getByText("Top movers")).toBeInTheDocument();
-    expect(screen.getByLabelText(/lia badge/i)).toBeInTheDocument();
+    // Badge is decorative (aria-hidden) so screen-readers skip it; the L glyph still renders.
+    expect(screen.getByText("L")).toBeInTheDocument();
   });
 
   it("shows cursor when streaming=true", () => {

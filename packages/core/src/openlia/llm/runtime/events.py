@@ -36,6 +36,11 @@ class ChatToolCallResult:
     call_id: str
     ok: bool
     summary: str
+    # Optional structured payload for UI-consumable tools (e.g. Secretary's
+    # `suggest_redirect`, which echoes `{department, reason, prefill}` so
+    # the frontend can render a `RedirectCard`). None for data-provider
+    # tools whose payloads feed the LLM, not the UI.
+    structured: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -50,7 +55,7 @@ class ChatReportThumbnail:
     TYPE = "chat.report_thumbnail"
     message_id: str
     report_id: str
-    mode: str
+    filename: str
 
 
 @dataclass(frozen=True)

@@ -72,12 +72,12 @@ def test_chat_error_includes_class_and_message() -> None:
 
 
 def test_chat_report_thumbnail_links_report_id() -> None:
-    e = ChatReportThumbnail(message_id="m_1", report_id="r_1", mode="stock_initiation")
+    e = ChatReportThumbnail(message_id="m_1", report_id="r_1", filename="report.pdf")
     assert to_wire(e) == {
         "type": "chat.report_thumbnail",
         "message_id": "m_1",
         "report_id": "r_1",
-        "mode": "stock_initiation",
+        "filename": "report.pdf",
     }
 
 

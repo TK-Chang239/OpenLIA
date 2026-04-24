@@ -65,11 +65,7 @@ def add_entry(
     if not ticker_up:
         raise ValueError("ticker required")
 
-    existing = (
-        db.query(EuWatchlistEntry)
-        .filter_by(user_id=user_id, ticker=ticker_up)
-        .one_or_none()
-    )
+    existing = db.query(EuWatchlistEntry).filter_by(user_id=user_id, ticker=ticker_up).one_or_none()
     if existing is not None:
         raise AlreadyOnWatchlistError(ticker_up)
 
@@ -78,7 +74,7 @@ def add_entry(
         raise TickerNotFoundError(ticker_up)
 
     row = EuWatchlistEntry(
-        id=f"eu_{uuid.uuid4().hex[:12]}",
+        id=str(uuid.uuid4()),
         user_id=user_id,
         ticker=ticker_up,
         company_name=lookup.get("company_name") or ticker_up,
@@ -91,11 +87,7 @@ def add_entry(
 
 
 def remove_entry(db: Session, *, user_id: str, entry_id: str) -> None:
-    row = (
-        db.query(EuWatchlistEntry)
-        .filter_by(id=entry_id, user_id=user_id)
-        .one_or_none()
-    )
+    row = db.query(EuWatchlistEntry).filter_by(id=entry_id, user_id=user_id).one_or_none()
     if row is None:
         raise WatchlistEntryNotFoundError(entry_id)
     db.delete(row)
