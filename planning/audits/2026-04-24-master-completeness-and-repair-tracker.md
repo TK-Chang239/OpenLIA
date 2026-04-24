@@ -41,7 +41,7 @@ Status legend (mirrors REM checklist + adds verification states):
 
 ## 1. Phase status snapshot
 
-All 23 plans are marked `Done` in the README. The "shipped %" column is a
+All 24 plans are marked `Done` in the README. The "shipped %" column is a
 rough estimate from the 2026-04-24 per-phase reviews and reflects how much
 of the *plan + spec* surface actually shipped, not just whether the plan
 merged.
@@ -72,6 +72,7 @@ merged.
 | 21 | Portfolio                           | Done        | ~55%      | DEFERRED + IMPLEMENTER    | 17-component frontend collapsed to monolith; price provider noop             |
 | 22 | Repository                          | Done        | ~65%      | DEFERRED + IMPLEMENTER    | FileViewer click-to-open missing (not in deferred list)                      |
 | 23 | Docker / Acceptance                 | Done        | ~55%      | IMPLEMENTER + DEFERRED    | Smoke suite, CI Docker job, RELEASING.md absent; deploy structure wrong      |
+| 24 | Design System Refresh               | Done        | ~85%      | IMPLEMENTER + DEFERRED    | Button fill-wipe missing; Setup wizard sweep skipped; Card test shallow; sidebar tokens expanded beyond plan |
 
 ---
 
@@ -305,7 +306,10 @@ hits them.
 - [ ] **P1-26 — Phase 8 design tokens diverged from plan to Wondermakers /
   Acid Yellow.** Functionally fine; **decision needed**: amend the plan
   to the as-built tokens, or roll the tokens back. Don't leave it
-  ambiguous.
+  ambiguous. **Resolution path:** Phase 24 (PR #41) formally adopted the
+  Wondermakers / Acid Yellow tokens — closing the ambiguity in the
+  Phase-24 direction. Mark P1-26 closed once Phase 8 plan amendment is
+  filed (see Phase 24 fix-plan NEW-24-05 for the token-surface deltas).
 
 - [ ] **P1-27 — End-to-end smoke matrix completion (REM-P1-019).** 11
   product journeys landed in `test_e2e_smoke_matrix.py` (covers personal
@@ -313,6 +317,16 @@ hits them.
   save/open/unsave, Secretary chat, MB follow-up, ER on-demand, EU
   on-demand, EU schedule→notification). Open: container-boot curl —
   blocked on Docker daemon (covered by P0-10).
+
+- [ ] **P1-28 — Phase 24 `Button` primary variant missing `::before`
+  fill-wipe hover overlay.** Plan Task 11 Step 1 mandates "primary (acid),
+  secondary (border), ghost variants + fill-wipe hover"; shipped
+  `Button.tsx` only does `bg-accent-primary hover:bg-accent-hover`. The
+  wipe is a load-bearing brand cue (matches `project/preview/buttons.html`
+  in the design bundle) — without it, the design-system rollout reads as
+  generic Tailwind. File:
+  `frontend/src/components/primitives/Button.tsx`. Source: Phase 24 fix
+  plan task 1.
 
 ---
 
@@ -608,6 +622,7 @@ instead of all 1,000+.
 | 21 | [phase-21-portfolio.md](./fix-plans/phase-21-portfolio.md) | ~55% | mixed |
 | 22 | [phase-22-repository.md](./fix-plans/phase-22-repository.md) | ~65% | mixed |
 | 23 | [phase-23-docker-packaging-acceptance.md](./fix-plans/phase-23-docker-packaging-acceptance.md) | ~55% | DEFERRED + IMPLEMENTER |
+| 24 | [phase-24-design-system-refresh.md](./fix-plans/phase-24-design-system-refresh.md) | ~85% | IMPLEMENTER + DEFERRED |
 
 **How to use:**
 
@@ -700,6 +715,17 @@ deferrals, missing submodules, per-phase test debt slices).
 | NEW-23-04     | 23    | `test_wheel_contents.py`                                     | P2       |
 | NEW-23-05     | 23    | Cookie/proxy integration + env-snapshot tests                | P2       |
 | NEW-23-06     | 23    | README Quickstart + CHANGELOG stub                           | P2       |
+| NEW-24-01     | 24    | Deepen `Card.test.tsx` to assert hover bar + olive border    | P2       |
+| NEW-24-02     | 24    | `DataRow.test.tsx` + `MonoLabel.test.tsx` smoke tests        | P2       |
+| NEW-24-03     | 24    | Restore `Sidebar.test.tsx` width assertions (220/52)         | P2       |
+| NEW-24-04     | 24    | NavItem rail-on-active test                                  | P2       |
+| NEW-24-05     | 24    | Document six `--color-sidebar-*` tokens beyond plan          | P2       |
+| NEW-24-06     | 24    | Setup wizard sweep (plan Task 14)                            | P1       |
+| NEW-24-07     | 24    | Pre-Phase-24 primitives audit (Banner/FormField/Pwd*)        | P2       |
+| NEW-24-08     | 24    | AuthLayout/Sidebar inline-style → Tailwind class swap        | P2       |
+| NEW-24-09     | 24    | Lock no-blue-tokens contract on report themes (vitest)       | P2       |
+| NEW-24-10     | 24    | Final acceptance walkthrough doc + build smoke               | P2       |
+| NEW-24-11     | 24    | Lock no-hex-literals contract on src (vitest)                | P2       |
 
 When closing any NEW-* item, strike through the row above AND the
 matching numbered task in §10.
