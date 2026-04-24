@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class FiveForcesDashboard:
     slug = "five_forces"
     display_name = "Five Forces"
 
-    T1_REQUIREMENTS: tuple[str, ...] = ()
+    T1_REQUIREMENTS: ClassVar[tuple[str, ...]] = ()
 
-    T2_FORMULAS: dict[str, str] = {
+    T2_FORMULAS: ClassVar[dict[str, str]] = {
         "force_debt_money": "force_debt_money",
         "force_political": "force_political",
         "force_geopolitical": "force_geopolitical",

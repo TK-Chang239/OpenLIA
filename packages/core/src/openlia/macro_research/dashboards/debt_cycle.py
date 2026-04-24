@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 # Thresholds (Dalio defaults — mutable via Smart Mode + user overrides).
 _DEBT_GDP_WARN = 100.0
@@ -17,14 +17,14 @@ class DebtCycleDashboard:
     slug = "debt_cycle"
     display_name = "Debt Cycle"
 
-    T1_REQUIREMENTS: tuple[str, ...] = (
+    T1_REQUIREMENTS: ClassVar[tuple[str, ...]] = (
         "macro_indicator:debt_gdp",
         "macro_indicator:interest_revenue",
         "stock_quote:TIP",
         "stock_quote:UUP",
     )
 
-    T2_FORMULAS: dict[str, str] = {
+    T2_FORMULAS: ClassVar[dict[str, str]] = {
         "debt_gdp": "debt_gdp",
         "interest_revenue": "interest_revenue",
         "tips_yield": "TIP_price * 0 + 1.5",
@@ -56,9 +56,7 @@ class DebtCycleDashboard:
 
         indicator_statuses: dict[str, str] = {
             "debt_gdp": bucket(debt_gdp, _DEBT_GDP_WARN, _DEBT_GDP_CRITICAL),
-            "interest_revenue": bucket(
-                int_rev, _INTEREST_REVENUE_WARN, _INTEREST_REVENUE_CRITICAL
-            ),
+            "interest_revenue": bucket(int_rev, _INTEREST_REVENUE_WARN, _INTEREST_REVENUE_CRITICAL),
             "tips_yield": "amber" if tips < _TIPS_YIELD_WARN else "green",
             "dxy": "amber" if dxy < _DXY_WARN else "green",
         }

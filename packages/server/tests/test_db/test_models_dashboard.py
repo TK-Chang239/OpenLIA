@@ -208,6 +208,8 @@ def test_mr_dashboard_state_columns(create_tables) -> None:
         "dashboard",
         "view_config",
         "threshold_overrides",
+        "assessment_schedule",
+        "last_assessment_at",
         "updated_at",
     }
     assert set(cols.keys()) == expected

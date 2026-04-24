@@ -6,11 +6,11 @@ import hashlib
 import json
 from typing import Any, Protocol
 
+from openlia.llm.runtime.messages import BatchItem, BatchResult, ReportRequest
+from openlia.macro_research.dashboards import DASHBOARDS
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from openlia.llm.runtime.messages import BatchItem, BatchResult, ReportRequest
-from openlia.macro_research.dashboards import DASHBOARDS
 from openlia_server.scheduler.payloads import MRAssessmentPayload
 
 
@@ -55,9 +55,7 @@ class MRAssessmentBuilderImpl:
 
         def synthesize(results: list[BatchResult]) -> ReportRequest:
             ok = [r for r in results if r.ok]
-            summary_lines = [
-                f"{r.id}: {json.dumps(r.data, default=str)[:500]}" for r in ok
-            ]
+            summary_lines = [f"{r.id}: {json.dumps(r.data, default=str)[:500]}" for r in ok]
             user_input = "\n".join(summary_lines) or "(no T4 results available)"
             return ReportRequest(
                 mode="synthesis",

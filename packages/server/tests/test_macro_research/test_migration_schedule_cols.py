@@ -3,12 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.orm import Session
-
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.dashboard import MrDashboardState
+from sqlalchemy import create_engine, inspect
+from sqlalchemy.orm import Session
 
 
 @pytest.fixture

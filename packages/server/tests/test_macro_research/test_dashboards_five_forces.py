@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.macro_research.dashboards.five_forces import FiveForcesDashboard
 
 
@@ -21,9 +20,7 @@ def test_metadata() -> None:
         ([9, 9, 8, 8, 7], 5, "Historical turning point zone"),
     ],
 )
-def test_active_force_count(
-    scores: list[int], expected_count: int, expected_bucket: str
-) -> None:
+def test_active_force_count(scores: list[int], expected_count: int, expected_bucket: str) -> None:
     d = FiveForcesDashboard()
     out = d.T3_compute(
         metrics={

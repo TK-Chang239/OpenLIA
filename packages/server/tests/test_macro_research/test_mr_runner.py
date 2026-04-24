@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 
 import pytest
 from _macro_research_fakes import FakeDataProvider
-
 from openlia_server.services.mr_runner import MRRunner
 
 
@@ -26,9 +25,7 @@ def runner() -> MRRunner:
         "generated_at": datetime.now(UTC),
     }
     dashboard_svc = MagicMock()
-    dashboard_svc.get_or_create.return_value = MagicMock(
-        view_config={}, threshold_overrides={}
-    )
+    dashboard_svc.get_or_create.return_value = MagicMock(view_config={}, threshold_overrides={})
 
     # session_factory must return a context manager — MagicMock supports this
     # out of the box via the auto-configured __enter__/__exit__ methods.
@@ -49,7 +46,7 @@ def test_run_returns_dashboard_result(runner: MRRunner) -> None:
     )
     assert result.slug == "debt_cycle"
     assert len(result.tiers) == 5
-    t4 = [t for t in result.tiers if t.tier == "T4"][0]
+    t4 = next(t for t in result.tiers if t.tier == "T4")
     assert t4.data["assessment"] == "Late plateau risk"
 
 

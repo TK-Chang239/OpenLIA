@@ -3,7 +3,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
-
 from openlia.llm.runtime.messages import BatchResult, ReportRequest
 from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
 

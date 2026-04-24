@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.macro_research.dashboards import DASHBOARDS
 from openlia.macro_research.dashboards.base import Dashboard
 

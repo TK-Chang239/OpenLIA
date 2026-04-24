@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable, Protocol
-
-from sqlalchemy.orm import Session
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from openlia.macro_research.assembler import DashboardAssembler
 from openlia.macro_research.dashboards import DASHBOARDS
 from openlia.macro_research.schemas import DashboardResult
+from sqlalchemy.orm import Session
 
 
 class _DataProvider(Protocol):

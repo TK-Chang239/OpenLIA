@@ -117,26 +117,18 @@ class SchedulerService:
     # Hot-reload API (called by route handlers)
     # ------------------------------------------------------------
 
-    async def add_schedule(
-        self, schedule: MbSchedule | EuSchedule | MrDashboardState
-    ) -> None:
+    async def add_schedule(self, schedule: MbSchedule | EuSchedule | MrDashboardState) -> None:
         job_type = self._job_type_for(schedule)
         if job_type not in self.executors:
             raise RuntimeError(f"no executor registered for job_type={job_type.value!r}")
         if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
-            raise ValueError(
-                "assessment_schedule must be set before registering an MR schedule"
-            )
+            raise ValueError("assessment_schedule must be set before registering an MR schedule")
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
-    async def modify_schedule(
-        self, schedule: MbSchedule | EuSchedule | MrDashboardState
-    ) -> None:
+    async def modify_schedule(self, schedule: MbSchedule | EuSchedule | MrDashboardState) -> None:
         job_type = self._job_type_for(schedule)
         if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
-            raise ValueError(
-                "assessment_schedule must be set before modifying an MR schedule"
-            )
+            raise ValueError("assessment_schedule must be set before modifying an MR schedule")
         await self.remove_schedule(job_type=job_type, user_id=schedule.user_id)
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
@@ -241,11 +233,7 @@ class SchedulerService:
         trigger = self._cron_trigger_for(schedule)
         # MR executor uses the dashboard slug in the schedule_id slot so it
         # knows which dashboard to run; MB/EU use the row id.
-        schedule_id = (
-            schedule.dashboard
-            if isinstance(schedule, MrDashboardState)
-            else schedule.id
-        )
+        schedule_id = schedule.dashboard if isinstance(schedule, MrDashboardState) else schedule.id
         await self.scheduler.add_schedule(
             self._run_job,
             trigger,

@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 
 import pytest
 from _macro_research_fakes import FakeDataProvider, FakeLLMClient
-
 from openlia.macro_research.assembler import DashboardAssembler
 
 
@@ -52,7 +51,7 @@ def test_honours_cached_t4(assembler: DashboardAssembler) -> None:
         t4_cached=cached,
         smart_mode=False,
     )
-    t4 = [t for t in result.tiers if t.tier == "T4"][0]
+    t4 = next(t for t in result.tiers if t.tier == "T4")
     assert t4.data["assessment"] == "cached text"
 
 
@@ -104,7 +103,7 @@ def test_integration_debt_cycle_red_phase() -> None:
         smart_mode=False,
     )
     assert result.severity == "red"
-    t3 = [t for t in result.tiers if t.tier == "T3"][0]
+    t3 = next(t for t in result.tiers if t.tier == "T3")
     assert t3.data["phase"] == "Deleveraging"
 
 
@@ -125,7 +124,7 @@ def test_smart_mode_propagates_to_t5_tier() -> None:
         t4_cached=None,
         smart_mode=True,
     )
-    t5 = [t for t in result.tiers if t.tier == "T5"][0]
+    t5 = next(t for t in result.tiers if t.tier == "T5")
     assert t5.data["smart_mode"] is True
 
 
@@ -148,7 +147,7 @@ def test_integration_four_seasons_summer() -> None:
         t4_cached=None,
         smart_mode=False,
     )
-    t3 = [t for t in result.tiers if t.tier == "T3"][0]
+    t3 = next(t for t in result.tiers if t.tier == "T3")
     assert t3.data["season"] == "Summer"
 
 
@@ -162,7 +161,7 @@ def test_integration_all_weather_red_on_concentration() -> None:
         smart_mode=False,
     )
     assert result.severity == "red"
-    t3 = [t for t in result.tiers if t.tier == "T3"][0]
+    t3 = next(t for t in result.tiers if t.tier == "T3")
     assert t3.data["overall_coverage_label"] == "Concentrated"
 
 
@@ -189,7 +188,7 @@ def test_integration_world_order_with_cached_t4() -> None:
         },
         smart_mode=False,
     )
-    t4 = [t for t in result.tiers if t.tier == "T4"][0]
+    t4 = next(t for t in result.tiers if t.tier == "T4")
     assert t4.data["assessment"] == "Stage 5 pressure"
     assert result.severity == "red"
 
@@ -217,6 +216,6 @@ def test_integration_five_forces_turning_point() -> None:
         },
         smart_mode=False,
     )
-    t3 = [t for t in result.tiers if t.tier == "T3"][0]
+    t3 = next(t for t in result.tiers if t.tier == "T3")
     assert t3.data["bucket"] == "Historical turning point zone"
     assert result.severity == "red"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.macro_research.dashboards.four_seasons import FourSeasonsDashboard
 
 

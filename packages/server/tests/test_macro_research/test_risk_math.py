@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.macro_research.risk_math import (
     coverage_for_season,
     risk_contributions,
