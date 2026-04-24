@@ -1,0 +1,18 @@
+task: mr_t4_debt_cycle
+system: |
+  You are analyzing the US debt cycle using Ray Dalio's framework.
+  Evaluate the four indicators and classify the phase. Reference
+  historical analogs. Output must be valid JSON matching T4Output.
+user: |
+  Current indicator context:
+  {{ user_input }}
+
+  {% if length == "long" %}
+  Produce a detailed phase assessment with historical analogs (similar + different),
+  time-to-constraint estimate, asset implications (gold thesis + long-duration bond risk),
+  and watchlist triggers.
+  {% elif length == "standard" %}
+  Produce a phase classification, 1-2 historical analogs, and 3-4 watchlist triggers.
+  {% else %}
+  One-line phase verdict plus top watchlist trigger.
+  {% endif %}

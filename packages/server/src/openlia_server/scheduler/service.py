@@ -17,6 +17,7 @@ from apscheduler.triggers.date import DateTrigger
 from openlia.llm.runtime.cancellation import CancellationToken
 
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.dashboard import MrDashboardState
 from openlia_server.db.models.scheduler import (
     EuSchedule,
     MbSchedule,
@@ -116,14 +117,18 @@ class SchedulerService:
     # Hot-reload API (called by route handlers)
     # ------------------------------------------------------------
 
-    async def add_schedule(self, schedule: MbSchedule | EuSchedule) -> None:
+    async def add_schedule(self, schedule: MbSchedule | EuSchedule | MrDashboardState) -> None:
         job_type = self._job_type_for(schedule)
         if job_type not in self.executors:
             raise RuntimeError(f"no executor registered for job_type={job_type.value!r}")
+        if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
+            raise ValueError("assessment_schedule must be set before registering an MR schedule")
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
-    async def modify_schedule(self, schedule: MbSchedule | EuSchedule) -> None:
+    async def modify_schedule(self, schedule: MbSchedule | EuSchedule | MrDashboardState) -> None:
         job_type = self._job_type_for(schedule)
+        if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
+            raise ValueError("assessment_schedule must be set before modifying an MR schedule")
         await self.remove_schedule(job_type=job_type, user_id=schedule.user_id)
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
@@ -152,6 +157,22 @@ class SchedulerService:
             args=(job_type, user_id, schedule_id),
             misfire_grace_time=self.settings.misfire_grace_seconds,
         )
+
+    def wire_mr(self, *, builder: Any, cache_store: Any) -> None:
+        """Replace the stub builder/cache on the MR executor with real implementations.
+
+        Called once after build_scheduler_service() so the MR executor
+        stops raising DepartmentPayloadBuilderNotWired at fire time.
+        """
+        from openlia_server.scheduler.registry import JobType
+
+        executor = self.executors.get(JobType.MR_ASSESSMENT)
+        if executor is None:
+            return
+        if hasattr(executor, "_mr_builder"):
+            executor._mr_builder = builder
+        if hasattr(executor, "_mr_cache_store"):
+            executor._mr_cache_store = cache_store
 
     async def remove_all_for_user(self, user_id: str) -> None:
         for jt in (JobType.MB_BRIEFING, JobType.EU_SCAN, JobType.MR_ASSESSMENT):
@@ -207,14 +228,17 @@ class SchedulerService:
         self,
         *,
         job_type: JobType,
-        schedule: MbSchedule | EuSchedule,
+        schedule: MbSchedule | EuSchedule | MrDashboardState,
     ) -> None:
         trigger = self._cron_trigger_for(schedule)
+        # MR executor uses the dashboard slug in the schedule_id slot so it
+        # knows which dashboard to run; MB/EU use the row id.
+        schedule_id = schedule.dashboard if isinstance(schedule, MrDashboardState) else schedule.id
         await self.scheduler.add_schedule(
             self._run_job,
             trigger,
             id=job_key(job_type, schedule.user_id),
-            args=(job_type, schedule.user_id, schedule.id),
+            args=(job_type, schedule.user_id, schedule_id),
             misfire_grace_time=self.settings.misfire_grace_seconds,
         )
 
@@ -258,11 +282,15 @@ class SchedulerService:
     # --- cron helpers ---
 
     @staticmethod
-    def _job_type_for(schedule: MbSchedule | EuSchedule) -> JobType:
+    def _job_type_for(
+        schedule: MbSchedule | EuSchedule | MrDashboardState,
+    ) -> JobType:
         if isinstance(schedule, MbSchedule):
             return JobType.MB_BRIEFING
         if isinstance(schedule, EuSchedule):
             return JobType.EU_SCAN
+        if isinstance(schedule, MrDashboardState):
+            return JobType.MR_ASSESSMENT
         raise TypeError(f"unknown schedule type: {type(schedule).__name__}")
 
     @staticmethod
@@ -287,7 +315,13 @@ class SchedulerService:
         return names
 
     @staticmethod
-    def _cron_trigger_for(schedule: MbSchedule | EuSchedule) -> CronTrigger:
+    def _cron_trigger_for(
+        schedule: MbSchedule | EuSchedule | MrDashboardState,
+    ) -> CronTrigger:
+        if isinstance(schedule, MrDashboardState):
+            return CronTrigger.from_crontab(
+                schedule.assessment_schedule or "0 0 * * 0", timezone="UTC"
+            )
         hour, minute = [int(p) for p in schedule.time.split(":")]
         days_raw = json.loads(schedule.days_of_week)
         days = ",".join(SchedulerService._days_to_names(days_raw))
@@ -300,9 +334,11 @@ class SchedulerService:
 
     @staticmethod
     def _cron_expression_for(
-        schedule: MbSchedule | EuSchedule,
+        schedule: MbSchedule | EuSchedule | MrDashboardState,
     ) -> str:
         """croniter-compatible 5-field string. Used only by should_catch_up."""
+        if isinstance(schedule, MrDashboardState):
+            return schedule.assessment_schedule or ""
         hour, minute = [int(p) for p in schedule.time.split(":")]
         days_raw = json.loads(schedule.days_of_week)
         days = ",".join(SchedulerService._days_to_names(days_raw))

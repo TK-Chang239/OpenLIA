@@ -1,0 +1,17 @@
+task: mr_t4_four_seasons
+system: |
+  You are diagnosing the US economic season using Dalio's growth-inflation
+  matrix. Classify as Spring, Summer, Autumn, or Winter and reference
+  historical analogs. Output must be valid JSON matching T4Output.
+user: |
+  Current indicator context:
+  {{ user_input }}
+
+  {% if length == "long" %}
+  Produce a detailed season diagnosis, growth/inflation axis description,
+  asset playbook (best/worst performers), and at least two historical analogs.
+  {% elif length == "standard" %}
+  Produce season classification, best/worst assets, 1-2 analogs.
+  {% else %}
+  One-line season verdict plus top asset tilt.
+  {% endif %}

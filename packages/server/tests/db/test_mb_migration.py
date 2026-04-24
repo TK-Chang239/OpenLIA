@@ -56,6 +56,9 @@ def test_migration_downgrade_drops_table(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{db}")
     cfg = _alembic_config(str(db))
     command.upgrade(cfg, "head")
+    # Downgrade past the mb_user_configs revision; later plans may add
+    # further revisions on top so downgrade by explicit target instead of "-1".
+    command.downgrade(cfg, "20260423_2100_mb")
     command.downgrade(cfg, "-1")
     engine = create_engine(f"sqlite:///{db}")
     insp = inspect(engine)

@@ -30,6 +30,9 @@ from openlia_server.routes.departments.earnings_update import (
 from openlia_server.routes.departments.equity_research import (
     build_equity_research_router,
 )
+from openlia_server.routes.departments.macro_research import (
+    build_macro_research_router,
+)
 from openlia_server.routes.departments.morning_briefing import (
     build_morning_briefing_router,
 )
@@ -37,6 +40,7 @@ from openlia_server.routes.departments.panic_thermometer import (
     build_panic_thermometer_router,
 )
 from openlia_server.routes.jobs import build_jobs_router
+from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.reports import build_reports_router
 from openlia_server.routes.settings import (
@@ -197,6 +201,10 @@ def _make_lifespan(
             )
 
             mb_builder = MbRequestBuilderImpl()
+            from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
+            from openlia_server.services.mr_cache import MRCacheStoreImpl
+            from openlia_server.services.mr_schedules import MRScheduleService
+
             async with adapter:
                 scheduler_svc = build_scheduler_service(
                     session_factory=_sm,
@@ -207,9 +215,26 @@ def _make_lifespan(
                     eu_planner=eu_planner,
                     mb_builder=mb_builder,
                 )
+                # Wire real MR builder + cache store into the MR executor so
+                # scheduled MR_ASSESSMENT jobs stop using the fail-fast stubs.
+                mr_data_provider = getattr(app.state, "mr_data_provider", None)
+                mr_builder = MRAssessmentBuilderImpl(data_provider=mr_data_provider)
+                mr_cache_store_lifespan = MRCacheStoreImpl()
+                scheduler_svc.wire_mr(builder=mr_builder, cache_store=mr_cache_store_lifespan)
                 await scheduler_svc.start()
 
+                # Rehydrate persisted MR schedules from mr_dashboard_state
+                # (REM-P2-004). Uses the scheduler's own session maker.
+                mr_schedule_svc_lifespan = MRScheduleService(
+                    session_factory=_sm, scheduler=scheduler_svc
+                )
+                try:
+                    await mr_schedule_svc_lifespan.rehydrate_all()
+                except Exception:
+                    log.exception("MR schedule rehydration failed (continuing startup)")
+
                 app.state.scheduler = scheduler_svc
+                app.state.mr_schedule_service_lifespan = mr_schedule_svc_lifespan
 
                 try:
                     yield
@@ -262,6 +287,63 @@ def create_app(
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
+
+    # Macro Research — singletons for dashboard CRUD, cache, runner, schedule.
+    from openlia_server.services.mr_cache import MRCacheStoreImpl
+    from openlia_server.services.mr_dashboard import MRDashboardService
+    from openlia_server.services.mr_runner import MRRunner
+    from openlia_server.services.mr_schedules import MRScheduleService
+
+    mr_dashboard_svc = MRDashboardService(session_factory=factory)
+    mr_cache_store = MRCacheStoreImpl()
+    mr_data_provider = getattr(app.state, "mr_data_provider", None) or _NoopPtDispatcher()
+
+    class _MRDataFetchAdapter:
+        """Wrap a PT-style dispatcher to expose the simpler fetch(requirement=...)
+        signature the MR assembler expects."""
+
+        def __init__(self, inner: Any) -> None:
+            self._inner = inner
+
+        def fetch(self, *, requirement: str, **kwargs: Any) -> Any:
+            try:
+                return self._inner.fetch(requirement=requirement, panel_id="mr", params={})
+            except TypeError:
+                # Inner already matches MR signature.
+                try:
+                    return self._inner.fetch(requirement=requirement)
+                except Exception:
+                    return None
+            except Exception:
+                return None
+
+    mr_runner = MRRunner(
+        data_provider=_MRDataFetchAdapter(mr_data_provider),
+        cache_store=mr_cache_store,
+        dashboard_service=mr_dashboard_svc,
+        session_factory=factory,
+    )
+    mr_schedule_svc = MRScheduleService(session_factory=factory, scheduler=None)
+    app.state.mr_runner = mr_runner
+    app.state.mr_dashboard_service = mr_dashboard_svc
+    app.state.mr_cache_store = mr_cache_store
+    app.state.mr_schedule_service = mr_schedule_svc
+
+    app.include_router(
+        build_macro_research_router(
+            db_session_factory=factory,
+            mode=mode,
+            mr_runner=mr_runner,
+            dashboard_service=mr_dashboard_svc,
+        )
+    )
+    app.include_router(
+        build_mr_schedule_router(
+            db_session_factory=factory,
+            mode=mode,
+            mr_schedule_service=mr_schedule_svc,
+        )
+    )
     # PT runner singleton (per-process) so the per-panel cache persists across
     # requests within a process. Dispatcher defaults to a no-op; a real
     # Plan 3 dispatcher can be installed on `app.state.pt_dispatcher` from an
