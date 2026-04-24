@@ -10,6 +10,7 @@ from typing import Any
 from openlia.panic_thermometer.panels import PANELS
 from openlia.panic_thermometer.presets import PT_PRESETS
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from openlia_server.db.models.dashboard import PtPreset, PtUserConfig
 
@@ -87,9 +88,13 @@ class PtConfigService:
     ) -> PtUserConfig:
         row = self.get_or_create_for_user(user_id)
         s = self._session()
-        row.panel_config = panel_config
-        row.composite_settings = composite_settings
+        # Always rebind to fresh copies so SQLAlchemy's JSON type sees the
+        # assignment as a change (in-place mutations are not tracked).
+        row.panel_config = [dict(p) for p in panel_config]
+        row.composite_settings = dict(composite_settings)
         row.active_preset_id = None
+        flag_modified(row, "panel_config")
+        flag_modified(row, "composite_settings")
         s.add(row)
         s.commit()
         s.refresh(row)
@@ -209,10 +214,13 @@ class PtConfigService:
         for incoming in preset.panel_config:
             current[incoming["panel_id"]] = incoming
         cfg.panel_config = [
-            current[pid] for pid in ("oil", "inflation", "fed_language", "wage_growth", "diplomacy")
+            dict(current[pid])
+            for pid in ("oil", "inflation", "fed_language", "wage_growth", "diplomacy")
         ]
+        flag_modified(cfg, "panel_config")
         if preset.composite_settings:
-            cfg.composite_settings = preset.composite_settings
+            cfg.composite_settings = dict(preset.composite_settings)
+            flag_modified(cfg, "composite_settings")
         cfg.active_preset_id = preset.id
         s.add(cfg)
         s.commit()
