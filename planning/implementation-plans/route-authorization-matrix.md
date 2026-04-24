@@ -173,20 +173,59 @@ Endpoints: provider CRUD + model CRUD + `remote-models` discovery + department t
 | `GET/POST/DELETE /departments/earnings-update/watchlist` | `require_auth` | `EuWatchlistItem.user_id` | blocked |
 | `GET/POST/PATCH/DELETE /departments/earnings-update/schedules` | `require_auth` | `EuSchedule.user_id` | blocked |
 
-### Plan 16 — Morning Briefing
+### Plan 16 — Morning Briefing (shipped)
 
-- `/departments/morning-briefing/chat` — `require_auth`, chat session owner, blocked during must-change-password.
-- `/departments/morning-briefing/schedules` — `require_auth`, `MbSchedule.user_id` owner scope.
+| Route | Access | Owner scope | Must-change-password |
+|---|---|---|---|
+| `GET/PUT /departments/morning-briefing/config` | `require_auth` | `MbConfig.user_id` | blocked |
+| `GET/PUT/DELETE /departments/morning-briefing/schedule` | `require_auth` | `MbSchedule.user_id` | blocked |
+| `POST /departments/morning-briefing/report` (SSE) | `require_auth` | writes `Report.user_id = user.id` | blocked |
+| `POST /departments/morning-briefing/chat/session` | `require_auth` | `ChatSession.user_id` (resolve-or-create) | blocked |
 
-### Plans 17-20 — Formula engine + dashboards
+### Plan 19 — Macro Research (shipped)
 
-- `/departments/{slug}/state` — `require_auth`, owner scope on `<Pt|Mr|Rs>UserConfig.user_id` or `FeSavedFormula.user_id`.
-- `/departments/{slug}/metrics` — `require_auth`, owner scope. PT/MR/RS preset endpoints that are globally readable are `public` for GET, `require_admin` for mutations.
+| Route | Access | Owner scope | Must-change-password |
+|---|---|---|---|
+| `GET /departments/macro-research/dashboards` | `require_auth` | — (enumerates preset dashboards) | blocked |
+| `GET /departments/macro-research/dashboards/{slug}` | `require_auth` | snapshot derived per-user where applicable | blocked |
+| `GET/PUT /departments/macro-research/dashboards/{slug}/config` | `require_auth` | `MrDashboardConfig.user_id` | blocked |
+| `POST /departments/macro-research/dashboards/{slug}/assessment/run` | `require_auth` | writes `MrAssessmentRun.user_id = user.id` | blocked |
+| `GET/PUT/DELETE /departments/macro-research/schedule` | `require_auth` | `MrSchedule.user_id` | blocked |
 
-### Plans 21-22 — Portfolio and Repository
+### Plan 20 — Retail Sentiment (shipped)
 
-- `/portfolio/*` — `require_auth`, `PortfolioHolding.user_id` owner scope.
-- `/repo/tags`, `/repo/items/{id}/download` — `require_auth`, `RepoItem.user_id` owner scope.
+| Route | Access | Owner scope | Must-change-password |
+|---|---|---|---|
+| `GET /departments/retail-sentiment/dashboard` | `require_auth` | snapshot aggregated globally; read-only | blocked |
+| `GET /departments/retail-sentiment/dashboard/history` | `require_auth` | snapshot history | blocked |
+| `GET/PUT /departments/retail-sentiment/config` | `require_auth` | `RsUserConfig.user_id` | blocked |
+| `POST /departments/retail-sentiment/run` | `require_auth` | writes `RsSnapshot` globally; audit by user | blocked |
+| `GET /departments/retail-sentiment/stocks/{ticker}/sentiment` | `require_auth` | — | blocked |
+| `GET /departments/retail-sentiment/spikes` | `require_auth` | — | blocked |
+
+### Plans 17-18 — Formula engine + Panic Thermometer
+
+- `/departments/{slug}/state` — `require_auth`, owner scope on `<Pt|Fe>UserConfig.user_id` / `FeSavedFormula.user_id`.
+- `/departments/{slug}/metrics` — `require_auth`, owner scope. PT preset endpoints that are globally readable are `public` for GET, `require_admin` for mutations.
+
+### Plan 21 — Portfolio (shipped)
+
+| Route | Access | Owner scope | Must-change-password |
+|---|---|---|---|
+| `GET/POST/PATCH/DELETE /portfolio/holdings` | `require_auth` | `PortfolioHolding.user_id` | blocked |
+| `GET /portfolio/analytics` | `require_auth` | derived from user's holdings | blocked |
+| `POST /portfolio/refresh-prices` | `require_auth` | operates on user's holdings | blocked |
+| `POST /portfolio/import-csv` / `GET /portfolio/export-csv` | `require_auth` | user's holdings only | blocked |
+| `GET /portfolio/search` | `require_auth` | provider-backed ticker search; no PII | blocked |
+
+### Plan 22 — Repository (shipped)
+
+| Route | Access | Owner scope | Must-change-password |
+|---|---|---|---|
+| `GET /repo/items` | `require_auth` | `RepoItem.user_id` | blocked |
+| `POST /repo/items` | `require_auth` | writes `RepoItem.user_id = user.id` | blocked |
+| `DELETE /repo/items` | `require_auth` | `RepoItem.user_id == user.id` (bulk) | blocked |
+| `GET /repo/facets` | `require_auth` | aggregates over user's RepoItem rows | blocked |
 
 ### Plan 23 — Production static serving
 

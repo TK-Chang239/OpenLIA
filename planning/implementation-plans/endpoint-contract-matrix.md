@@ -151,24 +151,71 @@ All `/setup/*` writes must return `410 Gone` once `wizard.completed = true`, exc
 - `/departments/earnings-update/watchlist` (GET/POST/DELETE, `require_auth` + owner scope).
 - `/departments/earnings-update/schedules` (GET/POST/PATCH/DELETE, `require_auth` + owner scope) — CRUD flows call scheduler `add_schedule/modify_schedule/remove_schedule` APIs in the same transaction.
 
-### Plan 16 — Morning Briefing
+### Plan 16 — Morning Briefing (shipped)
 
-- `/departments/morning-briefing/chat` (POST, SSE).
-- `/departments/morning-briefing/schedules` (GET/POST/PATCH/DELETE, `require_auth` + owner scope).
+Router: `build_morning_briefing_router` mounted at `/departments/morning-briefing`.
 
-### Plans 17-20 — Formula engine, Panic Thermometer, Macro Research, Retail Sentiment
+- `/departments/morning-briefing/config` (GET, `require_auth`) — returns `MbConfig` (report_length, enabled_section_ids, section_topics, custom_sections, reference_portfolio).
+- `/departments/morning-briefing/config` (PUT, `require_auth`) — upserts `MbConfig`.
+- `/departments/morning-briefing/schedule` (GET, `require_auth`) — returns `{schedule: MbSchedule | null}`.
+- `/departments/morning-briefing/schedule` (PUT, `require_auth`) — upserts one MB schedule (time, timezone, days_of_week, label).
+- `/departments/morning-briefing/schedule` (DELETE, `require_auth`) — 204 on delete.
+- `/departments/morning-briefing/report` (POST, `require_auth`, SSE) — on-demand briefing; emits `report.*` events terminating in `report.saved` or `report.error`.
+- `/departments/morning-briefing/chat/session` (POST, `require_auth`) — resolve-or-create the user's single MB `ChatSession`.
+- Recent reports listing reuses `/reports?department=morning_briefing` from Plan 13.
+- Test file: `packages/server/tests/test_routes_morning_briefing.py`.
+- Frontend client: `frontend/src/api/morning-briefing.ts`.
 
-- Each department adds:
-  - `/departments/{slug}/state` (GET, `require_auth` + owner scope) — user dashboard state.
-  - `/departments/{slug}/metrics` (GET/POST, `require_auth` + owner scope).
-  - Optional `/departments/{slug}/schedules` if batched.
+### Plan 18 — Panic Thermometer (shipped)
 
-### Plans 21-22 — Portfolio and Repository
+Router: `build_panic_thermometer_router` mounted at `/departments/panic-thermometer`.
+See `packages/server/src/openlia_server/routes/departments/panic_thermometer.py` for the full CRUD surface (dashboard, panels, rules, formulas, run).
+
+### Plan 19 — Macro Research (shipped)
+
+Router: `build_macro_research_router` mounted at `/departments/macro-research`.
+
+- `/departments/macro-research/dashboards` (GET, `require_auth`) — enumerates the five Dalio dashboards.
+- `/departments/macro-research/dashboards/{slug}` (GET, `require_auth`) — snapshot for one dashboard (`debt_cycle`, `four_seasons`, `all_weather`, `world_order`, `five_forces`).
+- `/departments/macro-research/dashboards/{slug}/config` (GET/PUT, `require_auth`) — per-user config.
+- `/departments/macro-research/dashboards/{slug}/assessment/run` (POST 202, `require_auth`) — kicks off assessment.
+- `/departments/macro-research/schedule` (GET/PUT/DELETE, `require_auth`) via `build_mr_schedules_router` — single recurring assessment schedule per user.
+- Test files: `packages/server/tests/test_routes_macro_research.py`, `test_routes_mr_schedules.py`.
+- Frontend client: `frontend/src/api/macro-research.ts`.
+
+### Plan 20 — Retail Sentiment (shipped)
+
+Router: `build_retail_sentiment_router` mounted at `/departments/retail-sentiment`.
+
+- `/departments/retail-sentiment/dashboard` (GET, `require_auth`) — current tabbed metric snapshot.
+- `/departments/retail-sentiment/dashboard/history` (GET, `require_auth`).
+- `/departments/retail-sentiment/config` (GET/PUT, `require_auth`).
+- `/departments/retail-sentiment/run` (POST, `require_auth`) — trigger a refresh.
+- `/departments/retail-sentiment/stocks/{ticker}/sentiment` (GET, `require_auth`).
+- `/departments/retail-sentiment/spikes` (GET, `require_auth`).
+- Test file: `packages/server/tests/test_routes_retail_sentiment.py`.
+- NLP classification + `rs_classification_log` table documented in Phase 20 spec are deferred; endpoint shape stable.
+
+### Plan 21 — Portfolio (shipped)
+
+Router: `build_portfolio_router` mounted at `/portfolio`.
 
 - `/portfolio/holdings` (GET/POST/PATCH/DELETE, `require_auth` + owner scope).
-- `/portfolio/snapshots` (GET, `require_auth` + owner scope).
-- `/repo/tags` (GET/POST/DELETE, `require_auth` + owner scope).
-- `/repo/items/{id}/download` (GET, `require_auth` + owner scope) — streams stored artifact.
+- `/portfolio/analytics` (GET, `require_auth`).
+- `/portfolio/refresh-prices` (POST, `require_auth`).
+- `/portfolio/import-csv` (POST, `require_auth`) / `/portfolio/export-csv` (GET, `require_auth`).
+- `/portfolio/search` (GET, `require_auth`).
+- Test file: `packages/server/tests/test_routes_portfolio.py`.
+
+### Plan 22 — Repository (shipped)
+
+Router: `build_repo_router` mounted at `/repo`.
+
+- `/repo/items` (GET, `require_auth` + owner scope) — list saved reports/files; accepts filter query params.
+- `/repo/items` (POST, `require_auth`) — save a generated report to the repo (idempotent via source_report_id).
+- `/repo/items` (DELETE, `require_auth`) — bulk unsave.
+- `/repo/facets` (GET, `require_auth`) — returns facet counts used by the Repo filter bar.
+- Test file: `packages/server/tests/test_routes_repo.py`. Additional E2E coverage: `test_e2e_smoke_matrix.py::test_journey_repo_save_open_unsave`.
 
 ### Plan 23 — Packaging + production static serving
 

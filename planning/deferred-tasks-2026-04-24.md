@@ -17,8 +17,11 @@ document lists every task that was compressed or deferred during the Phase
   not shipped. API client + section catalog covered; hook behavior covered
   implicitly via page integration.
 - **`ChatInterface` / `ChatReportThumbnail` / `useReportStream` wiring inside
-  the MB page.** Page currently uses inline `OnDemandBriefingButton` SSE
-  stream. Shared chat surface from Plan 12 not wired for MB follow-up Q&A.
+  the MB page.** Shipped 2026-04-24 on branch `feat/phase-16-mb-chat`:
+  `OnDemandBriefingButton` now streams via the shared `useReportStream` hook;
+  MB page exposes a dedicated Chat tab bound to the MB `ChatSession`; opening
+  a briefing from the archive renders `ReportRenderer` + `ChatInterface`
+  side by side with a `ReportThumbnail` chip for the active report.
 - **Endpoint-contract-matrix + route-authorization-matrix rows.** MB routes
   not yet documented in the two planning matrices.
 - **Manual smoke test.** Not executed.
@@ -75,14 +78,19 @@ document lists every task that was compressed or deferred during the Phase
 
 ## Phase 23 — Docker packaging + final acceptance
 
-- **`.github/workflows/release.yml`.** GHCR image publish + PyPI publish not
-  wired.
+- **`.github/workflows/release.yml`.** Shipped 2026-04-24 on branch
+  `feat/phase-16-mb-chat`: tag-triggered workflow builds and pushes the
+  Docker image to GHCR (amd64 + arm64), builds and publishes
+  `openlia-core` + `openlia` wheels to PyPI via trusted publishing, and
+  creates a GitHub Release with generated notes.
 - **Dedicated Caddyfile.** One reverse-proxy compose example covers the
   Cloudflare Tunnel + Caddy variants the plan itemized.
 - **Container-runtime smoke.** `docker run openlia:dev && curl /healthz`
   needs a Docker daemon — not executed.
-- **CHANGELOG + PyPI metadata.** `[project.urls]`, classifiers, readme fields
-  not polished.
+- **CHANGELOG + PyPI metadata.** Shipped 2026-04-24: `CHANGELOG.md` added
+  at repo root (0.1.0 entry covers Phases 0-24); `[project.urls]`,
+  classifiers, keywords, and `readme` fields added to both `openlia-core`
+  and `openlia` pyproject.toml.
 - **Frontend `prodBase.test.ts` / `buildOutput.test.ts`.** The existing
   `frontend/dist` build verifies the same invariants; dedicated vitests not
   shipped.
@@ -91,7 +99,7 @@ document lists every task that was compressed or deferred during the Phase
 
 | ID | Status | Gap |
 |---|---|---|
-| REM-P1-019 | `[~]` | ASGI-level smoke + product-journey smoke matrix landed (`packages/server/tests/test_e2e_smoke_matrix.py`, 6 journeys). Container-boot curl (`docker run openlia:dev` + `curl /healthz`) still open — needs Docker daemon. |
+| REM-P1-019 | `[~]` | ASGI-level smoke + product-journey smoke matrix landed (`packages/server/tests/test_e2e_smoke_matrix.py`, 11 journeys: 8 earlier + Equity Research report generation + Earnings Update report generation + EU schedule → notification). Respx-backed provider-connection tests for anthropic/openrouter/gemini added in `packages/server/tests/test_routes/test_llm_admin_routes.py`. Container-boot curl (`docker run openlia:dev` + `curl /healthz`) still open — needs Docker daemon. |
 | REM-P2-001 | partial | MR department page shipped 2026-04-24; remaining placeholders resolve as each plan ships real product surfaces. |
 
 All other REM items closed through Phase 16-23 execution.
@@ -120,31 +128,34 @@ Ranked by what blocks shipping vs polish.
 
 ### P1 — blocks confident production
 
-- **End-to-end smoke matrix (REM-P1-019).** Initial journey set landed
+- **End-to-end smoke matrix (REM-P1-019).** Eleven journeys landed
   2026-04-24 in `packages/server/tests/test_e2e_smoke_matrix.py` — personal
   first-run setup, company invite → register → login, auth logout/reload,
   provider CRUD (without live connection test), password reset +
-  must-change-password gate, repo save/open/unsave. Remaining gaps:
-  Secretary chat stream journey, Equity/Earnings report generation,
-  EU schedule → notification, and real provider connection tests (respx).
-  Plus container-boot curl (`docker run openlia:dev` + `curl /healthz`)
-  from Phase 23.
+  must-change-password gate, repo save/open/unsave, Secretary chat stream,
+  MB follow-up chat, Equity Research on-demand report generation, Earnings
+  Update on-demand report generation, and EU scheduled-scan → user
+  notification. Respx-backed provider-connection tests now cover anthropic
+  (happy + 401), openrouter, and gemini end-to-end through
+  `POST /settings/admin/llm/providers` with `run_test=true` in
+  `packages/server/tests/test_routes/test_llm_admin_routes.py`. Remaining
+  gap: container-boot curl (`docker run openlia:dev` + `curl /healthz`) from
+  Phase 23 — blocked on Docker daemon availability.
 - **Phase 20 NLP classification + `rs_classification_log`.** Retail
   Sentiment's documented behavior differs from what ships — decide whether
   to implement or amend the spec.
-- **Phase 16 `ChatInterface` + `ChatReportThumbnail` + `useReportStream`
-  wiring in MB page.** Users currently cannot follow-up chat about a
-  generated MB briefing.
+<!-- Phase 16 MB chat wiring shipped 2026-04-24 on branch feat/phase-16-mb-chat -->
+
 
 ### P2 — release hygiene
 
-- **`.github/workflows/release.yml`.** GHCR image publish + PyPI publish so
-  `pip install openlia` works.
-- **CHANGELOG + PyPI metadata polish.** `[project.urls]`, classifiers, long
-  description.
-- **Endpoint-contract-matrix + route-authorization-matrix rows** for Plans
-  16, 19, 20, 21, 22. Planning doc hygiene — every row the sprint added or
-  changed.
+<!-- All P2 items shipped 2026-04-24 on branch feat/phase-16-mb-chat:
+  - .github/workflows/release.yml (GHCR + PyPI trusted publish + GH Release)
+  - CHANGELOG.md + PyPI metadata polish on openlia-core and openlia
+  - endpoint-contract-matrix + route-authorization-matrix rows for Plans
+    16, 19, 20, 21, 22 (route-level detail matching shipped code)
+-->
+_Shipped 2026-04-24 — see above._
 
 ### P3 — UX polish
 
