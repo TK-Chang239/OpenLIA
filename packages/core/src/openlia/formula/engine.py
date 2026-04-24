@@ -290,3 +290,81 @@ def _eval_call(node: Call, ctx: EvaluationContext, state: _EvalState) -> Any:
             col=node.col,
         )
     return spec.impl(node, ctx, state)
+
+
+import statistics as _stats  # noqa: E402
+
+
+def _eval_args_as_numbers(node: Call, ctx: EvaluationContext, state: _EvalState) -> list[float]:
+    out: list[float] = []
+    for arg in node.args:
+        val = _eval_node(arg, ctx, state)
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            raise FormulaError(
+                f"function {node.callee!r} requires numeric args, got {type(val).__name__}",
+                line=node.line,
+                col=node.col,
+            )
+        out.append(float(val))
+    return out
+
+
+def _impl_min(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    return min(_eval_args_as_numbers(node, ctx, state))
+
+
+def _impl_max(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    return max(_eval_args_as_numbers(node, ctx, state))
+
+
+def _impl_abs(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    args = _eval_args_as_numbers(node, ctx, state)
+    return abs(args[0])
+
+
+def _impl_round(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    args = _eval_args_as_numbers(node, ctx, state)
+    if len(args) == 1:
+        return float(round(args[0]))
+    # Python's round accepts a negative ndigits; clamp to int.
+    return float(round(args[0], int(args[1])))
+
+
+def _impl_mean(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    args = _eval_args_as_numbers(node, ctx, state)
+    return sum(args) / len(args)
+
+
+def _impl_median(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    args = _eval_args_as_numbers(node, ctx, state)
+    return float(_stats.median(args))
+
+
+def _impl_stddev(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    args = _eval_args_as_numbers(node, ctx, state)
+    if len(args) < 2:
+        raise FormulaError(
+            "stddev requires at least two values",
+            line=node.line,
+            col=node.col,
+        )
+    return float(_stats.stdev(args))
+
+
+def _impl_sum(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    args = _eval_args_as_numbers(node, ctx, state)
+    return float(sum(args))
+
+
+FUNCTION_REGISTRY.update(
+    {
+        "min": _FunctionSpec("min", 1, 64, False, _impl_min),
+        "max": _FunctionSpec("max", 1, 64, False, _impl_max),
+        "abs": _FunctionSpec("abs", 1, 1, False, _impl_abs),
+        "round": _FunctionSpec("round", 1, 2, False, _impl_round),
+        "mean": _FunctionSpec("mean", 1, 64, False, _impl_mean),
+        "median": _FunctionSpec("median", 1, 64, False, _impl_median),
+        "stddev": _FunctionSpec("stddev", 1, 64, False, _impl_stddev),
+        "sum": _FunctionSpec("sum", 1, 64, False, _impl_sum),
+    }
+)
