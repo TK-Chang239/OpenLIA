@@ -22,7 +22,7 @@ _DEFAULT_RULESET: dict[str, Any] = {
         },
         {
             "status": "amber",
-            "formula": "neutral_keyword_detected AND NOT dovish_keyword_detected",
+            "formula": "neutral_keyword_detected and not dovish_keyword_detected",
             "label": "Neutral pivot",
         },
         {
