@@ -57,6 +57,9 @@ EXPECTED_TABLES = {
     "repo_items",
     # --- Plan 14 Equity Research ---
     "er_user_configs",
+    # --- Plan 15 Earnings Update ---
+    "eu_watchlist",
+    "eu_user_configs",
 }
 
 
