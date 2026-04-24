@@ -16,9 +16,7 @@ def test_resolves_or_creates_session(company_client, auth_user):
 def test_session_department_is_morning_briefing(company_client, auth_user, db_session):
     from openlia_server.db.models.content import ChatSession
 
-    sid = company_client.post(
-        "/departments/morning-briefing/chat/session"
-    ).json()["session_id"]
+    sid = company_client.post("/departments/morning-briefing/chat/session").json()["session_id"]
     row = db_session.query(ChatSession).filter_by(id=sid).one()
     assert row.department == "morning_briefing"
     assert row.user_id == auth_user.id
@@ -28,13 +26,9 @@ def test_session_is_user_scoped(client, user_factory, login_as):
     u1 = user_factory()
     u2 = user_factory()
     login_as(u1)
-    sid_1 = client.post("/departments/morning-briefing/chat/session").json()[
-        "session_id"
-    ]
+    sid_1 = client.post("/departments/morning-briefing/chat/session").json()["session_id"]
     login_as(u2)
-    sid_2 = client.post("/departments/morning-briefing/chat/session").json()[
-        "session_id"
-    ]
+    sid_2 = client.post("/departments/morning-briefing/chat/session").json()["session_id"]
     assert sid_1 != sid_2
 
 

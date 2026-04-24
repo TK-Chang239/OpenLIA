@@ -61,6 +61,8 @@ def test_migration_downgrade_drops_tables(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{db}")
     cfg = _alembic_config(str(db))
     command.upgrade(cfg, "head")
+    # Downgrade past the MB migration (head) then past the EU migration.
+    command.downgrade(cfg, "20260417_2200_eu")
     command.downgrade(cfg, "-1")
     engine = create_engine(f"sqlite:///{db}")
     insp = inspect(engine)

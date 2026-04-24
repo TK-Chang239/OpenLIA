@@ -62,8 +62,7 @@ class MbRequestBuilderImpl:
         user_input = (
             "Generate today's Morning Briefing using the user's coverage list "
             "and configured topics.\n\n"
-            "MB_EXTRAS_JSON:\n"
-            + json.dumps(extras, sort_keys=True)
+            "MB_EXTRAS_JSON:\n" + json.dumps(extras, sort_keys=True)
         )
 
         return ReportRequest(

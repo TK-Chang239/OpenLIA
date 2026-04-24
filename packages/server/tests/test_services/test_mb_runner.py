@@ -61,9 +61,7 @@ async def test_on_demand_forwards_events_and_persists(
 
 
 @pytest.mark.asyncio
-async def test_on_demand_reads_config(
-    create_tables, db_session, fake_report_runner
-) -> None:
+async def test_on_demand_reads_config(create_tables, db_session, fake_report_runner) -> None:
     _mk_user(db_session)
     db_session.add(
         MbUserConfig(
@@ -77,9 +75,7 @@ async def test_on_demand_reads_config(
         )
     )
     db_session.commit()
-    fake_report_runner.queue_events(
-        [ReportComplete(report_id="pending", schema=MINIMAL_SCHEMA)]
-    )
+    fake_report_runner.queue_events([ReportComplete(report_id="pending", schema=MINIMAL_SCHEMA)])
     async for _ in run_on_demand(
         session=db_session, user_id="u_1", report_runner=fake_report_runner
     ):

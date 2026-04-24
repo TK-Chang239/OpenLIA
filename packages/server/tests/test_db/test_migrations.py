@@ -60,6 +60,8 @@ EXPECTED_TABLES = {
     # --- Plan 15 Earnings Update ---
     "eu_watchlist",
     "eu_user_configs",
+    # --- Plan 16 Morning Briefing ---
+    "mb_user_configs",
 }
 
 

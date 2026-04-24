@@ -1,4 +1,8 @@
-"""Per-user Morning Briefing config: sections, topics, custom sections, length, reference portfolio toggle."""
+"""Per-user Morning Briefing config.
+
+Holds sections, topics, custom sections, length, and the reference
+portfolio toggle.
+"""
 
 from __future__ import annotations
 
@@ -73,9 +77,7 @@ def update_config(
             raise ValueError(f"unknown section id in topics: {sid!r}")
         for t in topics:
             if not isinstance(t, dict) or not t.get("topic"):
-                raise ValueError(
-                    f"topic entry requires non-empty 'topic' in section {sid!r}"
-                )
+                raise ValueError(f"topic entry requires non-empty 'topic' in section {sid!r}")
 
     for cs in custom_sections:
         if not isinstance(cs, dict) or not cs.get("title"):

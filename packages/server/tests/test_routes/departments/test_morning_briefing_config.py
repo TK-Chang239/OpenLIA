@@ -19,9 +19,7 @@ def test_put_config_persists(company_client, auth_user):
         "report_length": "concise",
         "enabled_section_ids": ["executive_summary", "global_macro"],
         "section_topics": {"global_macro": [{"topic": "War", "notes": "Ukraine"}]},
-        "custom_sections": [
-            {"id": "c1", "title": "My Focus", "description": "FX desk"}
-        ],
+        "custom_sections": [{"id": "c1", "title": "My Focus", "description": "FX desk"}],
         "reference_portfolio": True,
     }
     r = company_client.put("/departments/morning-briefing/config", json=payload)

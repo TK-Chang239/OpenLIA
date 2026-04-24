@@ -1,5 +1,4 @@
 import pytest
-
 from openlia.departments.morning_briefing import (
     MorningBriefingDepartment,
     MorningBriefingMode,

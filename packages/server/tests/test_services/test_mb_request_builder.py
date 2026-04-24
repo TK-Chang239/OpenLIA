@@ -21,14 +21,10 @@ def _mk_user(db: Session, user_id: str = "u_1") -> User:
     return u
 
 
-def test_build_uses_defaults_when_no_config(
-    create_tables, db_session: Session
-) -> None:
+def test_build_uses_defaults_when_no_config(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     builder = MbRequestBuilderImpl()
-    req: ReportRequest = builder.build(
-        session=db_session, user_id="u_1", schedule_id="s_1"
-    )
+    req: ReportRequest = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
     assert req.mode == "morning_briefing"
     assert len(req.enabled_sections) == 7
     assert req.length == "standard"
@@ -54,9 +50,7 @@ def test_build_maps_length_vocab(create_tables, db_session: Session) -> None:
     assert req.length == "brief"
 
 
-def test_build_passes_enabled_sections_and_customs(
-    create_tables, db_session: Session
-) -> None:
+def test_build_passes_enabled_sections_and_customs(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     db_session.add(
         MbUserConfig(
@@ -65,9 +59,7 @@ def test_build_passes_enabled_sections_and_customs(
             report_length="elaborative",
             enabled_section_ids=["executive_summary", "global_macro"],
             section_topics={"global_macro": [{"topic": "War", "notes": "Ukraine"}]},
-            custom_sections=[
-                {"id": "abc", "title": "My Focus", "description": "FX desk view"}
-            ],
+            custom_sections=[{"id": "abc", "title": "My Focus", "description": "FX desk view"}],
             reference_portfolio=False,
         )
     )
@@ -79,9 +71,7 @@ def test_build_passes_enabled_sections_and_customs(
     assert any(cs["title"] == "My Focus" for cs in req.custom_sections)
 
 
-def test_build_injects_reference_portfolio_when_enabled(
-    create_tables, db_session: Session
-) -> None:
+def test_build_injects_reference_portfolio_when_enabled(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     db_session.add(
         MbUserConfig(
@@ -94,12 +84,8 @@ def test_build_injects_reference_portfolio_when_enabled(
             reference_portfolio=True,
         )
     )
-    db_session.add(
-        PortfolioHolding(id="h1", user_id="u_1", ticker="AAPL", name="Apple Inc.")
-    )
-    db_session.add(
-        PortfolioHolding(id="h2", user_id="u_1", ticker="NVDA", name="NVIDIA")
-    )
+    db_session.add(PortfolioHolding(id="h1", user_id="u_1", ticker="AAPL", name="Apple Inc."))
+    db_session.add(PortfolioHolding(id="h2", user_id="u_1", ticker="NVDA", name="NVIDIA"))
     db_session.commit()
     builder = MbRequestBuilderImpl()
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
@@ -122,18 +108,14 @@ def test_build_skips_reference_portfolio_when_toggle_off(
             reference_portfolio=False,
         )
     )
-    db_session.add(
-        PortfolioHolding(id="h1", user_id="u_1", ticker="AAPL", name="Apple Inc.")
-    )
+    db_session.add(PortfolioHolding(id="h1", user_id="u_1", ticker="AAPL", name="Apple Inc."))
     db_session.commit()
     builder = MbRequestBuilderImpl()
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
     assert "AAPL" not in req.user_input
 
 
-def test_build_reference_portfolio_gracefully_absent(
-    create_tables, db_session: Session
-) -> None:
+def test_build_reference_portfolio_gracefully_absent(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     db_session.add(
         MbUserConfig(
@@ -166,9 +148,7 @@ def test_build_user_scoped_portfolio(create_tables, db_session: Session) -> None
             reference_portfolio=True,
         )
     )
-    db_session.add(
-        PortfolioHolding(id="h1", user_id="u_2", ticker="TSLA", name="Tesla")
-    )
+    db_session.add(PortfolioHolding(id="h1", user_id="u_2", ticker="TSLA", name="Tesla"))
     db_session.commit()
     builder = MbRequestBuilderImpl()
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")

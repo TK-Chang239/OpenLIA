@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import pytest
-
 from openlia.llm.runtime.prompts import PromptLoader
 
 
@@ -14,8 +13,7 @@ def loader() -> PromptLoader:
 def test_system_prompt_mentions_briefing_role(loader: PromptLoader) -> None:
     text = loader.render(
         "morning_briefing",
-        "report.morning_briefing.system",
-        report_length="normal",
+        "report.system",
         style_guide="x",
     )
     assert "briefing" in text.lower()
