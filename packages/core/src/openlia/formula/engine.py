@@ -139,12 +139,20 @@ def _eval_node(node: Expression, ctx: EvaluationContext, state: _EvalState) -> A
         return ctx.values[node.name]
 
     if isinstance(node, HistoricalVar):
-        # Body lands in Task 6; for now raise to keep behaviour explicit.
-        raise FormulaError(
-            "historical variables land in Task 6",
-            line=node.line,
-            col=node.col,
-        )
+        series = ctx.history.get(node.name)
+        if series is None:
+            raise FormulaError(
+                f"undefined historical series {node.name!r}",
+                line=node.line,
+                col=node.col,
+            )
+        if node.lag >= len(series):
+            raise FormulaError(
+                f"history for {node.name!r} needs >= {node.lag + 1} entries, got {len(series)}",
+                line=node.line,
+                col=node.col,
+            )
+        return float(series[-1 - node.lag])
 
     if isinstance(node, UnaryOp):
         operand = _eval_node(node.operand, ctx, state)
@@ -366,5 +374,117 @@ FUNCTION_REGISTRY.update(
         "median": _FunctionSpec("median", 1, 64, False, _impl_median),
         "stddev": _FunctionSpec("stddev", 1, 64, False, _impl_stddev),
         "sum": _FunctionSpec("sum", 1, 64, False, _impl_sum),
+    }
+)
+
+
+def _history_arg(node: Call, ctx: EvaluationContext, index: int = 0) -> tuple[str, list[float]]:
+    if not node.args or not isinstance(node.args[index], Var):
+        raise FormulaError(
+            f"function {node.callee!r} requires a bare variable as argument {index + 1}",
+            line=node.line,
+            col=node.col,
+        )
+    name = node.args[index].name  # type: ignore[attr-defined]
+    series = ctx.history.get(name)
+    if series is None:
+        raise FormulaError(
+            f"undefined historical series {name!r}",
+            line=node.line,
+            col=node.col,
+        )
+    return name, list(series)
+
+
+def _int_arg(node: Call, ctx: EvaluationContext, state: _EvalState, index: int) -> int:
+    val = _eval_node(node.args[index], ctx, state)
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise FormulaError(
+            f"function {node.callee!r} requires an integer argument",
+            line=node.line,
+            col=node.col,
+        )
+    if float(val).is_integer() is False or val < 0:
+        raise FormulaError(
+            f"function {node.callee!r} requires a non-negative integer",
+            line=node.line,
+            col=node.col,
+        )
+    return int(val)
+
+
+def _impl_last(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    if len(node.args) == 1:
+        _, series = _history_arg(node, ctx)
+        if not series:
+            raise FormulaError(
+                f"last({node.args[0]}) requires non-empty history",
+                line=node.line,
+                col=node.col,
+            )
+        return float(series[-1])
+    # last(series, n) returns the value n positions back (shorthand).
+    name, series = _history_arg(node, ctx)
+    n = _int_arg(node, ctx, state, 1)
+    if n == 0 or n > len(series):
+        raise FormulaError(
+            f"last({name}, {n}) requires history of at least {n} entries",
+            line=node.line,
+            col=node.col,
+        )
+    return float(series[-n])
+
+
+def _impl_pct_change(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    name, series = _history_arg(node, ctx)
+    n = _int_arg(node, ctx, state, 1)
+    if n <= 0 or n >= len(series):
+        raise FormulaError(
+            f"pct_change({name}, {n}) requires history of at least {n + 1} entries",
+            line=node.line,
+            col=node.col,
+        )
+    previous = series[-1 - n]
+    current = series[-1]
+    if previous == 0:
+        raise FormulaError(
+            f"pct_change({name}, {n}): prior value is zero",
+            line=node.line,
+            col=node.col,
+        )
+    return (current - previous) / previous * 100.0
+
+
+def _impl_rolling_mean(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    name, series = _history_arg(node, ctx)
+    n = _int_arg(node, ctx, state, 1)
+    if n == 0 or n > len(series):
+        raise FormulaError(
+            f"rolling_mean({name}, {n}): history has only {len(series)} entries",
+            line=node.line,
+            col=node.col,
+        )
+    window = series[-n:]
+    return sum(window) / float(n)
+
+
+def _impl_lag(node: Call, ctx: EvaluationContext, state: _EvalState) -> float:
+    name, series = _history_arg(node, ctx)
+    n = _int_arg(node, ctx, state, 1)
+    if n >= len(series):
+        raise FormulaError(
+            f"lag({name}, {n}): history has only {len(series)} entries",
+            line=node.line,
+            col=node.col,
+        )
+    return float(series[-1 - n])
+
+
+FUNCTION_REGISTRY.update(
+    {
+        "last": _FunctionSpec("last", 1, 2, True, _impl_last),
+        "pct_change": _FunctionSpec("pct_change", 2, 2, True, _impl_pct_change),
+        "rolling_mean": _FunctionSpec("rolling_mean", 2, 2, True, _impl_rolling_mean),
+        "lag": _FunctionSpec("lag", 2, 2, True, _impl_lag),
     }
 )
