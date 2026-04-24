@@ -142,3 +142,89 @@ export async function fetchRecentReports(
 export function reportStreamUrl(): string {
   return REPORT_PATH;
 }
+
+export interface OnDemandReportResult {
+  report_id: string;
+  title: string;
+}
+
+/**
+ * POST to /report, consume the SSE stream, and resolve with
+ * `{report_id, title}` once a `report.complete` event arrives. Rejects if the
+ * stream ends without a complete event, or if a `report.error` event is
+ * emitted.
+ */
+export async function startOnDemandReport(payload: {
+  ticker: string;
+}): Promise<OnDemandReportResult> {
+  const res = await fetch(REPORT_PATH, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
+    body: JSON.stringify({ ticker: payload.ticker }),
+  });
+  if (!res.ok || !res.body) {
+    let detail = `HTTP ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body && typeof body === "object" && "detail" in body) {
+        detail = String((body as { detail: unknown }).detail);
+      }
+    } catch {
+      // ignore parse error
+    }
+    throw new Error(detail);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let title = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let nl = buffer.indexOf("\n\n");
+      while (nl !== -1) {
+        const chunk = buffer.slice(0, nl);
+        buffer = buffer.slice(nl + 2);
+        nl = buffer.indexOf("\n\n");
+
+        const line = chunk.split("\n").find((l) => l.startsWith("data: "));
+        if (!line) continue;
+        const raw = line.slice("data: ".length);
+        let event: { type?: string; [k: string]: unknown };
+        try {
+          event = JSON.parse(raw) as { type?: string; [k: string]: unknown };
+        } catch {
+          continue;
+        }
+
+        if (event.type === "report.start") {
+          // schema title arrives with report.complete; no-op here
+        } else if (event.type === "report.complete") {
+          const schema = event.schema as { title?: string } | undefined;
+          title = schema?.title ?? "Earnings Update";
+          return {
+            report_id: String(event.report_id),
+            title,
+          };
+        } else if (event.type === "report.error") {
+          throw new Error(String(event.message ?? "Report generation failed"));
+        }
+      }
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // ignore
+    }
+  }
+  throw new Error("Report stream ended without a completion event");
+}
