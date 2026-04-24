@@ -4,6 +4,29 @@ Redesign of the Retail Sentiment department from a minimal 3-metric dashboard in
 
 > **Cross-reference note (2026-04-15):** Dashboard persistence is DB-backed per `database-design.md`: `rs_user_config` (per-user tab state, metric settings, filter presets, refresh interval), `rs_snapshots` (global point-in-time sentiment metric snapshots), and `rs_classification_log` (LLM classification audit trail). Watchlist integration uses the shared `watchlists`/`watchlist_items` tables.
 
+> **Amendment (2026-04-24) -- v1 scope narrowed to match shipped.** Phase 20 landed a working subset of this design but not the full feature. Rather than leave the spec aspirational, this amendment locks in what v1 actually is and flags what is deferred. The sections below describe the full target design; the "Shipped v1 Scope" matrix immediately below is the authoritative statement of what ships today.
+
+
+## Shipped v1 Scope (2026-04-24)
+
+This matrix is the source of truth for what runs in production. Everything else in this document is the v2 target.
+
+| Area | Shipped v1 | Deferred (v2) |
+|---|---|---|
+| **Metrics** | 7 of 12 computed by `openlia.retail_sentiment.metrics` (Sentiment Score, Buzz Volume, Momentum, Bull/Bear Ratio, Divergence, Social Velocity, Cross-Source Agreement) | Metrics 8-12 (Put/Call, Short Interest, Narrative Concentration, Institutional-Retail Gap, Event Sensitivity) -- shipped as placeholders returning null |
+| **Persistence** | `rs_user_config`, `rs_snapshots` tables + migrations | `rs_classification_log` table (not yet migrated) |
+| **NLP classification** | `_Classifier` protocol on `RsRunner` with a `NeutralClassifier` stub that returns `neutral` for all items | `LlmClassifier` wrapper (batch-30, retry-once, fallback-neutral), `retail_sentiment_classify.yaml` batch prompt, audit rows in `rs_classification_log` |
+| **Insights narrative** | None | `retail_sentiment_insights.yaml` prompt + narrative-synthesis LLM call |
+| **Routes** | 7 shipped under `/departments/retail_sentiment/*`: `GET /dashboard`, `GET /dashboard/history`, `GET /config`, `PUT /config`, `POST /run`, `GET /stocks/{ticker}/sentiment`, `GET /spikes` | `GET /schedule`, `PUT /schedule` (blocked on `JobType.RS_SNAPSHOT`) |
+| **Scheduler** | None | `RetailSentimentExecutor`, `JobType.RS_SNAPSHOT`, wiring through `SchedulerService` |
+| **Frontend page** | 3-tab shell, metric cards for shipped metrics, manual run trigger, spike list | Evidence Tab, Insights Tab, Settings drawer, Metrics Deep Dive panel, typed API client, SWR/react-query hooks |
+
+**v1 non-goals (hard):** anything labeled "Deferred" above, plus the non-goals listed in the original spec's [Non-Goals (v1)](#non-goals-v1) section.
+
+**Classifier status specifically:** the shipped `NeutralClassifier` is a placeholder that satisfies the protocol so the metrics pipeline runs end-to-end. No LLM call is made. This is deliberately visible in the UI (classifications show as "neutral") so users aren't misled; v2 will swap it for an LLM-backed implementation.
+
+**v2 follow-on (2-day bundle, deferred):** `rs_classification_log` model + migration (3-4h) -> batch prompt in `retail_sentiment.yaml` (2-3h) -> `LlmClassifier` wrapper (1-2d) -> wire audit writing into `rs_runner.py` (2-3h). This is the smallest diff that closes the spec-vs-reality gap for the classifier area. Evidence/Insights UI, scheduler integration, and metrics 8-12 are separate phases and not part of the v2 follow-on.
+
 
 ## Department Identity
 
@@ -559,40 +582,51 @@ Same OpenLIA design system as all other departments (CSS variables, Tailwind uti
 
 ## Integration with OpenLIA Architecture
 
+> Each entry below is tagged `[v1]` (shipped 2026-04-24), `[v2]` (deferred -- see the Shipped v1 Scope matrix near the top of this doc), or `[v2-bundle]` (part of the 2-day follow-on that closes the classifier gap).
+
 ### Core Layer (`packages/core/`)
 
-- `departments/retail_sentiment.py` -- Department class. No HTTP dependencies.
-- `departments/retail_sentiment/metrics.py` -- Computation for all 12 metrics (Pandas-based).
-- `departments/retail_sentiment/classifier.py` -- Batch NLP classification logic: prompt building, response parsing, retries, fallback.
-- `departments/retail_sentiment/schemas.py` -- Pydantic models for metric data, evidence items, NLP classification results, insight signals.
-- `prompts/retail_sentiment_classify.yaml` -- Prompt template for batch NLP classification with strict JSON output schema.
-- `prompts/retail_sentiment_insights.yaml` -- Prompt template for narrative synthesis generation.
+- `[v1]` `retail_sentiment/metrics.py` -- Pandas metrics engine. Ships 7 of 12 metrics; the remaining 5 return null placeholders.
+- `[v1]` `retail_sentiment/schemas.py` -- Pydantic models for metric snapshots, classified items, spike events.
+- `[v1]` `retail_sentiment/spike_detector.py` -- 7-day volume spike detection.
+- `[v1]` `departments/retail_sentiment.py` -- Department class. No HTTP dependencies.
+- `[v2-bundle]` `retail_sentiment/classifier.py` -- Batch NLP classification (prompt building, response parsing, retry-once, fallback-neutral, audit log emit).
+- `[v2-bundle]` `prompts/retail_sentiment.yaml` -- extend with `batch_classify` section (current file only has a single-item `classify_sentiment` prompt).
+- `[v2]` `prompts/retail_sentiment_insights.yaml` -- Narrative synthesis prompt.
 
 ### Server Layer (`packages/server/`)
 
-- `routes/retail_sentiment.py` -- REST endpoints: GET metrics per ticker, GET evidence feed, GET active signals, POST trigger refresh, GET/PUT settings.
-- `services/retail_sentiment.py` -- Orchestration: scheduled data fetching, NLP batch calls, metric computation, signal detection, insight generation.
-- Background scheduler: manages periodic data ingestion and NLP classification based on configured refresh interval.
+- `[v1]` `routes/departments/retail_sentiment.py` -- 7 REST endpoints (see Shipped v1 Scope matrix for the exact list).
+- `[v1]` `services/rs_config.py`, `services/rs_snapshot.py`, `services/rs_runner.py` -- Orchestration: data-fetch -> metrics -> snapshot persistence. `RsRunner` takes a `_Classifier` protocol; the default `NeutralClassifier` is a no-op stub.
+- `[v2-bundle]` `db/models/dashboard.py` -- add `RsClassificationLog` model.
+- `[v2-bundle]` Alembic migration -- create `rs_classification_log` table.
+- `[v2-bundle]` `services/rs_classification_log.py` -- `insert()` helper for one-row-per-batch audit writes.
+- `[v2]` `scheduler/executors/rs.py` + `JobType.RS_SNAPSHOT` + wiring -- periodic snapshot runs.
 
 ### Frontend (`frontend/`)
 
-- `pages/RetailSentiment.tsx` -- Page component with tab navigation (Overview / Evidence / Insights).
-- `pages/RetailSentiment/OverviewTab.tsx` -- Tiered metric layout + charts.
-- `pages/RetailSentiment/EvidenceTab.tsx` -- Metric-filtered evidence feed + impact decomposition.
-- `pages/RetailSentiment/InsightsTab.tsx` -- Active signals + narrative synthesis + reliability matrix.
-- `pages/RetailSentiment/MetricsDeepDive.tsx` -- Help panel (drawer).
-- `components/RetailSentiment/` -- MetricCard, GaugeArc, HeatMap, ScoreImpactBar, ReliabilityScatter, EvidenceItem, SignalCard, WordCloud.
+- `[v1]` `pages/RetailSentiment.tsx` -- 3-tab shell, metric cards for shipped metrics, manual `/run` trigger, spike list.
+- `[v2]` `pages/RetailSentiment/EvidenceTab.tsx` -- Metric-filtered evidence feed + impact decomposition.
+- `[v2]` `pages/RetailSentiment/InsightsTab.tsx` -- Active signals + narrative synthesis + reliability matrix.
+- `[v2]` `pages/RetailSentiment/MetricsDeepDive.tsx` -- Help panel drawer.
+- `[v2]` `components/RetailSentiment/` -- MetricCard, GaugeArc, HeatMap, ScoreImpactBar, ReliabilityScatter, EvidenceItem, SignalCard, WordCloud.
+- `[v2]` `api/retail-sentiment.ts` + `hooks/useRs*.ts` -- typed API client + SWR wrappers.
 
 
 ## Non-Goals (v1)
 
-- Chat interface or conversational interaction
-- Report generation, PDF/DOCX export
-- Real-time streaming (SSE) -- polling at configured interval is sufficient
-- Backtesting module for validating metric thresholds against historical returns
-- Intraday sentiment resolution below hourly granularity
-- Alert/notification system (Slack, email, Telegram) for signal triggers
-- Taiwan market or non-English NLP classification
+The shipped v1 does not attempt any of the following. Items marked `[forever]` are out of scope for the entire Retail Sentiment feature, not just v1; items marked `[v2]` are on the v2 roadmap per the Shipped v1 Scope matrix.
+
+- `[forever]` Chat interface or conversational interaction
+- `[forever]` Report generation, PDF/DOCX export
+- `[forever]` Real-time streaming (SSE) -- polling at configured interval is sufficient
+- `[v2]` Backtesting module for validating metric thresholds against historical returns
+- `[v2]` Intraday sentiment resolution below hourly granularity
+- `[v2]` Alert/notification system (Slack, email, Telegram) for signal triggers
+- `[forever]` Taiwan market or non-English NLP classification
+- `[v2]` LLM-backed classification (v1 ships the `NeutralClassifier` stub; see v2 follow-on bundle)
+- `[v2]` Evidence Tab, Insights Tab, Settings drawer, Metrics Deep Dive panel (v1 frontend is the 3-tab shell with shipped metric cards only)
+- `[v2]` Scheduled snapshots -- v1 requires manual `POST /run` triggering
 
 
 ## Open Questions
