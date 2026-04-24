@@ -60,7 +60,16 @@
   --color-bg-elevated: #FAFAF4;
   --color-bg-input:    #F5F4EF;
   --color-bg-code:     #EEECEA;
-  --color-sidebar-bg:  #0D0D0C;       /* sidebar is dark in both themes */
+  --color-sidebar-bg:           #0D0D0C;       /* sidebar is dark in both themes */
+  --color-sidebar-text:         #B5B3A8;
+  --color-sidebar-text-strong:  #F2F1E8;
+  --color-sidebar-text-muted:   #6E6E68;
+  --color-sidebar-hover:        #1C1C1A;
+  --color-sidebar-active:       #252522;
+  --color-sidebar-divider:      #252522;
+
+  --color-user-bubble-bg:   #1A1A18;
+  --color-user-bubble-text: #F2F1E8;
 
   /* Back-compat alias — retired tokens.css exposed this name. */
   --color-bg-app: var(--color-bg-base);

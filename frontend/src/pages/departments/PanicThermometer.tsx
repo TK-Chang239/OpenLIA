@@ -112,7 +112,7 @@ export default function PanicThermometer(): JSX.Element {
       </header>
 
       {dashboard.error ? (
-        <div role="alert" style={{ color: "#eb5757" }}>
+        <div role="alert" style={{ color: "var(--color-feedback-error)" }}>
           Failed to load dashboard: {dashboard.error.message}
         </div>
       ) : null}

@@ -33,8 +33,10 @@ export function NavItem({
           .join(" ")
       }
       style={({ isActive }: { isActive: boolean }) => ({
-        background: isActive ? "#252522" : "transparent",
-        color: isActive ? "#F2F1E8" : "#B5B3A8",
+        background: isActive ? "var(--color-sidebar-active)" : "transparent",
+        color: isActive
+          ? "var(--color-sidebar-text-strong)"
+          : "var(--color-sidebar-text)",
       })}
     >
       {({ isActive }) => (
