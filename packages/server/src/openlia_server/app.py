@@ -24,6 +24,9 @@ from openlia_server.db.session import SessionLocal, configure_engine, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
 from openlia_server.routes.chat_stream import build_chat_stream_router
+from openlia_server.routes.departments.equity_research import (
+    build_equity_research_router,
+)
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.reports import build_reports_router
@@ -208,6 +211,7 @@ def create_app(
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
 
