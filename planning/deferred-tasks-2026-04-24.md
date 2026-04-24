@@ -1,5 +1,7 @@
 # Deferred Tasks — Post Phase 16-23 Merge
 
+> **Superseded by `planning/audits/2026-04-24-master-completeness-and-repair-tracker.md` — kept for source-of-record / closed-item rationale.**
+
 Date: 2026-04-24
 
 All 23 implementation plans (Phases 0-23) are Done in the status table. This

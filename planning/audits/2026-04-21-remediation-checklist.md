@@ -1,5 +1,7 @@
 # Phase 9+ Remediation Checklist
 
+> **Superseded by `planning/audits/2026-04-24-master-completeness-and-repair-tracker.md` — kept for source-of-record / closed-item rationale.**
+
 Date: 2026-04-21
 
 Scope: prioritized remediation work derived from the Phase 0-8 implementation

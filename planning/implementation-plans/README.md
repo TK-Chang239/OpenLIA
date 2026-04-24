@@ -15,9 +15,9 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 5 | 2 | LLM runtime (runners, prompt loader, SSE) | Done (2026-04-19) | `2026-04-17-phase-5-llm-runtime.md` |
 | 6 | 3 | Background task scheduling | Done (2026-04-20) | `2026-04-17-phase-6-background-task-scheduling.md` |
 | 7 | 3 | CLI surface (`admin`, `wizard reset`, `secrets rotate-key`, `maintenance`) | Done (2026-04-20) | `2026-04-17-phase-7-cli-surface.md` |
-| 8 | 4 | Frontend shell (routing, auth context, layout, design tokens) | Draft | `2026-04-17-phase-8-frontend-shell.md` |
+| 8 | 4 | Frontend shell (routing, auth context, layout, design tokens) | Done (2026-04-20) | `2026-04-17-phase-8-frontend-shell.md` |
 | 9 | 4 | Login + Account Management UI | Done (2026-04-21) | `2026-04-17-phase-9-login-and-account-ui.md` |
-| 10 | 4 | Setup Wizard | Draft | `2026-04-17-phase-10-setup-wizard.md` |
+| 10 | 4 | Setup Wizard | Done (2026-04-22) | `2026-04-17-phase-10-setup-wizard.md` |
 | 11 | 4 | Settings page | Done (2026-04-22) | `2026-04-17-phase-11-settings-page.md` |
 | 12 | 4 | Shared chat components (ChatInterface, ChatHistory, FileViewer, FileDownload, SaveToRepo) | Done (2026-04-23) | `2026-04-17-phase-12-shared-chat-components.md` |
 | 13 | 5 | Report rendering pipeline + Secretary department | Done (2026-04-23) | `2026-04-17-phase-13-report-pipeline-and-secretary.md` |
@@ -31,6 +31,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 21 | 7 | Portfolio page | Done (2026-04-24) | `2026-04-23-phase-21-portfolio.md` |
 | 22 | 7 | Repository page | Done (2026-04-24) | `2026-04-23-phase-22-repository.md` |
 | 23 | 7 | Docker packaging + production build + final acceptance | Done (2026-04-24) | `2026-04-23-phase-23-docker-packaging-acceptance.md` |
+| 24 | 7 | Design system refresh (Wondermakers / Acid Yellow tokens, app shell, primitives) | Done (2026-04-24) | `2026-04-24-phase-24-design-system-refresh.md` |
 
 ---
 
