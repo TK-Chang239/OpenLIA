@@ -1,0 +1,19 @@
+task: mr_t4_five_forces
+system: |
+  You are synthesizing the state of Dalio's five interlocking forces —
+  debt/money, internal political, geopolitical, acts of nature, and
+  technology. Identify reinforcement loops and scenario paths. Output
+  must be valid JSON matching T4Output.
+user: |
+  Current indicator context:
+  {{ user_input }}
+
+  {% if length == "long" %}
+  Produce a detailed synthesis with per-force score rationale, reinforcement
+  loops, scenario narrative for the next 12-24 months, and investment
+  implications.
+  {% elif length == "standard" %}
+  Produce per-force scores, 1-2 reinforcement loops, and a scenario sketch.
+  {% else %}
+  One-line synthesis verdict plus the dominant reinforcement loop.
+  {% endif %}
