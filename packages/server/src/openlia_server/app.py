@@ -180,6 +180,11 @@ def _make_lifespan(
                 getattr(app.state, "earnings_recent_adapter", None) or _NoopEarningsRecentAdapter()
             )
             eu_planner = EuScanPlannerImpl(adapter=earnings_adapter)
+            from openlia_server.services.mb_request_builder import (
+                MbRequestBuilderImpl,
+            )
+
+            mb_builder = MbRequestBuilderImpl()
             async with adapter:
                 scheduler_svc = build_scheduler_service(
                     session_factory=_sm,
@@ -188,6 +193,7 @@ def _make_lifespan(
                     report_runner=build_report_runner(_sm),
                     batch_runner=None,
                     eu_planner=eu_planner,
+                    mb_builder=mb_builder,
                 )
                 await scheduler_svc.start()
 
