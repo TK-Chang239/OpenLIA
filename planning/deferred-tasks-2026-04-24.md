@@ -46,21 +46,23 @@ document lists every task that was compressed or deferred during the Phase
 
 ## Phase 20 — Retail Sentiment
 
-Spec amended 2026-04-24 (branch `docs/phase-20-rs-v1-amendment`) to lock v1
-scope to shipped reality. See the "Shipped v1 Scope" matrix in
-`planning/specs/systems/retail-sentiment-dashboard-design.md` for the
-source-of-truth split. Items below are now tracked against that matrix:
+Spec amended 2026-04-24 (PR #45) to lock v1 scope to shipped reality.
+Classifier follow-on bundle shipped same day on
+branch `feat/phase-20-rs-v2-classifier` — `rs_classification_log` model
++ migration, `batch_classify` prompt, async `LlmClassifier` (batch-30,
+retry-once, fallback-neutral), and audit wiring in `RsRunner`. The
+`NeutralClassifier` remains the default wiring until an LLM-backed
+provider is configured and `SyncLlmClassifier` is plugged into
+`app.state.rs_runner`.
 
-- **v2 follow-on bundle (~2 days, not scheduled).** Smallest diff that
-  closes the classifier spec-vs-reality gap: `rs_classification_log` model
-  + Alembic migration, `batch_classify` prompt section in
-  `retail_sentiment.yaml`, `LlmClassifier` wrapper (batch-30, retry-once,
-  fallback-neutral), wire audit writes into `rs_runner.py`. This is the
-  next concrete move under Phase 20.
-- **v2 full (deferred, no timeline).** `JobType.RS_SNAPSHOT` + executor +
-  `/schedule` endpoints, Evidence Tab, Insights Tab, Settings drawer,
-  Metrics Deep Dive panel, metrics 8–12, narrative synthesis prompt + LLM
-  call. Estimated ~4 weeks; wait for real user demand before investing.
+Remaining under Phase 20 (deferred, no timeline):
+
+- **v2 full.** `JobType.RS_SNAPSHOT` + scheduler executor + `/schedule`
+  endpoints, Evidence Tab, Insights Tab, Settings drawer, Metrics Deep
+  Dive panel, metrics 8–12, narrative synthesis prompt + LLM call.
+  ~4 weeks; wait for real user demand before investing.
+- **Per-metric drill-down UIs.** Plan specified per-metric charts;
+  compressed into a single tabbed dashboard grid. Belongs to v2 full.
 
 ## Phase 21 — Portfolio
 

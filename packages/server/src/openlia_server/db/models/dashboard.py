@@ -196,6 +196,41 @@ class RsSnapshot(Base):
     )
 
 
+class RsClassificationLog(Base):
+    """One row per LLM classification batch call. Global, no user_id:
+    classifications are produced per ticker and shared across users via
+    `rs_snapshots`, so the audit trail follows the same shape."""
+
+    __tablename__ = "rs_classification_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(16), nullable=False)
+    model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
+    item_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_rs_classification_log_ticker_created",
+            "ticker",
+            "created_at",
+        ),
+        Index(
+            "ix_rs_classification_log_batch",
+            "batch_id",
+        ),
+    )
+
+
 # ---------- Formula engine ----------
 
 

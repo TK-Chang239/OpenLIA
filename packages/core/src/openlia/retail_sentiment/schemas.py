@@ -88,3 +88,30 @@ class SpikeEvent(BaseModel):
     baseline_mean: float
     baseline_stddev: float
     z_score: float
+
+
+class ClassificationAudit(BaseModel):
+    """One audit row per LLM classification batch call. Persisted into
+    `rs_classification_log` by the server; emitted by `LlmClassifier`."""
+
+    model_config = ConfigDict(frozen=True)
+
+    batch_id: str
+    ticker: str
+    model_ref: str
+    item_count: int
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    latency_ms: int = 0
+    error: str | None = None
+
+
+class BatchClassifyResult(BaseModel):
+    """Returned from a classifier's `classify_batch`. `audits` is empty
+    for the neutral-stub classifier and contains one entry per LLM call
+    for the LLM-backed classifier."""
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[ClassifiedItem] = Field(default_factory=list)
+    audits: list[ClassificationAudit] = Field(default_factory=list)
