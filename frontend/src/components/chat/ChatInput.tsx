@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ArrowUp, Square } from "lucide-react";
 
 interface Props {
@@ -8,8 +8,18 @@ interface Props {
   placeholder: string;
 }
 
+const MAX_HEIGHT = 120;
+
 export function ChatInput({ onSend, onStop, isStreaming, placeholder }: Props): JSX.Element {
   const [value, setValue] = useState("");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${Math.min(ta.scrollHeight, MAX_HEIGHT)}px`;
+  }, [value]);
 
   const submit = () => {
     const trimmed = value.trim();
@@ -30,6 +40,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: Props): 
       <div className="mx-auto max-w-[720px]">
         <div className="flex items-end gap-2 rounded-xl border border-[--color-border-subtle] bg-[--color-bg-input] px-4 py-3">
           <textarea
+            ref={taRef}
             aria-label="Chat message"
             placeholder={placeholder}
             rows={1}
@@ -37,7 +48,7 @@ export function ChatInput({ onSend, onStop, isStreaming, placeholder }: Props): 
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 resize-none bg-transparent text-md leading-relaxed text-[--color-text-primary] outline-none placeholder:text-[--color-text-tertiary]"
-            style={{ maxHeight: 120 }}
+            style={{ maxHeight: MAX_HEIGHT, overflowY: "auto" }}
           />
           {isStreaming ? (
             <button

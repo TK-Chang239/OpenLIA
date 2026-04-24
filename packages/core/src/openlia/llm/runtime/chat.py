@@ -18,6 +18,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator, Callable
 
+from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
@@ -90,7 +91,12 @@ class ChatRunner:
 
         provider = self._provider_factory(resolved)
         system = self._prompts.render(department_id, "chat.system")
-        tools = await self._tools.build(department_id, has_web_search=True)
+        dept = get_department(department_id)
+        extra_tool_specs = dept.extra_tools if dept is not None else ()
+        extra_tool_names = frozenset(spec["name"] for spec in extra_tool_specs)
+        tools = await self._tools.build(
+            department_id, has_web_search=True, extra_tools=extra_tool_specs
+        )
 
         conversation = [Message(role=m.role, content=m.content) for m in messages]
 
@@ -127,7 +133,9 @@ class ChatRunner:
                     args_preview=json.dumps(call.arguments, separators=(",", ":"))[:120],
                 )
             results: list[ToolCallResult] = await self._tools.dispatch_many(
-                department_id=department_id, calls=response.tool_calls
+                department_id=department_id,
+                calls=response.tool_calls,
+                extra_tool_names=extra_tool_names,
             )
             for r in results:
                 yield ChatToolCallResult(
@@ -135,10 +143,13 @@ class ChatRunner:
                     call_id=r.call_id,
                     ok=r.ok,
                     summary=r.summary,
+                    structured=r.structured,
                 )
             for r in results:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
-            tools = await self._tools.build(department_id, has_web_search=True)
+            tools = await self._tools.build(
+                department_id, has_web_search=True, extra_tools=extra_tool_specs
+            )
 
         # Final text turn — stream tokens.
         if cancel_token is not None and cancel_token.is_cancelled:

@@ -1,4 +1,4 @@
-"""POST /departments/secretary/chat — scripted happy-path SSE stream."""
+"""GET /chat/sessions/{id}/stream — scripted happy-path SSE stream."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from openlia.llm.runtime.events import ChatDone, ChatStart, ChatToken
 from openlia_server.db import session as session_mod
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
+from openlia_server.services import chat_sessions as svc
 
 
 class _ScriptedChatRunner:
@@ -62,6 +63,8 @@ def stream_client(tmp_path, monkeypatch):
             )
         )
         s.commit()
+        session_row = svc.create_session(s, user_id="local", department="secretary", title="t")
+        session_id = session_row.id
 
     runner = _ScriptedChatRunner(
         events=[
@@ -77,27 +80,35 @@ def stream_client(tmp_path, monkeypatch):
     app.state.chat_runner_factory = lambda: runner
 
     try:
-        yield TestClient(app), runner
+        yield TestClient(app), runner, session_id
     finally:
         session_mod.dispose_engine()
 
 
 def _parse_sse_frames(body: str) -> list[dict]:
     frames: list[dict] = []
+    event_name: str | None = None
     for line in body.splitlines():
-        if line.startswith("data: "):
-            frames.append(json.loads(line[len("data: ") :]))
+        if line.startswith("event: "):
+            event_name = line[len("event: ") :]
+        elif line.startswith("data: "):
+            payload = json.loads(line[len("data: ") :])
+            assert event_name == payload["type"], "named event must match payload type"
+            frames.append(payload)
+            event_name = None
     return frames
 
 
-def test_scripted_chat_stream_emits_expected_frames(stream_client) -> None:
-    client, runner = stream_client
-    r = client.post(
-        "/departments/secretary/chat",
-        json={"messages": [{"role": "user", "content": "hello"}]},
-    )
+def test_scripted_chat_stream_emits_named_event_frames(stream_client) -> None:
+    client, runner, session_id = stream_client
+    r = client.get(f"/chat/sessions/{session_id}/stream", params={"q": "hello"})
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/event-stream")
+
+    # Every frame must be prefixed with a matching `event: <type>` line.
+    assert "event: chat.start" in r.text
+    assert "event: chat.token" in r.text
+    assert "event: chat.done" in r.text
 
     frames = _parse_sse_frames(r.text)
     types = [f["type"] for f in frames]
@@ -107,4 +118,26 @@ def test_scripted_chat_stream_emits_expected_frames(stream_client) -> None:
 
     assert runner.captured["department_id"] == "secretary"
     assert runner.captured["user_id"] == "local"
-    assert [m.content for m in runner.captured["messages"]] == ["hello"]
+    # The runner sees the persisted conversation history (the just-added user message).
+    assert runner.captured["messages"][-1].content == "hello"
+
+
+def test_stream_persists_user_and_assistant_messages(stream_client) -> None:
+    client, _runner, session_id = stream_client
+    r = client.get(f"/chat/sessions/{session_id}/stream", params={"q": "hello"})
+    assert r.status_code == 200
+
+    with session_mod.SessionLocal() as s:
+        rows = svc.list_messages(s, session_id=session_id, user_id="local")
+
+    roles = [r.role for r in rows]
+    contents = [r.content for r in rows]
+    assert roles == ["user", "assistant"]
+    assert contents[0] == "hello"
+    assert contents[1] == "hi there"
+
+
+def test_stream_returns_404_for_missing_session(stream_client) -> None:
+    client, _runner, _session_id = stream_client
+    r = client.get("/chat/sessions/missing/stream", params={"q": "x"})
+    assert r.status_code == 404

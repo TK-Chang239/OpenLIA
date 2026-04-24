@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.runtime.prompts import PromptLoader
 
 
@@ -13,11 +12,14 @@ def loader() -> PromptLoader:
 
 
 def _ctx(**overrides: object) -> dict[str, object]:
+    # `length` follows the `ReportRequest.length` contract: brief/standard/long.
+    # `eu_runner` maps the user-facing config value (concise/normal/elaborative)
+    # into one of these at the service call-site.
     base: dict[str, object] = {
         "user_input": "Analyze the latest Apple earnings release for AAPL.",
         "enabled_sections": ["quick_take", "key_financials"],
         "custom_sections": [],
-        "length": "normal",
+        "length": "standard",
         "framework": {"id": "earnings_update", "sections": []},
     }
     base.update(overrides)
@@ -40,17 +42,40 @@ def test_user_prompt_embeds_ticker_and_user_input(loader: PromptLoader) -> None:
     assert "Apple" in text or "latest" in text
 
 
-def test_length_knob_changes_prompt(loader: PromptLoader) -> None:
-    concise = loader.render(
+def test_length_brief_selects_tight_branch(loader: PromptLoader) -> None:
+    text = loader.render(
         "earnings_update",
         "report.earnings_update.user",
-        **_ctx(length="concise"),
+        **_ctx(length="brief"),
     )
-    elaborative = loader.render(
+    assert "LENGTH: BRIEF" in text
+    assert "LENGTH: STANDARD" not in text
+    assert "LENGTH: LONG" not in text
+
+
+def test_length_standard_selects_balanced_branch(loader: PromptLoader) -> None:
+    text = loader.render(
         "earnings_update",
         "report.earnings_update.user",
-        **_ctx(length="elaborative"),
+        **_ctx(length="standard"),
     )
-    assert concise != elaborative
-    assert "concise" in concise.lower()
-    assert "elaborative" in elaborative.lower() or "expansive" in elaborative.lower()
+    assert "LENGTH: STANDARD" in text
+    assert "LENGTH: BRIEF" not in text
+    assert "LENGTH: LONG" not in text
+
+
+def test_length_long_selects_deep_branch(loader: PromptLoader) -> None:
+    text = loader.render(
+        "earnings_update",
+        "report.earnings_update.user",
+        **_ctx(length="long"),
+    )
+    assert "LENGTH: LONG" in text
+    assert "LENGTH: BRIEF" not in text
+    assert "LENGTH: STANDARD" not in text
+
+
+def test_length_branches_produce_distinct_prompts(loader: PromptLoader) -> None:
+    brief = loader.render("earnings_update", "report.earnings_update.user", **_ctx(length="brief"))
+    long_ = loader.render("earnings_update", "report.earnings_update.user", **_ctx(length="long"))
+    assert brief != long_

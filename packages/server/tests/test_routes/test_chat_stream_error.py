@@ -11,6 +11,7 @@ from openlia.llm.exceptions import TierNotConfiguredError
 from openlia_server.db import session as session_mod
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
+from openlia_server.services import chat_sessions as svc
 
 
 class _RaisingChatRunner:
@@ -41,29 +42,33 @@ def stream_client(tmp_path, monkeypatch):
             )
         )
         s.commit()
+        row = svc.create_session(s, user_id="local", department="secretary", title="t")
+        session_id = row.id
 
     app = create_app(db_session_factory=session_mod.SessionLocal)
     app.state.chat_runner_factory = _RaisingChatRunner
     try:
-        yield TestClient(app)
+        yield TestClient(app), session_id
     finally:
         session_mod.dispose_engine()
 
 
-def test_raising_runner_emits_single_terminal_error_frame(stream_client: TestClient) -> None:
-    r = stream_client.post(
-        "/departments/secretary/chat",
-        json={"messages": [{"role": "user", "content": "hi"}]},
-    )
-    assert r.status_code == 200
-    frames = [
-        json.loads(line[len("data: ") :])
-        for line in r.text.splitlines()
-        if line.startswith("data: ")
+def _frames_from(body: str) -> list[dict]:
+    return [
+        json.loads(line[len("data: ") :]) for line in body.splitlines() if line.startswith("data: ")
     ]
+
+
+def test_raising_runner_emits_single_terminal_error_frame(stream_client) -> None:
+    client, session_id = stream_client
+    r = client.get(f"/chat/sessions/{session_id}/stream", params={"q": "hi"})
+    assert r.status_code == 200
+    frames = _frames_from(r.text)
     assert len(frames) == 1
     assert frames[0]["type"] == "chat.error"
     assert frames[0]["error_class"] == "TierNotConfiguredError"
+    # Error frames must still be named so the client's `error` listener fires.
+    assert "event: chat.error" in r.text
 
 
 def test_unauthenticated_chat_stream_returns_401(tmp_path, monkeypatch) -> None:
@@ -85,10 +90,7 @@ def test_unauthenticated_chat_stream_returns_401(tmp_path, monkeypatch) -> None:
     app.state.chat_runner_factory = _RaisingChatRunner
     client = TestClient(app)
     try:
-        r = client.post(
-            "/departments/secretary/chat",
-            json={"messages": [{"role": "user", "content": "hi"}]},
-        )
+        r = client.get("/chat/sessions/any/stream", params={"q": "hi"})
         assert r.status_code == 401
     finally:
         session_mod.dispose_engine()

@@ -140,7 +140,8 @@ def build_equity_research_router(
                 user_input=payload.user_input,
                 session_id=payload.session_id,
             ):
-                yield f"data: {json.dumps(_serialize_event(ev))}\n\n".encode()
+                wire = _serialize_event(ev)
+                yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
 
         return StreamingResponse(
             stream(),
@@ -166,7 +167,8 @@ def build_equity_research_router(
                 messages=messages,
                 cancel_token=cancel_token,
             ):
-                yield f"data: {json.dumps(to_wire(event))}\n\n".encode()
+                wire = to_wire(event)
+                yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
 
         return StreamingResponse(
             stream(),

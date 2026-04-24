@@ -7,7 +7,6 @@ from typing import Any, Literal
 
 from openlia.departments.base import Tier
 
-
 EarningsUpdateMode = Literal["earnings_analysis"]
 
 
@@ -16,6 +15,7 @@ class EarningsUpdateDepartment:
     name: str = "earnings_update"
     display_name: str = "Earnings Updates"
     prompt_name: str = "earnings_update"
+    tier: Tier = "everyday"
     data_requirement_types: tuple[str, ...] = (
         "earnings_data",
         "financial_statements",

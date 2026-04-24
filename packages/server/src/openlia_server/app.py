@@ -47,12 +47,20 @@ from openlia_server.services.runtime import build_chat_runner, build_report_runn
 
 
 class _NoopEarningsRecentAdapter:
-    """Fallback adapter for EuScanPlanner when the earnings_data provider
-    isn't wired. Returns no releases so scheduled EU scans no-op rather
-    than crashing the executor."""
+    """Fallback adapter used when the earnings_data provider isn't wired.
+
+    Implements both the EuScanPlanner `latest_release` shape and the
+    EU watchlist `next_earnings` shape so scheduled scans and the
+    on-demand watchlist route degrade gracefully (no releases / ticker
+    not found) rather than crashing the executor or returning 500.
+    """
 
     def latest_release(self, ticker: str, *, since):  # type: ignore[no-untyped-def]
         return None
+
+    def next_earnings(self, ticker: str):  # type: ignore[no-untyped-def]
+        return None
+
 
 log = logging.getLogger(__name__)
 
@@ -165,9 +173,9 @@ def _make_lifespan(
                         s.close()
 
             adapter = _SchedulerAdapter()
-            earnings_adapter = getattr(
-                app.state, "earnings_recent_adapter", None
-            ) or _NoopEarningsRecentAdapter()
+            earnings_adapter = (
+                getattr(app.state, "earnings_recent_adapter", None) or _NoopEarningsRecentAdapter()
+            )
             eu_planner = EuScanPlannerImpl(adapter=earnings_adapter)
             async with adapter:
                 scheduler_svc = build_scheduler_service(
@@ -232,8 +240,16 @@ def create_app(
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
+    # Report runner is consumed by per-department routes (equity_research, earnings_update).
+    # `build_report_runner` returns a RefreshingReportRunner that opens a fresh DB session
+    # per run, so we can share a single instance across requests.
+    app.state.report_runner = build_report_runner(db_session_factory=factory)
     app.state.equity_research_inner_factory = lambda: build_report_runner(
         db_session_factory=factory
+    )
+    # Earnings data adapter — optional; when unset the EU on-demand route uses a no-op.
+    app.state.earnings_adapter = getattr(
+        app.state, "earnings_adapter", _NoopEarningsRecentAdapter()
     )
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
 
