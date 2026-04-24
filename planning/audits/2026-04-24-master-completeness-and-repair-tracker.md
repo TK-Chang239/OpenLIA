@@ -21,6 +21,22 @@ Status legend (mirrors REM checklist + adds verification states):
 - Severity: **P0** (broken in production / blocks releasable build) ·
   **P1** (silent correctness gap) · **P2** (spec/plan hygiene, polish)
 
+**Document map:**
+
+- §1 Phase status snapshot
+- §2–§4 Severity-ordered backlog (P0 / P1 / P2) — every item an atomic
+  fix across all 23 phases
+- §5 Frontend test coverage debt (umbrella)
+- §6 REM checklist residuals
+- §7 Cross-cutting failure patterns
+- §8 Suggested repair sequencing (Sprints A–F)
+- §9 Tracking conventions
+- **§10 Per-phase fix plans (→ 100%)** — 23 per-phase task lists that,
+  executed top-to-bottom, take each phase from its current shipped-%
+  to 100% of both plan AND spec. Reuses IDs from §2–§4 and mints
+  `NEW-<phase>-NN` for spec-level gaps.
+- §11 Cross-reference table of newly minted (NEW-*) IDs
+
 ---
 
 ## 1. Phase status snapshot
@@ -552,3 +568,138 @@ P1 in the same PR.
   with a new sequence number.
 - Don't delete closed tickets — strike through (`~~text~~`) so the
   document stays a complete repair log.
+
+---
+
+## 10. Per-phase fix plans (to 100%)
+
+Per-phase fix plans live as individual files under
+[`fix-plans/`](./fix-plans/). Each file is self-contained: current
+shipped-%, root cause, gap summary, ordered tasks with file paths +
+plan + spec refs + acceptance, and a one-line verification command.
+
+Open only the phase you are working on - the master tracker stays
+navigable, and a session that loads one fix plan pays for ~30-80 lines
+instead of all 1,000+.
+
+| Phase | File | Current | Root cause |
+|-------|------|---------|------------|
+| 1a | [phase-1a-database-baseline.md](./fix-plans/phase-1a-database-baseline.md) | ~90% | mixed |
+| 1b | [phase-1b-db-dashboard-scheduler-notifications.md](./fix-plans/phase-1b-db-dashboard-scheduler-notifications.md) | ~95% | IMPLEMENTER |
+| 2 | [phase-2-auth-secrets.md](./fix-plans/phase-2-auth-secrets.md) | ~92% | IMPLEMENTER |
+| 3 | [phase-3-data-provider-adapter.md](./fix-plans/phase-3-data-provider-adapter.md) | ~95% plan / ~55% spec | SPEC_DRIFT |
+| 4 | [phase-4-llm-provider-system.md](./fix-plans/phase-4-llm-provider-system.md) | ~72% | mixed |
+| 5 | [phase-5-llm-runtime.md](./fix-plans/phase-5-llm-runtime.md) | ~88% | IMPLEMENTER |
+| 6 | [phase-6-background-task-scheduling.md](./fix-plans/phase-6-background-task-scheduling.md) | ~92% | IMPLEMENTER |
+| 7 | [phase-7-cli-surface.md](./fix-plans/phase-7-cli-surface.md) | ~97% | mixed |
+| 8 | [phase-8-frontend-shell.md](./fix-plans/phase-8-frontend-shell.md) | ~95% | SPEC_DRIFT + cosmetic |
+| 9 | [phase-9-login-account-ui.md](./fix-plans/phase-9-login-account-ui.md) | ~88% | IMPLEMENTER |
+| 10 | [phase-10-setup-wizard.md](./fix-plans/phase-10-setup-wizard.md) | ~72% | IMPLEMENTER |
+| 11 | [phase-11-settings-page.md](./fix-plans/phase-11-settings-page.md) | ~72% | IMPLEMENTER |
+| 12 | [phase-12-shared-chat-components.md](./fix-plans/phase-12-shared-chat-components.md) | ~90% | IMPLEMENTER |
+| 13 | [phase-13-report-pipeline-secretary.md](./fix-plans/phase-13-report-pipeline-secretary.md) | ~75% | IMPLEMENTER |
+| 14 | [phase-14-equity-research.md](./fix-plans/phase-14-equity-research.md) | ~83% | IMPLEMENTER |
+| 15 | [phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md) | ~78% | IMPLEMENTER |
+| 16 | [phase-16-morning-briefing.md](./fix-plans/phase-16-morning-briefing.md) | ~82% | mixed |
+| 17 | [phase-17-formula-engine.md](./fix-plans/phase-17-formula-engine.md) | ~70% | SPEC_DRIFT |
+| 18 | [phase-18-panic-thermometer.md](./fix-plans/phase-18-panic-thermometer.md) | ~72% | DEFERRED + IMPLEMENTER |
+| 19 | [phase-19-macro-research.md](./fix-plans/phase-19-macro-research.md) | ~72% | IMPLEMENTER |
+| 20 | [phase-20-retail-sentiment.md](./fix-plans/phase-20-retail-sentiment.md) | v1 ~60% / v2 100% | DEFERRED + SPEC_DRIFT |
+| 21 | [phase-21-portfolio.md](./fix-plans/phase-21-portfolio.md) | ~55% | mixed |
+| 22 | [phase-22-repository.md](./fix-plans/phase-22-repository.md) | ~65% | mixed |
+| 23 | [phase-23-docker-packaging-acceptance.md](./fix-plans/phase-23-docker-packaging-acceptance.md) | ~55% | DEFERRED + IMPLEMENTER |
+
+**How to use:**
+
+1. Pick a phase from section 8 Sprint sequencing.
+2. Open its fix plan file.
+3. Work tasks top-to-bottom; each task has plan ref + spec ref +
+   acceptance criterion baked in.
+4. When a task closes, strike through both the section 10 fix-plan
+   line AND the matching section 2/3/4 severity-ordered entry (and,
+   for NEW-* IDs, the section 11 row).
+
+## 11. Newly minted IDs (from Section 10 fix plans)
+
+Cross-reference for IDs introduced by the per-phase fix plans that are
+NOT in §2–§4. These are mostly spec-level gaps (a11y contracts, spec
+deferrals, missing submodules, per-phase test debt slices).
+
+| ID            | Phase | Title                                                        | Severity |
+|---------------|-------|--------------------------------------------------------------|----------|
+| NEW-1a-01     | 1a    | Spec-required `CHECK` constraints audit in baseline          | P1       |
+| NEW-1a-02     | 1a    | Nightly maintenance sweep job                                | P2       |
+| NEW-1b-01     | 1b    | `job_runs` FK cascade audit                                  | P2       |
+| NEW-2-01      | 2     | Auth rate-limit threshold test                               | P2       |
+| NEW-3-01      | 3     | `catalog`/`review`/`dispatch`/`python_providers`/`sentiment` stubs | P2 |
+| NEW-3-02      | 3     | Data-provider spec amendment header                          | P2       |
+| NEW-3-03      | 3     | `auto_map` mode-docstring audit                              | P2       |
+| NEW-4-01      | 4     | `build_llm_user_router` (sub of P2-12)                       | P1       |
+| NEW-4-02      | 4     | `openlia.llm` / `services.auth` public exports alignment     | P2       |
+| NEW-4-03      | 4     | Connection-test adapter-registry coverage                    | P2       |
+| NEW-5-01      | 5     | Runtime events + messages unit tests                         | P2       |
+| NEW-7-01      | 7     | `test_serve_prints_banner` (pair with P2-07)                 | P2       |
+| NEW-8-01      | 8     | Mobile responsive sidebar / tab bar                          | P1       |
+| NEW-8-02      | 8     | Collapsed-mode tooltip a11y                                  | P2       |
+| NEW-9-01      | 9     | `aria-describedby` on all auth form inputs                   | P1       |
+| NEW-9-02      | 9     | `aria-busy` on primary submit buttons                        | P2       |
+| NEW-9-03      | 9     | AccountManagementSpec parity audit                           | P2       |
+| NEW-10-01     | 10    | Reconcile two SetupWizard spec files                         | P2       |
+| NEW-10-02     | 10    | Step 3 `tier_complete` frontend gate                         | P1       |
+| NEW-10-03     | 10    | Concurrent-session takeover dialog                           | P2       |
+| NEW-11-01     | 11    | SettingsPageSpec per-tab parity audit                        | P2       |
+| NEW-12-01     | 12    | FileDownloadSpec dropdown contract                           | P1       |
+| NEW-12-02     | 12    | SaveToRepoSpec toast + idempotency                           | P1       |
+| NEW-12-03     | 12    | ChatInterfaceSpec streaming-cursor / cancel                  | P1       |
+| NEW-13-01     | 13    | `RedirectCard` Secretary chat block                          | P1       |
+| NEW-13-02     | 13    | Secretary welcome-state animations + stop label              | P2       |
+| NEW-13-03     | 13    | Secretary route backend tests                                | P2       |
+| NEW-14-01     | 14    | Restore spec-compliant ER Active layout                      | P1       |
+| NEW-14-02     | 14    | `FromPortfolioPicker` popover                                | P2       |
+| NEW-15-01     | 15    | EU page FileViewer + sidebar dot wiring                      | P1       |
+| NEW-15-02     | 15    | EU Watchlist Overdue + New-badge + market badge colors       | P2       |
+| NEW-15-03     | 15    | EU Cabinet search + filter dropdown                          | P2       |
+| NEW-15-04     | 15    | EU loading skeleton                                          | P2       |
+| NEW-15-05     | 15    | EU Cabinet remove-confirmation tooltip                       | P2       |
+| NEW-16-01     | 16    | MB frontend vitests (Archive/Settings/OnDemand)              | P2       |
+| NEW-16-02     | 16    | MB chat-session hook test + matrix row                       | P2       |
+| NEW-17-01     | 17    | Formula spec reconciliation writeup                          | P1       |
+| NEW-17-02     | 17    | `RuleSet` + `evaluate_ruleset`                               | P1       |
+| NEW-17-03     | 17    | Reserved derived scalars (`derived.py`)                      | P1       |
+| NEW-17-04     | 17    | `AND`/`OR`/`NOT` keyword aliases                             | P2       |
+| NEW-17-05     | 17    | `days_since` / `cross_above` / `cross_below` functions       | P1       |
+| NEW-18-01     | 18    | Oil + WageGrowth drill-down dashboards                       | P1       |
+| NEW-18-02     | 18    | Inflation + FedLanguage + Diplomacy drill-downs              | P1       |
+| NEW-18-03     | 18    | RuleEditor + FormulaInput + PanelSettingsPane                | P1       |
+| NEW-18-04     | 18    | ManualOverride + ImportExport + PresetLibrary                | P2       |
+| NEW-18-05     | 18    | PT server + per-panel tests                                  | P2       |
+| NEW-18-06     | 18    | PT auto-refresh dropdown verification                        | P2       |
+| NEW-19-01     | 19    | MR Settings panel + ScheduleEditor wiring                    | P1       |
+| NEW-19-02     | 19    | MR Summary tab + auto-refresh                                | P2       |
+| NEW-19-03     | 19    | MR backend tests (14 files)                                  | P2       |
+| NEW-19-04     | 19    | MR frontend tests (6 files)                                  | P2       |
+| NEW-19-05     | 19    | MR matrix rows                                               | P2       |
+| NEW-20-01     | 20    | RS scheduler integration (`JobType.RS_SNAPSHOT`)             | P1       |
+| NEW-20-02     | 20    | RS `/schedule` routes                                        | P1       |
+| NEW-20-03     | 20    | RS metrics 8–12                                              | P1       |
+| NEW-20-04     | 20    | RS narrative synthesis LLM call                              | P1       |
+| NEW-20-05     | 20    | RS frontend decomposition                                    | P1       |
+| NEW-20-06     | 20    | RS typed API client + hooks                                  | P2       |
+| NEW-21-01     | 21    | Portfolio decomposition into 15 components + 4 hooks         | P1       |
+| NEW-21-02     | 21    | Portfolio → ER ticker navigation                             | P1       |
+| NEW-21-03     | 21    | Portfolio toast + Undo                                       | P2       |
+| NEW-21-04     | 21    | Portfolio groups reorder + rename + delete                   | P2       |
+| NEW-21-05     | 21    | Portfolio market-closed/stale states + swipe + sort persist  | P2       |
+| NEW-22-01     | 22    | `useRepoList` hook                                           | P2       |
+| NEW-22-02     | 22    | Repository decomposition                                     | P1       |
+| NEW-22-03     | 22    | Repository department-tinted badges                          | P2       |
+| NEW-22-04     | 22    | Repository undo toast                                        | P2       |
+| NEW-23-01     | 23    | cloudflare-tunnel + caddy compose recipes                    | P1       |
+| NEW-23-02     | 23    | `RELEASING.md`                                               | P2       |
+| NEW-23-03     | 23    | CI Docker-build smoke job                                    | P1       |
+| NEW-23-04     | 23    | `test_wheel_contents.py`                                     | P2       |
+| NEW-23-05     | 23    | Cookie/proxy integration + env-snapshot tests                | P2       |
+| NEW-23-06     | 23    | README Quickstart + CHANGELOG stub                           | P2       |
+
+When closing any NEW-* item, strike through the row above AND the
+matching numbered task in §10.
