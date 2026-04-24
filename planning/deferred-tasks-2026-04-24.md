@@ -153,9 +153,11 @@ Ranked by what blocks shipping vs polish.
   `packages/server/tests/test_routes/test_llm_admin_routes.py`. Remaining
   gap: container-boot curl (`docker run openlia:dev` + `curl /healthz`) from
   Phase 23 — blocked on Docker daemon availability.
-- **Phase 20 NLP classification + `rs_classification_log`.** Retail
-  Sentiment's documented behavior differs from what ships — decide whether
-  to implement or amend the spec.
+- **Phase 20 v2 follow-on bundle.** Spec amendment landed 2026-04-24 on
+  branch `docs/phase-20-rs-v1-amendment`, locking v1 to the shipped subset.
+  Next concrete move is the ~2-day classifier bundle: `rs_classification_log`
+  migration → batch prompt → `LlmClassifier` wrapper → audit writes.
+  Remaining Evidence/Insights/scheduler work deferred to v2 full.
 <!-- Phase 16 MB chat wiring shipped 2026-04-24 on branch feat/phase-16-mb-chat -->
 
 
