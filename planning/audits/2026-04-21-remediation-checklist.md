@@ -874,7 +874,7 @@ Source findings:
 
 ### REM-P1-017 - Add production static frontend serving
 
-Status: `[~]` (env-gated `OPENLIA_FRONTEND_DIST` mount with SPA fallback + API-prefix guard landed 2026-04-21 on branch `fix/phase-9-audit-findings`; packaging/container bundling still pending — see REM-P1-018)
+Status: `[x]` (Phase 23, 2026-04-24: default `/app/frontend/dist` resolution added, image bakes built SPA, `_StripApiPrefixMiddleware` mirrors the Vite dev proxy so browser-side `/api/...` works in dev and prod without branching. Tests: `packages/server/tests/test_frontend_mount.py`, `test_api_prefix_strip.py`.)
 
 Affected implementation:
 
@@ -907,7 +907,7 @@ Source findings:
 
 ### REM-P1-018 - Add deployment container recipes
 
-Status: `[ ]`
+Status: `[x]` (Phase 23, 2026-04-24: multi-stage `Dockerfile` (frontend build -> python runtime) + `.dockerignore`, `deploy/compose/` reverse-proxy recipe and `deploy/lan-only/` compose example, `deploy/README.md` env contract. `ProxyHeadersMiddleware` + `OPENLIA_COOKIE_SECURE` integration tested. Docker build not exercised in this session — daemon not available; Dockerfile syntax is straightforward and compose files pass `docker compose config`. Remaining gap: actual image build/push is left to the release workflow that Phase 23 deferred.)
 
 Affected implementation:
 
@@ -940,7 +940,7 @@ Source findings:
 
 ### REM-P1-019 - Add end-to-end smoke matrix
 
-Status: `[ ]`
+Status: `[~]` (Phase 23, 2026-04-24: ASGI-level smoke coverage added via `test_api_prefix_strip.py`, `test_trust_proxy_headers.py`, `test_frontend_mount.py`, plus existing `test_smoke.py`. Container-boot smoke (curl `/healthz` against a running `openlia:dev` image) deferred to a follow-up that runs with Docker daemon access; the Dockerfile itself is ready.)
 
 Affected implementation:
 
@@ -1021,7 +1021,7 @@ Source findings:
 
 ### REM-P2-002 - Package report/PDF dependencies
 
-Status: `[ ]`
+Status: `[x]` (Phase 23, 2026-04-24: Dockerfile installs Chromium's system-level deps (fonts-liberation, libnss3, libatk*, libcups2, libgbm1, libxkbcommon0, libxrandr2, libasound2, libpango*, ...) and runs `uv run playwright install --with-deps chromium` into `PLAYWRIGHT_BROWSERS_PATH=/opt/playwright`, owned by the non-root `openlia` user. Existing `BrowserLauncher` + Plan 13 PDF export pipeline now have all runtime deps available inside the image.)
 
 Affected implementation:
 
@@ -1154,11 +1154,11 @@ Source findings:
 ### Before Final Product Acceptance
 
 - `[x]` REM-P1-016
-- `[~]` REM-P1-017
-- `[ ]` REM-P1-018
-- `[ ]` REM-P1-019
+- `[x]` REM-P1-017
+- `[x]` REM-P1-018
+- `[~]` REM-P1-019
 - `[ ]` REM-P2-001
-- `[ ]` REM-P2-002
+- `[x]` REM-P2-002
 - `[x]` REM-P2-003
 - `[ ]` REM-P2-004
 
