@@ -272,10 +272,43 @@ class _Parser:
             col=t.col,
         )
 
-    # Placeholder; Task 6 replaces the body with full `[t-N]` parsing.
-    def _parse_history_index(self, ident: Token) -> Expression:  # pragma: no cover
-        raise FormulaError(
-            "historical indexing '[t-N]' lands in Task 6",
+    def _parse_history_index(self, ident: Token) -> Expression:
+        # Already consumed the opening '['. Expect ``t - NUMBER`` then ']'.
+        t_tok = self.peek
+        if t_tok.kind is not TokenKind.IDENT or t_tok.value != "t":
+            raise FormulaError(
+                "history index must start with 't'",
+                line=t_tok.line,
+                col=t_tok.col,
+            )
+        self.advance()
+        minus = self.peek
+        if minus.kind is not TokenKind.MINUS:
+            raise FormulaError(
+                "history index must use '-' (e.g. 'price[t-3]')",
+                line=minus.line,
+                col=minus.col,
+            )
+        self.advance()
+        number = self.peek
+        if number.kind is not TokenKind.NUMBER:
+            raise FormulaError(
+                "history index requires an integer lag",
+                line=number.line,
+                col=number.col,
+            )
+        self.advance()
+        lag_val = number.value
+        if float(lag_val).is_integer() is False or lag_val < 0:
+            raise FormulaError(
+                "history lag must be a non-negative integer",
+                line=number.line,
+                col=number.col,
+            )
+        self.expect(TokenKind.RBRACKET, "']'")
+        return HistoricalVar(
+            name=ident.value,
+            lag=int(lag_val),
             line=ident.line,
             col=ident.col,
         )
