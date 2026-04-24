@@ -7,6 +7,7 @@ from openlia.departments.equity_research import (
     EquityResearchDepartment,
     EquityResearchMode,
 )
+from openlia.departments.macro_research import MacroResearchDepartment
 from openlia.departments.morning_briefing import (
     MorningBriefingDepartment,
     MorningBriefingMode,
@@ -20,6 +21,7 @@ _REGISTRY: dict[str, Department] = {
     "earnings_update": EarningsUpdateDepartment(),
     "morning_briefing": MorningBriefingDepartment(),
     "panic_thermometer": PanicThermometerDepartment(),
+    "macro_research": MacroResearchDepartment(),
 }
 
 
@@ -38,6 +40,7 @@ __all__ = [
     "EarningsUpdateMode",
     "EquityResearchDepartment",
     "EquityResearchMode",
+    "MacroResearchDepartment",
     "MorningBriefingDepartment",
     "MorningBriefingMode",
     "PanicThermometerDepartment",
