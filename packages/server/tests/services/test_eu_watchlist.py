@@ -9,8 +9,11 @@ from sqlalchemy.orm import Session
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
     u = User(
-        id=user_id, email=f"{user_id}@x", display_name=user_id,
-        password_hash="x", is_admin=False,
+        id=user_id,
+        email=f"{user_id}@x",
+        display_name=user_id,
+        password_hash="x",
+        is_admin=False,
     )
     db.add(u)
     db.commit()
@@ -29,21 +32,25 @@ class FakeEarningsAdapter:
 
 def _apple_blank() -> dict:
     return {
-        "ticker": "AAPL", "company_name": "Apple",
-        "date": None, "release_timing": None,
+        "ticker": "AAPL",
+        "company_name": "Apple",
+        "date": None,
+        "release_timing": None,
     }
 
 
 def test_add_calls_adapter_and_caches_date(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
-    adapter = FakeEarningsAdapter({
-        "AAPL": {
-            "ticker": "AAPL",
-            "company_name": "Apple Inc.",
-            "date": date(2026, 4, 25),
-            "release_timing": "post_market",
-        },
-    })
+    adapter = FakeEarningsAdapter(
+        {
+            "AAPL": {
+                "ticker": "AAPL",
+                "company_name": "Apple Inc.",
+                "date": date(2026, 4, 25),
+                "release_timing": "post_market",
+            },
+        }
+    )
     entry = svc.add_entry(db_session, user_id="u_1", ticker="AAPL", adapter=adapter)
     assert entry.ticker == "AAPL"
     assert entry.company_name == "Apple Inc."
@@ -76,20 +83,28 @@ def test_add_unknown_ticker_raises(create_tables, db_session: Session) -> None:
 
 def test_list_returns_entries_sorted_by_date(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
-    adapter = FakeEarningsAdapter({
-        "AAPL": {
-            "ticker": "AAPL", "company_name": "Apple",
-            "date": date(2026, 4, 25), "release_timing": "post_market",
-        },
-        "TSLA": {
-            "ticker": "TSLA", "company_name": "Tesla",
-            "date": date(2026, 4, 22), "release_timing": "pre_market",
-        },
-        "NVDA": {
-            "ticker": "NVDA", "company_name": "NVIDIA",
-            "date": None, "release_timing": None,
-        },
-    })
+    adapter = FakeEarningsAdapter(
+        {
+            "AAPL": {
+                "ticker": "AAPL",
+                "company_name": "Apple",
+                "date": date(2026, 4, 25),
+                "release_timing": "post_market",
+            },
+            "TSLA": {
+                "ticker": "TSLA",
+                "company_name": "Tesla",
+                "date": date(2026, 4, 22),
+                "release_timing": "pre_market",
+            },
+            "NVDA": {
+                "ticker": "NVDA",
+                "company_name": "NVIDIA",
+                "date": None,
+                "release_timing": None,
+            },
+        }
+    )
     for t in ["AAPL", "TSLA", "NVDA"]:
         svc.add_entry(db_session, user_id="u_1", ticker=t, adapter=adapter)
     entries = svc.list_entries(db_session, user_id="u_1")
@@ -131,12 +146,16 @@ def test_remove_is_user_scoped(create_tables, db_session: Session) -> None:
 
 def test_refresh_updates_stale_dates(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
-    adapter = FakeEarningsAdapter({
-        "AAPL": {
-            "ticker": "AAPL", "company_name": "Apple",
-            "date": date(2026, 4, 25), "release_timing": "post_market",
-        },
-    })
+    adapter = FakeEarningsAdapter(
+        {
+            "AAPL": {
+                "ticker": "AAPL",
+                "company_name": "Apple",
+                "date": date(2026, 4, 25),
+                "release_timing": "post_market",
+            },
+        }
+    )
     svc.add_entry(db_session, user_id="u_1", ticker="AAPL", adapter=adapter)
     # New quarter date published
     adapter.by_ticker["AAPL"]["date"] = date(2026, 7, 28)

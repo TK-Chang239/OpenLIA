@@ -64,7 +64,7 @@ def update_config(
     row = db.query(EuUserConfig).filter_by(user_id=user_id).one_or_none()
     if row is None:
         row = EuUserConfig(
-            id=f"euc_{uuid.uuid4().hex[:12]}",
+            id=str(uuid.uuid4()),
             user_id=user_id,
             report_length=report_length,
             enabled_section_ids=list(enabled_section_ids),

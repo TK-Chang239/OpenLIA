@@ -139,6 +139,36 @@ Frontend maps at the boundary: `role = is_admin ? "admin" : "user"`, `id = user_
 
 No new route merges without rows in both.
 
+### Patterns locked after the 2026-04-23 Phase 12–15 remediation
+
+These nine patterns emerged from fixing cross-plan drift between the chat layer (Plan 12), report pipeline (Plan 13), Equity Research (Plan 14), and Earnings Update (Plan 15). New plans for report-producing departments (Morning Briefing, Macro Research, Panic Thermometer, Retail Sentiment) must reuse them verbatim instead of reinventing per-department variants.
+
+1. **Named-event SSE framing.** All `/api/.../stream` and `/api/.../report` routes must emit `event: <type>\ndata: <json>\n\n`. Frontend consumers (`useChatStream`, `useReportStream`) register per-event listeners and drop frames that lack a matching `event:` line. Never emit bare `data:` frames — `EventSource.addEventListener(type, ...)` will not fire.
+
+2. **Chat stream endpoint shape.** Chat streams are `GET /api/chat/sessions/{session_id}/stream?q=<user_message>`. The session row owns the `department`; the route persists the user message before streaming, re-reads the full history, invokes `ChatRunner`, and persists the assistant message (including `tool_calls`) on `chat.done`. Departments do **not** ship bespoke `POST /chat` routes.
+
+3. **Report stream endpoint shape.** Report generation is `POST /api/departments/<slug>/report` with `{mode, user_input, session_id?}` and streams named `report.*` events terminating in either `report.saved {report_id}` (persistence done) or `report.error {message}`. The persisted row goes in the `reports` table via `report_store.create_report` in the orchestrator, not in the runner.
+
+4. **`useReportStream` hook (frontend).** `frontend/src/components/report/useReportStream.ts` consumes `POST`-based named-event SSE via `fetch` + `ReadableStream`. Every report-producing department page must start here — do not hand-roll an SSE reader per page.
+
+5. **`ChatReportThumbnail` wire shape.** The event carries `{message_id, report_id, filename}` (not `mode`). Frontend destructures `report_id` and `filename` from the data payload.
+
+6. **`/reports` endpoint surface.** Plan 13's router owns `GET /reports[?department=<slug>]`, `GET /reports/{id}`, `DELETE /reports/{id}`, and `POST /reports/{id}/export/pdf`. Department pages list their own reports through the `?department=...` filter, not through per-department list routes. The PDF export renders via `_render_block` covering `text | key_finding | rating_badge | metric_cards | table | group`; chart blocks degrade to a titled placeholder.
+
+7. **`suggest_redirect` structured-tool contract.** Secretary's `extra_tools` go through a new dispatcher path:
+   - `openlia.departments.get_department(name)` returns the `Department` with `extra_tools`.
+   - `ToolDispatcher.build(department_id, *, has_web_search, extra_tools=())` appends them to the tool list.
+   - `ToolDispatcher.dispatch(*, call, extra_tool_names=frozenset())` echoes the LLM's arguments via `_dispatch_structured_echo`, returning `ToolCallResult(..., structured=dict(call.arguments))`.
+   - `ChatToolCallResult` carries `structured: dict | None`. The frontend reducer stores it on `ToolCallView`; `ChatInterface` renders `<RedirectCard />` for any completed tool call with `tool_name === "suggest_redirect"` and a `structured` payload, both live and on history rehydration.
+
+8. **Scheduler "one schedule per (job_type, user_id)".** `SchedulerService.add_schedule/modify_schedule/remove_schedule` key by `job_key(job_type, user_id)` — each user has **exactly one** schedule per `JobType`. Department routes that create/update/delete schedules MUST accept that constraint; do not design APIs that imply multiple concurrent schedules per user per job type. Use `label` and `days_of_week` to express multi-slot intent inside a single schedule.
+
+9. **All `String(36)` id columns get `str(uuid.uuid4())`.** No prefixed short-hex ids (`eu_<12hex>`, `euc_<12hex>`, `eus_<12hex>`) — they don't match the UUID-36 norm and break cross-table audits. Any new table keyed by `String(36)` generates ids with `uuid.uuid4()`.
+
+Ancillary lock:
+
+- **Length-branching prompts use mapped values.** Prompt Jinja must branch on `ReportRequest.length` (`brief` / `standard` / `long`), not on the user-facing config value (`concise` / `normal` / `elaborative`). Service call-sites map at the boundary via `_LENGTH_MAP`. See `packages/core/src/openlia/prompts/earnings_update.yaml` for the canonical shape.
+
 ---
 
 ## Phase 1 — Persistence foundation

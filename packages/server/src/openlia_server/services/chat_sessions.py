@@ -93,6 +93,6 @@ def list_messages(db: Session, *, session_id: str, user_id: str) -> list[ChatMes
     stmt = (
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.id.asc())
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     )
     return list(db.execute(stmt).scalars())
