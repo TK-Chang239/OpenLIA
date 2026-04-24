@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { LiaBadge } from "./LiaBadge";
 
 interface Props {
@@ -7,34 +8,37 @@ interface Props {
   stopped?: boolean;
 }
 
-export function AssistantMessage({ content, streaming, timestamp, stopped }: Props): JSX.Element {
+export function AssistantMessage({
+  content,
+  streaming,
+  timestamp,
+  stopped,
+}: Props): JSX.Element {
   return (
-    <article
-      aria-label="Assistant message"
-      className="flex items-start gap-3"
-    >
+    <article aria-label="Assistant message" className="flex items-start gap-3">
       <LiaBadge />
-      <div className="min-w-0 flex-1">
-        <div
-          className="whitespace-pre-wrap text-md leading-[1.75] text-[--color-text-primary]"
-        >
+      <div className="flex flex-col min-w-0 max-w-[600px]">
+        <div className="rounded-[10px] border border-border-subtle bg-bg-elevated px-4 py-[14px] text-[14.5px] leading-[1.65] font-display text-text-primary whitespace-pre-wrap">
           {content}
           {streaming ? (
             <span
               data-testid="streaming-cursor"
-              className="ml-0.5 inline-block text-[--color-accent-primary]/50"
+              className="ml-0.5 inline-block"
+              style={{ color: "rgba(212, 255, 0, 0.7)" }}
             >
               &#9612;
             </span>
           ) : null}
         </div>
         {stopped ? (
-          <span className="mt-1.5 block text-xs italic text-[--color-text-tertiary]">
+          <span className="mt-1.5 block font-mono text-[10px] italic text-text-tertiary">
             Response stopped.
           </span>
         ) : null}
         {timestamp ? (
-          <time className="mt-1 block text-xs text-[--color-text-tertiary]">{timestamp}</time>
+          <time className="mt-1 block font-mono text-[10px] text-text-tertiary">
+            {timestamp}
+          </time>
         ) : null}
       </div>
     </article>

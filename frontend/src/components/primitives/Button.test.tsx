@@ -14,7 +14,7 @@ describe("Button", () => {
     const { rerender } = render(<Button variant="primary">A</Button>);
     expect(screen.getByRole("button").className).toContain("bg-accent-primary");
     rerender(<Button variant="secondary">A</Button>);
-    expect(screen.getByRole("button").className).toContain("bg-surface-hover");
+    expect(screen.getByRole("button").className).toContain("border-border-secondary");
   });
 
   it("is disabled when disabled prop is set", () => {
