@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from openlia.formula.engine import FormulaError
+from openlia.formula.engine import MAX_AST_DEPTH, MAX_NODE_COUNT, FormulaError
 from openlia.formula.lexer import LexError, tokenize
 from openlia.formula.tokens import Token, TokenKind
 
@@ -107,6 +107,31 @@ class _Parser:
     def __init__(self, tokens: list[Token]) -> None:
         self.tokens = tokens
         self.pos = 0
+        self.node_count = 0
+        self.depth = 0
+
+    def _enter(self) -> None:
+        self.depth += 1
+        if self.depth > MAX_AST_DEPTH:
+            t = self.peek
+            raise FormulaError(
+                f"expression exceeds max depth of {MAX_AST_DEPTH}",
+                line=t.line,
+                col=t.col,
+            )
+
+    def _exit(self) -> None:
+        self.depth -= 1
+
+    def _count(self) -> None:
+        self.node_count += 1
+        if self.node_count > MAX_NODE_COUNT:
+            t = self.peek
+            raise FormulaError(
+                f"expression exceeds max node count of {MAX_NODE_COUNT}",
+                line=t.line,
+                col=t.col,
+            )
 
     # ---- navigation ----
     @property
@@ -146,131 +171,188 @@ class _Parser:
         return node
 
     def ternary(self) -> Expression:
-        left = self.or_expr()
-        if self.accept(TokenKind.IF):
-            cond = self.or_expr()
-            self.expect(TokenKind.ELSE, "'else'")
-            other = self.ternary()
-            return IfElse(
-                condition=cond,
-                then_branch=left,
-                else_branch=other,
-                line=left.line,
-                col=left.col,
-            )
-        return left
+        self._enter()
+        try:
+            left = self.or_expr()
+            if self.accept(TokenKind.IF):
+                cond = self.or_expr()
+                self.expect(TokenKind.ELSE, "'else'")
+                other = self.ternary()
+                self._count()
+                return IfElse(
+                    condition=cond,
+                    then_branch=left,
+                    else_branch=other,
+                    line=left.line,
+                    col=left.col,
+                )
+            return left
+        finally:
+            self._exit()
 
     def or_expr(self) -> Expression:
-        node = self.and_expr()
-        while self.accept(TokenKind.OR):
-            right = self.and_expr()
-            node = BinaryOp("or", node, right, line=node.line, col=node.col)
-        return node
+        self._enter()
+        try:
+            node = self.and_expr()
+            while self.accept(TokenKind.OR):
+                right = self.and_expr()
+                self._count()
+                node = BinaryOp("or", node, right, line=node.line, col=node.col)
+            return node
+        finally:
+            self._exit()
 
     def and_expr(self) -> Expression:
-        node = self.not_expr()
-        while self.accept(TokenKind.AND):
-            right = self.not_expr()
-            node = BinaryOp("and", node, right, line=node.line, col=node.col)
-        return node
+        self._enter()
+        try:
+            node = self.not_expr()
+            while self.accept(TokenKind.AND):
+                right = self.not_expr()
+                self._count()
+                node = BinaryOp("and", node, right, line=node.line, col=node.col)
+            return node
+        finally:
+            self._exit()
 
     def not_expr(self) -> Expression:
-        if self.accept(TokenKind.NOT):
-            operand = self.not_expr()
-            return UnaryOp("not", operand, line=operand.line, col=operand.col)
-        return self.comparison()
+        self._enter()
+        try:
+            if self.accept(TokenKind.NOT):
+                operand = self.not_expr()
+                self._count()
+                return UnaryOp("not", operand, line=operand.line, col=operand.col)
+            return self.comparison()
+        finally:
+            self._exit()
 
     def comparison(self) -> Expression:
-        node = self.additive()
-        while self.peek.kind in _COMPARISON_KINDS:
-            op_tok = self.advance()
-            right = self.additive()
-            node = BinaryOp(
-                _COMPARISON_KINDS[op_tok.kind],
-                node,
-                right,
-                line=node.line,
-                col=node.col,
-            )
-        return node
+        self._enter()
+        try:
+            node = self.additive()
+            while self.peek.kind in _COMPARISON_KINDS:
+                op_tok = self.advance()
+                right = self.additive()
+                self._count()
+                node = BinaryOp(
+                    _COMPARISON_KINDS[op_tok.kind],
+                    node,
+                    right,
+                    line=node.line,
+                    col=node.col,
+                )
+            return node
+        finally:
+            self._exit()
 
     def additive(self) -> Expression:
-        node = self.multiplicative()
-        while True:
-            if self.accept(TokenKind.PLUS):
-                right = self.multiplicative()
-                node = BinaryOp("+", node, right, line=node.line, col=node.col)
-            elif self.accept(TokenKind.MINUS):
-                right = self.multiplicative()
-                node = BinaryOp("-", node, right, line=node.line, col=node.col)
-            else:
-                return node
+        self._enter()
+        try:
+            node = self.multiplicative()
+            while True:
+                if self.accept(TokenKind.PLUS):
+                    right = self.multiplicative()
+                    self._count()
+                    node = BinaryOp("+", node, right, line=node.line, col=node.col)
+                elif self.accept(TokenKind.MINUS):
+                    right = self.multiplicative()
+                    self._count()
+                    node = BinaryOp("-", node, right, line=node.line, col=node.col)
+                else:
+                    return node
+        finally:
+            self._exit()
 
     def multiplicative(self) -> Expression:
-        node = self.unary()
-        while True:
-            if self.accept(TokenKind.STAR):
-                right = self.unary()
-                node = BinaryOp("*", node, right, line=node.line, col=node.col)
-            elif self.accept(TokenKind.SLASH):
-                right = self.unary()
-                node = BinaryOp("/", node, right, line=node.line, col=node.col)
-            elif self.accept(TokenKind.PERCENT):
-                right = self.unary()
-                node = BinaryOp("%", node, right, line=node.line, col=node.col)
-            else:
-                return node
+        self._enter()
+        try:
+            node = self.unary()
+            while True:
+                if self.accept(TokenKind.STAR):
+                    right = self.unary()
+                    self._count()
+                    node = BinaryOp("*", node, right, line=node.line, col=node.col)
+                elif self.accept(TokenKind.SLASH):
+                    right = self.unary()
+                    self._count()
+                    node = BinaryOp("/", node, right, line=node.line, col=node.col)
+                elif self.accept(TokenKind.PERCENT):
+                    right = self.unary()
+                    self._count()
+                    node = BinaryOp("%", node, right, line=node.line, col=node.col)
+                else:
+                    return node
+        finally:
+            self._exit()
 
     def unary(self) -> Expression:
-        if self.accept(TokenKind.MINUS):
-            operand = self.unary()
-            return UnaryOp("-", operand, line=operand.line, col=operand.col)
-        return self.power()
+        self._enter()
+        try:
+            if self.accept(TokenKind.MINUS):
+                operand = self.unary()
+                self._count()
+                return UnaryOp("-", operand, line=operand.line, col=operand.col)
+            return self.power()
+        finally:
+            self._exit()
 
     def power(self) -> Expression:
-        base = self.primary()
-        if self.accept(TokenKind.DOUBLESTAR):
-            exponent = self.unary()  # right-associative
-            return BinaryOp("**", base, exponent, line=base.line, col=base.col)
-        return base
+        self._enter()
+        try:
+            base = self.primary()
+            if self.accept(TokenKind.DOUBLESTAR):
+                exponent = self.unary()  # right-associative
+                self._count()
+                return BinaryOp("**", base, exponent, line=base.line, col=base.col)
+            return base
+        finally:
+            self._exit()
 
     def primary(self) -> Expression:
-        t = self.peek
-        if t.kind is TokenKind.NUMBER:
-            self.advance()
-            return Literal(value=t.value, line=t.line, col=t.col)
-        if t.kind is TokenKind.TRUE:
-            self.advance()
-            return Literal(value=True, line=t.line, col=t.col)
-        if t.kind is TokenKind.FALSE:
-            self.advance()
-            return Literal(value=False, line=t.line, col=t.col)
-        if t.kind is TokenKind.LPAREN:
-            self.advance()
-            node = self.ternary()
-            self.expect(TokenKind.RPAREN, "')'")
-            return node
-        if t.kind is TokenKind.IDENT:
-            self.advance()
-            # Function call?
-            if self.accept(TokenKind.LPAREN):
-                args: list[Expression] = []
-                if self.peek.kind is not TokenKind.RPAREN:
-                    args.append(self.ternary())
-                    while self.accept(TokenKind.COMMA):
-                        args.append(self.ternary())
+        self._enter()
+        try:
+            t = self.peek
+            if t.kind is TokenKind.NUMBER:
+                self.advance()
+                self._count()
+                return Literal(value=t.value, line=t.line, col=t.col)
+            if t.kind is TokenKind.TRUE:
+                self.advance()
+                self._count()
+                return Literal(value=True, line=t.line, col=t.col)
+            if t.kind is TokenKind.FALSE:
+                self.advance()
+                self._count()
+                return Literal(value=False, line=t.line, col=t.col)
+            if t.kind is TokenKind.LPAREN:
+                self.advance()
+                node = self.ternary()
                 self.expect(TokenKind.RPAREN, "')'")
-                return Call(callee=t.value, args=args, line=t.line, col=t.col)
-            # Historical indexing lands in Task 6.
-            if self.accept(TokenKind.LBRACKET):
-                return self._parse_history_index(t)
-            return Var(name=t.value, line=t.line, col=t.col)
+                return node
+            if t.kind is TokenKind.IDENT:
+                self.advance()
+                # Function call?
+                if self.accept(TokenKind.LPAREN):
+                    args: list[Expression] = []
+                    if self.peek.kind is not TokenKind.RPAREN:
+                        args.append(self.ternary())
+                        while self.accept(TokenKind.COMMA):
+                            args.append(self.ternary())
+                    self.expect(TokenKind.RPAREN, "')'")
+                    self._count()
+                    return Call(callee=t.value, args=args, line=t.line, col=t.col)
+                if self.accept(TokenKind.LBRACKET):
+                    self._count()
+                    return self._parse_history_index(t)
+                self._count()
+                return Var(name=t.value, line=t.line, col=t.col)
 
-        raise FormulaError(
-            f"expected expression but found {t.kind.name}",
-            line=t.line,
-            col=t.col,
-        )
+            raise FormulaError(
+                f"expected expression but found {t.kind.name}",
+                line=t.line,
+                col=t.col,
+            )
+        finally:
+            self._exit()
 
     def _parse_history_index(self, ident: Token) -> Expression:
         # Already consumed the opening '['. Expect ``t - NUMBER`` then ']'.
