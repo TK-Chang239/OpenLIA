@@ -41,8 +41,18 @@ from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
 from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import build_chat_runner, build_report_runner
+
+
+class _NoopEarningsRecentAdapter:
+    """Fallback adapter for EuScanPlanner when the earnings_data provider
+    isn't wired. Returns no releases so scheduled EU scans no-op rather
+    than crashing the executor."""
+
+    def latest_release(self, ticker: str, *, since):  # type: ignore[no-untyped-def]
+        return None
 
 log = logging.getLogger(__name__)
 
@@ -155,6 +165,10 @@ def _make_lifespan(
                         s.close()
 
             adapter = _SchedulerAdapter()
+            earnings_adapter = getattr(
+                app.state, "earnings_recent_adapter", None
+            ) or _NoopEarningsRecentAdapter()
+            eu_planner = EuScanPlannerImpl(adapter=earnings_adapter)
             async with adapter:
                 scheduler_svc = build_scheduler_service(
                     session_factory=_sm,
@@ -162,6 +176,7 @@ def _make_lifespan(
                     scheduler=adapter,
                     report_runner=build_report_runner(_sm),
                     batch_runner=None,
+                    eu_planner=eu_planner,
                 )
                 await scheduler_svc.start()
 
