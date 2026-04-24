@@ -24,6 +24,9 @@ from openlia_server.db.session import SessionLocal, configure_engine, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
 from openlia_server.routes.chat_stream import build_chat_stream_router
+from openlia_server.routes.departments.earnings_update import (
+    build_earnings_update_router,
+)
 from openlia_server.routes.departments.equity_research import (
     build_equity_research_router,
 )
@@ -38,8 +41,18 @@ from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
 from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import build_chat_runner, build_report_runner
+
+
+class _NoopEarningsRecentAdapter:
+    """Fallback adapter for EuScanPlanner when the earnings_data provider
+    isn't wired. Returns no releases so scheduled EU scans no-op rather
+    than crashing the executor."""
+
+    def latest_release(self, ticker: str, *, since):  # type: ignore[no-untyped-def]
+        return None
 
 log = logging.getLogger(__name__)
 
@@ -152,6 +165,10 @@ def _make_lifespan(
                         s.close()
 
             adapter = _SchedulerAdapter()
+            earnings_adapter = getattr(
+                app.state, "earnings_recent_adapter", None
+            ) or _NoopEarningsRecentAdapter()
+            eu_planner = EuScanPlannerImpl(adapter=earnings_adapter)
             async with adapter:
                 scheduler_svc = build_scheduler_service(
                     session_factory=_sm,
@@ -159,6 +176,7 @@ def _make_lifespan(
                     scheduler=adapter,
                     report_runner=build_report_runner(_sm),
                     batch_runner=None,
+                    eu_planner=eu_planner,
                 )
                 await scheduler_svc.start()
 
@@ -212,6 +230,7 @@ def create_app(
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
     app.state.equity_research_inner_factory = lambda: build_report_runner(
         db_session_factory=factory
