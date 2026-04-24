@@ -53,8 +53,13 @@ def _framework_section_ids(mode: ReportMode) -> set[str]:
     return {s["id"] for s in data.get("sections", [])}
 
 
+def _framework_section_id_list(mode: ReportMode) -> list[str]:
+    data = load_framework(mode)
+    return [s["id"] for s in data.get("sections", [])]
+
+
 def _default_sections_by_mode() -> dict[ReportMode, list[str]]:
-    return {mode: sorted(_framework_section_ids(mode)) for mode in _VALID_MODES}
+    return {mode: _framework_section_id_list(mode) for mode in _VALID_MODES}
 
 
 def _default_custom_sections_by_mode() -> dict[ReportMode, list[CustomSectionDTO]]:
@@ -128,10 +133,10 @@ class EquityResearchConfigService:
         self,
         user_id: str,
         *,
-        report_mode: ReportMode | None,
-        report_length: ReportLength | None,
-        sections_by_mode: dict[str, list[str]] | None,
-        custom_sections_by_mode: dict[str, list[CustomSectionDTO]] | None,
+        report_mode: ReportMode | None = None,
+        report_length: ReportLength | None = None,
+        sections_by_mode: dict[str, list[str]] | None = None,
+        custom_sections_by_mode: dict[str, list[CustomSectionDTO]] | None = None,
     ) -> ErConfigDTO:
         if report_mode is not None and report_mode not in _VALID_MODES:
             raise ValueError(f"unknown mode {report_mode!r}")
