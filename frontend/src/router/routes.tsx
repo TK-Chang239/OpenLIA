@@ -55,7 +55,7 @@ export const routes: RouteObject[] = [
           { path: "/earnings-update", element: <EarningsUpdate /> },
           { path: "/morning-briefing", element: <MorningBriefing /> },
           { path: "/retail-sentiment", element: <RetailSentiment /> },
-          { path: "/macro-research", element: <MacroResearch /> },
+          { path: "/macro-research/*", element: <MacroResearch /> },
           { path: "/panic-thermometer", element: <PanicThermometer /> },
         ],
       },
