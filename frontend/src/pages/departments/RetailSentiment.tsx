@@ -25,9 +25,9 @@ function formatNumber(value: number | null, digits = 2): string {
 }
 
 function sentimentTone(score: number): string {
-  if (score > 0.2) return "#2f855a";
-  if (score < -0.2) return "#c53030";
-  return "#4a5568";
+  if (score > 0.2) return "var(--color-feedback-success)";
+  if (score < -0.2) return "var(--color-feedback-error)";
+  return "var(--color-text-secondary)";
 }
 
 function MetricCard(props: {
@@ -41,14 +41,14 @@ function MetricCard(props: {
       style={{
         padding: "12px 16px",
         borderRadius: 8,
-        border: "1px solid #e2e8f0",
-        background: props.muted ? "#f7fafc" : "white",
+        border: "1px solid var(--color-border-subtle)",
+        background: props.muted ? "var(--color-bg-input)" : "var(--color-bg-elevated)",
       }}
     >
-      <div style={{ fontSize: 11, textTransform: "uppercase", color: "#718096" }}>
+      <div style={{ fontSize: 11, textTransform: "uppercase", color: "var(--color-text-secondary)" }}>
         {props.label}
       </div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: "#1a202c" }}>
+      <div style={{ fontSize: 22, fontWeight: 600, color: "var(--color-text-primary)" }}>
         {formatNumber(props.value, props.digits ?? 2)}
       </div>
     </div>
@@ -61,8 +61,8 @@ function SnapshotCard({ snap }: { snap: RsSnapshot }): JSX.Element {
       style={{
         padding: 16,
         borderRadius: 10,
-        border: "1px solid #e2e8f0",
-        background: "white",
+        border: "1px solid var(--color-border-subtle)",
+        background: "var(--color-bg-elevated)",
         marginBottom: 12,
       }}
     >
@@ -103,7 +103,7 @@ function SnapshotCard({ snap }: { snap: RsSnapshot }): JSX.Element {
           muted={snap.short_interest_pressure === null}
         />
       </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: "#718096" }}>
+      <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-secondary)" }}>
         captured {new Date(snap.captured_at).toLocaleString()}
       </div>
     </div>
@@ -176,7 +176,7 @@ export default function RetailSentiment(): JSX.Element {
   return (
     <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Retail Sentiment</h1>
-      <p style={{ color: "#4a5568", marginBottom: 16 }}>
+      <p style={{ color: "var(--color-text-secondary)", marginBottom: 16 }}>
         Monitor social + news sentiment, buzz volume, and cross-source agreement for tickers.
       </p>
 
@@ -189,9 +189,9 @@ export default function RetailSentiment(): JSX.Element {
             style={{
               padding: "8px 16px",
               borderRadius: 6,
-              border: "1px solid #e2e8f0",
-              background: tab === t.id ? "#2d3748" : "white",
-              color: tab === t.id ? "white" : "#2d3748",
+              border: "1px solid var(--color-border-subtle)",
+              background: tab === t.id ? "var(--neutral-900)" : "var(--color-bg-elevated)",
+              color: tab === t.id ? "var(--neutral-50)" : "var(--color-text-primary)",
               cursor: "pointer",
             }}
           >
@@ -205,8 +205,8 @@ export default function RetailSentiment(): JSX.Element {
           marginBottom: 16,
           padding: 12,
           borderRadius: 8,
-          border: "1px solid #e2e8f0",
-          background: "#f7fafc",
+          border: "1px solid var(--color-border-subtle)",
+          background: "var(--color-bg-input)",
           display: "flex",
           gap: 8,
           alignItems: "center",
@@ -220,7 +220,7 @@ export default function RetailSentiment(): JSX.Element {
             flex: 1,
             padding: "8px 12px",
             borderRadius: 6,
-            border: "1px solid #cbd5e0",
+            border: "1px solid var(--color-border-secondary)",
           }}
         />
         <button
@@ -230,8 +230,8 @@ export default function RetailSentiment(): JSX.Element {
           style={{
             padding: "8px 16px",
             borderRadius: 6,
-            background: "#2b6cb0",
-            color: "white",
+            background: "var(--color-accent-primary)",
+            color: "var(--color-accent-on)",
             border: "none",
             cursor: busy ? "wait" : "pointer",
           }}
@@ -244,8 +244,8 @@ export default function RetailSentiment(): JSX.Element {
           style={{
             padding: "8px 16px",
             borderRadius: 6,
-            background: "white",
-            border: "1px solid #cbd5e0",
+            background: "var(--color-bg-elevated)",
+            border: "1px solid var(--color-border-secondary)",
             cursor: "pointer",
           }}
         >
@@ -258,8 +258,8 @@ export default function RetailSentiment(): JSX.Element {
           style={{
             padding: 12,
             borderRadius: 6,
-            background: "#fed7d7",
-            color: "#742a2a",
+            background: "rgba(224, 92, 48, 0.1)",
+            color: "var(--color-feedback-error)",
             marginBottom: 16,
           }}
         >
@@ -273,7 +273,7 @@ export default function RetailSentiment(): JSX.Element {
             Tickers tracked: {dashboard?.tickers.length ?? 0}
           </h2>
           {(dashboard?.snapshots ?? []).length === 0 ? (
-            <div style={{ color: "#718096" }}>
+            <div style={{ color: "var(--color-text-secondary)" }}>
               No snapshots yet. Trigger one via the input above.
             </div>
           ) : (
@@ -295,7 +295,7 @@ export default function RetailSentiment(): JSX.Element {
       {tab === "spikes" ? (
         <div>
           {spikes.length === 0 ? (
-            <div style={{ color: "#718096" }}>No spikes detected in the last 7 days.</div>
+            <div style={{ color: "var(--color-text-secondary)" }}>No spikes detected in the last 7 days.</div>
           ) : (
             spikes.map((sp) => (
               <div
@@ -303,13 +303,13 @@ export default function RetailSentiment(): JSX.Element {
                 style={{
                   padding: 12,
                   borderRadius: 8,
-                  border: "1px solid #feb2b2",
-                  background: "#fff5f5",
+                  border: "1px solid var(--color-border-error)",
+                  background: "rgba(224, 92, 48, 0.06)",
                   marginBottom: 8,
                 }}
               >
                 <div style={{ fontWeight: 600 }}>{sp.ticker}</div>
-                <div style={{ fontSize: 13, color: "#742a2a" }}>
+                <div style={{ fontSize: 13, color: "var(--color-feedback-error)" }}>
                   buzz={formatNumber(sp.buzz, 0)} · z={formatNumber(sp.z_score)} · baseline{" "}
                   μ={formatNumber(sp.baseline_mean, 1)} σ={formatNumber(sp.baseline_stddev, 1)}
                 </div>

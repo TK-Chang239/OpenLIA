@@ -35,7 +35,7 @@ export function Sidebar(): JSX.Element {
         "transition-[width] duration-normal ease-in-out",
         collapsed ? "w-[52px]" : "w-[220px]",
       ].join(" ")}
-      style={{ color: "#B5B3A8" }}
+      style={{ color: "var(--color-sidebar-text)" }}
     >
       <header
         className={[
@@ -57,7 +57,7 @@ export function Sidebar(): JSX.Element {
         {!collapsed && (
           <span
             className="font-display text-[15px] font-semibold tracking-tight"
-            style={{ color: "#F2F1E8" }}
+            style={{ color: "var(--color-sidebar-text-strong)" }}
           >
             OpenLia
           </span>
@@ -71,7 +71,7 @@ export function Sidebar(): JSX.Element {
             className="px-2 pt-1 pb-2 font-mono text-[9px] uppercase"
             style={{
               letterSpacing: "var(--tracking-micro)",
-              color: "#6E6E68",
+              color: "var(--color-sidebar-text-muted)",
               fontWeight: 500,
             }}
           >
@@ -90,14 +90,18 @@ export function Sidebar(): JSX.Element {
         ))}
 
         {collapsed ? (
-          <div className="my-2 h-px" style={{ background: "#252522" }} aria-hidden="true" />
+          <div
+            className="my-2 h-px"
+            style={{ background: "var(--color-sidebar-divider)" }}
+            aria-hidden="true"
+          />
         ) : (
           <div
             role="separator"
             className="px-2 pt-4 pb-2 font-mono text-[9px] uppercase"
             style={{
               letterSpacing: "var(--tracking-micro)",
-              color: "#6E6E68",
+              color: "var(--color-sidebar-text-muted)",
               fontWeight: 500,
             }}
           >
@@ -122,7 +126,7 @@ export function Sidebar(): JSX.Element {
 
       <footer
         className="flex-shrink-0 px-2 py-2 space-y-0.5"
-        style={{ borderTop: "1px solid #252522" }}
+        style={{ borderTop: "1px solid var(--color-sidebar-divider)" }}
       >
         <NavItem
           label="Settings"
@@ -148,7 +152,7 @@ export function Sidebar(): JSX.Element {
             />
           </span>
           {collapsed ? null : (
-            <span className="text-[13px]" style={{ color: "#B5B3A8" }}>
+            <span className="text-[13px]" style={{ color: "var(--color-sidebar-text)" }}>
               Account
             </span>
           )}
@@ -164,7 +168,7 @@ export function Sidebar(): JSX.Element {
               "w-full flex items-center gap-2 px-2 py-[9px] text-[13px] rounded-md transition-colors duration-normal ease-out",
               collapsed ? "justify-center" : "",
             ].join(" ")}
-            style={{ color: "#B5B3A8" }}
+            style={{ color: "var(--color-sidebar-text)" }}
           >
             <LogOut size={16} strokeWidth={1.5} />
             {collapsed ? null : <span>Sign out</span>}
@@ -179,7 +183,7 @@ export function Sidebar(): JSX.Element {
             "w-full flex items-center gap-2 px-2 py-[9px] text-[13px] rounded-md transition-colors duration-normal ease-out",
             collapsed ? "justify-center" : "",
           ].join(" ")}
-          style={{ color: "#B5B3A8" }}
+          style={{ color: "var(--color-sidebar-text)" }}
         >
           {collapsed ? (
             <ChevronRight size={16} strokeWidth={1.5} />

@@ -10,7 +10,10 @@ export function UserBubble({ content, timestamp }: Props): JSX.Element {
     <article role="article" aria-label="User message" className="flex flex-col items-end">
       <div
         className="max-w-[520px] whitespace-pre-wrap rounded-[10px] px-[15px] py-[11px] text-[14px] leading-[1.5] font-display"
-        style={{ background: "#1A1A18", color: "#F2F1E8" }}
+        style={{
+          background: "var(--color-user-bubble-bg)",
+          color: "var(--color-user-bubble-text)",
+        }}
       >
         {content}
       </div>
