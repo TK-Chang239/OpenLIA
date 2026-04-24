@@ -46,11 +46,21 @@ document lists every task that was compressed or deferred during the Phase
 
 ## Phase 20 — Retail Sentiment
 
-- **Per-metric drill-down UIs.** Plan specified per-metric charts; compressed
-  into a single tabbed dashboard grid.
-- **Batch NLP classification layer.** Current path returns metric snapshots
-  directly without the documented NLP classification pass.
-- **`rs_classification_log` table.** Not created.
+Spec amended 2026-04-24 (branch `docs/phase-20-rs-v1-amendment`) to lock v1
+scope to shipped reality. See the "Shipped v1 Scope" matrix in
+`planning/specs/systems/retail-sentiment-dashboard-design.md` for the
+source-of-truth split. Items below are now tracked against that matrix:
+
+- **v2 follow-on bundle (~2 days, not scheduled).** Smallest diff that
+  closes the classifier spec-vs-reality gap: `rs_classification_log` model
+  + Alembic migration, `batch_classify` prompt section in
+  `retail_sentiment.yaml`, `LlmClassifier` wrapper (batch-30, retry-once,
+  fallback-neutral), wire audit writes into `rs_runner.py`. This is the
+  next concrete move under Phase 20.
+- **v2 full (deferred, no timeline).** `JobType.RS_SNAPSHOT` + executor +
+  `/schedule` endpoints, Evidence Tab, Insights Tab, Settings drawer,
+  Metrics Deep Dive panel, metrics 8–12, narrative synthesis prompt + LLM
+  call. Estimated ~4 weeks; wait for real user demand before investing.
 
 ## Phase 21 — Portfolio
 
@@ -141,9 +151,11 @@ Ranked by what blocks shipping vs polish.
   `packages/server/tests/test_routes/test_llm_admin_routes.py`. Remaining
   gap: container-boot curl (`docker run openlia:dev` + `curl /healthz`) from
   Phase 23 — blocked on Docker daemon availability.
-- **Phase 20 NLP classification + `rs_classification_log`.** Retail
-  Sentiment's documented behavior differs from what ships — decide whether
-  to implement or amend the spec.
+- **Phase 20 v2 follow-on bundle.** Spec amendment landed 2026-04-24 on
+  branch `docs/phase-20-rs-v1-amendment`, locking v1 to the shipped subset.
+  Next concrete move is the ~2-day classifier bundle: `rs_classification_log`
+  migration → batch prompt → `LlmClassifier` wrapper → audit writes.
+  Remaining Evidence/Insights/scheduler work deferred to v2 full.
 <!-- Phase 16 MB chat wiring shipped 2026-04-24 on branch feat/phase-16-mb-chat -->
 
 
