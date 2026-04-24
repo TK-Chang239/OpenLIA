@@ -46,11 +46,23 @@ document lists every task that was compressed or deferred during the Phase
 
 ## Phase 20 — Retail Sentiment
 
-- **Per-metric drill-down UIs.** Plan specified per-metric charts; compressed
-  into a single tabbed dashboard grid.
-- **Batch NLP classification layer.** Current path returns metric snapshots
-  directly without the documented NLP classification pass.
-- **`rs_classification_log` table.** Not created.
+Spec amended 2026-04-24 (PR #45) to lock v1 scope to shipped reality.
+Classifier follow-on bundle shipped same day on
+branch `feat/phase-20-rs-v2-classifier` — `rs_classification_log` model
++ migration, `batch_classify` prompt, async `LlmClassifier` (batch-30,
+retry-once, fallback-neutral), and audit wiring in `RsRunner`. The
+`NeutralClassifier` remains the default wiring until an LLM-backed
+provider is configured and `SyncLlmClassifier` is plugged into
+`app.state.rs_runner`.
+
+Remaining under Phase 20 (deferred, no timeline):
+
+- **v2 full.** `JobType.RS_SNAPSHOT` + scheduler executor + `/schedule`
+  endpoints, Evidence Tab, Insights Tab, Settings drawer, Metrics Deep
+  Dive panel, metrics 8–12, narrative synthesis prompt + LLM call.
+  ~4 weeks; wait for real user demand before investing.
+- **Per-metric drill-down UIs.** Plan specified per-metric charts;
+  compressed into a single tabbed dashboard grid. Belongs to v2 full.
 
 ## Phase 21 — Portfolio
 

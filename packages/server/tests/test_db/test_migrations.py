@@ -45,6 +45,7 @@ EXPECTED_TABLES = {
     "mr_assessment_cache",
     "rs_user_config",
     "rs_snapshots",
+    "rs_classification_log",
     "fe_saved_formulas",
     # Scheduler + notifications (4)
     "mb_schedules",
