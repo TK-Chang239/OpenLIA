@@ -37,7 +37,9 @@ class WatchlistEntryDTO:
 
 class EarningsAdapter(Protocol):
     def next_earnings(self, ticker: str) -> dict | None:
-        """Return {'ticker': str, 'company_name': str, 'date': date|None, 'release_timing': 'pre_market'|'post_market'|None} or None."""
+        """Return a lookup dict with keys `ticker`, `company_name`, `date`
+        (date|None), `release_timing` ('pre_market'|'post_market'|None),
+        or None if the ticker isn't known."""
         ...
 
 
@@ -104,7 +106,10 @@ def list_entries(db: Session, *, user_id: str) -> list[WatchlistEntryDTO]:
     rows = (
         db.query(EuWatchlistEntry)
         .filter_by(user_id=user_id)
-        .order_by(nulls_last(EuWatchlistEntry.next_earnings_date.asc()), EuWatchlistEntry.ticker.asc())
+        .order_by(
+            nulls_last(EuWatchlistEntry.next_earnings_date.asc()),
+            EuWatchlistEntry.ticker.asc(),
+        )
         .all()
     )
     return [_to_dto(r) for r in rows]

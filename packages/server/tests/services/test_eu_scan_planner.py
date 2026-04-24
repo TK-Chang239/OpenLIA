@@ -2,15 +2,17 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
 from openlia.llm.runtime.messages import ReportRequest
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.departments import EuUserConfig, EuWatchlistEntry
 from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
+from sqlalchemy.orm import Session
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
+    u = User(
+        id=user_id, email=f"{user_id}@x", display_name=user_id,
+        password_hash="x", is_admin=False,
+    )
     db.add(u)
     db.commit()
     return u
@@ -73,7 +75,9 @@ def test_plan_passes_since_to_adapter(create_tables, db_session: Session) -> Non
     assert adapter.calls == [("AAPL", since)]
 
 
-def test_plan_builds_report_request_with_ticker_and_config(create_tables, db_session: Session) -> None:
+def test_plan_builds_report_request_with_ticker_and_config(
+    create_tables, db_session: Session,
+) -> None:
     _mk_user(db_session)
     _add_watchlist(db_session, "u_1", "AAPL", "Apple Inc.")
     now = datetime.now(tz=UTC)
@@ -82,7 +86,11 @@ def test_plan_builds_report_request_with_ticker_and_config(create_tables, db_ses
     db_session.add(EuUserConfig(
         id="euc_1", user_id="u_1", report_length="concise",
         enabled_section_ids=["quick_take", "key_financials"],
-        custom_sections=[{"id": "custom_extra_1", "title": "Model update", "description": "Update base case"}],
+        custom_sections=[{
+            "id": "custom_extra_1",
+            "title": "Model update",
+            "description": "Update base case",
+        }],
     ))
     db_session.commit()
 

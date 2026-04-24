@@ -1,16 +1,18 @@
 from dataclasses import dataclass, field
 
 import pytest
-from sqlalchemy.orm import Session
-
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import EuSchedule
 from openlia_server.scheduler.registry import JobType
 from openlia_server.services import eu_schedules as svc
+from sqlalchemy.orm import Session
 
 
 def _mk_user(db: Session, user_id: str = "u_1") -> User:
-    u = User(id=user_id, email=f"{user_id}@x", display_name=user_id, password_hash="x", is_admin=False)
+    u = User(
+        id=user_id, email=f"{user_id}@x", display_name=user_id,
+        password_hash="x", is_admin=False,
+    )
     db.add(u)
     db.commit()
     return u
