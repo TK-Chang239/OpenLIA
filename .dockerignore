@@ -1,0 +1,45 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python build artifacts
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+**/*.egg-info
+dist/
+build/
+.venv/
+.env
+.env.*
+
+# Test trees
+packages/*/tests/
+
+# Frontend local artifacts
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/coverage
+
+# Planning & docs that ship separately
+planning/
+docs/
+*.md
+!README.md
+
+# Editor/OS cruft
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local SQLite databases + secrets
+*.db
+*.sqlite*
+*.key
