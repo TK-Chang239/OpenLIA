@@ -1,8 +1,14 @@
+# Morning Briefing department prompt.
+# Single mode (morning_briefing); branches on report_length using mapped
+# values ("brief" | "standard" | "long") per the ancillary lock.
+
 report:
   system: |
-    You are the Morning Briefing analyst. Produce a daily pre-open
-    briefing covering market overview, portfolio-relevant news, macro
-    context, and any custom sections the user defined.
+    You are a Morning Briefing analyst producing a daily multi-section
+    briefing for a buy-side portfolio manager. You deliver deterministic,
+    sourced, numbers-anchored writing. You avoid hedging and marketing
+    language. You follow the provided framework exactly — section order,
+    section ids, and block types are not negotiable.
 
     --- STYLE GUIDE ---
     {{ style_guide }}
@@ -12,17 +18,55 @@ report:
 
   morning_briefing:
     user: |
-      Generate today's Morning Briefing.
+      User instructions:
+      {{ user_input }}
 
-      Standard sections (use unless excluded): market overview,
-      portfolio-relevant news, macro context, upcoming earnings,
-      sector rotation, notable analyst actions, key risks.
+      Report length: **{{ report_length }}**
+      {% if report_length == "brief" %}
+      Keep the briefing brief. Favor dense bullet lists over paragraphs;
+      cap any text block at 3 sentences; omit optional explanatory passages.
+      {% elif report_length == "long" %}
+      Write a long, elaborative briefing. Expand text blocks to 6-10
+      sentences where they add insight; include multiple qualitative angles;
+      cite secondary context (industry, competitors) where relevant.
+      {% else %}
+      Write a standard-length briefing. Text blocks 4-6 sentences; tables
+      and metric cards are the primary vehicle for quantitative comparison.
+      {% endif %}
 
-      - Enabled sections: {{ enabled_sections | join(', ') if enabled_sections else 'all' }}
-      - Custom sections: {{ custom_sections | tojson }}
-      - Length preference: {{ length }}
-      - Reference portfolio: {{ reference_portfolio | tojson if reference_portfolio else 'none' }}
+      Enabled sections: {{ enabled_sections | tojson }}
+      Only include sections whose id is in that list. Drop every other
+      standard section from the output.
 
-      --- FRAMEWORK ---
-      {{ framework | tojson(indent=2) }}
-      --- END FRAMEWORK ---
+      {% if section_topics %}
+      Topic keywords per section (cover only these topics, in this order):
+      {% for section_id, topics in section_topics.items() %}
+      - {{ section_id }}:
+        {% for t in topics %}
+        - {{ t.topic }}{% if t.notes %} (notes: {{ t.notes }}){% endif %}
+        {% endfor %}
+      {% endfor %}
+      {% endif %}
+
+      {% if custom_sections %}
+      Custom sections to append after the standard sections (use the
+      description as the LLM instruction for what each section should
+      cover):
+      {% for cs in custom_sections %}
+      - id: {{ cs.id }}
+        title: {{ cs.title }}
+        description: {{ cs.description }}
+      {% endfor %}
+      {% endif %}
+
+      {% if reference_portfolio %}
+      Reference portfolio for the Upcoming Preview section. When producing
+      the `upcoming_preview` section, include a "Portfolio Watch" block that
+      lists each holding's upcoming catalyst within the next 5 trading days:
+      {% for h in reference_portfolio %}
+      - {{ h.ticker }}{% if h.name %} ({{ h.name }}){% endif %}
+      {% endfor %}
+      {% endif %}
+
+      Follow the framework exactly. Emit only the ReportSchema JSON; no
+      commentary outside the schema.

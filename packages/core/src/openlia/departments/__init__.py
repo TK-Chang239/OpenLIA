@@ -7,12 +7,17 @@ from openlia.departments.equity_research import (
     EquityResearchDepartment,
     EquityResearchMode,
 )
+from openlia.departments.morning_briefing import (
+    MorningBriefingDepartment,
+    MorningBriefingMode,
+)
 from openlia.departments.secretary import SecretaryDepartment
 
 _REGISTRY: dict[str, Department] = {
     "secretary": SecretaryDepartment(),
     "equity_research": EquityResearchDepartment(),
     "earnings_update": EarningsUpdateDepartment(),
+    "morning_briefing": MorningBriefingDepartment(),
 }
 
 
@@ -31,6 +36,8 @@ __all__ = [
     "EarningsUpdateMode",
     "EquityResearchDepartment",
     "EquityResearchMode",
+    "MorningBriefingDepartment",
+    "MorningBriefingMode",
     "SecretaryDepartment",
     "get_department",
 ]

@@ -23,7 +23,7 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 13 | 5 | Report rendering pipeline + Secretary department | Done (2026-04-23) | `2026-04-17-phase-13-report-pipeline-and-secretary.md` |
 | 14 | 5 | Equity Research department (initiation / update / sector) | Done (2026-04-23) | `2026-04-17-phase-14-equity-research.md` |
 | 15 | 5 | Earnings Update department + scan scheduling | Done (2026-04-23) | `2026-04-17-phase-15-earnings-update.md` |
-| 16 | 5 | Morning Briefing department + briefing scheduling | Draft (2026-04-23) | `2026-04-23-phase-16-morning-briefing.md` |
+| 16 | 5 | Morning Briefing department + briefing scheduling | Done (2026-04-23) | `2026-04-23-phase-16-morning-briefing.md` |
 | 17 | 6 | Formula engine DSL | Draft (2026-04-23) | `2026-04-23-phase-17-formula-engine.md` |
 | 18 | 6 | Panic Thermometer page | Draft (2026-04-23) | `2026-04-23-phase-18-panic-thermometer.md` |
 | 19 | 6 | Macro Research Dalio dashboards (5 dashboards) | Draft (2026-04-23) | `2026-04-23-phase-19-macro-research.md` |
