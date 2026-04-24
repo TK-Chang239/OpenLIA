@@ -33,16 +33,13 @@ document lists every task that was compressed or deferred during the Phase
 - **Share-link pako/base64 encoder.** Export/import via Blob/File works;
   URL-encoded share link not shipped.
 
-## Phase 19 — Macro Research (load-bearing gap)
+## Phase 19 — Macro Research
 
-- **Entire frontend page composition.** 5 dashboard React views + hooks not
-  shipped. `pages/departments/MacroResearch.tsx` remains the Phase 8
-  placeholder.
-  - Backend, persistence, scheduler integration, and all 5 Dalio dashboards
-    (Debt Cycle, Four Seasons, All-Weather, World Order, Five Forces) are
-    complete.
-  - Backend computes and persists assessments; users cannot see them until
-    this frontend work lands.
+- **Entire frontend page composition.** Shipped 2026-04-24 on branch
+  `feat/phase-19-frontend`: six-tab shell + SummaryView + DebtCycleView +
+  FourSeasonsView + AllWeatherView + WorldOrderView + FiveForcesView +
+  ScheduleEditor modal, typed API client, `MRSnapshot` department integration
+  test.
 
 ## Phase 20 — Retail Sentiment
 
@@ -95,20 +92,19 @@ document lists every task that was compressed or deferred during the Phase
 | ID | Status | Gap |
 |---|---|---|
 | REM-P1-019 | `[~]` | ASGI-level smoke shipped; container-boot curl + full product-journey smoke matrix still open. |
-| REM-P2-001 | partial | MR department page still placeholder (see Phase 19). |
+| REM-P2-001 | partial | MR department page shipped 2026-04-24; remaining placeholders resolve as each plan ships real product surfaces. |
 
 All other REM items closed through Phase 16-23 execution.
 
 ## Project Stage
 
-**Feature-complete backend, ~85% frontend, pre-release.** All 23 plan specs
-shipped backend + persistence + routes. Every user-facing surface has
-something rendering, with one major exception (MR dashboards). Deployment
-artifacts exist (Dockerfile + two compose recipes) but have not been run
-through a real container boot.
+**Feature-complete backend + frontend, pre-release.** All 23 plan specs
+shipped backend + persistence + routes; all department pages now render real
+product surface. Deployment artifacts exist (Dockerfile + two compose
+recipes) but have not been run through a real container boot.
 
-- Tests: ~1400 passing; 23 migrations; 7 department routers mounted.
-- Gap — source vs usable: MR dashboards compute but render a placeholder page.
+- Tests: ~1400 backend + 415 frontend passing; 23 migrations; 7 department
+  routers mounted.
 - Gap — source vs deployable: Docker image defined but never built and
   smoke-tested in a real container; no publish workflow.
 
@@ -118,9 +114,6 @@ Ranked by what blocks shipping vs polish.
 
 ### P0 — blocks public alpha
 
-- **Phase 19 frontend.** Build the 5 Dalio dashboard views (Debt Cycle, Four
-  Seasons, All-Weather, World Order, Five Forces) against the shipped
-  backend. Largest single user-visible gap.
 - **Container-runtime smoke.** Build the Dockerfile, run it, hit `/healthz`
   and `/` from outside the container. Closes REM-P1-019's last hole and
   proves the deploy recipe actually works.
