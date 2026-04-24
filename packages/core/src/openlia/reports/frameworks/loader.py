@@ -65,7 +65,7 @@ def load_framework_customized(
     enabled_section_ids: set[str],
     custom_sections: Iterable[CustomSection],
 ) -> dict[str, Any]:
-    data = deepcopy(load_framework(name))
+    data = load_framework(name)
     original_sections = list(data.get("sections", []))
     known_ids = {s.get("id") for s in original_sections}
     unknown = set(enabled_section_ids) - known_ids
