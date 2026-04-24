@@ -91,7 +91,7 @@ document lists every task that was compressed or deferred during the Phase
 
 | ID | Status | Gap |
 |---|---|---|
-| REM-P1-019 | `[~]` | ASGI-level smoke shipped; container-boot curl + full product-journey smoke matrix still open. |
+| REM-P1-019 | `[~]` | ASGI-level smoke + product-journey smoke matrix landed (`packages/server/tests/test_e2e_smoke_matrix.py`, 6 journeys). Container-boot curl (`docker run openlia:dev` + `curl /healthz`) still open — needs Docker daemon. |
 | REM-P2-001 | partial | MR department page shipped 2026-04-24; remaining placeholders resolve as each plan ships real product surfaces. |
 
 All other REM items closed through Phase 16-23 execution.
@@ -120,11 +120,15 @@ Ranked by what blocks shipping vs polish.
 
 ### P1 — blocks confident production
 
-- **End-to-end smoke matrix (REM-P1-019).** Product journeys: personal boot,
-  company invite → register → login → setup, provider CRUD + connection
-  test, Secretary chat, Equity report, EU schedule → notification,
-  repository open/save/download, password reset. Plan 23 explicitly deferred
-  this.
+- **End-to-end smoke matrix (REM-P1-019).** Initial journey set landed
+  2026-04-24 in `packages/server/tests/test_e2e_smoke_matrix.py` — personal
+  first-run setup, company invite → register → login, auth logout/reload,
+  provider CRUD (without live connection test), password reset +
+  must-change-password gate, repo save/open/unsave. Remaining gaps:
+  Secretary chat stream journey, Equity/Earnings report generation,
+  EU schedule → notification, and real provider connection tests (respx).
+  Plus container-boot curl (`docker run openlia:dev` + `curl /healthz`)
+  from Phase 23.
 - **Phase 20 NLP classification + `rs_classification_log`.** Retail
   Sentiment's documented behavior differs from what ships — decide whether
   to implement or amend the spec.
