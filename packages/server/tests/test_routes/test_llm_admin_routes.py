@@ -119,6 +119,146 @@ def test_test_provider_endpoint_does_not_persist(
     assert db_session.query(LLMProvider).count() == 0
 
 
+# ---------------------------------------------------------------------------
+# respx-driven create-provider coverage for the other real provider contracts.
+# The openai path is already covered above; these add the three other shipped
+# kinds so a schema or auth-header change in one provider can't silently ship.
+# ---------------------------------------------------------------------------
+
+
+def test_create_provider_anthropic_run_test_happy_path(
+    company_client, make_user, monkeypatch
+) -> None:
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+    with respx.mock() as mock:
+        route = mock.post("https://api.anthropic.com/v1/messages").respond(
+            200,
+            json={
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+        resp = company_client.post(
+            "/settings/admin/llm/providers",
+            json={
+                "kind": "anthropic",
+                "label": "Main Anthropic",
+                "api_key": "sk-ant-test",
+                "run_test": True,
+                "test_model": "claude-sonnet-4-6",
+            },
+        )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["kind"] == "anthropic"
+    assert body["test"]["ok"] is True
+    # Adapter sends x-api-key + anthropic-version on the probe call.
+    sent = route.calls[0].request
+    assert sent.headers["x-api-key"] == "sk-ant-test"
+    assert sent.headers["anthropic-version"] == "2023-06-01"
+
+
+def test_create_provider_anthropic_rejects_401(company_client, make_user, monkeypatch) -> None:
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            401, json={"error": {"message": "invalid api key"}}
+        )
+        resp = company_client.post(
+            "/settings/admin/llm/providers",
+            json={
+                "kind": "anthropic",
+                "label": "Bad Anthropic",
+                "api_key": "sk-ant-bad",
+                "run_test": True,
+                "test_model": "claude-sonnet-4-6",
+            },
+        )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert detail["error"] == "connection_test_failed"
+    assert detail["test"]["ok"] is False
+    assert detail["test"]["error_class"] == "AuthError"
+
+
+def test_create_provider_openrouter_run_test_happy_path(
+    company_client, make_user, monkeypatch
+) -> None:
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+    with respx.mock() as mock:
+        route = mock.post("https://openrouter.ai/api/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "x"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+        resp = company_client.post(
+            "/settings/admin/llm/providers",
+            json={
+                "kind": "openrouter",
+                "label": "Main OpenRouter",
+                "api_key": "or-test",
+                "run_test": True,
+                "test_model": "anthropic/claude-sonnet-4-6",
+            },
+        )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["kind"] == "openrouter"
+    assert body["test"]["ok"] is True
+    # OpenRouter expects a Bearer token on the probe call.
+    sent = route.calls[0].request
+    assert sent.headers["authorization"] == "Bearer or-test"
+
+
+def test_create_provider_gemini_run_test_happy_path(company_client, make_user, monkeypatch) -> None:
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).respond(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "x"}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1},
+            },
+        )
+        resp = company_client.post(
+            "/settings/admin/llm/providers",
+            json={
+                "kind": "gemini",
+                "label": "Main Gemini",
+                "api_key": "g-test",
+                "run_test": True,
+                "test_model": "gemini-3-flash",
+            },
+        )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["kind"] == "gemini"
+    assert body["test"]["ok"] is True
+
+
 def test_create_model_rejects_without_provider(company_client, make_user, monkeypatch) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
     make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
