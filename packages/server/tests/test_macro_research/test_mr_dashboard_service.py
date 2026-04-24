@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
 from openlia_server.services.mr_dashboard import MRDashboardService
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture

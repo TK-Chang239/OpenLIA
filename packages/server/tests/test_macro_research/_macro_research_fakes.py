@@ -48,9 +48,7 @@ class FakeMRCacheStore:
 class FakeReportStore:
     saved: list[dict[str, Any]] = field(default_factory=list)
 
-    def save(
-        self, *, session: Any, user_id: str, department: str, payload: dict[str, Any]
-    ) -> str:
+    def save(self, *, session: Any, user_id: str, department: str, payload: dict[str, Any]) -> str:
         self.saved.append({"user_id": user_id, "department": department, "payload": payload})
         return "report-1"
 

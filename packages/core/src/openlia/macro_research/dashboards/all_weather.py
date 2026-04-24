@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from openlia.macro_research.risk_math import (
     DEFAULT_VOLS,
@@ -19,8 +19,8 @@ _FALLBACK_60_40 = {"equities": 0.60, "long_bonds": 0.40}
 class AllWeatherDashboard:
     slug = "all_weather"
     display_name = "All-Weather"
-    T1_REQUIREMENTS: tuple[str, ...] = ()
-    T2_FORMULAS: dict[str, str] = {}
+    T1_REQUIREMENTS: ClassVar[tuple[str, ...]] = ()
+    T2_FORMULAS: ClassVar[dict[str, str]] = {}
     T4_PROMPT_KEY: str | None = None
 
     def T3_compute(
@@ -36,8 +36,7 @@ class AllWeatherDashboard:
         rc_ref = risk_contributions(weights=REFERENCE_ALLOCATION, vols=DEFAULT_VOLS)
 
         season_coverage: dict[str, str] = {
-            season: coverage_for_season(season=season, weights=resolved)
-            for season in SEASON_ASSETS
+            season: coverage_for_season(season=season, weights=resolved) for season in SEASON_ASSETS
         }
 
         user_gold = resolved.get("gold", 0.0)

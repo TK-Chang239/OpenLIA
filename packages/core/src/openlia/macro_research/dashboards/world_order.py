@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import statistics
-from typing import Any
+from typing import Any, ClassVar
 
 _STAGE_LABELS = {
     1: "early",
@@ -16,7 +16,7 @@ class WorldOrderDashboard:
     slug = "world_order"
     display_name = "World Order"
 
-    T1_REQUIREMENTS: tuple[str, ...] = (
+    T1_REQUIREMENTS: ClassVar[tuple[str, ...]] = (
         "macro_indicator:usd_fx_reserve_share",
         "macro_indicator:cb_gold_purchases",
         "macro_indicator:foreign_treasury_holdings",
@@ -24,7 +24,7 @@ class WorldOrderDashboard:
         "company_news:geopolitical",
     )
 
-    T2_FORMULAS: dict[str, str] = {
+    T2_FORMULAS: ClassVar[dict[str, str]] = {
         "usd_reserve_share": "usd_fx_reserve_share",
         "cb_gold_yoy": "cb_gold_purchases",
         "foreign_treasuries_change": "foreign_treasury_holdings",

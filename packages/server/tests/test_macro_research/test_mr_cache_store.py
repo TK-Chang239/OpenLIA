@@ -3,12 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from openlia_server.db.base import Base
 from openlia_server.db.models.dashboard import MrAssessmentCache
 from openlia_server.services.mr_cache import MRCacheStoreImpl
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 @pytest.fixture

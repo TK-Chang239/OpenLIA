@@ -54,9 +54,7 @@ class MacroResearchDepartment:
         economic_season = (t2 or {}).get("season")
         active_force_count = (t5 or {}).get("active_force_count")
 
-        generated = [
-            x.get("generated_at") for x in (t1, t2, t5) if x and x.get("generated_at")
-        ]
+        generated = [x.get("generated_at") for x in (t1, t2, t5) if x and x.get("generated_at")]
         generated_at = min(generated) if generated else None
 
         is_stale = False

@@ -20,12 +20,8 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     with op.batch_alter_table("mr_dashboard_state") as batch:
-        batch.add_column(
-            sa.Column("assessment_schedule", sa.String(length=64), nullable=True)
-        )
-        batch.add_column(
-            sa.Column("last_assessment_at", sa.DateTime(timezone=True), nullable=True)
-        )
+        batch.add_column(sa.Column("assessment_schedule", sa.String(length=64), nullable=True))
+        batch.add_column(sa.Column("last_assessment_at", sa.DateTime(timezone=True), nullable=True))
 
 
 def downgrade() -> None:

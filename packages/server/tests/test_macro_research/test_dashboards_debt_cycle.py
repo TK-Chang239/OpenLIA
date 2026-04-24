@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.macro_research.dashboards.debt_cycle import DebtCycleDashboard
 
 

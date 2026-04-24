@@ -3,7 +3,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from openlia_server.db.models.dashboard import MrDashboardState
 from openlia_server.scheduler.registry import JobType
 from openlia_server.scheduler.service import SchedulerService

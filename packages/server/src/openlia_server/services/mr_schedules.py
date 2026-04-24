@@ -4,7 +4,7 @@ the canonical `world_order` mr_dashboard_state row."""
 from __future__ import annotations
 
 import uuid
-from typing import Callable
+from collections.abc import Callable
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -68,9 +68,7 @@ class MRScheduleService:
         if row is None or row.assessment_schedule is None:
             return
         if self._scheduler is not None:
-            await self._scheduler.remove_schedule(
-                job_type=JobType.MR_ASSESSMENT, user_id=user_id
-            )
+            await self._scheduler.remove_schedule(job_type=JobType.MR_ASSESSMENT, user_id=user_id)
         with self._session_factory() as s:
             fresh = s.scalars(
                 select(MrDashboardState).where(

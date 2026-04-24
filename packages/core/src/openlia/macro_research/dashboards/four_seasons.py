@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class FourSeasonsDashboard:
     slug = "four_seasons"
     display_name = "Four Seasons"
 
-    T1_REQUIREMENTS: tuple[str, ...] = (
+    T1_REQUIREMENTS: ClassVar[tuple[str, ...]] = (
         "macro_indicator:pmi",
         "macro_indicator:gdp_yoy",
         "macro_indicator:cpi_yoy",
@@ -18,7 +18,7 @@ class FourSeasonsDashboard:
         "stock_quote:LQD",
     )
 
-    T2_FORMULAS: dict[str, str] = {
+    T2_FORMULAS: ClassVar[dict[str, str]] = {
         "pmi": "pmi",
         "gdp_yoy": "gdp_yoy",
         "cpi_yoy": "cpi_yoy",
@@ -60,9 +60,7 @@ class FourSeasonsDashboard:
             severity = "amber"
 
         confidence = "clear"
-        if not (growth_rising or growth_falling) or not (
-            inflation_rising or inflation_falling
-        ):
+        if not (growth_rising or growth_falling) or not (inflation_rising or inflation_falling):
             confidence = "mixed"
         if season == "Transitioning":
             confidence = "transitioning"
@@ -75,9 +73,7 @@ class FourSeasonsDashboard:
                 "rising" if growth_rising else ("falling" if growth_falling else "flat")
             ),
             "inflation_axis": (
-                "rising"
-                if inflation_rising
-                else ("falling" if inflation_falling else "steady")
+                "rising" if inflation_rising else ("falling" if inflation_falling else "steady")
             ),
             "credit_spread": spread,
             "asset_playbook": self._playbook(season),
