@@ -110,7 +110,12 @@ def test_watchlist_is_user_scoped(company_client, auth_user, user_factory, login
     other = user_factory()
     login_as(other)
     client.app.state.earnings_adapter = _FakeAdapter(
-        lookup={"ticker": "AAPL", "company_name": "Apple Inc.", "date": None, "release_timing": None}
+        lookup={
+            "ticker": "AAPL",
+            "company_name": "Apple Inc.",
+            "date": None,
+            "release_timing": None,
+        }
     )
     r = client.get("/departments/earnings-update/watchlist")
     assert r.status_code == 200
