@@ -99,7 +99,7 @@ document lists every task that was compressed or deferred during the Phase
 
 | ID | Status | Gap |
 |---|---|---|
-| REM-P1-019 | `[~]` | ASGI-level smoke + product-journey smoke matrix landed (`packages/server/tests/test_e2e_smoke_matrix.py`, 8 journeys: 6 initial + Secretary chat stream + MB follow-up chat). Container-boot curl (`docker run openlia:dev` + `curl /healthz`) still open — needs Docker daemon. |
+| REM-P1-019 | `[~]` | ASGI-level smoke + product-journey smoke matrix landed (`packages/server/tests/test_e2e_smoke_matrix.py`, 11 journeys: 8 earlier + Equity Research report generation + Earnings Update report generation + EU schedule → notification). Respx-backed provider-connection tests for anthropic/openrouter/gemini added in `packages/server/tests/test_routes/test_llm_admin_routes.py`. Container-boot curl (`docker run openlia:dev` + `curl /healthz`) still open — needs Docker daemon. |
 | REM-P2-001 | partial | MR department page shipped 2026-04-24; remaining placeholders resolve as each plan ships real product surfaces. |
 
 All other REM items closed through Phase 16-23 execution.
@@ -128,16 +128,19 @@ Ranked by what blocks shipping vs polish.
 
 ### P1 — blocks confident production
 
-- **End-to-end smoke matrix (REM-P1-019).** Eight journeys landed
+- **End-to-end smoke matrix (REM-P1-019).** Eleven journeys landed
   2026-04-24 in `packages/server/tests/test_e2e_smoke_matrix.py` — personal
   first-run setup, company invite → register → login, auth logout/reload,
   provider CRUD (without live connection test), password reset +
-  must-change-password gate, repo save/open/unsave, Secretary chat stream
-  (scripted `ChatRunner`, SSE frames + persistence), and MB follow-up chat
-  (resolve-or-create session + stream). Remaining gaps: Equity/Earnings
-  report generation, EU schedule → notification, and real provider
-  connection tests (respx). Plus container-boot curl
-  (`docker run openlia:dev` + `curl /healthz`) from Phase 23.
+  must-change-password gate, repo save/open/unsave, Secretary chat stream,
+  MB follow-up chat, Equity Research on-demand report generation, Earnings
+  Update on-demand report generation, and EU scheduled-scan → user
+  notification. Respx-backed provider-connection tests now cover anthropic
+  (happy + 401), openrouter, and gemini end-to-end through
+  `POST /settings/admin/llm/providers` with `run_test=true` in
+  `packages/server/tests/test_routes/test_llm_admin_routes.py`. Remaining
+  gap: container-boot curl (`docker run openlia:dev` + `curl /healthz`) from
+  Phase 23 — blocked on Docker daemon availability.
 - **Phase 20 NLP classification + `rs_classification_log`.** Retail
   Sentiment's documented behavior differs from what ships — decide whether
   to implement or amend the spec.
