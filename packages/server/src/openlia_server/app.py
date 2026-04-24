@@ -39,6 +39,9 @@ from openlia_server.routes.departments.morning_briefing import (
 from openlia_server.routes.departments.panic_thermometer import (
     build_panic_thermometer_router,
 )
+from openlia_server.routes.departments.retail_sentiment import (
+    build_retail_sentiment_router,
+)
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
@@ -344,6 +347,17 @@ def create_app(
             mr_schedule_service=mr_schedule_svc,
         )
     )
+
+    # Retail Sentiment — runner singleton (per-process). Data provider optional;
+    # when absent the runner produces empty-posts snapshots (useful for tests).
+    from openlia_server.services.rs_runner import RsRunner as _RsRunner
+
+    rs_data_provider = getattr(app.state, "rs_data_provider", None)
+    app.state.rs_runner = _RsRunner(
+        session_factory=factory,
+        data_provider=rs_data_provider,
+    )
+    app.include_router(build_retail_sentiment_router(db_session_factory=factory, mode=mode))
     # PT runner singleton (per-process) so the per-panel cache persists across
     # requests within a process. Dispatcher defaults to a no-op; a real
     # Plan 3 dispatcher can be installed on `app.state.pt_dispatcher` from an
