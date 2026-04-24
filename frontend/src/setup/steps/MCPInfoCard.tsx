@@ -2,8 +2,8 @@ import { Info } from "lucide-react";
 
 export function MCPInfoCard() {
   return (
-    <div className="bg-[--color-surface-info]/10 border border-[--color-surface-info]/30 rounded-[--radius-md] p-3 mb-4 flex gap-3">
-      <Info size={16} className="text-[--color-surface-info] mt-0.5 flex-shrink-0" />
+    <div className="bg-[--color-feedback-info]/10 border border-[--color-feedback-info]/30 rounded-[--radius-md] p-3 mb-4 flex gap-3">
+      <Info size={16} className="text-[--color-feedback-info] mt-0.5 flex-shrink-0" />
       <div>
         <p className="text-sm font-semibold text-[--color-text-primary] mb-1">
           MCP authentication
