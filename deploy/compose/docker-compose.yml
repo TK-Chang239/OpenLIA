@@ -1,0 +1,34 @@
+# Production deployment: OpenLIA behind a TLS-terminating reverse proxy
+# (Cloudflare Tunnel, Caddy, nginx, etc.).
+#
+# Start:
+#   OPENLIA_IMAGE=ghcr.io/your-org/openlia:latest \
+#   OPENLIA_SECRET_KEY=<base64-32-bytes> \
+#   docker compose up -d
+#
+# Expose port 8000 on the docker network; terminate TLS at your proxy and
+# forward X-Forwarded-{For,Proto} so OPENLIA_TRUST_PROXY_HEADERS works.
+
+services:
+  openlia:
+    image: ${OPENLIA_IMAGE:-ghcr.io/openlia/openlia:latest}
+    restart: unless-stopped
+    environment:
+      OPENLIA_MODE: company
+      OPENLIA_TRUST_PROXY_HEADERS: "true"
+      OPENLIA_COOKIE_SECURE: "true"
+      OPENLIA_DB_URL: sqlite:////home/openlia/.openlia/openlia.db
+      OPENLIA_SCHEDULER_ENABLED: "true"
+      OPENLIA_SECRET_KEY: ${OPENLIA_SECRET_KEY:-}
+    volumes:
+      - openlia_data:/home/openlia/.openlia
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  openlia_data:

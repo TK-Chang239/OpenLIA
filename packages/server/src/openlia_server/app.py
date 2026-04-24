@@ -1,4 +1,27 @@
-"""FastAPI application factory."""
+"""FastAPI application factory.
+
+Environment contract (production-relevant subset):
+
+    OPENLIA_MODE                 personal | company (default: personal)
+    OPENLIA_DB_URL               SQLAlchemy URL; defaults to ~/.openlia/openlia.db
+    OPENLIA_FRONTEND_DIST        Absolute path to built SPA. Resolution order:
+                                   1. this env var
+                                   2. /app/frontend/dist (Docker image default)
+                                   3. <repo>/frontend/dist (local npm build)
+    OPENLIA_TRUST_PROXY_HEADERS  "true" to honor X-Forwarded-For /
+                                   X-Forwarded-Proto (for Cloudflare Tunnel,
+                                   Caddy, or any TLS-terminating proxy).
+    OPENLIA_COOKIE_SECURE        "true" forces Secure flag on session cookies;
+                                   defaults to true when OPENLIA_MODE=company,
+                                   false otherwise.
+    OPENLIA_SCHEDULER_ENABLED    "true" to run APScheduler jobs; default false.
+    OPENLIA_SECRET_KEY           32-byte base64 AES-256-GCM key; if unset, the
+                                   server reads/writes ~/.openlia/secret.key.
+
+The `/api/...` prefix from the dev Vite proxy is also stripped at runtime by
+`_StripApiPrefixMiddleware` so the same built bundle works locally and in
+production (Caddy, Cloudflare Tunnel) without per-environment rewrites.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +39,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.orm import sessionmaker
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 import openlia_server.db.models  # noqa: F401 — registers all models on Base.metadata
 from openlia_server.db.base import Base
@@ -136,6 +160,30 @@ class _SchedulerAdapter:
 
     async def get_schedules(self) -> list:
         return await self._sched.get_schedules()
+
+
+class _StripApiPrefixMiddleware:
+    """Strip a leading `/api` segment from incoming HTTP paths.
+
+    Mirrors the Vite dev proxy (`rewrite: (p) => p.replace(/^\\/api/, "")`)
+    so the built SPA can call `/api/...` in production and dev without
+    branching on environment. Non-HTTP scopes pass through unchanged.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            path = scope.get("path", "")
+            raw_path = scope.get("raw_path")
+            if path == "/api" or path.startswith("/api/"):
+                new_path = path[4:] or "/"
+                scope = dict(scope)
+                scope["path"] = new_path
+                if raw_path is not None and (raw_path.startswith(b"/api/") or raw_path == b"/api"):
+                    scope["raw_path"] = raw_path[4:] or b"/"
+        await self._app(scope, receive, send)
 
 
 def _is_loopback_request(request: Request) -> bool:
@@ -269,6 +317,15 @@ def create_app(
         version="0.0.0",
         lifespan=_make_lifespan(db_session_factory),
     )
+
+    app.add_middleware(_StripApiPrefixMiddleware)
+
+    if os.environ.get("OPENLIA_TRUST_PROXY_HEADERS", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
+        app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
     app.include_router(
         build_setup_router(
@@ -425,6 +482,11 @@ def create_app(
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/_debug/client_host", include_in_schema=False)
+    def _debug_client_host(request: Request) -> dict[str, str | None]:
+        host = request.client.host if request.client else None
+        return {"host": host, "scheme": request.url.scheme}
+
     _mount_frontend(app)
 
     return app
@@ -453,19 +515,41 @@ _API_PREFIXES = (
 def _mount_frontend(app: FastAPI) -> None:
     """Serve `frontend/dist` with SPA fallback when configured.
 
-    Skips silently if `OPENLIA_FRONTEND_DIST` is unset or the directory does
-    not yet exist, so dev servers and tests don't need a built bundle.
+    Resolution order:
+      1. OPENLIA_FRONTEND_DIST env var (wins if set; missing dir -> skip).
+      2. /app/frontend/dist (Docker image default).
+      3. <repo>/frontend/dist (local npm build).
+
+    Skips silently when no candidate resolves to a directory containing
+    index.html, so dev servers and tests don't need a built bundle.
     """
+    candidates: list[str] = []
     dist_env = os.environ.get("OPENLIA_FRONTEND_DIST")
-    if not dist_env:
-        return
-    dist_dir = os.path.abspath(dist_env)
-    if not os.path.isdir(dist_dir):
-        return
-    index_html = os.path.join(dist_dir, "index.html")
-    if not os.path.isfile(index_html):
+    if dist_env:
+        candidates.append(dist_env)
+    else:
+        candidates.append("/app/frontend/dist")
+        here = os.path.dirname(os.path.abspath(__file__))
+        repo_dist = os.path.normpath(
+            os.path.join(here, "..", "..", "..", "..", "..", "frontend", "dist")
+        )
+        candidates.append(repo_dist)
+
+    resolved: tuple[str, str] | None = None
+    for candidate in candidates:
+        dist_dir = os.path.abspath(candidate)
+        if not os.path.isdir(dist_dir):
+            continue
+        index_html = os.path.join(dist_dir, "index.html")
+        if not os.path.isfile(index_html):
+            continue
+        resolved = (dist_dir, index_html)
+        break
+
+    if resolved is None:
         return
 
+    dist_dir, index_html = resolved
     assets_dir = os.path.join(dist_dir, "assets")
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
@@ -475,7 +559,11 @@ def _mount_frontend(app: FastAPI) -> None:
         head = full_path.split("/", 1)[0]
         if head in _API_PREFIXES:
             raise HTTPException(status_code=404)
-        candidate = os.path.normpath(os.path.join(dist_dir, full_path))
-        if full_path and candidate.startswith(dist_dir + os.sep) and os.path.isfile(candidate):
-            return FileResponse(candidate)
+        candidate_file = os.path.normpath(os.path.join(dist_dir, full_path))
+        if (
+            full_path
+            and candidate_file.startswith(dist_dir + os.sep)
+            and os.path.isfile(candidate_file)
+        ):
+            return FileResponse(candidate_file)
         return FileResponse(index_html)
