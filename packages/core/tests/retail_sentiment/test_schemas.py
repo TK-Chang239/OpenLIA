@@ -1,8 +1,6 @@
 from datetime import UTC, datetime
 
 import pytest
-from pydantic import ValidationError
-
 from openlia.retail_sentiment.schemas import (
     ClassificationLabel,
     ClassifiedItem,
@@ -11,6 +9,7 @@ from openlia.retail_sentiment.schemas import (
     SignalAlert,
     SpikeEvent,
 )
+from pydantic import ValidationError
 
 
 def test_classification_label_values():
