@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from importlib import resources
@@ -20,6 +21,13 @@ class CustomizationOptions:
     custom_sections: tuple[dict[str, Any], ...] | list[dict[str, Any]] = field(
         default_factory=tuple
     )
+
+
+@dataclass(frozen=True)
+class CustomSection:
+    id: str
+    title: str
+    description: str | None
 
 
 def _read_resource(relative_name: str) -> str:
@@ -48,6 +56,32 @@ def load_framework(
     for extra in customizations.custom_sections:
         sections.append(deepcopy(extra))
     data["sections"] = sections
+    return data
+
+
+def load_framework_customized(
+    name: str,
+    *,
+    enabled_section_ids: set[str],
+    custom_sections: Iterable[CustomSection],
+) -> dict[str, Any]:
+    data = deepcopy(load_framework(name))
+    original_sections = list(data.get("sections", []))
+    known_ids = {s.get("id") for s in original_sections}
+    unknown = set(enabled_section_ids) - known_ids
+    if unknown:
+        raise ValueError(f"unknown section ids: {sorted(unknown)}")
+    kept = [s for s in original_sections if s.get("id") in enabled_section_ids]
+    for extra in custom_sections:
+        kept.append(
+            {
+                "id": extra.id,
+                "title": extra.title,
+                "instructions": extra.description or "",
+                "blocks": [],
+            }
+        )
+    data["sections"] = kept
     return data
 
 
