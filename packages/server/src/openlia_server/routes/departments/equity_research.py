@@ -9,7 +9,10 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openlia.departments.equity_research import EquityResearchDepartment
+from openlia.llm.runtime.cancellation import CancellationToken
+from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.events import to_wire
+from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session as DBSession
 
@@ -42,6 +45,11 @@ class ErConfigPatch(BaseModel):
 class ReportPayload(BaseModel):
     mode: str
     user_input: str
+    session_id: str | None = None
+
+
+class ChatPayload(BaseModel):
+    message: str
     session_id: str | None = None
 
 
@@ -133,6 +141,32 @@ def build_equity_research_router(
                 session_id=payload.session_id,
             ):
                 yield f"data: {json.dumps(_serialize_event(ev))}\n\n".encode()
+
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+        )
+
+    @router.post("/chat")
+    async def post_chat(
+        payload: ChatPayload,
+        request: Request,
+        user: User = require_auth,
+    ) -> StreamingResponse:
+        factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
+        runner = factory()
+        cancel_token = CancellationToken()
+        messages = [RuntimeChatMessage(role="user", content=payload.message)]
+
+        async def stream() -> AsyncIterator[bytes]:
+            async for event in runner.run(
+                department_id="equity_research",
+                user_id=user.id,
+                messages=messages,
+                cancel_token=cancel_token,
+            ):
+                yield f"data: {json.dumps(to_wire(event))}\n\n".encode()
 
         return StreamingResponse(
             stream(),
