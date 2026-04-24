@@ -30,6 +30,9 @@ from openlia_server.routes.departments.earnings_update import (
 from openlia_server.routes.departments.equity_research import (
     build_equity_research_router,
 )
+from openlia_server.routes.departments.morning_briefing import (
+    build_morning_briefing_router,
+)
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.reports import build_reports_router
@@ -239,6 +242,7 @@ def create_app(
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
     # Report runner is consumed by per-department routes (equity_research, earnings_update).
     # `build_report_runner` returns a RefreshingReportRunner that opens a fresh DB session
