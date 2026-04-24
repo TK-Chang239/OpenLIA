@@ -23,14 +23,14 @@ This directory holds the per-feature implementation plans that turn the specs in
 | 13 | 5 | Report rendering pipeline + Secretary department | Done (2026-04-23) | `2026-04-17-phase-13-report-pipeline-and-secretary.md` |
 | 14 | 5 | Equity Research department (initiation / update / sector) | Done (2026-04-23) | `2026-04-17-phase-14-equity-research.md` |
 | 15 | 5 | Earnings Update department + scan scheduling | Done (2026-04-23) | `2026-04-17-phase-15-earnings-update.md` |
-| 16 | 5 | Morning Briefing department + briefing scheduling | Not started | — |
-| 17 | 6 | Formula engine DSL | Not started | — |
-| 18 | 6 | Panic Thermometer page | Not started | — |
-| 19 | 6 | Macro Research Dalio dashboards (5 dashboards) | Not started | — |
-| 20 | 6 | Retail Sentiment dashboard (12 metrics, 3 tabs) | Not started | — |
-| 21 | 7 | Portfolio page | Not started | — |
-| 22 | 7 | Repository page | Not started | — |
-| 23 | 7 | Docker packaging + production build + final acceptance | Not started | — |
+| 16 | 5 | Morning Briefing department + briefing scheduling | Draft (2026-04-23) | `2026-04-23-phase-16-morning-briefing.md` |
+| 17 | 6 | Formula engine DSL | Draft (2026-04-23) | `2026-04-23-phase-17-formula-engine.md` |
+| 18 | 6 | Panic Thermometer page | Draft (2026-04-23) | `2026-04-23-phase-18-panic-thermometer.md` |
+| 19 | 6 | Macro Research Dalio dashboards (5 dashboards) | Draft (2026-04-23) | `2026-04-23-phase-19-macro-research.md` |
+| 20 | 6 | Retail Sentiment dashboard (12 metrics, 3 tabs) | Draft (2026-04-23) | `2026-04-23-phase-20-retail-sentiment.md` |
+| 21 | 7 | Portfolio page | Draft (2026-04-23) | `2026-04-23-phase-21-portfolio.md` |
+| 22 | 7 | Repository page | Draft (2026-04-23) | `2026-04-23-phase-22-repository.md` |
+| 23 | 7 | Docker packaging + production build + final acceptance | Draft (2026-04-23) | `2026-04-23-phase-23-docker-packaging-acceptance.md` |
 
 ---
 
