@@ -99,18 +99,78 @@ document lists every task that was compressed or deferred during the Phase
 
 All other REM items closed through Phase 16-23 execution.
 
-## Priority Ranking (subjective)
+## Project Stage
 
-1. **Phase 19 frontend (P0).** Blocks MR dashboards from being usable.
-2. **Remediation REM-P1-019 final product-journey smoke matrix (P1).** Needed
-   before real production acceptance.
-3. **Phase 20 NLP classification + `rs_classification_log` (P1).** Retail
-   Sentiment's documented behavior differs from what ships.
-4. **Phase 16 `ChatInterface` wiring (P2).** Users cannot chat about their
-   generated MB briefing.
-5. **Phase 23 release workflow + container smoke (P2).** Needed for "pip
-   install openlia" and Docker publish but not needed to run the app.
-6. **Frontend UX polish across 16/18/21/22 (P3).** Nice-to-have; product is
-   functional without.
-7. **Endpoint / authorization matrix rows for Plans 16, 22 (P3).** Planning
-   doc hygiene.
+**Feature-complete backend, ~85% frontend, pre-release.** All 23 plan specs
+shipped backend + persistence + routes. Every user-facing surface has
+something rendering, with one major exception (MR dashboards). Deployment
+artifacts exist (Dockerfile + two compose recipes) but have not been run
+through a real container boot.
+
+- Tests: ~1400 passing; 23 migrations; 7 department routers mounted.
+- Gap — source vs usable: MR dashboards compute but render a placeholder page.
+- Gap — source vs deployable: Docker image defined but never built and
+  smoke-tested in a real container; no publish workflow.
+
+## Roadmap
+
+Ranked by what blocks shipping vs polish.
+
+### P0 — blocks public alpha
+
+- **Phase 19 frontend.** Build the 5 Dalio dashboard views (Debt Cycle, Four
+  Seasons, All-Weather, World Order, Five Forces) against the shipped
+  backend. Largest single user-visible gap.
+- **Container-runtime smoke.** Build the Dockerfile, run it, hit `/healthz`
+  and `/` from outside the container. Closes REM-P1-019's last hole and
+  proves the deploy recipe actually works.
+
+### P1 — blocks confident production
+
+- **End-to-end smoke matrix (REM-P1-019).** Product journeys: personal boot,
+  company invite → register → login → setup, provider CRUD + connection
+  test, Secretary chat, Equity report, EU schedule → notification,
+  repository open/save/download, password reset. Plan 23 explicitly deferred
+  this.
+- **Phase 20 NLP classification + `rs_classification_log`.** Retail
+  Sentiment's documented behavior differs from what ships — decide whether
+  to implement or amend the spec.
+- **Phase 16 `ChatInterface` + `ChatReportThumbnail` + `useReportStream`
+  wiring in MB page.** Users currently cannot follow-up chat about a
+  generated MB briefing.
+
+### P2 — release hygiene
+
+- **`.github/workflows/release.yml`.** GHCR image publish + PyPI publish so
+  `pip install openlia` works.
+- **CHANGELOG + PyPI metadata polish.** `[project.urls]`, classifiers, long
+  description.
+- **Endpoint-contract-matrix + route-authorization-matrix rows** for Plans
+  16, 19, 20, 21, 22. Planning doc hygiene — every row the sprint added or
+  changed.
+
+### P3 — UX polish
+
+- **Atomic component refactors** for MB (`MBSettingsView.tsx` →
+  `SectionRow`/`TopicChip`/`NotesPopover`/`CustomSectionRow`/`ScheduleRow`/
+  `AddScheduleModal`), Portfolio (slide-out drawer, group tabs, dedicated
+  CSV dialog), Repository (Radix Popover/DropdownMenu primitives,
+  `RepoFilterBar`/`RepoFilterChips`/`RepoListItem`/`RepoListSkeleton`/
+  `RepoEmptyState`/`RemoveConfirmDialog`/`UndoToast`).
+- **Charts and animations across new pages.** PT per-panel Chart.js
+  drill-downs, PT `RuleEditor`/`FormulaInput` inline UI, PT pako share-link,
+  Portfolio SVG sparkline + area chart, Repository framer-motion, Repository
+  date-range picker UI.
+- **URL-synced filter hooks** for Portfolio and Repository
+  (`useSearchParams`).
+- **Per-component unit tests** for Repository and Portfolio.
+- **React-query hooks** for Portfolio (holdings / analytics / localPref).
+- **Frontend build invariant tests.** `prodBase.test.ts` /
+  `buildOutput.test.ts` — existing `frontend/dist` build verifies these
+  invariants but no dedicated vitests run.
+
+### Suggested next concrete move
+
+Phase 19 frontend as one branch, then a single "ship-prep" branch bundling
+container smoke + release workflow + E2E smoke scripts. Everything below P2
+can wait for user feedback.
