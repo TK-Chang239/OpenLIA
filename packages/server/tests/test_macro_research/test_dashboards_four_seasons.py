@@ -12,7 +12,9 @@ def d() -> FourSeasonsDashboard:
 def test_metadata(d: FourSeasonsDashboard) -> None:
     assert d.slug == "four_seasons"
     assert d.display_name == "Four Seasons"
-    assert d.T4_PROMPT_KEY == "four_seasons"
+    # Spec (MacroResearchPageSpec.md): Four Seasons is T2 formula-only —
+    # no LLM narrative tier.
+    assert d.T4_PROMPT_KEY is None
 
 
 def test_requirements(d: FourSeasonsDashboard) -> None:

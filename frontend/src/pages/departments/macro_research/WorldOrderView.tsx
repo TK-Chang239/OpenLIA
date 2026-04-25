@@ -7,6 +7,7 @@ import {
 import {
   AssessmentBlock,
   ErrorBlock,
+  FreshnessBadge,
   LoadingBlock,
   Panel,
   SeverityPill,
@@ -36,8 +37,8 @@ export default function WorldOrderView(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
-  const load = useCallback(() => {
-    getDashboard("world_order")
+  const load = useCallback((sm: boolean) => {
+    getDashboard("world_order", sm)
       .then((r) => {
         setData(r);
         setError(null);
@@ -46,14 +47,14 @@ export default function WorldOrderView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(smartMode);
+  }, [load, smartMode]);
 
   const onRun = async () => {
     setRunning(true);
     try {
       await runAssessment("world_order");
-      load();
+      load(smartMode);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -76,6 +77,7 @@ export default function WorldOrderView(): JSX.Element {
             World Order
           </h2>
           <SeverityPill severity={data.severity} />
+          <FreshnessBadge generatedAt={data.generated_at} />
         </div>
         <div className="flex items-center gap-3">
           <SmartModeToggle value={smartMode} onChange={setSmartMode} />

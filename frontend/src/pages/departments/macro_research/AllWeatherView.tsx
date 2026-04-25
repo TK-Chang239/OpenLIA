@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   getDashboard,
-  runAssessment,
   type DashboardResult,
 } from "../../../api/macro_research";
 import {
   AssessmentBlock,
   ErrorBlock,
+  FreshnessBadge,
   LoadingBlock,
   Panel,
   SeverityPill,
@@ -39,10 +39,9 @@ export default function AllWeatherView(): JSX.Element {
   const [data, setData] = useState<DashboardResult | null>(null);
   const [smartMode, setSmartMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
 
-  const load = useCallback(() => {
-    getDashboard("all_weather")
+  const load = useCallback((sm: boolean) => {
+    getDashboard("all_weather", sm)
       .then((r) => {
         setData(r);
         setError(null);
@@ -51,20 +50,8 @@ export default function AllWeatherView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  const onRun = async () => {
-    setRunning(true);
-    try {
-      await runAssessment("all_weather");
-      load();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setRunning(false);
-    }
-  };
+    load(smartMode);
+  }, [load, smartMode]);
 
   if (error) return <ErrorBlock message={error} />;
   if (!data) return <LoadingBlock label="All-Weather" />;
@@ -80,17 +67,10 @@ export default function AllWeatherView(): JSX.Element {
             All-Weather
           </h2>
           <SeverityPill severity={data.severity} />
+          <FreshnessBadge generatedAt={data.generated_at} />
         </div>
         <div className="flex items-center gap-3">
           <SmartModeToggle value={smartMode} onChange={setSmartMode} />
-          <button
-            type="button"
-            disabled={running}
-            onClick={onRun}
-            className="rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-sm text-[--color-text-primary] disabled:opacity-60"
-          >
-            {running ? "Running…" : "Run assessment now"}
-          </button>
         </div>
       </header>
 

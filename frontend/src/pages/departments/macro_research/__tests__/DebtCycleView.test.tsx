@@ -79,4 +79,19 @@ describe("DebtCycleView", () => {
       ).toBeInTheDocument(),
     );
   });
+
+  it("re-fetches with smart_mode=true when the toggle flips (NEW-19-06)", async () => {
+    const { getByRole } = render(<DebtCycleView />);
+    await waitFor(() => expect(mocks.getDashboard).toHaveBeenCalled());
+    const initialCalls = mocks.getDashboard.mock.calls.length;
+    const toggle = getByRole("switch", { name: /smart mode/i });
+    toggle.click();
+    await waitFor(() =>
+      expect(mocks.getDashboard.mock.calls.length).toBeGreaterThan(initialCalls),
+    );
+    const lastCall =
+      mocks.getDashboard.mock.calls[mocks.getDashboard.mock.calls.length - 1];
+    expect(lastCall[0]).toBe("debt_cycle");
+    expect(lastCall[1]).toBe(true);
+  });
 });

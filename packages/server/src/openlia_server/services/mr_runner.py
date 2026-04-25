@@ -8,6 +8,7 @@ from typing import Any, Protocol
 from openlia.macro_research.assembler import DashboardAssembler
 from openlia.macro_research.dashboards import DASHBOARDS
 from openlia.macro_research.schemas import DashboardResult
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 
@@ -47,9 +48,12 @@ class MRRunner:
         if dashboard_slug not in DASHBOARDS:
             raise KeyError(f"unknown dashboard: {dashboard_slug!r}")
         # Touch per-user state row (ensures existence; also exposes thresholds).
+        # Only swallow IntegrityError for the racy unique-constraint case
+        # (concurrent first-touch); every other failure is a programming bug
+        # and must propagate so callers see the real cause.
         try:
             self._dashboard.get_or_create(user_id=user_id, dashboard=dashboard_slug)
-        except Exception:
+        except IntegrityError:
             pass
 
         t4_cached: dict[str, Any] | None = None
