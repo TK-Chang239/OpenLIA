@@ -33,6 +33,8 @@ from openlia.llm.runtime.events import (
     ReportComplete,
     ReportError,
     ReportPhase,
+    ReportSectionComplete,
+    ReportSectionStart,
     ReportStart,
     ReportToolCall,
     ReportToolCallStart,
@@ -237,6 +239,17 @@ class ReportRunner:
         if cancel_token is not None and cancel_token.is_cancelled:
             return
 
+        sections_meta = framework.get("sections", []) or []
+        total_sections = len(sections_meta)
+        for idx, section in enumerate(sections_meta):
+            yield ReportSectionStart(
+                report_id=report_id,
+                section_id=str(section.get("id", "")),
+                title=str(section.get("title", section.get("id", "Section"))),
+                idx=idx,
+                total=total_sections,
+            )
+
         try:
             final = await self._await(
                 provider.generate(
@@ -272,6 +285,13 @@ class ReportRunner:
                 message=f"LLM returned non-JSON response: {exc!s}",
             )
             return
+
+        for section in schema_payload.get("sections", []) or []:
+            yield ReportSectionComplete(
+                report_id=report_id,
+                section_id=str(section.get("id", "")),
+                blocks=list(section.get("blocks", []) or []),
+            )
 
         yield ReportComplete(report_id=report_id, schema=schema_payload)
 

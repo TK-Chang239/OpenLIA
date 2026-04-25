@@ -90,3 +90,37 @@ async def test_runner_forwards_active_config_to_inner(db_session, user, fake_rep
     assert last.mode == "stock_update"
     assert last.user_input == "AAPL"
     assert len(last.enabled_sections) == 7
+
+
+@pytest.mark.asyncio
+async def test_runner_threads_report_length_via_resolve_active(
+    db_session, user, fake_report_runner
+):
+    """resolve_active threads `report_length` from the user's saved config
+    into the inner ReportRequest (mapped: concise→brief, normal→standard,
+    elaborative→long)."""
+    from openlia_server.services.equity_research_config import (
+        EquityResearchConfigService,
+    )
+
+    cfg_svc = EquityResearchConfigService(db_session)
+    cfg_svc.get_config(user)
+    cfg_svc.update_config(
+        user,
+        report_mode=None,
+        report_length="elaborative",
+        sections_by_mode=None,
+        custom_sections_by_mode=None,
+    )
+
+    fake_report_runner.queue_events([ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA)])
+    runner = EquityResearchRunner(db_session=db_session, inner=fake_report_runner)
+    async for _ in runner.run_report(
+        user_id=user,
+        mode="stock_update",
+        user_input="AAPL",
+        session_id=None,
+    ):
+        pass
+    assert fake_report_runner.last_request is not None
+    assert fake_report_runner.last_request.length == "long"

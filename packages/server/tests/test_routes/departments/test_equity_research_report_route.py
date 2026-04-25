@@ -67,6 +67,7 @@ def test_report_route_streams_start_complete_saved(company_client, auth_user):
     types = [e["type"] for e in events]
     assert "report.start" in types
     assert "report.complete" in types
+    assert "report.saved" in types  # explicit assertion for the saved frame
     assert types[-1] == "report.saved"
     assert events[-1]["report_id"]
 

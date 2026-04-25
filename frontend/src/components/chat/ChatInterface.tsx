@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
@@ -17,6 +17,13 @@ interface Chip {
   value: string;
 }
 
+export interface InlineExtraMessage {
+  /** Insert AFTER this user message id, or "end" to render after the chat thread. */
+  after: string | "end";
+  node: ReactNode;
+  key: string;
+}
+
 interface Props {
   sessionId: string;
   greeting: string;
@@ -25,6 +32,12 @@ interface Props {
   inputPlaceholder: string;
   /** Optional one-shot message dispatched automatically on mount. */
   initialMessage?: string | null;
+  /** NEW-14-01: override the default `/api/chat/sessions/{id}/stream` endpoint. */
+  streamUrl?: string;
+  /** NEW-14-01: extra fields merged into the JSON request body. */
+  bodyExtras?: Record<string, unknown>;
+  /** NEW-14-02: inline assistant-side nodes injected into the message list. */
+  extraInlineMessages?: InlineExtraMessage[];
 }
 
 interface PersistedToolCall {
@@ -43,13 +56,20 @@ export function ChatInterface({
   chips,
   inputPlaceholder,
   initialMessage,
+  streamUrl,
+  bodyExtras,
+  extraInlineMessages,
 }: Props): JSX.Element {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sentOnce, setSentOnce] = useState(false);
   const lastSentRef = useRef<string>("");
-  const { state, send, stop, reset } = useChatStream({ sessionId });
+  const { state, send, stop, reset } = useChatStream({
+    sessionId,
+    streamUrl,
+    bodyExtras,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +123,8 @@ export function ChatInterface({
   const isStreaming =
     state.status === "opening" || state.status === "thinking" || state.status === "streaming";
 
-  const showWelcome = loaded && !sentOnce && !loadError;
+  const hasInline = (extraInlineMessages?.length ?? 0) > 0;
+  const showWelcome = loaded && !sentOnce && !loadError && !hasInline;
 
   const autoscrollKey = useMemo(
     () =>
@@ -158,13 +179,18 @@ export function ChatInterface({
         ) : null}
         {!showWelcome && !loadError ? (
           <MessageList autoscrollKey={autoscrollKey}>
-            {history.map((m) =>
-              m.role === "user" ? (
-                <UserBubble key={m.id} content={m.content} />
-              ) : (
-                <HistoricalAssistantMessage key={m.id} message={m} />
-              ),
-            )}
+            {history.flatMap((m) => {
+              const node =
+                m.role === "user" ? (
+                  <UserBubble key={m.id} content={m.content} />
+                ) : (
+                  <HistoricalAssistantMessage key={m.id} message={m} />
+                );
+              const inline = (extraInlineMessages ?? [])
+                .filter((x) => x.after === m.id)
+                .map((x) => <div key={x.key}>{x.node}</div>);
+              return [node, ...inline];
+            })}
             {state.status === "thinking" ? <ThinkingIndicator /> : null}
             {state.toolCalls.length > 0 ? (
               <div className="flex flex-col gap-2">
@@ -217,6 +243,11 @@ export function ChatInterface({
                 onRetry={() => send(lastSentRef.current)}
               />
             ) : null}
+            {(extraInlineMessages ?? [])
+              .filter((x) => x.after === "end")
+              .map((x) => (
+                <div key={x.key}>{x.node}</div>
+              ))}
           </MessageList>
         ) : null}
       </div>

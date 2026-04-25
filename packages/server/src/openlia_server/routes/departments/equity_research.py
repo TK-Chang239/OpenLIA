@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import uuid
 from collections.abc import AsyncIterator, Callable
-from typing import Literal
+from datetime import UTC, datetime
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -18,7 +20,9 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.content import ChatMessage as DbChatMessage
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import chat_sessions as chat_sessions_svc
 from openlia_server.services.equity_research_config import (
     CustomSectionDTO,
     EquityResearchConfigService,
@@ -154,11 +158,43 @@ def build_equity_research_router(
         payload: ChatPayload,
         request: Request,
         user: User = require_auth,
+        session: DBSession = Depends(session_dep),
     ) -> StreamingResponse:
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         runner = factory()
         cancel_token = CancellationToken()
-        messages = [RuntimeChatMessage(role="user", content=payload.message)]
+
+        session_id = payload.session_id
+        if session_id is not None:
+            try:
+                chat_sessions_svc.get_session(session, session_id=session_id, user_id=user.id)
+            except (LookupError, PermissionError) as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            session.add(
+                DbChatMessage(
+                    id=str(uuid.uuid4()),
+                    session_id=session_id,
+                    role="user",
+                    content=payload.message,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            session.commit()
+            try:
+                chat_sessions_svc.ensure_titled(
+                    session,
+                    session_id=session_id,
+                    first_user_text=payload.message,
+                )
+            except Exception:
+                pass
+            rows = chat_sessions_svc.list_messages(session, session_id=session_id, user_id=user.id)
+            messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows]
+        else:
+            messages = [RuntimeChatMessage(role="user", content=payload.message)]
+
+        assistant_text: list[str] = []
+        tool_calls_log: list[dict[str, Any]] = []
 
         async def stream() -> AsyncIterator[bytes]:
             async for event in runner.run(
@@ -166,9 +202,43 @@ def build_equity_research_router(
                 user_id=user.id,
                 messages=messages,
                 cancel_token=cancel_token,
+                session_id=session_id,
             ):
                 wire = to_wire(event)
+                etype = wire["type"]
+                if etype == "chat.token":
+                    assistant_text.append(wire.get("text", ""))
+                elif etype == "chat.tool_call.start":
+                    tool_calls_log.append(
+                        {
+                            "call_id": wire.get("call_id"),
+                            "tool_name": wire.get("tool_name"),
+                            "args_preview": wire.get("args_preview"),
+                            "status": "running",
+                        }
+                    )
+                elif etype == "chat.tool_call.result":
+                    for tc in tool_calls_log:
+                        if tc["call_id"] == wire.get("call_id"):
+                            tc["status"] = "done" if wire.get("ok") else "failed"
+                            tc["summary"] = wire.get("summary")
+                            if wire.get("structured") is not None:
+                                tc["structured"] = wire["structured"]
+                            break
                 yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
+            if session_id is not None and (assistant_text or tool_calls_log):
+                content = "".join(assistant_text)
+                session.add(
+                    DbChatMessage(
+                        id=str(uuid.uuid4()),
+                        session_id=session_id,
+                        role="assistant",
+                        content=content,
+                        tool_calls=tool_calls_log or None,
+                        created_at=datetime.now(UTC),
+                    )
+                )
+                session.commit()
 
         return StreamingResponse(
             stream(),
