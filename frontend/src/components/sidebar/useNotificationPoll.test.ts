@@ -85,4 +85,41 @@ describe("useNotificationPoll", () => {
       expect(result.current.unreadByDepartment.morning_briefing ?? 0).toBe(0),
     );
   });
+
+  it("stops polling after a 401 and exposes error='unauthorized'", async () => {
+    const spy = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 401 }));
+    global.fetch = spy as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useNotificationPoll());
+
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(result.current.error).toBe("unauthorized"));
+
+    // Advance well past the poll interval; no more fetches must happen.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS * 3);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears the timer on unmount and stops further fetches", async () => {
+    const spy = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ total: 0, by_department: {} }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    global.fetch = spy as unknown as typeof fetch;
+
+    const { unmount } = renderHook(() => useNotificationPoll());
+    await vi.waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(NOTIFICATION_POLL_MS * 3);
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
 });

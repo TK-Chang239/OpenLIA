@@ -108,4 +108,25 @@ describe("Sidebar", () => {
       expect(urls).toContain("/api/auth/logout");
     });
   });
+
+  it("is hidden below md breakpoint via tailwind classes", () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+
+    renderAt("/");
+    const nav = screen.getByRole("navigation", { name: /main navigation/i });
+    expect(nav.className).toContain("hidden");
+    expect(nav.className).toContain("md:flex");
+
+    window.matchMedia = originalMatchMedia;
+  });
 });

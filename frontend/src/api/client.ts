@@ -14,6 +14,16 @@ export interface FetchOptions extends Omit<RequestInit, "body"> {
   json?: unknown;
 }
 
+function resolveUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  const base =
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "";
+  if (!base) return path;
+  const trimmedBase = base.replace(/\/+$/, "");
+  const trimmedPath = path.startsWith("/") ? path : `/${path}`;
+  return `${trimmedBase}${trimmedPath}`;
+}
+
 export async function fetchJson<T = unknown>(
   path: string,
   options: FetchOptions = {},
@@ -34,9 +44,11 @@ export async function fetchJson<T = unknown>(
     init.body = JSON.stringify(json);
   }
 
+  const url = resolveUrl(path);
+
   let response: Response;
   try {
-    response = await fetch(path, init);
+    response = await fetch(url, init);
   } catch (err) {
     const message = err instanceof Error ? err.message : "network error";
     throw new ApiError(0, message);
@@ -54,7 +66,7 @@ export async function fetchJson<T = unknown>(
   if (!response.ok) {
     throw new ApiError(
       response.status,
-      `HTTP ${response.status} on ${path}`,
+      `HTTP ${response.status} on ${url}`,
       parsedBody,
     );
   }
