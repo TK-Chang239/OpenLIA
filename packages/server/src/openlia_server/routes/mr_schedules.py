@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
 from openlia_server.db.models.auth import User
@@ -14,6 +14,16 @@ from openlia_server.middleware.auth import build_require_auth
 
 class ScheduleUpsert(BaseModel):
     cron_expression: str
+
+
+def _resolve_service(request: Request, fallback: Any) -> Any:
+    """Return the scheduler-bound MRScheduleService stashed on app.state
+    by the lifespan hook. Falls back to the factory-time instance only
+    when no lifespan ran (tests pass a stub explicitly)."""
+    svc = getattr(request.app.state, "mr_schedule_service", None)
+    if svc is not None:
+        return svc
+    return fallback
 
 
 def build_mr_schedule_router(
@@ -30,8 +40,9 @@ def build_mr_schedule_router(
         require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
 
     @router.get("")
-    def get_schedule(user: User = require_auth) -> dict[str, Any]:
-        row = mr_schedule_service.get(user_id=user.id)
+    def get_schedule(request: Request, user: User = require_auth) -> dict[str, Any]:
+        svc = _resolve_service(request, mr_schedule_service)
+        row = svc.get(user_id=user.id)
         if row is None or row.assessment_schedule is None:
             return {"cron_expression": None, "last_assessment_at": None}
         return {
@@ -42,17 +53,22 @@ def build_mr_schedule_router(
         }
 
     @router.put("")
-    async def put_schedule(body: ScheduleUpsert, user: User = require_auth) -> dict[str, Any]:
+    async def put_schedule(
+        body: ScheduleUpsert, request: Request, user: User = require_auth
+    ) -> dict[str, Any]:
         if not body.cron_expression.strip():
             raise HTTPException(status_code=400, detail="cron_expression required")
-        row = await mr_schedule_service.upsert(
-            user_id=user.id, cron_expression=body.cron_expression
-        )
+        svc = _resolve_service(request, mr_schedule_service)
+        try:
+            row = await svc.upsert(user_id=user.id, cron_expression=body.cron_expression)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"cron_expression": row.assessment_schedule}
 
     @router.delete("", status_code=204)
-    async def delete_schedule(user: User = require_auth) -> Response:
-        await mr_schedule_service.delete(user_id=user.id)
+    async def delete_schedule(request: Request, user: User = require_auth) -> Response:
+        svc = _resolve_service(request, mr_schedule_service)
+        await svc.delete(user_id=user.id)
         return Response(status_code=204)
 
     return router

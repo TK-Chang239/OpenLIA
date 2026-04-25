@@ -1,9 +1,10 @@
 """Construct the SchedulerService executor graph.
 
-Each Plan that ships a real department builder will update this module
-to inject its real implementation. Until then, stubs raise
-DepartmentPayloadBuilderNotWired when fired — which the executor logs
-as a failed job_runs row but does NOT treat as a crash."""
+Every scheduled job type must be wired with its real builder/store
+collaborator. The wiring entry point is strict — omitting any
+dependency raises TypeError at boot. Test-only fakes live in
+`tests/test_scheduler/_scheduler_fakes.py`.
+"""
 
 from __future__ import annotations
 
@@ -14,17 +15,14 @@ from openlia_server.scheduler.executors.eu import EUScanExecutor
 from openlia_server.scheduler.executors.maintenance import MaintenanceExecutor
 from openlia_server.scheduler.executors.mb import MBBriefingExecutor
 from openlia_server.scheduler.executors.mr import MRAssessmentExecutor
+from openlia_server.scheduler.executors.rs import RSSnapshotExecutor
 from openlia_server.scheduler.payloads import (
     EUScanPlanner,
     MBRequestBuilder,
     MRAssessmentBuilder,
     MRCacheStore,
     ReportStore,
-    StubEUScanPlanner,
-    StubMBRequestBuilder,
-    StubMRAssessmentBuilder,
-    StubMRCacheStore,
-    StubReportStore,
+    RSSnapshotRunner,
 )
 from openlia_server.scheduler.registry import JobType
 from openlia_server.scheduler.service import SchedulerService
@@ -38,19 +36,17 @@ def build_scheduler_service(
     scheduler: Any,
     report_runner: Any,
     batch_runner: Any,
-    mb_builder: MBRequestBuilder | None = None,
-    eu_planner: EUScanPlanner | None = None,
-    mr_builder: MRAssessmentBuilder | None = None,
-    report_store: ReportStore | None = None,
-    mr_cache_store: MRCacheStore | None = None,
+    mb_builder: MBRequestBuilder,
+    eu_planner: EUScanPlanner,
+    mr_builder: MRAssessmentBuilder,
+    report_store: ReportStore,
+    mr_cache_store: MRCacheStore,
+    rs_runner: RSSnapshotRunner | None = None,
 ) -> SchedulerService:
-    mb_builder = mb_builder or StubMBRequestBuilder()
-    eu_planner = eu_planner or StubEUScanPlanner()
-    mr_builder = mr_builder or StubMRAssessmentBuilder()
-    report_store = report_store or StubReportStore()
-    mr_cache_store = mr_cache_store or StubMRCacheStore()
+    if batch_runner is None:
+        raise TypeError("batch_runner is required (got None)")
 
-    executors = {
+    executors: dict[JobType, Any] = {
         JobType.MB_BRIEFING: MBBriefingExecutor(
             session_factory=session_factory,
             mb_builder=mb_builder,
@@ -74,6 +70,12 @@ def build_scheduler_service(
             session_factory=session_factory,
         ),
     }
+
+    if rs_runner is not None:
+        executors[JobType.RS_SNAPSHOT] = RSSnapshotExecutor(
+            session_factory=session_factory,
+            rs_runner=rs_runner,
+        )
 
     return SchedulerService(
         session_factory=session_factory,

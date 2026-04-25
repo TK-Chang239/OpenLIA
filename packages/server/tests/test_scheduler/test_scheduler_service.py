@@ -507,6 +507,37 @@ async def test_shutdown_cancels_active_tokens_and_stops_scheduler(
 
 
 @pytest.mark.asyncio
+async def test_add_schedule_sets_max_instances(session_factory) -> None:
+    """NEW-6-05: per-{job_type, user_id} max_instances=1 must be passed
+    to the underlying scheduler at registration time."""
+    with session_factory() as s:
+        _seed_user(s)
+
+    mb_exec = _RecordingExecutor(
+        session_factory=session_factory,
+        job_type=JobType.MB_BRIEFING,
+    )
+    scheduler = FakeAPScheduler()
+    svc = SchedulerService(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        settings=SchedulerSettings(enabled=True),
+        executors={JobType.MB_BRIEFING: mb_exec},
+    )
+    await svc.start()
+
+    await svc.add_schedule(_mb_schedule())
+    key = job_key(JobType.MB_BRIEFING, "u_1")
+    job = scheduler.jobs[key]
+    assert job.max_instances == 1
+    assert job.coalesce is True
+    # Maintenance job carries the same caps.
+    maint = scheduler.jobs[MAINTENANCE_JOB_KEY]
+    assert maint.max_instances == 1
+    assert maint.coalesce is True
+
+
+@pytest.mark.asyncio
 async def test_run_retry_fires_original_schedule_as_one_shot(
     session_factory,
 ) -> None:
