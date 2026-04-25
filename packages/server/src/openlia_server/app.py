@@ -14,7 +14,7 @@ Environment contract (production-relevant subset):
     OPENLIA_COOKIE_SECURE        "true" forces Secure flag on session cookies;
                                    defaults to true when OPENLIA_MODE=company,
                                    false otherwise.
-    OPENLIA_SCHEDULER_ENABLED    "true" to run APScheduler jobs; default false.
+    OPENLIA_SCHEDULER_ENABLED    "true" to run APScheduler jobs; default true.
     OPENLIA_SECRET_KEY           32-byte base64 AES-256-GCM key; if unset, the
                                    server reads/writes ~/.openlia/secret.key.
 
@@ -84,7 +84,11 @@ from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
 from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
 from openlia_server.services.report_export import BrowserLauncher
-from openlia_server.services.runtime import build_chat_runner, build_report_runner
+from openlia_server.services.runtime import (
+    build_batch_runner,
+    build_chat_runner,
+    build_report_runner,
+)
 
 # Per-department expected prompt slots; validated at startup so a missing or
 # renamed slot fails the boot rather than the first user request.
@@ -158,8 +162,11 @@ class _SchedulerAdapter:
       background task onto the running event loop.
     """
 
-    def __init__(self) -> None:
-        self._sched = AsyncScheduler()
+    def __init__(self, *, max_concurrent_jobs: int | None = None) -> None:
+        if max_concurrent_jobs is not None:
+            self._sched = AsyncScheduler(max_concurrent_jobs=max_concurrent_jobs)
+        else:
+            self._sched = AsyncScheduler()
         self._bg_task: asyncio.Task | None = None
 
     async def __aenter__(self) -> _SchedulerAdapter:
@@ -185,6 +192,17 @@ class _SchedulerAdapter:
                 log.debug("error during scheduler teardown (ignored)", exc_info=True)
 
     async def add_schedule(self, *args: Any, **kwargs: Any) -> Any:
+        # APScheduler 4.x has no per-schedule `max_instances` knob — the
+        # in-process self-rolled guard in SchedulerService._active_tokens
+        # enforces single-instance semantics. Strip the kwarg so production
+        # wiring stays compatible with the spec-mandated API while the
+        # FakeAPScheduler in tests records it for assertions.
+        kwargs.pop("max_instances", None)
+        coalesce = kwargs.pop("coalesce", None)
+        if coalesce is not None:
+            from apscheduler import CoalescePolicy
+
+            kwargs["coalesce"] = CoalescePolicy.latest if coalesce else CoalescePolicy.earliest
         return await self._sched.add_schedule(*args, **kwargs)
 
     async def remove_schedule(self, id: str) -> None:
@@ -282,7 +300,7 @@ def _make_lifespan(
                     finally:
                         s.close()
 
-            adapter = _SchedulerAdapter()
+            adapter = _SchedulerAdapter(max_concurrent_jobs=scheduler_settings.max_concurrent_jobs)
             earnings_adapter = (
                 getattr(app.state, "earnings_recent_adapter", None) or _NoopEarningsRecentAdapter()
             )
@@ -295,6 +313,12 @@ def _make_lifespan(
             from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
             from openlia_server.services.mr_cache import MRCacheStoreImpl
             from openlia_server.services.mr_schedules import MRScheduleService
+            from openlia_server.services.report_store import ReportStoreImpl
+
+            mr_data_provider = getattr(app.state, "mr_data_provider", None)
+            mr_builder = MRAssessmentBuilderImpl(data_provider=mr_data_provider)
+            mr_cache_store_lifespan = MRCacheStoreImpl()
+            report_store_impl = ReportStoreImpl()
 
             async with adapter:
                 scheduler_svc = build_scheduler_service(
@@ -302,30 +326,29 @@ def _make_lifespan(
                     settings=scheduler_settings,
                     scheduler=adapter,
                     report_runner=build_report_runner(_sm),
-                    batch_runner=None,
+                    batch_runner=build_batch_runner(_sm),
                     eu_planner=eu_planner,
                     mb_builder=mb_builder,
+                    mr_builder=mr_builder,
+                    report_store=report_store_impl,
+                    mr_cache_store=mr_cache_store_lifespan,
                 )
-                # Wire real MR builder + cache store into the MR executor so
-                # scheduled MR_ASSESSMENT jobs stop using the fail-fast stubs.
-                mr_data_provider = getattr(app.state, "mr_data_provider", None)
-                mr_builder = MRAssessmentBuilderImpl(data_provider=mr_data_provider)
-                mr_cache_store_lifespan = MRCacheStoreImpl()
-                scheduler_svc.wire_mr(builder=mr_builder, cache_store=mr_cache_store_lifespan)
                 await scheduler_svc.start()
 
-                # Rehydrate persisted MR schedules from mr_dashboard_state
-                # (REM-P2-004). Uses the scheduler's own session maker.
+                # Bind the scheduler-aware MRScheduleService onto app.state
+                # so route handlers always reach the live scheduler. The
+                # factory-time instance built below is only a fallback for
+                # tests that bypass lifespan.
                 mr_schedule_svc_lifespan = MRScheduleService(
                     session_factory=_sm, scheduler=scheduler_svc
                 )
                 try:
                     await mr_schedule_svc_lifespan.rehydrate_all()
-                except Exception:
+                except (ValueError, RuntimeError, LookupError):
                     log.exception("MR schedule rehydration failed (continuing startup)")
 
                 app.state.scheduler = scheduler_svc
-                app.state.mr_schedule_service_lifespan = mr_schedule_svc_lifespan
+                app.state.mr_schedule_service = mr_schedule_svc_lifespan
 
                 try:
                     yield
@@ -424,7 +447,11 @@ def create_app(
         dashboard_service=mr_dashboard_svc,
         session_factory=factory,
     )
-    mr_schedule_svc = MRScheduleService(session_factory=factory, scheduler=None)
+    # Factory-time MR schedule service. The lifespan replaces this with
+    # a scheduler-bound instance on app.state.mr_schedule_service before
+    # the first request. The route layer reads from app.state for every
+    # handler so there is no risk of binding the no-scheduler instance.
+    mr_schedule_svc = MRScheduleService(session_factory=factory)
     app.state.mr_runner = mr_runner
     app.state.mr_dashboard_service = mr_dashboard_svc
     app.state.mr_cache_store = mr_cache_store

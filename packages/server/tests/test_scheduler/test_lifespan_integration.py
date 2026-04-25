@@ -8,8 +8,11 @@ from _scheduler_fakes import (
     FakeAPScheduler,
     FakeBatchRunner,
     FakeMBBuilder,
+    FakeMRBuilder,
+    FakeMRCacheStore,
     FakeReportRunner,
     FakeReportStore,
+    StubEUScanPlanner,
 )
 from openlia.llm.runtime.events import ReportComplete, ReportStart
 from openlia.llm.runtime.messages import ReportRequest
@@ -81,7 +84,12 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
         ),
         batch_runner=FakeBatchRunner(results=[]),
         mb_builder=FakeMBBuilder(request=ReportRequest(mode="morning_briefing", user_input="go")),
+        eu_planner=StubEUScanPlanner(),
+        mr_builder=FakeMRBuilder(
+            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
+        ),
         report_store=FakeReportStore(next_id="rep_final"),
+        mr_cache_store=FakeMRCacheStore(),
     )
     await svc.start()
 

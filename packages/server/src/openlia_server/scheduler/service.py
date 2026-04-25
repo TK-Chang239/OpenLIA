@@ -240,6 +240,8 @@ class SchedulerService:
             id=job_key(job_type, schedule.user_id),
             args=(job_type, schedule.user_id, schedule_id),
             misfire_grace_time=self.settings.misfire_grace_seconds,
+            max_instances=1,
+            coalesce=True,
         )
 
     async def _register_maintenance_job(self) -> None:
@@ -252,6 +254,8 @@ class SchedulerService:
             id=MAINTENANCE_JOB_KEY,
             args=(JobType.SYSTEM_MAINTENANCE, None, None),
             misfire_grace_time=self.settings.misfire_grace_seconds,
+            max_instances=1,
+            coalesce=True,
         )
 
     async def _maybe_backfill(
@@ -319,9 +323,12 @@ class SchedulerService:
         schedule: MbSchedule | EuSchedule | MrDashboardState,
     ) -> CronTrigger:
         if isinstance(schedule, MrDashboardState):
-            return CronTrigger.from_crontab(
-                schedule.assessment_schedule or "0 0 * * 0", timezone="UTC"
-            )
+            if not schedule.assessment_schedule:
+                raise ValueError(
+                    "MR assessment_schedule must be set before registering "
+                    "an MR schedule (no silent default)"
+                )
+            return CronTrigger.from_crontab(schedule.assessment_schedule, timezone="UTC")
         hour, minute = [int(p) for p in schedule.time.split(":")]
         days_raw = json.loads(schedule.days_of_week)
         days = ",".join(SchedulerService._days_to_names(days_raw))

@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from _scheduler_fakes import FakeAPScheduler, FakeBatchRunner, FakeReportRunner
+from _scheduler_fakes import (
+    FakeAPScheduler,
+    FakeBatchRunner,
+    FakeMRBuilder,
+    FakeMRCacheStore,
+    FakeReportRunner,
+    FakeReportStore,
+    StubEUScanPlanner,
+)
+from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.scheduler.executors.mb import MBBriefingExecutor
 from openlia_server.scheduler.registry import JobType
 from openlia_server.scheduler.settings import SchedulerSettings
@@ -17,6 +26,12 @@ def test_wiring_accepts_real_mb_builder(session_factory) -> None:
         report_runner=FakeReportRunner(events=[]),
         batch_runner=FakeBatchRunner(results=[]),
         mb_builder=builder,
+        eu_planner=StubEUScanPlanner(),
+        mr_builder=FakeMRBuilder(
+            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
+        ),
+        report_store=FakeReportStore(),
+        mr_cache_store=FakeMRCacheStore(),
     )
     mb_exec = svc.executors[JobType.MB_BRIEFING]
     assert isinstance(mb_exec, MBBriefingExecutor)

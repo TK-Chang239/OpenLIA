@@ -29,6 +29,19 @@ def _seed_notif(
     )
 
 
+def test_unread_response_shape(client_with_user, route_session_factory) -> None:
+    """NEW-6-09: spec §Notifications #2 mandates `{total: N, by_department: {...}}`.
+
+    Pin the keys so future refactors don't silently rename the surface
+    that the SideBar polls every 60s."""
+    r = client_with_user.get("/notifications/unread")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body.keys()) == {"total", "by_department"}
+    assert isinstance(body["total"], int)
+    assert isinstance(body["by_department"], dict)
+
+
 def test_unread_returns_counts_by_department(client_with_user, route_session_factory) -> None:
     with route_session_factory() as s:
         _seed_notif(s, id="n1", department="morning_briefing")

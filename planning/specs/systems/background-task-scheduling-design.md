@@ -72,9 +72,16 @@ OpenLIA is self-hosted and targets single-process deployments in v1. Celery requ
 
 > **Dev note (v2):** Automatic news-triggered MR assessments. The server would periodically poll news feeds (e.g. every 30 min), run keyword matching against the user's configured trigger keywords, and fire a T4/T5 assessment if a significant match is found. Design considerations: defining "significant," deduplicating triggers across polling cycles, rate-limiting LLM cost for users with sensitive keyword lists, and interaction with the existing weekly/quarterly schedule (skip the next scheduled run if a trigger already ran recently).
 
+### 5. Retail Sentiment snapshot (`rs_snapshot`)
+
+- **Trigger:** Cron (per-user, hourly default during market hours; configurable cadence is a Phase 20 follow-up).
+- **Scope:** Per-user. The executor pulls the user's EU watchlist, runs `RsRunner.run_many(...)` against it, and persists the resulting snapshots through the RS service layer.
+- **Execution:** Sequential per-ticker classify + snapshot write. The RS service emits one `assessment_ready` notification per fire that summarises ticker count.
+- **Schedule source:** Phase 20 will define the row source; for Phase 6 the executor + JobType + wiring slot exist so the registration path can light up without further scheduler edits.
+
 ### 4. Nightly maintenance (`system_maintenance`)
 
-- **Trigger:** Once on server startup, then daily interval (configurable, default 24 hours).
+- **Trigger:** Daily cron at 03:00 UTC. (Earlier drafts called for an immediate first run on startup; the implementation chose pure cron because the maintenance sweep is idempotent and the 24-hour gap on a fresh boot is acceptable.)
 - **Scope:** System-wide (not per-user).
 - **Execution:** Runs the pruning sweep defined in `database-design.md`:
 
