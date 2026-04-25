@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.config import LLMModel, UserLLMPreference
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 
 
 class PreferenceIn(BaseModel):
@@ -23,7 +23,7 @@ class PreferenceListOut(BaseModel):
 
 def build_settings_models_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/settings/admin/llm", tags=["settings"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/preferences", response_model=PreferenceListOut)

@@ -63,6 +63,39 @@ class TestForcedPasswordBlocksProductRoutes:
         client, _ = forced_user_client
         _assert_must_change(client.post("/jobs/some-run-id/retry"))
 
+    def test_settings_prefs_get_blocked(self, forced_user_client):
+        client, _ = forced_user_client
+        _assert_must_change(client.get("/settings/prefs"))
+
+    def test_settings_prefs_patch_blocked(self, forced_user_client):
+        client, _ = forced_user_client
+        _assert_must_change(client.patch("/settings/prefs", json={"theme": "dark"}))
+
+    def test_settings_email_patch_blocked(self, forced_user_client):
+        client, _ = forced_user_client
+        _assert_must_change(
+            client.patch(
+                "/settings/email",
+                json={
+                    "new_email": "new@example.com",
+                    "current_password": "correct horse battery staple",
+                },
+            )
+        )
+
+    def test_settings_models_list_blocked(self, forced_user_client):
+        client, _ = forced_user_client
+        _assert_must_change(client.get("/settings/admin/llm/preferences"))
+
+    def test_settings_models_put_blocked(self, forced_user_client):
+        client, _ = forced_user_client
+        _assert_must_change(
+            client.put(
+                "/settings/admin/llm/preferences",
+                json={"tier": "thinking", "model_id": "any-id"},
+            )
+        )
+
 
 class TestForcedPasswordBlocksAdminRoutes:
     def test_settings_data_providers_list_blocked(self, forced_admin_client):
