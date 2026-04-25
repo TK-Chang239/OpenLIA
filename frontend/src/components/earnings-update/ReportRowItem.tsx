@@ -6,6 +6,7 @@ interface Props {
   showExtras?: boolean;
   onDownload?: (id: string) => void;
   onRemove?: (id: string) => void;
+  isNew?: boolean;
 }
 
 function formatDate(iso: string): string {
@@ -22,19 +23,26 @@ export function ReportRowItem({
   showExtras,
   onDownload,
   onRemove,
+  isNew = false,
 }: Props) {
   return (
     <div
       role="row"
       className="flex items-center gap-4 px-6 py-3.5 border-b border-[--color-border-subtle] hover:bg-[--color-surface-hover] transition-colors duration-[--duration-fast]"
     >
+      {isNew ? (
+        <span
+          aria-label="New"
+          className="inline-block w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] flex-shrink-0"
+        />
+      ) : null}
       <span className="text-sm font-semibold text-[--color-text-primary] w-12 flex-shrink-0">
         {report.subject ?? "—"}
       </span>
       <span className="flex-1 text-base text-[--color-text-primary]">
         {report.title}
       </span>
-      <span className="text-sm text-[--color-text-secondary] flex-shrink-0">
+      <span className="hidden sm:block text-sm text-[--color-text-secondary] flex-shrink-0">
         {formatDate(report.created_at)}
       </span>
       <button

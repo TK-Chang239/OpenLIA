@@ -91,6 +91,7 @@ def create_report(
     schema: ReportSchema,
     model_ref: str = "",
     content_markdown: str = "",
+    subject: str | None = None,
 ) -> str:
     report_id = str(uuid.uuid4())
     row = Report(
@@ -99,6 +100,7 @@ def create_report(
         department=department,
         report_type=mode,
         title=schema.cover.title,
+        subject=subject,
         content_markdown=content_markdown,
         content_structured=schema.model_dump(mode="json"),
         model_ref=model_ref,

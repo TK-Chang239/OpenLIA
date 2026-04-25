@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useState } from "react";
+
 import { RecentReport } from "../../api/earnings-update";
 
 import { ReportRowItem } from "./ReportRowItem";
@@ -8,11 +10,61 @@ interface Props {
   onOpenCabinet: () => void;
 }
 
+const STORAGE_KEY = "eu-opened-reports";
+const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function readOpened(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((x): x is string => typeof x === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeOpened(opened: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(opened)));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+function isWithinNewWindow(createdAt: string): boolean {
+  const ts = new Date(createdAt).getTime();
+  if (Number.isNaN(ts)) return false;
+  return Date.now() - ts < NEW_WINDOW_MS;
+}
+
 export function RecentReportsList({
   reports,
   onOpenReport,
   onOpenCabinet,
 }: Props) {
+  const [openedIds, setOpenedIds] = useState<Set<string>>(() => readOpened());
+
+  useEffect(() => {
+    writeOpened(openedIds);
+  }, [openedIds]);
+
+  const handleOpen = useCallback(
+    (id: string) => {
+      setOpenedIds((prev) => {
+        if (prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.add(id);
+        return next;
+      });
+      onOpenReport(id);
+    },
+    [onOpenReport],
+  );
+
   return (
     <section>
       <header className="flex items-center justify-between px-6 pt-5 pb-3">
@@ -34,7 +86,12 @@ export function RecentReportsList({
       ) : (
         <div>
           {reports.map((r) => (
-            <ReportRowItem key={r.id} report={r} onOpen={onOpenReport} />
+            <ReportRowItem
+              key={r.id}
+              report={r}
+              onOpen={handleOpen}
+              isNew={isWithinNewWindow(r.created_at) && !openedIds.has(r.id)}
+            />
           ))}
         </div>
       )}

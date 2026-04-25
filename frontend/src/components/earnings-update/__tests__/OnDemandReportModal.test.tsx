@@ -47,6 +47,34 @@ describe("OnDemandReportModal", () => {
     expect(startReport).toHaveBeenCalledWith({ ticker: "AAPL" });
   });
 
+  it("shows selected company state with last earnings date when ticker matches a watchlist entry", () => {
+    render(
+      <OnDemandReportModal
+        open
+        onClose={() => {}}
+        onReportReady={() => {}}
+        startReport={async () => ({ report_id: "x", title: "t" })}
+        entries={[
+          {
+            id: "e1",
+            ticker: "AAPL",
+            company_name: "Apple Inc.",
+            next_earnings_date: "2026-01-30",
+            release_timing: "post_market",
+          },
+        ]}
+      />,
+    );
+    fireEvent.change(screen.getByPlaceholderText(/ticker/i), {
+      target: { value: "aapl" },
+    });
+    const block = screen.getByTestId("selected-company");
+    expect(block).toHaveTextContent("AAPL");
+    expect(block).toHaveTextContent(/Apple Inc/);
+    expect(block).toHaveTextContent(/Last earnings/);
+    expect(block).toHaveTextContent(/Jan 30, 2026/);
+  });
+
   it("shows error when startReport rejects", async () => {
     const startReport = vi.fn().mockRejectedValue(new Error("boom"));
     render(

@@ -131,12 +131,32 @@ export async function deleteSchedule(id: string): Promise<void> {
 
 // ----- Reports -----
 
+export interface RecentReportsQuery {
+  limit?: number;
+  q?: string;
+  ticker?: string;
+  from?: string;
+  to?: string;
+}
+
 export async function fetchRecentReports(
-  limit = 5,
+  query: number | RecentReportsQuery = 5,
 ): Promise<RecentReportsListResponse> {
+  const opts: RecentReportsQuery =
+    typeof query === "number" ? { limit: query } : query;
+  const params = new URLSearchParams();
+  params.set("limit", String(opts.limit ?? 5));
+  if (opts.q) params.set("q", opts.q);
+  if (opts.ticker) params.set("ticker", opts.ticker);
+  if (opts.from) params.set("from", opts.from);
+  if (opts.to) params.set("to", opts.to);
   return fetchJson<RecentReportsListResponse>(
-    `${REPORTS_PATH}?limit=${limit}`,
+    `${REPORTS_PATH}?${params.toString()}`,
   );
+}
+
+export async function deleteReport(reportId: string): Promise<void> {
+  await fetchJson<unknown>(`${REPORTS_PATH}/${reportId}`, { method: "DELETE" });
 }
 
 export function reportStreamUrl(): string {

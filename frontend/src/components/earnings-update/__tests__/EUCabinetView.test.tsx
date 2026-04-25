@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { EUCabinetView } from "../EUCabinetView";
@@ -50,6 +50,46 @@ describe("EUCabinetView", () => {
     });
     expect(screen.queryByText(/Apple Inc\./)).toBeNull();
     expect(screen.getByText(/Tesla Inc\./)).toBeInTheDocument();
+  });
+
+  it("ticker filter narrows results", () => {
+    render(
+      <EUCabinetView
+        reports={reports}
+        onBack={() => {}}
+        onOpenReport={() => {}}
+        onDownload={() => {}}
+        onRemove={async () => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /filters/i }));
+    fireEvent.change(screen.getByPlaceholderText(/AAPL/), {
+      target: { value: "AAPL" },
+    });
+    expect(screen.queryByText(/Tesla Inc\./)).toBeNull();
+    expect(screen.getByText(/Apple Inc\./)).toBeInTheDocument();
+  });
+
+  it("only fires onRemove after Confirm in confirm dialog", async () => {
+    const onRemove = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EUCabinetView
+        reports={reports}
+        onBack={() => {}}
+        onOpenReport={() => {}}
+        onDownload={() => {}}
+        onRemove={onRemove}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: /remove/i })[0]);
+    expect(onRemove).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("alertdialog");
+    const confirmBtn = Array.from(
+      dialog.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((b) => b.textContent === "Remove");
+    expect(confirmBtn).toBeTruthy();
+    fireEvent.click(confirmBtn!);
+    await waitFor(() => expect(onRemove).toHaveBeenCalledTimes(1));
   });
 
   it("back button fires", () => {
