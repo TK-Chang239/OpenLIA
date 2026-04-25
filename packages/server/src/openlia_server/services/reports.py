@@ -1,8 +1,16 @@
-"""Report store service.
+"""Report store service — canonical Phase-13 implementation.
 
-Validates completed report schemas emitted by `ReportRunner` and persists
-them into the `reports` table. Transaction ownership stays with the caller
-(route session dependency) — nothing here commits.
+Validates `ReportSchema` payloads from `ReportRunner` (Phase 13 Task 3) and
+persists them in the `reports` table. Also exposes:
+
+- `ReportStoreImpl` — Protocol adapter used by the scheduler executors so a
+  finished background-job report payload can be written via `save()`.
+- `get_report` / `create_report` — primary read/write API used by routes.
+- `get_report_for_user` / `save_report` — alternate-shape helpers used by
+  HTTP-driven flows (return the ORM row directly without revalidation).
+
+Transaction ownership stays with the caller (route session dependency or
+scheduler executor); this module never commits.
 """
 
 from __future__ import annotations
@@ -10,35 +18,94 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from openlia.reports.schema import ReportSchema
+from openlia.reports.validator import validate_report_payload
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import Report
 
 
+class ReportNotFoundError(LookupError):
+    pass
+
+
 class InvalidReportSchemaError(ValueError):
-    """Raised when a report schema does not match the runtime contract."""
+    """Raised when a payload fails canonical `ReportSchema` validation."""
 
 
-def validate_report_schema(schema: Any) -> None:
-    """Require `title: str` and `sections: list[{heading: str, content: str}]`."""
-    if not isinstance(schema, dict):
-        raise InvalidReportSchemaError("schema must be a dict")
-    title = schema.get("title")
-    if not isinstance(title, str) or not title:
-        raise InvalidReportSchemaError("schema.title must be a non-empty str")
-    sections = schema.get("sections")
-    if not isinstance(sections, list):
-        raise InvalidReportSchemaError("schema.sections must be a list")
-    for i, section in enumerate(sections):
-        if not isinstance(section, dict):
-            raise InvalidReportSchemaError(f"schema.sections[{i}] must be a dict")
-        heading = section.get("heading")
-        if not isinstance(heading, str):
-            raise InvalidReportSchemaError(f"schema.sections[{i}].heading must be a str")
-        content = section.get("content")
-        if not isinstance(content, str):
-            raise InvalidReportSchemaError(f"schema.sections[{i}].content must be a str")
+def validate_report_schema(payload: Any) -> ReportSchema:
+    """Validate `payload` against the canonical `ReportSchema`.
+
+    Returns the parsed `ReportSchema`. Raises `InvalidReportSchemaError`
+    on any pydantic validation failure so callers can render a uniform
+    400-style error.
+    """
+    try:
+        return validate_report_payload(payload)
+    except Exception as exc:
+        raise InvalidReportSchemaError(str(exc)) from exc
+
+
+class ReportStoreImpl:
+    """Adapter that fulfils the scheduler `ReportStore` Protocol by
+    persisting completed background-job reports through `create_report`.
+
+    The scheduler hands the executor a finished report payload (a dict
+    matching ReportSchema). We validate and write a fresh `reports` row.
+    """
+
+    def save(
+        self,
+        *,
+        session: Session,
+        user_id: str,
+        department: str,
+        payload: dict[str, Any],
+    ) -> str:
+        schema = validate_report_payload(payload)
+        return create_report(
+            session,
+            user_id=user_id,
+            department=department,
+            mode="background",
+            schema=schema,
+        )
+
+
+def get_report(session: Session, *, report_id: str, user_id: str) -> ReportSchema:
+    row = session.execute(
+        select(Report).where(Report.id == report_id, Report.user_id == user_id)
+    ).scalar_one_or_none()
+    if row is None:
+        raise ReportNotFoundError(report_id)
+    return validate_report_payload(row.content_structured)
+
+
+def create_report(
+    session: Session,
+    *,
+    user_id: str,
+    department: str,
+    mode: str,
+    schema: ReportSchema,
+    model_ref: str = "",
+    content_markdown: str = "",
+) -> str:
+    report_id = str(uuid.uuid4())
+    row = Report(
+        id=report_id,
+        user_id=user_id,
+        department=department,
+        report_type=mode,
+        title=schema.cover.title,
+        content_markdown=content_markdown,
+        content_structured=schema.model_dump(mode="json"),
+        model_ref=model_ref,
+    )
+    session.add(row)
+    session.flush()
+    return report_id
 
 
 def save_report(
@@ -56,7 +123,11 @@ def save_report(
     token_usage: dict | None = None,
     generation_duration_ms: int | None = None,
 ) -> Report:
-    """Validate schema, build `Report`, flush, return. Does not commit."""
+    """Validate `content_structured` against canonical `ReportSchema` and
+    insert a fresh `Report` row. Does not commit. Used by HTTP-driven
+    flows that want the ORM row back; scheduler executors should prefer
+    `ReportStoreImpl.save` / `create_report`.
+    """
     validate_report_schema(content_structured)
     report = Report(
         id=str(uuid.uuid4()),

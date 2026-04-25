@@ -1,12 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('../../components/chat/ChatInterface', () => ({
-  ChatInterface: ({ onFirstMessage }: any) => (
-    <button data-testid="send" onClick={() => onFirstMessage?.('hi')}>
-      send
-    </button>
+  ChatInterface: ({ greeting, subtext, chips, inputPlaceholder }: any) => (
+    <div data-testid="chat-interface">
+      <h1>{greeting}</h1>
+      <p>{subtext}</p>
+      <ul>
+        {chips.map((c: { label: string; value: string }) => (
+          <li key={c.value}>
+            <button type="button">{c.label}</button>
+          </li>
+        ))}
+      </ul>
+      <span data-testid="placeholder">{inputPlaceholder}</span>
+    </div>
   ),
 }));
 
@@ -25,12 +34,15 @@ describe('SecretaryPage', () => {
     renderPage();
     expect(screen.getByText(/Welcome back, Alex/)).toBeInTheDocument();
     expect(screen.getByText(/What can I help you with today/)).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: /^(What is LIA|Get a quick market snapshot|How do I use Equity Research|Summarize).*/ })).not.toHaveLength(0);
+    expect(
+      screen.getAllByRole('button', {
+        name: /^(What is LIA|Get a quick market snapshot|How do I use Equity Research|Summarize).*/,
+      }),
+    ).not.toHaveLength(0);
   });
 
-  it('hides the welcome state once a message has been sent', () => {
+  it('uses the spec-mandated input placeholder', () => {
     renderPage();
-    fireEvent.click(screen.getByTestId('send'));
-    expect(screen.queryByText(/Welcome back, Alex/)).toBeNull();
+    expect(screen.getByTestId('placeholder')).toHaveTextContent(/Ask LIA anything/);
   });
 });

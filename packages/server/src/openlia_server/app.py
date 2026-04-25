@@ -67,6 +67,7 @@ from openlia_server.routes.departments.panic_thermometer import (
 from openlia_server.routes.departments.retail_sentiment import (
     build_retail_sentiment_router,
 )
+from openlia_server.routes.departments.secretary import build_secretary_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
@@ -313,7 +314,7 @@ def _make_lifespan(
             from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
             from openlia_server.services.mr_cache import MRCacheStoreImpl
             from openlia_server.services.mr_schedules import MRScheduleService
-            from openlia_server.services.report_store import ReportStoreImpl
+            from openlia_server.services.reports import ReportStoreImpl
 
             mr_data_provider = getattr(app.state, "mr_data_provider", None)
             mr_builder = MRAssessmentBuilderImpl(data_provider=mr_data_provider)
@@ -424,6 +425,7 @@ def create_app(
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
