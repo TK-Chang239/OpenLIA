@@ -65,7 +65,7 @@ merged.
 | 14 | Equity Research                     | Done        | ~83%      | IMPLEMENTER               | Active layout diverges from spec; `POST /chat` drops `session_id`            |
 | 15 | Earnings Update                     | Done        | ~78%      | IMPLEMENTER               | `/schedules` route absent; `EarningsUpdatePage.tsx` absent                   |
 | 16 | Morning Briefing                    | Done        | ~82%      | IMPLEMENTER               | `mb_user_configs` migration absent; prompt/builder JSON-blob mismatch        |
-| 17 | Formula Engine                      | Done        | ~70%      | SPEC_DRIFT                | Plan vs design spec describe materially different DSLs                       |
+| 17 | Formula Engine                      | Done        | 100%      | RESOLVED                  | ~~Plan vs design spec describe materially different DSLs~~ — closed via Phase 17 fix-plan (NEW-17-00..16); Option A (plan wins, additive spec amendment); reserved scalars + ruleset + streak moved into engine; pt_runner private helpers deleted |
 | 18 | Panic Thermometer                   | Done        | ~72%      | DEFERRED + IMPLEMENTER    | 5 drill-down dashboards + rule editor deferred; server tests missed          |
 | 19 | Macro Research                      | Done        | ~72%      | IMPLEMENTER               | Settings panel never built; `POST /assessment/run` is a stub                 |
 | 20 | Retail Sentiment                    | Done        | v1: 60% / v2-bundle: 100% | DEFERRED        | v2-full deferred; `rs_classification_log` migration unconfirmed              |
@@ -642,7 +642,7 @@ instead of all 1,000+.
 | 14 | [phase-14-equity-research.md](./fix-plans/phase-14-equity-research.md) | ~83% | IMPLEMENTER |
 | 15 | [phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md) | ~78% | IMPLEMENTER |
 | 16 | [phase-16-morning-briefing.md](./fix-plans/phase-16-morning-briefing.md) | ~82% | mixed |
-| 17 | [phase-17-formula-engine.md](./fix-plans/phase-17-formula-engine.md) | ~70% | SPEC_DRIFT |
+| 17 | ~~[phase-17-formula-engine.md](./fix-plans/phase-17-formula-engine.md)~~ | 100% | RESOLVED (fix/phase-17-formula-engine) |
 | 18 | [phase-18-panic-thermometer.md](./fix-plans/phase-18-panic-thermometer.md) | ~72% | DEFERRED + IMPLEMENTER |
 | 19 | [phase-19-macro-research.md](./fix-plans/phase-19-macro-research.md) | ~72% | IMPLEMENTER |
 | 20 | [phase-20-retail-sentiment.md](./fix-plans/phase-20-retail-sentiment.md) | v1 ~60% / v2 100% | DEFERRED + SPEC_DRIFT |

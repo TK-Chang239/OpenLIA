@@ -27,8 +27,9 @@ def test_historical_var_negative_lag_raises(engine: FormulaEngine):
     history = ctx_with_history(history={"price": [1.0]})
     with pytest.raises(FormulaError):
         engine.evaluate("price[t+1]", history)  # parser should not accept +
-    with pytest.raises(FormulaError):
-        engine.evaluate("price[t-10]", history)  # out of range
+    # Insufficient-history now returns null + warning rather than raising.
+    assert engine.evaluate("price[t-10]", history) is None
+    assert engine.last_warnings
 
 
 def test_historical_var_missing_series_raises(engine: FormulaEngine):
@@ -57,9 +58,9 @@ def test_rolling_mean_n(engine: FormulaEngine):
 
 def test_rolling_mean_requires_enough_history(engine: FormulaEngine):
     h = ctx_with_history(history={"price": [1.0, 2.0]})
-    with pytest.raises(FormulaError) as exc:
-        engine.evaluate("rolling_mean(price, 5)", h)
-    assert "history" in str(exc.value).lower()
+    # Insufficient history returns null + warning per spec.
+    assert engine.evaluate("rolling_mean(price, 5)", h) is None
+    assert engine.last_warnings
 
 
 def test_lag_n(engine: FormulaEngine):
@@ -72,8 +73,9 @@ def test_lag_n(engine: FormulaEngine):
 
 def test_pct_change_requires_positive_prior(engine: FormulaEngine):
     h = ctx_with_history(history={"price": [0.0, 10.0]})
-    with pytest.raises(FormulaError):
-        engine.evaluate("pct_change(price, 1)", h)
+    # Prior-zero now returns null + warning rather than raising.
+    assert engine.evaluate("pct_change(price, 1)", h) is None
+    assert engine.last_warnings
 
 
 def test_history_func_first_arg_must_be_variable(engine: FormulaEngine):

@@ -42,12 +42,24 @@ _DEFAULT_RULESET: dict[str, Any] = {
 }
 
 
+_PANEL_SCALAR_KEYS: frozenset[str] = frozenset()
+
+
 @dataclass(frozen=True)
 class OilPanel:
     panel_id: str = "oil"
     required_requirements: tuple[str, ...] = ("historical_prices", "stock_quote")
     optional_requirements: tuple[str, ...] = ()
     default_ruleset: dict[str, Any] = field(default_factory=lambda: _DEFAULT_RULESET)
+
+    def known_identifiers(self) -> set[str]:
+        from openlia.formula import RESERVED_NAMES
+
+        names: set[str] = set(RESERVED_NAMES) | set(_PANEL_SCALAR_KEYS)
+        names |= {"price", "high", "low"}  # raw_series keys
+        names |= set(self.default_ruleset.get("params", {}).keys())
+        names.add("streak_days")
+        return names
 
     def build_context(
         self,
@@ -67,19 +79,19 @@ class OilPanel:
             warnings.append("oil: no historical price data available")
 
         if quote and quote.get("price") is not None:
-            price = float(quote["price"])
-            prev_close = (
-                float(quote["previous_close"])
-                if quote.get("previous_close") is not None
-                else (closes[-2] if len(closes) >= 2 else price)
-            )
+            live_price = float(quote["price"])
+            # Append the live quote to the series so reserved derived `price`
+            # reflects the live tick rather than yesterday's close.
+            closes = [*closes, live_price]
+            if highs:
+                highs = [*highs, max(highs[-1], live_price)]
+            if lows:
+                lows = [*lows, min(lows[-1], live_price)]
         else:
             warnings.append("oil: live quote unavailable - using last historical close")
-            price = closes[-1] if closes else 0.0
-            prev_close = closes[-2] if len(closes) >= 2 else price
 
         return PanelContextBuildResult(
-            scalars={"price": price, "prev_close": prev_close},
+            scalars={},
             raw_series={"price": closes, "high": highs, "low": lows},
             warnings=warnings,
         )
