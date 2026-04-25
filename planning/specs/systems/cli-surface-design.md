@@ -96,12 +96,14 @@ Starts the FastAPI server with the background task scheduler, Alembic migration 
 **Startup output:**
 
 ```
-OpenLIA v1.0.0
+OpenLIA vX.Y.Z
 Mode:      personal
 Database:  ~/.openlia/openlia.db
 Listening: http://127.0.0.1:8000
 Scheduler: enabled (12 active jobs)
 ```
+
+(actual version read from `openlia_server._cli_support.OPENLIA_VERSION`)
 
 If the wizard has not been completed, the startup message includes:
 
@@ -139,7 +141,7 @@ Admin operations for managing users, invites, and sessions in company-mode deplo
 
 The `lockout` subcommand follows the same convention -- it emits `auth.lockout_setting_changed` (the canonical action name), not a `cli.*` variant.
 
-`unlock` does not have a dedicated event type in the v1 enum; emit it as `session_revoked` with `metadata = {"action": "unlock", "source": "cli"}` if any audit row is desired, or omit (since unlocking is not a security-relevant state change in the way disabling is). Default v1 behavior: omit.
+`unlock` does not have a dedicated event type in the v1 enum; emit it as `session_revoked` with `metadata = {"action": "unlock", "source": "cli"}` if any audit row is desired, or omit (since unlocking is not a security-relevant state change in the way disabling is). Default v1 behavior: omit. Current implementation (cli.py `admin_unlock`) matches this -- no `auth_events` row emitted.
 
 ---
 
@@ -277,6 +279,7 @@ Creates a signup invite token and prints the full invite URL. The admin delivers
 ```
 Invite created.
 URL:      http://localhost:8000/register?invite=abc123...
+ID:       7c91e2b4-3fae-4c1d-9b6a-9d7e0f2b1a55
 Label:    Engineering team
 Max uses: 10
 Expires:  2026-04-23
@@ -288,20 +291,22 @@ Expires:  2026-04-23
 
 Lists all invites with usage stats.
 
-**Output:** Table with columns: `Token` (first 12 chars), `Label`, `Uses` (count/max or count/unlimited), `Created`, `Expires`, `Status` (active/expired/revoked/exhausted).
+**Output:** Table with columns: `ID` (first 8 chars of the invite UUID), `Label`, `Uses` (count/max or count/unlimited), `Created`, `Expires`, `Status` (active/expired/revoked/exhausted).
 
 ```
-Token          Label              Uses          Created      Expires      Status
-abc123def456   Engineering team   3/10          2026-04-15   2026-04-23   active
-xyz789abc012   Summer interns     5/unlimited   2026-04-10   --           active
-mno345pqr678   --                 1/1           2026-04-08   2026-04-09   exhausted
+ID         Label              Uses          Created      Expires      Status
+7c91e2b4   Engineering team   3/10          2026-04-15   2026-04-23   active
+a3f80d12   Summer interns     5/unlimited   2026-04-10   --           active
+b6219ce7   --                 1/1           2026-04-08   2026-04-09   exhausted
 ```
+
+Raw invite tokens are never stored (only `token_hash`), so `list-invites` shows the invite UUID instead. Use the 8-char prefix with `revoke-invite`.
 
 ---
 
-#### `openlia admin revoke-invite <token>`
+#### `openlia admin revoke-invite <invite-id>`
 
-Revokes an invite so it can no longer be used for registration. Takes the full token or the first 12-character prefix shown in `list-invites`.
+Revokes an invite so it can no longer be used for registration. Takes the full invite UUID or the 8-character prefix shown in `list-invites`. If the prefix matches more than one invite, the command fails with an error and lists the matches.
 
 **When to use:** When an invite link was shared with the wrong person, or when the admin wants to close registration after enough users have signed up.
 
@@ -337,7 +342,8 @@ Re-encrypts all API keys in the database with a new AES-256-GCM key. Walks `llm_
 
 | Flag | Type | Notes |
 |---|---|---|
-| `--new-key` | string | Base64-encoded 32-byte key. If omitted, reads from stdin. If neither provided, generates a random key. |
+| `--new-key` | string | Base64-encoded 32-byte key. If omitted (and `--from-stdin` not set), generates a random key. Mutually exclusive with `--from-stdin`. |
+| `--from-stdin` | flag | Read the base64 key from stdin (one line, trailing newline stripped). Use in scripted/CI contexts where the key must not appear in argv or shell history. Mutually exclusive with `--new-key`. |
 
 **Output:**
 
