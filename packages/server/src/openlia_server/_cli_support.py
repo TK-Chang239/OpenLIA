@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -110,3 +111,45 @@ def print_version_and_exit() -> None:
     """`--version` handler."""
     typer.echo(OPENLIA_VERSION)
     raise typer.Exit()
+
+
+def _shorten_db_url(db_url: str) -> str:
+    """Render a sqlite path as a `~`-relative path; strip query params; leave
+    non-sqlite URLs untouched aside from the query-string strip."""
+    base = db_url.split("?", 1)[0]
+    sqlite_prefix = "sqlite:///"
+    if not base.startswith(sqlite_prefix):
+        return base
+    raw_path = base[len(sqlite_prefix) :]
+    if not raw_path:
+        return base
+    path = Path(raw_path)
+    try:
+        home = Path.home()
+        rel = path.resolve().relative_to(home.resolve())
+        return f"~/{rel}"
+    except (ValueError, OSError):
+        return str(path)
+
+
+def render_startup_banner(
+    *,
+    version: str,
+    mode: str,
+    db_url: str,
+    host: str,
+    port: int,
+    scheduler_enabled: bool,
+    wizard_pending: bool,
+) -> str:
+    """Build the canonical multi-line startup banner. Pure (no IO)."""
+    lines = [
+        f"OpenLIA v{version}",
+        f"Mode:      {mode}",
+        f"Database:  {_shorten_db_url(db_url)}",
+        f"Listening: http://{host}:{port}",
+        f"Scheduler: {'enabled' if scheduler_enabled else 'disabled'}",
+    ]
+    if wizard_pending:
+        lines.append("Setup wizard: pending -- open the URL above to configure.")
+    return "\n".join(lines)

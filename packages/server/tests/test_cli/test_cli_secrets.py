@@ -155,3 +155,57 @@ class TestRotateKey:
         result = cli_runner.invoke(app, ["secrets", "rotate-key", "--new-key", new_key_b64])
         assert result.exit_code == 0
         assert "0 values re-encrypted" in result.output
+
+    def test_rotate_key_from_stdin(
+        self,
+        cli_runner,
+        cli_engine,
+        cli_secret_key,
+        cli_home,
+        seeded_encrypted_rows,
+        monkeypatch,
+    ):
+        new_key = b"\x88" * 32
+        new_key_b64 = base64.b64encode(new_key).decode()
+        result = cli_runner.invoke(
+            app, ["secrets", "rotate-key", "--from-stdin"], input=new_key_b64 + "\n"
+        )
+        assert result.exit_code == 0, result.output
+        assert "3 values re-encrypted" in result.output
+
+        from openlia_server.db.session import SessionLocal
+
+        with SessionLocal() as s:
+            llm = s.execute(select(LLMProvider)).scalar_one()
+            assert (
+                crypto.decrypt_with_key(new_key, "llm_1", llm.api_key_encrypted) == "sk-llm-secret"
+            )
+
+    def test_rotate_key_from_stdin_empty(
+        self,
+        cli_runner,
+        cli_engine,
+        cli_secret_key,
+        cli_home,
+        seeded_encrypted_rows,
+    ):
+        result = cli_runner.invoke(app, ["secrets", "rotate-key", "--from-stdin"], input="")
+        assert result.exit_code == 1
+        assert "no key read from stdin" in result.output
+
+    def test_rotate_key_rejects_both_flags(
+        self,
+        cli_runner,
+        cli_engine,
+        cli_secret_key,
+        cli_home,
+        seeded_encrypted_rows,
+    ):
+        new_key_b64 = base64.b64encode(b"\x99" * 32).decode()
+        result = cli_runner.invoke(
+            app,
+            ["secrets", "rotate-key", "--new-key", new_key_b64, "--from-stdin"],
+            input=new_key_b64 + "\n",
+        )
+        assert result.exit_code == 1
+        assert "use either --new-key or --from-stdin" in result.output
