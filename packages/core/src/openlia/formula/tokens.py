@@ -10,6 +10,8 @@ from typing import Any
 class TokenKind(Enum):
     # Literals
     NUMBER = auto()
+    STRING = auto()
+    NULL = auto()
     IDENT = auto()
     # Arithmetic
     PLUS = auto()

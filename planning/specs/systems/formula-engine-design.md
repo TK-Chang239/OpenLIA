@@ -2,6 +2,87 @@
 
 A shared, deterministic formula engine used by Panic Thermometer (PT) and Macro Research T1/T2 (MR) to evaluate user-defined threshold conditions against live and historical financial data. Replaces hardcoded thresholds with user-editable rule sets that map live values to status levels (green / amber / red / dark_red).
 
+## Shipped v1 DSL — authoritative
+
+The implemented module under `packages/core/src/openlia/formula/` is the source of truth for the DSL surface. This section documents what actually ships and supersedes any conflicting prose later in this spec. Sections below describe the long-term target surface; deltas vs. shipped are called out where they exist.
+
+**Module layout (7 files):**
+
+```
+packages/core/src/openlia/formula/
+├── __init__.py        # Public re-exports
+├── tokens.py          # TokenKind enum + Token dataclass (lexer output)
+├── lexer.py           # Source string -> tokens
+├── parser.py          # Tokens -> typed AST (Pratt parser)
+├── engine.py          # FormulaEngine + EvaluationContext + FUNCTION_REGISTRY
+├── requirements.py    # Static AST walk -> RequirementRef list
+├── derived.py         # Reserved-scalar computation (ma20/50/100/200, atr_14, std_20, ...)
+└── rules.py           # Rule, RuleSet, PanelResult, evaluate_ruleset, compute_streak
+```
+
+**Operators (shipped, including non-spec extensions):**
+
+| Operator | Kind | Status |
+|---|---|---|
+| `(` `)` | Grouping | Spec |
+| Unary `-`, `not` | Unary | Spec (lowercase canonical) |
+| `**` | Arithmetic (right-assoc) | Shipped, non-spec |
+| `*`, `/`, `%` | Arithmetic | `%` shipped, non-spec |
+| `+`, `-` | Arithmetic | Spec |
+| `<`, `<=`, `>`, `>=`, `==`, `!=` | Comparison | Spec |
+| `and` | Boolean (short-circuit) | Spec, lowercase canonical |
+| `or` | Boolean (short-circuit) | Spec, lowercase canonical |
+| `a if cond else b` | Ternary | Shipped, non-spec |
+
+**Keyword casing:** `and`, `or`, `not`, `if`, `else`, `true`, `false`, `null` are accepted in either case (e.g. `AND`, `And`, `and` all valid). Canonical form is lowercase. Identifiers remain case-sensitive.
+
+**Function catalog (shipped — must match `engine.FUNCTION_REGISTRY`):**
+
+| Name | Signature | Notes |
+|---|---|---|
+| `min(*values)` | variadic numbers -> number | Min of all args |
+| `max(*values)` | variadic numbers -> number | Max of all args |
+| `abs(x)` | number -> number | |
+| `round(x[, ndigits])` | number[, int] -> number | |
+| `mean(*values)` | variadic numbers -> number | |
+| `median(*values)` | variadic numbers -> number | |
+| `stddev(*values)` | variadic numbers -> number | Sample stddev |
+| `sum(*values)` | variadic numbers -> number | |
+| `last(field[, n])` | series[, int] -> number | History-aware |
+| `pct_change(field, n)` | series, int -> number\|null | Returns null on prior=0 (warning) |
+| `rolling_mean(field, n)` | series, int -> number\|null | Identical to `avg` |
+| `lag(field, n)` | series, int -> number | History-aware |
+| `avg(field, n)` | series, int -> number\|null | Spec canonical name |
+| `cross_above(fast, slow)` | series, series -> bool | `fast[-2] <= slow[-2] and fast[-1] > slow[-1]` |
+| `cross_below(fast, slow)` | series, series -> bool | `fast[-2] >= slow[-2] and fast[-1] < slow[-1]` |
+| `consecutive(field, op, value)` | series, string, number -> int | `op` in `>`, `<`, `>=`, `<=`, `==`, `!=` |
+| `slope(field, n)` | series, int -> number\|null | Linear-regression slope |
+| `percentile(field, lookback, pct)` | series, int, number -> number\|null | Linear-interpolation rank |
+| `days_since(event_type)` | string -> int\|null | Reads `events` side-channel on context |
+
+**Literals:**
+- Number (int, float, scientific): `85`, `3.14`, `1.2e-3`
+- Boolean: `true`, `false` (any case)
+- Null: `null` (any case) — engine implements null propagation per "Null Semantics" below
+- String: `"double-quoted"` with `\"` and `\\` escapes — required by `consecutive` and `days_since`
+
+**Public API (shipped):**
+- `parse(source) -> Expression` — bare AST parse, raises `ParseError`
+- `parse_formula(source, known_names=None) -> ParsedFormula` — parse + identifier extraction + unknown-id list, used by the frontend `/parse` endpoint
+- `FormulaEngine().evaluate(expr, ctx) -> float | bool | None` — direct numeric/boolean result; division-by-zero and insufficient-history return `None` with a warning attached to the engine state
+- `EvaluationContext(values, history, events=[])` — two-slot context plus the `events` side-channel for `days_since`
+- `EvaluationContext.from_raw_series(raw_series, scalars, params, *, events=None)` — three-input constructor that injects reserved derived scalars and validates that `scalars` / `params` do not shadow reserved names
+- `evaluate_ruleset(ruleset, raw_series, scalars, *, params=None, events=None) -> PanelResult` — first-match-wins, default green, label interpolation via `str.format_map` with missing-key fallback
+- `compute_streak(streak_condition, raw_series, scalars, *, params=None, events=None) -> int` — engine-owned streak backtest with as-of-bar reserved-scalar recomputation
+- Errors: `FormulaError` (base) with subclasses `ParseError`, `UnknownIdentifierError`, `TypeMismatchError`. All carry `line`, `col`, `position`, plus `identifier` / `type_` where applicable.
+
+**Safety caps (shipped, non-spec but retained):** `MAX_AST_DEPTH=64`, `MAX_NODE_COUNT=1024`, `MAX_EVAL_STEPS=10_000`. Exceeding any cap raises `FormulaError`.
+
+The remainder of this document describes the long-term canonical surface (null semantics, reserved scalars, ruleset semantics, streak algorithm). Where prose calls for "uppercase keywords", "9-file layout", or "no `%` / `**` / ternary", treat the "Shipped v1 DSL — authoritative" section above as the binding statement.
+
+---
+
+
 Referenced by:
 - `planning/specs/pages/departments/PanicThermometerPageSpec.md`
 - `planning/specs/systems/macro-research-dalio-dashboards-design.md`

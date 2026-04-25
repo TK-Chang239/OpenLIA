@@ -42,18 +42,18 @@ def test_type_error_carries_op_and_position(engine: FormulaEngine):
     assert "+" in msg
 
 
-def test_division_by_zero_carries_position(engine: FormulaEngine):
-    with pytest.raises(FormulaError) as exc:
-        engine.evaluate("5 / 0", EvaluationContext())
-    assert "division" in str(exc.value).lower()
-    assert exc.value.line == 1
+def test_division_by_zero_returns_null_with_warning(engine: FormulaEngine):
+    result = engine.evaluate_safe("5 / 0", EvaluationContext())
+    assert result.value is None
+    assert any("division" in w.lower() for w in result.warnings)
 
 
-def test_history_error_mentions_series_name_and_size(engine: FormulaEngine):
-    with pytest.raises(FormulaError) as exc:
-        engine.evaluate(
-            "price[t-10]",
-            EvaluationContext(history={"price": [1.0, 2.0]}),
-        )
-    assert "price" in str(exc.value)
-    assert "11" in str(exc.value)  # needs >= 11 entries
+def test_insufficient_history_returns_null_with_warning(engine: FormulaEngine):
+    result = engine.evaluate_safe(
+        "price[t-10]",
+        EvaluationContext(history={"price": [1.0, 2.0]}),
+    )
+    assert result.value is None
+    joined = " ".join(result.warnings)
+    assert "price" in joined
+    assert "11" in joined  # needs >= 11 entries

@@ -41,9 +41,10 @@ def test_oil_build_context_from_payloads():
         panel_config={"params": {"ticker": "BNO.US"}},
         payloads={"historical_prices": history, "stock_quote": quote},
     )
-    assert r.raw_series["price"][-1] == 85.0
-    assert r.scalars["price"] == 92.4
-    assert r.scalars["prev_close"] == 91.0
+    # Live quote tick is appended to raw_series so reserved `price` derives correctly.
+    assert r.raw_series["price"][-1] == 92.4
+    assert r.raw_series["price"][-2] == 85.0
+    assert r.scalars == {}
 
 
 def test_oil_build_context_without_live_quote_falls_back_to_last_close():
@@ -70,5 +71,6 @@ def test_oil_build_context_without_live_quote_falls_back_to_last_close():
         panel_config={"params": {"ticker": "BNO.US"}},
         payloads={"historical_prices": history, "stock_quote": None},
     )
-    assert r.scalars["price"] == 82.5
+    assert r.raw_series["price"][-1] == 82.5
+    assert r.scalars == {}
     assert "quote unavailable" in " ".join(r.warnings)
