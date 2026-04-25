@@ -4,7 +4,7 @@ Wraps `ReportRunner.run()` with EU-specific defaults:
 - Pulls the user's EU config (sections + length + custom sections).
 - Builds a `ReportRequest` with mode="earnings_analysis".
 - Forwards every SSE event to the caller.
-- Persists the report on `ReportComplete` via `report_store.create_report`.
+- Persists the report on `ReportComplete` via `reports.create_report`.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from openlia.reports.validator import validate_report_payload
 from sqlalchemy.orm import Session
 
 from openlia_server.services import eu_config as eu_config_svc
-from openlia_server.services import report_store as report_store_mod
+from openlia_server.services import reports as reports_svc
 
 _LENGTH_MAP = {"concise": "brief", "normal": "standard", "elaborative": "long"}
 
@@ -67,7 +67,7 @@ async def run_on_demand(
         yield event
         if isinstance(event, ReportComplete):
             schema = validate_report_payload(event.schema)
-            report_store_mod.create_report(
+            reports_svc.create_report(
                 session,
                 user_id=user_id,
                 department="earnings_update",

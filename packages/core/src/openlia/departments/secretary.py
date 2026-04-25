@@ -40,6 +40,27 @@ _SUGGEST_REDIRECT_TOOL: dict[str, Any] = {
 }
 
 
+_SAVE_REPORT_TO_REPO_TOOL: dict[str, Any] = {
+    "name": "save_report_to_repo",
+    "description": (
+        "Save an existing report into the user's repository so they can "
+        "find it again later. Provide the report id from the current "
+        "conversation context."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "report_id": {
+                "type": "string",
+                "description": "The id of an existing Report owned by the user.",
+            }
+        },
+        "required": ["report_id"],
+        "additionalProperties": False,
+    },
+}
+
+
 @dataclass(frozen=True)
 class SecretaryDepartment:
     name: str = "secretary"
@@ -55,4 +76,7 @@ class SecretaryDepartment:
         "historical_prices",
         "economic_events",
     )
-    extra_tools: tuple[dict[str, Any], ...] = (_SUGGEST_REDIRECT_TOOL,)
+    extra_tools: tuple[dict[str, Any], ...] = (
+        _SUGGEST_REDIRECT_TOOL,
+        _SAVE_REPORT_TO_REPO_TOOL,
+    )

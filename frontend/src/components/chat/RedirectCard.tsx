@@ -42,7 +42,7 @@ export function RedirectCard({ department, reason, prefill }: RedirectCardProps)
   const label = DEPT_LABEL[department];
   const go = () => {
     const base = DEPT_PATH[department];
-    const target = prefill ? `${base}?q=${encodeURIComponent(prefill)}` : base;
+    const target = prefill ? `${base}?prefill=${encodeURIComponent(prefill)}` : base;
     navigate(target);
   };
 

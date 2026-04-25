@@ -15,16 +15,21 @@ interface Props {
 
 export function WelcomeOverlay({ greeting, subtext, chips, onChipClick }: Props): JSX.Element {
   const reduce = useReducedMotion();
-  const overlayDuration = reduce ? 0 : 0.2;
+  // Phase 13 NEW-13-05 spec:
+  //   greeting/subtext entry: opacity 0→1, y 12→0, 250ms
+  //   chip stagger: 40ms apart
+  //   exit: opacity 1→0, y 0→-8, 200ms
+  const entryDuration = reduce ? 0 : 0.25;
+  const exitDuration = reduce ? 0 : 0.2;
   const chipDuration = reduce ? 0 : 0.22;
+  const chipStagger = 0.04;
 
   return (
     <motion.div
       data-testid="welcome-overlay"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0, y: reduce ? 0 : -12 }}
-      transition={{ duration: overlayDuration, ease: "easeOut" }}
+      initial={{ opacity: 0, y: reduce ? 0 : 12 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: entryDuration, ease: "easeOut" } }}
+      exit={{ opacity: 0, y: reduce ? 0 : -8, transition: { duration: exitDuration, ease: "easeOut" } }}
       className="relative flex h-full w-full flex-col items-center justify-center px-6"
       style={{
         backgroundImage:
@@ -62,7 +67,7 @@ export function WelcomeOverlay({ greeting, subtext, chips, onChipClick }: Props)
               transition={{
                 duration: chipDuration,
                 ease: "easeOut",
-                delay: reduce ? 0 : 0.2 + idx * 0.05,
+                delay: reduce ? 0 : 0.2 + idx * chipStagger,
               }}
               whileHover={
                 reduce

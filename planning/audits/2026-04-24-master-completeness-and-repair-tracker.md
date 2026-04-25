@@ -61,7 +61,7 @@ merged.
 | 10 | Setup Wizard                        | Done        | 100%      | RESOLVED                  | ~~Steps 3+4 backend missing~~ — closed via Phase 10 fix-plan (P0-03/03b, P1-15/16, NEW-10-01..15); /setup/models, /setup/providers, /setup/required_tiers shipped, dynamic dept registry, loopback during entire wizard, takeover-on-409 modal, e2e smoke green |
 | 11 | Settings Page                       | Done        | 100%      | RESOLVED                  | ~~Admin panels stubbed, unsaved-changes guard unwired, admin reset uses window.prompt~~ — closed via Phase 11 fix-plan (P0-07/09, P1-11, P2-14, NEW-11-02..13); ModelsAdminPanel + DataProvidersAdminPanel real CRUD, dirty-form blocker, server random temp password + OneTimeSecretModal |
 | 12 | Shared Chat Components              | Done        | 100%      | RESOLVED                  | ~~`Department` union covers 2 of 7; targeted vitest gaps~~ — closed via Phase 12 fix-plan (P1-02, P2-16, NEW-12-01..21); 7-dept union, drawer search/scope/archive, markdown+code highlighting, inline thumbnails, FileViewer focus+scroll preservation, idempotent SaveToRepo, AbortController POST SSE, auto-titles |
-| 13 | Report Pipeline & Secretary         | Done        | ~75%      | IMPLEMENTER               | Secretary HTTP route never created                                           |
+| 13 | Report Pipeline & Secretary         | Done        | 100%      | RESOLVED                  | ~~Secretary HTTP route never created; PDF block renderer field-name bugs~~ — closed via Phase 13 fix-plan (P0-01, P1-01, NEW-13-01..10); Secretary SSE route + chat-runner shipped, PDF block renderer fixed, SPA print route + ReportPrintPage, services/report_store.py deleted, save_report_to_repo tool |
 | 14 | Equity Research                     | Done        | ~83%      | IMPLEMENTER               | Active layout diverges from spec; `POST /chat` drops `session_id`            |
 | 15 | Earnings Update                     | Done        | ~78%      | IMPLEMENTER               | `/schedules` route absent; `EarningsUpdatePage.tsx` absent                   |
 | 16 | Morning Briefing                    | Done        | ~82%      | IMPLEMENTER               | `mb_user_configs` migration absent; prompt/builder JSON-blob mismatch        |
@@ -638,7 +638,7 @@ instead of all 1,000+.
 | 10 | ~~[phase-10-setup-wizard.md](./fix-plans/phase-10-setup-wizard.md)~~ | 100% | RESOLVED (fix/phase-10-setup-wizard) |
 | 11 | ~~[phase-11-settings-page.md](./fix-plans/phase-11-settings-page.md)~~ | 100% | RESOLVED (fix/phase-11-settings-page) |
 | 12 | ~~[phase-12-shared-chat-components.md](./fix-plans/phase-12-shared-chat-components.md)~~ | 100% | RESOLVED (fix/phase-12-shared-chat-components) |
-| 13 | [phase-13-report-pipeline-secretary.md](./fix-plans/phase-13-report-pipeline-secretary.md) | ~75% | IMPLEMENTER |
+| 13 | ~~[phase-13-report-pipeline-secretary.md](./fix-plans/phase-13-report-pipeline-secretary.md)~~ | 100% | RESOLVED (fix/phase-13-report-pipeline-secretary) |
 | 14 | [phase-14-equity-research.md](./fix-plans/phase-14-equity-research.md) | ~83% | IMPLEMENTER |
 | 15 | [phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md) | ~78% | IMPLEMENTER |
 | 16 | [phase-16-morning-briefing.md](./fix-plans/phase-16-morning-briefing.md) | ~82% | mixed |

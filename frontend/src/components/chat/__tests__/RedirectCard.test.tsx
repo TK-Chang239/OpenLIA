@@ -34,7 +34,7 @@ describe('RedirectCard', () => {
     mockNavigate.mockClear();
     renderCard();
     fireEvent.click(screen.getByRole('button', { name: /Go to Equity Research/i }));
-    expect(mockNavigate).toHaveBeenCalledWith('/equity-research?q=AAPL');
+    expect(mockNavigate).toHaveBeenCalledWith('/equity-research?prefill=AAPL');
   });
 
   it('omits the query parameter when no prefill is given', () => {

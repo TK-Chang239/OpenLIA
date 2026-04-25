@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,6 +8,35 @@ from typing import Any
 
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import validate_report_payload
+
+
+class ReportAssemblyError(ValueError):
+    """Raised when assembly cannot produce a publishable report.
+
+    Currently used to reject blocks that still contain unsubstituted
+    `{{tool:...}}` placeholders so an in-flight tool-call value never
+    leaks into a published report.
+    """
+
+
+_TOOL_PLACEHOLDER_RE = re.compile(r"^\s*\{\{\s*tool\s*:[^}]*\}\}\s*$")
+
+
+def _assert_no_tool_placeholders(node: Any, path: str = "") -> None:
+    if isinstance(node, str):
+        if _TOOL_PLACEHOLDER_RE.match(node):
+            raise ReportAssemblyError(
+                f"unsubstituted tool placeholder at {path or '<root>'}: {node!r}"
+            )
+        return
+    if isinstance(node, dict):
+        for k, v in node.items():
+            _assert_no_tool_placeholders(v, f"{path}.{k}" if path else str(k))
+        return
+    if isinstance(node, list):
+        for i, v in enumerate(node):
+            _assert_no_tool_placeholders(v, f"{path}[{i}]")
+        return
 
 
 @dataclass(frozen=True)
@@ -62,4 +92,5 @@ def assemble_report(
     stripped.setdefault("schema_version", "1.0")
     stripped.setdefault("department", department)
     stripped.setdefault("generated_at", now.isoformat())
+    _assert_no_tool_placeholders(stripped)
     return validate_report_payload(stripped)
