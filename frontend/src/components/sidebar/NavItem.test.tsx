@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { Home } from "lucide-react";
 import { NavItem } from "./NavItem";
@@ -64,5 +65,27 @@ describe("NavItem", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId("nav-item-dot")).toBeInTheDocument();
+  });
+
+  it("shows a Radix tooltip with the label when collapsed and hovered", async () => {
+    const user = userEvent.setup();
+    renderAt(
+      "/",
+      <NavItem
+        label="Equity Research"
+        icon={Home}
+        path="/equity-research"
+        collapsed={true}
+        hasUnread={false}
+      />,
+    );
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.hover(screen.getByRole("link"));
+    await waitFor(() => {
+      const tip = screen.getAllByText("Equity Research");
+      expect(tip.length).toBeGreaterThan(0);
+    });
+    const tooltips = await screen.findAllByRole("tooltip");
+    expect(tooltips[0]).toHaveTextContent("Equity Research");
   });
 });
