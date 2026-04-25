@@ -247,11 +247,9 @@ hits them.
   falsy ("green") rather than erroring. Becomes wrong-but-quiet the
   moment a live dispatcher is wired.
 
-- [ ] **P1-11 — Phase 4 `update_model` route accepts fields it silently
-  drops.** `_ModelIn` body includes `model_ref` and `tier`; service call
-  passes only `display_name`, `is_tier_default`, `is_enabled`,
-  `overrides`. Edit-model UI lies about what it persists. File:
-  `packages/server/src/openlia_server/routes/settings.py` lines 604–637.
+- [x] ~~**P1-11 — Phase 4 `update_model` route accepts fields it silently
+  drops.**~~ RESOLVED: `update_model` service + route now wire `tier`,
+  `model_ref`, `provider_id` (NEW-4-10).
 
 - [ ] **P1-12 — Phase 5 `await_with_grace` exported but unused in runners.**
   Spec required 2-second grace period for in-flight tool calls on
@@ -420,14 +418,13 @@ keeps the project navigable.
   `system` and `user` keys at the file root co-exist with the canonical
   `chat:` block. Remove the dead keys.
 
-- [ ] **P2-11 — Phase 4 `/admin/llm/*` vs `/settings/admin/llm/*` prefix.**
-  Spec uses the former; shipped uses the latter. Amend the spec to match
-  the shipped prefix (already locked in cross-plan contracts as
-  `/settings/admin/llm/*`).
+- [x] ~~**P2-11 — Phase 4 `/admin/llm/*` vs `/settings/admin/llm/*` prefix.**~~
+  RESOLVED: spec rewritten to `/settings/admin/llm/*` (lines 403-428).
 
-- [ ] **P2-12 — Phase 4 user-preference router missing.** Service-layer
-  helpers exist; `build_llm_user_router` was never created. Either ship
-  the router or remove the helpers and amend the plan.
+- [x] ~~**P2-12 — Phase 4 user-preference router missing.**~~ RESOLVED:
+  `build_llm_user_router` ships in `routes/settings_llm_user.py` mounted
+  at `/settings/models` with roster, preferences CRUD, and
+  `effective/{department_id}` (covered by NEW-4-11).
 
 - [ ] **P2-13 — Phase 8 `Secretary.tsx` placeholder skipped.** Real Phase 9
   `SecretaryPage` is registered in the router; the Phase 8 placeholder file
@@ -632,7 +629,7 @@ instead of all 1,000+.
 | 1b | ~~[phase-1b-db-dashboard-scheduler-notifications.md](./fix-plans/phase-1b-db-dashboard-scheduler-notifications.md)~~ | 100% | RESOLVED (PR #52) |
 | 2 | ~~[phase-2-auth-secrets.md](./fix-plans/phase-2-auth-secrets.md)~~ | 100% | RESOLVED |
 | 3 | ~~[phase-3-data-provider-adapter.md](./fix-plans/phase-3-data-provider-adapter.md)~~ | 100% | RESOLVED (fix/phase-3-data-provider-adapter) |
-| 4 | [phase-4-llm-provider-system.md](./fix-plans/phase-4-llm-provider-system.md) | ~72% | mixed |
+| 4 | ~~[phase-4-llm-provider-system.md](./fix-plans/phase-4-llm-provider-system.md)~~ | 100% | RESOLVED (fix/phase-4-llm-provider-system) |
 | 5 | [phase-5-llm-runtime.md](./fix-plans/phase-5-llm-runtime.md) | ~88% | IMPLEMENTER |
 | 6 | [phase-6-background-task-scheduling.md](./fix-plans/phase-6-background-task-scheduling.md) | ~92% | IMPLEMENTER |
 | 7 | [phase-7-cli-surface.md](./fix-plans/phase-7-cli-surface.md) | ~97% | mixed |
@@ -695,9 +692,30 @@ deferrals, missing submodules, per-phase test debt slices).
 | ~~NEW-3-06~~  | 3     | ~~`ProviderEntry.extra_config` immutability~~ — wrapped in `MappingProxyType` at validation time | P2 |
 | ~~NEW-3-07~~  | 3     | ~~EODHD `_format_ticker` exchange suffix~~ — sourced from `extra_config["exchange_suffix"]` (default `US`) | P2 |
 | ~~NEW-3-08~~  | 3     | ~~Better error for legacy MCP rows missing both `base_url` and `mcp_url`~~ — `ProviderEntry._transport_requirements` includes provider id in the message | P2 |
-| NEW-4-01      | 4     | `build_llm_user_router` (sub of P2-12)                       | P1       |
-| NEW-4-02      | 4     | `openlia.llm` / `services.auth` public exports alignment     | P2       |
-| NEW-4-03      | 4     | Connection-test adapter-registry coverage                    | P2       |
+| ~~NEW-4-01~~  | 4     | ~~`build_llm_user_router` (sub of P2-12)~~ — `routes/settings_llm_user.py` mounted at `/settings/models` | P1 |
+| ~~NEW-4-02~~  | 4     | ~~`openlia.llm` / `services.auth` public exports alignment~~ — `__init__.py` populated; covered by `test_public_api.py` | P2 |
+| ~~NEW-4-03~~  | 4     | ~~Connection-test adapter-registry coverage~~ — adapter retry tests added (`test_adapter_retry.py`) | P2 |
+| ~~NEW-4-10~~  | 4     | ~~PUT `/settings/admin/llm/models/{id}` silently drops `tier`/`model_ref`/`provider_id`~~ — `update_model` service + route now wire all fields; `test_update_model_persists_tier_and_model_ref` | P0 |
+| ~~NEW-4-11~~  | 4     | ~~User-pref router mis-pathed at `/settings/admin/llm`~~ — `build_llm_user_router` mounts `/settings/models` with roster + `effective/{department_id}` | P0 |
+| ~~NEW-4-20~~  | 4     | ~~`with_retries` exported but unused~~ — wrapped in all 6 adapters (anthropic/openai/gemini/openrouter/openai_compat/ollama) | P1 |
+| ~~NEW-4-21~~  | 4     | ~~`openlia.llm.__init__` empty~~ — full public API re-exported | P1 |
+| ~~NEW-4-22~~  | 4     | ~~Wizard Step 3 `POST /setup/models` + `/setup/models/test` missing~~ — handlers added in `routes/setup.py`; `test_e2e_wizard_models.py` | P1 |
+| ~~NEW-4-23~~  | 4     | ~~No `evaluate_requirements` / per-dept `REQUIREMENTS`~~ — `capabilities.evaluate_requirements`, `department_requirements.DEPARTMENT_REQUIREMENTS`, `test_capabilities_gate.py` | P1 |
+| ~~NEW-4-24~~  | 4     | ~~`remote-models` 500s for openrouter/ollama~~ — route returns `{skipped:true}`; admin tests | P1 |
+| ~~NEW-4-25~~  | 4     | ~~openai_compat advertised_capabilities not capturable~~ — `_ModelIn.advertised_capabilities`; auto-writes capability_override row | P1 |
+| ~~NEW-4-26~~  | 4     | ~~`get_provider_api_key` 500s on tampered ciphertext~~ — wraps `DecryptError` -> `AuthError`; service test added | P1 |
+| ~~NEW-4-27~~  | 4     | ~~`run_test` defaulted to false~~ — defaults to true; explicit opt-out requires `skip_reason` | P1 |
+| ~~NEW-4-30~~  | 4     | ~~`SHIPPED_TIER_DEFAULTS` not exported~~ — re-exported from `openlia.llm` | P2 |
+| ~~NEW-4-31~~  | 4     | ~~`uq_llm_models_tier_default` partial index missing `postgresql_where`~~ — added on ORM + baseline migration | P2 |
+| ~~NEW-4-32~~  | 4     | ~~`ModelsSection` placeholder + missing admin panel~~ — section renders three-tier roster against `/settings/models`; admin panel lists provider+model CRUD with delete/set-default | P2 |
+| ~~NEW-4-33~~  | 4     | ~~OpenAI `context_window` always None~~ — falls back to `capabilities_for(...).max_context_tokens` | P2 |
+| ~~NEW-4-34~~  | 4     | ~~`update_provider` cannot clear `env_var_name`/`api_key`~~ — `_Unchanged` sentinel + `clear_api_key`/`clear_env_var_name` flags | P2 |
+| ~~NEW-4-35~~  | 4     | ~~`_TRANSIENT`/`is_transient` not re-exported~~ — `is_transient` exposed via `openlia.llm` | P2 |
+| ~~NEW-4-36~~  | 4     | ~~`_http.py` may be empty~~ — verified contains `make_client`/`status_to_exception`/`wrap_httpx_error` | P2 |
+| ~~NEW-4-37~~  | 4     | ~~No `SQLModelRegistry` ↔ `resolve()` integration test~~ — covered by existing `test_llm_registry.py` (4-stage round-trip) | P2 |
+| ~~NEW-4-38~~  | 4     | ~~No wizard-Step-3 → DB → `resolve()` e2e~~ — `test_e2e_wizard_models.py` posts three tiers, asserts persistence + resolver | P2 |
+| ~~NEW-4-39~~  | 4     | ~~`OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_TIER` env override unwired~~ — `SQLModelRegistry.get_department_tier_override` consults env first | P2 |
+| ~~NEW-4-40~~  | 4     | ~~Department default tier mapping audit~~ — confirmed seven entries in both spec and `department_defaults.py` | P2 |
 | NEW-5-01      | 5     | Runtime events + messages unit tests                         | P2       |
 | NEW-7-01      | 7     | `test_serve_prints_banner` (pair with P2-07)                 | P2       |
 | NEW-8-01      | 8     | Mobile responsive sidebar / tab bar                          | P1       |

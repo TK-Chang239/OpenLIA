@@ -400,16 +400,16 @@ All endpoints require authentication in company mode. Admin-only endpoints retur
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/admin/llm/providers` | List all LLM providers with model counts. |
-| POST | `/admin/llm/providers` | Create a provider. Tests connection first. |
-| PUT | `/admin/llm/providers/{id}` | Update provider. Tests connection first. |
-| DELETE | `/admin/llm/providers/{id}` | Delete provider. Blocked if models exist. |
-| POST | `/admin/llm/providers/{id}/test` | Test provider connection without persisting. |
-| GET | `/admin/llm/providers/{id}/models` | List models for a provider. |
-| POST | `/admin/llm/models` | Create a model entry. |
-| PUT | `/admin/llm/models/{id}` | Update model (tier, display name, overrides, default, enabled). |
-| DELETE | `/admin/llm/models/{id}` | Delete model. Cascades `user_llm_preferences`. |
-| GET | `/admin/llm/providers/{id}/remote-models` | Proxy to provider's `/models` endpoint for live model list. Skipped for Ollama/OpenRouter. |
+| GET | `/settings/admin/llm/providers` | List all LLM providers with model counts. |
+| POST | `/settings/admin/llm/providers` | Create a provider. Tests connection first. |
+| PUT | `/settings/admin/llm/providers/{id}` | Update provider. Tests connection first. |
+| DELETE | `/settings/admin/llm/providers/{id}` | Delete provider. Blocked if models exist. |
+| POST | `/settings/admin/llm/providers/{id}/test` | Test provider connection without persisting. |
+| GET | `/settings/admin/llm/providers/{id}/models` | List models for a provider. |
+| POST | `/settings/admin/llm/models` | Create a model entry. |
+| PUT | `/settings/admin/llm/models/{id}` | Update model (tier, display name, overrides, default, enabled). |
+| DELETE | `/settings/admin/llm/models/{id}` | Delete model. Cascades `user_llm_preferences`. |
+| GET | `/settings/admin/llm/providers/{id}/remote-models` | Proxy to provider's `/models` endpoint for live model list. Skipped for Ollama/OpenRouter. |
 
 ### User-facing (any authenticated user)
 
@@ -424,8 +424,8 @@ All endpoints require authentication in company mode. Admin-only endpoints retur
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/admin/llm/department/{id}` | Body: `{tier?}`. Null body resets to shipped default. |
-| POST | `/admin/llm/capability_override/{provider}/{model}` | Set capability override. Omit body to clear. |
+| POST | `/settings/admin/llm/department/{id}` | Body: `{tier?}`. Null body resets to shipped default. |
+| POST | `/settings/admin/llm/capability_override/{provider}/{model}` | Set capability override. Omit body to clear. |
 
 Wizard counterparts (`/setup/models`, `/setup/models/test`) already exist per `SetupWizardSpec.md`. Their payload shape is updated to carry three tier slots and write to `llm_providers` / `llm_models` tables.
 

@@ -70,6 +70,7 @@ class LLMModel(Base, TimestampMixin):
             "tier",
             unique=True,
             sqlite_where=text("is_tier_default = 1"),
+            postgresql_where=text("is_tier_default"),
         ),
         CheckConstraint(
             "tier IN ('thinking', 'everyday', 'quick')",

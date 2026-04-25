@@ -515,6 +515,7 @@ def upgrade() -> None:
             ["tier"],
             unique=True,
             sqlite_where=sa.text("is_tier_default = 1"),
+            postgresql_where=sa.text("is_tier_default"),
         )
 
     op.create_table(

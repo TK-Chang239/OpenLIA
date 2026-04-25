@@ -200,3 +200,64 @@ def test_department_tier_override_roundtrip(_env_secret, db_session) -> None:
     assert svc.get_department_tier_override(db_session, "equity_research") == "quick"
     svc.clear_department_tier_override(db_session, "equity_research")
     assert svc.get_department_tier_override(db_session, "equity_research") is None
+
+
+def test_decrypt_failure_raises_auth_error(_env_secret, db_session) -> None:
+    """NEW-4-26: DecryptError on decrypt_for_row -> AuthError, not 500."""
+    from openlia.llm.exceptions import AuthError
+
+    p = svc.create_provider(db_session, kind="openai", label="OAI", api_key="sk-real")
+    db_session.commit()
+
+    row = db_session.get(LLMProvider, p.id)
+    assert row.api_key_encrypted is not None
+    row.api_key_encrypted = "corrupted-base64"
+    db_session.commit()
+
+    try:
+        svc.get_provider_api_key(db_session, p.id)
+        raise AssertionError("expected AuthError")
+    except AuthError:
+        pass
+
+
+def test_update_provider_clears_api_key_with_explicit_none(_env_secret, db_session) -> None:
+    """NEW-4-34: update_provider(api_key=None) clears the encrypted column."""
+    p = svc.create_provider(db_session, kind="openai", label="OAI", api_key="sk-real")
+    db_session.commit()
+    assert db_session.get(LLMProvider, p.id).api_key_encrypted is not None
+
+    svc.update_provider(db_session, p.id, api_key=None)
+    db_session.commit()
+
+    assert db_session.get(LLMProvider, p.id).api_key_encrypted is None
+
+
+def test_update_provider_clears_env_var_name_with_explicit_none(
+    _env_secret, db_session
+) -> None:
+    p = svc.create_provider(
+        db_session,
+        kind="openai",
+        label="OAI",
+        env_var_name="OPENLIA_OPENAI_KEY",
+    )
+    db_session.commit()
+    assert db_session.get(LLMProvider, p.id).env_var_name == "OPENLIA_OPENAI_KEY"
+
+    svc.update_provider(db_session, p.id, env_var_name=None)
+    db_session.commit()
+    assert db_session.get(LLMProvider, p.id).env_var_name is None
+
+
+def test_update_provider_unchanged_keeps_existing_values(_env_secret, db_session) -> None:
+    p = svc.create_provider(
+        db_session, kind="openai", label="OAI", api_key="sk-real"
+    )
+    db_session.commit()
+    svc.update_provider(db_session, p.id, label="Renamed")
+    db_session.commit()
+
+    row = db_session.get(LLMProvider, p.id)
+    assert row.label == "Renamed"
+    assert row.api_key_encrypted is not None  # api_key was UNCHANGED

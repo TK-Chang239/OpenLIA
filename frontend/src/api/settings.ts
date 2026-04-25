@@ -28,7 +28,31 @@ export interface EmailUpdateIn {
 }
 
 export interface ModelPreferences {
-  preferences: Record<Tier, string>;
+  preferences: Record<string, string>;
+}
+
+export interface RosterEntry {
+  id: string;
+  model_ref: string;
+  display_name: string;
+  provider_id: string;
+  provider_kind: string;
+  is_tier_default: boolean;
+  is_enabled: boolean;
+}
+
+export interface ModelsRoster {
+  thinking: RosterEntry[];
+  everyday: RosterEntry[];
+  quick: RosterEntry[];
+}
+
+export interface EffectiveModel {
+  model_ref: string;
+  provider_kind: string;
+  tier: string;
+  model_id: string;
+  provider_id: string;
 }
 
 export class ApiError extends Error {
@@ -67,14 +91,19 @@ export const updatePrefs = (patch: PrefsPatch) =>
 export const updateEmail = (body: EmailUpdateIn) =>
   request<{ email: string }>('/api/settings/email', { method: 'PATCH', body: JSON.stringify(body) });
 
+export const getModelsRoster = () => request<ModelsRoster>('/api/settings/models');
+
 export const getModelPreferences = () =>
-  request<ModelPreferences>('/api/settings/admin/llm/preferences');
+  request<ModelPreferences>('/api/settings/models/preferences');
 
 export const putModelPreference = (tier: Tier, model_id: string) =>
-  request<{ ok: true }>('/api/settings/admin/llm/preferences', {
+  request<{ ok: true }>(`/api/settings/models/preferences/${tier}`, {
     method: 'PUT',
-    body: JSON.stringify({ tier, model_id }),
+    body: JSON.stringify({ model_id }),
   });
 
 export const deleteModelPreference = (tier: Tier) =>
-  request<{ ok: true }>(`/api/settings/admin/llm/preferences/${tier}`, { method: 'DELETE' });
+  request<{ ok: true }>(`/api/settings/models/preferences/${tier}`, { method: 'DELETE' });
+
+export const getEffectiveModel = (departmentId: string) =>
+  request<EffectiveModel>(`/api/settings/models/effective/${departmentId}`);
