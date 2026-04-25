@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol
 
+from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, SseEvent
 from openlia.llm.runtime.messages import ReportRequest
 from openlia.reports.validator import validate_report_payload
@@ -40,6 +41,7 @@ class ReportRunnerLike(Protocol):
         department_id: str,
         user_id: str,
         request: ReportRequest,
+        cancel_token: CancellationToken | None = ...,
     ) -> AsyncIterator[SseEvent]: ...
 
 
@@ -48,6 +50,7 @@ async def run_on_demand(
     session: Session,
     user_id: str,
     report_runner: ReportRunnerLike,
+    cancel_token: CancellationToken | None = None,
 ) -> AsyncIterator[SseEvent | ReportSavedEvent]:
     builder = MbRequestBuilderImpl()
     request = builder.build(session=session, user_id=user_id, schedule_id="on_demand")
@@ -57,6 +60,7 @@ async def run_on_demand(
         department_id="morning_briefing",
         user_id=user_id,
         request=request,
+        cancel_token=cancel_token,
     ):
         if isinstance(event, ReportComplete):
             last_complete = event

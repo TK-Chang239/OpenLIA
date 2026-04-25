@@ -7,11 +7,17 @@ happens in the server route; this module stays pure-data.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 ReportPhaseName = Literal["fetching_data", "writing", "finalizing"]
 _ALLOWED_PHASES: tuple[str, ...] = ("fetching_data", "writing", "finalizing")
+
+
+def _utc_now_iso() -> str:
+    """ISO-8601 UTC timestamp (e.g. `2026-04-24T23:18:00.123456+00:00`)."""
+    return datetime.now(UTC).isoformat()
 
 
 @dataclass(frozen=True)
@@ -55,7 +61,11 @@ class ChatReportThumbnail:
     TYPE = "chat.report_thumbnail"
     message_id: str
     report_id: str
-    filename: str
+    # `mode` is the canonical field per the runtime spec (e.g. "stock_initiation").
+    mode: str
+    # `filename` retained for FE backwards compatibility — emitting code may
+    # pass an empty string. Treat as deprecated; consumers should prefer `mode`.
+    filename: str = ""
 
 
 @dataclass(frozen=True)
@@ -63,6 +73,7 @@ class ChatDone:
     TYPE = "chat.done"
     message_id: str
     stop_reason: str
+    ts: str = field(default_factory=_utc_now_iso)
 
 
 @dataclass(frozen=True)
@@ -71,6 +82,7 @@ class ChatError:
     message_id: str
     error_class: str
     message: str
+    ts: str = field(default_factory=_utc_now_iso)
 
 
 @dataclass(frozen=True)
@@ -94,18 +106,30 @@ class ReportPhase:
 
 
 @dataclass(frozen=True)
+class ReportToolCallStart:
+    TYPE = "report.tool_call.start"
+    report_id: str
+    call_id: str
+    tool_name: str
+    args_preview: str
+
+
+@dataclass(frozen=True)
 class ReportToolCall:
     TYPE = "report.tool_call"
     report_id: str
     tool_name: str
     summary: str
+    call_id: str = ""
 
 
 @dataclass(frozen=True)
 class ReportComplete:
     TYPE = "report.complete"
     report_id: str
+    # TODO(plan-13): narrow to ReportSchema once Phase 13 ships the type.
     schema: dict[str, Any]
+    ts: str = field(default_factory=_utc_now_iso)
 
 
 @dataclass(frozen=True)
@@ -114,6 +138,7 @@ class ReportError:
     report_id: str
     error_class: str
     message: str
+    ts: str = field(default_factory=_utc_now_iso)
 
 
 SseEvent = (
@@ -126,6 +151,7 @@ SseEvent = (
     | ChatError
     | ReportStart
     | ReportPhase
+    | ReportToolCallStart
     | ReportToolCall
     | ReportComplete
     | ReportError
