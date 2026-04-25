@@ -19,7 +19,7 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import Report
 from openlia_server.middleware.auth import build_require_auth
-from openlia_server.services.report_export import export_report_pdf
+from openlia_server.services.report_export import export_report_docx, export_report_pdf
 from openlia_server.services.reports import (
     ReportNotFoundError,
     get_report,
@@ -624,6 +624,25 @@ def build_reports_router(
         return Response(
             content=pdf,
             media_type="application/pdf",
+            headers={"content-disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @router.get("/{report_id}/docx")
+    async def export_report_docx_route(
+        report_id: str,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> Response:
+        try:
+            schema = get_report(session, report_id=report_id, user_id=user.id)
+        except ReportNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
+        payload = schema.model_dump(mode="json")
+        data = export_report_docx(payload)
+        filename = f"report-{report_id}.docx"
+        return Response(
+            content=data,
+            media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             headers={"content-disposition": f'attachment; filename="{filename}"'},
         )
 

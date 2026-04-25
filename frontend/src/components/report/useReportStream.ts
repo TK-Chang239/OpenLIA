@@ -26,10 +26,19 @@ export type ReportStreamStatus =
   | "complete"
   | "error";
 
+export type SectionStatus = "pending" | "writing" | "done";
+
+export interface SectionView {
+  id: string;
+  title: string;
+  status: SectionStatus;
+}
+
 export interface ReportStreamState {
   status: ReportStreamStatus;
   phase: ReportPhase | null;
   sectionTitles: string[];
+  sections: SectionView[];
   toolCalls: { tool: string; summary: string }[];
   reportId: string | null;
   errorMessage: string | null;
@@ -39,6 +48,7 @@ const INITIAL: ReportStreamState = {
   status: "idle",
   phase: null,
   sectionTitles: [],
+  sections: [],
   toolCalls: [],
   reportId: null,
   errorMessage: null,
@@ -59,16 +69,49 @@ function reducer(state: ReportStreamState, action: Action): ReportStreamState {
       : { ...state, status: "error", errorMessage: "Aborted" };
   const { event, data } = action;
   switch (event) {
-    case "report.start":
+    case "report.start": {
+      const titles = Array.isArray(data.section_titles)
+        ? (data.section_titles as string[])
+        : [];
       return {
         ...state,
         status: "writing",
-        sectionTitles: Array.isArray(data.section_titles)
-          ? (data.section_titles as string[])
-          : [],
+        sectionTitles: titles,
+        sections: titles.map((t) => ({
+          id: "",
+          title: t,
+          status: "pending" as const,
+        })),
       };
+    }
     case "report.phase":
       return { ...state, phase: (data.phase as ReportPhase) ?? null };
+    case "report.section.start": {
+      const id = String(data.section_id ?? "");
+      const title = String(data.title ?? "");
+      const idx = typeof data.idx === "number" ? data.idx : -1;
+      const next = [...state.sections];
+      // Prefer matching by idx (start emits ordered events with stable idx).
+      if (idx >= 0 && idx < next.length) {
+        next[idx] = { id, title, status: "writing" };
+      } else if (next.length === 0) {
+        next.push({ id, title, status: "writing" });
+      } else {
+        const i = next.findIndex((s) => s.title === title);
+        if (i >= 0) next[i] = { ...next[i], id, status: "writing" };
+        else next.push({ id, title, status: "writing" });
+      }
+      return { ...state, sections: next };
+    }
+    case "report.section.complete": {
+      const id = String(data.section_id ?? "");
+      const next = state.sections.map((s) =>
+        s.id && s.id === id
+          ? { ...s, status: "done" as const }
+          : s,
+      );
+      return { ...state, sections: next };
+    }
     case "report.tool_call":
       return {
         ...state,
@@ -108,9 +151,11 @@ export interface StartOptions {
 export function useReportStream() {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const abortRef = useRef<AbortController | null>(null);
+  const lastOptionsRef = useRef<StartOptions | null>(null);
 
   const start = useCallback(({ url, body }: StartOptions) => {
     abortRef.current?.abort();
+    lastOptionsRef.current = { url, body };
     dispatch({ kind: "START" });
     const controller = new AbortController();
     abortRef.current = controller;
@@ -131,8 +176,15 @@ export function useReportStream() {
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    lastOptionsRef.current = null;
     dispatch({ kind: "RESET" });
   }, []);
+
+  const retry = useCallback(() => {
+    const opts = lastOptionsRef.current;
+    if (!opts) return;
+    start(opts);
+  }, [start]);
 
   useEffect(
     () => () => {
@@ -141,7 +193,7 @@ export function useReportStream() {
     [],
   );
 
-  return { state, start, stop, reset };
+  return { state, start, stop, reset, retry };
 }
 
 interface ConsumeArgs {

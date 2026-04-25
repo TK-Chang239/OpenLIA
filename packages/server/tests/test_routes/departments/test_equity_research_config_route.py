@@ -68,3 +68,36 @@ def test_put_config_adds_custom_section(company_client, auth_user):
 def test_config_requires_auth(company_client_anon):
     r = company_client_anon.get("/departments/equity-research/config")
     assert r.status_code == 401
+
+
+def test_put_config_rejects_unknown_mode(company_client, auth_user):
+    company_client.get("/departments/equity-research/config")
+    r = company_client.put(
+        "/departments/equity-research/config",
+        json={"report_mode": "bogus_mode"},
+    )
+    assert r.status_code == 400
+    assert "unknown" in r.json()["detail"].lower()
+
+
+def test_put_config_then_get_roundtrips(company_client, auth_user):
+    company_client.get("/departments/equity-research/config")
+    company_client.put(
+        "/departments/equity-research/config",
+        json={
+            "report_mode": "stock_update",
+            "report_length": "concise",
+            "sections_by_mode": {"stock_update": ["investment_thesis", "event_analysis"]},
+            "custom_sections_by_mode": {
+                "stock_update": [{"id": "custom_q1", "title": "Q1 commentary", "description": "x"}]
+            },
+        },
+    )
+    body = company_client.get("/departments/equity-research/config").json()
+    assert body["report_mode"] == "stock_update"
+    assert body["report_length"] == "concise"
+    assert body["sections_by_mode"]["stock_update"] == [
+        "investment_thesis",
+        "event_analysis",
+    ]
+    assert body["custom_sections_by_mode"]["stock_update"][0]["id"] == "custom_q1"

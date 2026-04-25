@@ -124,6 +124,32 @@ class ReportToolCall:
 
 
 @dataclass(frozen=True)
+class ReportSectionStart:
+    TYPE = "report.section.start"
+    report_id: str
+    section_id: str
+    title: str
+    idx: int
+    total: int
+
+
+@dataclass(frozen=True)
+class ReportSectionChunk:
+    TYPE = "report.section.chunk"
+    report_id: str
+    section_id: str
+    text: str
+
+
+@dataclass(frozen=True)
+class ReportSectionComplete:
+    TYPE = "report.section.complete"
+    report_id: str
+    section_id: str
+    blocks: list[Any] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
 class ReportComplete:
     TYPE = "report.complete"
     report_id: str
@@ -153,6 +179,9 @@ SseEvent = (
     | ReportPhase
     | ReportToolCallStart
     | ReportToolCall
+    | ReportSectionStart
+    | ReportSectionChunk
+    | ReportSectionComplete
     | ReportComplete
     | ReportError
 )

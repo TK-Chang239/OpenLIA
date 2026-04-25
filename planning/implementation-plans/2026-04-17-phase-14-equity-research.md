@@ -3661,3 +3661,22 @@ git commit -m "docs(plans): mark Plan 14 (Equity Research) as Draft"
 - `ReportMode` literal is defined identically in core (`EquityResearchMode`) and frontend (`ReportMode`). Both list the three modes; if they diverge, the type system breaks at the route boundary.
 - `report_length` enum is shared across Tasks 4 (DB CHECK), 6 (service DTO), 11 (frontend type), 13 (modal).
 - Section ids in `section-catalog.ts` (Task 13) must match the IDs in Plan 13's framework JSON — Task 13 Step 3 flags verification as required.
+
+---
+
+## Post-audit corrections (2026-04-24)
+
+The following items were re-baselined against `EquityResearchPageSpec.md` during the Phase 14 deep audit and shipped under `fix/phase-14-equity-research`. Sections of the original plan that contradict these corrections are **superseded**.
+
+- **Active layout (single-column)** — supersedes split-panel `<div className="flex flex-1 min-h-0">` in Task 15/16. The Active state now renders one full-width `ChatInterface`; the `ReportCard` and progress / error bubbles are injected as `extraInlineMessages`. The shared `FileViewerProvider` (Phase 12) opens the global drawer/route from the card's `Open Report` action.
+- **Suggestion chip auto-submit (NEW-14-03)** — chips fill the input AND trigger `/report` POST exactly once. Old test pinning "fills only" behavior was rewritten.
+- **DOCX export (NEW-14-04)** — `ReportCard` Download is now a Radix dropdown with PDF + DOCX entries. Backend `services/report_export.py:export_report_docx` and `GET /reports/{id}/docx` ship as new code paths; `python-docx` is a server-only dependency. Phase 13 P1-01 field names (`metric_cards.metrics`, `table.headers/rows`, `key_finding.content`, `rating_badge.rating`) are honoured.
+- **ER chat threads `session_id` (P1-03)** — `POST /departments/equity-research/chat` accepts `session_id`, persists user/assistant messages to the chat session, and forwards the id into `ChatRunner.run`. Frontend `ChatInterface` accepts `streamUrl` + `bodyExtras` so the page can route follow-up turns to the ER-specific endpoint.
+- **Per-section streaming events (NEW-14-06)** — runtime emits `report.section.start` and `report.section.complete` (plus optional `report.section.chunk`) around the writing pass. `useReportStream` tracks `sections[]` with status transitions; Active layout shows a live checklist instead of a static title list.
+- **Retry button (NEW-14-07)** — error state in chat inlines `[Try again]` (`RotateCcw`) which re-issues the last `startReport(...)` via `useReportStream.retry()`.
+- **Save-to-Repo from card (NEW-14-05)** — `ReportCard.onSave` calls `saveReportToRepo(reportId)` and flips the bookmark icon to filled.
+- **Loading skeleton (NEW-14-08)** — initial config-load placeholder is a header-+-chip skeleton row (`animate-pulse`).
+
+Test gap closure (NEW-14-tests):
+- Backend: `test_equity_research_chat_route.py` adds session_id threading + reuse-session coverage; `test_equity_research_runner.py` adds report_length-via-resolve_active; `test_equity_research_config_route.py` adds unknown-mode 400 + PUT/GET round-trip; `test_reports.py` adds DOCX zip-header + auth coverage.
+- Frontend: `EquityResearch.test.tsx`, `ReportCard.test.tsx`, `FromPortfolioPicker.test.tsx`, `useReportStream.test.tsx` add the matching SSE-happy-path / dropdown / section-reducer assertions.

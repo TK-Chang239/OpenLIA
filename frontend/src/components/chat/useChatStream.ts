@@ -179,6 +179,10 @@ interface Options {
   sessionId: string;
   /** Pluggable transport for tests; defaults to ``window.fetch``. */
   fetchImpl?: typeof fetch;
+  /** Override the default `/api/chat/sessions/{id}/stream` endpoint. */
+  streamUrl?: string;
+  /** Extra fields merged into the JSON request body (e.g. `{ session_id }`). */
+  bodyExtras?: Record<string, unknown>;
 }
 
 interface StopReason {
@@ -192,7 +196,7 @@ interface ActiveStream {
   reason: StopReason;
 }
 
-export function useChatStream({ sessionId, fetchImpl }: Options) {
+export function useChatStream({ sessionId, fetchImpl, streamUrl, bodyExtras }: Options) {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const activeRef = useRef<ActiveStream | null>(null);
   const reconnectAttemptedRef = useRef<boolean>(false);
@@ -228,12 +232,16 @@ export function useChatStream({ sessionId, fetchImpl }: Options) {
       activeRef.current = { controller, reason };
 
       let response: Response;
+      const url = streamUrl ?? `/api/chat/sessions/${sessionId}/stream`;
+      const body = streamUrl
+        ? { message: userMessage, ...(bodyExtras ?? {}) }
+        : { q: userMessage, ...(bodyExtras ?? {}) };
       try {
-        response = await fetcher(`/api/chat/sessions/${sessionId}/stream`, {
+        response = await fetcher(url, {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-          body: JSON.stringify({ q: userMessage }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
       } catch (err) {
@@ -312,7 +320,7 @@ export function useChatStream({ sessionId, fetchImpl }: Options) {
       }
       dispatch({ kind: "TRANSPORT_ERROR" });
     },
-    [fetcher, sessionId],
+    [fetcher, sessionId, streamUrl, bodyExtras],
   );
 
   const send = useCallback(

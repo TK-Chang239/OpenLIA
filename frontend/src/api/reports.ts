@@ -40,3 +40,7 @@ export async function fetchReport(reportId: string): Promise<ReportSchema> {
 export function reportPdfUrl(reportId: string): string {
   return `/api/reports/${reportId}/export/pdf`;
 }
+
+export function reportDocxUrl(reportId: string): string {
+  return `/api/reports/${reportId}/docx`;
+}

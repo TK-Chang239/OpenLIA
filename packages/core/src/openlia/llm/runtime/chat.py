@@ -82,7 +82,11 @@ class ChatRunner:
         messages: list[ChatMessage],
         attachments: list[Attachment] | None = None,
         cancel_token: CancellationToken | None = None,
+        session_id: str | None = None,
     ) -> AsyncIterator[SseEvent]:
+        # `session_id` is currently informational — runtime does not branch
+        # on it but routes thread it for telemetry / persistence parity.
+        del session_id
         message_id = self._message_id_factory()
         yield ChatStart(message_id=message_id)
 
