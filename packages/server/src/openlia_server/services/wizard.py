@@ -105,11 +105,16 @@ def verify_session_token(db: Session, token: str | None) -> bool:
 
 
 def set_mode(db: Session, mode: Mode) -> None:
+    # Cross-plan contract: WizardState.mode is the source of truth during
+    # setup; config_store.wizard.mode is the durable record after finalize.
+    # We write both so reads from either source match while the wizard runs.
     row = db.get(ConfigStore, "wizard.mode")
     if row is None:
         db.add(ConfigStore(key="wizard.mode", value=mode))
     else:
         row.value = mode
+    state = _load_or_create_state(db)
+    state.mode = mode
     db.flush()
 
 

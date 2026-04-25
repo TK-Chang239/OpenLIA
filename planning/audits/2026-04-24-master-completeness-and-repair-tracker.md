@@ -58,7 +58,7 @@ merged.
 | 7  | CLI Surface                         | Done        | 100%      | RESOLVED                  | ~~`serve` startup banner missing~~ — closed via Phase 7 fix-plan (NEW-7-01..09); banner shipped, rotate-key `--from-stdin` flag added, spec reconciled |
 | 8  | Frontend Shell                      | Done        | 100%      | RESOLVED                  | ~~Design tokens diverged; mobile shell + ErrorBoundary + skip-nav missing~~ — closed via Phase 8 fix-plan (P1-26, P2-13, P2-18, NEW-8-01..15); mobile shell, ErrorBoundary, ShellSkeleton, multi-segment breadcrumbs all shipped |
 | 9  | Login / Account UI                  | Done        | 100%      | RESOLVED                  | ~~Server requires `display_name`; `aria-describedby` missing~~ — closed via Phase 9 fix-plan (P0-08, P1-17, P1-18, NEW-9-01..09); display_name optional with email-local-part fallback, signup policy gates Sign-up link, account_locked surfaces retry-after minutes, aria-describedby + transport-error helper across 6 forms |
-| 10 | Setup Wizard                        | Done        | ~72%      | IMPLEMENTER               | Step 3 (Models) backend handlers don't exist (frontend hits 404)             |
+| 10 | Setup Wizard                        | Done        | 100%      | RESOLVED                  | ~~Steps 3+4 backend missing~~ — closed via Phase 10 fix-plan (P0-03/03b, P1-15/16, NEW-10-01..15); /setup/models, /setup/providers, /setup/required_tiers shipped, dynamic dept registry, loopback during entire wizard, takeover-on-409 modal, e2e smoke green |
 | 11 | Settings Page                       | Done        | ~75%      | IMPLEMENTER               | ~~New routes use `build_require_auth`, bypass must-change-password~~ — closed via Phase 2 fix-plan P0-02-01; remaining Phase 11 gaps tracked in `phase-11-settings-page.md` |
 | 12 | Shared Chat Components              | Done        | 100%      | RESOLVED                  | ~~`Department` union covers 2 of 7; targeted vitest gaps~~ — closed via Phase 12 fix-plan (P1-02, P2-16, NEW-12-01..21); 7-dept union, drawer search/scope/archive, markdown+code highlighting, inline thumbnails, FileViewer focus+scroll preservation, idempotent SaveToRepo, AbortController POST SSE, auto-titles |
 | 13 | Report Pipeline & Secretary         | Done        | ~75%      | IMPLEMENTER               | Secretary HTTP route never created                                           |
@@ -635,7 +635,7 @@ instead of all 1,000+.
 | 7 | ~~[phase-7-cli-surface.md](./fix-plans/phase-7-cli-surface.md)~~ | 100% | RESOLVED (fix/phase-7-cli-surface) |
 | 8 | ~~[phase-8-frontend-shell.md](./fix-plans/phase-8-frontend-shell.md)~~ | 100% | RESOLVED (fix/phase-8-frontend-shell) |
 | 9 | ~~[phase-9-login-account-ui.md](./fix-plans/phase-9-login-account-ui.md)~~ | 100% | RESOLVED (fix/phase-9-login-account-ui) |
-| 10 | [phase-10-setup-wizard.md](./fix-plans/phase-10-setup-wizard.md) | ~72% | IMPLEMENTER |
+| 10 | ~~[phase-10-setup-wizard.md](./fix-plans/phase-10-setup-wizard.md)~~ | 100% | RESOLVED (fix/phase-10-setup-wizard) |
 | 11 | [phase-11-settings-page.md](./fix-plans/phase-11-settings-page.md) | ~72% | IMPLEMENTER |
 | 12 | ~~[phase-12-shared-chat-components.md](./fix-plans/phase-12-shared-chat-components.md)~~ | 100% | RESOLVED (fix/phase-12-shared-chat-components) |
 | 13 | [phase-13-report-pipeline-secretary.md](./fix-plans/phase-13-report-pipeline-secretary.md) | ~75% | IMPLEMENTER |
