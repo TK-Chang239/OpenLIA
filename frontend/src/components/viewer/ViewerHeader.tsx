@@ -11,6 +11,7 @@ interface Props {
   source: FileSource;
   reportId?: string;
   initialSaved?: boolean;
+  hideSaveToRepoButton?: boolean;
   onClose: () => void;
   closeButtonRef?: Ref<HTMLButtonElement>;
 }
@@ -21,6 +22,7 @@ export function ViewerHeader({
   source,
   reportId,
   initialSaved = false,
+  hideSaveToRepoButton = false,
   onClose,
   closeButtonRef,
 }: Props): JSX.Element {
@@ -31,7 +33,7 @@ export function ViewerHeader({
         <p className="mt-0.5 truncate ol-label-sm">{metadata}</p>
       </div>
       <div className="ml-2 flex flex-shrink-0 items-center gap-1.5">
-        {reportId !== undefined ? (
+        {reportId !== undefined && !hideSaveToRepoButton ? (
           <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={initialSaved} />
         ) : null}
         <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
