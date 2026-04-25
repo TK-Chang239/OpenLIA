@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
 import { type FileSource } from "../FileViewerContext";
-import { sourceUrl } from "./sourceUrl";
+import { useFileFetch } from "./useFileFetch";
+import { RendererEmpty, RendererError, RendererLoading } from "./RendererStates";
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -42,20 +42,16 @@ function parseCsv(text: string): string[][] {
 }
 
 export function CsvRenderer({ source }: { source: FileSource }): JSX.Element {
-  const [rows, setRows] = useState<string[][] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { status, data, error, retry } = useFileFetch<string[][]>(source, {
+    parse: parseCsv,
+    isEmpty: (rows) => rows.length === 0,
+  });
 
-  useEffect(() => {
-    fetch(sourceUrl(source), { credentials: "same-origin" })
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((t) => setRows(parseCsv(t)))
-      .catch((e: unknown) => setError((e as Error).message));
-  }, [source]);
-
-  if (error) return <div className="p-6 text-sm text-[--color-feedback-error]">{error}</div>;
-  if (rows === null)
-    return <div className="p-6 text-sm text-[--color-text-secondary]">Loading…</div>;
-  const [header, ...data] = rows;
+  if (status === "loading") return <RendererLoading />;
+  if (status === "error")
+    return <RendererError message={error?.message} onRetry={retry} />;
+  if (status === "empty" || !data) return <RendererEmpty />;
+  const [header, ...rest] = data;
   return (
     <div className="overflow-auto">
       <table className="w-full border-collapse text-sm">
@@ -72,7 +68,7 @@ export function CsvRenderer({ source }: { source: FileSource }): JSX.Element {
           </tr>
         </thead>
         <tbody>
-          {data.map((row, ri) => (
+          {rest.map((row, ri) => (
             <tr
               key={ri}
               className={`border-b border-[--color-border-subtle] last:border-0 ${ri % 2 === 1 ? "bg-[--color-surface-hover]/40" : ""}`}

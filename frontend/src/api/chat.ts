@@ -1,11 +1,15 @@
 import { fetchJson } from "./client";
+import type { DepartmentSlug } from "./departments";
 
-export type Department = "secretary" | "equity_research";
+export type { DepartmentSlug } from "./departments";
+// Back-compat alias for existing call sites; new code should prefer DepartmentSlug.
+export type Department = DepartmentSlug;
+
 export type MessageRole = "user" | "assistant" | "system" | "tool";
 
 export interface ChatSession {
   id: string;
-  department: Department;
+  department: DepartmentSlug;
   title: string;
   is_pinned: boolean;
   is_archived: boolean;
@@ -20,14 +24,27 @@ export interface ChatMessage {
   model_ref: string | null;
   token_usage: Record<string, unknown> | null;
   created_at: string;
+  stopped_at?: string | null;
 }
 
-export const listSessions = (includeArchived = false) =>
-  fetchJson<{ items: ChatSession[] }>(
-    `/api/chat/sessions${includeArchived ? "?include_archived=true" : ""}`,
-  );
+export interface ListSessionsOptions {
+  department?: DepartmentSlug;
+  include_archived?: boolean;
+  q?: string;
+}
 
-export const createSession = (body: { department: Department; title: string }) =>
+export const listSessions = (opts: ListSessionsOptions = {}) => {
+  const params = new URLSearchParams();
+  if (opts.department) params.set("department", opts.department);
+  if (opts.include_archived) params.set("include_archived", "true");
+  if (opts.q) params.set("q", opts.q);
+  const qs = params.toString();
+  return fetchJson<{ items: ChatSession[] }>(
+    `/api/chat/sessions${qs ? `?${qs}` : ""}`,
+  );
+};
+
+export const createSession = (body: { department: DepartmentSlug; title: string }) =>
   fetchJson<ChatSession>("/api/chat/sessions", { method: "POST", json: body });
 
 export const patchSession = (

@@ -25,4 +25,29 @@ describe("WelcomeOverlay", () => {
     fireEvent.click(screen.getByRole("button", { name: /market today/i }));
     expect(onClick).toHaveBeenCalledWith("What moved the market today?");
   });
+
+  it("respects prefers-reduced-motion (zero stagger on chips)", () => {
+    // Stub matchMedia → reduce.
+    const originalMatch = window.matchMedia;
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes("reduce"),
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      onchange: null,
+      dispatchEvent: vi.fn(),
+    })) as typeof window.matchMedia;
+    render(
+      <WelcomeOverlay
+        greeting="Hi"
+        subtext=""
+        chips={[{ label: "x", value: "x" }]}
+        onChipClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("welcome-overlay")).toBeInTheDocument();
+    window.matchMedia = originalMatch;
+  });
 });

@@ -46,8 +46,8 @@ class _SavingPersist:
     def __init__(self) -> None:
         self.calls: list[dict] = []
 
-    def save_assistant(self, *, content, tool_calls):  # type: ignore[no-untyped-def]
-        self.calls.append({"content": content, "tool_calls": tool_calls})
+    def save_assistant(self, *, content, tool_calls, stopped=False):  # type: ignore[no-untyped-def]
+        self.calls.append({"content": content, "tool_calls": tool_calls, "stopped": stopped})
 
 
 @pytest.mark.asyncio
@@ -81,8 +81,11 @@ async def test_disconnect_watcher_flips_cancel_token() -> None:
     # runner's cancel token, which unblocked the runner's wait().
     assert runner.captured_token is not None
     assert runner.captured_token.is_cancelled is True
-    # No assistant persistence after a disconnect — the iterator stops mid-flight.
-    assert persist.calls == []
+    # Phase 12 NEW-12-03: a cancelled stream now persists whatever partial
+    # text it received with `stopped=True` so chat-history rehydration can
+    # render the "Response stopped." marker.
+    assert len(persist.calls) == 1
+    assert persist.calls[0]["stopped"] is True
 
 
 @pytest.mark.asyncio

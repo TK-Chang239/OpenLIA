@@ -69,6 +69,7 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
+    stopped_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (Index("ix_chat_messages_session_id_created_at", "session_id", "created_at"),)
 
