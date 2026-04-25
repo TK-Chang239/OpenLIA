@@ -104,6 +104,43 @@ class TestUnlock:
         assert result.exit_code == 2
         assert "not found" in result.output.lower()
 
+    def test_unlock_clears_locked_until_and_attempts(
+        self, cli_runner, company_mode, cli_engine, cli_session
+    ):
+        from openlia_server.db.models.auth import AuthEvent
+
+        now = datetime.now(UTC)
+        alice = User(
+            id="u_alice",
+            email="alice@company.com",
+            display_name="Alice",
+            password_hash="h",
+            is_admin=False,
+            is_disabled=False,
+            failed_login_attempts=5,
+            locked_until=now + timedelta(minutes=15),
+        )
+        cli_session.add(alice)
+        cli_session.commit()
+
+        result = cli_runner.invoke(app, ["admin", "unlock", "alice@company.com"])
+        assert result.exit_code == 0, result.output
+        assert "Unlocked: alice@company.com" in result.output
+
+        cli_session.expire_all()
+        refreshed = cli_session.get(User, "u_alice")
+        assert refreshed.locked_until is None
+        assert refreshed.failed_login_attempts == 0
+
+        # Spec §admin (line 142) — v1 default: omit auth_events row.
+        events = cli_session.query(AuthEvent).all()
+        assert events == []
+
+    def test_unlock_user_not_found_exits_2(self, cli_runner, company_mode, cli_engine):
+        result = cli_runner.invoke(app, ["admin", "unlock", "missing@company.com"])
+        assert result.exit_code == 2
+        assert "user not found: missing@company.com" in result.output.lower()
+
 
 class TestResetPassword:
     def test_with_password_flag_sets_must_change(
