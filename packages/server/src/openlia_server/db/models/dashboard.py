@@ -58,8 +58,12 @@ class PtUserConfig(Base, TimestampMixin):
         ForeignKey("pt_presets.id", ondelete="SET NULL"),
         nullable=True,
     )
-    panel_config: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
-    composite_settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    panel_config: Mapped[list[Any]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    composite_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
 
 
 class PtPreset(Base, TimestampMixin):
@@ -75,9 +79,15 @@ class PtPreset(Base, TimestampMixin):
     )
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    is_shipped: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    panel_config: Mapped[list[Any]] = mapped_column(JSON, nullable=False)
-    composite_settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    is_shipped: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    panel_config: Mapped[list[Any]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    composite_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "name", name="uq_pt_presets_user_name"),
@@ -108,8 +118,12 @@ class MrDashboardState(Base):
         nullable=False,
     )
     dashboard: Mapped[str] = mapped_column(String(32), nullable=False)
-    view_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    threshold_overrides: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    view_config: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    threshold_overrides: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     assessment_schedule: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_assessment_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
@@ -165,8 +179,12 @@ class RsUserConfig(Base):
         nullable=False,
     )
     active_tab: Mapped[str] = mapped_column(String(32), nullable=False, default="overview")
-    metric_settings: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
-    filter_presets: Mapped[list[Any]] = mapped_column(JSON, nullable=False, default=list)
+    metric_settings: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    filter_presets: Mapped[list[Any]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
     refresh_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     updated_at: Mapped[datetime] = mapped_column(
         UTCDateTime(),
@@ -191,7 +209,7 @@ class RsSnapshot(Base):
         Index(
             "ix_rs_snapshots_ticker_captured",
             "ticker",
-            "captured_at",
+            text("captured_at DESC"),
         ),
     )
 
@@ -208,9 +226,15 @@ class RsClassificationLog(Base):
     ticker: Mapped[str] = mapped_column(String(16), nullable=False)
     model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     item_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    prompt_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    completion_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    latency_ms: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(),

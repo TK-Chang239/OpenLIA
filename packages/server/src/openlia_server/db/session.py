@@ -1,3 +1,11 @@
+"""SQLAlchemy engine + session helpers.
+
+Centralizes engine creation (`get_engine`), session factory (`SessionLocal`),
+and the `get_db_session` FastAPI dependency that commits on clean exit and
+rolls back on exception. Spec reference: `database-design.md` §2 "Session
+lifecycle".
+"""
+
 from __future__ import annotations
 
 from sqlalchemy import Engine, create_engine, event

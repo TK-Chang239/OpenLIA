@@ -1,4 +1,4 @@
-"""Scheduler and notification tables.
+"""Scheduler and notification tables (Plan 1b).
 
 Rows:
   mb_schedules, eu_schedules — per-user cron schedules.
@@ -10,6 +10,14 @@ FK notes:
   - job_runs.retry_of → job_runs.id, SET NULL.
   - user_notifications.job_run_id → job_runs.id, SET NULL.
   - job_runs.schedule_id is a soft-polymorphic pointer (no FK constraint).
+
+Relationship discipline:
+  `JobRun` and `UserNotification` deliberately omit SQLAlchemy
+  `relationship()` attributes. The service layer joins via explicit
+  `select(...).join(...)` calls — there is no navigational use case where an
+  ORM-level relationship would be clearer than the hand-written SQL, and
+  keeping these lightweight avoids lazy-load surprises in request hot paths
+  (the scheduler writes them frequently and reads them in bulk).
 """
 
 from __future__ import annotations
@@ -24,6 +32,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,7 +54,9 @@ class MbSchedule(Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     days_of_week: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
@@ -69,7 +80,9 @@ class EuSchedule(Base):
     timezone: Mapped[str] = mapped_column(String(64), nullable=False)
     days_of_week: Mapped[str] = mapped_column(Text, nullable=False)
     label: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )

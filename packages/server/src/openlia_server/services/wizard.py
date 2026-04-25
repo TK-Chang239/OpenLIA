@@ -187,6 +187,14 @@ def set_config(db: Session, key: str, value: str) -> None:
 def finalize(db: Session, mode: Mode) -> None:
     set_config(db, "wizard.completed", "true")
     set_config(db, "wizard.mode", mode)
+    # Mode-default signup policy seeded on wizard completion per
+    # `database-design.md` §3 `signup_policy` ("Seeded on wizard completion:
+    # personal mode -> `closed`; company mode -> `invite_only`"). The seed is
+    # idempotent: if the admin already set a policy via `set_signup_policy`
+    # during the wizard, this call is a no-op.
+    from openlia_server.services.auth import signup_policy as _signup_policy
+
+    _signup_policy.seed_signup_policy(db, mode_flag=mode)
     state = _load_or_create_state(db)
     state.active_session_token = None
     state.completed_steps = []

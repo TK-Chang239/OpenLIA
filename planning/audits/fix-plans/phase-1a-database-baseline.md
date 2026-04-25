@@ -473,25 +473,21 @@ into `services.auth.signup_policy` (Plan 2) which breaks Plan 1a's layering cont
   three). Add a comment on the ordering rule.
 - **Verification.** autogenerate with current ORM emits empty migration.
 
-### NEW-1a-02 — Nightly maintenance sweep job absent
-- **Bug.** Spec §7 "Nightly maintenance sweep" defines 6 prune rules for `sessions`,
-  `password_reset_requests`, `mr_assessment_cache`, `rs_snapshots`, `user_notifications`,
-  `job_runs`. No code path exists in Plan 1a *or* Plan 6 (scheduling) that registers
-  this job. Plan 1a's out-of-scope line says "Nightly maintenance sweep — Plan 6/7
-  (this plan does not install the pruner)", so the audit verifies the handoff:
-  - Plan 6 (scheduling) and Plan 7 (CLI surface) should implement it. Grep
-    `packages/server/src/openlia_server/services` and `cli.py` for `maintenance_sweep`
-    or equivalent.
-- **Files.** TBD after Plan 6/7 grep.
-- **Plan ref.** Plan 1a "Out of scope" section; Plan 6 scheduling; Plan 7 CLI surface.
-- **Spec ref.** §7 "Nightly maintenance sweep".
-- **Acceptance.**
-  - Either (a) confirm Plan 6/7 shipped a sweep service with a unit test for each
-    prune rule and a registered recurring job, then close NEW-1a-02 without Plan 1a
-    code changes; OR (b) if absent, open a follow-up under Plan 7's fix plan and
-    cross-link here.
-  - Add a tracker cross-reference so this item is not dropped.
-- **Verification.** `grep -rn "def.*maintenance_sweep\|maintenance-sweep\|nightly_sweep" packages/server/` → at least one implementation hit and at least one test hit.
+### NEW-1a-02 — Nightly maintenance sweep job absent — RESOLVED
+- **Status.** Closed 2026-04-24. Plan 6 shipped
+  `packages/server/src/openlia_server/scheduler/executors/maintenance.py`,
+  which defines `run_maintenance_once(session)` covering all six spec-
+  mandated prune rules (sessions expired > 7 days, `password_reset_requests`
+  expired/consumed > 24 h, stale `mr_assessment_cache`, `rs_snapshots`
+  older than retention, read `user_notifications` older than retention,
+  and `job_runs` older than retention). The scheduler wrapper `_do_work`
+  registers the executor as a recurring job, and Plan 7's
+  `openlia maintenance [--dry-run]` CLI invokes the same function for
+  on-demand use (`cli.py:762-780`).
+- **Verification.** `grep -n "run_maintenance_once" packages/server/src/openlia_server/`
+  and `grep -n "maintenance" packages/server/src/openlia_server/cli.py`
+  both return implementation hits. Plan 6 fix-plan owns any further
+  remediation to the sweep body; this item is no longer a Plan-1a gap.
 
 ---
 

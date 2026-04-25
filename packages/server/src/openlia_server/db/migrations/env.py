@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-import openlia_server.db.models  # noqa: F401
+import openlia_server.db.models.register_all  # noqa: F401
 from openlia_server.db import bootstrap
 from openlia_server.db.base import Base
 
@@ -29,6 +29,7 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
+        compare_server_default=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -49,6 +50,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             render_as_batch=True,
+            compare_server_default=True,
         )
         with context.begin_transaction():
             context.run_migrations()
