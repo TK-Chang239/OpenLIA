@@ -3,14 +3,25 @@
 The provider is a callable `PortfolioPriceProvider` that returns
 ``Decimal | None`` for a ticker (``None`` means "not available"); cache is
 process-local and opt-in. Restarting drops the cache — that's intentional.
+
+Production wiring: ``app.py`` builds an :class:`AdapterPriceProvider` from
+``app.state.financial_adapter`` (a configured Plan 3 :class:`ProviderAdapter`
+exposing ``stock_quote``). When no adapter is registered the factory falls
+back to :class:`_NoopPriceProvider` with a warning log so the page degrades
+gracefully (sparkline ``—``, price ``—``) rather than 5xx-ing.
 """
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from decimal import Decimal
-from typing import Protocol
+from decimal import Decimal, InvalidOperation
+from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 class PortfolioPriceProvider(Protocol):
@@ -44,6 +55,11 @@ class PriceCache:
 
     def set(self, ticker: str, price: Decimal | None) -> None:
         self._cache[ticker.upper()] = _CachedQuote(price=price, fetched_at=self._now())
+
+    def invalidate(self, tickers: Iterable[str]) -> None:
+        """Public force-refresh hook — drop cached entries for the given tickers."""
+        for raw in tickers:
+            self._cache.pop(raw.upper(), None)
 
     def refresh_cooldown_remaining(self, user_id: str) -> float:
         last = self._last_refresh_by_user.get(user_id)
@@ -94,3 +110,52 @@ class _NoopPriceProvider:
 
 def get_default_provider() -> PortfolioPriceProvider:
     return _NoopPriceProvider()
+
+
+def _coerce_price(payload: Any) -> Decimal | None:
+    """Best-effort extraction of a last-price scalar from a stock_quote payload.
+
+    EODHD's `/real-time/{ticker}` returns a dict with a numeric `close`.
+    We tolerate dict / list / scalar shapes and ignore the EODHD `"NA"` sentinel.
+    """
+    if payload is None:
+        return None
+    if isinstance(payload, list):
+        if not payload:
+            return None
+        payload = payload[0]
+    if isinstance(payload, dict):
+        for key in ("close", "last", "price", "regularMarketPrice"):
+            if key in payload:
+                payload = payload[key]
+                break
+        else:
+            return None
+    if payload is None or payload == "" or payload == "NA":
+        return None
+    try:
+        return Decimal(str(payload))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+class AdapterPriceProvider:
+    """Bridge a Plan 3 async ProviderAdapter into the sync get_price contract.
+
+    Used as the production factory when ``app.state.financial_adapter`` is
+    set. ``DataNotAvailable`` and any other adapter error degrades to ``None``
+    so the cache stores the sentinel and the route returns 200 with null
+    prices rather than 5xx.
+    """
+
+    def __init__(self, adapter: Any) -> None:
+        self._adapter = adapter
+
+    def get_price(self, ticker: str) -> Decimal | None:
+        try:
+            result = asyncio.run(self._adapter.fetch("stock_quote", {"symbol": ticker.upper()}))
+        except Exception as exc:
+            logger.debug("portfolio price fetch failed for %s: %s", ticker, exc)
+            return None
+        payload = getattr(result, "payload", None)
+        return _coerce_price(payload)

@@ -56,6 +56,7 @@ export interface AnalyticsResponse {
   total_unrealized_pl_pct: string | null;
   positions: PositionAnalytic[];
   allocations: Record<string, string>;
+  last_quote_at?: string | null;
 }
 
 export interface CsvImportResponse {
@@ -70,6 +71,8 @@ export interface RefreshPricesResponse {
 export interface SearchResult {
   ticker: string;
   name: string | null;
+  exchange?: string | null;
+  already_added?: boolean;
 }
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -130,6 +133,17 @@ export async function refreshPrices(): Promise<RefreshPricesResponse> {
     method: "POST",
     credentials: "include",
   });
+  if (res.status === 429) {
+    const body = await res.json().catch(() => ({ detail: { retry_after: 30 } }));
+    const retryAfter = (body?.detail?.retry_after as number | undefined) ?? 30;
+    const err = new Error(`Try again in ${retryAfter} seconds`) as Error & {
+      retryAfter?: number;
+      status?: number;
+    };
+    err.retryAfter = retryAfter;
+    err.status = 429;
+    throw err;
+  }
   return jsonOrThrow<RefreshPricesResponse>(res);
 }
 
@@ -148,9 +162,60 @@ export function exportCsvUrl(): string {
 }
 
 export async function searchTickers(q: string): Promise<SearchResult[]> {
+  if (!q.trim()) return [];
   const res = await fetch(`/api/portfolio/search?q=${encodeURIComponent(q)}`, {
     credentials: "include",
   });
   const body = await jsonOrThrow<{ results: SearchResult[] }>(res);
   return body.results;
+}
+
+// ---------- Groups ---------------------------------------------------------
+
+export async function fetchGroups(): Promise<string[]> {
+  const res = await fetch("/api/portfolio/groups", { credentials: "include" });
+  const body = await jsonOrThrow<{ groups: string[] }>(res);
+  return body.groups;
+}
+
+export async function createGroup(name: string): Promise<string[]> {
+  const res = await fetch("/api/portfolio/groups", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const body = await jsonOrThrow<{ groups: string[] }>(res);
+  return body.groups;
+}
+
+export async function renameGroup(name: string, new_name: string): Promise<string[]> {
+  const res = await fetch(`/api/portfolio/groups/${encodeURIComponent(name)}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ new_name }),
+  });
+  const body = await jsonOrThrow<{ groups: string[] }>(res);
+  return body.groups;
+}
+
+export async function reorderGroups(order: string[]): Promise<string[]> {
+  const res = await fetch("/api/portfolio/groups/reorder", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ order }),
+  });
+  const body = await jsonOrThrow<{ groups: string[] }>(res);
+  return body.groups;
+}
+
+export async function deleteGroup(name: string): Promise<string[]> {
+  const res = await fetch(`/api/portfolio/groups/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  const body = await jsonOrThrow<{ groups: string[] }>(res);
+  return body.groups;
 }
