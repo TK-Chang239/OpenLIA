@@ -6,6 +6,8 @@ import { MobileTabBar } from "../components/sidebar/MobileTabBar";
 import { MobileSidebarOverlay } from "../components/sidebar/MobileSidebarOverlay";
 import { MobileNavProvider, useMobileNav } from "./MobileNavContext";
 import { crumbsForPath, stampsForNow } from "./shellState";
+import { FileViewerProvider } from "../components/viewer/FileViewerContext";
+import { FileViewer } from "../components/viewer/FileViewer";
 
 interface AppLayoutProps {
   children?: ReactNode;
@@ -39,8 +41,11 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
             live={pathname.startsWith("/morning-briefing")}
           />
         </header>
-        <main id="main" tabIndex={-1} className="overflow-y-auto pb-14 md:pb-0">
-          {children ?? <Outlet />}
+        <main id="main" tabIndex={-1} className="flex overflow-y-auto pb-14 md:pb-0">
+          <div className="flex-1 min-w-0">
+            {children ?? <Outlet />}
+          </div>
+          <FileViewer />
         </main>
       </section>
       <MobileTabBar />
@@ -51,7 +56,9 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
 export function AppLayout({ children }: AppLayoutProps = {}): JSX.Element {
   return (
     <MobileNavProvider>
-      <AppLayoutInner>{children}</AppLayoutInner>
+      <FileViewerProvider>
+        <AppLayoutInner>{children}</AppLayoutInner>
+      </FileViewerProvider>
     </MobileNavProvider>
   );
 }

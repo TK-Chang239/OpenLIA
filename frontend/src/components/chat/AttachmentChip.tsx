@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import { type LucideProps, FileText, Sheet, Image as ImageIcon, FileCode, File } from "lucide-react";
 import { type FileKind, type FileSource, useFileViewer } from "../viewer/FileViewerContext";
 import { sourceUrl } from "../viewer/renderers/sourceUrl";
@@ -36,42 +37,57 @@ export function AttachmentChip({
 }: Props): JSX.Element {
   const { open } = useFileViewer();
   const Icon = ICON[fileType];
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [saved, setSaved] = useState<boolean>(initialSaved);
 
-  const openViewer = () => open({ filename, kind: fileType, metadata, source, initialSaved });
+  const openViewer = () =>
+    open({
+      filename,
+      kind: fileType,
+      metadata,
+      source,
+      initialSaved: saved,
+      trigger: triggerRef.current,
+    });
 
   return (
     <div
-      className="group inline-flex max-w-[320px] cursor-pointer items-center gap-3 rounded-sm border border-border-subtle bg-bg-elevated px-3 py-2 transition-all duration-normal ease-out hover:border-yellow-600 hover:text-feedback-success"
+      role="group"
+      aria-label={`Attachment: ${filename}`}
+      data-saved={saved ? "true" : undefined}
+      className="group inline-flex max-w-[320px] items-center gap-3 rounded-sm border border-border-subtle bg-bg-elevated px-3 py-2 transition-all duration-normal ease-out hover:border-yellow-600 hover:text-feedback-success"
       style={{ fontFamily: "var(--font-mono)" }}
-      onClick={(e) => {
-        if ((e.target as HTMLElement).closest("[data-chip-action]")) return;
-        openViewer();
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          openViewer();
-        }
-      }}
     >
-      <Icon size={14} strokeWidth={1.5} />
-      <div className="min-w-0 flex-1">
-        <p
-          className="truncate text-[11px] font-medium text-text-primary"
-          style={{ maxWidth: 160 }}
-        >
-          {filename}
-        </p>
-        <p className="text-[10px] text-text-secondary">{metadata}</p>
-      </div>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={openViewer}
+        aria-label={`Open file viewer: ${filename}`}
+        className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[--color-accent-primary]"
+      >
+        <Icon size={14} strokeWidth={1.5} />
+        <span className="min-w-0 flex-1">
+          <span
+            className="block truncate text-[11px] font-medium text-text-primary"
+            style={{ maxWidth: 160 }}
+          >
+            {filename}
+          </span>
+          <span className="block text-[10px] text-text-secondary">{metadata}</span>
+        </span>
+      </button>
       <div
-        className="ml-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        className="ml-2 flex items-center gap-1 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto data-[saved=true]:opacity-100 data-[saved=true]:pointer-events-auto"
+        data-saved={saved ? "true" : undefined}
         data-chip-action=""
       >
         {reportId !== undefined ? (
-          <SaveToRepoButton variant="chip" reportId={reportId} initialSaved={initialSaved} />
+          <SaveToRepoButton
+            variant="chip"
+            reportId={reportId}
+            initialSaved={saved}
+            onChange={setSaved}
+          />
         ) : null}
         <FileDownloadButton variant="chip" url={sourceUrl(source)} filename={filename} />
       </div>

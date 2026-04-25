@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { X } from "lucide-react";
 import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
@@ -11,6 +12,7 @@ interface Props {
   reportId?: string;
   initialSaved?: boolean;
   onClose: () => void;
+  closeButtonRef?: Ref<HTMLButtonElement>;
 }
 
 export function ViewerHeader({
@@ -20,6 +22,7 @@ export function ViewerHeader({
   reportId,
   initialSaved = false,
   onClose,
+  closeButtonRef,
 }: Props): JSX.Element {
   return (
     <div className="flex min-h-[56px] flex-shrink-0 items-start justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-4 py-3">
@@ -33,6 +36,7 @@ export function ViewerHeader({
         ) : null}
         <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         <button
+          ref={closeButtonRef}
           type="button"
           aria-label="Close"
           onClick={onClose}

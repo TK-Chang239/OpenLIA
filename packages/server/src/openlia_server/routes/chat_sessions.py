@@ -27,8 +27,14 @@ class SessionListOut(BaseModel):
     items: list[SessionOut]
 
 
+_DEPARTMENT_PATTERN = (
+    r"^(secretary|equity_research|earnings_update|morning_briefing"
+    r"|retail_sentiment|macro_research|panic_thermometer)$"
+)
+
+
 class SessionCreateIn(BaseModel):
-    department: str = Field(..., pattern=r"^(secretary|equity_research)$")
+    department: str = Field(..., pattern=_DEPARTMENT_PATTERN)
     title: str = Field(..., min_length=1, max_length=200)
 
 
@@ -46,6 +52,7 @@ class MessageOut(BaseModel):
     model_ref: str | None = None
     token_usage: dict | None = None
     created_at: datetime
+    stopped_at: datetime | None = None
 
 
 class MessageListOut(BaseModel):
@@ -60,10 +67,18 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
     @router.get("", response_model=SessionListOut)
     def list_sessions_ep(
         include_archived: bool = False,
+        department: str | None = None,
+        q: str | None = None,
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> SessionListOut:
-        rows = svc.list_sessions(db, user_id=user.id, include_archived=include_archived)
+        rows = svc.list_sessions(
+            db,
+            user_id=user.id,
+            include_archived=include_archived,
+            department=department,
+            q=q,
+        )
         return SessionListOut(
             items=[SessionOut.model_validate(r, from_attributes=True) for r in rows]
         )
@@ -150,6 +165,7 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
                     model_ref=r.model_ref,
                     token_usage=r.token_usage,
                     created_at=r.created_at,
+                    stopped_at=r.stopped_at,
                 )
                 for r in rows
             ]

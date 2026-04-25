@@ -1,27 +1,32 @@
-import { useEffect, useState } from "react";
 import { type FileSource } from "../FileViewerContext";
-import { sourceUrl } from "./sourceUrl";
+import { useFileFetch } from "./useFileFetch";
+import { RendererEmpty, RendererError, RendererLoading } from "./RendererStates";
 
 export function CodeRenderer({ source }: { source: FileSource }): JSX.Element {
-  const [text, setText] = useState<string | null>(null);
+  const { status, data, error, retry } = useFileFetch<string>(source, {
+    parse: (raw) => raw,
+  });
 
-  useEffect(() => {
-    fetch(sourceUrl(source), { credentials: "same-origin" })
-      .then((r) => r.text())
-      .then(setText);
-  }, [source]);
-
-  if (text === null) return <div className="animate-pulse p-6">Loading…</div>;
-  const lines = text.split("\n");
+  if (status === "loading") return <RendererLoading />;
+  if (status === "error")
+    return <RendererError message={error?.message} onRetry={retry} />;
+  if (status === "empty" || !data) return <RendererEmpty />;
+  const lines = data.split("\n");
   return (
     <div className="flex text-sm">
-      <div className="flex-shrink-0 select-none border-r border-[--color-border-subtle] bg-[--color-bg-base] px-4 py-4 text-right font-mono text-[--color-text-tertiary]">
+      <div
+        aria-hidden="true"
+        className="flex-shrink-0 select-none border-r border-[--color-border-subtle] bg-[--color-bg-base] px-4 py-4 text-right font-mono text-[--color-text-tertiary]"
+      >
         {lines.map((_, i) => (
           <div key={i}>{i + 1}</div>
         ))}
       </div>
-      <pre className="flex-1 overflow-x-auto whitespace-pre bg-[--color-bg-code] px-4 py-4 font-mono text-[--color-text-code]">
-        {text}
+      <pre
+        data-language="text"
+        className="flex-1 overflow-x-auto whitespace-pre bg-[--color-bg-code] px-4 py-4 font-mono text-[--color-text-code]"
+      >
+        <code className="language-text">{data}</code>
       </pre>
     </div>
   );

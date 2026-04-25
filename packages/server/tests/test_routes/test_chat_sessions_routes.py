@@ -85,3 +85,41 @@ def test_patch_rejects_other_user(client, user_factory, login_as):
     b = user_factory()
     login_as(b)
     assert client.patch(f"/chat/sessions/{sid}", json={"title": "hacked"}).status_code == 403
+
+
+def test_department_filter_scopes_list(client, user_factory, login_as):
+    login_as(user_factory())
+    client.post("/chat/sessions", json={"department": "secretary", "title": "S"})
+    client.post(
+        "/chat/sessions",
+        json={"department": "morning_briefing", "title": "M"},
+    )
+    r = client.get("/chat/sessions?department=secretary")
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["title"] == "S"
+    assert items[0]["department"] == "secretary"
+
+
+def test_q_filter_matches_title_substring(client, user_factory, login_as):
+    login_as(user_factory())
+    client.post("/chat/sessions", json={"department": "secretary", "title": "alpha bravo"})
+    client.post("/chat/sessions", json={"department": "secretary", "title": "charlie"})
+    r = client.get("/chat/sessions?q=alpha")
+    titles = [s["title"] for s in r.json()["items"]]
+    assert titles == ["alpha bravo"]
+
+
+def test_create_session_accepts_all_seven_departments(client, user_factory, login_as):
+    login_as(user_factory())
+    for dep in (
+        "secretary",
+        "equity_research",
+        "earnings_update",
+        "morning_briefing",
+        "retail_sentiment",
+        "macro_research",
+        "panic_thermometer",
+    ):
+        r = client.post("/chat/sessions", json={"department": dep, "title": dep})
+        assert r.status_code == 201, dep

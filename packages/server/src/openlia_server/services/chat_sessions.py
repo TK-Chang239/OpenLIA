@@ -26,7 +26,12 @@ def create_session(db: Session, *, user_id: str, department: str, title: str) ->
 
 
 def list_sessions(
-    db: Session, *, user_id: str, include_archived: bool = False
+    db: Session,
+    *,
+    user_id: str,
+    include_archived: bool = False,
+    department: str | None = None,
+    q: str | None = None,
 ) -> list[ChatSession]:
     last_activity = (
         select(ChatMessage.session_id, func.max(ChatMessage.created_at).label("last_at"))
@@ -44,7 +49,33 @@ def list_sessions(
     )
     if not include_archived:
         stmt = stmt.where(ChatSession.is_archived.is_(False))
+    if department is not None:
+        stmt = stmt.where(ChatSession.department == department)
+    if q is not None and q.strip():
+        like = f"%{q.strip().lower()}%"
+        stmt = stmt.where(func.lower(ChatSession.title).like(like))
     return list(db.execute(stmt).scalars())
+
+
+def ensure_titled(
+    db: Session, *, session_id: str, first_user_text: str, default_title: str = "New chat"
+) -> None:
+    """If the session still has the default title, replace it with the
+    first 48 characters of the first user message.
+
+    Idempotent — safe to call after every user message; it only mutates
+    when ``title == default_title``.
+    """
+    row = db.get(ChatSession, session_id)
+    if row is None:
+        return
+    if row.title != default_title:
+        return
+    text = (first_user_text or "").strip()
+    if not text:
+        return
+    row.title = text[:48]
+    db.commit()
 
 
 def get_session(db: Session, *, session_id: str, user_id: str) -> ChatSession:

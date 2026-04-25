@@ -1,8 +1,6 @@
-"""File download routes for reports and chat attachments."""
+"""File download routes — request glue only; resolution lives in services.files."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
@@ -10,12 +8,22 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import ChatAttachment, ChatMessage, ChatSession, Report
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import files as svc
+
+_ERROR_MAP: dict[type[Exception], tuple[int, str]] = {
+    svc.ReportNotFound: (404, "report_not_found"),
+    svc.AttachmentNotFound: (404, "attachment_not_found"),
+    svc.MessageNotFound: (404, "message_not_found"),
+    svc.Forbidden: (403, "forbidden"),
+    svc.FileGone: (410, "file_gone"),
+    svc.UnsupportedFormat: (415, "unsupported_format"),
+}
 
 
-def _safe_filename(name: str) -> str:
-    return name.replace('"', "").replace("\r", "").replace("\n", "")
+def _raise_http(exc: Exception) -> None:
+    status, code = _ERROR_MAP[type(exc)]
+    raise HTTPException(status_code=status, detail={"code": code, "message": str(exc)})
 
 
 def build_files_router(*, db_session_factory, mode: str) -> APIRouter:
@@ -26,20 +34,20 @@ def build_files_router(*, db_session_factory, mode: str) -> APIRouter:
     @router.get("/reports/{report_id}/download")
     def download_report(
         report_id: str,
+        format: str | None = None,
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> Response:
-        row = db.get(Report, report_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail={"code": "report_not_found"})
-        if row.user_id != user.id:
-            raise HTTPException(status_code=403, detail={"code": "forbidden"})
-        safe_title = _safe_filename(row.title or "report")
-        filename = f"{safe_title}.md"
+        try:
+            blob = svc.resolve_report_download(
+                db, user_id=user.id, report_id=report_id, format=format
+            )
+        except tuple(_ERROR_MAP) as exc:
+            _raise_http(exc)
         return Response(
-            content=row.content_markdown.encode(),
-            media_type="text/markdown",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            content=blob.content,
+            media_type=blob.media_type,
+            headers={"Content-Disposition": f'attachment; filename="{blob.filename}"'},
         )
 
     @router.get("/chat/attachments/{attachment_id}/download")
@@ -48,25 +56,16 @@ def build_files_router(*, db_session_factory, mode: str) -> APIRouter:
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> FileResponse:
-        row = db.get(ChatAttachment, attachment_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail={"code": "attachment_not_found"})
-        # Auth: attachment → message → session → user
-        msg = db.get(ChatMessage, row.message_id)
-        if msg is None:
-            raise HTTPException(status_code=404, detail={"code": "message_not_found"})
-        sess = db.get(ChatSession, msg.session_id)
-        if sess is None or sess.user_id != user.id:
-            raise HTTPException(status_code=403, detail={"code": "forbidden"})
-        path = Path(row.storage_path)
-        if not path.is_file():
-            raise HTTPException(status_code=410, detail={"code": "file_gone"})
+        try:
+            stored = svc.resolve_attachment_download(
+                db, user_id=user.id, attachment_id=attachment_id
+            )
+        except tuple(_ERROR_MAP) as exc:
+            _raise_http(exc)
         return FileResponse(
-            path,
-            media_type=row.mime_type or "application/octet-stream",
-            headers={
-                "Content-Disposition": f'attachment; filename="{_safe_filename(row.filename)}"'
-            },
+            stored.path,
+            media_type=stored.media_type,
+            headers={"Content-Disposition": f'attachment; filename="{stored.filename}"'},
         )
 
     return router

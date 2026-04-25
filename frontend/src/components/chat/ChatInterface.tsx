@@ -10,7 +10,6 @@ import { ToolCallChip } from "./ToolCallChip";
 import { ErrorMessage } from "./ErrorMessage";
 import { WelcomeOverlay } from "./WelcomeOverlay";
 import { useChatStream } from "./useChatStream";
-import { ReportThumbnail } from "./ReportThumbnail";
 import { RedirectCard, type RedirectDepartment } from "./RedirectCard";
 
 interface Chip {
@@ -107,8 +106,14 @@ export function ChatInterface({
   const showWelcome = loaded && !sentOnce && !loadError;
 
   const autoscrollKey = useMemo(
-    () => `${history.length}:${state.message.length}:${state.toolCalls.length}`,
-    [history.length, state.message.length, state.toolCalls.length],
+    () =>
+      `${history.length}:${state.message.length}:${state.toolCalls.length}:${state.chunks.length}`,
+    [
+      history.length,
+      state.message.length,
+      state.toolCalls.length,
+      state.chunks.length,
+    ],
   );
 
   const initialSentRef = useRef<string | null>(null);
@@ -199,16 +204,13 @@ export function ChatInterface({
             {(state.status === "streaming" ||
               state.status === "done" ||
               state.status === "stopped") &&
-            state.message ? (
+            (state.chunks.length > 0 || state.message) ? (
               <AssistantMessage
-                content={state.message}
+                chunks={state.chunks}
                 streaming={state.status === "streaming"}
                 stopped={state.status === "stopped"}
               />
             ) : null}
-            {state.reportThumbnails.map((t) => (
-              <ReportThumbnail key={t.report_id} reportId={t.report_id} filename={t.filename} />
-            ))}
             {state.status === "error" && state.errorMessage ? (
               <ErrorMessage
                 message={state.errorMessage}
