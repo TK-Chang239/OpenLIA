@@ -68,7 +68,7 @@ merged.
 | 17 | Formula Engine                      | Done        | 100%      | RESOLVED                  | ~~Plan vs design spec describe materially different DSLs~~ — closed via Phase 17 fix-plan (NEW-17-00..16); Option A (plan wins, additive spec amendment); reserved scalars + ruleset + streak moved into engine; pt_runner private helpers deleted |
 | 18 | Panic Thermometer                   | Done        | 100%      | RESOLVED                  | ~~5 drill-down dashboards + rule editor deferred~~ — closed via Phase 18 fix-plan (NEW-18-01..16); 5 dashboards, RuleEditor + FormulaInput + PanelSettingsPane, ManualOverridePopover, ImportExportModal, PanelDashboard frame; PtTriggerEvent + PANIC_LEVEL_CHANGE notifications |
 | 19 | Macro Research                      | Done        | 100%      | RESOLVED                  | ~~Settings panel never built; POST /assessment/run is a stub~~ — closed via Phase 19 fix-plan (P1-05/06, NEW-19-01..14); SchedulerService.run_now wires real JobRun, MRSettingsPanel + threshold-overrides endpoint, smart_mode plumbed through, FreshnessBadge, composite Summary tab + auto-refresh |
-| 20 | Retail Sentiment                    | Done        | v1: 60% / v2-bundle: 100% | DEFERRED        | v2-full deferred; `rs_classification_log` migration unconfirmed              |
+| 20 | Retail Sentiment                    | Done        | 100%      | RESOLVED                  | ~~v2-full deferred; `rs_classification_log` migration unconfirmed~~ — closed via Phase 20 fix-plan (NEW-20-01..15): RS scheduler integration shipped, Evidence/Insights/Settings/Deep-Dive UI shipped, metrics 8/9/11/12 + spec-correct Buzz Volume + insights synthesis shipped, `reliability.py` extracted, schedule routes shipped |
 | 21 | Portfolio                           | Done        | ~55%      | DEFERRED + IMPLEMENTER    | 17-component frontend collapsed to monolith; price provider noop             |
 | 22 | Repository                          | Done        | ~65%      | DEFERRED + IMPLEMENTER    | FileViewer click-to-open missing (not in deferred list)                      |
 | 23 | Docker / Acceptance                 | Done        | ~55%      | IMPLEMENTER + DEFERRED    | Smoke suite, CI Docker job, RELEASING.md absent; deploy structure wrong      |
@@ -649,7 +649,7 @@ instead of all 1,000+.
 | 17 | ~~[phase-17-formula-engine.md](./fix-plans/phase-17-formula-engine.md)~~ | 100% | RESOLVED (fix/phase-17-formula-engine) |
 | 18 | ~~[phase-18-panic-thermometer.md](./fix-plans/phase-18-panic-thermometer.md)~~ | 100% | RESOLVED (fix/phase-18-panic-thermometer) |
 | 19 | ~~[phase-19-macro-research.md](./fix-plans/phase-19-macro-research.md)~~ | 100% | RESOLVED (fix/phase-19-macro-research) |
-| 20 | [phase-20-retail-sentiment.md](./fix-plans/phase-20-retail-sentiment.md) | v1 ~60% / v2 100% | DEFERRED + SPEC_DRIFT |
+| 20 | ~~[phase-20-retail-sentiment.md](./fix-plans/phase-20-retail-sentiment.md)~~ | 100% | RESOLVED (fix/phase-20-retail-sentiment) |
 | 21 | [phase-21-portfolio.md](./fix-plans/phase-21-portfolio.md) | ~55% | mixed |
 | 22 | [phase-22-repository.md](./fix-plans/phase-22-repository.md) | ~65% | mixed |
 | 23 | [phase-23-docker-packaging-acceptance.md](./fix-plans/phase-23-docker-packaging-acceptance.md) | ~55% | DEFERRED + IMPLEMENTER |

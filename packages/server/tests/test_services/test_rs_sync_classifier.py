@@ -112,6 +112,48 @@ def test_refreshing_classifier_uses_configured_model(
     assert audit.error is None
 
 
+def test_refreshing_classifier_provider_exception_falls_back_to_neutral(
+    _env_secret, db_session, db_session_factory, create_tables
+) -> None:
+    provider = svc.create_provider(
+        db_session,
+        kind="openai",
+        label="main",
+        api_key="sk-test",
+        base_url=None,
+        env_var_name=None,
+        extra_config=None,
+    )
+    svc.create_model(
+        db_session,
+        provider_id=provider.id,
+        tier="quick",
+        model_ref="gpt-5.4-nano",
+        display_name="Nano",
+        is_tier_default=True,
+    )
+    db_session.commit()
+
+    async def _boom_generate(self, request):
+        raise RuntimeError("provider down")
+
+    classifier = RefreshingSyncLlmClassifier(db_session_factory=db_session_factory)
+
+    from openlia.llm.adapters.openai import OpenAIAdapter
+
+    with patch.object(OpenAIAdapter, "generate", _boom_generate):
+        result = classifier.classify_batch(
+            ticker="AAPL",
+            posts=[_post("p1", "great quarter"), _post("p2", "meh outlook")],
+        )
+
+    # LlmClassifier retries once; on second failure falls back to neutral
+    # but emits one audit row with the error captured.
+    assert [item.classification.value for item in result.items] == ["neutral", "neutral"]
+    assert len(result.audits) == 1
+    assert "RuntimeError" in (result.audits[0].error or "")
+
+
 def test_app_factory_installs_refreshing_classifier_on_rs_runner() -> None:
     with patch.dict(
         os.environ,

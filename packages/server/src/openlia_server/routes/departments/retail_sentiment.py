@@ -1,23 +1,24 @@
 """Retail Sentiment department routes.
 
-Compressed surface compared to the full plan: ships dashboard, history,
-config GET/PUT, run POST, stocks/{ticker}, spikes GET. Schedule endpoints
-are deferred to a follow-up task once JobType.RS_SNAPSHOT ships.
-"""
+Ships dashboard, history, config GET/PUT, run POST, stocks/{ticker},
+spikes GET, schedule GET/PUT (RS_SNAPSHOT job)."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from openlia.retail_sentiment.schemas import MetricSnapshot, SpikeEvent
 from openlia.retail_sentiment.spike_detector import detect_spike
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import rs_schedules as rs_schedules_svc
 from openlia_server.services.rs_config import RsConfigService
 from openlia_server.services.rs_runner import RsRunner
 from openlia_server.services.rs_snapshot import RsSnapshotService
@@ -34,12 +35,32 @@ class _RunDTO(BaseModel):
     tickers: list[str] = Field(default_factory=list)
 
 
+class _ScheduleIn(BaseModel):
+    time: str = Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    timezone: str = Field(min_length=3, max_length=64)
+    days_of_week: list[Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]] = Field(
+        min_length=1
+    )
+    label: str = Field(default="", max_length=64)
+    is_enabled: bool = True
+
+
+class _ScheduleOut(BaseModel):
+    id: str
+    time: str
+    timezone: str
+    days_of_week: list[str]
+    label: str
+    is_enabled: bool
+
+
 def _snapshot_out(snap: MetricSnapshot) -> dict[str, Any]:
     return {
         "ticker": snap.ticker,
         "captured_at": snap.captured_at.isoformat(),
         "sentiment_score": snap.sentiment_score,
         "buzz_volume": snap.buzz_volume,
+        "buzz_count": snap.buzz_count,
         "sentiment_momentum": snap.sentiment_momentum,
         "bull_bear_ratio": snap.bull_bear_ratio,
         "buzz_sentiment_divergence": snap.buzz_sentiment_divergence,
@@ -51,6 +72,7 @@ def _snapshot_out(snap: MetricSnapshot) -> dict[str, Any]:
         "institutional_retail_gap": snap.institutional_retail_gap,
         "event_sensitivity": snap.event_sensitivity,
         "source_breakdown": dict(snap.source_breakdown),
+        "narrative": snap.narrative,
     }
 
 
@@ -76,6 +98,10 @@ def _config_out(cfg: Any) -> dict[str, Any]:
     }
 
 
+def _optional_scheduler(request: Request):
+    return getattr(request.app.state, "scheduler", None)
+
+
 def build_retail_sentiment_router(
     *,
     db_session_factory: Callable[[], Any],
@@ -83,6 +109,7 @@ def build_retail_sentiment_router(
 ) -> APIRouter:
     require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
     router = APIRouter(prefix="/departments/retail_sentiment", tags=["retail_sentiment"])
+    session_dep = make_session_dependency(db_session_factory)
 
     def _config_svc() -> RsConfigService:
         return RsConfigService(session_factory=db_session_factory)
@@ -191,5 +218,55 @@ def build_retail_sentiment_router(
             if spike is not None:
                 spikes.append(_spike_out(spike))
         return {"spikes": spikes}
+
+    @router.get("/schedule")
+    def get_schedule(
+        user: User = require_auth,
+        db: DBSession = Depends(session_dep),
+    ) -> dict[str, Any]:
+        dto = rs_schedules_svc.get_schedule(db, user_id=user.id)
+        if dto is None:
+            return {"schedule": None}
+        return {
+            "schedule": _ScheduleOut(
+                id=dto.id,
+                time=dto.time,
+                timezone=dto.timezone,
+                days_of_week=list(dto.days_of_week),
+                label=dto.label,
+                is_enabled=dto.is_enabled,
+            ).model_dump()
+        }
+
+    @router.put("/schedule", response_model=_ScheduleOut)
+    async def put_schedule(
+        payload: _ScheduleIn,
+        user: User = require_auth,
+        db: DBSession = Depends(session_dep),
+        scheduler=Depends(_optional_scheduler),
+    ) -> _ScheduleOut:
+        if scheduler is None:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")
+        try:
+            dto = await rs_schedules_svc.upsert_schedule(
+                db,
+                user_id=user.id,
+                time=payload.time,
+                timezone=payload.timezone,
+                days_of_week=list(payload.days_of_week),
+                label=payload.label,
+                is_enabled=payload.is_enabled,
+                scheduler=scheduler,
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        return _ScheduleOut(
+            id=dto.id,
+            time=dto.time,
+            timezone=dto.timezone,
+            days_of_week=list(dto.days_of_week),
+            label=dto.label,
+            is_enabled=dto.is_enabled,
+        )
 
     return router

@@ -49,6 +49,7 @@ class MetricSnapshot(BaseModel):
 
     sentiment_score: float
     buzz_volume: float
+    buzz_count: float = 0.0
     sentiment_momentum: float
     bull_bear_ratio: float
     buzz_sentiment_divergence: float
@@ -60,6 +61,7 @@ class MetricSnapshot(BaseModel):
     institutional_retail_gap: float | None = None
     event_sensitivity: float | None = None
     source_breakdown: dict[str, float] = Field(default_factory=dict)
+    narrative: str | None = None
 
 
 SignalSeverity = Literal["panic", "stealth_recovery", "caution", "info"]
