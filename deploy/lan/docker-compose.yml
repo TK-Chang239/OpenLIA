@@ -1,18 +1,24 @@
-# LAN-only deployment: OpenLIA bound to the host's local network without a
-# reverse proxy. Cookies are NOT marked Secure (no TLS).
+# LAN-only deployment.
+#
+# OpenLIA bound to 0.0.0.0:8080 on the host with no TLS. Defaults to
+# personal mode (no auth) for a single-user workstation. Switch to
+# company mode by setting OPENLIA_MODE=company in `.env` and running the
+# admin invite-create flow afterward.
+#
+# Cookies are NOT marked Secure because the browser will speak plain
+# HTTP. Do NOT expose this recipe directly to the public internet.
 #
 # Start:
-#   OPENLIA_IMAGE=ghcr.io/your-org/openlia:latest \
+#   cp .env.example .env && $EDITOR .env
 #   docker compose up -d
 #
-# Then open http://<host-ip>:8000 from another machine on the LAN.
-
+# Then open http://<host-ip>:8080 from another machine on the LAN.
 services:
   openlia:
     image: ${OPENLIA_IMAGE:-ghcr.io/openlia/openlia:latest}
     restart: unless-stopped
     environment:
-      OPENLIA_MODE: company
+      OPENLIA_MODE: ${OPENLIA_MODE:-personal}
       OPENLIA_COOKIE_SECURE: "false"
       OPENLIA_DB_URL: sqlite:////home/openlia/.openlia/openlia.db
       OPENLIA_SCHEDULER_ENABLED: "true"
@@ -20,7 +26,7 @@ services:
     volumes:
       - openlia_data:/home/openlia/.openlia
     ports:
-      - "8000:8000"
+      - "8080:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
       interval: 30s
