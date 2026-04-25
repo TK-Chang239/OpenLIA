@@ -60,6 +60,11 @@
   --color-bg-elevated: #FAFAF4;
   --color-bg-input:    #F5F4EF;
   --color-bg-code:     #EEECEA;
+  /* Sidebar-scoped tokens. The sidebar is the only surface that stays dark in
+     both themes; these tokens encode the dark palette so the Tailwind layer
+     never has to hardcode hex values. They expand the canonical Phase 24
+     surface (which exposes only --color-sidebar-bg) and are documented in the
+     plan's "Token surface deltas (post-merge)" appendix. */
   --color-sidebar-bg:           #0D0D0C;       /* sidebar is dark in both themes */
   --color-sidebar-text:         #B5B3A8;
   --color-sidebar-text-strong:  #F2F1E8;

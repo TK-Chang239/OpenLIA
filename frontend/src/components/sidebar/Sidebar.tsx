@@ -44,13 +44,8 @@ export function Sidebar(): JSX.Element {
         ].join(" ")}
       >
         <span
-          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md font-bold"
-          style={{
-            background: "var(--color-accent-primary)",
-            color: "var(--color-accent-on)",
-            fontSize: 10,
-            boxShadow: "var(--shadow-accent)",
-          }}
+          className="inline-flex items-center justify-center w-[26px] h-[26px] rounded-md font-bold bg-accent-primary text-accent-on shadow-accent"
+          style={{ fontSize: 10 }}
         >
           LIA
         </span>

@@ -1702,3 +1702,20 @@ EOF
 3. **Type consistency:** `TopBar` props, `useTheme` return, `Card` props, `DataRow` props are defined once and referenced consistently.
 4. **Accent policy:** acid yellow is applied only as an accent (rail, send button, LIA badge, bar on card hover, focus ring). Olive `#A8CC00` is the hover border; acid is never a fill on large surfaces.
 5. **Motion tokens only:** every `transition-duration` uses a token (`duration-normal`, `duration-slow`). No `300ms` literals in the task bodies.
+
+---
+
+## Token surface deltas (post-merge)
+
+Task 1 of the plan exposes only `--color-sidebar-bg` for sidebar surfaces. During implementation the sidebar required additional dark-mode-stable tokens because it is the only surface that stays dark across both themes. The following six sidebar-scoped tokens were added to `frontend/src/styles/tokens.css` beyond the original plan surface and are documented here for future contributors:
+
+| Token | Light hex | Purpose |
+|---|---|---|
+| `--color-sidebar-text` | `#B5B3A8` | Default sidebar nav-item label color |
+| `--color-sidebar-text-strong` | `#F2F1E8` | Active / brand-name sidebar text |
+| `--color-sidebar-text-muted` | `#6E6E68` | Section dividers ("General", "Departments") |
+| `--color-sidebar-hover` | `#1C1C1A` | Hover background on sidebar rows |
+| `--color-sidebar-active` | `#252522` | Active background on sidebar rows |
+| `--color-sidebar-divider` | `#252522` | Footer border / collapsed section separator |
+
+Plan Task 1 status: `[~]` shipped-with-additions. These tokens are intentionally not exposed as Tailwind utilities because they are only consumed by `Sidebar.tsx` and `NavItem.tsx` via inline `style={{ color: "var(--color-sidebar-…)" }}` props. Other surfaces continue to use the canonical Tailwind utilities (`bg-bg-base`, `text-text-primary`, etc.).
