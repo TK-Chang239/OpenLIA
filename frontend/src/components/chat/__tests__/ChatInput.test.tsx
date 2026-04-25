@@ -58,4 +58,21 @@ describe("ChatInput", () => {
     fireEvent.click(screen.getByLabelText("Stop generating"));
     expect(onStop).toHaveBeenCalled();
   });
+
+  it("renders the helper microcopy below the input row", () => {
+    render(<ChatInput onSend={vi.fn()} isStreaming={false} placeholder="" />);
+    expect(
+      screen.getByText("Enter to send · Shift+Enter for new line"),
+    ).toBeInTheDocument();
+  });
+
+  it("textarea has aria-describedby pointing at the helper element", () => {
+    render(<ChatInput onSend={vi.fn()} isStreaming={false} placeholder="" />);
+    const ta = screen.getByLabelText("Chat message");
+    const id = ta.getAttribute("aria-describedby");
+    expect(id).toBeTruthy();
+    expect(document.getElementById(id!)?.textContent).toBe(
+      "Enter to send · Shift+Enter for new line",
+    );
+  });
 });

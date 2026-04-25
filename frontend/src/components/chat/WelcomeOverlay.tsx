@@ -1,4 +1,5 @@
 import { motion } from "framer-motion";
+import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 interface Chip {
   label: string;
@@ -13,10 +14,17 @@ interface Props {
 }
 
 export function WelcomeOverlay({ greeting, subtext, chips, onChipClick }: Props): JSX.Element {
+  const reduce = useReducedMotion();
+  const overlayDuration = reduce ? 0 : 0.2;
+  const chipDuration = reduce ? 0 : 0.22;
+
   return (
     <motion.div
-      exit={{ opacity: 0, y: -12 }}
-      transition={{ duration: 0.2, ease: "easeIn" }}
+      data-testid="welcome-overlay"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0, y: reduce ? 0 : -12 }}
+      transition={{ duration: overlayDuration, ease: "easeOut" }}
       className="relative flex h-full w-full flex-col items-center justify-center px-6"
       style={{
         backgroundImage:
@@ -49,10 +57,18 @@ export function WelcomeOverlay({ greeting, subtext, chips, onChipClick }: Props)
               key={c.label}
               type="button"
               onClick={() => onChipClick(c.value)}
-              initial={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: reduce ? 0 : 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.22, ease: "easeOut", delay: 0.2 + idx * 0.05 }}
-              whileHover={{ scale: 1.02, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+              transition={{
+                duration: chipDuration,
+                ease: "easeOut",
+                delay: reduce ? 0 : 0.2 + idx * 0.05,
+              }}
+              whileHover={
+                reduce
+                  ? undefined
+                  : { scale: 1.02, transition: { type: "spring", stiffness: 400, damping: 20 } }
+              }
               className="rounded-full border border-[--color-border-secondary]/60 bg-[--color-bg-elevated]/80 px-3.5 py-2 text-sm text-[--color-text-secondary] backdrop-blur-sm hover:border-[--color-accent-primary]/40 hover:bg-[--color-accent-subtle]/50 hover:text-[--color-accent-primary]"
             >
               {c.label}
