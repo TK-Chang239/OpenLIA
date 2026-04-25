@@ -135,3 +135,20 @@ def test_effective_returns_resolved_model(company_client, make_user, db_session)
     assert body["tier"] == "thinking"
     assert body["model_ref"] == "claude-sonnet-4"
     assert body["provider_kind"] == "anthropic"
+
+
+def test_department_defaults_endpoint(company_client, make_user, db_session) -> None:
+    """NEW-11-05: per-department default tier + reason are exposed to authed users."""
+    make_user(email="user@example.com", password="pw-12345678")
+    _login(company_client)
+
+    resp = company_client.get("/settings/models/department-defaults")
+    assert resp.status_code == 200
+    body = resp.json()
+    rows = {r["department_id"]: r for r in body["departments"]}
+    # Every department from openlia.llm.department_defaults should be present.
+    assert {"secretary", "equity_research", "panic_thermometer"}.issubset(rows.keys())
+    assert rows["equity_research"]["tier"] == "thinking"
+    assert rows["secretary"]["tier"] == "everyday"
+    # Reason copy comes from DEPARTMENT_TIER_REASONS.
+    assert rows["equity_research"]["reason"]

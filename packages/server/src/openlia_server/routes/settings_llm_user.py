@@ -6,11 +6,16 @@ Surface (per llm-provider-design.md §API Surface — User-facing):
     PUT    /settings/models/preferences/{tier} -> set preference
     DELETE /settings/models/preferences/{tier} -> clear preference
     GET    /settings/models/effective/{department_id} -> resolved model for current user
+    GET    /settings/models/department-defaults -> per-department default tier + reason
 """
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from openlia.llm.department_defaults import (
+    DEPARTMENT_DEFAULT_TIERS,
+    DEPARTMENT_TIER_REASONS,
+)
 from openlia.llm.exceptions import TierNotConfiguredError
 from openlia.llm.resolver import resolve as resolve_model
 from openlia.llm.types import ModelTier
@@ -56,6 +61,16 @@ class _EffectiveOut(BaseModel):
     tier: str
     model_id: str
     provider_id: str
+
+
+class _DepartmentDefaultRow(BaseModel):
+    department_id: str
+    tier: str
+    reason: str
+
+
+class _DepartmentDefaultsOut(BaseModel):
+    departments: list[_DepartmentDefaultRow]
 
 
 def build_llm_user_router(*, db_session_factory, mode: str) -> APIRouter:
@@ -150,6 +165,20 @@ def build_llm_user_router(*, db_session_factory, mode: str) -> APIRouter:
         db.query(UserLLMPreference).filter_by(user_id=user.id, tier=tier).delete()
         db.flush()
         return {"ok": True}
+
+    @router.get("/department-defaults", response_model=_DepartmentDefaultsOut)
+    def get_department_defaults(
+        _: User = require_auth,
+    ) -> _DepartmentDefaultsOut:
+        rows = [
+            _DepartmentDefaultRow(
+                department_id=dept_id,
+                tier=tier.value,
+                reason=DEPARTMENT_TIER_REASONS.get(dept_id, ""),
+            )
+            for dept_id, tier in DEPARTMENT_DEFAULT_TIERS.items()
+        ]
+        return _DepartmentDefaultsOut(departments=rows)
 
     @router.get("/effective/{department_id}", response_model=_EffectiveOut)
     def get_effective(

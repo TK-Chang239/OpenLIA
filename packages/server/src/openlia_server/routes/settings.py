@@ -282,6 +282,22 @@ def build_data_providers_router(
         _admin=require_admin,
         session: DBSession = Depends(session_dep),
     ) -> Response:
+        # Block delete if any requirement mapping still references this provider.
+        mapped = session.scalar(
+            select(DataProviderRequirementMapping)
+            .where(DataProviderRequirementMapping.provider_id == provider_id)
+            .limit(1)
+        )
+        if mapped is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "provider_in_use",
+                    "message": (
+                        "Provider is assigned to a requirement mapping; remove mappings first."
+                    ),
+                },
+            )
         try:
             svc.delete_provider(session, provider_id)
         except svc.ProviderNotFoundError as exc:

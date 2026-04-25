@@ -1,4 +1,7 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
+import { NavLink, Outlet, useBlocker } from 'react-router-dom';
+import { SettingsDirtyProvider, useSettingsDirty } from './dirty-context';
+import { UnsavedChangesModal } from './UnsavedChangesModal';
 
 interface NavItem {
   to: string;
@@ -17,8 +20,32 @@ interface Props {
   userRole: 'user' | 'admin';
 }
 
-export function SettingsShell({ userRole }: Props): JSX.Element {
+function ShellInner({ userRole }: Props): JSX.Element {
   const items = ITEMS.filter((i) => !i.adminOnly || userRole === 'admin');
+  const dirtyCtx = useSettingsDirty();
+
+  // In-app navigation guard. `useBlocker` re-evaluates on every navigation
+  // attempt; we read `isAnyDirty()` lazily so the latest snapshot wins.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => {
+    if (!dirtyCtx) return false;
+    if (currentLocation.pathname === nextLocation.pathname) return false;
+    return dirtyCtx.isAnyDirty();
+  });
+
+  // Hard navigation guard (browser-level reload/close).
+  useEffect(() => {
+    if (!dirtyCtx) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!dirtyCtx.isAnyDirty()) return;
+      e.preventDefault();
+      e.returnValue = '';
+      return '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirtyCtx]);
+
+  const blockerOpen = blocker.state === 'blocked';
   return (
     <div className="flex min-h-[calc(100vh-4rem)] w-full">
       <aside className="w-56 shrink-0 border-r border-border-subtle bg-bg-base">
@@ -49,6 +76,19 @@ export function SettingsShell({ userRole }: Props): JSX.Element {
       <main className="flex-1 p-6">
         <Outlet />
       </main>
+      <UnsavedChangesModal
+        open={blockerOpen}
+        onConfirmDiscard={() => blocker.proceed?.()}
+        onCancel={() => blocker.reset?.()}
+      />
     </div>
+  );
+}
+
+export function SettingsShell(props: Props): JSX.Element {
+  return (
+    <SettingsDirtyProvider>
+      <ShellInner {...props} />
+    </SettingsDirtyProvider>
   );
 }

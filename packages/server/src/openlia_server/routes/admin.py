@@ -26,7 +26,11 @@ class CreateInviteIn(BaseModel):
 
 
 class DirectResetIn(BaseModel):
-    new_password: str
+    new_password: str | None = None
+
+
+class DirectResetOut(BaseModel):
+    temporary_password: str
 
 
 def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
@@ -132,22 +136,25 @@ def build_admin_router(*, db_session_factory: Callable[[], DBSession]) -> APIRou
         user.updated_at = datetime.now(UTC)
         return Response(status_code=204)
 
-    @router.post("/users/{user_id}/reset-password", status_code=204)
+    @router.post("/users/{user_id}/reset-password", response_model=DirectResetOut)
     def direct_reset(
         user_id: str,
         body: DirectResetIn,
         admin=require_admin,
         db: DBSession = Depends(session_dep),
-    ):
+    ) -> DirectResetOut:
         try:
-            reset_service.admin_direct_reset(
-                db, user_id=user_id, new_password=body.new_password, admin_user_id=admin.id
+            password = reset_service.admin_direct_reset(
+                db,
+                user_id=user_id,
+                new_password=body.new_password,
+                admin_user_id=admin.id,
             )
         except AuthError as exc:
             raise HTTPException(
                 status_code=400, detail={"code": exc.code, "message": str(exc)}
             ) from exc
-        return Response(status_code=204)
+        return DirectResetOut(temporary_password=password)
 
     @router.get("/password-reset-requests")
     def list_reset_requests(admin=require_admin, db: DBSession = Depends(session_dep)):

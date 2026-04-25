@@ -133,10 +133,20 @@ def admin_direct_reset(
     db: DBSession,
     *,
     user_id: str,
-    new_password: str,
+    new_password: str | None = None,
     admin_user_id: str | None,
     metadata: dict[str, object] | None = None,
-) -> None:
+) -> str:
+    """Reset a user's password directly.
+
+    If ``new_password`` is None, a cryptographically random temporary password
+    is generated and returned (plaintext); the caller is responsible for
+    surfacing it once. The returned value is always the plaintext password
+    that was just set so admin tooling can display it. Sets
+    ``must_change_password=True`` and revokes all active sessions.
+    """
+    if new_password is None:
+        new_password = tokens.generate_opaque_token()
     passwords.validate_password_policy(new_password)
     user = db.get(User, user_id)
     if user is None:
@@ -155,6 +165,7 @@ def admin_direct_reset(
         actor_user_id=admin_user_id,
         metadata=metadata,
     )
+    return new_password
 
 
 def change_password(
