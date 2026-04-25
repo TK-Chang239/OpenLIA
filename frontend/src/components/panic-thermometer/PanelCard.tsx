@@ -9,7 +9,7 @@ const STATUS_COLORS: Record<PanelStatus, string> = {
   green: "var(--color-feedback-success)",
   amber: "var(--color-feedback-warning)",
   red: "var(--color-feedback-error)",
-  dark_red: "var(--color-border-error)",
+  dark_red: "var(--color-feedback-error-strong)",
   disabled: "var(--color-text-tertiary)",
 };
 

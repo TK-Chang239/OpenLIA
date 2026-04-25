@@ -27,7 +27,12 @@ def test_job_statuses_match_spec() -> None:
 
 
 def test_notification_types_match_spec() -> None:
-    assert {n.value for n in NotificationType} == {"report_ready", "assessment_ready", "job_failed"}
+    assert {n.value for n in NotificationType} == {
+        "report_ready",
+        "assessment_ready",
+        "job_failed",
+        "panic_level_change",
+    }
 
 
 def test_job_key_user_scoped() -> None:

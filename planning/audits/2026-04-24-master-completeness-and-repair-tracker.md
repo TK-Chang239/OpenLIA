@@ -66,7 +66,7 @@ merged.
 | 15 | Earnings Update                     | Done        | 100%      | RESOLVED                  | ~~/schedules route absent; duplicate impls; Cabinet remove stub~~ — closed via Phase 15 fix-plan (P0-02, NEW-15-01..19); /schedules consolidated into EU router with 422 validation, Cabinet DELETE, Overdue/New/Empty/Error/Skeleton states, search+filter, OnDemand CheckCircle, mobile responsive, framework parity, cascade delete |
 | 16 | Morning Briefing                    | Done        | 100%      | RESOLVED                  | ~~prompt/builder JSON-blob mismatch; settings inline; no per-component vitests~~ — closed via Phase 16 fix-plan (P1-04, P2-15, NEW-16-01..06); ReportRequest gains section_topics + reference_portfolio fields, MB settings decomposed into 6 atomic Radix-driven components, 10 new vitests, microcopy aligned |
 | 17 | Formula Engine                      | Done        | 100%      | RESOLVED                  | ~~Plan vs design spec describe materially different DSLs~~ — closed via Phase 17 fix-plan (NEW-17-00..16); Option A (plan wins, additive spec amendment); reserved scalars + ruleset + streak moved into engine; pt_runner private helpers deleted |
-| 18 | Panic Thermometer                   | Done        | ~72%      | DEFERRED + IMPLEMENTER    | 5 drill-down dashboards + rule editor deferred; server tests missed          |
+| 18 | Panic Thermometer                   | Done        | 100%      | RESOLVED                  | ~~5 drill-down dashboards + rule editor deferred~~ — closed via Phase 18 fix-plan (NEW-18-01..16); 5 dashboards, RuleEditor + FormulaInput + PanelSettingsPane, ManualOverridePopover, ImportExportModal, PanelDashboard frame; PtTriggerEvent + PANIC_LEVEL_CHANGE notifications |
 | 19 | Macro Research                      | Done        | ~72%      | IMPLEMENTER               | Settings panel never built; `POST /assessment/run` is a stub                 |
 | 20 | Retail Sentiment                    | Done        | v1: 60% / v2-bundle: 100% | DEFERRED        | v2-full deferred; `rs_classification_log` migration unconfirmed              |
 | 21 | Portfolio                           | Done        | ~55%      | DEFERRED + IMPLEMENTER    | 17-component frontend collapsed to monolith; price provider noop             |
@@ -445,8 +445,12 @@ keeps the project navigable.
   logic lives inline in `routes/files.py`. Not a bug; violates the
   business-logic-in-services rule.
 
-- [ ] **P2-17 — Phase 12 zero frontend vitests.** Plan Task 20 mandated a
-  smoke suite. Schedule when time permits.
+- [x] **P2-17 — Phase 12 zero frontend vitests.** Phase 18 closeout
+  shipped seven Panic Thermometer vitests under
+  `frontend/src/__tests__/panic-thermometer/` (PanicThermometer,
+  RuleEditor, FormulaInput, OilDashboard, DiplomacyDashboard,
+  PresetLibrary, ImportExportModal). Phase 12 chat/viewer/save-to-repo
+  smoke tests still outstanding — track separately.
 
 - [ ] **P2-18 — Phase 8 `PagePlaceholder` renders styled card, not bare
   `<h1>`.** Cosmetic; either amend plan or revert.
@@ -643,7 +647,7 @@ instead of all 1,000+.
 | 15 | ~~[phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md)~~ | 100% | RESOLVED (fix/phase-15-earnings-update) |
 | 16 | ~~[phase-16-morning-briefing.md](./fix-plans/phase-16-morning-briefing.md)~~ | 100% | RESOLVED (fix/phase-16-morning-briefing) |
 | 17 | ~~[phase-17-formula-engine.md](./fix-plans/phase-17-formula-engine.md)~~ | 100% | RESOLVED (fix/phase-17-formula-engine) |
-| 18 | [phase-18-panic-thermometer.md](./fix-plans/phase-18-panic-thermometer.md) | ~72% | DEFERRED + IMPLEMENTER |
+| 18 | ~~[phase-18-panic-thermometer.md](./fix-plans/phase-18-panic-thermometer.md)~~ | 100% | RESOLVED (fix/phase-18-panic-thermometer) |
 | 19 | [phase-19-macro-research.md](./fix-plans/phase-19-macro-research.md) | ~72% | IMPLEMENTER |
 | 20 | [phase-20-retail-sentiment.md](./fix-plans/phase-20-retail-sentiment.md) | v1 ~60% / v2 100% | DEFERRED + SPEC_DRIFT |
 | 21 | [phase-21-portfolio.md](./fix-plans/phase-21-portfolio.md) | ~55% | mixed |

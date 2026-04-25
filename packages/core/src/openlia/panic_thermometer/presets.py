@@ -216,7 +216,7 @@ def _wage_dynamic_threshold() -> dict[str, Any]:
         "rules": [
             {
                 "status": "red",
-                "formula": "value > rolling_mean(value, 12) + std_20",
+                "formula": "value > rolling_mean(value, 12) + sigma_threshold",
                 "label": "Above 1-sigma of trailing avg",
             },
             {
@@ -233,7 +233,7 @@ def _wage_dynamic_threshold() -> dict[str, Any]:
         "params": {
             "event_type_filter": "Average Hourly Earnings",
             "history_lookback_months": 24,
-            "std_20": 0.1,
+            "sigma_threshold": 0.1,
         },
         "streak_condition": None,
     }
