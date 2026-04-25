@@ -107,6 +107,59 @@ async def test_on_demand_uppercases_ticker(create_tables, db_session: Session) -
 
 
 @pytest.mark.asyncio
+async def test_on_demand_persists_subject_as_ticker(create_tables, db_session: Session) -> None:
+    _mk_user(db_session)
+    complete = ReportComplete(report_id="r_x", schema=_valid_schema(title="AAPL Q1 FY2026"))
+    runner = ScriptedRunner(events=[complete])
+
+    async for _ in run_on_demand(
+        session=db_session, user_id="u_1", ticker="aapl", report_runner=runner
+    ):
+        pass
+
+    rows = db_session.query(Report).filter_by(user_id="u_1").all()
+    assert len(rows) == 1
+    assert rows[0].subject == "AAPL"
+    assert "AAPL" in (rows[0].title or "") or "Earnings" in (rows[0].title or "")
+
+
+@pytest.mark.asyncio
+async def test_eu_runner_does_not_touch_schedule_last_run_at(
+    create_tables, db_session: Session
+) -> None:
+    """On-demand reports must not bump eu_schedules.last_run_at."""
+    import json
+    from datetime import UTC, datetime
+
+    from openlia_server.db.models.scheduler import EuSchedule
+
+    _mk_user(db_session)
+    sched = EuSchedule(
+        id="s_1",
+        user_id="u_1",
+        time="06:00",
+        timezone="UTC",
+        days_of_week=json.dumps([0, 1, 2, 3, 4]),
+        label=None,
+        is_enabled=True,
+        created_at=datetime.now(UTC),
+        last_run_at=None,
+    )
+    db_session.add(sched)
+    db_session.commit()
+
+    complete = ReportComplete(report_id="r_lr", schema=_valid_schema(title="AAPL"))
+    runner = ScriptedRunner(events=[complete])
+    async for _ in run_on_demand(
+        session=db_session, user_id="u_1", ticker="AAPL", report_runner=runner
+    ):
+        pass
+
+    db_session.refresh(sched)
+    assert sched.last_run_at is None
+
+
+@pytest.mark.asyncio
 async def test_on_demand_pulls_user_config(create_tables, db_session: Session) -> None:
     from openlia_server.db.models.departments import EuUserConfig
 

@@ -108,3 +108,20 @@ def test_defaults_match_framework_section_ids(create_tables, db_session: Session
         "risk_assessment",
         "thesis_check",
     }
+
+
+def test_eu_section_ids_match_framework() -> None:
+    """Backend DEFAULT_SECTION_IDS must match the framework JSON sections exactly."""
+    import json
+    from pathlib import Path
+
+    from openlia_server.services.eu_config import DEFAULT_SECTION_IDS
+
+    # Locate the framework JSON shipped in the core package.
+    core_root = Path(__file__).resolve().parents[3] / "core"
+    framework_path = (
+        core_root / "src" / "openlia" / "reports" / "frameworks" / "earnings_update.json"
+    )
+    framework = json.loads(framework_path.read_text())
+    framework_ids = tuple(section["id"] for section in framework["sections"])
+    assert framework_ids == DEFAULT_SECTION_IDS
