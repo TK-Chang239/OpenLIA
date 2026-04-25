@@ -30,6 +30,7 @@ class NotificationType(StrEnum):
     REPORT_READY = "report_ready"
     ASSESSMENT_READY = "assessment_ready"
     JOB_FAILED = "job_failed"
+    PANIC_LEVEL_CHANGE = "panic_level_change"
 
 
 MAINTENANCE_JOB_KEY = "system_maintenance"
