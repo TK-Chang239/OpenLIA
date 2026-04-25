@@ -9,12 +9,26 @@ def test_defaults_when_no_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "OPENLIA_SCHEDULER_ENABLED",
         "OPENLIA_SCHEDULER_MISFIRE_GRACE_SECONDS",
         "OPENLIA_SCHEDULER_SHUTDOWN_GRACE_SECONDS",
+        "OPENLIA_SCHEDULER_MAX_CONCURRENT_JOBS",
     ):
         monkeypatch.delenv(k, raising=False)
     s = SchedulerSettings.from_env()
     assert s.enabled is True
     assert s.misfire_grace_seconds == 21_600
     assert s.shutdown_grace_seconds == 30
+    assert s.max_concurrent_jobs is None
+
+
+def test_max_concurrent_jobs_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENLIA_SCHEDULER_MAX_CONCURRENT_JOBS", "25")
+    s = SchedulerSettings.from_env()
+    assert s.max_concurrent_jobs == 25
+
+
+def test_max_concurrent_jobs_rejects_zero(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENLIA_SCHEDULER_MAX_CONCURRENT_JOBS", "0")
+    with pytest.raises(ValueError, match="max_concurrent_jobs"):
+        SchedulerSettings.from_env()
 
 
 @pytest.mark.parametrize(

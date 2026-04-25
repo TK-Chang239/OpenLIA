@@ -2,7 +2,12 @@
 
 Imported by sibling test files via `from _fakes import FakeFoo`. The
 `sys.path.insert(...)` in conftest.py makes this directory importable
-as top-level modules under --import-mode=importlib."""
+as top-level modules under --import-mode=importlib.
+
+Test-only stubs for the scheduler `payloads` Protocols also live here
+so production code never depends on a "raises at fire time" payload
+builder. Tests that exercise the not-wired failure path import them
+from this module."""
 
 from __future__ import annotations
 
@@ -20,10 +25,57 @@ from openlia.llm.runtime.messages import (
     ReportRequest,
 )
 from openlia_server.scheduler.payloads import (
+    DepartmentPayloadBuilderNotWired,
     EUScanTarget,
     MRAssessmentPayload,
 )
 from sqlalchemy.orm import Session
+
+# ------------------------------------------------------------------
+# Test-only stub builders — historically lived in scheduler/payloads.py.
+# Moved here once every department shipped a real builder so production
+# wiring fails loudly when a real builder is missing.
+# ------------------------------------------------------------------
+
+
+class StubMBRequestBuilder:
+    def build(self, *, session: Session | None, user_id: str, schedule_id: str) -> ReportRequest:
+        raise DepartmentPayloadBuilderNotWired("MBRequestBuilder not provided")
+
+
+class StubEUScanPlanner:
+    def plan(
+        self,
+        *,
+        session: Session | None,
+        user_id: str,
+        schedule_id: str,
+        since: datetime | None,
+    ) -> list[EUScanTarget]:
+        raise DepartmentPayloadBuilderNotWired("EUScanPlanner not provided")
+
+
+class StubMRAssessmentBuilder:
+    def build(self, *, session: Session | None, user_id: str) -> MRAssessmentPayload:
+        raise DepartmentPayloadBuilderNotWired("MRAssessmentBuilder not provided")
+
+
+class StubReportStore:
+    def save(
+        self,
+        *,
+        session: Session | None,
+        user_id: str,
+        department: str,
+        payload: dict[str, Any],
+    ) -> str:
+        raise DepartmentPayloadBuilderNotWired("ReportStore not provided")
+
+
+class StubMRCacheStore:
+    def save(self, *, session: Session | None, user_id: str, payload: dict[str, Any]) -> str:
+        raise DepartmentPayloadBuilderNotWired("MRCacheStore not provided")
+
 
 # ------------------------------------------------------------------
 # FakeSleep — swap for asyncio.sleep in retry-backoff tests.
@@ -244,6 +296,8 @@ class _ScheduledJob:
     args: tuple
     kwargs: dict
     misfire_grace_time: float | None
+    max_instances: int | None = None
+    coalesce: bool | None = None
 
 
 @dataclass
@@ -267,6 +321,8 @@ class FakeAPScheduler:
         args: tuple = (),
         kwargs: dict | None = None,
         misfire_grace_time: float | None = None,
+        max_instances: int | None = None,
+        coalesce: bool | None = None,
     ) -> str:
         if id in self.jobs:
             raise ValueError(f"duplicate schedule id: {id}")
@@ -277,6 +333,8 @@ class FakeAPScheduler:
             args=args,
             kwargs=kwargs or {},
             misfire_grace_time=misfire_grace_time,
+            max_instances=max_instances,
+            coalesce=coalesce,
         )
         return id
 

@@ -6,12 +6,26 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.dashboard import MrDashboardState
 from openlia_server.scheduler.registry import JobType
 from openlia_server.scheduler.service import SchedulerService
+
+
+def _validate_cron(cron_expression: str) -> None:
+    """Raise ValueError if the cron expression is not a valid 5-field crontab.
+
+    Mirrors what `SchedulerService._cron_trigger_for` will do at fire time;
+    surfaces the error at write time so users see a 400 instead of a silent
+    fallback in the scheduler.
+    """
+    try:
+        CronTrigger.from_crontab(cron_expression)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"invalid cron expression: {cron_expression!r} ({exc})") from exc
 
 
 class MRScheduleService:
@@ -37,6 +51,7 @@ class MRScheduleService:
             return s.scalars(stmt).first()
 
     async def upsert(self, *, user_id: str, cron_expression: str) -> MrDashboardState:
+        _validate_cron(cron_expression)
         with self._session_factory() as s:
             existing = s.scalars(
                 select(MrDashboardState).where(

@@ -15,6 +15,7 @@ class JobType(StrEnum):
     MB_BRIEFING = "mb_briefing"
     EU_SCAN = "eu_scan"
     MR_ASSESSMENT = "mr_assessment"
+    RS_SNAPSHOT = "rs_snapshot"
     SYSTEM_MAINTENANCE = "system_maintenance"
 
 
@@ -38,6 +39,7 @@ _DEPARTMENT_BY_JOB: dict[JobType, str] = {
     JobType.MB_BRIEFING: "morning_briefing",
     JobType.EU_SCAN: "earnings_update",
     JobType.MR_ASSESSMENT: "macro_research",
+    JobType.RS_SNAPSHOT: "retail_sentiment",
 }
 
 

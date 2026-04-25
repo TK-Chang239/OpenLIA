@@ -69,3 +69,18 @@ async def test_delete_noop_when_no_row(factory) -> None:
     svc = MRScheduleService(session_factory=factory, scheduler=scheduler)
     await svc.delete(user_id="u-1")
     scheduler.remove_schedule.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_invalid_cron_rejected(factory) -> None:
+    """NEW-6-06: invalid cron expressions raise ValueError at write time
+    so the route can map them to 400 instead of letting the scheduler
+    fall back to a silent default."""
+    scheduler = MagicMock()
+    scheduler.modify_schedule = AsyncMock()
+    svc = MRScheduleService(session_factory=factory, scheduler=scheduler)
+
+    with pytest.raises(ValueError):
+        await svc.upsert(user_id="u-1", cron_expression="not a cron")
+
+    scheduler.modify_schedule.assert_not_awaited()

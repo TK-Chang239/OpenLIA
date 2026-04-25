@@ -54,7 +54,7 @@ merged.
 | 3  | Data Provider Adapter               | Done        | 100%      | RESOLVED                  | ~~Cleanest phase — only `company_fundamentals` capability deferred~~ — closed via Phase 3 fix-plan (P0-3-01..P0-3-04, P1-3-05..P1-3-12, NEW-3-01..NEW-3-08) |
 | 4  | LLM Provider System                 | Done        | 100%      | RESOLVED                  | ~~User-preference HTTP routes never wired~~ — closed via Phase 4 fix-plan (NEW-4-10/11/20-27, 30-40 + P2-11/12) on `fix/phase-4-llm-provider-system` |
 | 5  | LLM Runtime                         | Done        | 100%      | RESOLVED                  | ~~`await_with_grace` unused; no startup slot check~~ — closed via Phase 5 fix-plan (P1-12/12b/13/14, NEW-5-01..06, P2-10, P2-NEW-5-07/08/09; P2-NEW-5-10 deferred to consuming plan) |
-| 6  | Background Scheduler                | Done        | ~92%      | IMPLEMENTER               | `batch_runner=None` → MR jobs crash; dual `MRScheduleService` instances      |
+| 6  | Background Scheduler                | Done        | 100%      | RESOLVED                  | ~~`batch_runner=None` → MR jobs crash; dual `MRScheduleService` instances~~ — closed via Phase 6 fix-plan (P0-04/05, NEW-6-01..09, P2-05/06/20); RS_SNAPSHOT JobType added; cron validation + concurrency caps wired |
 | 7  | CLI Surface                         | Done        | ~97%      | RESOLVED                  | Best-shipped phase — only `serve` startup banner missing                     |
 | 8  | Frontend Shell                      | Done        | ~95%      | IMPLEMENTER + SPEC_DRIFT  | Design tokens diverged to Wondermakers/Acid Yellow palette                   |
 | 9  | Login / Account UI                  | Done        | ~88%      | IMPLEMENTER               | Server requires `display_name`; `aria-describedby` missing                   |
@@ -631,7 +631,7 @@ instead of all 1,000+.
 | 3 | ~~[phase-3-data-provider-adapter.md](./fix-plans/phase-3-data-provider-adapter.md)~~ | 100% | RESOLVED (fix/phase-3-data-provider-adapter) |
 | 4 | ~~[phase-4-llm-provider-system.md](./fix-plans/phase-4-llm-provider-system.md)~~ | 100% | RESOLVED (fix/phase-4-llm-provider-system) |
 | 5 | ~~[phase-5-llm-runtime.md](./fix-plans/phase-5-llm-runtime.md)~~ | 100% | RESOLVED (fix/phase-5-llm-runtime) |
-| 6 | [phase-6-background-task-scheduling.md](./fix-plans/phase-6-background-task-scheduling.md) | ~92% | IMPLEMENTER |
+| 6 | ~~[phase-6-background-task-scheduling.md](./fix-plans/phase-6-background-task-scheduling.md)~~ | 100% | RESOLVED (fix/phase-6-background-task-scheduling) |
 | 7 | [phase-7-cli-surface.md](./fix-plans/phase-7-cli-surface.md) | ~97% | mixed |
 | 8 | [phase-8-frontend-shell.md](./fix-plans/phase-8-frontend-shell.md) | ~95% | SPEC_DRIFT + cosmetic |
 | 9 | [phase-9-login-account-ui.md](./fix-plans/phase-9-login-account-ui.md) | ~88% | IMPLEMENTER |

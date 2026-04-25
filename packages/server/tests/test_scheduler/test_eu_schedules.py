@@ -4,9 +4,19 @@ from contextlib import asynccontextmanager
 
 import openlia_server.db.models  # noqa: F401 — register all models
 import pytest
-from _scheduler_fakes import FakeAPScheduler, FakeBatchRunner, FakeReportRunner
+from _scheduler_fakes import (
+    FakeAPScheduler,
+    FakeBatchRunner,
+    FakeMBBuilder,
+    FakeMRBuilder,
+    FakeMRCacheStore,
+    FakeReportRunner,
+    FakeReportStore,
+    StubEUScanPlanner,
+)
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
 from openlia_server.routes.eu_schedules import build_eu_schedules_router
@@ -66,6 +76,13 @@ def eu_fixtures(eu_session_factory):
         scheduler=fake_scheduler,
         report_runner=FakeReportRunner(events=[]),
         batch_runner=FakeBatchRunner(results=[]),
+        mb_builder=FakeMBBuilder(request=ReportRequest(mode="stock_update", user_input="x")),
+        eu_planner=StubEUScanPlanner(),
+        mr_builder=FakeMRBuilder(
+            items=[], synth=ReportRequest(mode="mr_synthesis", user_input="x")
+        ),
+        report_store=FakeReportStore(),
+        mr_cache_store=FakeMRCacheStore(),
     )
 
     @asynccontextmanager
