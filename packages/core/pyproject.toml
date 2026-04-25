@@ -6,7 +6,7 @@ build-backend = "uv_build"
 name = "openlia-core"
 version = "0.1.0"
 description = "OpenLIA core library — departments, LLM adapters, data adapters, report generation. Pure Python library. No server-side HTTP frameworks (FastAPI, uvicorn, SQLAlchemy)."
-readme = "../../README.md"
+readme = "README.md"
 requires-python = ">=3.12"
 authors = [{name = "OpenLIA contributors"}]
 license = {text = "MIT"}
@@ -47,7 +47,10 @@ dev = [
 [tool.uv.build-backend]
 module-name = "openlia"
 module-root = "src"
-
-[tool.hatch.build.targets.wheel.force-include]
-"src/openlia/prompts" = "openlia/prompts"
-"src/openlia/reports/frameworks" = "openlia/reports/frameworks"
+# uv_build ships every file under module-root by default; explicitly list
+# non-Python resource directories so prompts/frameworks land in the wheel
+# (and so removal of any item here is a deliberate, reviewable change).
+source-include = [
+    "src/openlia/prompts/**/*.yaml",
+    "src/openlia/reports/frameworks/**/*",
+]

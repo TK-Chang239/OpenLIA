@@ -14,9 +14,68 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Release workflow (`.github/workflows/release.yml`): on `v*.*.*` tag, builds
   and pushes the Docker image to GHCR (amd64 + arm64) and publishes
   `openlia-core` + `openlia` wheels to PyPI via trusted publishing, then
-  creates a GitHub Release with generated notes.
+  creates a GitHub Release with generated notes. PyPI publish is gated on
+  `PYPI_API_TOKEN` presence; without the token, wheels build and the workflow
+  logs a skip line instead of failing.
 - PyPI metadata: `[project.urls]`, classifiers, keywords, and `readme` added
-  to both `openlia-core` and `openlia`.
+  to both `openlia-core` and `openlia`. Per-package `README.md` files now
+  ship inside each wheel so PyPI's project description is populated.
+- `[tool.uv.build-backend].source-include` in `packages/core/pyproject.toml`
+  explicitly ships `openlia/prompts/**/*.yaml` and
+  `openlia/reports/frameworks/**/*` resources in the wheel.
+- Three Docker deployment recipes under `deploy/`: `cloudflare-tunnel/`
+  (cloudflared sidecar), `caddy/` (automatic Let's Encrypt + SSE flush
+  block), and `lan/` (HTTP on port 8080, mode-toggleable). Each ships a
+  per-recipe `.env.example`.
+- `OPENLIA_TRUST_PROXY_HEADERS` + `OPENLIA_COOKIE_SECURE` env wiring
+  documented in `deploy/README.md` plus `tests/fixtures/production_env.yaml`
+  snapshot pinned via `test_production_env_snapshot.py`.
+- Cookie/proxy integration coverage: `test_cookie_secure.py` (3-case mode
+  matrix) + `test_proxy_and_cookie_integration.py` (company-mode behind
+  TLS proxy with /api strip).
+- `/api` prefix stripping middleware verified in production via
+  `test_api_prefix_strip.py`; reverse-proxy configs forward `/api/*`
+  untouched.
+- `openlia admin create-invite --json` flag emits machine-readable
+  `{invite_id, token, url}` JSON for scripting and the smoke harness.
+- Wheel-contents tests (`test_wheel_contents.py` in both packages) lock the
+  installable surface: server wheel ships `openlia_server/` + `openlia`
+  console script; core wheel ships `openlia/prompts/*.yaml` +
+  `openlia/reports/frameworks/`. Neither ships `tests/`, `planning/`, or
+  `.venv/`.
+- Frontend production build vitests: `prodBase.test.ts` asserts no
+  `https?://host/api` literal escapes into source; `buildOutput.test.ts`
+  asserts the Vite build emits a hashed bundle reference and the SPA mount
+  point. `buildOutput` skips when `dist/` is absent.
+- Container-runtime smoke harness under `tests/smoke/` (P0-10 closed):
+  `test_personal_mode.py` and `test_company_mode.py` boot a real Docker
+  container, exercise `/healthz` + `/api` prefix + SPA + setup wizard +
+  invite/register/login flow + cookie/proxy header propagation. Skips
+  cleanly without `SMOKE=1`.
+- CI Docker build job (`.github/workflows/ci.yml::docker`) builds the image
+  via `docker/build-push-action` (gha cache), runs the container, polls
+  `/healthz` for 30s, and dumps `docker logs` on failure.
+- `RELEASING.md` documents version scheme, pre-flight, tag/push, workflow
+  side-effects, post-release verification, and rolling a broken release.
+- `scripts/acceptance.sh` runs the full local merge-gate (lint, format,
+  pytest, frontend lint/test/build, docker build, smoke, compose validate
+  ×3, Caddyfile validate, `uv build --all-packages`, throwaway venv
+  install, `openlia --help`).
+- Root `README.md` rewritten with Docker / PyPI / from-source quickstarts
+  plus a deployment recipes table and a Docs section linking
+  `deploy/README.md`, `RELEASING.md`, `CHANGELOG.md`, and `planning/`.
+
+### Changed
+- `deploy/lan/docker-compose.yml` (renamed from `deploy/lan-only/`) now
+  exposes `8080:8000` and defaults `OPENLIA_MODE` to `personal`,
+  overridable via `.env`.
+- `.dockerignore` re-allows `CHANGELOG.md` and `LICENSE*` in addition to
+  `README.md` so wheel/release tooling can find them in the build context.
+- `packages/core/pyproject.toml` and `packages/server/pyproject.toml`:
+  `readme = "../../README.md"` → `readme = "README.md"` (relative paths
+  outside the package source tree are not embedded by `uv_build`). Dead
+  `[tool.hatch.build.targets.wheel.force-include]` block removed from
+  `core/pyproject.toml` (build-backend is `uv_build`, not hatchling).
 
 ## [0.1.0] — 2026-04-24
 

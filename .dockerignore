@@ -32,6 +32,8 @@ planning/
 docs/
 *.md
 !README.md
+!CHANGELOG.md
+!LICENSE*
 
 # Editor/OS cruft
 .idea/
