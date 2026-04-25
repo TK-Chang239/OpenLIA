@@ -3,13 +3,14 @@ export function WizardProgress({ value, max }: { value: number; max: number }) {
   return (
     <div
       role="progressbar"
+      aria-label="Wizard progress"
       aria-valuenow={value}
       aria-valuemax={max}
       aria-valuemin={0}
-      className="h-0.5 bg-[--color-border-subtle]"
+      className="h-0.5 bg-border-subtle rounded-full"
     >
       <div
-        className="h-full bg-[--color-accent-primary] transition-[width] duration-200 ease-out"
+        className="h-full bg-accent-primary rounded-full transition-[width] duration-normal ease-out"
         style={{ width: `${pct}%` }}
       />
     </div>

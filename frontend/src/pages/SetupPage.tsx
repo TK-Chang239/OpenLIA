@@ -10,16 +10,16 @@ import { ReviewStep } from "../setup/steps/ReviewStep";
 function Inner() {
   const wizard = useWizard();
   if (wizard.state === "loading") {
-    return <div className="p-8 text-sm text-[--color-text-secondary]">Loading…</div>;
+    return <div className="p-8 text-sm text-text-secondary">Loading…</div>;
   }
   if (wizard.state === "error") {
     return (
       <div className="p-8">
-        <p className="text-sm text-[--color-feedback-error]">{wizard.message}</p>
+        <p className="text-sm text-feedback-error">{wizard.message}</p>
         <button
           type="button"
           onClick={wizard.refresh}
-          className="mt-3 h-9 px-3 rounded-[--radius-md] text-sm border border-[--color-border-secondary]"
+          className="mt-3 h-9 px-3 rounded-md text-sm border border-border-secondary"
         >
           Retry
         </button>

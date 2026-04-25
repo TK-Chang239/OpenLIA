@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { Home } from "lucide-react";
+import { Home, Sun } from "lucide-react";
 import { NavItem } from "./NavItem";
 
 function renderAt(route: string, ui: React.ReactElement) {
@@ -65,6 +65,24 @@ describe("NavItem", () => {
       </MemoryRouter>,
     );
     expect(screen.getByTestId("nav-item-dot")).toBeInTheDocument();
+  });
+
+  it("renders the acid-yellow rail when route is active", () => {
+    render(
+      <MemoryRouter initialEntries={["/morning-briefing"]}>
+        <NavItem
+          label="Morning Briefing"
+          icon={Sun}
+          path="/morning-briefing"
+          collapsed={false}
+          hasUnread={false}
+        />
+      </MemoryRouter>,
+    );
+    const link = screen.getByRole("link", { current: "page" });
+    const rail = link.querySelector("[aria-hidden='true']");
+    expect(rail).not.toBeNull();
+    expect(rail!.className).toMatch(/absolute|w-\[2px\]/);
   });
 
   it("shows a Radix tooltip with the label when collapsed and hovered", async () => {
