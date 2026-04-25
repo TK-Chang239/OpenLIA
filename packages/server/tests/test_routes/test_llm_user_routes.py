@@ -46,9 +46,7 @@ def _seed_provider_and_models(db_session, *, with_user_pref_for: str | None = No
 
     if with_user_pref_for is not None:
         db_session.add(
-            UserLLMPreference(
-                user_id=with_user_pref_for, tier="everyday", model_id="m-everyday"
-            )
+            UserLLMPreference(user_id=with_user_pref_for, tier="everyday", model_id="m-everyday")
         )
 
     db_session.commit()
@@ -74,9 +72,7 @@ def test_roster_returns_three_tier_payload(company_client, make_user, db_session
     assert body["everyday"][0]["is_tier_default"] is True
 
 
-def test_put_preference_404_for_unknown_model(
-    company_client, make_user, db_session
-) -> None:
+def test_put_preference_404_for_unknown_model(company_client, make_user, db_session) -> None:
     make_user(email="user@example.com", password="pw-12345678")
     _login(company_client)
     _seed_provider_and_models(db_session)
@@ -88,9 +84,7 @@ def test_put_preference_404_for_unknown_model(
     assert resp.status_code == 404
 
 
-def test_put_preference_422_for_tier_mismatch(
-    company_client, make_user, db_session
-) -> None:
+def test_put_preference_422_for_tier_mismatch(company_client, make_user, db_session) -> None:
     make_user(email="user@example.com", password="pw-12345678")
     _login(company_client)
     _seed_provider_and_models(db_session)
@@ -102,9 +96,7 @@ def test_put_preference_422_for_tier_mismatch(
     assert resp.status_code == 422
 
 
-def test_put_and_delete_preference_round_trip(
-    company_client, make_user, db_session
-) -> None:
+def test_put_and_delete_preference_round_trip(company_client, make_user, db_session) -> None:
     user = make_user(email="user@example.com", password="pw-12345678")
     _login(company_client)
     _seed_provider_and_models(db_session)
@@ -132,9 +124,7 @@ def test_put_and_delete_preference_round_trip(
     )
 
 
-def test_effective_returns_resolved_model(
-    company_client, make_user, db_session
-) -> None:
+def test_effective_returns_resolved_model(company_client, make_user, db_session) -> None:
     make_user(email="user@example.com", password="pw-12345678")
     _login(company_client)
     _seed_provider_and_models(db_session)

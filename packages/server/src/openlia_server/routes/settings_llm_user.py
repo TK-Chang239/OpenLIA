@@ -133,9 +133,7 @@ def build_llm_user_router(*, db_session_factory, mode: str) -> APIRouter:
                     "message": f"Model is tier {model.tier}, not {tier}.",
                 },
             )
-        existing = (
-            db.query(UserLLMPreference).filter_by(user_id=user.id, tier=tier).one_or_none()
-        )
+        existing = db.query(UserLLMPreference).filter_by(user_id=user.id, tier=tier).one_or_none()
         if existing is None:
             db.add(UserLLMPreference(user_id=user.id, tier=tier, model_id=payload.model_id))
         else:

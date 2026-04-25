@@ -558,9 +558,7 @@ def build_llm_providers_admin_router(
                 label=_maybe(payload.label),
                 api_key=_maybe(payload.api_key, clear_flag=payload.clear_api_key),
                 base_url=_maybe(payload.base_url),
-                env_var_name=_maybe(
-                    payload.env_var_name, clear_flag=payload.clear_env_var_name
-                ),
+                env_var_name=_maybe(payload.env_var_name, clear_flag=payload.clear_env_var_name),
                 extra_config=_maybe(payload.extra_config),
                 is_enabled=_maybe(payload.is_enabled),
             )

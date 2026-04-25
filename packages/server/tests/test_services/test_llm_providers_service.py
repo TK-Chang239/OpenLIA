@@ -233,9 +233,7 @@ def test_update_provider_clears_api_key_with_explicit_none(_env_secret, db_sessi
     assert db_session.get(LLMProvider, p.id).api_key_encrypted is None
 
 
-def test_update_provider_clears_env_var_name_with_explicit_none(
-    _env_secret, db_session
-) -> None:
+def test_update_provider_clears_env_var_name_with_explicit_none(_env_secret, db_session) -> None:
     p = svc.create_provider(
         db_session,
         kind="openai",
@@ -251,9 +249,7 @@ def test_update_provider_clears_env_var_name_with_explicit_none(
 
 
 def test_update_provider_unchanged_keeps_existing_values(_env_secret, db_session) -> None:
-    p = svc.create_provider(
-        db_session, kind="openai", label="OAI", api_key="sk-real"
-    )
+    p = svc.create_provider(db_session, kind="openai", label="OAI", api_key="sk-real")
     db_session.commit()
     svc.update_provider(db_session, p.id, label="Renamed")
     db_session.commit()
