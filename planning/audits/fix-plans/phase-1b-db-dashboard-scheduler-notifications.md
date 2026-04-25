@@ -1,5 +1,14 @@
 # Phase 1b — DB (Dashboard/Scheduler/Notifications) fix plan (→ 100%)
 
+**Scope note.** This fix plan is scoped to the 12 tables Phase 1b owns:
+`pt_user_configs`, `pt_presets`, `mr_dashboard_state`, `mr_assessment_cache`,
+`rs_user_config`, `rs_snapshots`, `rs_classification_log`, `fe_saved_formulas`,
+`mb_schedules`, `eu_schedules`, `job_runs`, `user_notifications`. Any items the
+Master Tracker P0-09 bundle attributes to sibling phases (`mb_user_configs` →
+Phase 16, `eu_user_configs` / `eu_watchlist` → Phase 15, `er_user_configs` →
+Phase 14, `user_prefs` → Phase 11) are not Phase-1b responsibilities; they
+live under those phases' own fix plans.
+
 **Current shipped:** ~92% (originally tracked at 95%; deeper audit demoted it —
 two catch-up migrations landed but multiple server-side defaults, CHECK
 constraints, spec-drift items, and missing tests are unresolved).

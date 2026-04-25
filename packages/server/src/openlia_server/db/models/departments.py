@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -90,9 +91,15 @@ class EuUserConfig(Base, TimestampMixin):
         nullable=False,
         unique=True,
     )
-    report_length: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
-    enabled_section_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    custom_sections: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
+    report_length: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="normal", server_default="normal"
+    )
+    enabled_section_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    custom_sections: Mapped[list[dict]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -114,11 +121,21 @@ class MbUserConfig(Base, TimestampMixin):
         nullable=False,
         unique=True,
     )
-    report_length: Mapped[str] = mapped_column(String(16), nullable=False, default="normal")
-    enabled_section_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
-    section_topics: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    custom_sections: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
-    reference_portfolio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    report_length: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="normal", server_default="normal"
+    )
+    enabled_section_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    section_topics: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+    custom_sections: Mapped[list[dict]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    reference_portfolio: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
 
     __table_args__ = (
         CheckConstraint(

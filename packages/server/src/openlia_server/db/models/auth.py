@@ -1,3 +1,8 @@
+"""Plan 1a authentication tables: users, sessions, signup_invites,
+signup_policy, password_reset_requests, auth_events. Spec reference:
+`database-design.md` §3.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime

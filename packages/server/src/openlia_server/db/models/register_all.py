@@ -16,12 +16,17 @@ before children.
 
 from __future__ import annotations
 
+# Ordering: roots first (no FK dependencies), then dependents. `auth.User`
+# and the `infrastructure` singletons are the parents of every downstream
+# user-scoped table; registering them first keeps Alembic autogenerate's
+# cross-reference emission deterministic. ruff's isort pass is disabled for
+# this file in ruff.toml so the semantic order below is preserved.
 from openlia_server.db.models import (  # noqa: F401
     auth,
+    infrastructure,
     config,
     content,
     dashboard,
     departments,
-    infrastructure,
     scheduler,
 )

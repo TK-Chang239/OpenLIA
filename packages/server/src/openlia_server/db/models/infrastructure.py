@@ -1,3 +1,8 @@
+"""Plan 1a infrastructure tables: wizard_state and config_store. Spec
+reference: `database-design.md` §7. `wizard_state` shape finalized by
+Plan 10 (setup wizard).
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -9,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -20,8 +26,12 @@ class WizardState(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_started")
-    current_step: Mapped[str] = mapped_column(String(32), nullable=False, default="mode")
-    completed_steps: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    current_step: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="mode", server_default="mode"
+    )
+    completed_steps: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
     step_data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     active_session_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
