@@ -168,6 +168,8 @@ class ReportRunner:
             length=request.length,
             enabled_sections=request.enabled_sections,
             custom_sections=request.custom_sections,
+            section_topics=request.section_topics,
+            reference_portfolio=request.reference_portfolio,
         )
 
         conversation = [Message(role="user", content=user_msg)]

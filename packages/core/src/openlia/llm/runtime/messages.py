@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -29,6 +30,8 @@ class ReportRequest:
     enabled_sections: list[str] = field(default_factory=list)
     custom_sections: list[dict[str, Any]] = field(default_factory=list)
     length: str = "standard"
+    section_topics: Mapping[str, list[dict[str, Any]]] | None = None
+    reference_portfolio: list[dict[str, Any]] | None = None
 
     def __post_init__(self) -> None:
         if self.length not in _ALLOWED_LENGTHS:
