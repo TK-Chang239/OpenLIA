@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import uuid
 from datetime import UTC, datetime
 
@@ -11,6 +12,7 @@ import uvicorn
 from sqlalchemy import select
 
 from openlia_server._cli_support import (
+    OPENLIA_VERSION,
     build_session,
     echo_error,
     exit_not_found,
@@ -18,8 +20,10 @@ from openlia_server._cli_support import (
     log_cli_event,
     parse_duration,
     print_version_and_exit,
+    render_startup_banner,
     require_company,
 )
+from openlia_server.db import bootstrap as bootstrap_module
 from openlia_server.db.bootstrap import bootstrap
 from openlia_server.db.models.auth import (
     AuthEvent,
@@ -103,13 +107,49 @@ def serve(
     if no_scheduler:
         os.environ["OPENLIA_SCHEDULER_ENABLED"] = "false"
     bootstrap()
+    bind_host = host if host is not None else _default_host()
+    bind_port = port if port is not None else _default_port()
+    mode = os.environ.get("OPENLIA_MODE", "personal").lower()
+    scheduler_env = os.environ.get("OPENLIA_SCHEDULER_ENABLED", "true").lower()
+    scheduler_enabled = scheduler_env not in {"false", "0", "no"}
+    db_url = bootstrap_module.resolve_db_url()
+    wizard_pending = _read_wizard_pending(db_url)
+    typer.echo(
+        render_startup_banner(
+            version=OPENLIA_VERSION,
+            mode=mode,
+            db_url=db_url,
+            host=bind_host,
+            port=bind_port,
+            scheduler_enabled=scheduler_enabled,
+            wizard_pending=wizard_pending,
+        )
+    )
     uvicorn.run(
         "openlia_server.app:create_app",
-        host=host if host is not None else _default_host(),
-        port=port if port is not None else _default_port(),
+        host=bind_host,
+        port=bind_port,
         reload=reload,
         factory=True,
     )
+
+
+def _read_wizard_pending(db_url: str) -> bool:
+    """Read the `wizard.completed` config row on a short-lived session.
+    Returns True when the wizard has not yet completed (row missing, falsy
+    value, or DB unreachable — fail open: do not block startup)."""
+    db = build_session(db_url)
+    try:
+        row = db.execute(
+            select(ConfigStore).where(ConfigStore.key == "wizard.completed")
+        ).scalar_one_or_none()
+        if row is None:
+            return True
+        return not bool(row.value)
+    except Exception:
+        return False
+    finally:
+        db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -683,23 +723,43 @@ def secrets_rotate_key(
         "--new-key",
         help="Base64-encoded 32-byte key. Omit to generate a random one.",
     ),
+    from_stdin: bool = typer.Option(
+        False,
+        "--from-stdin",
+        help="Read base64 key from stdin (one line, trailing newline stripped).",
+    ),
 ) -> None:
     """Re-encrypt every stored API key with a new AES-256-GCM key."""
+    if new_key is not None and from_stdin:
+        echo_error("use either --new-key or --from-stdin, not both")
+        raise typer.Exit(code=1)
+
     try:
         old_key = crypto_module.load_secret_key()
     except crypto_module.SecretKeyError as exc:
         echo_error(str(exc))
         raise typer.Exit(code=1) from exc
 
-    try:
-        new_key_bytes = (
-            _decode_new_key(new_key)
-            if new_key is not None
-            else secrets_module.token_bytes(crypto_module.KEY_LENGTH_BYTES)
-        )
-    except typer.BadParameter as exc:
-        echo_error(str(exc))
-        raise typer.Exit(code=1) from exc
+    if from_stdin:
+        raw_stdin = sys.stdin.readline().strip()
+        if not raw_stdin:
+            echo_error("no key read from stdin")
+            raise typer.Exit(code=1)
+        try:
+            new_key_bytes = _decode_new_key(raw_stdin)
+        except typer.BadParameter as exc:
+            echo_error(str(exc))
+            raise typer.Exit(code=1) from exc
+    else:
+        try:
+            new_key_bytes = (
+                _decode_new_key(new_key)
+                if new_key is not None
+                else secrets_module.token_bytes(crypto_module.KEY_LENGTH_BYTES)
+            )
+        except typer.BadParameter as exc:
+            echo_error(str(exc))
+            raise typer.Exit(code=1) from exc
 
     if new_key_bytes == old_key:
         echo_error("new key must differ from the current key.")

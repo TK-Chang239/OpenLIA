@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 import typer
@@ -124,3 +125,88 @@ class TestLogCliEvent:
 
         row = cli_session.query(AuthEvent).one()
         assert row.event_metadata["source"] == "cli"
+
+
+class TestRenderStartupBanner:
+    def test_canonical_lines_in_order_with_sqlite_shortening(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/u")))
+        out = support.render_startup_banner(
+            version="0.1.0",
+            mode="personal",
+            db_url="sqlite:////home/u/.openlia/openlia.db",
+            host="127.0.0.1",
+            port=8000,
+            scheduler_enabled=True,
+            wizard_pending=False,
+        )
+        lines = out.splitlines()
+        assert lines == [
+            "OpenLIA v0.1.0",
+            "Mode:      personal",
+            "Database:  ~/.openlia/openlia.db",
+            "Listening: http://127.0.0.1:8000",
+            "Scheduler: enabled",
+        ]
+
+    def test_strips_query_params_and_keeps_absolute_when_outside_home(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/u")))
+        out = support.render_startup_banner(
+            version="0.1.0",
+            mode="company",
+            db_url="sqlite:////var/lib/openlia/openlia.db?check_same_thread=0",
+            host="0.0.0.0",
+            port=8000,
+            scheduler_enabled=False,
+            wizard_pending=False,
+        )
+        lines = out.splitlines()
+        assert lines[1] == "Mode:      company"
+        assert lines[2] == "Database:  /var/lib/openlia/openlia.db"
+        assert lines[3] == "Listening: http://0.0.0.0:8000"
+        assert lines[4] == "Scheduler: disabled"
+
+    def test_wizard_pending_appends_extra_line(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/u")))
+        out = support.render_startup_banner(
+            version="0.1.0",
+            mode="personal",
+            db_url="sqlite:////home/u/.openlia/openlia.db",
+            host="127.0.0.1",
+            port=8000,
+            scheduler_enabled=True,
+            wizard_pending=True,
+        )
+        lines = out.splitlines()
+        assert len(lines) == 6
+        assert lines[5] == "Setup wizard: pending -- open the URL above to configure."
+
+    def test_wizard_off_omits_extra_line(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: Path("/home/u")))
+        out = support.render_startup_banner(
+            version="0.1.0",
+            mode="personal",
+            db_url="sqlite:////home/u/.openlia/openlia.db",
+            host="127.0.0.1",
+            port=8000,
+            scheduler_enabled=True,
+            wizard_pending=False,
+        )
+        assert "Setup wizard" not in out
+        assert len(out.splitlines()) == 5
+
+    def test_non_sqlite_url_passes_through_minus_query(self) -> None:
+        out = support.render_startup_banner(
+            version="0.1.0",
+            mode="company",
+            db_url="postgresql://user:pw@host/db?sslmode=require",
+            host="0.0.0.0",
+            port=8000,
+            scheduler_enabled=True,
+            wizard_pending=False,
+        )
+        assert "Database:  postgresql://user:pw@host/db" in out
+        assert "sslmode" not in out
