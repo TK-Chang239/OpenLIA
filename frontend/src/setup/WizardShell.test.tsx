@@ -24,4 +24,13 @@ describe("WizardShell", () => {
     expect(bar).toHaveAttribute("aria-valuenow", "2");
     expect(bar).toHaveAttribute("aria-valuemax", "5");
   });
+
+  it("renders STEP X / Y mono label above the title", () => {
+    render(
+      <WizardShell title="Models" stepIndex={0} totalSteps={6}>
+        <p>body</p>
+      </WizardShell>,
+    );
+    expect(screen.getByText("STEP 01 / 06")).toBeInTheDocument();
+  });
 });

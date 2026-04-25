@@ -21,4 +21,25 @@ describe("Button", () => {
     render(<Button disabled>Save</Button>);
     expect(screen.getByRole("button")).toBeDisabled();
   });
+
+  it("renders the fill-wipe overlay only for the primary variant", () => {
+    const { rerender } = render(<Button variant="primary">A</Button>);
+    const primaryBtn = screen.getByRole("button");
+    const wipe = primaryBtn.querySelector("[data-testid='button-fill-wipe']");
+    expect(wipe).not.toBeNull();
+    expect(wipe!.getAttribute("aria-hidden")).toBe("true");
+    expect(wipe!.className).toContain("bg-accent-hover");
+    expect(wipe!.className).toContain("-translate-x-full");
+    expect(wipe!.className).toContain("group-hover:translate-x-0");
+
+    rerender(<Button variant="secondary">A</Button>);
+    expect(
+      screen.getByRole("button").querySelector("[data-testid='button-fill-wipe']"),
+    ).toBeNull();
+
+    rerender(<Button variant="ghost">A</Button>);
+    expect(
+      screen.getByRole("button").querySelector("[data-testid='button-fill-wipe']"),
+    ).toBeNull();
+  });
 });

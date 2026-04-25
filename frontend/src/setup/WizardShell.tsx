@@ -17,14 +17,21 @@ export function WizardShell({ title, stepIndex, totalSteps, children, footer }: 
       aria-modal="true"
       aria-labelledby={titleId}
       aria-label={title}
-      className="fixed inset-0 bg-[--color-bg-base] overflow-auto"
+      className="fixed inset-0 bg-bg-base overflow-auto"
     >
-      <div className="max-w-[880px] w-[90%] mx-auto my-10 bg-[--color-bg-elevated] rounded-[--radius-lg] shadow-md border border-[--color-border-subtle]">
-        <header className="h-14 flex items-center justify-between px-6 border-b border-[--color-border-subtle]">
-          <h1 id={titleId} className="text-lg font-semibold text-[--color-text-primary]">
-            {title}
-          </h1>
-          <span className="text-xs text-[--color-text-secondary]">
+      <div className="max-w-[880px] w-[90%] mx-auto my-10 bg-bg-elevated rounded-lg shadow-md border border-border-subtle">
+        <header className="h-14 flex items-center justify-between px-6 border-b border-border-subtle">
+          <div className="flex flex-col gap-0.5">
+            <span className="ol-label-sm">
+              {`STEP ${(stepIndex + 1).toString().padStart(2, "0")} / ${totalSteps
+                .toString()
+                .padStart(2, "0")}`}
+            </span>
+            <h1 id={titleId} className="text-lg font-semibold text-text-primary">
+              {title}
+            </h1>
+          </div>
+          <span className="text-xs text-text-secondary">
             Step {stepIndex + 1} of {totalSteps}
           </span>
         </header>

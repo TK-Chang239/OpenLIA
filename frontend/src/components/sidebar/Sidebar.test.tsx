@@ -109,6 +109,24 @@ describe("Sidebar", () => {
     });
   });
 
+  it("renders at 220px expanded width by default", () => {
+    renderAt("/");
+    const nav = screen.getByRole("navigation", { name: /main navigation/i });
+    expect(nav.className).toContain("w-[220px]");
+  });
+
+  it("collapses to 52px when toggle clicked", async () => {
+    renderAt("/");
+    const toggle = screen.getByRole("button", { name: /collapse sidebar/i });
+    await act(async () => {
+      toggle.click();
+    });
+    await waitFor(() => {
+      const nav = screen.getByRole("navigation", { name: /main navigation/i });
+      expect(nav.className).toContain("w-[52px]");
+    });
+  });
+
   it("is hidden below md breakpoint via tailwind classes", () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = vi.fn().mockImplementation((query: string) => ({
