@@ -109,6 +109,8 @@ class _CapturedReportRequest:
     enabled_sections: list
     custom_sections: list
     length: str
+    section_topics: dict | None = None
+    reference_portfolio: list | None = None
 
 
 class FakeReportRunner:
@@ -127,6 +129,10 @@ class FakeReportRunner:
             enabled_sections=list(req.enabled_sections),
             custom_sections=list(req.custom_sections),
             length=req.length,
+            section_topics=dict(req.section_topics) if req.section_topics else None,
+            reference_portfolio=(
+                list(req.reference_portfolio) if req.reference_portfolio else None
+            ),
         )
         for e in self._queue:
             yield e

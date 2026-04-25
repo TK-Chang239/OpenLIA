@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from openlia.llm.runtime.events import ReportComplete, ReportStart
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.content import PortfolioHolding
 from openlia_server.db.models.departments import MbUserConfig
 from openlia_server.services.mb_runner import ReportSavedEvent, run_on_demand
 from sqlalchemy.orm import Session
@@ -107,3 +108,40 @@ async def test_on_demand_no_persist_when_no_complete(
         collected.append(ev)
     saved = [e for e in collected if isinstance(e, ReportSavedEvent)]
     assert saved == []
+
+
+@pytest.mark.asyncio
+async def test_on_demand_forwards_section_topics_and_reference_portfolio(
+    create_tables, db_session, fake_report_runner
+) -> None:
+    """NEW-16-06 — captured ReportRequest carries section_topics + reference_portfolio
+    as typed fields (not JSON-stuffed into user_input)."""
+    _mk_user(db_session)
+    db_session.add(
+        MbUserConfig(
+            id="c1",
+            user_id="u_1",
+            report_length="normal",
+            enabled_section_ids=["global_macro", "upcoming_preview"],
+            section_topics={"global_macro": [{"topic": "War", "notes": "Russia-Ukraine"}]},
+            custom_sections=[],
+            reference_portfolio=True,
+        )
+    )
+    db_session.add(PortfolioHolding(id="h1", user_id="u_1", ticker="AAPL", name="Apple Inc."))
+    db_session.add(PortfolioHolding(id="h2", user_id="u_1", ticker="NVDA", name="NVIDIA"))
+    db_session.commit()
+    fake_report_runner.queue_events([ReportComplete(report_id="pending", schema=MINIMAL_SCHEMA)])
+    async for _ in run_on_demand(
+        session=db_session, user_id="u_1", report_runner=fake_report_runner
+    ):
+        pass
+    captured = fake_report_runner.last_request
+    assert captured.section_topics == {
+        "global_macro": [{"topic": "War", "notes": "Russia-Ukraine"}]
+    }
+    assert captured.reference_portfolio is not None
+    tickers = [h["ticker"] for h in captured.reference_portfolio]
+    assert "AAPL" in tickers
+    assert "NVDA" in tickers
+    assert "MB_EXTRAS_JSON" not in captured.user_input

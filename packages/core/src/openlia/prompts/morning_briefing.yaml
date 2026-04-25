@@ -1,5 +1,5 @@
 # Morning Briefing department prompt.
-# Single mode (morning_briefing); branches on report_length using mapped
+# Single mode (morning_briefing); branches on length using mapped
 # values ("brief" | "standard" | "long") per the ancillary lock.
 
 report:
@@ -21,11 +21,11 @@ report:
       User instructions:
       {{ user_input }}
 
-      Report length: **{{ report_length }}**
-      {% if report_length == "brief" %}
+      Report length: **{{ length }}**
+      {% if length == "brief" %}
       Keep the briefing brief. Favor dense bullet lists over paragraphs;
       cap any text block at 3 sentences; omit optional explanatory passages.
-      {% elif report_length == "long" %}
+      {% elif length == "long" %}
       Write a long, elaborative briefing. Expand text blocks to 6-10
       sentences where they add insight; include multiple qualitative angles;
       cite secondary context (industry, competitors) where relevant.

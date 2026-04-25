@@ -11,13 +11,20 @@ Whenever the reports are completed, MB will notify the user through email.
 
 ## User Interface Design
 
+> **Spec amended 2026-04-25 to match shipped: Chat tab added; reverting would break existing user mental model.**
+>
+> v1 ships with a 3-tab navigation (**Archive / Chat / Settings**) instead of the original two-view shell. Selecting **Open** on a report card transitions the page to a **viewer-split Chat** layout (report renderer on the left, follow-up chat on the right) — the same MB chat session that backs the dedicated Chat tab.
+
 ### Overview
 
-The Morning Briefings page has two views that share the same page header:
-- **Archive View** (default): A chronological grid of generated report cards.
-- **Settings View**: A configuration panel for report sections and schedules. Accessed via the Settings button; returns to Archive via a Back button.
+The Morning Briefings page is composed as a single page with three tabs that share the same page header:
+- **Archive Tab** (default): A chronological grid of generated report cards grouped by date.
+- **Chat Tab**: Mounts the MB department chat session (`POST /api/departments/morning-briefing/chat/session`) so the user can ask follow-ups about any recent briefing.
+- **Settings Tab**: A configuration panel for report sections, custom sections, and schedules.
 
-There is no modal — clicking Settings switches the full content area.
+Clicking **Open** on a report card replaces the tab area with a viewer-split layout (report on the left, follow-up chat on the right bound to the same MB session). A `Close` button returns to the Archive tab.
+
+There is no modal for Settings — switching tabs swaps the full content area.
 
 ---
 
