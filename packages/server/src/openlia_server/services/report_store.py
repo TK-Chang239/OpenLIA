@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import validate_report_payload
@@ -12,6 +13,32 @@ from openlia_server.db.models.content import Report
 
 class ReportNotFoundError(LookupError):
     pass
+
+
+class ReportStoreImpl:
+    """Adapter that fulfils the scheduler `ReportStore` Protocol by
+    persisting completed background-job reports through `create_report`.
+
+    The scheduler hands the executor a finished report payload (a dict
+    matching ReportSchema). We validate and write a fresh `reports` row.
+    """
+
+    def save(
+        self,
+        *,
+        session: Session,
+        user_id: str,
+        department: str,
+        payload: dict[str, Any],
+    ) -> str:
+        schema = validate_report_payload(payload)
+        return create_report(
+            session,
+            user_id=user_id,
+            department=department,
+            mode="background",
+            schema=schema,
+        )
 
 
 def get_report(session: Session, *, report_id: str, user_id: str) -> ReportSchema:

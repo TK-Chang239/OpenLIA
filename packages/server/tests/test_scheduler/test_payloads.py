@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import pytest
-from openlia_server.scheduler.payloads import (
-    DepartmentPayloadBuilderNotWired,
-    EUScanTarget,
-    MRAssessmentPayload,
+from _scheduler_fakes import (
     StubEUScanPlanner,
     StubMBRequestBuilder,
     StubMRAssessmentBuilder,
     StubMRCacheStore,
     StubReportStore,
+)
+from openlia_server.scheduler.payloads import (
+    DepartmentPayloadBuilderNotWired,
+    EUScanTarget,
+    MRAssessmentPayload,
 )
 
 
@@ -49,25 +51,25 @@ def test_mr_assessment_payload_carries_items_schema_and_synthesize() -> None:
 
 def test_stub_mb_builder_raises() -> None:
     stub = StubMBRequestBuilder()
-    with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 16"):
+    with pytest.raises(DepartmentPayloadBuilderNotWired):
         stub.build(session=None, user_id="u_1", schedule_id="s_1")
 
 
 def test_stub_eu_planner_raises() -> None:
     stub = StubEUScanPlanner()
-    with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 15"):
+    with pytest.raises(DepartmentPayloadBuilderNotWired):
         stub.plan(session=None, user_id="u_1", schedule_id="s_1", since=None)
 
 
 def test_stub_mr_builder_raises() -> None:
     stub = StubMRAssessmentBuilder()
-    with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 19"):
+    with pytest.raises(DepartmentPayloadBuilderNotWired):
         stub.build(session=None, user_id="u_1")
 
 
 def test_stub_report_store_raises() -> None:
     stub = StubReportStore()
-    with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 13"):
+    with pytest.raises(DepartmentPayloadBuilderNotWired):
         stub.save(
             session=None,
             user_id="u_1",
@@ -78,5 +80,5 @@ def test_stub_report_store_raises() -> None:
 
 def test_stub_mr_cache_store_raises() -> None:
     stub = StubMRCacheStore()
-    with pytest.raises(DepartmentPayloadBuilderNotWired, match="Plan 19"):
+    with pytest.raises(DepartmentPayloadBuilderNotWired):
         stub.save(session=None, user_id="u_1", payload={})
