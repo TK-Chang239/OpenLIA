@@ -665,3 +665,83 @@ async def test_report_emits_per_section_events(prompts_root: Path, frameworks_ro
     types = {to_wire(e)["type"] for e in events}
     assert "report.section.start" in types
     assert "report.section.complete" in types
+
+
+async def test_report_forwards_section_topics_and_reference_portfolio(
+    tmp_path: Path,
+) -> None:
+    """P1-04 — ReportRunner forwards section_topics + reference_portfolio
+    fields from ReportRequest into the Jinja render context for the user
+    prompt. End-to-end the captured LLMRequest user message includes the
+    topic strings and holding tickers."""
+    fwroot = tmp_path / "fw"
+    fwroot.mkdir()
+    (fwroot / "morning_briefing.json").write_text(
+        json.dumps(
+            {
+                "title": "MB",
+                "sections": [
+                    {"id": "global_macro", "title": "Global Macro", "instructions": "..."},
+                ],
+            }
+        )
+    )
+    (fwroot / "morning_briefing_style_guide.md").write_text("# Style\n")
+
+    proots = tmp_path / "prompts"
+    shared = proots / "shared"
+    shared.mkdir(parents=True)
+    (shared / "output_discipline.yaml.j2").write_text("disc.\n")
+    (proots / "morning_briefing.yaml").write_text(
+        dedent(
+            """\
+            report:
+              system: |
+                Style: {{ style_guide }}
+              morning_briefing:
+                user: |
+                  topics:
+                  {% if section_topics %}{% for sid, ts in section_topics.items() %}
+                  - {{ sid }}: {% for t in ts %}{{ t.topic }} ({{ t.notes }}){% endfor %}
+                  {% endfor %}{% endif %}
+                  refs:
+                  {% if reference_portfolio %}{% for h in reference_portfolio %}
+                  - {{ h.ticker }} {{ h.name }}
+                  {% endfor %}{% endif %}
+            """
+        )
+    )
+
+    filled = {"title": "MB", "sections": [{"id": "global_macro", "blocks": []}]}
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
+    data = FakeDataDispatcher(manifest={"morning_briefing": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=proots),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=fwroot,
+        report_id_factory=lambda: "r_1",
+    )
+    request = ReportRequest(
+        mode="morning_briefing",
+        user_input="generate",
+        enabled_sections=["global_macro"],
+        section_topics={"global_macro": [{"topic": "War", "notes": "Russia-Ukraine"}]},
+        reference_portfolio=[
+            {"ticker": "AAPL", "name": "Apple"},
+            {"ticker": "NVDA", "name": "Nvidia"},
+        ],
+    )
+    await _collect(runner.run(department_id="morning_briefing", user_id="u_1", request=request))
+    captured = provider.captured_requests[0]
+    assert captured.messages, "expected at least one message"
+    user_msg = captured.messages[0].content
+    assert "War" in user_msg
+    assert "Russia-Ukraine" in user_msg
+    assert "AAPL" in user_msg
+    assert "NVDA" in user_msg
