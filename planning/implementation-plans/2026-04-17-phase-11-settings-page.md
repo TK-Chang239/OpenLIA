@@ -158,7 +158,7 @@ planning/projectStructure.md            # MODIFY — record Settings structure
 1. **Role gating.** `require_admin` wraps every `/admin/*` route. Frontend `AdminSection` renders only when `auth.user.role === "admin"` or `mode === "personal"`.
 2. **Dirty state per section.** Each section tracks its own dirty flag; Save button disabled until dirty; post-save returns to disabled with 1.5s success flash.
 3. **Unsaved-changes guard.** `useDirtyForm` exposes a prompt hook; `SettingsShell` intercepts sidebar navigation when any section is dirty.
-4. **Must-change-password.** `MustChangePasswordGate` (Plan 9) wraps `SettingsPage` so the page redirects to Account → Change Password when the flag is set; all other nav buttons disabled until cleared.
+4. **Must-change-password.** Gate at router level (forces users into `/settings/account` via `frontend/src/router/MustChangePasswordGate.tsx` rather than wrapping `<SettingsPage>` directly). Backend mirrors this with `build_require_active_user` rejecting flagged users on every settings/admin route with `{"code":"must_change_password"}`. (Phase 11 fix-plan 2026-04-24: P2-14 ratifies the as-shipped router-level placement.)
 5. **Admin-only API key writes.** Per user memory + spec non-goal, only admins create/edit/delete LLM or data provider credentials. Non-admin users only pick from the roster.
 6. **One-time secrets.** Invite tokens and password-reset approval tokens are shown in a modal with explicit "won't be shown again" copy; never leaked through list endpoints.
 7. **Disable = session revoke.** Disabling a user sets `users.is_disabled=true` + deletes all their sessions + logs an `auth_events` row.
@@ -175,7 +175,7 @@ planning/projectStructure.md            # MODIFY — record Settings structure
 ## Task 1: `user_prefs` model + migration
 
 **Files:**
-- Modify: `packages/server/src/openlia_server/db/models/user.py`
+- Modify: `packages/server/src/openlia_server/db/models/config.py` (UserPrefs lives alongside the LLM/provider config tables; original plan listed `db/models/user.py`)
 - Create: `packages/server/migrations/versions/<next>_add_user_prefs.py`
 - Test: `packages/server/tests/test_db/test_user_prefs_model.py`
 
@@ -1788,6 +1788,8 @@ git commit -m "feat(settings): add SettingsShell with left nav and role-gated Ad
 ---
 
 ### Task 14: GeneralSection (display name, notifications, appearance)
+
+> **Phase 11 fix-plan note (2026-04-24, NEW-11-07):** Language fields (display, response, report) ship under **Account** per the spec, not under General. `GeneralSection.save()` deliberately patches only `display_name`, `theme`, `notify_inapp`, `notify_email`. Do not move language toggles into General without an updated spec.
 
 **Files:**
 - Create: `frontend/src/components/settings/sections/GeneralSection.tsx`
@@ -3621,12 +3623,14 @@ git commit -m "feat(settings): add SettingsPage with routing and admin gating"
 
 ### Task 23: Must-change-password enforcement at the shell
 
-**Files:**
-- Modify: `frontend/src/components/AppShell.tsx` (add `MustChangePasswordGate` before children)
-- Create: `frontend/src/components/MustChangePasswordGate.tsx`
-- Test: `frontend/src/components/__tests__/MustChangePasswordGate.test.tsx`
+> **Phase 11 fix-plan note (2026-04-24, P2-14):** Shipped at the **router level**, not the shell level. The component lives at `frontend/src/router/MustChangePasswordGate.tsx` and is wired into `frontend/src/router/routes.tsx` so flagged users land on the password-change form before any chrome renders. Backend equivalence is enforced by `build_require_active_user`, which rejects every authenticated route with `{"code":"must_change_password"}` when the flag is set.
 
-**Why this exists:** the `must_change_password` flag must block navigation to anything except `/settings/account` and the password-change form itself. This gate runs once per render in the main shell and short-circuits to AccountSection when the flag is set and the user is not already there.
+**Files:**
+- Created: `frontend/src/router/MustChangePasswordGate.tsx` (router-level)
+- Modify: `frontend/src/router/routes.tsx`
+- Test: covered by `frontend/src/router/__tests__/router.test.tsx` plus backend `tests/test_routes/test_must_change_password_gate.py`
+
+**Why this exists:** the `must_change_password` flag must block navigation to anything except the password-change form itself. The router-level gate short-circuits the entire app tree before component rendering instead of patching individual shells.
 
 - [ ] **Step 1: Write failing test**
 
