@@ -57,6 +57,26 @@ class TestCreateInvite:
         assert result.exit_code == 1
         assert "Invalid duration" in result.output
 
+    def test_json_output_is_machine_readable(
+        self, cli_runner, company_mode, cli_engine, cli_session
+    ):
+        import json
+        import re
+
+        result = cli_runner.invoke(app, ["admin", "create-invite", "--max-uses", "1", "--json"])
+        assert result.exit_code == 0, result.output
+        payload = json.loads(result.output.strip().splitlines()[-1])
+        assert set(payload.keys()) >= {"invite_id", "token", "url"}
+        assert re.match(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            payload["invite_id"],
+        )
+        assert payload["token"]
+        assert payload["url"].endswith(f"invite={payload['token']}")
+        row = cli_session.execute(select(SignupInvite)).scalar_one()
+        assert row.id == payload["invite_id"]
+        assert row.token_hash == tokens_service.hash_token(payload["token"])
+
 
 class TestListInvites:
     def test_groups_active_expired_revoked_exhausted(
