@@ -7,6 +7,7 @@ import {
 import {
   AssessmentBlock,
   ErrorBlock,
+  FreshnessBadge,
   LoadingBlock,
   Panel,
   SeverityPill,
@@ -34,8 +35,8 @@ export default function FiveForcesView(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
-  const load = useCallback(() => {
-    getDashboard("five_forces")
+  const load = useCallback((sm: boolean) => {
+    getDashboard("five_forces", sm)
       .then((r) => {
         setData(r);
         setError(null);
@@ -44,14 +45,14 @@ export default function FiveForcesView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(smartMode);
+  }, [load, smartMode]);
 
   const onRun = async () => {
     setRunning(true);
     try {
       await runAssessment("five_forces");
-      load();
+      load(smartMode);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -74,6 +75,7 @@ export default function FiveForcesView(): JSX.Element {
             Five Forces
           </h2>
           <SeverityPill severity={data.severity} />
+          <FreshnessBadge generatedAt={data.generated_at} />
         </div>
         <div className="flex items-center gap-3">
           <SmartModeToggle value={smartMode} onChange={setSmartMode} />

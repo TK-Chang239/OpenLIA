@@ -25,7 +25,9 @@ class FourSeasonsDashboard:
         "credit_spread": "(LQD_price - HYG_price) / 100",
     }
 
-    T4_PROMPT_KEY: str | None = "four_seasons"
+    # T2 formula-only dashboard per spec (MacroResearchPageSpec.md):
+    # Four Seasons surfaces T1+T2+T3 derived signals only — no LLM narrative.
+    T4_PROMPT_KEY: str | None = None
 
     def T3_compute(
         self,

@@ -158,6 +158,30 @@ class SchedulerService:
             misfire_grace_time=self.settings.misfire_grace_seconds,
         )
 
+    async def run_now(
+        self,
+        *,
+        job_type: JobType,
+        user_id: str,
+        schedule_id: str,
+        run_id: str,
+    ) -> None:
+        """Fire a one-shot dispatch of a job (used by ad-hoc "Run now" routes).
+
+        Mirrors `run_retry` but takes the (job_type, user_id, schedule_id)
+        triple directly so the caller can persist the JobRun row with its
+        own id and pass it through. The pre-allocated `run_id` is forwarded
+        to the executor so it reuses the row instead of opening a new one,
+        which lets the route return a real id synchronously."""
+        run_time = self.clock() + timedelta(seconds=1)
+        await self.scheduler.add_schedule(
+            self._run_job,
+            DateTrigger(run_time=run_time),
+            id=f"{job_key(job_type, user_id)}:run_now:{run_id}",
+            args=(job_type, user_id, schedule_id, run_id),
+            misfire_grace_time=self.settings.misfire_grace_seconds,
+        )
+
     def wire_mr(self, *, builder: Any, cache_store: Any) -> None:
         """Replace the stub builder/cache on the MR executor with real implementations.
 
@@ -190,6 +214,7 @@ class SchedulerService:
         job_type: JobType,
         user_id: str | None,
         schedule_id: str | None,
+        run_id: str | None = None,
     ) -> None:
         key = (
             MAINTENANCE_JOB_KEY
@@ -212,6 +237,7 @@ class SchedulerService:
                 user_id=user_id,
                 schedule_id=schedule_id,
                 cancel_token=token,
+                run_id=run_id,
             )
         except asyncio.CancelledError:
             raise

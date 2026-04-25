@@ -444,7 +444,15 @@ def create_app(
 
     class _MRDataFetchAdapter:
         """Wrap a PT-style dispatcher to expose the simpler fetch(requirement=...)
-        signature the MR assembler expects."""
+        signature the MR assembler expects.
+
+        NEW-19-10: only the signature-mismatch fallback is swallowed; real
+        fetch failures escape so a misconfigured provider surfaces in the
+        route response instead of silently masking dashboards as zeroed.
+        Production wiring should install a registry-backed adapter onto
+        `app.state.mr_data_provider` before the first request; the noop
+        dispatcher remains as a default for tests and dev with no provider.
+        """
 
         def __init__(self, inner: Any) -> None:
             self._inner = inner
@@ -453,13 +461,8 @@ def create_app(
             try:
                 return self._inner.fetch(requirement=requirement, panel_id="mr", params={})
             except TypeError:
-                # Inner already matches MR signature.
-                try:
-                    return self._inner.fetch(requirement=requirement)
-                except Exception:
-                    return None
-            except Exception:
-                return None
+                # Inner already matches MR signature — call it directly.
+                return self._inner.fetch(requirement=requirement)
 
     mr_runner = MRRunner(
         data_provider=_MRDataFetchAdapter(mr_data_provider),

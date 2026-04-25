@@ -44,8 +44,12 @@ export function listDashboards(): Promise<{ dashboards: DashboardSummary[] }> {
   return _fetch(`${base}/dashboards`) as Promise<{ dashboards: DashboardSummary[] }>;
 }
 
-export function getDashboard(slug: string): Promise<DashboardResult> {
-  return _fetch(`${base}/dashboards/${slug}`) as Promise<DashboardResult>;
+export function getDashboard(
+  slug: string,
+  smartMode = false,
+): Promise<DashboardResult> {
+  const qs = smartMode ? "?smart_mode=true" : "";
+  return _fetch(`${base}/dashboards/${slug}${qs}`) as Promise<DashboardResult>;
 }
 
 export function getConfig(slug: string): Promise<DashboardConfig> {
@@ -60,6 +64,17 @@ export function putConfig(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  }) as Promise<DashboardConfig>;
+}
+
+export function putThresholdOverrides(
+  slug: string,
+  threshold_overrides: Record<string, unknown>,
+): Promise<DashboardConfig> {
+  return _fetch(`${base}/dashboards/${slug}/threshold-overrides`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ threshold_overrides }),
   }) as Promise<DashboardConfig>;
 }
 

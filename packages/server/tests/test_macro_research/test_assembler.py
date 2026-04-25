@@ -55,6 +55,34 @@ def test_honours_cached_t4(assembler: DashboardAssembler) -> None:
     assert t4.data["assessment"] == "cached text"
 
 
+def test_debt_cycle_t2_metrics_populate_from_stub_provider() -> None:
+    """NEW-19-10: T2 metrics should resolve through the data provider so a
+    stubbed registry returns the values the dashboard surfaces in T3."""
+    data = FakeDataProvider(
+        values={
+            "macro_indicator:debt_gdp": 130.0,
+            "macro_indicator:interest_revenue": 14.0,
+            "stock_quote:TIP": {"price": 115.0},
+            "stock_quote:UUP": {"price": 30.0},
+        }
+    )
+    asm = DashboardAssembler(
+        data_provider=data,
+        llm_client=FakeLLMClient(scripted_response={}),
+    )
+    result = asm.run(
+        dashboard_slug="debt_cycle",
+        user_id="u-1",
+        portfolio=None,
+        t4_cached=None,
+        smart_mode=False,
+    )
+    t2 = next(t for t in result.tiers if t.tier == "T2")
+    # The provider stub fed real numeric values through; T2 must surface
+    # them, not the assembler's zeroed fallback.
+    assert t2.data.get("debt_gdp") == 130.0
+
+
 def test_unknown_slug_raises(assembler: DashboardAssembler) -> None:
     with pytest.raises(KeyError):
         assembler.run(
