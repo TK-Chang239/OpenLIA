@@ -12,6 +12,7 @@ from openlia.llm.adapters._http import (
 )
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.retry import with_retries
 from openlia.llm.types import (
     LLMChunk,
     LLMRequest,
@@ -63,18 +64,22 @@ class OllamaAdapter(LLMProvider):
             ]
 
         base = (self.credentials.base_url or "http://localhost:11434").rstrip("/")
-        async with make_client(base_url=base) as client:
-            try:
-                resp = await client.post("/api/chat", json=payload)
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            body = resp.json()
+
+        async def _post() -> dict:
+            async with make_client(base_url=base) as client:
+                try:
+                    resp = await client.post("/api/chat", json=payload)
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                return resp.json()
+
+        body = await with_retries(_post)
 
         message = body.get("message") or {}
         return LLMResponse(

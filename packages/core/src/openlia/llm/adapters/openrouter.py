@@ -13,6 +13,7 @@ from openlia.llm.adapters._http import (
 )
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.retry import with_retries
 from openlia.llm.types import (
     LLMChunk,
     LLMRequest,
@@ -71,18 +72,21 @@ class OpenRouterAdapter(LLMProvider):
                 for t in request.tools
             ]
 
-        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
-            try:
-                resp = await client.post("/v1/chat/completions", json=payload)
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            body = resp.json()
+        async def _post() -> dict:
+            async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+                try:
+                    resp = await client.post("/v1/chat/completions", json=payload)
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                return resp.json()
+
+        body = await with_retries(_post)
 
         choice = body["choices"][0]
         message = choice.get("message", {})

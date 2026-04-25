@@ -12,7 +12,9 @@ from openlia.llm.adapters._http import (
     wrap_httpx_error,
 )
 from openlia.llm.base import LLMProvider
+from openlia.llm.capabilities import capabilities_for
 from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.retry import with_retries
 from openlia.llm.types import (
     LLMChunk,
     LLMRequest,
@@ -53,26 +55,32 @@ class OpenAIAdapter(LLMProvider):
         }
 
     async def list_models(self) -> list[ModelInfo]:
-        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
-            try:
-                resp = await client.get("/v1/models")
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            data = resp.json()
-            return [
-                ModelInfo(
-                    id=item["id"],
-                    display_name=item["id"],
-                    context_window=item.get("context_length"),
-                )
-                for item in data.get("data", [])
-            ]
+        async def _call() -> list[ModelInfo]:
+            async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+                try:
+                    resp = await client.get("/v1/models")
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                data = resp.json()
+                return [
+                    ModelInfo(
+                        id=item["id"],
+                        display_name=item["id"],
+                        context_window=item.get("context_length")
+                        or capabilities_for(
+                            provider_kind="openai", model=item["id"]
+                        ).max_context_tokens,
+                    )
+                    for item in data.get("data", [])
+                ]
+
+        return await with_retries(_call)
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload: dict = {
@@ -101,19 +109,22 @@ class OpenAIAdapter(LLMProvider):
                 "json_schema": request.response_format.json_schema,
             }
 
-        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
-            try:
-                resp = await client.post("/v1/chat/completions", json=payload)
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
+        async def _post() -> dict:
+            async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+                try:
+                    resp = await client.post("/v1/chat/completions", json=payload)
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
 
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            body = resp.json()
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                return resp.json()
+
+        body = await with_retries(_post)
 
         choice = body["choices"][0]
         message = choice.get("message", {})

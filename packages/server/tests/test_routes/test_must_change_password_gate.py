@@ -85,14 +85,14 @@ class TestForcedPasswordBlocksProductRoutes:
 
     def test_settings_models_list_blocked(self, forced_user_client):
         client, _ = forced_user_client
-        _assert_must_change(client.get("/settings/admin/llm/preferences"))
+        _assert_must_change(client.get("/settings/models/preferences"))
 
     def test_settings_models_put_blocked(self, forced_user_client):
         client, _ = forced_user_client
         _assert_must_change(
             client.put(
-                "/settings/admin/llm/preferences",
-                json={"tier": "thinking", "model_id": "any-id"},
+                "/settings/models/preferences/thinking",
+                json={"model_id": "any-id"},
             )
         )
 

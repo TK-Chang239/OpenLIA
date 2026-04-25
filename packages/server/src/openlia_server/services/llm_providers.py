@@ -16,12 +16,33 @@ import os
 import uuid
 from dataclasses import dataclass
 
+from openlia.llm.exceptions import AuthError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from openlia_server.db.crypto import decrypt_for_row, encrypt_for_row
+from openlia_server.db.crypto import DecryptError, decrypt_for_row, encrypt_for_row
 from openlia_server.db.models.config import LLMModel, LLMProvider, UserLLMPreference
 from openlia_server.db.models.infrastructure import ConfigStore
+
+
+class _Unchanged:
+    """Sentinel marking a service-call argument as 'leave the field as-is'.
+
+    Distinguishes 'caller did not pass a value' from 'caller passed None to clear'.
+    """
+
+    _instance: _Unchanged | None = None
+
+    def __new__(cls) -> _Unchanged:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return "UNCHANGED"
+
+
+UNCHANGED = _Unchanged()
 
 # ---------------------------------------------------------------------------
 # Errors
@@ -106,25 +127,27 @@ def update_provider(
     session: Session,
     provider_id: str,
     *,
-    label: str | None = None,
-    api_key: str | None = None,
-    env_var_name: str | None = None,
-    base_url: str | None = None,
-    extra_config: dict | None = None,
-    is_enabled: bool | None = None,
+    label: str | None | _Unchanged = UNCHANGED,
+    api_key: str | None | _Unchanged = UNCHANGED,
+    env_var_name: str | None | _Unchanged = UNCHANGED,
+    base_url: str | None | _Unchanged = UNCHANGED,
+    extra_config: dict | None | _Unchanged = UNCHANGED,
+    is_enabled: bool | _Unchanged = UNCHANGED,
 ) -> None:
     row = get_provider(session, provider_id)
-    if label is not None:
+    if not isinstance(label, _Unchanged) and label is not None:
         row.label = label
-    if api_key is not None:
-        row.api_key_encrypted = encrypt_for_row(row_id=provider_id, plaintext=api_key)
-    if env_var_name is not None:
+    if not isinstance(api_key, _Unchanged):
+        row.api_key_encrypted = (
+            encrypt_for_row(row_id=provider_id, plaintext=api_key) if api_key is not None else None
+        )
+    if not isinstance(env_var_name, _Unchanged):
         row.env_var_name = env_var_name
-    if base_url is not None:
+    if not isinstance(base_url, _Unchanged):
         row.base_url = base_url
-    if extra_config is not None:
+    if not isinstance(extra_config, _Unchanged):
         row.extra_config = extra_config
-    if is_enabled is not None:
+    if not isinstance(is_enabled, _Unchanged) and is_enabled is not None:
         row.is_enabled = is_enabled
     session.flush()
 
@@ -153,7 +176,10 @@ def get_provider_api_key(session: Session, provider_id: str) -> str | None:
         if env_val is not None:
             return env_val
     if row.api_key_encrypted:
-        return decrypt_for_row(row_id=row.id, token=row.api_key_encrypted)
+        try:
+            return decrypt_for_row(row_id=row.id, token=row.api_key_encrypted)
+        except DecryptError as exc:
+            raise AuthError("API key unreadable; ask admin to re-save") from exc
     return None
 
 
@@ -214,12 +240,21 @@ def update_model(
     session: Session,
     model_id: str,
     *,
+    provider_id: str | None = None,
+    tier: str | None = None,
+    model_ref: str | None = None,
     display_name: str | None = None,
     is_tier_default: bool | None = None,
     is_enabled: bool | None = None,
     overrides: dict | None = None,
 ) -> None:
     row = get_model(session, model_id)
+    if provider_id is not None:
+        row.provider_id = provider_id
+    if model_ref is not None:
+        row.model_ref = model_ref
+    if tier is not None:
+        row.tier = tier
     if display_name is not None:
         row.display_name = display_name
     if is_tier_default is not None:
