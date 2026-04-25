@@ -91,6 +91,33 @@ class EuSchedule(Base):
     __table_args__ = (Index("ix_eu_schedules_user", "user_id"),)
 
 
+class RsSchedule(Base):
+    """Per-user Retail Sentiment snapshot schedule. Identical shape to
+    MbSchedule + EuSchedule (cron-ish time/tz/days)."""
+
+    __tablename__ = "rs_schedules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    time: Mapped[str] = mapped_column(String(5), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False)
+    days_of_week: Mapped[str] = mapped_column(Text, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.now()
+    )
+    last_run_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (Index("ix_rs_schedules_user", "user_id"),)
+
+
 class JobRun(Base):
     """Append-only execution history for every scheduled background job."""
 

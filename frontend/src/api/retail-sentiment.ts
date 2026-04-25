@@ -7,6 +7,7 @@ export interface RsSnapshot {
   captured_at: string;
   sentiment_score: number;
   buzz_volume: number;
+  buzz_count: number;
   sentiment_momentum: number;
   bull_bear_ratio: number;
   buzz_sentiment_divergence: number;
@@ -18,6 +19,24 @@ export interface RsSnapshot {
   institutional_retail_gap: number | null;
   event_sensitivity: number | null;
   source_breakdown: Record<string, number>;
+  narrative: string | null;
+}
+
+export interface RsSchedule {
+  id: string;
+  time: string;
+  timezone: string;
+  days_of_week: string[];
+  label: string;
+  is_enabled: boolean;
+}
+
+export interface RsScheduleUpsert {
+  time: string;
+  timezone: string;
+  days_of_week: string[];
+  label: string;
+  is_enabled?: boolean;
 }
 
 export interface RsSpike {
@@ -81,4 +100,15 @@ export function getStockSentiment(ticker: string): Promise<{ latest: RsSnapshot;
 
 export function getSpikes(): Promise<{ spikes: RsSpike[] }> {
   return fetchJson(`${BASE}/spikes`);
+}
+
+export function getSchedule(): Promise<{ schedule: RsSchedule | null }> {
+  return fetchJson(`${BASE}/schedule`);
+}
+
+export function putSchedule(payload: RsScheduleUpsert): Promise<RsSchedule> {
+  return fetchJson<RsSchedule>(`${BASE}/schedule`, {
+    method: "PUT",
+    json: payload,
+  });
 }
