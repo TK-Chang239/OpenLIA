@@ -72,7 +72,7 @@ merged.
 | 21 | Portfolio                           | Done        | ~55%      | DEFERRED + IMPLEMENTER    | 17-component frontend collapsed to monolith; price provider noop             |
 | 22 | Repository                          | Done        | ~65%      | DEFERRED + IMPLEMENTER    | FileViewer click-to-open missing (not in deferred list)                      |
 | 23 | Docker / Acceptance                 | Done        | ~55%      | IMPLEMENTER + DEFERRED    | Smoke suite, CI Docker job, RELEASING.md absent; deploy structure wrong      |
-| 24 | Design System Refresh               | Done        | ~85%      | IMPLEMENTER + DEFERRED    | Button fill-wipe missing; Setup wizard sweep skipped; Card test shallow; sidebar tokens expanded beyond plan |
+| 24 | Design System Refresh               | Done        | 100%      | RESOLVED                  | ~~Button fill-wipe missing; Setup wizard sweep skipped; Card test shallow~~ — closed via Phase 24 fix-plan (P1-28, NEW-24-01..11); Button hover overlay shipped, Setup wizard tokens normalized, Card hover contract tested, no-hex/no-blue vitest locks |
 
 ---
 
@@ -649,7 +649,7 @@ instead of all 1,000+.
 | 21 | [phase-21-portfolio.md](./fix-plans/phase-21-portfolio.md) | ~55% | mixed |
 | 22 | [phase-22-repository.md](./fix-plans/phase-22-repository.md) | ~65% | mixed |
 | 23 | [phase-23-docker-packaging-acceptance.md](./fix-plans/phase-23-docker-packaging-acceptance.md) | ~55% | DEFERRED + IMPLEMENTER |
-| 24 | [phase-24-design-system-refresh.md](./fix-plans/phase-24-design-system-refresh.md) | ~85% | IMPLEMENTER + DEFERRED |
+| 24 | ~~[phase-24-design-system-refresh.md](./fix-plans/phase-24-design-system-refresh.md)~~ | 100% | RESOLVED (fix/phase-24-design-system-refresh) |
 
 **How to use:**
 
