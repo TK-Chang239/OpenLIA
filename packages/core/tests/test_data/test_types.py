@@ -12,6 +12,11 @@ def test_provider_category_values() -> None:
     assert ProviderCategory.FINANCIAL.value == "financial"
     assert ProviderCategory.NEWS.value == "news"
     assert ProviderCategory.SOCIAL_MEDIA.value == "social_media"
+    assert ProviderCategory.SEARCH.value == "search"
+
+
+def test_search_category_enum() -> None:
+    assert ProviderCategory("search") is ProviderCategory.SEARCH
 
 
 def test_provider_mode_values() -> None:
@@ -93,3 +98,33 @@ def test_tool_result_payload_can_be_list() -> None:
         payload=[{"date": "2026-04-10", "close": 220.0}],
     )
     assert isinstance(result.payload, list)
+
+
+def test_provider_entry_extra_config_rejects_mutation() -> None:
+    """NEW-3-06 — extra_config is wrapped in MappingProxyType to prevent
+    in-place mutation that Plan 5's hashing would otherwise miss."""
+    entry = ProviderEntry(
+        id="5" * 36,
+        kind="eodhd",
+        label="E",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://eodhd.com/api",
+        extra_config={"exchange_suffix": "US"},
+    )
+    with pytest.raises(TypeError):
+        entry.extra_config["exchange_suffix"] = "LSE"  # type: ignore[index]
+
+
+def test_provider_entry_mcp_error_includes_id() -> None:
+    """NEW-3-08 — error message includes row id for debuggability."""
+    with pytest.raises(ValidationError) as exc:
+        ProviderEntry(
+            id="6" * 36,
+            kind="eodhd",
+            label="E",
+            category=ProviderCategory.FINANCIAL,
+            mode=ProviderMode.MCP,
+        )
+    assert "6" * 36 in str(exc.value)

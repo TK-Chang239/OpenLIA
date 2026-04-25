@@ -1,3 +1,5 @@
+from datetime import UTC
+
 import httpx
 import pytest
 import respx
@@ -145,3 +147,164 @@ def test_registry_exposes_eodhd() -> None:
     from openlia.data.adapters import ADAPTERS
 
     assert ADAPTERS["eodhd"] is EODHDAdapter
+
+
+# ---------- P0-3-04: company_fundamentals ----------
+
+
+@respx.mock
+async def test_fetch_company_fundamentals_extracts_financials_block() -> None:
+    respx.get("https://eodhd.com/api/fundamentals/AAPL.US").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "General": {"Code": "AAPL"},
+                "Financials": {"Income_Statement": {"yearly": {"2024-09-30": {"netIncome": 1.0}}}},
+            },
+        )
+    )
+    adapter = EODHDAdapter(_entry())
+    result = await adapter.fetch("company_fundamentals", {"symbol": "AAPL"})
+    assert result.capability == "company_fundamentals"
+    assert "Financials" in result.payload
+    # General block should be stripped — only Financials returned.
+    assert "General" not in result.payload
+
+
+@respx.mock
+async def test_fetch_company_fundamentals_missing_block_raises() -> None:
+    respx.get("https://eodhd.com/api/fundamentals/MSFT.US").mock(
+        return_value=httpx.Response(200, json={"General": {"Code": "MSFT"}}),
+    )
+    from openlia.data.errors import DataNotAvailable
+
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(DataNotAvailable):
+        await adapter.fetch("company_fundamentals", {"symbol": "MSFT"})
+
+
+# ---------- P1-3-06: typed errors for auth/transient/RFC1123 ----------
+
+
+@respx.mock
+async def test_eodhd_401_raises_authentication_error() -> None:
+    from openlia.data.errors import AuthenticationError
+
+    respx.get("https://eodhd.com/api/real-time/AAPL.US").mock(
+        return_value=httpx.Response(401, text="bad key"),
+    )
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(AuthenticationError) as exc:
+        await adapter.fetch("stock_quote", {"symbol": "AAPL"})
+    assert exc.value.status_code == 401
+
+
+@respx.mock
+async def test_eodhd_403_raises_authentication_error() -> None:
+    from openlia.data.errors import AuthenticationError
+
+    respx.get("https://eodhd.com/api/real-time/AAPL.US").mock(
+        return_value=httpx.Response(403, text="forbidden"),
+    )
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(AuthenticationError) as exc:
+        await adapter.fetch("stock_quote", {"symbol": "AAPL"})
+    assert exc.value.status_code == 403
+
+
+@respx.mock
+async def test_eodhd_5xx_marks_transient() -> None:
+    respx.get("https://eodhd.com/api/real-time/AAPL.US").mock(
+        return_value=httpx.Response(503, text="boom"),
+    )
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(DataSourceError) as exc:
+        await adapter.fetch("stock_quote", {"symbol": "AAPL"})
+    assert exc.value.is_transient is True
+    assert exc.value.status_code == 503
+
+
+@respx.mock
+async def test_eodhd_timeout_marks_transient() -> None:
+    respx.get("https://eodhd.com/api/real-time/AAPL.US").mock(
+        side_effect=httpx.ConnectTimeout("slow"),
+    )
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(DataSourceError) as exc:
+        await adapter.fetch("stock_quote", {"symbol": "AAPL"})
+    assert exc.value.is_transient is True
+
+
+def test_eodhd_http_date_retry_after() -> None:
+    """RFC 1123 HTTP-date in Retry-After must be parsed to seconds-from-now."""
+    from datetime import datetime, timedelta
+    from email.utils import format_datetime
+
+    from openlia.data.adapters.eodhd import _parse_retry_after
+
+    target = datetime.now(tz=UTC) + timedelta(seconds=45)
+    header = format_datetime(target, usegmt=True)
+    parsed = _parse_retry_after(header)
+    assert parsed is not None
+    assert 30 <= parsed <= 60
+
+
+def test_eodhd_retry_after_integer_seconds() -> None:
+    from openlia.data.adapters.eodhd import _parse_retry_after
+
+    assert _parse_retry_after("12") == 12
+    assert _parse_retry_after("0") == 0
+    assert _parse_retry_after(None) is None
+    assert _parse_retry_after("garbage") is None
+
+
+# ---------- P1-3-07: retry/backoff ----------
+
+
+@respx.mock
+async def test_rate_limit_retries_and_succeeds_on_third_attempt() -> None:
+    side_effects = [
+        httpx.Response(429, headers={"Retry-After": "0"}, text="throttled"),
+        httpx.Response(429, headers={"Retry-After": "0"}, text="throttled"),
+        httpx.Response(200, json={"close": 100.0}),
+    ]
+    route = respx.get("https://eodhd.com/api/real-time/AAPL.US").mock(
+        side_effect=side_effects,
+    )
+    adapter = EODHDAdapter(_entry())
+    result = await adapter.fetch("stock_quote", {"symbol": "AAPL"})
+    assert route.call_count == 3
+    assert result.payload["close"] == 100.0
+
+
+@respx.mock
+async def test_rate_limit_exhausted_raises_rate_limit_error() -> None:
+    respx.get("https://eodhd.com/api/real-time/AAPL.US").mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "0"}, text="throttled"),
+    )
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(RateLimitError):
+        await adapter.fetch("stock_quote", {"symbol": "AAPL"})
+
+
+# ---------- NEW-3-07: extra_config exchange suffix ----------
+
+
+@respx.mock
+async def test_format_ticker_honors_extra_config_suffix() -> None:
+    entry = ProviderEntry(
+        id="00000000-0000-0000-0000-000000000002",
+        kind="eodhd",
+        label="EODHD-LSE",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="K",
+        base_url="https://eodhd.com/api",
+        extra_config={"exchange_suffix": "LSE"},
+    )
+    route = respx.get("https://eodhd.com/api/real-time/HSBA.LSE").mock(
+        return_value=httpx.Response(200, json={"close": 1.0}),
+    )
+    adapter = EODHDAdapter(entry)
+    await adapter.fetch("stock_quote", {"symbol": "HSBA"})
+    assert route.called
