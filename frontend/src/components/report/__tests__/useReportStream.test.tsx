@@ -88,4 +88,48 @@ describe("useReportStream", () => {
     await waitFor(() => expect(result.current.state.status).toBe("error"));
     expect(result.current.state.errorMessage).toMatch(/500/);
   });
+
+  it("section.start / section.complete drive section state (NEW-14-06)", async () => {
+    const body =
+      sseFrame("report.start", {
+        report_id: "r_1",
+        department: "equity_research",
+        mode: "stock_initiation",
+        section_titles: ["A", "B"],
+      }) +
+      sseFrame("report.section.start", {
+        report_id: "r_1",
+        section_id: "a",
+        title: "A",
+        idx: 0,
+        total: 2,
+      }) +
+      sseFrame("report.section.start", {
+        report_id: "r_1",
+        section_id: "b",
+        title: "B",
+        idx: 1,
+        total: 2,
+      }) +
+      sseFrame("report.section.complete", {
+        report_id: "r_1",
+        section_id: "a",
+        blocks: [],
+      }) +
+      sseFrame("report.complete", { report_id: "r_1", schema: {} }) +
+      sseFrame("report.saved", { report_id: "r_1" });
+
+    vi.stubGlobal("fetch", mockFetchStream(body));
+    const { result } = renderHook(() => useReportStream());
+    act(() => {
+      result.current.start({ url: "/api/x", body: {} });
+    });
+    await waitFor(() => expect(result.current.state.status).toBe("complete"));
+    const secs = result.current.state.sections;
+    expect(secs.length).toBe(2);
+    const a = secs.find((s) => s.id === "a");
+    const b = secs.find((s) => s.id === "b");
+    expect(a?.status).toBe("done");
+    expect(b?.status).toBe("writing");
+  });
 });

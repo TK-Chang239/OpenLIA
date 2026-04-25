@@ -74,3 +74,6 @@ export const saveToRepo = (reportId: string) =>
 
 export const unsaveFromRepo = (reportId: string) =>
   fetchJson<void>(`/api/repo/items?report_id=${reportId}`, { method: "DELETE" });
+
+/** Alias used by Equity Research ReportCard.onSave (NEW-14-05). */
+export const saveReportToRepo = (reportId: string) => saveToRepo(reportId);

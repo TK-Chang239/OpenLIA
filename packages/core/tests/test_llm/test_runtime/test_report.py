@@ -13,6 +13,8 @@ from openlia.llm.runtime.events import (
     ReportComplete,
     ReportError,
     ReportPhase,
+    ReportSectionComplete,
+    ReportSectionStart,
     ReportStart,
     ReportToolCall,
 )
@@ -615,3 +617,51 @@ async def test_report_cancellation_stops_yielding(
             token.cancel()
     types = [type(e) for e in collected]
     assert ReportComplete not in types
+
+
+async def test_report_emits_per_section_events(prompts_root: Path, frameworks_root: Path) -> None:
+    """NEW-14-06 — runtime emits report.section.start/complete around the
+    structured-output writing pass."""
+    filled = {
+        "title": "AAPL Initiation",
+        "sections": [
+            {"id": "overview", "blocks": [{"type": "text", "content": "..."}]},
+            {"id": "thesis", "blocks": []},
+        ],
+    }
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
+    data = FakeDataDispatcher(manifest={"equity_research": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(
+                mode="stock_initiation",
+                user_input="AAPL",
+                enabled_sections=["overview", "thesis"],
+            ),
+        )
+    )
+    starts = [e for e in events if isinstance(e, ReportSectionStart)]
+    completes = [e for e in events if isinstance(e, ReportSectionComplete)]
+    assert [s.section_id for s in starts] == ["overview", "thesis"]
+    assert all(s.total == 2 for s in starts)
+    assert [c.section_id for c in completes] == ["overview", "thesis"]
+    # Wire format includes the named events
+    from openlia.llm.runtime.events import to_wire
+
+    types = {to_wire(e)["type"] for e in events}
+    assert "report.section.start" in types
+    assert "report.section.complete" in types
