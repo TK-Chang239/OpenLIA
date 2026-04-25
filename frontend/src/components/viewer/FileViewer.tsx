@@ -117,6 +117,7 @@ export function FileViewer(): JSX.Element | null {
           className="relative flex h-full flex-shrink-0 flex-col border-l border-border-subtle bg-bg-elevated"
           style={panelStyle}
           data-mobile={mobile ? "true" : "false"}
+          data-testid="file-viewer"
         >
           {!mobile ? (
             <ResizeHandle onWidthChange={setWidth} viewportWidth={viewportWidth} />
@@ -129,6 +130,7 @@ export function FileViewer(): JSX.Element | null {
               current.source.kind === "report" ? current.source.reportId : undefined
             }
             initialSaved={current.initialSaved}
+            hideSaveToRepoButton={current.hideSaveToRepoButton ?? false}
             onClose={close}
             closeButtonRef={closeButtonRef}
           />

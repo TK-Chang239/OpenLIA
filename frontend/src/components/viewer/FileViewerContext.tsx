@@ -27,6 +27,8 @@ export interface FileViewerTarget {
   metadata: string;
   source: FileSource;
   initialSaved?: boolean;
+  /** Suppress the Save-to-Repo button in the viewer header (already-saved entrypoints). */
+  hideSaveToRepoButton?: boolean;
   /** Element that opened the viewer; focus returns here on close. */
   trigger?: HTMLElement | null;
 }

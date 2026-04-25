@@ -245,10 +245,10 @@ Endpoints: provider CRUD + model CRUD + `remote-models` discovery + department t
 
 | Route | Access | Owner scope | Must-change-password |
 |---|---|---|---|
-| `GET /repo/items` | `require_auth` | `RepoItem.user_id` | blocked |
+| `GET /repo/items` (filtered + paginated) | `require_auth` | `RepoItem.user_id == user.id`; cross-user rows never returned regardless of filter args | blocked |
 | `POST /repo/items` | `require_auth` | writes `RepoItem.user_id = user.id` | blocked |
-| `DELETE /repo/items` | `require_auth` | `RepoItem.user_id == user.id` (bulk) | blocked |
-| `GET /repo/facets` | `require_auth` | aggregates over user's RepoItem rows | blocked |
+| `DELETE /repo/items?report_id=…` | `require_auth` | `RepoItem.user_id == user.id` | blocked |
+| `GET /repo/facets` | `require_auth` | aggregates over user's RepoItem rows; admin scope does NOT escalate | blocked |
 
 ### Plan 23 — Production static serving
 

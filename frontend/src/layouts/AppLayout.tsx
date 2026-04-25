@@ -8,6 +8,7 @@ import { MobileNavProvider, useMobileNav } from "./MobileNavContext";
 import { crumbsForPath, stampsForNow } from "./shellState";
 import { FileViewerProvider } from "../components/viewer/FileViewerContext";
 import { FileViewer } from "../components/viewer/FileViewer";
+import { ToastProvider } from "../components/primitives/Toast";
 
 interface AppLayoutProps {
   children?: ReactNode;
@@ -56,9 +57,11 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
 export function AppLayout({ children }: AppLayoutProps = {}): JSX.Element {
   return (
     <MobileNavProvider>
-      <FileViewerProvider>
-        <AppLayoutInner>{children}</AppLayoutInner>
-      </FileViewerProvider>
+      <ToastProvider>
+        <FileViewerProvider>
+          <AppLayoutInner>{children}</AppLayoutInner>
+        </FileViewerProvider>
+      </ToastProvider>
     </MobileNavProvider>
   );
 }

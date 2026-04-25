@@ -1,6 +1,45 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+
+vi.mock("pdfjs-dist", () => ({
+  getDocument: () => ({ promise: Promise.resolve({ numPages: 0, getPage: vi.fn() }) }),
+  GlobalWorkerOptions: { workerSrc: "" },
+}));
+
+vi.mock("framer-motion", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("framer-motion")>();
+  type AnyProps = Record<string, unknown> & { children?: React.ReactNode };
+  const stripFmProps = (props: AnyProps) => {
+    const {
+      initial: _i,
+      animate: _a,
+      exit: _e,
+      transition: _t,
+      whileHover: _w,
+      ...rest
+    } = props;
+    return rest;
+  };
+  return {
+    ...actual,
+    AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    motion: {
+      ...actual.motion,
+      aside: ({ children, ...props }: AnyProps) => (
+        <aside {...stripFmProps(props)}>{children}</aside>
+      ),
+      div: ({ children, ...props }: AnyProps) => (
+        <div {...stripFmProps(props)}>{children}</div>
+      ),
+      button: ({ children, ...props }: AnyProps) => (
+        <button {...stripFmProps(props)}>{children}</button>
+      ),
+    },
+    useReducedMotion: () => false,
+  };
+});
 
 const listRepoItemsFiltered = vi.fn();
 const fetchRepoFacets = vi.fn();
@@ -21,14 +60,32 @@ vi.mock("../../api/reports", () => ({
 }));
 
 import Repository from "../Repository";
+import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
+import { FileViewer } from "../../components/viewer/FileViewer";
+import { ToastProvider } from "../../components/primitives/Toast";
 
-function renderPage() {
+function renderPage(initial: string = "/repository") {
   return render(
-    <MemoryRouter>
-      <Repository />
+    <MemoryRouter initialEntries={[initial]}>
+      <ToastProvider>
+        <FileViewerProvider>
+          <Repository />
+          <FileViewer />
+        </FileViewerProvider>
+      </ToastProvider>
     </MemoryRouter>,
   );
 }
+
+const SAMPLE_ROW = {
+  id: "i1",
+  report_id: "r1",
+  department: "equity_research",
+  title: "AAPL",
+  filename: "AAPL.pdf",
+  generated_at: "2026-04-20T10:00:00Z",
+  saved_at: "2026-04-22T10:00:00Z",
+};
 
 describe("Repository page", () => {
   beforeEach(() => {
@@ -38,51 +95,155 @@ describe("Repository page", () => {
       total: 1,
     });
     listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+  });
+
+  it("renders saved row and department badge", async () => {
+    renderPage();
+    await waitFor(() => expect(listRepoItemsFiltered).toHaveBeenCalled());
+    expect(await screen.findByText("AAPL.pdf")).toBeInTheDocument();
+    expect(screen.getByTestId("department-badge")).toHaveTextContent("Equity Research");
+  });
+
+  it("shows no-saved empty state when zero rows and no filters", async () => {
+    listRepoItemsFiltered.mockResolvedValueOnce({ items: [], page: 1, page_size: 50, has_more: false });
+    fetchRepoFacets.mockResolvedValueOnce({ departments: [], total: 0 });
+    renderPage();
+    await waitFor(() => expect(listRepoItemsFiltered).toHaveBeenCalled());
+    expect(await screen.findByTestId("repo-empty-no-saved")).toBeInTheDocument();
+  });
+
+  it("opens remove dialog and removes row on confirm", async () => {
+    unsaveFromRepo.mockResolvedValueOnce(undefined);
+    renderPage();
+    const removeBtn = await screen.findByRole("button", { name: /Remove AAPL.pdf/ });
+    fireEvent.click(removeBtn);
+    expect(await screen.findByTestId("remove-confirm-dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
+    await waitFor(() => expect(unsaveFromRepo).toHaveBeenCalledWith("r1"));
+    await waitFor(() => expect(screen.queryByText("AAPL.pdf")).not.toBeInTheDocument());
+  });
+
+  it("clicking row opens FileViewer with metadata and no Save button", async () => {
+    renderPage();
+    const row = await screen.findByTestId("repo-row");
+    fireEvent.click(row);
+    const viewer = await screen.findByTestId("file-viewer");
+    expect(viewer).toBeInTheDocument();
+    // Save-to-Repo button must NOT render in viewer header.
+    expect(
+      viewer.querySelector('[aria-label="Save to repository"]'),
+    ).toBeNull();
+    expect(
+      viewer.querySelector('[aria-label="Remove from repository"]'),
+    ).toBeNull();
+  });
+
+  it("Download anchor click does not open viewer", async () => {
+    renderPage();
+    const dl = await screen.findByRole("link", { name: /Download AAPL.pdf/ });
+    fireEvent.click(dl);
+    expect(screen.queryByTestId("file-viewer")).not.toBeInTheDocument();
+  });
+
+  it("changes sort and fires fetch with new sort param", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(listRepoItemsFiltered).toHaveBeenCalled());
+    listRepoItemsFiltered.mockClear();
+    await user.click(screen.getByRole("button", { name: /Sort/ }));
+    await user.click(await screen.findByText("Filename (A→Z)"));
+    await waitFor(() =>
+      expect(listRepoItemsFiltered).toHaveBeenCalledWith(
+        expect.objectContaining({ sort: "filename_asc" }),
+      ),
+    );
+  });
+
+  it("URL params restore filters", async () => {
+    renderPage("/repository?q=aapl&department=equity_research");
+    await waitFor(() => expect(listRepoItemsFiltered).toHaveBeenCalled());
+    expect(screen.getByLabelText(/Search filename/)).toHaveValue("aapl");
+  });
+
+  it("Clear all removes filters and resets URL", async () => {
+    renderPage("/repository?q=aapl");
+    await waitFor(() => expect(screen.getByText(/Search:/)).toBeInTheDocument());
+    fireEvent.click(screen.getByText("Clear all"));
+    await waitFor(() => expect(screen.queryByText(/Search:/)).not.toBeInTheDocument());
+  });
+
+  it("filter chip dismiss removes that filter", async () => {
+    renderPage("/repository?department=equity_research");
+    const chip = await screen.findByRole("button", {
+      name: /Remove filter Equity Research/,
+    });
+    fireEvent.click(chip);
+    await waitFor(() =>
+      expect(screen.queryByText("Equity Research", { selector: "[data-testid='filter-chip'] *" }))
+        .not.toBeInTheDocument(),
+    );
+  });
+
+  it("error state renders the error alert", async () => {
+    listRepoItemsFiltered.mockRejectedValueOnce(new Error("boom"));
+    renderPage();
+    expect(await screen.findByRole("alert")).toHaveTextContent("boom");
+  });
+
+  it("undo restores row at original index after successful remove", async () => {
+    listRepoItemsFiltered.mockResolvedValueOnce({
       items: [
-        {
-          id: "i1",
-          report_id: "r1",
-          department: "equity_research",
-          title: "AAPL",
-          filename: "AAPL.pdf",
-          generated_at: "2026-04-20T10:00:00Z",
-          saved_at: "2026-04-22T10:00:00Z",
-        },
+        SAMPLE_ROW,
+        { ...SAMPLE_ROW, id: "i2", report_id: "r2", filename: "MSFT.pdf" },
+        { ...SAMPLE_ROW, id: "i3", report_id: "r3", filename: "GOOG.pdf" },
       ],
       page: 1,
       page_size: 50,
       has_more: false,
     });
-  });
-
-  it("renders a saved report row and facet chip", async () => {
+    unsaveFromRepo.mockResolvedValueOnce(undefined);
+    saveToRepo.mockResolvedValueOnce({ id: "i2", report_id: "r2", created_at: "" });
     renderPage();
-    await waitFor(() => expect(listRepoItemsFiltered).toHaveBeenCalled());
-    expect(await screen.findByText("AAPL.pdf")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /equity_research \(1\)/ })).toBeInTheDocument();
+    const removeBtn = await screen.findByRole("button", { name: /Remove MSFT.pdf/ });
+    fireEvent.click(removeBtn);
+    fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
+    await waitFor(() => expect(unsaveFromRepo).toHaveBeenCalledWith("r2"));
+    const undo = await screen.findByRole("button", { name: /Undo/ });
+    await act(async () => {
+      undo.click();
+    });
+    await waitFor(() => expect(saveToRepo).toHaveBeenCalledWith("r2"));
+    await waitFor(() => {
+      const rows = screen.getAllByTestId("repo-row");
+      expect(rows[1]).toHaveTextContent("MSFT.pdf");
+    });
   });
 
-  it("shows empty state when no saved reports", async () => {
+  it("error toast appears when remove fails and row is restored", async () => {
     listRepoItemsFiltered.mockResolvedValueOnce({
-      items: [],
+      items: [
+        SAMPLE_ROW,
+        { ...SAMPLE_ROW, id: "i2", report_id: "r2", filename: "MSFT.pdf" },
+      ],
       page: 1,
       page_size: 50,
       has_more: false,
     });
-    fetchRepoFacets.mockResolvedValueOnce({ departments: [], total: 0 });
+    unsaveFromRepo.mockRejectedValueOnce(new Error("nope"));
     renderPage();
-    await waitFor(() => expect(listRepoItemsFiltered).toHaveBeenCalled());
-    expect(await screen.findByText(/No saved reports yet/)).toBeInTheDocument();
-  });
-
-  it("opens remove confirmation then deletes row", async () => {
-    unsaveFromRepo.mockResolvedValueOnce(undefined);
-    renderPage();
-    const removeBtn = await screen.findByRole("button", { name: /Remove AAPL.pdf/ });
+    const removeBtn = await screen.findByRole("button", { name: /Remove MSFT.pdf/ });
     fireEvent.click(removeBtn);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
-    await waitFor(() => expect(unsaveFromRepo).toHaveBeenCalledWith("r1"));
-    await waitFor(() => expect(screen.queryByText("AAPL.pdf")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Failed to remove/i)).toBeInTheDocument());
+    // Row restored at original index.
+    await waitFor(() => {
+      const rows = screen.getAllByTestId("repo-row");
+      expect(rows[1]).toHaveTextContent("MSFT.pdf");
+    });
   });
 });
