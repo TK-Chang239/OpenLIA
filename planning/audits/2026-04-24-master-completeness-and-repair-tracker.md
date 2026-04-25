@@ -148,14 +148,23 @@ real use), not polish. Each line links the gap to the source review.
   - Bug: production Postgres deploys missing tables/columns that exist only
     in models. Tests pass via `create_all` on SQLite.
   - Required migrations:
-    - `2026-04-16-1200_baseline.py` — Phase 1a baseline file (only
-      `.gitkeep` in versions/ today).
-    - `mr_dashboard_state` add `assessment_schedule`, `last_assessment_at`
-      (Phase 1b drift).
-    - `rs_classification_log` create_table (Phase 1b/20 drift; expected by
-      `test_migrations.py` EXPECTED_TABLES but never created).
+    - ~~`2026-04-16-1200_baseline.py` — Phase 1a baseline file (only
+      `.gitkeep` in versions/ today).~~ **Resolved f2b3055** — shipped as
+      `2026-04-18-1609_baseline.py` (Alembic revision `01526cb27f5e`);
+      Plan 1a Task 10 amended with the shipped filename.
+    - ~~`mr_dashboard_state` add `assessment_schedule`, `last_assessment_at`
+      (Phase 1b drift).~~ **Resolved f2b3055** —
+      `2026-04-24-0001_mr_dashboard_state_schedule_cols.py` adds both
+      columns; step-migration test in `test_migration_parity.py`.
+    - ~~`rs_classification_log` create_table (Phase 1b/20 drift; expected by
+      `test_migrations.py` EXPECTED_TABLES but never created).~~
+      **Resolved f2b3055** — `2026-04-24-0100_rs_classification_log.py`
+      creates the table plus both indexes; step-migration test in
+      `test_migration_parity.py`.
     - `user_prefs` create_table (Phase 11).
     - `mb_user_configs` create_table (Phase 16).
+  - Phase 1a / 1b slice of P0-09 closed. Remaining bullets belong to
+    Phases 11 / 16 and remain open under their own fix plans.
   - Source: Phase 1a/1b/11/16/20 reviews.
 
 - [ ] **P0-10 — Container-runtime smoke (REM-P1-019 residual).**
@@ -299,9 +308,12 @@ hits them.
   `OPENLIA_MODE: company`.** A user following the LAN recipe gets
   auth-required mode with no override knob.
 
-- [ ] **P1-25 — Phase 20 `rs_classification_log` Alembic migration
+- [x] ~~**P1-25 — Phase 20 `rs_classification_log` Alembic migration
   unverified.** Model exists in `dashboard.py`; migration file presence
-  not confirmed. Same Postgres deploy risk as P0-09 (covered there).
+  not confirmed. Same Postgres deploy risk as P0-09 (covered there).~~
+  **Resolved f2b3055** — migration `2026-04-24-0100_rs_classification_log.py`
+  is reachable from `head`, covered by step-migration and parity tests
+  in `test_migration_parity.py` and `test_rs_classification_log.py`.
 
 - [ ] **P1-26 — Phase 8 design tokens diverged from plan to Wondermakers /
   Acid Yellow.** Functionally fine; **decision needed**: amend the plan
@@ -361,10 +373,15 @@ keeps the project navigable.
   (works), but `from openlia_server.services.auth import authenticate`
   fails contract.
 
-- [ ] **P2-04 — Phase 1a `models/__init__.py` includes `dashboard`,
+- [x] ~~**P2-04 — Phase 1a `models/__init__.py` includes `dashboard`,
   `scheduler`, `departments`** alongside Plan-1A modules; docstring still
   says these were added "in Plan 1B". Update docstring + decide whether
-  the Plan-1B+ imports belong in baseline.
+  the Plan-1B+ imports belong in baseline.~~ **Resolved f2b3055** —
+  `models/__init__.py` scoped back to `auth, config, content, infrastructure`
+  with a docstring that points to owning phases; full-schema registration
+  moved to the side-effect shim `models/register_all.py`. Every db module
+  now carries a docstring (enforced by
+  `test_alembic_hygiene::test_every_db_module_has_docstring`).
 
 - [ ] **P2-05 — Phase 6 scheduler `__init__.py` empty.** Plan called for
   re-exports of `SchedulerService`, `JobType`, `JobStatus`. Non-breaking

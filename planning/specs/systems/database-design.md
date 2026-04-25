@@ -198,6 +198,12 @@ Opaque server-side session tokens. Issued on login, stored hashed, presented by 
 - Opaque tokens (not JWT) because revocation must be instant and session metadata lives in one place.
 - Cookie flags: `HttpOnly`, `Secure` (controlled by `OPENLIA_COOKIE_SECURE`, defaults true in company mode), `SameSite=Lax`.
 - Nightly prune: delete rows where `expires_at < now() - 7 days`.
+- **`updated_at` exempt.** `sessions` is mutable but intentionally omits the
+  `TimestampMixin` `updated_at` column. `last_seen_at` already carries the
+  "last touched" signal (throttled to once per minute) and doubles as the
+  freshness timestamp for the "your sessions" UI, so a second `updated_at`
+  would be redundant. See §2 "Timestamps" for the global rule and the
+  exemption convention.
 
 ### `signup_invites`
 
