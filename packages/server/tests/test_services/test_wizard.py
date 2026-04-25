@@ -44,3 +44,16 @@ def test_get_status_env_mode_shadows_db_mode(create_tables, db_session: Session)
     status = svc.get_status(db_session, env={"OPENLIA_MODE": "company"})
     assert status.mode == "company"
     assert "mode" in status.env_overrides
+
+
+def test_set_mode_persists_both_columns(create_tables, db_session: Session) -> None:
+    """Cross-plan contract: set_mode writes both ConfigStore + WizardState.mode."""
+    from openlia_server.db.models.infrastructure import ConfigStore, WizardState
+
+    svc.set_mode(db_session, "company")
+    db_session.commit()
+
+    cs_row = db_session.get(ConfigStore, "wizard.mode")
+    state = db_session.get(WizardState, 1)
+    assert cs_row is not None and cs_row.value == "company"
+    assert state is not None and state.mode == "company"

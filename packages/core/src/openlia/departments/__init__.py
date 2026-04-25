@@ -36,6 +36,43 @@ def get_department(name: str) -> Department | None:
     return _REGISTRY.get(name)
 
 
+def get_registered_department_ids() -> list[str]:
+    """Return the canonical list of registered department ids."""
+    return list(_REGISTRY.keys())
+
+
+def get_enabled_default_tiers(enabled: list[str] | None = None) -> set[str]:
+    """Return the union of `DEFAULT_TIER`s for the given enabled department ids.
+
+    When `enabled` is None, returns the union across all registered departments.
+    Each department's tier is read from `Department.tier` (a Tier literal).
+    Used by the wizard to decide which model tiers must be configured.
+    """
+    ids = enabled if enabled is not None else list(_REGISTRY.keys())
+    out: set[str] = set()
+    for name in ids:
+        dept = _REGISTRY.get(name)
+        if dept is None:
+            continue
+        tier = getattr(dept, "tier", None)
+        if isinstance(tier, str):
+            out.add(tier)
+    return out
+
+
+def get_department_data_requirements() -> dict[str, list[str]]:
+    """Return a mapping of department id -> required data requirement types.
+
+    Used by the AI review step of the setup wizard to feed the LLM the
+    data that each enabled department needs.
+    """
+    out: dict[str, list[str]] = {}
+    for name, dept in _REGISTRY.items():
+        reqs = getattr(dept, "data_requirement_types", ())
+        out[name] = list(reqs)
+    return out
+
+
 __all__ = [
     "Department",
     "EarningsUpdateDepartment",
@@ -49,4 +86,7 @@ __all__ = [
     "RetailSentimentDepartment",
     "SecretaryDepartment",
     "get_department",
+    "get_department_data_requirements",
+    "get_enabled_default_tiers",
+    "get_registered_department_ids",
 ]
