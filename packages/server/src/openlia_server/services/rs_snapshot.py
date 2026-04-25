@@ -18,6 +18,7 @@ def _snapshot_to_row_payload(snap: MetricSnapshot) -> dict[str, Any]:
     return {
         "sentiment_score": snap.sentiment_score,
         "buzz_volume": snap.buzz_volume,
+        "buzz_count": snap.buzz_count,
         "sentiment_momentum": snap.sentiment_momentum,
         "bull_bear_ratio": snap.bull_bear_ratio,
         "buzz_sentiment_divergence": snap.buzz_sentiment_divergence,
@@ -28,6 +29,7 @@ def _snapshot_to_row_payload(snap: MetricSnapshot) -> dict[str, Any]:
         "narrative_concentration": snap.narrative_concentration,
         "institutional_retail_gap": snap.institutional_retail_gap,
         "event_sensitivity": snap.event_sensitivity,
+        "narrative": snap.narrative,
     }
 
 
@@ -38,6 +40,7 @@ def _row_to_metric_snapshot(row: RsSnapshot) -> MetricSnapshot:
         captured_at=row.captured_at,
         sentiment_score=float(data.get("sentiment_score", 0.0)),
         buzz_volume=float(data.get("buzz_volume", 0.0)),
+        buzz_count=float(data.get("buzz_count", data.get("buzz_volume", 0.0))),
         sentiment_momentum=float(data.get("sentiment_momentum", 0.0)),
         bull_bear_ratio=float(data.get("bull_bear_ratio", 0.0)),
         buzz_sentiment_divergence=float(data.get("buzz_sentiment_divergence", 0.0)),
@@ -49,6 +52,7 @@ def _row_to_metric_snapshot(row: RsSnapshot) -> MetricSnapshot:
         institutional_retail_gap=data.get("institutional_retail_gap"),
         event_sensitivity=data.get("event_sensitivity"),
         source_breakdown=row.source_breakdown or {},
+        narrative=data.get("narrative"),
     )
 
 

@@ -50,6 +50,7 @@ EXPECTED_TABLES = {
     # Scheduler + notifications (4)
     "mb_schedules",
     "eu_schedules",
+    "rs_schedules",
     "job_runs",
     "user_notifications",
     # --- Plan 11 additions ---

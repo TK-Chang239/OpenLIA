@@ -1,323 +1,246 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  getConfig,
-  getDashboard,
-  getSpikes,
-  runSnapshot,
-  updateConfig,
-  type RsConfig,
-  type RsDashboard,
-  type RsSnapshot,
-  type RsSpike,
-} from "../../api/retail-sentiment";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-type Tab = "overview" | "per_stock" | "spikes";
+import { runSnapshot } from "../../api/retail-sentiment";
+import { EvidenceTab } from "../../components/retail-sentiment/EvidenceTab";
+import { InsightsTab } from "../../components/retail-sentiment/InsightsTab";
+import { MetricsDeepDive } from "../../components/retail-sentiment/MetricsDeepDive";
+import { OverviewTab } from "../../components/retail-sentiment/OverviewTab";
+import { ScheduleEditor } from "../../components/retail-sentiment/ScheduleEditor";
+import { SettingsDrawer } from "../../components/retail-sentiment/SettingsDrawer";
+import { TickerSelector } from "../../components/retail-sentiment/TickerSelector";
+import { useRsConfig } from "../../hooks/useRsConfig";
+import { useRsDashboard } from "../../hooks/useRsDashboard";
+import { useRsHistory } from "../../hooks/useRsHistory";
+import { useRsSchedule } from "../../hooks/useRsSchedule";
+import { useRsSpikes } from "../../hooks/useRsSpikes";
 
-const TABS: Array<{ id: Tab; label: string }> = [
+type TabId = "overview" | "evidence" | "insights";
+
+const TABS: Array<{ id: TabId; label: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "per_stock", label: "Per Stock" },
-  { id: "spikes", label: "Spikes" },
+  { id: "evidence", label: "Evidence" },
+  { id: "insights", label: "Insights" },
 ];
 
-function formatNumber(value: number | null, digits = 2): string {
-  if (value === null || value === undefined) return "—";
-  return value.toFixed(digits);
-}
-
-function sentimentTone(score: number): string {
-  if (score > 0.2) return "var(--color-feedback-success)";
-  if (score < -0.2) return "var(--color-feedback-error)";
-  return "var(--color-text-secondary)";
-}
-
-function MetricCard(props: {
-  label: string;
-  value: number | null;
-  digits?: number;
-  muted?: boolean;
-}): JSX.Element {
-  return (
-    <div
-      style={{
-        padding: "12px 16px",
-        borderRadius: 8,
-        border: "1px solid var(--color-border-subtle)",
-        background: props.muted ? "var(--color-bg-input)" : "var(--color-bg-elevated)",
-      }}
-    >
-      <div style={{ fontSize: 11, textTransform: "uppercase", color: "var(--color-text-secondary)" }}>
-        {props.label}
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: "var(--color-text-primary)" }}>
-        {formatNumber(props.value, props.digits ?? 2)}
-      </div>
-    </div>
-  );
-}
-
-function SnapshotCard({ snap }: { snap: RsSnapshot }): JSX.Element {
-  return (
-    <div
-      style={{
-        padding: 16,
-        borderRadius: 10,
-        border: "1px solid var(--color-border-subtle)",
-        background: "var(--color-bg-elevated)",
-        marginBottom: 12,
-      }}
-    >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <div style={{ fontSize: 18, fontWeight: 700 }}>{snap.ticker}</div>
-        <div
-          style={{
-            fontSize: 14,
-            fontWeight: 600,
-            color: sentimentTone(snap.sentiment_score),
-          }}
-        >
-          sentiment {formatNumber(snap.sentiment_score)}
-        </div>
-      </div>
-      <div
-        style={{
-          marginTop: 12,
-          display: "grid",
-          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
-          gap: 8,
-        }}
-      >
-        <MetricCard label="Buzz Vol" value={snap.buzz_volume} digits={0} />
-        <MetricCard label="Momentum" value={snap.sentiment_momentum} />
-        <MetricCard label="Bull/Bear" value={snap.bull_bear_ratio} />
-        <MetricCard label="Velocity/hr" value={snap.social_velocity} />
-        <MetricCard label="Divergence" value={snap.buzz_sentiment_divergence} />
-        <MetricCard label="X-Source" value={snap.cross_source_agreement} />
-        <MetricCard
-          label="P/C Ratio"
-          value={snap.put_call_ratio}
-          muted={snap.put_call_ratio === null}
-        />
-        <MetricCard
-          label="Short Press"
-          value={snap.short_interest_pressure}
-          muted={snap.short_interest_pressure === null}
-        />
-      </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: "var(--color-text-secondary)" }}>
-        captured {new Date(snap.captured_at).toLocaleString()}
-      </div>
-    </div>
-  );
+function tabFromConfig(active: string | undefined): TabId {
+  if (active === "evidence" || active === "insights") return active;
+  return "overview";
 }
 
 export default function RetailSentiment(): JSX.Element {
-  const [tab, setTab] = useState<Tab>("overview");
-  const [dashboard, setDashboard] = useState<RsDashboard | null>(null);
-  const [spikes, setSpikes] = useState<RsSpike[]>([]);
-  const [config, setConfig] = useState<RsConfig | null>(null);
-  const [runTicker, setRunTicker] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { config, save: saveConfig } = useRsConfig();
+  const { dashboard, refresh: refreshDashboard } = useRsDashboard(
+    config?.refresh_interval_minutes ?? null,
+  );
+  const { spikes, refresh: refreshSpikes } = useRsSpikes();
+  const { schedule, save: saveSchedule } = useRsSchedule();
 
-  const refresh = useCallback(async () => {
-    try {
-      const [d, s, c] = await Promise.all([
-        getDashboard(),
-        getSpikes(),
-        getConfig(),
-      ]);
-      setDashboard(d);
-      setSpikes(s.spikes);
-      setConfig(c);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+  const [tab, setTab] = useState<TabId>("overview");
+  const [tickers, setTickers] = useState<string[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [deepDiveOpen, setDeepDiveOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Hydrate tickers + selected tab from dashboard + config.
+  useEffect(() => {
+    if (dashboard) {
+      setTickers((prev) => {
+        const merged = Array.from(new Set([...prev, ...dashboard.tickers]));
+        return merged;
+      });
     }
-  }, []);
+  }, [dashboard]);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    if (config) setTab(tabFromConfig(config.active_tab));
+  }, [config]);
+
+  const { history } = useRsHistory(selected, 7);
+
+  const onTabChange = useCallback(
+    (next: TabId) => {
+      setTab(next);
+      if (config && config.active_tab !== next) {
+        void saveConfig({ active_tab: next });
+      }
+    },
+    [config, saveConfig],
+  );
+
+  const onAddTicker = useCallback((t: string) => {
+    setTickers((prev) => (prev.includes(t) ? prev : [...prev, t]));
+    setSelected(t);
+  }, []);
+
+  const onRemoveTicker = useCallback((t: string) => {
+    setTickers((prev) => prev.filter((x) => x !== t));
+    setSelected((prev) => (prev === t ? null : prev));
+  }, []);
 
   const onRun = useCallback(async () => {
-    if (!runTicker.trim()) return;
+    if (tickers.length === 0) {
+      setError("Add at least one ticker before running a snapshot.");
+      return;
+    }
     setBusy(true);
+    setError(null);
     try {
-      await runSnapshot(
-        runTicker
-          .split(",")
-          .map((t) => t.trim().toUpperCase())
-          .filter(Boolean),
-      );
-      setRunTicker("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      await runSnapshot(tickers);
+      await refreshDashboard();
+      await refreshSpikes();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [runTicker, refresh]);
+  }, [tickers, refreshDashboard, refreshSpikes]);
 
-  const onTabChange = useCallback(
-    async (next: Tab) => {
-      setTab(next);
-      if (config && config.active_tab !== next) {
-        try {
-          const updated = await updateConfig({ active_tab: next });
-          setConfig(updated);
-        } catch {
-          // Non-fatal: tab persistence is best-effort.
-        }
-      }
-    },
-    [config],
-  );
+  const snapshots = useMemo(() => dashboard?.snapshots ?? [], [dashboard]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Retail Sentiment</h1>
-      <p style={{ color: "var(--color-text-secondary)", marginBottom: 16 }}>
-        Monitor social + news sentiment, buzz volume, and cross-source agreement for tickers.
-      </p>
+    <div className="mx-auto max-w-6xl space-y-4 p-6">
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Retail Sentiment</h1>
+          <p className="text-sm text-[--color-text-secondary]">
+            Multi-source sentiment, buzz, and signal monitor.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setScheduleOpen(true)}
+            className="rounded-md border border-[--color-border-secondary] px-2 py-1 text-xs"
+          >
+            Schedule
+          </button>
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="rounded-md border border-[--color-border-secondary] px-2 py-1 text-xs"
+          >
+            Settings
+          </button>
+          <button
+            type="button"
+            aria-label="Open metrics deep dive"
+            onClick={() => setDeepDiveOpen(true)}
+            className="rounded-md border border-[--color-border-secondary] px-2 py-1 text-xs"
+          >
+            ?
+          </button>
+        </div>
+      </header>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <TickerSelector
+        tickers={tickers}
+        selected={selected}
+        onSelect={setSelected}
+        onAdd={onAddTicker}
+        onRemove={onRemoveTicker}
+        onImportFromPortfolio={() => {
+          // Wired hook — Portfolio fetcher integration left for follow-up.
+          setError(
+            "Portfolio import is wired but not yet connected to the live portfolio API.",
+          );
+        }}
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
-            onClick={() => void onTabChange(t.id)}
-            style={{
-              padding: "8px 16px",
-              borderRadius: 6,
-              border: "1px solid var(--color-border-subtle)",
-              background: tab === t.id ? "var(--neutral-900)" : "var(--color-bg-elevated)",
-              color: tab === t.id ? "var(--neutral-50)" : "var(--color-text-primary)",
-              cursor: "pointer",
-            }}
+            onClick={() => onTabChange(t.id)}
+            data-testid={`tab-${t.id}`}
+            className={[
+              "rounded-md border px-3 py-1 text-sm",
+              tab === t.id
+                ? "border-[--color-accent-primary] bg-[--color-accent-primary] text-[--color-accent-on]"
+                : "border-[--color-border-subtle] bg-[--color-bg-elevated]",
+            ].join(" ")}
           >
             {t.label}
           </button>
         ))}
-      </div>
-
-      <div
-        style={{
-          marginBottom: 16,
-          padding: 12,
-          borderRadius: 8,
-          border: "1px solid var(--color-border-subtle)",
-          background: "var(--color-bg-input)",
-          display: "flex",
-          gap: 8,
-          alignItems: "center",
-        }}
-      >
-        <input
-          value={runTicker}
-          onChange={(e) => setRunTicker(e.target.value)}
-          placeholder="AAPL,MSFT"
-          style={{
-            flex: 1,
-            padding: "8px 12px",
-            borderRadius: 6,
-            border: "1px solid var(--color-border-secondary)",
-          }}
-        />
-        <button
-          type="button"
-          onClick={() => void onRun()}
-          disabled={busy || !runTicker.trim()}
-          style={{
-            padding: "8px 16px",
-            borderRadius: 6,
-            background: "var(--color-accent-primary)",
-            color: "var(--color-accent-on)",
-            border: "none",
-            cursor: busy ? "wait" : "pointer",
-          }}
-        >
-          {busy ? "Running…" : "Run snapshot"}
-        </button>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          style={{
-            padding: "8px 16px",
-            borderRadius: 6,
-            background: "var(--color-bg-elevated)",
-            border: "1px solid var(--color-border-secondary)",
-            cursor: "pointer",
-          }}
-        >
-          Refresh
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void onRun()}
+            disabled={busy}
+            className="rounded-md bg-[--color-accent-primary] px-3 py-1 text-xs text-[--color-accent-on] disabled:opacity-60"
+          >
+            {busy ? "Running…" : "Run snapshot"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void refreshDashboard();
+              void refreshSpikes();
+            }}
+            className="rounded-md border border-[--color-border-secondary] px-3 py-1 text-xs"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {error ? (
         <div
-          style={{
-            padding: 12,
-            borderRadius: 6,
-            background: "rgba(224, 92, 48, 0.1)",
-            color: "var(--color-feedback-error)",
-            marginBottom: 16,
-          }}
+          role="alert"
+          data-testid="rs-error-banner"
+          className="rounded-md border border-[--color-feedback-error] bg-[--color-feedback-error-bg] px-3 py-2 text-sm text-[--color-feedback-error]"
         >
           {error}
         </div>
       ) : null}
 
+      {tickers.length === 0 ? (
+        <div
+          data-testid="rs-empty"
+          className="rounded-md border border-dashed border-[--color-border-subtle] p-6 text-sm text-[--color-text-secondary]"
+        >
+          No tickers tracked. Add one above or use Import from Portfolio.
+        </div>
+      ) : null}
+
       {tab === "overview" ? (
-        <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
-            Tickers tracked: {dashboard?.tickers.length ?? 0}
-          </h2>
-          {(dashboard?.snapshots ?? []).length === 0 ? (
-            <div style={{ color: "var(--color-text-secondary)" }}>
-              No snapshots yet. Trigger one via the input above.
-            </div>
-          ) : (
-            (dashboard?.snapshots ?? []).map((s) => (
-              <SnapshotCard key={s.ticker} snap={s} />
-            ))
-          )}
-        </div>
+        <OverviewTab selected={selected} snapshots={snapshots} />
+      ) : null}
+      {tab === "evidence" ? (
+        <EvidenceTab selected={selected} history={history} />
+      ) : null}
+      {tab === "insights" ? (
+        <InsightsTab
+          selected={selected}
+          snapshots={snapshots}
+          spikes={spikes}
+        />
       ) : null}
 
-      {tab === "per_stock" ? (
-        <div>
-          {(dashboard?.snapshots ?? []).map((s) => (
-            <SnapshotCard key={s.ticker} snap={s} />
-          ))}
-        </div>
-      ) : null}
-
-      {tab === "spikes" ? (
-        <div>
-          {spikes.length === 0 ? (
-            <div style={{ color: "var(--color-text-secondary)" }}>No spikes detected in the last 7 days.</div>
-          ) : (
-            spikes.map((sp) => (
-              <div
-                key={`${sp.ticker}-${sp.detected_at}`}
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  border: "1px solid var(--color-border-error)",
-                  background: "rgba(224, 92, 48, 0.06)",
-                  marginBottom: 8,
-                }}
-              >
-                <div style={{ fontWeight: 600 }}>{sp.ticker}</div>
-                <div style={{ fontSize: 13, color: "var(--color-feedback-error)" }}>
-                  buzz={formatNumber(sp.buzz, 0)} · z={formatNumber(sp.z_score)} · baseline{" "}
-                  μ={formatNumber(sp.baseline_mean, 1)} σ={formatNumber(sp.baseline_stddev, 1)}
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : null}
+      <MetricsDeepDive
+        open={deepDiveOpen}
+        onClose={() => setDeepDiveOpen(false)}
+      />
+      <ScheduleEditor
+        open={scheduleOpen}
+        schedule={schedule}
+        onClose={() => setScheduleOpen(false)}
+        onSave={saveSchedule}
+      />
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSave={async (next) => {
+          // Persist via the existing config endpoint as `metric_settings`.
+          await saveConfig({
+            metric_settings: next as unknown as Record<string, unknown>,
+          });
+        }}
+      />
     </div>
   );
 }

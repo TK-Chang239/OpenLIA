@@ -1,8 +1,10 @@
-"""12-metric sentiment engine.
+"""12-metric Retail Sentiment engine.
 
-Compressed implementation: the plan defines 12 metrics (7 basic + 5 optional).
-This module ships the core 7 basic metrics plus a placeholder pipeline for
-optionals that returns ``None`` when advanced data is absent.
+Computes the basic 7 metrics + the 5 optional metrics per the
+RetailSentimentPageSpec. Optional inputs (options chains, short
+interest, institutional holdings, historical prices) are gated:
+the metric is `None` when its provider payload is missing or
+malformed (graceful degrade per Design Rule 9).
 """
 
 from __future__ import annotations
@@ -10,27 +12,19 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from datetime import datetime
+from itertools import pairwise
 from typing import Any
 
+from openlia.retail_sentiment.reliability import (
+    DEFAULT_SOURCE_WEIGHTS,
+    _normalize_weights,
+)
 from openlia.retail_sentiment.schemas import (
     ClassificationLabel,
     ClassifiedItem,
     MetricSnapshot,
     RawSocialPost,
 )
-
-DEFAULT_SOURCE_WEIGHTS: dict[str, float] = {
-    "financial_provider": 0.40,
-    "social_media": 0.35,
-    "cross_platform": 0.25,
-}
-
-
-def _normalize_weights(weights: dict[str, float]) -> dict[str, float]:
-    total = sum(max(0.0, v) for v in weights.values())
-    if total <= 0:
-        return dict(DEFAULT_SOURCE_WEIGHTS)
-    return {k: max(0.0, v) / total for k, v in weights.items()}
 
 
 def _score_for_label(label: ClassificationLabel) -> float:
@@ -51,51 +45,49 @@ def compute_snapshot(
     source_weights: dict[str, float] | None = None,
     optional_inputs: dict[str, Any] | None = None,
 ) -> MetricSnapshot:
-    """Compute the 12 metrics for a single ticker from classified items.
+    """Compute the 12-metric snapshot for a single ticker.
 
-    Basic metrics (always computed when posts exist):
-      1. sentiment_score    — mean of label scores in [-1, 1]
-      2. buzz_volume        — raw count of posts
-      3. sentiment_momentum — current score minus prior score (0 if none)
-      4. bull_bear_ratio    — bullish count / max(bearish count, 1)
-      5. buzz_sentiment_divergence — |buzz z-score| minus |sentiment z-score|
-      6. social_velocity    — posts-per-hour over last 24h
-      7. cross_source_agreement — stddev across per-source mean scores
-     10. narrative_concentration — top-3 key phrase share of total
-     12. source_breakdown   — per-source weighted means
-
-    Optional metrics (None unless optional_inputs provided):
-      8. put_call_ratio
-      9. short_interest_pressure
-     11. institutional_retail_gap
-     (event_sensitivity treated as optional too)
+    Optional metrics return `None` when their provider input is missing.
     """
     classifications_by_id = {c.id: c for c in classifications}
     items = [(p, classifications_by_id.get(p.id)) for p in posts]
     classified = [(p, c) for p, c in items if c is not None]
 
-    # Metric 1: mean sentiment
+    # Metric 1: mean sentiment.
     if classified:
         scores = [_score_for_label(c.classification) for _, c in classified]
         sentiment_score = sum(scores) / len(scores)
     else:
         sentiment_score = 0.0
 
-    # Metric 2: buzz volume
-    buzz_volume = float(len(posts))
+    # Metric 2: buzz volume.
+    # `buzz_count` keeps the raw integer; `buzz_volume` is the
+    # spec-defined ratio of today / 30-day-mean (1.0 baseline when
+    # there is no history). The historical baseline is taken from
+    # `prior_snapshots[*].buzz_count` (back-fills from `buzz_volume` for
+    # rows persisted before the rename).
+    buzz_count = float(len(posts))
+    history_counts = [
+        float(getattr(s, "buzz_count", None) or s.buzz_volume) for s in prior_snapshots
+    ]
+    if history_counts:
+        baseline_mean = sum(history_counts) / len(history_counts)
+        buzz_volume = (buzz_count / baseline_mean) if baseline_mean > 0 else 0.0
+    else:
+        buzz_volume = 1.0 if buzz_count > 0 else 0.0
 
-    # Metric 3: momentum vs prior snapshot
+    # Metric 3: momentum vs prior snapshot.
     if prior_snapshots:
         sentiment_momentum = sentiment_score - prior_snapshots[-1].sentiment_score
     else:
         sentiment_momentum = 0.0
 
-    # Metric 4: bull/bear ratio
+    # Metric 4: bull / bear ratio.
     bulls = sum(1 for _, c in classified if c.classification is ClassificationLabel.BULLISH)
     bears = sum(1 for _, c in classified if c.classification is ClassificationLabel.BEARISH)
     bull_bear_ratio = float(bulls) / float(max(bears, 1))
 
-    # Metric 5: buzz-sentiment divergence (simple z-score difference)
+    # Metric 5: buzz-sentiment divergence (z-score gap).
     if len(prior_snapshots) >= 2:
         prior_buzz = [s.buzz_volume for s in prior_snapshots]
         prior_sent = [s.sentiment_score for s in prior_snapshots]
@@ -105,7 +97,7 @@ def compute_snapshot(
     else:
         buzz_sentiment_divergence = 0.0
 
-    # Metric 6: social velocity (posts per hour over last 24h window)
+    # Metric 6: social velocity (posts per hour over last 24h window).
     if posts:
         latest = max(p.created_at for p in posts)
         window_start = latest.timestamp() - 24 * 3600
@@ -114,7 +106,7 @@ def compute_snapshot(
     else:
         social_velocity = 0.0
 
-    # Metric 7 + 12: cross-source agreement + breakdown
+    # Metric 7 + 12: cross-source agreement + breakdown.
     weights = _normalize_weights(source_weights or DEFAULT_SOURCE_WEIGHTS)
     per_source: dict[str, list[float]] = {}
     for p, c in classified:
@@ -128,7 +120,9 @@ def compute_snapshot(
     else:
         cross_source_agreement = 1.0 if per_source_mean else 0.0
 
-    # Metric 10: narrative concentration (top-3 phrase share)
+    # Metric 10: narrative concentration (top-3 phrase share).
+    # NOTE: NeutralClassifier emits no key_phrases, so this metric is
+    # only populated when an LLM-backed classifier is wired.
     phrase_counts: dict[str, int] = {}
     for _, c in classified:
         for phrase in c.key_phrases:
@@ -140,18 +134,20 @@ def compute_snapshot(
     else:
         narrative_concentration = None
 
-    # Optional metrics gated on optional_inputs
     optional = optional_inputs or {}
-    put_call_ratio = optional.get("put_call_ratio")
-    short_interest_pressure = optional.get("short_interest_pressure")
-    institutional_retail_gap = optional.get("institutional_retail_gap")
-    event_sensitivity = optional.get("event_sensitivity")
+    put_call_ratio = _put_call_sentiment_ratio(optional.get("options_data"), sentiment_score)
+    short_interest_pressure = _short_interest_pressure(optional.get("short_interest"))
+    institutional_retail_gap = _institutional_retail_gap(
+        optional.get("institutional_holdings"), sentiment_score
+    )
+    event_sensitivity = _event_sensitivity(optional.get("historical_prices"))
 
     return MetricSnapshot(
         ticker=ticker,
         captured_at=captured_at,
         sentiment_score=sentiment_score,
         buzz_volume=buzz_volume,
+        buzz_count=buzz_count,
         sentiment_momentum=sentiment_momentum,
         bull_bear_ratio=bull_bear_ratio,
         buzz_sentiment_divergence=buzz_sentiment_divergence,
@@ -178,3 +174,83 @@ def _z_score(value: float, history: Sequence[float]) -> float:
     if stddev == 0:
         return 0.0
     return (value - mean) / stddev
+
+
+# ---------------------------------------------------------------------------
+# Optional metrics
+# ---------------------------------------------------------------------------
+
+
+def _put_call_sentiment_ratio(payload: Any, sentiment_score: float) -> float | None:
+    """Metric 8: Put/Call Sentiment Ratio. Returns None when the options
+    payload is missing or unusable. Formula: (puts / calls) * (1 - sentiment).
+
+    Expected payload shape: dict with `puts` + `calls` numeric volume.
+    """
+    if not isinstance(payload, dict):
+        return None
+    puts = payload.get("puts")
+    calls = payload.get("calls")
+    if not isinstance(puts, int | float) or not isinstance(calls, int | float):
+        return None
+    if calls <= 0:
+        return None
+    pc = float(puts) / float(calls)
+    return float(pc * (1.0 - sentiment_score))
+
+
+def _short_interest_pressure(payload: Any) -> float | None:
+    """Metric 9: Short Interest Pressure = short_pct_float * days_to_cover.
+    None when either field missing."""
+    if not isinstance(payload, dict):
+        return None
+    short_pct = payload.get("short_pct_float")
+    days = payload.get("days_to_cover")
+    if not isinstance(short_pct, int | float) or not isinstance(days, int | float):
+        return None
+    return float(short_pct) * float(days)
+
+
+def _institutional_retail_gap(payload: Any, sentiment_score: float) -> float | None:
+    """Metric 11: Institutional-Retail Gap = institutional_change_pct -
+    retail_sentiment. None when institutional change% missing."""
+    if not isinstance(payload, dict):
+        return None
+    inst_change = payload.get("change_pct")
+    if not isinstance(inst_change, int | float):
+        return None
+    return float(inst_change) - float(sentiment_score)
+
+
+def _event_sensitivity(payload: Any) -> float | None:
+    """Metric 12: Event Sensitivity Score over last 30 trading days.
+
+    Returns None on cold start (<30 daily samples). Spec page handles
+    the "Insufficient data (N/30 days)" message in the UI.
+
+    Computed as the std-dev of daily simple returns; expresses how
+    reactive price has been to news flow over the window.
+    """
+    if not isinstance(payload, list) or len(payload) < 30:
+        return None
+    closes: list[float] = []
+    for entry in payload[-30:]:
+        if isinstance(entry, dict):
+            close = entry.get("close") or entry.get("adjusted_close")
+        else:
+            close = entry
+        if not isinstance(close, int | float):
+            return None
+        closes.append(float(close))
+    if len(closes) < 30:
+        return None
+    returns: list[float] = []
+    for prev, cur in pairwise(closes):
+        if prev <= 0:
+            return None
+        returns.append((cur - prev) / prev)
+    if not returns:
+        return None
+    mean = sum(returns) / len(returns)
+    variance = sum((r - mean) ** 2 for r in returns) / len(returns)
+    return float(math.sqrt(variance))
