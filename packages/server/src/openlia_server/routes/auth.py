@@ -114,13 +114,20 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
             ip_address=ip,
         )
         _set_cookie(response, created.raw_token, persistent=False, secure=_cookie_secure())
-        return {"user_id": user.id, "email": user.email, "display_name": user.display_name}
+        return {
+            "user_id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "is_admin": user.is_admin,
+            "must_change_password": user.must_change_password,
+        }
 
     @router.post("/login")
     def login(
         body: LoginIn,
         request: Request,
         response: Response,
+        openlia_session: str | None = Cookie(default=None, alias=COOKIE_NAME),
         db: DBSession = Depends(session_dep),
     ):
         ip = _ip(request)
@@ -157,6 +164,13 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
                 status_code=_status_for(exc.code),
                 content={"code": exc.code, "message": str(exc)},
             )
+
+        # Session-fixation defense: revoke any cookie the caller arrived with
+        # before minting a new one. AccountManagementSpec §13.2.
+        if openlia_session:
+            prior = sessions.validate_session(db, openlia_session)
+            if prior is not None:
+                sessions.revoke_session(db, prior.session.id)
 
         created = sessions.create_session(
             db,
@@ -285,6 +299,10 @@ def _set_cookie(response: Response, raw_token: str, *, persistent: bool, secure:
     )
 
 
+# `must_change_password` is intentionally absent. It is a non-fatal flag on
+# /auth/login and /auth/session response bodies; the 403 enforcement lives in
+# `middleware.auth.build_require_active_user`, not in any AuthError raised
+# from this module.
 _STATUS_MAP = {
     "invalid_credentials": 401,
     "account_disabled": 403,
@@ -299,7 +317,6 @@ _STATUS_MAP = {
     "registration_failed": 400,
     "token_invalid": 400,
     "token_expired": 410,
-    "must_change_password": 200,
 }
 
 

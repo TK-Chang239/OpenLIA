@@ -50,3 +50,19 @@ def test_wizard_finalize_company_mode_seeds_invite_only(db_session: Session, cre
 
     row = db_session.execute(select(SignupPolicy)).scalar_one()
     assert row.mode == "invite_only"
+
+
+def test_mode_flip_does_not_overwrite_policy(db_session: Session, create_tables) -> None:
+    """A subsequent seed call with a different mode flag must not flip mode.
+
+    Phase 2 fix-plan P2-02-04 — guards against the personal→company env flip
+    silently opening registration. Mode changes belong to an explicit admin
+    action, not to a server restart with a new env var.
+    """
+    from openlia_server.services.auth import signup_policy
+
+    signup_policy.seed_signup_policy(db_session, mode_flag="personal")
+    signup_policy.seed_signup_policy(db_session, mode_flag="company")
+
+    row = db_session.execute(select(SignupPolicy)).scalar_one()
+    assert row.mode == "closed", "second seed with company flag must not overwrite"

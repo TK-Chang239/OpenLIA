@@ -96,6 +96,35 @@ class TestLockout:
         )
         assert result.user.email == "alice@example.com"
 
+    def test_lockout_emits_ordered_events(self, db_session, make_user, enable_lockout):
+        make_user()
+        # 5 wrong-password attempts: the 5th crosses the threshold and emits
+        # `account_locked` before the trailing `login_failure(wrong_password)`.
+        # The 6th attempt fails the locked-until check first and emits a
+        # `login_failure(locked)`.
+        for _ in range(6):
+            with pytest.raises(AuthError):
+                login.authenticate(db_session, email="alice@example.com", password="nope")
+
+        events = list(
+            db_session.execute(select(AuthEvent).order_by(AuthEvent.created_at)).scalars()
+        )
+        types = [e.event_type for e in events]
+
+        # Attempts 1-4: pure login_failure(wrong_password).
+        assert types[:4] == ["login_failure"] * 4
+        for ev in events[:4]:
+            assert (ev.event_metadata or {}).get("reason") == "wrong_password"
+
+        # Attempt 5 (threshold crossing): account_locked, then login_failure(wrong_password).
+        assert types[4] == "account_locked"
+        assert types[5] == "login_failure"
+        assert (events[5].event_metadata or {}).get("reason") == "wrong_password"
+
+        # Attempt 6: login_failure(locked) — locked check fires before password verify.
+        assert types[6] == "login_failure"
+        assert (events[6].event_metadata or {}).get("reason") == "locked"
+
     def test_success_resets_failure_counter(self, db_session, make_user, enable_lockout):
         u = make_user()
         for _ in range(3):
