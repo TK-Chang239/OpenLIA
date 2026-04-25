@@ -220,11 +220,23 @@ Router: `build_portfolio_router` mounted at `/portfolio`.
 
 Router: `build_repo_router` mounted at `/repo`.
 
-- `/repo/items` (GET, `require_auth` + owner scope) — list saved reports/files; accepts filter query params.
-- `/repo/items` (POST, `require_auth`) — save a generated report to the repo (idempotent via source_report_id).
-- `/repo/items` (DELETE, `require_auth`) — bulk unsave.
-- `/repo/facets` (GET, `require_auth`) — returns facet counts used by the Repo filter bar.
-- Test file: `packages/server/tests/test_routes_repo.py`. Additional E2E coverage: `test_e2e_smoke_matrix.py::test_journey_repo_save_open_unsave`.
+- `GET /repo/items` (`require_auth` + owner scope) — dual-shape response:
+  - When called with no filter args (legacy unfiltered call), returns flat `{ items: [{id, report_id, created_at}] }`.
+  - When called with any of the filter/sort/page args (or `filtered=true`), returns paginated
+    `{ items: RepoRowOut[], page, page_size, has_more }` where `RepoRowOut = {id, report_id, department, title, filename, generated_at, saved_at}`.
+  - Filter query params (all optional, all owner-scoped):
+    - `q` (string, case-insensitive `LIKE` on `Report.title`; empty string treated as no filter).
+    - `department` (repeatable + CSV; e.g. `?department=equity_research,secretary&department=earnings_update` deduped union).
+    - `generated_from`, `generated_to` (ISO date `YYYY-MM-DD`, inclusive on `Report.created_at`).
+    - `saved_from`, `saved_to` (ISO date, inclusive on `RepoItem.created_at`).
+    - `sort` (one of `saved_desc | saved_asc | generated_desc | generated_asc | department_asc | filename_asc`; default `saved_desc`; invalid → 422).
+    - `page` (>= 1; `page=0` → 422).
+    - `page_size` (1–200; >200 → 422; default 50).
+  - `saved_from > saved_to` returns empty list (not 422).
+- `POST /repo/items` (`require_auth`) — save a generated report (idempotent via `report_id`).
+- `DELETE /repo/items` (`require_auth`) — unsave a single report by `?report_id=…` (owner-scoped).
+- `GET /repo/facets` (`require_auth` + owner scope) — returns `{ departments: [{slug, count}], total }` used by the Repo filter bar; empty list for new users.
+- Test files: `packages/server/tests/test_routes/test_repo_filter_routes.py` (15 cases incl. negative + cross-user isolation), `test_repo_routes.py` (Plan 12 save/unsave coverage). Additional E2E coverage: `test_e2e_smoke_matrix.py::test_journey_repo_save_open_unsave`.
 
 ### Plan 23 — Packaging + production static serving
 
