@@ -86,12 +86,14 @@ Even though v1 is SQLite-only, every column type is chosen so a future Postgres 
 
 ### Timestamps
 
-Every mutable table carries:
+Every mutable table usually carries:
 
 - `created_at DateTime(timezone=True) NOT NULL DEFAULT now()`
 - `updated_at DateTime(timezone=True) NOT NULL DEFAULT now()` -- bumped by SQLAlchemy `onupdate=func.now()`.
 
 Append-only / event tables (`auth_events`, `llm_call_log`, etc.) carry only `created_at`.
+
+**Exemptions.** A handful of mutable tables omit `updated_at` when another column already carries the "last touched" signal. These are called out in §3/§7. Notable case: `sessions` uses `last_seen_at` in place of `updated_at`, so `updated_at` is intentionally absent from the `sessions` column list.
 
 ### Soft-delete policy
 
@@ -204,7 +206,7 @@ Multi-use, optionally-capped invite tokens. Admin creates; prospective users pre
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | `String(36)` | PK | |
-| `token` | `String(64)` | UNIQUE NOT NULL | URL-safe random string (32 bytes base64url). Stored in plaintext (bearer credential; looked up by value). |
+| `token_hash` | `String(64)` | UNIQUE NOT NULL | SHA-256 hex digest of the URL-safe random bearer token (32 bytes base64url, returned once to the creator and never persisted). Lookup is by `token_hash(presented_token)`. See §5 "Non-encrypted credential columns". |
 | `label` | `String(128)` | NULL | Admin-facing note ("Q2 hires", "contractors"). |
 | `created_by_user_id` | `String(36)` | FK `users.id` SET NULL | |
 | `created_at` | `DateTime(tz)` | NOT NULL | |
@@ -213,7 +215,7 @@ Multi-use, optionally-capped invite tokens. Admin creates; prospective users pre
 | `use_count` | `Integer` | NOT NULL DEFAULT `0` | Incremented atomically on successful registration. |
 | `revoked_at` | `DateTime(tz)` | NULL | Admin-revoked. Further registrations rejected. |
 
-**Indexes:** `uq_signup_invites_token`.
+**Indexes:** `uq_signup_invites_token_hash`.
 
 **Registration flow:**
 
@@ -444,7 +446,7 @@ Configured search backends for LLM runtime tool calls.
 - `users.password_hash` -- Argon2id hash (one-way).
 - `sessions.token_hash` -- SHA-256 (one-way).
 - `password_reset_requests.token_hash` -- SHA-256 (one-way).
-- `signup_invites.token` -- plaintext bearer token, looked up by value. Protected by randomness + admin revocation.
+- `signup_invites.token_hash` -- SHA-256 (one-way) of the opaque bearer token. Raw token shown to the creator once on issuance and never persisted. Protected by randomness + admin revocation.
 
 ### Env-var precedence
 
@@ -569,12 +571,27 @@ Generated reports saved to the user's repository.
 | `model_ref` | `String(128)` | NOT NULL | |
 | `token_usage` | `JSON` | NULL | Total token usage for the generation run. |
 | `generation_duration_ms` | `Integer` | NULL | Wall-clock time. |
-| `is_starred` | `Boolean` | NOT NULL DEFAULT `false` | |
-| `tags` | `JSON` | NOT NULL DEFAULT `[]` | User-applied string tags. Searchable via `json_each`. |
 | `created_at` | `DateTime(tz)` | NOT NULL | |
 | `updated_at` | `DateTime(tz)` | NOT NULL | |
 
 **Indexes:** `ix_reports_user_department`, `ix_reports_user_created` on `(user_id, created_at DESC)`, `ix_reports_subject`, `ix_reports_report_type`.
+
+**Starring / saved-to-repo signal:** originally modeled as `reports.is_starred` + `reports.tags`. Superseded by the `repo_items (user_id, report_id, created_at)` join table introduced in migration `2026-04-22-2200_repo_items_and_drop_legacy_report_cols.py`. Presence of a `repo_items` row means the user has saved the report to their Repository view; absence means not saved. User-applied tag strings were cut in the same migration (no v1 consumer depended on them). See §6 `repo_items` below.
+
+### `repo_items`
+
+Join table recording which reports a user has saved to their Repository view. Replaces the legacy `reports.is_starred` column.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `String(36)` | PK | |
+| `user_id` | `String(36)` | FK `users.id` CASCADE, NOT NULL | Saved-state belongs to the user; deleting the user drops their saves. |
+| `report_id` | `String(36)` | FK `reports.id` CASCADE, NOT NULL | Report deletion drops the save. |
+| `created_at` | `DateTime(tz)` | NOT NULL DEFAULT `now()` | When the user starred it. |
+
+**Unique constraint:** `uq_repo_items_user_report` on `(user_id, report_id)` -- one row per user/report.
+
+**Indexes:** `ix_repo_items_user_id_created_at` on `(user_id, created_at)` for the Repository "recent first" list.
 
 ### `report_versions`
 
@@ -653,7 +670,9 @@ Tracks setup wizard progress. Singleton row.
 |---|---|---|---|
 | `id` | `Integer` | PK CHECK `id = 1` | Enforced singleton. |
 | `status` | `String(32)` | NOT NULL DEFAULT `'not_started'` | `not_started`, `in_progress`, `completed`. |
-| `current_step` | `Integer` | NOT NULL DEFAULT `1` | Step the admin last completed (1-7). |
+| `current_step` | `String(32)` | NOT NULL DEFAULT `'mode'` | Slug of the step the admin is on (`mode`, `admin`, `llm`, `data`, `smtp`, `summary`, `done`). |
+| `completed_steps` | `JSON` | NOT NULL DEFAULT `[]` | Ordered list of completed step slugs. Drives the progress bar. |
+| `active_session_token` | `String(64)` | NULL | SHA-256 hex of the wizard's anti-replay session cookie. Cleared on completion or reset. |
 | `mode` | `String(16)` | NULL | `personal` or `company`. Set on step 1. |
 | `step_data` | `JSON` | NOT NULL DEFAULT `{}` | Per-step intermediate state. Cleared on completion. |
 | `started_at` | `DateTime(tz)` | NULL | |
@@ -664,7 +683,8 @@ Tracks setup wizard progress. Singleton row.
 
 - Seeded with `status = 'not_started'` on first startup.
 - `openlia serve` checks this on boot; if not completed, all non-wizard routes redirect.
-- `openlia wizard reset` CLI resets to `not_started`.
+- `openlia wizard reset` CLI resets to `not_started` and clears `active_session_token` + `completed_steps`.
+- Shape finalized by Plan 10 setup wizard. Original Plan 1a shape used an `Integer` `current_step` without the `completed_steps` / `active_session_token` columns; migration `2026-04-21-0001_reshape_wizard_state.py` flipped `current_step` to `String(32)` and added the two new columns, and `2026-04-22-1800_drop_wizard_state_legacy_columns.py` removed the vestigial integer column.
 
 ### `config_store`
 
@@ -731,9 +751,13 @@ Per-user state for Macro Research Dalio dashboards. One row per user per dashboa
 | `dashboard` | `String(32)` | NOT NULL | `debt_cycle`, `four_seasons`, `all_weather`, `world_order`, `five_forces`. |
 | `view_config` | `JSON` | NOT NULL DEFAULT `{}` | Saved view: selected country, time range, chart zoom, collapsed panels. |
 | `threshold_overrides` | `JSON` | NOT NULL DEFAULT `{}` | User-customized T1/T2 thresholds. Keys are indicator IDs. Empty = all defaults. |
+| `assessment_schedule` | `String(64)` | NULL | Cadence at which the background scheduler regenerates the T4/T5 assessment, stored as a 5-field cron expression (`'MIN HOUR DOM MON DOW'`) evaluated in UTC. Service-layer helpers also accept the shorthands `weekly`, `quarterly` and expand them to their canonical cron form before persisting. NULL = follow the global default for the dashboard. |
+| `last_assessment_at` | `DateTime(tz)` | NULL | UTC timestamp of the most recent successful assessment run. Used by catch-up logic to decide whether to regenerate on next scheduler tick. |
 | `updated_at` | `DateTime(tz)` | NOT NULL | |
 
 **Unique constraint:** `uq_mr_dashboard_user_dashboard` on `(user_id, dashboard)`.
+
+**Schedule columns.** `assessment_schedule` / `last_assessment_at` were added by migration `2026-04-24-0001_mr_dashboard_state_schedule_cols.py` to support the Macro-Research background-assessment loop. The enum is defined in `background-task-scheduling-design.md` §Department schedule tables.
 
 ### `mr_assessment_cache`
 
@@ -786,6 +810,28 @@ Point-in-time sentiment metric snapshots for historical trend view. Global (not 
 **Indexes:** `ix_rs_snapshots_ticker_captured` on `(ticker, captured_at DESC)`.
 
 **Notes:** Captured once per refresh cycle per ticker. 90-day retention (configurable via `config_store` key `rs.snapshot_retention_days`).
+
+### `rs_classification_log`
+
+Append-only audit trail of every retail-sentiment LLM classification request. Used to debug scoring regressions and to drive the v2 refresher/training pipeline.
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `String(36)` | PK | |
+| `ticker` | `String(16)` | NOT NULL | Normalized uppercase. |
+| `batch_id` | `String(36)` | NULL | Groups classifications produced by a single refresh pass. NULL if triggered ad-hoc. |
+| `classifier_version` | `String(32)` | NOT NULL | e.g. `rs-v1`, `rs-refreshing-v2`. |
+| `model_ref` | `String(128)` | NOT NULL | Provider/model the classifier called. |
+| `prompt_tokens` | `Integer` | NOT NULL DEFAULT `0` | |
+| `completion_tokens` | `Integer` | NOT NULL DEFAULT `0` | |
+| `classification` | `JSON` | NOT NULL | Raw structured output returned by the LLM. |
+| `latency_ms` | `Integer` | NULL | Wall-clock time for the classifier call. |
+| `error` | `Text` | NULL | Error string if the classification failed; row still written to preserve a complete audit. |
+| `created_at` | `DateTime(tz)` | NOT NULL DEFAULT `now()` | |
+
+**Indexes:** `ix_rs_classification_log_ticker_created` on `(ticker, created_at)`; `ix_rs_classification_log_batch` on `(batch_id)`.
+
+**Notes:** Added by migration `2026-04-24-0100_rs_classification_log.py` as the v2 follow-on to `retail-sentiment-dashboard-design.md`. Append-only; no user-facing delete path. Pruning is scoped to the nightly maintenance sweep (§7 below) once the retention policy is locked.
 
 ### `fe_saved_formulas`
 
@@ -907,8 +953,9 @@ Complete list of env vars introduced or affected by this design:
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `OPENLIA_DB_URL` | SQLAlchemy database URL | `sqlite:///~/.openlia/openlia.db` |
-| `OPENLIA_SECRET_KEY` | Base64-encoded 32-byte AES key for API key encryption | Falls back to `~/.openlia/secret.key` file |
+| `OPENLIA_HOME` | Filesystem root for the SQLite DB, uploads, and `secret.key`. `OPENLIA_DB_URL` and secret-key-file resolution fall back to `$OPENLIA_HOME/...` when unset. | `~/.openlia` |
+| `OPENLIA_DB_URL` | SQLAlchemy database URL | `sqlite:///$OPENLIA_HOME/openlia.db` |
+| `OPENLIA_SECRET_KEY` | Base64-encoded 32-byte AES key for API key encryption | Falls back to `$OPENLIA_HOME/secret.key` file |
 | `OPENLIA_TRUST_PROXY_HEADERS` | Trust `X-Forwarded-For` / `X-Forwarded-Proto` headers | `false` |
 | `OPENLIA_COOKIE_SECURE` | Set `Secure` flag on session cookie | `true` in company mode, `false` in personal |
 
@@ -918,7 +965,7 @@ Provider-specific env vars (e.g., `OPENAI_API_KEY`, `EODHD_API_KEY`) are read by
 
 ## 9. Table inventory
 
-29 tables total.
+40 tables total. This count matches `EXPECTED_TABLES` in `packages/server/tests/test_db/test_migrations.py` (single source of truth for the shipped schema). Rows 36-40 are owned by later phase plans (11/14/15/16) but land in the same Alembic migration chain, so they are listed here for completeness; their column definitions live in the owning plans, not in this spec.
 
 | # | Table | Section | Category |
 |---|---|---|---|
@@ -939,18 +986,29 @@ Provider-specific env vars (e.g., `OPENAI_API_KEY`, `EODHD_API_KEY`) are read by
 | 15 | `chat_attachments` | 6 | Content |
 | 16 | `reports` | 6 | Content |
 | 17 | `report_versions` | 6 | Content |
-| 18 | `portfolio_holdings` | 6 | Content |
-| 19 | `watchlists` | 6 | Content |
-| 20 | `watchlist_items` | 6 | Content |
-| 21 | `wizard_state` | 7 | Infrastructure |
-| 22 | `config_store` | 7 | Infrastructure |
-| 23 | `pt_user_configs` | 7 | Dashboard |
-| 24 | `pt_presets` | 7 | Dashboard |
-| 25 | `mr_dashboard_state` | 7 | Dashboard |
-| 26 | `mr_assessment_cache` | 7 | Dashboard |
-| 27 | `rs_user_config` | 7 | Dashboard |
-| 28 | `rs_snapshots` | 7 | Dashboard |
-| 29 | `fe_saved_formulas` | 7 | Dashboard |
+| 18 | `repo_items` | 6 | Content |
+| 19 | `portfolio_holdings` | 6 | Content |
+| 20 | `watchlists` | 6 | Content |
+| 21 | `watchlist_items` | 6 | Content |
+| 22 | `wizard_state` | 7 | Infrastructure |
+| 23 | `config_store` | 7 | Infrastructure |
+| 24 | `pt_user_configs` | 7 | Dashboard |
+| 25 | `pt_presets` | 7 | Dashboard |
+| 26 | `mr_dashboard_state` | 7 | Dashboard |
+| 27 | `mr_assessment_cache` | 7 | Dashboard |
+| 28 | `rs_user_config` | 7 | Dashboard |
+| 29 | `rs_snapshots` | 7 | Dashboard |
+| 30 | `rs_classification_log` | 7 | Dashboard (v2 follow-on) |
+| 31 | `fe_saved_formulas` | 7 | Dashboard |
+| 32 | `mb_schedules` | 7 | Scheduler |
+| 33 | `eu_schedules` | 7 | Scheduler |
+| 34 | `job_runs` | 7 | Scheduler |
+| 35 | `user_notifications` | 7 | Scheduler |
+| 36 | `user_prefs` | Plan 11 | User preferences |
+| 37 | `er_user_configs` | Plan 14 | Equity Research |
+| 38 | `eu_watchlist` | Plan 15 | Earnings Update |
+| 39 | `eu_user_configs` | Plan 15 | Earnings Update |
+| 40 | `mb_user_configs` | Plan 16 | Morning Briefing |
 
 ---
 

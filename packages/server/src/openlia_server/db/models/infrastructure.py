@@ -26,7 +26,13 @@ class WizardState(Base):
     active_session_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mode: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
-    __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+        CheckConstraint(
+            "status IN ('not_started', 'in_progress', 'completed')",
+            name="status_enum",
+        ),
+    )
 
 
 class ConfigStore(Base):

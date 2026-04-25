@@ -31,7 +31,10 @@ class User(Base, TimestampMixin):
     failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
-    __table_args__ = (Index("ix_users_locked_until", "locked_until"),)
+    __table_args__ = (
+        Index("ix_users_locked_until", "locked_until"),
+        CheckConstraint("failed_login_attempts >= 0", name="failed_login_attempts_nonneg"),
+    )
 
     sessions: Mapped[list[Session]] = relationship(
         "Session", back_populates="user", cascade="all, delete-orphan", passive_deletes=True
@@ -109,7 +112,13 @@ class SignupPolicy(Base):
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    __table_args__ = (CheckConstraint("id = 1", name="singleton"),)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="singleton"),
+        CheckConstraint(
+            "mode IN ('invite_only', 'closed', 'open')",
+            name="mode_enum",
+        ),
+    )
 
 
 class PasswordResetRequest(Base):

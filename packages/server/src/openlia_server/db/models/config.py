@@ -65,6 +65,10 @@ class LLMModel(Base, TimestampMixin):
             unique=True,
             sqlite_where=text("is_tier_default = 1"),
         ),
+        CheckConstraint(
+            "tier IN ('thinking', 'everyday', 'quick')",
+            name="tier_enum",
+        ),
     )
 
 
@@ -83,6 +87,13 @@ class UserLLMPreference(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "tier IN ('thinking', 'everyday', 'quick')",
+            name="tier_enum",
+        ),
     )
 
 
