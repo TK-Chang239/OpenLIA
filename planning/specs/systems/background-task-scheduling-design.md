@@ -217,7 +217,7 @@ Schedule storage lives in department-specific tables. The scheduler queries all 
 
 **`eu_schedules`** -- new table, mirrors `mb_schedules`. Columns: `id`, `user_id`, `time` (HH:MM), `timezone`, `days_of_week` (JSON array), `label`, `is_enabled`, `created_at`, `last_run_at`.
 
-**`mr_dashboard_state`** -- already defined in `database-design.md`. Assessment schedule column: `assessment_schedule` (enum: `weekly`, `quarterly`). `last_assessment_at` for catch-up logic.
+**`mr_dashboard_state`** -- already defined in `database-design.md`. Assessment schedule column: `assessment_schedule` stores a 5-field cron expression in UTC (shipped contract); service-layer helpers accept the shorthands `weekly` / `quarterly` and expand them to cron before persisting. `last_assessment_at` captures the most recent successful assessment for catch-up logic.
 
 No unified `scheduled_jobs` table. The scheduler queries the three department tables directly. This keeps schedule ownership with the department that defines it.
 

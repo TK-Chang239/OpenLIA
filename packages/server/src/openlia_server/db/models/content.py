@@ -1,3 +1,14 @@
+"""Plan 1a Content tables (`database-design.md` §6).
+
+Owns the chat session/message/attachment tables, the report + report_version
+pair, the `repo_items` saved-to-repository join table (added by Plan 12),
+portfolio holdings, and watchlists. See the spec for the full column list
+and FK/cascade contracts. Legacy `Report.is_starred` and `Report.tags`
+columns were dropped by migration
+`2026-04-22-2200_repo_items_and_drop_legacy_report_cols.py`; starring is now
+the presence of a `repo_items` row.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
