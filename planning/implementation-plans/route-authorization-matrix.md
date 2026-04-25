@@ -87,6 +87,22 @@ Per REM-P0-007:
 | `POST /auth/password-reset/consume` | public (token-authenticated) | n/a | — | Token validated in service; no session required. |
 | `POST /auth/change-password` | `require_auth` | **exempt (primary unblock path)** | — | Writes `must_change_password = false` on success. |
 
+#### `/auth/register` error codes
+
+Pinned by Phase 2 fix-plan P2-02-02. The register handler maps `services.auth` error codes to HTTP via `routes/auth.py::_STATUS_MAP`; this table freezes that mapping so a future "401 for all registration rejections" refactor is a conscious decision, not silent drift.
+
+| Code | HTTP | When |
+|---|---|---|
+| `weak_password` | 400 | Password fails `validate_password_policy` (`OPENLIA_PASSWORD_MIN_LENGTH`, default 8). |
+| `registration_failed` | 400 | Generic terminal error (e.g. duplicate email — intentionally non-specific so the response does not leak account existence). |
+| `signup_closed` | 403 | `signup_policy.mode = "closed"`. |
+| `invite_required` | 403 | Invite-only mode and `invite_token` is missing. |
+| `invite_invalid` | 403 | Invite token does not resolve, is revoked, expired, or capped. |
+| `email_domain_not_allowed` | 403 | `signup_policy.allowed_email_domains` is non-empty and the email's domain is not on the allowlist. |
+| `rate_limited` | 429 | `register_ip` window exceeded (5/hour per IP). |
+
+`must_change_password` is intentionally NOT in `_STATUS_MAP`: it is a non-fatal flag on the `/auth/login` and `/auth/session` response bodies, not an `AuthError` code. The 403 enforcement lives in `middleware.auth.build_require_active_user`.
+
 ### Admin router (`company` only)
 
 All routes: `require_admin`. Must-change-password: not exempt — an admin with a pending forced change cannot manage others until they change their own password.
