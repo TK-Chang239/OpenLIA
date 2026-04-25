@@ -72,13 +72,28 @@ def test_chat_error_includes_class_and_message() -> None:
 
 
 def test_chat_report_thumbnail_links_report_id() -> None:
-    e = ChatReportThumbnail(message_id="m_1", report_id="r_1", filename="report.pdf")
-    assert to_wire(e) == {
-        "type": "chat.report_thumbnail",
-        "message_id": "m_1",
-        "report_id": "r_1",
-        "filename": "report.pdf",
-    }
+    # NEW-5-01: `mode` is the canonical field; `filename` retained for FE
+    # backwards compatibility (deprecated).
+    e = ChatReportThumbnail(
+        message_id="m_1",
+        report_id="r_1",
+        mode="stock_initiation",
+        filename="report.pdf",
+    )
+    wire = to_wire(e)
+    assert wire["type"] == "chat.report_thumbnail"
+    assert wire["message_id"] == "m_1"
+    assert wire["report_id"] == "r_1"
+    assert wire["mode"] == "stock_initiation"
+    assert wire["filename"] == "report.pdf"
+
+
+def test_chat_report_thumbnail_filename_optional_for_backwards_compat() -> None:
+    # `filename` defaults to "" so callers can omit it.
+    e = ChatReportThumbnail(message_id="m_1", report_id="r_1", mode="earnings_update")
+    wire = to_wire(e)
+    assert wire["mode"] == "earnings_update"
+    assert wire["filename"] == ""
 
 
 def test_report_start_includes_section_titles() -> None:
@@ -121,14 +136,68 @@ def test_report_complete_carries_schema_payload() -> None:
 
 def test_report_error_wire_shape() -> None:
     e = ReportError(report_id="r_1", error_class="CapabilityError", message="Tools not supported")
-    assert to_wire(e) == {
-        "type": "report.error",
-        "report_id": "r_1",
-        "error_class": "CapabilityError",
-        "message": "Tools not supported",
-    }
+    wire = to_wire(e)
+    assert wire["type"] == "report.error"
+    assert wire["report_id"] == "r_1"
+    assert wire["error_class"] == "CapabilityError"
+    assert wire["message"] == "Tools not supported"
+    # P2-NEW-5-07: terminal events carry an ISO-8601 UTC timestamp.
+    assert "ts" in wire
+    assert wire["ts"].endswith("+00:00") or wire["ts"].endswith("Z")
 
 
 def test_to_wire_output_is_json_serializable() -> None:
     e = ReportComplete(report_id="r_1", schema={"title": "x", "sections": []})
     json.dumps(to_wire(e))  # must not raise
+
+
+def test_report_tool_call_carries_call_id() -> None:
+    """NEW-5-02: ReportToolCall carries call_id so the FE can correlate it
+    with a preceding report.tool_call.start event."""
+    e = ReportToolCall(
+        report_id="r_1",
+        tool_name="financial_statements",
+        summary="Fetched 10-K",
+        call_id="c_42",
+    )
+    wire = to_wire(e)
+    assert wire["call_id"] == "c_42"
+
+
+def test_report_tool_call_start_wire_shape() -> None:
+    """NEW-5-03: report.tool_call.start fired before dispatch carries call_id,
+    tool_name, and an args preview."""
+    from openlia.llm.runtime.events import ReportToolCallStart
+
+    e = ReportToolCallStart(
+        report_id="r_1",
+        call_id="c_42",
+        tool_name="stock_quote",
+        args_preview='{"symbol":"AAPL"}',
+    )
+    wire = to_wire(e)
+    assert wire["type"] == "report.tool_call.start"
+    assert wire["call_id"] == "c_42"
+    assert wire["tool_name"] == "stock_quote"
+    assert wire["args_preview"] == '{"symbol":"AAPL"}'
+
+
+def test_chat_done_includes_ts() -> None:
+    """P2-NEW-5-07: terminal ChatDone carries ISO-8601 UTC ts."""
+    e = ChatDone(message_id="m_1", stop_reason="complete")
+    wire = to_wire(e)
+    assert "ts" in wire
+    # ISO-8601 UTC ends with +00:00 (Python's datetime.isoformat) or Z.
+    assert wire["ts"].endswith("+00:00") or wire["ts"].endswith("Z")
+
+
+def test_chat_error_includes_ts() -> None:
+    e = ChatError(message_id="m_1", error_class="X", message="y")
+    wire = to_wire(e)
+    assert "ts" in wire
+
+
+def test_report_complete_includes_ts() -> None:
+    e = ReportComplete(report_id="r_1", schema={})
+    wire = to_wire(e)
+    assert "ts" in wire

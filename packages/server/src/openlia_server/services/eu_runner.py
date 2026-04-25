@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol
 
+from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, SseEvent
 from openlia.llm.runtime.messages import ReportRequest
 from openlia.reports.validator import validate_report_payload
@@ -30,6 +31,7 @@ class ReportRunnerLike(Protocol):
         department_id: str,
         user_id: str,
         request: ReportRequest,
+        cancel_token: CancellationToken | None = ...,
     ) -> AsyncIterator[SseEvent]: ...
 
 
@@ -39,6 +41,7 @@ async def run_on_demand(
     user_id: str,
     ticker: str,
     report_runner: ReportRunnerLike,
+    cancel_token: CancellationToken | None = None,
 ) -> AsyncIterator[SseEvent]:
     t = ticker.strip().upper()
     if not t:
@@ -59,6 +62,7 @@ async def run_on_demand(
         department_id="earnings_update",
         user_id=user_id,
         request=request,
+        cancel_token=cancel_token,
     ):
         yield event
         if isinstance(event, ReportComplete):

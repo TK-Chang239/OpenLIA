@@ -251,6 +251,78 @@ async def test_dispatch_extra_tool_echoes_arguments_into_structured() -> None:
     }
 
 
+async def test_find_more_data_budget_exhaustion_returns_ok_false() -> None:
+    """NEW-5-04: when `max_expansions` is reached, find_more_data returns
+    `ok=False, summary="expansion budget exhausted"` and the catalog is
+    never consulted."""
+
+    class _SpyDataDispatcher(FakeDataDispatcher):
+        find_more_data_calls: int = 0
+
+        async def find_more_data(self, *, department_id: str, description: str):
+            type(self).find_more_data_calls += 1
+            return {
+                "name": f"new_tool_{type(self).find_more_data_calls}",
+                "description": "added",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            }
+
+    data = _SpyDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    # Budget = 2 expansions for the department.
+    r1 = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c1", name="find_more_data", arguments={"description": "a"}),
+        max_expansions=2,
+    )
+    r2 = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c2", name="find_more_data", arguments={"description": "b"}),
+        max_expansions=2,
+    )
+    r3 = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c3", name="find_more_data", arguments={"description": "c"}),
+        max_expansions=2,
+    )
+    assert r1.ok is True
+    assert r2.ok is True
+    assert r3.ok is False
+    assert r3.summary == "expansion budget exhausted"
+    # Spy: catalog called twice (within budget); never on the third.
+    assert type(data).find_more_data_calls == 2
+
+
+async def test_find_more_data_budget_none_means_unlimited() -> None:
+    """NEW-5-04 — chat path: Secretary passes max_expansions=None, so the
+    budget never blocks the call."""
+
+    class _CountingDispatcher(FakeDataDispatcher):
+        catalog_calls: int = 0
+
+        async def find_more_data(self, *, department_id: str, description: str):
+            type(self).catalog_calls += 1
+            return None
+
+    data = _CountingDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    for i in range(50):
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id=f"c{i}", name="find_more_data", arguments={"description": "x"}),
+            max_expansions=None,
+        )
+        # All calls reach the catalog; none gets blocked.
+        assert "expansion budget exhausted" not in result.summary
+    assert type(data).catalog_calls == 50
+
+
 async def test_dispatch_known_data_tool_ignores_extra_tool_names() -> None:
     # Ensure extra_tool_names only diverts calls that actually match.
     data = FakeDataDispatcher(manifest=_MANIFEST, results={"stock_quote": {"symbol": "AAPL"}})
