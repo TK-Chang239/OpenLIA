@@ -575,3 +575,40 @@ async def test_run_retry_fires_original_schedule_as_one_shot(
     retry_key = f"{job_key(JobType.MB_BRIEFING, 'u_1')}:retry:run_failed"
     assert retry_key in scheduler.jobs
     assert isinstance(scheduler.jobs[retry_key].trigger, DateTrigger)
+
+
+@pytest.mark.asyncio
+async def test_run_now_dispatches_one_shot_with_pre_allocated_run_id(
+    session_factory,
+) -> None:
+    """NEW Phase 19 P1-05: scheduler.run_now schedules a one-shot DateTrigger
+    keyed to the pre-allocated job_runs id and forwards it via the args
+    tuple so the executor reuses the row."""
+    from apscheduler.triggers.date import DateTrigger
+
+    with session_factory() as s:
+        _seed_user(s)
+
+    scheduler = FakeAPScheduler()
+    svc = SchedulerService(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        settings=SchedulerSettings(enabled=True),
+    )
+    await svc.start()
+
+    await svc.run_now(
+        job_type=JobType.MR_ASSESSMENT,
+        user_id="u_1",
+        schedule_id="debt_cycle",
+        run_id="run-123",
+    )
+
+    expected_key = f"{job_key(JobType.MR_ASSESSMENT, 'u_1')}:run_now:run-123"
+    assert expected_key in scheduler.jobs
+    job = scheduler.jobs[expected_key]
+    assert isinstance(job.trigger, DateTrigger)
+    # Args carry job_type, user_id, schedule_id, run_id (4-tuple).
+    assert job.args[1] == "u_1"
+    assert job.args[2] == "debt_cycle"
+    assert job.args[3] == "run-123"

@@ -275,3 +275,54 @@ async def test_mr_batch_runner_transient_failure_retries_both_stages(
         assert s.get(JobRun, run_id).status == JobStatus.COMPLETED.value
         assert s.get(JobRun, run_id).attempt == 2
     assert len(batch.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_mr_executor_reuses_pre_allocated_run_id(session_factory) -> None:
+    """Phase 19 P1-05: an HTTP route that pre-allocates a job_runs row
+    must see the same id used by the executor (instead of a fresh row),
+    so the route's synchronously-returned id is the live row."""
+    from datetime import UTC, datetime
+
+    with session_factory() as s:
+        _seed(s)
+        s.add(
+            JobRun(
+                id="pre-allocated-id",
+                user_id="u_1",
+                job_type="mr_assessment",
+                schedule_id="debt_cycle",
+                status=JobStatus.RUNNING.value,
+                started_at=datetime.now(UTC),
+            )
+        )
+        s.commit()
+
+    builder = FakeMRBuilder(
+        items=[BatchItem(id="a", context={})],
+        synth=ReportRequest(mode="mr_synthesis", user_input="s"),
+    )
+    batch_runner = FakeBatchRunner(
+        results=[BatchResult(id="a", ok=True, data={"x": 1}, error=None)]
+    )
+    report_runner = FakeReportRunner(events=_t5_ok_events())
+    cache = FakeMRCacheStore(next_id="cache_yy")
+
+    ex = MRAssessmentExecutor(
+        session_factory=session_factory,
+        sleep=FakeSleep(),
+        mr_builder=builder,
+        batch_runner=batch_runner,
+        report_runner=report_runner,
+        mr_cache_store=cache,
+    )
+    returned = await ex.execute(user_id="u_1", schedule_id="debt_cycle", run_id="pre-allocated-id")
+    assert returned == "pre-allocated-id"
+
+    with session_factory() as s:
+        # Only one row was touched — the pre-allocated one transitioned to
+        # COMPLETED rather than a duplicate row being created.
+        rows = s.query(JobRun).all()
+        assert len(rows) == 1
+        assert rows[0].id == "pre-allocated-id"
+        assert rows[0].status == JobStatus.COMPLETED.value

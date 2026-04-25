@@ -58,3 +58,28 @@ def test_run_unknown_slug_raises(runner: MRRunner) -> None:
             portfolio=None,
             smart_mode=False,
         )
+
+
+def test_run_propagates_dashboard_service_errors() -> None:
+    """NEW-19-07: programming errors in dashboard_service must escape, not
+    be swallowed. Only IntegrityError (racy unique-constraint hit) is
+    silently retried.
+    """
+    data = FakeDataProvider(values={})
+    cache = MagicMock()
+    cache.read_latest.return_value = None
+    dashboard_svc = MagicMock()
+    dashboard_svc.get_or_create.side_effect = RuntimeError("boom")
+    runner = MRRunner(
+        data_provider=data,
+        cache_store=cache,
+        dashboard_service=dashboard_svc,
+        session_factory=MagicMock,
+    )
+    with pytest.raises(RuntimeError, match="boom"):
+        runner.run(
+            user_id="u-1",
+            dashboard_slug="debt_cycle",
+            portfolio=None,
+            smart_mode=False,
+        )

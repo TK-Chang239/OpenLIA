@@ -202,11 +202,13 @@ Endpoints: provider CRUD + model CRUD + `remote-models` discovery + department t
 
 | Route | Access | Owner scope | Must-change-password |
 |---|---|---|---|
-| `GET /departments/macro-research/dashboards` | `require_auth` | — (enumerates preset dashboards) | blocked |
-| `GET /departments/macro-research/dashboards/{slug}` | `require_auth` | snapshot derived per-user where applicable | blocked |
-| `GET/PUT /departments/macro-research/dashboards/{slug}/config` | `require_auth` | `MrDashboardConfig.user_id` | blocked |
-| `POST /departments/macro-research/dashboards/{slug}/assessment/run` | `require_auth` | writes `MrAssessmentRun.user_id = user.id` | blocked |
-| `GET/PUT/DELETE /departments/macro-research/schedule` | `require_auth` | `MrSchedule.user_id` | blocked |
+| `GET /departments/macro_research/dashboards` | `require_auth` | — (enumerates preset dashboards) | blocked |
+| `GET /departments/macro_research/dashboards/{slug}?smart_mode=<bool>` | `require_auth` | snapshot derived per-user; runner reads `MrDashboardState.user_id` | blocked |
+| `GET /departments/macro_research/dashboards/{slug}/config` | `require_auth` | `MrDashboardState.user_id` | blocked |
+| `PUT /departments/macro_research/dashboards/{slug}/config` | `require_auth` | `MrDashboardState.user_id` (writes view_config + threshold_overrides) | blocked |
+| `PUT /departments/macro_research/dashboards/{slug}/threshold-overrides` | `require_auth` | `MrDashboardState.user_id` (writes threshold_overrides only) | blocked |
+| `POST /departments/macro_research/dashboards/{slug}/assessment/run` | `require_auth` | writes `JobRun.user_id = user.id` and dispatches `MR_ASSESSMENT` via `app.state.scheduler.run_now` | blocked |
+| `GET/PUT/DELETE /departments/macro_research/schedule` | `require_auth` | `MrDashboardState.user_id` (canonical `world_order` row — see Phase 19 NEW-19-12) | blocked |
 
 ### Plan 20 — Retail Sentiment (shipped)
 
