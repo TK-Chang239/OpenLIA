@@ -1,6 +1,12 @@
-"""Report store service — validation + persistence + owner-scoped read."""
+"""Report store service — validation + persistence + owner-scoped read.
+
+Phase 13 NEW-13-03: validates against the canonical `ReportSchema`. Legacy
+`{heading, content}` section shape is no longer accepted.
+"""
 
 from __future__ import annotations
+
+from datetime import UTC, datetime
 
 import pytest
 from openlia_server.db.models.auth import User
@@ -9,12 +15,22 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 
-def _valid_schema() -> dict:
+def _valid_schema_dict() -> dict:
     return {
-        "title": "AAPL Q3 Update",
+        "schema_version": "1.0",
+        "department": "secretary",
+        "generated_at": datetime(2026, 4, 24, tzinfo=UTC).isoformat(),
+        "cover": {
+            "title": "AAPL Q3 Update",
+            "subtitle": "FY2026",
+            "tagline": "Strong quarter.",
+        },
         "sections": [
-            {"heading": "Summary", "content": "Revenue up 10%."},
-            {"heading": "Risks", "content": "FX exposure."},
+            {
+                "id": "summary",
+                "title": "Summary",
+                "blocks": [{"type": "text", "content": "Revenue up 10%."}],
+            }
         ],
     }
 
@@ -29,7 +45,8 @@ def _seed_user(db_session: Session, uid: str = "u1") -> User:
 def test_validate_report_schema_accepts_canonical_shape(create_tables) -> None:
     from openlia_server.services import reports as svc
 
-    svc.validate_report_schema(_valid_schema())
+    parsed = svc.validate_report_schema(_valid_schema_dict())
+    assert parsed.cover.title == "AAPL Q3 Update"
 
 
 @pytest.mark.parametrize(
@@ -38,12 +55,12 @@ def test_validate_report_schema_accepts_canonical_shape(create_tables) -> None:
         {},
         {"sections": []},
         {"title": "t"},
-        {"title": 5, "sections": []},
-        {"title": "t", "sections": "not-a-list"},
-        {"title": "t", "sections": [{"heading": "h"}]},
-        {"title": "t", "sections": [{"content": "c"}]},
-        {"title": "t", "sections": [{"heading": 3, "content": "c"}]},
-        {"title": "t", "sections": [{"heading": "h", "content": None}]},
+        {
+            "schema_version": "1.0",
+            "department": "secretary",
+            "cover": {"title": "t", "subtitle": "s", "tagline": "x"},
+            "sections": "not-a-list",
+        },
     ],
 )
 def test_validate_report_schema_rejects_malformed(create_tables, schema) -> None:
@@ -59,14 +76,14 @@ def test_save_report_persists_and_round_trips_structured_content(
     from openlia_server.services import reports as svc
 
     _seed_user(db_session)
-    schema = _valid_schema()
+    schema = _valid_schema_dict()
 
     report = svc.save_report(
         db_session,
         user_id="u1",
         department="secretary",
         report_type="chat_summary",
-        title=schema["title"],
+        title=schema["cover"]["title"],
         subject=None,
         content_markdown="# AAPL",
         content_structured=schema,
@@ -95,7 +112,7 @@ def test_save_report_rejects_invalid_schema_without_writing(
             title="t",
             subject=None,
             content_markdown="x",
-            content_structured={"title": "t"},  # missing sections
+            content_structured={"title": "t"},  # missing required fields
             model_ref="gpt-4o",
         )
     db_session.rollback()
@@ -114,7 +131,7 @@ def test_get_report_for_user_returns_owner_row(create_tables, db_session: Sessio
         title="t",
         subject=None,
         content_markdown="x",
-        content_structured=_valid_schema(),
+        content_structured=_valid_schema_dict(),
         model_ref="gpt-4o",
     )
     db_session.commit()
@@ -137,7 +154,7 @@ def test_get_report_for_user_returns_none_for_non_owner(create_tables, db_sessio
         title="t",
         subject=None,
         content_markdown="x",
-        content_structured=_valid_schema(),
+        content_structured=_valid_schema_dict(),
         model_ref="gpt-4o",
     )
     db_session.commit()

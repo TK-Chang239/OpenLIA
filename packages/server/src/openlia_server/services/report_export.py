@@ -41,12 +41,32 @@ async def export_report_pdf(
     *,
     header_html: str | None = None,
     footer_html: str | None = None,
+    bundle_url: str | None = None,
+    cookies: list[dict[str, Any]] | None = None,
 ) -> bytes:
+    """Render a report HTML body to PDF bytes via Playwright.
+
+    Two paths:
+      - When `bundle_url` is provided: navigate the page to that URL with
+        `wait_until="networkidle"`. Use this for the SPA-driven flow where
+        the React `ReportRenderer` mounts and ECharts renders real vector
+        graphics. Optional `cookies` are forwarded so the SPA can call
+        `/api/reports/:id` against the protected backend.
+      - Otherwise: use `page.set_content(html)`. This is the static-fallback
+        path that ships chart titles, tables, and metric cards baked into
+        the HTML — used by tests and any environment where the SPA bundle
+        isn't reachable.
+    """
     browser = await launcher.browser()
     context = await browser.new_context()
     try:
+        if cookies:
+            await context.add_cookies(cookies)
         page = await context.new_page()
-        await page.set_content(html, wait_until="networkidle")
+        if bundle_url is not None:
+            await page.goto(bundle_url, wait_until="networkidle")
+        else:
+            await page.set_content(html, wait_until="networkidle")
         kwargs: dict[str, Any] = {
             "format": "A4",
             "margin": {"top": "20mm", "bottom": "25mm", "left": "20mm", "right": "20mm"},

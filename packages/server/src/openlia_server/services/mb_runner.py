@@ -3,7 +3,7 @@
 Wraps `ReportRunner.run()` with MB-specific defaults:
 - Builds a `ReportRequest` via `MbRequestBuilderImpl` (config + portfolio).
 - Forwards every SSE event to the caller.
-- Persists the report on `ReportComplete` via `report_store.create_report`
+- Persists the report on `ReportComplete` via `reports.create_report`
   and yields a synthetic `ReportSavedEvent` per README pattern #3.
 """
 
@@ -19,13 +19,13 @@ from openlia.llm.runtime.messages import ReportRequest
 from openlia.reports.validator import validate_report_payload
 from sqlalchemy.orm import Session
 
-from openlia_server.services import report_store
+from openlia_server.services import reports as reports_svc
 from openlia_server.services.mb_request_builder import MbRequestBuilderImpl
 
 
 @dataclass(frozen=True)
 class ReportSavedEvent:
-    """Terminal event emitted after the report is persisted by report_store.
+    """Terminal event emitted after the report is persisted by reports service.
 
     Mirrors README pattern #3: `report.saved {report_id}`.
     """
@@ -70,7 +70,7 @@ async def run_on_demand(
         return
 
     schema_obj = validate_report_payload(last_complete.schema)
-    report_id = report_store.create_report(
+    report_id = reports_svc.create_report(
         session,
         user_id=user_id,
         department="morning_briefing",

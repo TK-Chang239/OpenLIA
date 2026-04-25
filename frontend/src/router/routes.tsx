@@ -20,6 +20,7 @@ import MorningBriefing from "../pages/departments/MorningBriefing";
 import RetailSentiment from "../pages/departments/RetailSentiment";
 import MacroResearch from "../pages/departments/MacroResearch";
 import PanicThermometer from "../pages/departments/PanicThermometer";
+import ReportPrintPage from "../pages/ReportPrintPage";
 
 function SecretaryRoute() {
   const { user } = useAuth();
@@ -39,6 +40,10 @@ export const routes: RouteObject[] = [
       { path: "/forgot-password", element: <ForgotPasswordPage /> },
       { path: "/reset-password", element: <ResetPasswordPage /> },
       { path: "/setup", element: <SetupPage /> },
+      // Full-bleed print/PDF page. No AppShell so backgrounds/margins are
+      // controlled by the print stylesheet, and so the body of the page
+      // can be paginated by Playwright/browser print engines cleanly.
+      { path: "/reports/:id/render", element: <ReportPrintPage /> },
       {
         element: (
           <ProtectedRoute>

@@ -9,7 +9,7 @@ from openlia.reports.schema import (
     Section,
     TextBlock,
 )
-from openlia_server.services.report_store import (
+from openlia_server.services.reports import (
     ReportNotFoundError,
     create_report,
     get_report,
