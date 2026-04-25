@@ -109,9 +109,17 @@ class DataProvider(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="financial", server_default="financial"
+    )
+    mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="api_key", server_default="api_key"
+    )
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     env_var_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mcp_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    mcp_auth_header: Mapped[str | None] = mapped_column(Text, nullable=True)
     extra_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by_user_id: Mapped[str | None] = mapped_column(
@@ -121,6 +129,15 @@ class DataProvider(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_data_providers_kind", "kind"),
         Index("ix_data_providers_is_enabled", "is_enabled"),
+        Index("ix_data_providers_category", "category"),
+        CheckConstraint(
+            "category IN ('financial', 'news', 'social_media', 'search')",
+            name="ck_data_providers_category",
+        ),
+        CheckConstraint(
+            "mode IN ('api_key', 'mcp')",
+            name="ck_data_providers_mode",
+        ),
     )
 
 

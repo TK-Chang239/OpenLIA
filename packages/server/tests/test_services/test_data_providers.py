@@ -198,20 +198,27 @@ def test_auto_map_populates_mappings_for_every_basic_and_advanced_type(
     )
     summary = svc.auto_map(db_session, manifest=load_manifest())
     # EODHDAdapter declares stock_quote, historical_prices, company_profile,
-    # company_news — all four should be mapped for equity_research.
+    # company_news, company_fundamentals (P0-3-04).
     covered = {m.requirement_type for m in summary.mapped}
-    assert {"stock_quote", "historical_prices", "company_profile", "company_news"} <= covered
-    # Every mapping points to the sole provider we just created
+    assert {
+        "stock_quote",
+        "historical_prices",
+        "company_profile",
+        "company_news",
+        "company_fundamentals",
+    } <= covered
     assert all(m.provider_id == p.id for m in summary.mapped)
-    # stock_grade / insider_transactions / company_fundamentals not covered
+    # stock_grade / insider_transactions remain unmet (no adapter covers them yet).
     unmet_types = {u.requirement_type for u in summary.unmet}
     assert {"stock_grade", "insider_transactions"} <= unmet_types
+    assert "company_fundamentals" not in unmet_types
 
 
-def test_auto_map_uses_admin_set_priorities_as_tie_break(db_session) -> None:
+def test_auto_map_first_match_wins(db_session) -> None:
+    """Per P0-3-03, only the highest-priority capable provider is mapped per
+    requirement. Runners-up are NOT recorded as mapping rows."""
     from openlia.data.manifest import load_manifest
 
-    # Create two EODHD-kind providers. The one with lower priority wins.
     a = svc.create_provider(
         db_session,
         kind="eodhd",
@@ -232,9 +239,209 @@ def test_auto_map_uses_admin_set_priorities_as_tie_break(db_session) -> None:
     )
     svc.set_provider_default_priority(db_session, provider_id=a.id, priority=50)
     svc.set_provider_default_priority(db_session, provider_id=b.id, priority=10)
-    svc.auto_map(db_session, manifest=load_manifest())
+    summary = svc.auto_map(db_session, manifest=load_manifest())
+
+    # Provider B (priority 10) wins; A is NOT mapped.
+    assert all(m.provider_id == b.id for m in summary.mapped)
+    # Each (requirement_type, provider_id) pair appears at most once.
+    pairs = {(m.requirement_type, m.provider_id) for m in summary.mapped}
+    assert len(pairs) == len(summary.mapped)
 
     entries = svc.load_entries_for_capability(db_session, capability="stock_quote")
-    # Provider B (priority 10) comes before A (priority 50)
+    assert len(entries) == 1
     assert entries[0].id == b.id
-    assert entries[1].id == a.id
+
+
+def test_auto_map_is_idempotent(db_session) -> None:
+    from openlia.data.manifest import load_manifest
+
+    svc.create_provider(
+        db_session,
+        kind="eodhd",
+        label="E",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://eodhd.com/api",
+    )
+    s1 = svc.auto_map(db_session, manifest=load_manifest())
+    s2 = svc.auto_map(db_session, manifest=load_manifest())
+    pairs1 = {(m.requirement_type, m.provider_id) for m in s1.mapped}
+    pairs2 = {(m.requirement_type, m.provider_id) for m in s2.mapped}
+    assert pairs1 == pairs2
+
+
+# ---------- P0-3-01 / P0-3-02 / P1-3-09 ----------
+
+
+def test_create_provider_persists_category(db_session) -> None:
+    created = svc.create_provider(
+        db_session,
+        kind="newsapi_org",
+        label="N",
+        category=ProviderCategory.NEWS,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://newsapi.org/v2",
+    )
+    row = db_session.get(DataProvider, created.id)
+    assert row.category == "news"
+    assert row.mode == "api_key"
+
+
+def test_row_to_entry_uses_db_category_for_unknown_kinds(db_session) -> None:
+    """If row.kind has no adapter, the category MUST come from the DB column,
+    not from a fallback to FINANCIAL."""
+    created = svc.create_provider(
+        db_session,
+        kind="newsapi_ai",
+        label="N",
+        category=ProviderCategory.NEWS,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://newsapi.ai",
+    )
+    # Force kind to a value with no adapter.
+    row = db_session.get(DataProvider, created.id)
+    row.kind = "no-such-adapter"
+    db_session.flush()
+    entry = svc.load_provider_entry(db_session, created.id, priority=100)
+    assert entry.category is ProviderCategory.NEWS
+
+
+def test_create_mcp_provider_roundtrips(db_session) -> None:
+    created = svc.create_provider(
+        db_session,
+        kind="eodhd",
+        label="EODHD-MCP",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.MCP,
+        mcp_url="https://mcp.eodhd.test/sse",
+        mcp_auth_header="Bearer token",
+    )
+    row = db_session.get(DataProvider, created.id)
+    assert row.mode == "mcp"
+    assert row.mcp_url == "https://mcp.eodhd.test/sse"
+    assert row.mcp_auth_header == "Bearer token"
+    entry = svc.load_provider_entry(db_session, created.id, priority=10)
+    assert entry.mode is ProviderMode.MCP
+    assert entry.mcp_url == "https://mcp.eodhd.test/sse"
+
+
+def test_create_mcp_provider_without_mcp_url_raises(db_session) -> None:
+    with pytest.raises(ValueError, match="mcp_url"):
+        svc.create_provider(
+            db_session,
+            kind="eodhd",
+            label="bad",
+            category=ProviderCategory.FINANCIAL,
+            mode=ProviderMode.MCP,
+        )
+
+
+# ---------- P1-3-05 ----------
+
+
+def test_create_provider_accepts_fmp_newsapi_search_kinds(db_session) -> None:
+    for kind, category in (
+        ("fmp", ProviderCategory.FINANCIAL),
+        ("finnhub", ProviderCategory.FINANCIAL),
+        ("yfinance", ProviderCategory.FINANCIAL),
+        ("newsapi_ai", ProviderCategory.NEWS),
+        ("newsapi_org", ProviderCategory.NEWS),
+        ("mediastack", ProviderCategory.NEWS),
+    ):
+        created = svc.create_provider(
+            db_session,
+            kind=kind,
+            label=kind.upper(),
+            category=category,
+            mode=ProviderMode.API_KEY,
+            api_key="k",
+            base_url=f"https://{kind}.test",
+        )
+        row = db_session.get(DataProvider, created.id)
+        assert row.kind == kind
+        assert row.category == category.value
+
+
+def test_provider_category_enum_includes_search() -> None:
+    assert ProviderCategory.SEARCH.value == "search"
+
+
+# ---------- P1-3-10 ----------
+
+
+def test_load_entries_for_capability_skips_disabled_provider(db_session) -> None:
+    a = svc.create_provider(
+        db_session,
+        kind="eodhd",
+        label="A",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://eodhd.com/api",
+    )
+    b = svc.create_provider(
+        db_session,
+        kind="eodhd",
+        label="B",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://eodhd.com/api",
+    )
+    svc.set_requirement_mapping(
+        db_session, requirement_type="stock_quote", provider_id=a.id, priority=10
+    )
+    svc.set_requirement_mapping(
+        db_session, requirement_type="stock_quote", provider_id=b.id, priority=20
+    )
+    svc.update_provider(db_session, a.id, is_enabled=False)
+    entries = svc.load_entries_for_capability(db_session, capability="stock_quote")
+    assert [e.id for e in entries] == [b.id]
+
+
+# ---------- P1-3-11 ----------
+
+
+def test_set_provider_default_priority_rejects_negative(db_session) -> None:
+    created = svc.create_provider(
+        db_session,
+        kind="eodhd",
+        label="x",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://eodhd.com/api",
+    )
+    with pytest.raises(ValueError):
+        svc.set_provider_default_priority(db_session, provider_id=created.id, priority=-1)
+
+
+# ---------- list_providers_by_category ----------
+
+
+def test_list_providers_by_category(db_session) -> None:
+    svc.create_provider(
+        db_session,
+        kind="eodhd",
+        label="E",
+        category=ProviderCategory.FINANCIAL,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://eodhd.com/api",
+    )
+    svc.create_provider(
+        db_session,
+        kind="newsapi_org",
+        label="N",
+        category=ProviderCategory.NEWS,
+        mode=ProviderMode.API_KEY,
+        api_key="k",
+        base_url="https://newsapi.org/v2",
+    )
+    fin = svc.list_providers_by_category(db_session, category=ProviderCategory.FINANCIAL)
+    news = svc.list_providers_by_category(db_session, category=ProviderCategory.NEWS)
+    assert {r.kind for r in fin} == {"eodhd"}
+    assert {r.kind for r in news} == {"newsapi_org"}
