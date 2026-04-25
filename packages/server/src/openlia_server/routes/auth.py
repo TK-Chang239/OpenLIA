@@ -26,7 +26,7 @@ from openlia_server.services.auth.errors import AuthError
 class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)
-    display_name: str = Field(min_length=1, max_length=128)
+    display_name: str | None = Field(default=None, max_length=128)
     invite_token: str | None = None
 
 
@@ -156,7 +156,8 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
                 status_code=423,
                 content={
                     "code": "account_locked",
-                    "retry_after_seconds": exc.retry_after_seconds,
+                    "message": "Account is temporarily locked.",
+                    "metadata": {"retry_after_seconds": exc.retry_after_seconds},
                 },
             )
         except AuthError as exc:

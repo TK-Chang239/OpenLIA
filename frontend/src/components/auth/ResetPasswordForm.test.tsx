@@ -74,4 +74,67 @@ describe("ResetPasswordForm", () => {
       expect(screen.getByRole("alert").textContent).toMatch(/expired or has already been used/i),
     );
   });
+
+  it("wires aria-describedby on confirm input when mismatched", async () => {
+    renderForm();
+    fireEvent.change(screen.getByLabelText("New Password"), {
+      target: { value: "Abcdefg1!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), {
+      target: { value: "Different1!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /reset password/i }));
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("Confirm New Password") as HTMLInputElement).getAttribute(
+          "aria-describedby",
+        ),
+      ).toBe("confirm-error"),
+    );
+  });
+
+  it("renders offline banner on TypeError", async () => {
+    global.fetch = vi
+      .fn()
+      .mockRejectedValue(new TypeError("Failed to fetch")) as unknown as typeof fetch;
+    renderForm();
+    fireEvent.change(screen.getByLabelText("New Password"), {
+      target: { value: "Abcdefg1!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), {
+      target: { value: "Abcdefg1!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /reset password/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(
+        /Can't reach the server/,
+      ),
+    );
+  });
+
+  it("toggles aria-busy on submit during request", async () => {
+    let resolveCall: (resp: Response) => void = () => undefined;
+    global.fetch = vi.fn().mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveCall = resolve;
+        }),
+    ) as unknown as typeof fetch;
+    renderForm();
+    fireEvent.change(screen.getByLabelText("New Password"), {
+      target: { value: "Abcdefg1!" },
+    });
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), {
+      target: { value: "Abcdefg1!" },
+    });
+    const button = screen.getByRole("button", { name: /reset password/i });
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(button.getAttribute("aria-busy")).toBe("true"),
+    );
+    resolveCall(new Response(null, { status: 204 }));
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(/password updated/i),
+    );
+  });
 });

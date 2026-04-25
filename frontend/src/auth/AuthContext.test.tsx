@@ -197,6 +197,53 @@ describe("AuthProvider", () => {
     expect(result.current.mustChangePassword).toBe(true);
   });
 
+  it("logout() then refresh() on 401 clears mustChangePassword", async () => {
+    let callIdx = 0;
+    global.fetch = vi.fn().mockImplementation(() => {
+      callIdx += 1;
+      // 1st call: initial getSession returns must_change_password=true
+      if (callIdx === 1) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              user_id: "u1",
+              email: "a@x.com",
+              is_admin: false,
+              must_change_password: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      // 2nd call: logout returns 204
+      if (callIdx === 2) {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      // Subsequent: getSession returns 401
+      return Promise.resolve(new Response(null, { status: 401 }));
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useAuth(), {
+      wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
+    });
+
+    await waitFor(() => expect(result.current.status).toBe("authenticated"));
+    expect(result.current.mustChangePassword).toBe(true);
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    expect(result.current.mustChangePassword).toBe(false);
+    expect(result.current.status).toBe("unauthenticated");
+
+    // Now an explicit refresh resolving 401 keeps the flag cleared.
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.mustChangePassword).toBe(false);
+    expect(result.current.status).toBe("unauthenticated");
+  });
+
   it("clearMustChangePassword() resets the flag", async () => {
     global.fetch = vi
       .fn()
