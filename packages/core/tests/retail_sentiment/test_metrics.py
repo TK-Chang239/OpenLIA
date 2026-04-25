@@ -64,7 +64,10 @@ def test_mixed_sentiment_scores():
     )
     # 2 bullish + 1 bearish in 3 posts: (1 + 1 - 1)/3 = 0.333...
     assert abs(snap.sentiment_score - (1 / 3)) < 1e-9
-    assert snap.buzz_volume == 3.0
+    assert snap.buzz_count == 3.0
+    # buzz_volume is the spec-defined ratio (count / 30d-mean); cold-start
+    # baseline = 1.0 when there are posts but no prior history.
+    assert snap.buzz_volume == 1.0
     assert snap.bull_bear_ratio == 2.0
     assert snap.narrative_concentration is not None
     assert "social_media" in snap.source_breakdown

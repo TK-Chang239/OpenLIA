@@ -21,6 +21,7 @@ from openlia_server.db.models.dashboard import MrDashboardState
 from openlia_server.db.models.scheduler import (
     EuSchedule,
     MbSchedule,
+    RsSchedule,
 )
 from openlia_server.scheduler.executors.base import BaseExecutor, SessionFactory
 from openlia_server.scheduler.recovery import (
@@ -84,6 +85,7 @@ class SchedulerService:
             }
             mb_rows = session.query(MbSchedule).filter(MbSchedule.is_enabled.is_(True)).all()
             eu_rows = session.query(EuSchedule).filter(EuSchedule.is_enabled.is_(True)).all()
+            rs_rows = session.query(RsSchedule).filter(RsSchedule.is_enabled.is_(True)).all()
 
         for row in mb_rows:
             if row.user_id not in enabled_user_ids:
@@ -96,6 +98,14 @@ class SchedulerService:
                 continue
             await self._register_schedule(job_type=JobType.EU_SCAN, schedule=row)
             await self._maybe_backfill(job_type=JobType.EU_SCAN, schedule=row)
+
+        for row in rs_rows:
+            if row.user_id not in enabled_user_ids:
+                continue
+            if JobType.RS_SNAPSHOT not in self.executors:
+                continue
+            await self._register_schedule(job_type=JobType.RS_SNAPSHOT, schedule=row)
+            await self._maybe_backfill(job_type=JobType.RS_SNAPSHOT, schedule=row)
 
     async def shutdown(self) -> None:
         """Cancel all in-flight jobs, wait up to `shutdown_grace_seconds`
@@ -117,7 +127,9 @@ class SchedulerService:
     # Hot-reload API (called by route handlers)
     # ------------------------------------------------------------
 
-    async def add_schedule(self, schedule: MbSchedule | EuSchedule | MrDashboardState) -> None:
+    async def add_schedule(
+        self, schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState
+    ) -> None:
         job_type = self._job_type_for(schedule)
         if job_type not in self.executors:
             raise RuntimeError(f"no executor registered for job_type={job_type.value!r}")
@@ -125,7 +137,9 @@ class SchedulerService:
             raise ValueError("assessment_schedule must be set before registering an MR schedule")
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
-    async def modify_schedule(self, schedule: MbSchedule | EuSchedule | MrDashboardState) -> None:
+    async def modify_schedule(
+        self, schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState
+    ) -> None:
         job_type = self._job_type_for(schedule)
         if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
             raise ValueError("assessment_schedule must be set before modifying an MR schedule")
@@ -199,7 +213,12 @@ class SchedulerService:
             executor._mr_cache_store = cache_store
 
     async def remove_all_for_user(self, user_id: str) -> None:
-        for jt in (JobType.MB_BRIEFING, JobType.EU_SCAN, JobType.MR_ASSESSMENT):
+        for jt in (
+            JobType.MB_BRIEFING,
+            JobType.EU_SCAN,
+            JobType.MR_ASSESSMENT,
+            JobType.RS_SNAPSHOT,
+        ):
             try:
                 await self.scheduler.remove_schedule(job_key(jt, user_id))
             except Exception:
@@ -254,7 +273,7 @@ class SchedulerService:
         self,
         *,
         job_type: JobType,
-        schedule: MbSchedule | EuSchedule | MrDashboardState,
+        schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState,
     ) -> None:
         trigger = self._cron_trigger_for(schedule)
         # MR executor uses the dashboard slug in the schedule_id slot so it
@@ -288,7 +307,7 @@ class SchedulerService:
         self,
         *,
         job_type: JobType,
-        schedule: MbSchedule | EuSchedule,
+        schedule: MbSchedule | EuSchedule | RsSchedule,
     ) -> None:
         cron = self._cron_expression_for(schedule)
         if not should_catch_up(
@@ -313,12 +332,14 @@ class SchedulerService:
 
     @staticmethod
     def _job_type_for(
-        schedule: MbSchedule | EuSchedule | MrDashboardState,
+        schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState,
     ) -> JobType:
         if isinstance(schedule, MbSchedule):
             return JobType.MB_BRIEFING
         if isinstance(schedule, EuSchedule):
             return JobType.EU_SCAN
+        if isinstance(schedule, RsSchedule):
+            return JobType.RS_SNAPSHOT
         if isinstance(schedule, MrDashboardState):
             return JobType.MR_ASSESSMENT
         raise TypeError(f"unknown schedule type: {type(schedule).__name__}")
@@ -346,7 +367,7 @@ class SchedulerService:
 
     @staticmethod
     def _cron_trigger_for(
-        schedule: MbSchedule | EuSchedule | MrDashboardState,
+        schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState,
     ) -> CronTrigger:
         if isinstance(schedule, MrDashboardState):
             if not schedule.assessment_schedule:
@@ -367,7 +388,7 @@ class SchedulerService:
 
     @staticmethod
     def _cron_expression_for(
-        schedule: MbSchedule | EuSchedule | MrDashboardState,
+        schedule: MbSchedule | EuSchedule | RsSchedule | MrDashboardState,
     ) -> str:
         """croniter-compatible 5-field string. Used only by should_catch_up."""
         if isinstance(schedule, MrDashboardState):

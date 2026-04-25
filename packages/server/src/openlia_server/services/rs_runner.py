@@ -1,8 +1,8 @@
 """Retail Sentiment pipeline orchestrator.
 
 Fetches raw posts, produces classifications (via an injected classifier),
-computes the metric snapshot, and persists it. Also detects spikes from
-recent history and returns them alongside the snapshot.
+computes the metric snapshot, persists it, and (when a Quick-tier model
+is configured) synthesizes a narrative paragraph for the Insights tab.
 
 Classifiers return a `BatchClassifyResult` (items + audits). For the
 LLM-backed classifier each LLM call emits one `ClassificationAudit`,
@@ -12,7 +12,8 @@ stub emits no audits (no LLM call was made).
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import asyncio
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -24,6 +25,7 @@ from openlia.retail_sentiment.schemas import (
     ClassifiedItem,
     MetricSnapshot,
     RawSocialPost,
+    SignalAlert,
     SpikeEvent,
 )
 from openlia.retail_sentiment.spike_detector import detect_spike
@@ -41,6 +43,13 @@ class _Classifier(Protocol):
     def classify_batch(
         self, *, ticker: str, posts: Sequence[RawSocialPost]
     ) -> BatchClassifyResult: ...
+
+
+# Optional sync wrapper around the async narrative-synthesis call.
+NarrativeSynthesizer = Callable[
+    [MetricSnapshot, Sequence[SignalAlert]],
+    Awaitable[str | None],
+]
 
 
 class NeutralClassifier:
@@ -71,6 +80,14 @@ class RsRunResult:
     spike: SpikeEvent | None
 
 
+_OPTIONAL_REQUIREMENTS: tuple[str, ...] = (
+    "options_data",
+    "short_interest",
+    "institutional_holdings",
+    "historical_prices",
+)
+
+
 class RsRunner:
     def __init__(
         self,
@@ -80,6 +97,7 @@ class RsRunner:
         classifier: _Classifier | None = None,
         snapshot_service: RsSnapshotService | None = None,
         classification_log_service: RsClassificationLogService | None = None,
+        narrative_synthesizer: NarrativeSynthesizer | None = None,
     ) -> None:
         self._factory = session_factory
         self._data = data_provider
@@ -88,6 +106,7 @@ class RsRunner:
         self._classification_log = classification_log_service or RsClassificationLogService(
             session_factory=session_factory
         )
+        self._narrative_synthesizer = narrative_synthesizer
 
     def _fetch_posts(self, ticker: str) -> list[RawSocialPost]:
         if self._data is None:
@@ -103,8 +122,22 @@ class RsRunner:
             posts.extend(_coerce_posts(raw, ticker=ticker, source=requirement))
         return posts
 
+    def _fetch_optional(self, ticker: str) -> dict[str, Any]:
+        if self._data is None:
+            return {}
+        out: dict[str, Any] = {}
+        for requirement in _OPTIONAL_REQUIREMENTS:
+            try:
+                raw = self._data.fetch(requirement=requirement, ticker=ticker)
+            except Exception:
+                raw = None
+            if raw is not None:
+                out[requirement] = raw
+        return out
+
     def run_ticker(self, ticker: str) -> RsRunResult:
         posts = self._fetch_posts(ticker)
+        optional = self._fetch_optional(ticker)
         result = self._classifier.classify_batch(ticker=ticker, posts=posts)
         for audit in result.audits:
             self._classification_log.insert(audit)
@@ -116,7 +149,14 @@ class RsRunner:
             posts=posts,
             classifications=result.items,
             prior_snapshots=prior,
+            optional_inputs=optional or None,
         )
+
+        if self._narrative_synthesizer is not None:
+            narrative = self._run_narrative(snap, signals=())
+            if narrative:
+                snap = snap.model_copy(update={"narrative": narrative})
+
         snap_id = self._snapshots.write(snap)
         spike = detect_spike(
             ticker=ticker,
@@ -128,6 +168,20 @@ class RsRunner:
 
     def run_many(self, tickers: Sequence[str]) -> list[RsRunResult]:
         return [self.run_ticker(t) for t in tickers]
+
+    def _run_narrative(
+        self,
+        snap: MetricSnapshot,
+        *,
+        signals: Sequence[SignalAlert],
+    ) -> str | None:
+        synth = self._narrative_synthesizer
+        if synth is None:
+            return None
+        try:
+            return asyncio.run(synth(snap, signals))
+        except Exception:
+            return None
 
 
 def _coerce_posts(raw: Any, *, ticker: str, source: str) -> list[RawSocialPost]:
