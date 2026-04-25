@@ -61,6 +61,7 @@ The Earnings Updates page uses a **two-section stacked layout** within the main 
 | Background | `--color-bg-base` |
 | Border | 1px bottom, `--color-border-subtle` |
 | Page title | "Earnings Updates" — `text-xl font-semibold text-[--color-text-primary]`, `pl-6` |
+| Settings icon | Right of header (left of On-Demand button); 18px `Settings` icon; `text-[--color-text-secondary] hover:text-[--color-text-primary] p-1`; opens the Report Settings modal (mirrors Morning Briefing's Settings entry — see "Page Settings" below) |
 | On-Demand Report button | `pr-6`; `Plus` icon (16px) + "On-Demand Report" label; `bg-[--color-accent-primary] text-white text-sm px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover]`; opens On-Demand modal |
 
 ---
@@ -202,7 +203,7 @@ When a new automated earnings report is generated, the "Earnings Updates" nav it
 | Mobile (<768px) | Watchlist scrolls horizontally; report rows hide date column; Cabinet view is full-screen |
 
 ## Page Settings
-In the settings page for SR, changeable settings are avaliable as below:
+In the settings page for EU, changeable settings are avaliable as below:
 1. Report Sections: Allows the user to select what sections the user wants to be included in the report. Default sections are included for the user to check or uncheck.
 2. Custom Sections: There is also a custom button that allows users to add custom sections. The custom button opens up another pop-up that allows user to input a name for their custom section as well as a description box for what the section should be about.
 3. Length Adjuster: Allows user to choose the length of reports, such as concise, normal, or ellaborative.

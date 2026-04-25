@@ -73,5 +73,6 @@ async def run_on_demand(
                 department="earnings_update",
                 mode="earnings_analysis",
                 schema=schema,
+                subject=t,
             )
             session.commit()

@@ -63,7 +63,7 @@ merged.
 | 12 | Shared Chat Components              | Done        | 100%      | RESOLVED                  | ~~`Department` union covers 2 of 7; targeted vitest gaps~~ — closed via Phase 12 fix-plan (P1-02, P2-16, NEW-12-01..21); 7-dept union, drawer search/scope/archive, markdown+code highlighting, inline thumbnails, FileViewer focus+scroll preservation, idempotent SaveToRepo, AbortController POST SSE, auto-titles |
 | 13 | Report Pipeline & Secretary         | Done        | 100%      | RESOLVED                  | ~~Secretary HTTP route never created; PDF block renderer field-name bugs~~ — closed via Phase 13 fix-plan (P0-01, P1-01, NEW-13-01..10); Secretary SSE route + chat-runner shipped, PDF block renderer fixed, SPA print route + ReportPrintPage, services/report_store.py deleted, save_report_to_repo tool |
 | 14 | Equity Research                     | Done        | 100%      | RESOLVED                  | ~~Active layout split-panel; POST /chat drops session_id~~ — closed via Phase 14 fix-plan (P1-03, NEW-14-01..09); single-column layout + inline ReportCard, DOCX export, per-section streaming events, retry button, save-to-repo from card |
-| 15 | Earnings Update                     | Done        | ~78%      | IMPLEMENTER               | `/schedules` route absent; `EarningsUpdatePage.tsx` absent                   |
+| 15 | Earnings Update                     | Done        | 100%      | RESOLVED                  | ~~/schedules route absent; duplicate impls; Cabinet remove stub~~ — closed via Phase 15 fix-plan (P0-02, NEW-15-01..19); /schedules consolidated into EU router with 422 validation, Cabinet DELETE, Overdue/New/Empty/Error/Skeleton states, search+filter, OnDemand CheckCircle, mobile responsive, framework parity, cascade delete |
 | 16 | Morning Briefing                    | Done        | ~82%      | IMPLEMENTER               | `mb_user_configs` migration absent; prompt/builder JSON-blob mismatch        |
 | 17 | Formula Engine                      | Done        | 100%      | RESOLVED                  | ~~Plan vs design spec describe materially different DSLs~~ — closed via Phase 17 fix-plan (NEW-17-00..16); Option A (plan wins, additive spec amendment); reserved scalars + ruleset + streak moved into engine; pt_runner private helpers deleted |
 | 18 | Panic Thermometer                   | Done        | ~72%      | DEFERRED + IMPLEMENTER    | 5 drill-down dashboards + rule editor deferred; server tests missed          |
@@ -640,7 +640,7 @@ instead of all 1,000+.
 | 12 | ~~[phase-12-shared-chat-components.md](./fix-plans/phase-12-shared-chat-components.md)~~ | 100% | RESOLVED (fix/phase-12-shared-chat-components) |
 | 13 | ~~[phase-13-report-pipeline-secretary.md](./fix-plans/phase-13-report-pipeline-secretary.md)~~ | 100% | RESOLVED (fix/phase-13-report-pipeline-secretary) |
 | 14 | ~~[phase-14-equity-research.md](./fix-plans/phase-14-equity-research.md)~~ | 100% | RESOLVED (fix/phase-14-equity-research) |
-| 15 | [phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md) | ~78% | IMPLEMENTER |
+| 15 | ~~[phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md)~~ | 100% | RESOLVED (fix/phase-15-earnings-update) |
 | 16 | [phase-16-morning-briefing.md](./fix-plans/phase-16-morning-briefing.md) | ~82% | mixed |
 | 17 | ~~[phase-17-formula-engine.md](./fix-plans/phase-17-formula-engine.md)~~ | 100% | RESOLVED (fix/phase-17-formula-engine) |
 | 18 | [phase-18-panic-thermometer.md](./fix-plans/phase-18-panic-thermometer.md) | ~72% | DEFERRED + IMPLEMENTER |
