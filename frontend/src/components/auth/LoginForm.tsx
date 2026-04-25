@@ -2,13 +2,17 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
+import { mapTransportError } from "../../api/errors";
 import { useAuth } from "../../auth/AuthContext";
 import { Banner, type BannerVariant } from "../primitives/Banner";
 import { FormField } from "../primitives/FormField";
 import { PasswordInput } from "../primitives/PasswordInput";
 
+export type SignupPolicyMode = "open" | "invite_only" | "closed";
+
 export interface LoginFormProps {
   inviteToken?: string;
+  policyMode?: SignupPolicyMode;
 }
 
 interface FormState {
@@ -32,7 +36,7 @@ interface ServerError {
   metadata?: Record<string, unknown>;
 }
 
-export function LoginForm({ inviteToken }: LoginFormProps) {
+export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
   const { login } = useAuth();
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -80,18 +84,23 @@ export function LoginForm({ inviteToken }: LoginFormProps) {
 
   function handleError(err: unknown) {
     if (!(err instanceof ApiError)) {
-      setBanner({
-        message: "Unexpected error. Please try again.",
-        variant: "error",
-      });
+      setBanner(mapTransportError(err));
+      return;
+    }
+    if (err.status === 0 || err.status >= 500) {
+      setBanner(mapTransportError(err));
       return;
     }
     const body = (err.body as ServerError | null) ?? {};
     if (body.code === "account_locked") {
-      setBanner({
-        message: body.message ?? "Account is temporarily locked.",
-        variant: "warning",
-      });
+      const retryRaw = body.metadata?.retry_after_seconds;
+      const seconds = typeof retryRaw === "number" ? retryRaw : 0;
+      const minutes = Math.max(1, Math.ceil(seconds / 60));
+      const banner =
+        seconds > 0
+          ? `Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`
+          : (body.message ?? "Account is temporarily locked.");
+      setBanner({ message: banner, variant: "warning" });
       return;
     }
     if (body.code === "rate_limited") {
@@ -123,6 +132,7 @@ export function LoginForm({ inviteToken }: LoginFormProps) {
           value={form.email}
           onChange={(e) => update("email", e.target.value)}
           disabled={submitting}
+          aria-describedby={fieldErrors.email ? "email-error" : undefined}
           className={`w-full h-10 rounded-md border bg-bg-input px-3 text-sm text-text-primary placeholder:text-text-tertiary outline-none transition-colors duration-fast ${
             fieldErrors.email
               ? "border-feedback-error ring-2 ring-feedback-error/20"
@@ -139,6 +149,7 @@ export function LoginForm({ inviteToken }: LoginFormProps) {
           autoComplete="current-password"
           hasError={Boolean(fieldErrors.password)}
           disabled={submitting}
+          describedBy={fieldErrors.password ? "password-error" : undefined}
         />
       </FormField>
 
@@ -181,7 +192,7 @@ export function LoginForm({ inviteToken }: LoginFormProps) {
         </Link>
       </div>
 
-      {inviteToken && (
+      {inviteToken && policyMode !== "closed" && (
         <p className="mt-6 text-sm text-text-secondary text-center">
           Don&apos;t have an account?{" "}
           <Link

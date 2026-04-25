@@ -9,6 +9,7 @@ export interface PasswordInputProps {
   placeholder?: string;
   hasError?: boolean;
   disabled?: boolean;
+  describedBy?: string;
 }
 
 export function PasswordInput({
@@ -19,6 +20,7 @@ export function PasswordInput({
   placeholder,
   hasError = false,
   disabled = false,
+  describedBy,
 }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
   const borderClass = hasError
@@ -36,6 +38,7 @@ export function PasswordInput({
         autoComplete={autoComplete}
         placeholder={placeholder}
         disabled={disabled}
+        aria-describedby={describedBy}
         className={`w-full h-10 rounded-md bg-bg-input px-3 pr-10 text-sm text-text-primary placeholder:text-text-tertiary outline-none transition-colors duration-fast border ${borderClass}`}
       />
       <button

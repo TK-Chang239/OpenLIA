@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { changePassword } from "../../api/auth";
 import { ApiError } from "../../api/client";
+import { mapTransportError } from "../../api/errors";
 import { useAuth } from "../../auth/AuthContext";
 import { Banner, type BannerVariant } from "../primitives/Banner";
 import { FormField } from "../primitives/FormField";
@@ -57,20 +58,21 @@ export function MustChangePasswordForm() {
       await refresh();
     } catch (err) {
       if (err instanceof ApiError) {
-        const body = (err.body as ServerError | null) ?? {};
-        if (body.field) {
-          setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+        if (err.status === 0 || err.status >= 500) {
+          setBanner(mapTransportError(err));
         } else {
-          setBanner({
-            message: body.message ?? "Password change failed.",
-            variant: "error",
-          });
+          const body = (err.body as ServerError | null) ?? {};
+          if (body.field) {
+            setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+          } else {
+            setBanner({
+              message: body.message ?? "Password change failed.",
+              variant: "error",
+            });
+          }
         }
       } else {
-        setBanner({
-          message: "Unexpected error. Please try again.",
-          variant: "error",
-        });
+        setBanner(mapTransportError(err));
       }
     } finally {
       setSubmitting(false);
@@ -97,6 +99,11 @@ export function MustChangePasswordForm() {
           autoComplete="current-password"
           hasError={Boolean(fieldErrors.current_password)}
           disabled={submitting}
+          describedBy={
+            fieldErrors.current_password
+              ? "current_password-error"
+              : undefined
+          }
         />
       </FormField>
 
@@ -112,6 +119,9 @@ export function MustChangePasswordForm() {
           autoComplete="new-password"
           hasError={Boolean(fieldErrors.new_password)}
           disabled={submitting}
+          describedBy={
+            fieldErrors.new_password ? "new_password-error" : undefined
+          }
         />
         <PasswordStrengthMeter value={newPw} />
       </FormField>
@@ -128,6 +138,7 @@ export function MustChangePasswordForm() {
           autoComplete="new-password"
           hasError={Boolean(fieldErrors.confirm)}
           disabled={submitting}
+          describedBy={fieldErrors.confirm ? "confirm-error" : undefined}
         />
       </FormField>
 

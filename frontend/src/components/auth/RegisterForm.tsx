@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { register } from "../../api/auth";
 import { ApiError } from "../../api/client";
+import { mapTransportError } from "../../api/errors";
 import { useAuth } from "../../auth/AuthContext";
 import { Banner, type BannerVariant } from "../primitives/Banner";
 import { FormField } from "../primitives/FormField";
@@ -96,10 +97,11 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
 
   function handleError(err: unknown) {
     if (!(err instanceof ApiError)) {
-      setBanner({
-        message: "Unexpected error. Please try again.",
-        variant: "error",
-      });
+      setBanner(mapTransportError(err));
+      return;
+    }
+    if (err.status === 0 || err.status >= 500) {
+      setBanner(mapTransportError(err));
       return;
     }
     const body = (err.body as ServerError | null) ?? {};
@@ -138,6 +140,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
           value={form.email}
           onChange={(e) => update("email", e.target.value)}
           disabled={submitting}
+          aria-describedby={fieldErrors.email ? "email-error" : undefined}
           className={`w-full h-10 rounded-md border bg-bg-input px-3 text-sm text-text-primary placeholder:text-text-tertiary outline-none transition-colors duration-fast ${
             fieldErrors.email
               ? "border-feedback-error ring-2 ring-feedback-error/20"
@@ -154,6 +157,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
           autoComplete="new-password"
           hasError={Boolean(fieldErrors.password)}
           disabled={submitting}
+          describedBy={fieldErrors.password ? "password-error" : undefined}
         />
         <PasswordStrengthMeter value={form.password} />
       </FormField>
@@ -170,6 +174,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
           autoComplete="new-password"
           hasError={Boolean(fieldErrors.confirm)}
           disabled={submitting}
+          describedBy={fieldErrors.confirm ? "confirm-error" : undefined}
         />
       </FormField>
 
