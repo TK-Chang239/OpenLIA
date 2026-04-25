@@ -44,7 +44,7 @@ describe('settings api', () => {
     });
   });
 
-  it('GET /settings/admin/llm/preferences returns preferences map', async () => {
+  it('GET /settings/models/preferences returns preferences map', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ preferences: { thinking: 'gpt-4o' } }),
@@ -53,20 +53,20 @@ describe('settings api', () => {
     expect(prefs.preferences.thinking).toBe('gpt-4o');
   });
 
-  it('PUT /settings/admin/llm/preferences with tier+model_id body', async () => {
+  it('PUT /settings/models/preferences/{tier} with model_id body', async () => {
     (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
     await putModelPreference('quick', 'gpt-4o-mini');
     const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/admin/llm/preferences');
+    expect(url).toBe('/api/settings/models/preferences/quick');
     expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ tier: 'quick', model_id: 'gpt-4o-mini' });
+    expect(JSON.parse(init.body)).toEqual({ model_id: 'gpt-4o-mini' });
   });
 
-  it('DELETE /settings/admin/llm/preferences/{tier}', async () => {
+  it('DELETE /settings/models/preferences/{tier}', async () => {
     (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
     await deleteModelPreference('quick');
     const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/admin/llm/preferences/quick');
+    expect(url).toBe('/api/settings/models/preferences/quick');
     expect(init.method).toBe('DELETE');
   });
 });

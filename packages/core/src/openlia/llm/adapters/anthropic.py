@@ -12,6 +12,7 @@ from openlia.llm.adapters._http import (
 )
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.retry import with_retries
 from openlia.llm.types import (
     LLMChunk,
     LLMRequest,
@@ -37,26 +38,29 @@ class AnthropicAdapter(LLMProvider):
         }
 
     async def list_models(self) -> list[ModelInfo]:
-        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
-            try:
-                resp = await client.get("/v1/models")
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            data = resp.json()
-            return [
-                ModelInfo(
-                    id=item["id"],
-                    display_name=item.get("display_name") or item["id"],
-                    context_window=item.get("context_window"),
-                )
-                for item in data.get("data", [])
-            ]
+        async def _call() -> list[ModelInfo]:
+            async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+                try:
+                    resp = await client.get("/v1/models")
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                data = resp.json()
+                return [
+                    ModelInfo(
+                        id=item["id"],
+                        display_name=item.get("display_name") or item["id"],
+                        context_window=item.get("context_window"),
+                    )
+                    for item in data.get("data", [])
+                ]
+
+        return await with_retries(_call)
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload: dict = {
@@ -79,18 +83,21 @@ class AnthropicAdapter(LLMProvider):
                 for t in request.tools
             ]
 
-        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
-            try:
-                resp = await client.post("/v1/messages", json=payload)
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            body = resp.json()
+        async def _post() -> dict:
+            async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+                try:
+                    resp = await client.post("/v1/messages", json=payload)
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                return resp.json()
+
+        body = await with_retries(_post)
 
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []

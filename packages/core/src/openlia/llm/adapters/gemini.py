@@ -12,6 +12,7 @@ from openlia.llm.adapters._http import (
 )
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.retry import with_retries
 from openlia.llm.types import (
     LLMChunk,
     LLMRequest,
@@ -35,30 +36,33 @@ class GeminiAdapter(LLMProvider):
         return {"key": self.credentials.api_key or ""}
 
     async def list_models(self) -> list[ModelInfo]:
-        async with make_client(base_url=_BASE_URL) as client:
-            try:
-                resp = await client.get("/v1beta/models", params=self._query())
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            data = resp.json()
-            out: list[ModelInfo] = []
-            for item in data.get("models", []):
-                name = item.get("name", "")
-                short_id = name.split("/", 1)[1] if "/" in name else name
-                out.append(
-                    ModelInfo(
-                        id=short_id,
-                        display_name=item.get("displayName") or short_id,
-                        context_window=item.get("inputTokenLimit"),
+        async def _call() -> list[ModelInfo]:
+            async with make_client(base_url=_BASE_URL) as client:
+                try:
+                    resp = await client.get("/v1beta/models", params=self._query())
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
                     )
-                )
-            return out
+                data = resp.json()
+                out: list[ModelInfo] = []
+                for item in data.get("models", []):
+                    name = item.get("name", "")
+                    short_id = name.split("/", 1)[1] if "/" in name else name
+                    out.append(
+                        ModelInfo(
+                            id=short_id,
+                            display_name=item.get("displayName") or short_id,
+                            context_window=item.get("inputTokenLimit"),
+                        )
+                    )
+                return out
+
+        return await with_retries(_call)
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload: dict = {
@@ -89,18 +93,22 @@ class GeminiAdapter(LLMProvider):
             ]
 
         path = f"/v1beta/models/{self.model}:generateContent"
-        async with make_client(base_url=_BASE_URL) as client:
-            try:
-                resp = await client.post(path, params=self._query(), json=payload)
-            except httpx.HTTPError as exc:
-                raise wrap_httpx_error(exc) from exc
-            if resp.status_code != 200:
-                status_to_exception(
-                    status_code=resp.status_code,
-                    body_text=resp.text,
-                    headers=dict(resp.headers),
-                )
-            body = resp.json()
+
+        async def _post() -> dict:
+            async with make_client(base_url=_BASE_URL) as client:
+                try:
+                    resp = await client.post(path, params=self._query(), json=payload)
+                except httpx.HTTPError as exc:
+                    raise wrap_httpx_error(exc) from exc
+                if resp.status_code != 200:
+                    status_to_exception(
+                        status_code=resp.status_code,
+                        body_text=resp.text,
+                        headers=dict(resp.headers),
+                    )
+                return resp.json()
+
+        body = await with_retries(_post)
 
         candidate = (body.get("candidates") or [{}])[0]
         parts = (candidate.get("content") or {}).get("parts") or []

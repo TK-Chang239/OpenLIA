@@ -342,7 +342,8 @@ class _ProviderIn(BaseModel):
     env_var_name: str | None = None
     extra_config: dict | None = None
     is_enabled: bool = True
-    run_test: bool = False
+    run_test: bool = True
+    skip_reason: str | None = None
     test_model: str | None = None
 
 
@@ -366,6 +367,8 @@ class _ProviderUpdate(BaseModel):
     env_var_name: str | None = None
     extra_config: dict | None = None
     is_enabled: bool | None = None
+    clear_api_key: bool = False
+    clear_env_var_name: bool = False
 
 
 class _ModelIn(BaseModel):
@@ -376,6 +379,7 @@ class _ModelIn(BaseModel):
     is_tier_default: bool = False
     is_enabled: bool = True
     overrides: dict | None = None
+    advertised_capabilities: dict | None = None
 
 
 class _ModelOut(BaseModel):
@@ -515,6 +519,11 @@ def build_llm_providers_admin_router(
                         "test": test_result.model_dump(),
                     },
                 )
+        elif not payload.skip_reason:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"error": "run_test=false requires skip_reason"},
+            )
         created = llm_svc.create_provider(
             db,
             kind=payload.kind,
@@ -535,16 +544,23 @@ def build_llm_providers_admin_router(
         _=require_admin,
         db: DBSession = Depends(session_dep),
     ) -> _ProviderOut:
+        unchanged = llm_svc.UNCHANGED
+
+        def _maybe(value, *, clear_flag: bool = False):
+            if clear_flag:
+                return None
+            return unchanged if value is None else value
+
         try:
             llm_svc.update_provider(
                 db,
                 provider_id,
-                label=payload.label,
-                api_key=payload.api_key,
-                base_url=payload.base_url,
-                env_var_name=payload.env_var_name,
-                extra_config=payload.extra_config,
-                is_enabled=payload.is_enabled,
+                label=_maybe(payload.label),
+                api_key=_maybe(payload.api_key, clear_flag=payload.clear_api_key),
+                base_url=_maybe(payload.base_url),
+                env_var_name=_maybe(payload.env_var_name, clear_flag=payload.clear_env_var_name),
+                extra_config=_maybe(payload.extra_config),
+                is_enabled=_maybe(payload.is_enabled),
             )
         except llm_svc.ProviderNotFoundError as exc:
             raise HTTPException(
@@ -594,12 +610,12 @@ def build_llm_providers_admin_router(
             for m in llm_svc.list_models_for_provider(db, provider_id)
         ]
 
-    @router.get("/providers/{provider_id}/remote-models", response_model=list[dict])
+    @router.get("/providers/{provider_id}/remote-models")
     async def remote_models(
         provider_id: str,
         _=require_admin,
         db: DBSession = Depends(session_dep),
-    ) -> list[dict]:
+    ) -> dict | list[dict]:
         try:
             row = llm_svc.get_provider(db, provider_id)
         except llm_svc.ProviderNotFoundError as exc:
@@ -607,6 +623,8 @@ def build_llm_providers_admin_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "provider not found"},
             ) from exc
+        if row.kind in ("openrouter", "ollama"):
+            return {"skipped": True, "reason": "manual entry"}
         api_key = llm_svc.get_provider_api_key(db, provider_id)
         adapter = build_adapter(
             kind=row.kind,
@@ -633,7 +651,7 @@ def build_llm_providers_admin_router(
         from openlia_server.db.models.config import LLMModel
 
         try:
-            llm_svc.get_provider(db, payload.provider_id)
+            provider_row = llm_svc.get_provider(db, payload.provider_id)
         except llm_svc.ProviderNotFoundError as exc:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -649,6 +667,13 @@ def build_llm_providers_admin_router(
             is_enabled=payload.is_enabled,
             overrides=payload.overrides,
         )
+        if provider_row.kind == "openai_compat" and payload.advertised_capabilities is not None:
+            llm_svc.set_capability_override(
+                db,
+                provider_kind="openai_compat",
+                model=payload.model_ref,
+                override=payload.advertised_capabilities,
+            )
         m = db.get(LLMModel, created.id)
         return _ModelOut(
             id=m.id,
@@ -674,6 +699,9 @@ def build_llm_providers_admin_router(
             llm_svc.update_model(
                 db,
                 model_id,
+                provider_id=payload.provider_id,
+                tier=payload.tier,
+                model_ref=payload.model_ref,
                 display_name=payload.display_name,
                 is_tier_default=payload.is_tier_default,
                 is_enabled=payload.is_enabled,

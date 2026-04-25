@@ -216,7 +216,7 @@ def test_journey_provider_crud(db_session, monkeypatch, make_user) -> None:
     # Empty to start.
     assert client.get("/settings/admin/llm/providers").json() == []
 
-    # Create — run_test=False so no network is required.
+    # Create — run_test=False with skip_reason so no network is required.
     create = client.post(
         "/settings/admin/llm/providers",
         json={
@@ -224,6 +224,7 @@ def test_journey_provider_crud(db_session, monkeypatch, make_user) -> None:
             "label": "Main OpenAI",
             "api_key": "sk-test",
             "run_test": False,
+            "skip_reason": "smoke_test_no_network",
         },
     )
     assert create.status_code == 201
