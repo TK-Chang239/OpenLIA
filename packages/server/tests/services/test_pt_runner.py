@@ -110,6 +110,40 @@ def test_runner_disabled_panel_returns_disabled_status(db_session, user):
     assert payload.panels["oil"]["status"] == "disabled"
 
 
+def test_level_transition_inserts_trigger_event(db_session, user):
+    from openlia_server.db.models.dashboard import PtTriggerEvent
+    from openlia_server.db.models.scheduler import UserNotification
+
+    cfg_svc = PtConfigService(session_factory=lambda: db_session)
+    cfg_svc.get_or_create_for_user(user.id)
+    runner = PtRunner(
+        session_factory=lambda: db_session,
+        dispatcher=_dispatcher_with_oil_red(),
+    )
+    runner.compute_dashboard(user.id)
+    rows = db_session.query(PtTriggerEvent).filter_by(user_id=user.id).all()
+    assert len(rows) == 1
+    assert rows[0].level_from is None
+    assert rows[0].level_to in {"calm", "elevated", "high", "severe", "crisis"}
+    notifs = db_session.query(UserNotification).filter_by(user_id=user.id).all()
+    assert any(n.type == "panic_level_change" for n in notifs)
+
+
+def test_no_event_when_level_unchanged(db_session, user):
+    from openlia_server.db.models.dashboard import PtTriggerEvent
+
+    cfg_svc = PtConfigService(session_factory=lambda: db_session)
+    cfg_svc.get_or_create_for_user(user.id)
+    runner = PtRunner(
+        session_factory=lambda: db_session,
+        dispatcher=_dispatcher_with_oil_red(),
+    )
+    runner.compute_dashboard(user.id)
+    runner.compute_dashboard(user.id)
+    rows = db_session.query(PtTriggerEvent).filter_by(user_id=user.id).all()
+    assert len(rows) == 1
+
+
 def test_runner_manual_override_short_circuits_rule_evaluation(db_session, user):
     cfg_svc = PtConfigService(session_factory=lambda: db_session)
     cfg = cfg_svc.get_or_create_for_user(user.id)

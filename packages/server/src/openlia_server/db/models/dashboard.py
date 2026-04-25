@@ -66,6 +66,38 @@ class PtUserConfig(Base, TimestampMixin):
     )
 
 
+class PtTriggerEvent(Base, TimestampMixin):
+    """Composite-level transition log. One row per panic-level change.
+
+    Used by `pt_runner.compute_dashboard` to detect transitions and emit
+    user_notifications. `payload_json` carries the full composite snapshot
+    (panel statuses, score, mode) at the time of the change.
+    """
+
+    __tablename__ = "pt_trigger_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    level_from: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    level_to: Mapped[str] = mapped_column(String(16), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_pt_trigger_events_user_occurred",
+            "user_id",
+            "occurred_at",
+        ),
+    )
+
+
 class PtPreset(Base, TimestampMixin):
     """Named configuration snapshots. Shipped library presets + user-created."""
 

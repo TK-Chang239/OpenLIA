@@ -260,3 +260,48 @@ def test_seed_runs_on_startup(company_client, db_session):
     company_client.get("/healthz")
     rows = db_session.query(PtPreset).filter_by(is_shipped=True).all()
     assert len(rows) == 15
+
+
+# --- NEW-18-12 — additional coverage --------------------------------------
+
+
+def test_dashboard_emits_warnings_for_missing_payloads(pt_client):
+    # Default test dispatcher provides only oil data; other panels emit warnings.
+    body = pt_client.get("/departments/panic_thermometer/dashboard").json()
+    assert any(panel.get("warnings") for panel in body["panels"].values())
+
+
+def test_dashboard_records_trigger_event_on_first_run(pt_client, db_session):
+    from openlia_server.db.models.dashboard import PtTriggerEvent
+
+    pt_client.get("/departments/panic_thermometer/dashboard")
+    rows = db_session.query(PtTriggerEvent).all()
+    assert len(rows) >= 1
+
+
+def test_formula_test_returns_resolved_values(pt_client):
+    pt_client.get("/departments/panic_thermometer/dashboard")
+    r = pt_client.post(
+        "/departments/panic_thermometer/formula/test",
+        json={"formula": "price > price_threshold", "panel": "oil", "params": {}},
+    )
+    body = r.json()
+    assert "price" in body["resolved_values"]
+    assert "price_threshold" in body["resolved_values"]
+
+
+def test_formula_test_without_warmed_cache_returns_409(pt_client):
+    r = pt_client.post(
+        "/departments/panic_thermometer/formula/test",
+        json={"formula": "price > 0", "panel": "oil", "params": {}},
+    )
+    assert r.status_code == 409
+
+
+def test_apply_preset_then_dashboard_reflects_streak_condition(pt_client):
+    listing = pt_client.get("/departments/panic_thermometer/presets").json()
+    oil_ma = next(p for p in listing if p["name"] == "oil::ma_relative" and p["is_shipped"])
+    pt_client.post(f"/departments/panic_thermometer/presets/{oil_ma['id']}/apply")
+    body = pt_client.get("/departments/panic_thermometer/config").json()
+    oil = next(p for p in body["panel_config"] if p["panel_id"] == "oil")
+    assert oil["streak_condition"] == "price > ma200 * ma_multiplier"
