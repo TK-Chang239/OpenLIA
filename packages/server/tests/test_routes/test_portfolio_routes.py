@@ -109,9 +109,122 @@ def test_csv_import(client, user_factory, login_as) -> None:
     assert body["created"][0]["ticker"] == "NVDA"
 
 
-def test_search_echoes_query(client, user_factory, login_as) -> None:
+def test_search_uses_adapter(client, user_factory, login_as) -> None:
+    """Search resolves over the configured financial adapter via company_profile."""
+
+    class _ToolResult:
+        def __init__(self, payload: dict) -> None:
+            self.payload = payload
+
+    class _FakeAdapter:
+        async def fetch(self, capability: str, params: dict) -> _ToolResult:
+            assert capability == "company_profile"
+            return _ToolResult(
+                {"General": {"Code": "AAPL", "Name": "Apple Inc.", "Exchange": "NASDAQ"}}
+            )
+
+    client.app.state.financial_adapter = _FakeAdapter()
+    try:
+        u = user_factory()
+        login_as(u)
+        r = client.get("/portfolio/search?q=aapl")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["results"] == [
+            {
+                "ticker": "AAPL",
+                "name": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "already_added": False,
+            }
+        ]
+    finally:
+        client.app.state.financial_adapter = None
+
+
+def test_search_empty_query_returns_empty(client, user_factory, login_as) -> None:
     u = user_factory()
     login_as(u)
-    r = client.get("/portfolio/search?q=aapl")
+    r = client.get("/portfolio/search?q=")
     assert r.status_code == 200
-    assert r.json() == {"results": [{"ticker": "AAPL", "name": None}]}
+    assert r.json() == {"results": []}
+
+
+def test_search_marks_already_added(client, user_factory, login_as) -> None:
+    class _ToolResult:
+        def __init__(self, payload: dict) -> None:
+            self.payload = payload
+
+    class _FakeAdapter:
+        async def fetch(self, capability: str, params: dict) -> _ToolResult:
+            return _ToolResult({"General": {"Code": "AAPL", "Name": "Apple Inc."}})
+
+    client.app.state.financial_adapter = _FakeAdapter()
+    try:
+        u = user_factory()
+        login_as(u)
+        client.post("/portfolio/holdings", json={"ticker": "AAPL"})
+        r = client.get("/portfolio/search?q=aapl")
+        body = r.json()
+        assert body["results"][0]["already_added"] is True
+    finally:
+        client.app.state.financial_adapter = None
+
+
+def test_search_adapter_error_returns_empty(client, user_factory, login_as) -> None:
+    class _RaisingAdapter:
+        async def fetch(self, capability: str, params: dict):
+            raise RuntimeError("boom")
+
+    client.app.state.financial_adapter = _RaisingAdapter()
+    try:
+        u = user_factory()
+        login_as(u)
+        r = client.get("/portfolio/search?q=zzz")
+        assert r.status_code == 200
+        assert r.json() == {"results": []}
+    finally:
+        client.app.state.financial_adapter = None
+
+
+def test_groups_create_list_rename_delete(client, user_factory, login_as) -> None:
+    u = user_factory()
+    login_as(u)
+    # Create
+    r = client.post("/portfolio/groups", json={"name": "Tech"})
+    assert r.status_code == 201
+    assert "Tech" in r.json()["groups"]
+    # List
+    r = client.get("/portfolio/groups")
+    assert r.status_code == 200
+    assert "Tech" in r.json()["groups"]
+    # Rename
+    r = client.patch("/portfolio/groups/Tech", json={"new_name": "Megacap"})
+    assert r.status_code == 200
+    assert "Megacap" in r.json()["groups"]
+    # Delete
+    r = client.delete("/portfolio/groups/Megacap")
+    assert r.status_code == 200
+    assert "Megacap" not in r.json()["groups"]
+
+
+def test_groups_reorder(client, user_factory, login_as) -> None:
+    u = user_factory()
+    login_as(u)
+    client.post("/portfolio/groups", json={"name": "A"})
+    client.post("/portfolio/groups", json={"name": "B"})
+    r = client.post("/portfolio/groups/reorder", json={"order": ["B", "A"]})
+    assert r.status_code == 200
+    assert r.json()["groups"] == ["B", "A"]
+
+
+def test_groups_rename_unknown_returns_404(client, user_factory, login_as) -> None:
+    u = user_factory()
+    login_as(u)
+    r = client.patch("/portfolio/groups/Nope", json={"new_name": "X"})
+    assert r.status_code == 404
+
+
+def test_groups_endpoints_require_auth(client) -> None:
+    r = client.get("/portfolio/groups")
+    assert r.status_code in (401, 403)

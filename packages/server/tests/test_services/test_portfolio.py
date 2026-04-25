@@ -221,6 +221,104 @@ def test_csv_export_and_import(db_session, user) -> None:
     assert result.errors == []
 
 
+def test_list_groups_derives_from_holdings(db_session, user) -> None:
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="AAPL",
+        shares=None,
+        cost_basis=None,
+        currency="USD",
+        notes=None,
+        groups=["Tech", "Watchlist"],
+    )
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="JPM",
+        shares=None,
+        cost_basis=None,
+        currency="USD",
+        notes=None,
+        groups=["Banks"],
+    )
+    groups = svc.list_groups(db_session, user_id=user.id)
+    assert sorted(groups) == ["Banks", "Tech", "Watchlist"]
+
+
+def test_create_group_persists_empty(db_session, user) -> None:
+    svc.create_group(db_session, user_id=user.id, name="Megacap")
+    groups = svc.list_groups(db_session, user_id=user.id)
+    assert "Megacap" in groups
+
+
+def test_rename_group_updates_all_holdings(db_session, user) -> None:
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="AAPL",
+        shares=None,
+        cost_basis=None,
+        currency="USD",
+        notes=None,
+        groups=["Tech"],
+    )
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="MSFT",
+        shares=None,
+        cost_basis=None,
+        currency="USD",
+        notes=None,
+        groups=["Tech"],
+    )
+    svc.rename_group(db_session, user_id=user.id, old_name="Tech", new_name="Megacap")
+    holdings = svc.list_holdings(db_session, user_id=user.id)
+    for h in holdings:
+        assert "Tech" not in h.groups
+        assert "Megacap" in h.groups
+    assert "Megacap" in svc.list_groups(db_session, user_id=user.id)
+
+
+def test_rename_unknown_group_raises(db_session, user) -> None:
+    with pytest.raises(svc.GroupNotFoundError):
+        svc.rename_group(db_session, user_id=user.id, old_name="Nope", new_name="Other")
+
+
+def test_reorder_groups_persists(db_session, user) -> None:
+    svc.create_group(db_session, user_id=user.id, name="A")
+    svc.create_group(db_session, user_id=user.id, name="B")
+    svc.create_group(db_session, user_id=user.id, name="C")
+    out = svc.reorder_groups(db_session, user_id=user.id, order=["C", "A", "B"])
+    assert out == ["C", "A", "B"]
+    assert svc.list_groups(db_session, user_id=user.id) == ["C", "A", "B"]
+
+
+def test_delete_group_removes_membership(db_session, user) -> None:
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="AAPL",
+        shares=None,
+        cost_basis=None,
+        currency="USD",
+        notes=None,
+        groups=["Tech"],
+    )
+    svc.delete_group(db_session, user_id=user.id, name="Tech")
+    holdings = svc.list_holdings(db_session, user_id=user.id)
+    assert holdings[0].groups == []
+    assert "Tech" not in svc.list_groups(db_session, user_id=user.id)
+
+
+def test_groups_meta_row_hidden_from_holdings(db_session, user) -> None:
+    svc.create_group(db_session, user_id=user.id, name="Empty")
+    holdings = svc.list_holdings(db_session, user_id=user.id)
+    # The internal __GROUPS__ sentinel must not surface in list_holdings.
+    assert all(h.ticker != "__GROUPS__" for h in holdings)
+
+
 def test_csv_import_reports_duplicates(db_session, user) -> None:
     svc.create_holding(
         db_session,

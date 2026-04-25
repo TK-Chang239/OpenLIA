@@ -8,7 +8,6 @@ import {
   BarChart2,
   Globe,
   Thermometer,
-  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 
@@ -26,7 +25,7 @@ export const CORE_NAV: readonly NavEntry[] = [
   {
     id: "portfolio",
     label: "Portfolio",
-    icon: Briefcase,
+    icon: BarChart2,
     path: "/portfolio",
     departmentId: null,
   },

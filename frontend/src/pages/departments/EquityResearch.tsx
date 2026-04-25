@@ -1,5 +1,6 @@
 import { RotateCcw, Settings } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 
 import { createSession } from "../../api/chat";
 import { saveReportToRepo } from "../../api/repo";
@@ -22,13 +23,16 @@ import { useErConfig } from "../../hooks/useErConfig";
 
 export default function EquityResearch() {
   const { config, loading, patch } = useErConfig();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tickerParam = searchParams.get("ticker");
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(tickerParam ?? "");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
   const [schema, setSchema] = useState<ReportSchema | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [autoStarted, setAutoStarted] = useState(false);
   const fileViewer = useFileViewer();
   const {
     state: reportState,
@@ -73,6 +77,17 @@ export default function EquityResearch() {
   const onSend = () => {
     void dispatchReport(input);
   };
+
+  // Phase 21: deep-link from Portfolio populates the input with ?ticker=SYM.
+  // We pre-fill the textarea (already done above) and clear the query param
+  // so a manual edit + send won't re-trigger on remount. Auto-dispatch is
+  // intentionally NOT wired so users can adjust the prompt before sending.
+  useEffect(() => {
+    if (tickerParam && !autoStarted) {
+      setAutoStarted(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [tickerParam, autoStarted, setSearchParams]);
 
   // Fetch the persisted schema once the server signals `report.saved`.
   useEffect(() => {
