@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { SettingsPage } from './SettingsPage';
 
 vi.mock('../auth/useCurrentUser', () => ({
@@ -41,15 +41,19 @@ vi.mock('../components/settings/admin/DataProvidersAdminPanel', () => ({
   DataProvidersAdminPanel: () => null,
 }));
 
+function renderAt(path: string) {
+  const router = createMemoryRouter(
+    [{ path: '/settings/*', element: <SettingsPage /> }],
+    { initialEntries: [path] },
+  );
+  return render(<RouterProvider router={router} />);
+}
+
 describe('SettingsPage', () => {
-  it('redirects /settings to /settings/general', async () => {
-    render(
-      <MemoryRouter initialEntries={['/settings']}>
-        <Routes>
-          <Route path="/settings/*" element={<SettingsPage />} />
-        </Routes>
-      </MemoryRouter>,
+  it('renders General section at /settings/general', async () => {
+    renderAt('/settings/general');
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: /^General$/ })).toBeInTheDocument(),
     );
-    await waitFor(() => expect(screen.getByRole('heading', { name: /general/i })).toBeInTheDocument());
   });
 });

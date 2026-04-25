@@ -130,6 +130,30 @@ def test_delete_provider(personal_client) -> None:
     assert resp3.json()["providers"] == []
 
 
+def test_delete_provider_returns_409_when_mapped(personal_client) -> None:
+    resp = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "Mapped",
+            "category": "financial",
+            "mode": "api_key",
+            "api_key": "k",
+            "base_url": "https://eodhd.com/api",
+        },
+    )
+    pid = resp.json()["id"]
+    put = personal_client.put(
+        "/settings/data-providers/mappings/stock_quote",
+        json={"provider_id": pid, "priority": 50},
+    )
+    assert put.status_code == 200
+    deleted = personal_client.delete(f"/settings/data-providers/{pid}")
+    assert deleted.status_code == 409
+    body = deleted.json()
+    assert body["detail"]["error"] == "provider_in_use"
+
+
 def test_update_missing_provider_returns_404(personal_client) -> None:
     resp = personal_client.patch(
         "/settings/data-providers/nonexistent-id",

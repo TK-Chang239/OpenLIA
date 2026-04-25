@@ -1,4 +1,4 @@
-import { ApiError } from './settings';
+import { ApiError, request } from './_request';
 export { ApiError };
 
 export interface InviteSummary {
@@ -35,21 +35,6 @@ export interface ResetRequestRow {
   status: 'pending' | 'approved' | 'rejected';
 }
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    credentials: 'same-origin',
-  });
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    const detail = body.detail ?? {};
-    throw new ApiError(r.status, detail.code ?? 'http_error', detail.message ?? `HTTP ${r.status}`);
-  }
-  if (r.status === 204) return undefined as T;
-  return r.json();
-}
-
 export const listInvites = () => request<InviteSummary[]>('/api/admin/invites');
 
 export const createInvite = (body: {
@@ -69,10 +54,14 @@ export const disableUser = (id: string) =>
 export const enableUser = (id: string) =>
   request<void>(`/api/admin/users/${id}/enable`, { method: 'POST' });
 
-export const adminResetPassword = (id: string, new_password: string) =>
-  request<void>(`/api/admin/users/${id}/reset-password`, {
+export interface AdminResetPasswordResponse {
+  temporary_password: string;
+}
+
+export const adminResetPassword = (id: string) =>
+  request<AdminResetPasswordResponse>(`/api/admin/users/${id}/reset-password`, {
     method: 'POST',
-    body: JSON.stringify({ new_password }),
+    body: JSON.stringify({}),
   });
 
 export const listResetRequests = () =>

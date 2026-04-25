@@ -358,7 +358,8 @@ def test_journey_password_reset_and_forced_change(db_session, monkeypatch, make_
         f"/admin/users/{target.id}/reset-password",
         json={"new_password": "NewTempPassword1!"},
     )
-    assert reset.status_code == 204
+    assert reset.status_code == 200
+    assert reset.json()["temporary_password"] == "NewTempPassword1!"
     assert client.post("/auth/logout").status_code == 204
     client.cookies.clear()
 

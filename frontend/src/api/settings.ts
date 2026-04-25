@@ -55,33 +55,8 @@ export interface EffectiveModel {
   provider_id: string;
 }
 
-export class ApiError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(url, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-    credentials: 'same-origin',
-  });
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    const detail = body.detail ?? {};
-    throw new ApiError(r.status, detail.code ?? 'http_error', detail.message ?? `HTTP ${r.status}`);
-  }
-  return r.json();
-}
+export { ApiError } from './_request';
+import { request } from './_request';
 
 export const getPrefs = () => request<Prefs>('/api/settings/prefs');
 
@@ -107,3 +82,16 @@ export const deleteModelPreference = (tier: Tier) =>
 
 export const getEffectiveModel = (departmentId: string) =>
   request<EffectiveModel>(`/api/settings/models/effective/${departmentId}`);
+
+export interface DepartmentDefaultRow {
+  department_id: string;
+  tier: string;
+  reason: string;
+}
+
+export interface DepartmentDefaults {
+  departments: DepartmentDefaultRow[];
+}
+
+export const getDepartmentDefaults = () =>
+  request<DepartmentDefaults>('/api/settings/models/department-defaults');

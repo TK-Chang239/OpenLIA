@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useSettingsDirty } from './dirty-context';
 
 export interface DirtyForm<T extends object> {
   values: T;
@@ -39,6 +40,14 @@ export function useDirtyForm<T extends object>(initialValues: T): DirtyForm<T> {
   }, [values]);
 
   const isDirty = useMemo(() => !shallowEqual(values, initial), [values, initial]);
+
+  const sectionId = useId();
+  const dirtyCtx = useSettingsDirty();
+  useEffect(() => {
+    if (!dirtyCtx) return;
+    dirtyCtx.register(sectionId, isDirty);
+    return () => dirtyCtx.unregister(sectionId);
+  }, [dirtyCtx, sectionId, isDirty]);
 
   return { values, initial, isDirty, setField, setValues, reset, markSaved };
 }
