@@ -34,15 +34,16 @@ def test_variable_lookup(engine: FormulaEngine):
     assert engine.evaluate("price * 2", ctx(price=10.0)) == 20.0
 
 
-def test_division_by_zero_raises(engine: FormulaEngine):
-    with pytest.raises(FormulaError) as exc:
-        engine.evaluate("1 / 0", EvaluationContext())
-    assert "division" in str(exc.value).lower()
+def test_division_by_zero_returns_null_with_warning(engine: FormulaEngine):
+    result = engine.evaluate_safe("1 / 0", EvaluationContext())
+    assert result.value is None
+    assert any("division" in w.lower() for w in result.warnings)
 
 
-def test_modulo_by_zero_raises(engine: FormulaEngine):
-    with pytest.raises(FormulaError):
-        engine.evaluate("5 % 0", EvaluationContext())
+def test_modulo_by_zero_returns_null_with_warning(engine: FormulaEngine):
+    result = engine.evaluate_safe("5 % 0", EvaluationContext())
+    assert result.value is None
+    assert any("modulo" in w.lower() for w in result.warnings)
 
 
 def test_undefined_variable_raises(engine: FormulaEngine):

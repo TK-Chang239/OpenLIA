@@ -69,6 +69,22 @@ class DiplomacyPanel:
     optional_requirements: tuple[str, ...] = ()
     default_ruleset: dict[str, Any] = field(default_factory=lambda: _DEFAULT_RULESET)
 
+    def known_identifiers(self) -> set[str]:
+        from openlia.formula import RESERVED_NAMES
+
+        names: set[str] = set(RESERVED_NAMES) | {
+            "days_elapsed",
+            "days_remaining",
+            "progress_detected",
+            "escalation_detected",
+            "matched_progress_headlines",
+            "matched_escalation_headlines",
+            "manual_override",
+        }
+        names |= set(self.default_ruleset.get("params", {}).keys())
+        names.add("streak_days")
+        return names
+
     def build_context(
         self,
         *,

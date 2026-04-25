@@ -11,6 +11,8 @@ from openlia.formula.tokens import Token, TokenKind
 
 
 class LexError(Exception):
+    """Internal lexer failure; the parser converts this into ParseError."""
+
     def __init__(self, message: str, *, line: int, col: int) -> None:
         super().__init__(f"{message} at line {line}, col {col}")
         self.line = line
@@ -25,6 +27,7 @@ _KEYWORDS: dict[str, TokenKind] = {
     "else": TokenKind.ELSE,
     "true": TokenKind.TRUE,
     "false": TokenKind.FALSE,
+    "null": TokenKind.NULL,
 }
 
 
@@ -76,20 +79,62 @@ def tokenize(source: str) -> list[Token]:
             i = j
             continue
 
-        # Identifiers / keywords.
+        # Identifiers / keywords (case-insensitive keyword match; identifiers
+        # remain case-sensitive).
         if ch.isalpha() or ch == "_":
             j = i
             while j < n and (source[j].isalnum() or source[j] == "_"):
                 j += 1
             text = source[i:j]
-            kind = _KEYWORDS.get(text, TokenKind.IDENT)
+            kind = _KEYWORDS.get(text.lower(), TokenKind.IDENT)
             value: object = text
             if kind is TokenKind.TRUE:
                 value = True
             elif kind is TokenKind.FALSE:
                 value = False
+            elif kind is TokenKind.NULL:
+                value = None
             tokens.append(Token(kind, value, line=line, col=col, length=j - i))
             i = j
+            continue
+
+        # String literal (double-quoted, supports \" and \\ escapes).
+        if ch == '"':
+            j = i + 1
+            buf: list[str] = []
+            while j < n:
+                c = source[j]
+                if c == "\\":
+                    if j + 1 >= n:
+                        raise LexError("unterminated string escape", line=line, col=col)
+                    nxt = source[j + 1]
+                    if nxt == '"':
+                        buf.append('"')
+                    elif nxt == "\\":
+                        buf.append("\\")
+                    else:
+                        raise LexError(f"unknown string escape '\\{nxt}'", line=line, col=col)
+                    j += 2
+                    continue
+                if c == '"':
+                    j += 1
+                    tokens.append(
+                        Token(
+                            TokenKind.STRING,
+                            "".join(buf),
+                            line=line,
+                            col=col,
+                            length=j - i,
+                        )
+                    )
+                    i = j
+                    break
+                if c == "\n":
+                    raise LexError("unterminated string literal", line=line, col=col)
+                buf.append(c)
+                j += 1
+            else:
+                raise LexError("unterminated string literal", line=line, col=col)
             continue
 
         # Two-character operators first.
