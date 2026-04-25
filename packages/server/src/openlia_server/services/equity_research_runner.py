@@ -1,4 +1,4 @@
-"""Equity Research orchestrator — config + ReportRunner + report_store."""
+"""Equity Research orchestrator — config + ReportRunner + reports service."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from openlia.llm.runtime.messages import ReportRequest
 from openlia.reports.validator import validate_report_payload
 from sqlalchemy.orm import Session
 
-from openlia_server.services import report_store
+from openlia_server.services import reports as reports_svc
 from openlia_server.services.equity_research_config import (
     EquityResearchConfigService,
 )
@@ -88,7 +88,7 @@ class EquityResearchRunner:
 
         if last_complete is not None:
             schema_obj = validate_report_payload(last_complete.schema)
-            report_id = report_store.create_report(
+            report_id = reports_svc.create_report(
                 self._db,
                 user_id=user_id,
                 department=self._dept.name,

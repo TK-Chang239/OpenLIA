@@ -73,3 +73,43 @@ body {
     box-shadow: 0 0 0 6px rgba(168, 204, 0, 0);
   }
 }
+
+/* ----- Print / PDF route (/reports/:id/render) ----------------------- */
+.report-print-root {
+  background: var(--color-bg, #ffffff);
+  color: var(--color-text-primary, #1a1a1a);
+  min-height: 100vh;
+  padding: 24px;
+}
+.report-print-error {
+  padding: 32px;
+  font-family: var(--font-sans, system-ui);
+  color: #991b1b;
+}
+@page {
+  size: A4;
+  margin: 20mm 20mm 25mm 20mm;
+}
+@media print {
+  body {
+    background: #ffffff \!important;
+  }
+  .report-print-root {
+    padding: 0;
+  }
+  /* No app chrome ever bleeds into print. */
+  .ol-app-shell, .ol-sidebar, header[role="banner"] {
+    display: none \!important;
+  }
+  .report__toc {
+    display: none \!important;
+  }
+  /* Avoid splitting key blocks across pages. */
+  .report__main h2,
+  .report__main h3,
+  .report__main table,
+  .chart {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

@@ -91,3 +91,17 @@ def test_assemble_falls_back_to_default_header_for_unknown_department():
         now=datetime(2026, 4, 11, tzinfo=UTC),
     )
     assert schema.page_furniture.header["right"] == "OpenLIA Report"
+
+
+def test_rejects_unsubstituted_tool_placeholder():
+    from openlia.reports.assembler import ReportAssemblyError
+
+    raw = _raw()
+    raw["sections"][0]["blocks"].append({"type": "text", "content": "{{tool:stock_quote}}"})
+    with pytest.raises(ReportAssemblyError):
+        assemble_report(
+            raw,
+            department="equity_research",
+            furniture=DEFAULT_FURNITURE,
+            now=datetime(2026, 4, 11, tzinfo=UTC),
+        )
