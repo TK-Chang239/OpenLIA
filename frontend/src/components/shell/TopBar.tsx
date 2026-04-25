@@ -1,6 +1,8 @@
 import type { JSX } from "react";
+import { Menu } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LivePill } from "./LivePill";
+import { useMobileNav } from "../../layouts/MobileNavContext";
 
 export interface TopBarProps {
   crumbs: string[];
@@ -11,11 +13,19 @@ export interface TopBarProps {
 export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.Element {
   const last = crumbs[crumbs.length - 1];
   const head = crumbs.slice(0, -1);
+  const { setOpen } = useMobileNav();
   return (
     <div
       className="flex items-center gap-[14px] px-7 py-[14px] border-b border-border-subtle bg-bg-base"
-      role="banner"
     >
+      <button
+        type="button"
+        aria-label="Open navigation"
+        onClick={() => setOpen(true)}
+        className="md:hidden inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary hover:text-text-primary"
+      >
+        <Menu size={18} strokeWidth={1.5} />
+      </button>
       <nav
         aria-label="Breadcrumb"
         className="flex items-center gap-2 font-mono text-[10px] uppercase text-text-secondary"

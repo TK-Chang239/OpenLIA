@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, type RouteObject } from "react-router-do
 import { AppLayout } from "../layouts/AppLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { MustChangePasswordGate } from "./MustChangePasswordGate";
+import { SetupGate } from "./SetupGate";
 import { LoginPage } from "../pages/LoginPage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
@@ -30,38 +31,43 @@ function SecretaryRoute() {
 }
 
 export const routes: RouteObject[] = [
-  { path: "/login", element: <LoginPage /> },
-  { path: "/register", element: <RegisterPage /> },
-  { path: "/forgot-password", element: <ForgotPasswordPage /> },
-  { path: "/reset-password", element: <ResetPasswordPage /> },
-  { path: "/setup", element: <SetupPage /> },
   {
-    element: (
-      <ProtectedRoute>
-        <MustChangePasswordGate />
-      </ProtectedRoute>
-    ),
+    element: <SetupGate />,
     children: [
+      { path: "/login", element: <LoginPage /> },
+      { path: "/register", element: <RegisterPage /> },
+      { path: "/forgot-password", element: <ForgotPasswordPage /> },
+      { path: "/reset-password", element: <ResetPasswordPage /> },
+      { path: "/setup", element: <SetupPage /> },
       {
-        element: <AppLayout />,
+        element: (
+          <ProtectedRoute>
+            <MustChangePasswordGate />
+          </ProtectedRoute>
+        ),
         children: [
-          { path: "/", element: <Navigate to="/secretary" replace /> },
-          { path: "/home", element: <Home /> },
-          { path: "/repository", element: <Repository /> },
-          { path: "/portfolio", element: <PortfolioPage /> },
-          { path: "/settings/*", element: <SettingsPage /> },
-          { path: "/secretary", element: <SecretaryRoute /> },
-          { path: "/equity-research", element: <EquityResearch /> },
-          { path: "/earnings-update", element: <EarningsUpdate /> },
-          { path: "/morning-briefing", element: <MorningBriefing /> },
-          { path: "/retail-sentiment", element: <RetailSentiment /> },
-          { path: "/macro-research/*", element: <MacroResearch /> },
-          { path: "/panic-thermometer", element: <PanicThermometer /> },
+          {
+            element: <AppLayout />,
+            children: [
+              { path: "/", element: <Navigate to="/secretary" replace /> },
+              { path: "/home", element: <Home /> },
+              { path: "/repository", element: <Repository /> },
+              { path: "/portfolio", element: <PortfolioPage /> },
+              { path: "/settings/*", element: <SettingsPage /> },
+              { path: "/secretary", element: <SecretaryRoute /> },
+              { path: "/equity-research", element: <EquityResearch /> },
+              { path: "/earnings-update", element: <EarningsUpdate /> },
+              { path: "/morning-briefing", element: <MorningBriefing /> },
+              { path: "/retail-sentiment", element: <RetailSentiment /> },
+              { path: "/macro-research/*", element: <MacroResearch /> },
+              { path: "/panic-thermometer", element: <PanicThermometer /> },
+            ],
+          },
         ],
       },
+      { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
-  { path: "*", element: <Navigate to="/" replace /> },
 ];
 
 export const router = createBrowserRouter(routes);
