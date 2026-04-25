@@ -43,3 +43,11 @@ class PanelBase(Protocol):
     ) -> PanelContextBuildResult:
         """Turn raw adapter payloads into engine inputs."""
         ...
+
+    def known_identifiers(self) -> set[str]:
+        """All identifier names a formula evaluated against this panel may reference.
+
+        Includes engine-reserved derived scalars, panel-emitted scalars,
+        raw_series keys, default-ruleset params, and the streak primitive.
+        """
+        ...

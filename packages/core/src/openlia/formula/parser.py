@@ -21,7 +21,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from openlia.formula.engine import MAX_AST_DEPTH, MAX_NODE_COUNT, FormulaError
+from openlia.formula.engine import (
+    MAX_AST_DEPTH,
+    MAX_NODE_COUNT,
+    FormulaError,
+    ParseError,
+)
 from openlia.formula.lexer import LexError, tokenize
 from openlia.formula.tokens import Token, TokenKind
 
@@ -37,7 +42,7 @@ class Expression:
 
 @dataclass
 class Literal(Expression):
-    value: float | bool
+    value: float | bool | str | None
     line: int = 0
     col: int = 0
 
@@ -114,7 +119,7 @@ class _Parser:
         self.depth += 1
         if self.depth > MAX_AST_DEPTH:
             t = self.peek
-            raise FormulaError(
+            raise ParseError(
                 f"expression exceeds max depth of {MAX_AST_DEPTH}",
                 line=t.line,
                 col=t.col,
@@ -127,7 +132,7 @@ class _Parser:
         self.node_count += 1
         if self.node_count > MAX_NODE_COUNT:
             t = self.peek
-            raise FormulaError(
+            raise ParseError(
                 f"expression exceeds max node count of {MAX_NODE_COUNT}",
                 line=t.line,
                 col=t.col,
@@ -151,7 +156,7 @@ class _Parser:
     def expect(self, kind: TokenKind, what: str) -> Token:
         if self.peek.kind is not kind:
             t = self.peek
-            raise FormulaError(
+            raise ParseError(
                 f"expected {what} but found {t.kind.name}",
                 line=t.line,
                 col=t.col,
@@ -163,7 +168,7 @@ class _Parser:
         node = self.ternary()
         if self.peek.kind is not TokenKind.EOF:
             t = self.peek
-            raise FormulaError(
+            raise ParseError(
                 f"unexpected token {t.kind.name} after expression",
                 line=t.line,
                 col=t.col,
@@ -315,6 +320,14 @@ class _Parser:
                 self.advance()
                 self._count()
                 return Literal(value=t.value, line=t.line, col=t.col)
+            if t.kind is TokenKind.STRING:
+                self.advance()
+                self._count()
+                return Literal(value=t.value, line=t.line, col=t.col)
+            if t.kind is TokenKind.NULL:
+                self.advance()
+                self._count()
+                return Literal(value=None, line=t.line, col=t.col)
             if t.kind is TokenKind.TRUE:
                 self.advance()
                 self._count()
@@ -346,7 +359,7 @@ class _Parser:
                 self._count()
                 return Var(name=t.value, line=t.line, col=t.col)
 
-            raise FormulaError(
+            raise ParseError(
                 f"expected expression but found {t.kind.name}",
                 line=t.line,
                 col=t.col,
@@ -358,7 +371,7 @@ class _Parser:
         # Already consumed the opening '['. Expect ``t - NUMBER`` then ']'.
         t_tok = self.peek
         if t_tok.kind is not TokenKind.IDENT or t_tok.value != "t":
-            raise FormulaError(
+            raise ParseError(
                 "history index must start with 't'",
                 line=t_tok.line,
                 col=t_tok.col,
@@ -366,7 +379,7 @@ class _Parser:
         self.advance()
         minus = self.peek
         if minus.kind is not TokenKind.MINUS:
-            raise FormulaError(
+            raise ParseError(
                 "history index must use '-' (e.g. 'price[t-3]')",
                 line=minus.line,
                 col=minus.col,
@@ -374,7 +387,7 @@ class _Parser:
         self.advance()
         number = self.peek
         if number.kind is not TokenKind.NUMBER:
-            raise FormulaError(
+            raise ParseError(
                 "history index requires an integer lag",
                 line=number.line,
                 col=number.col,
@@ -382,7 +395,7 @@ class _Parser:
         self.advance()
         lag_val = number.value
         if float(lag_val).is_integer() is False or lag_val < 0:
-            raise FormulaError(
+            raise ParseError(
                 "history lag must be a non-negative integer",
                 line=number.line,
                 col=number.col,
@@ -400,5 +413,21 @@ def parse(source: str) -> Expression:
     try:
         tokens = tokenize(source)
     except LexError as exc:
-        raise FormulaError(str(exc), line=exc.line, col=exc.col) from exc
+        raise ParseError(str(exc), line=exc.line, col=exc.col) from exc
     return _Parser(tokens).parse()
+
+
+# Re-export so callers can still catch the legacy union type.
+__all__ = [
+    "BinaryOp",
+    "Call",
+    "Expression",
+    "FormulaError",
+    "HistoricalVar",
+    "IfElse",
+    "Literal",
+    "ParseError",
+    "UnaryOp",
+    "Var",
+    "parse",
+]

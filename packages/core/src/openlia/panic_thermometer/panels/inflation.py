@@ -52,6 +52,17 @@ _DEFAULT_RULESET: dict[str, Any] = {
 }
 
 
+_PANEL_SCALAR_KEYS: frozenset[str] = frozenset(
+    {
+        "michigan_5y",
+        "michigan_prev",
+        "michigan_5y_missing",
+        "tip_price_latest",
+        "tip_prev_close",
+    }
+)
+
+
 @dataclass(frozen=True)
 class InflationPanel:
     panel_id: str = "inflation"
@@ -62,6 +73,15 @@ class InflationPanel:
     )
     optional_requirements: tuple[str, ...] = ()
     default_ruleset: dict[str, Any] = field(default_factory=lambda: _DEFAULT_RULESET)
+
+    def known_identifiers(self) -> set[str]:
+        from openlia.formula import RESERVED_NAMES
+
+        names: set[str] = set(RESERVED_NAMES) | set(_PANEL_SCALAR_KEYS)
+        names |= {"price", "tip_price"}  # raw_series keys
+        names |= set(self.default_ruleset.get("params", {}).keys())
+        names.add("streak_days")
+        return names
 
     def build_context(
         self,

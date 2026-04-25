@@ -70,6 +70,24 @@ class FedLanguagePanel:
     optional_requirements: tuple[str, ...] = ()
     default_ruleset: dict[str, Any] = field(default_factory=lambda: _DEFAULT_RULESET)
 
+    def known_identifiers(self) -> set[str]:
+        from openlia.formula import RESERVED_NAMES
+
+        names: set[str] = set(RESERVED_NAMES) | {
+            "dovish_keyword_detected",
+            "neutral_keyword_detected",
+            "hawkish_keyword_detected",
+            "crisis_keyword_detected",
+            "matched_phrase",
+            "matched_headline",
+            "matched_date",
+            "days_since_fomc",
+            "manual_override",
+        }
+        names |= set(self.default_ruleset.get("params", {}).keys())
+        names.add("streak_days")
+        return names
+
     def build_context(
         self,
         *,
