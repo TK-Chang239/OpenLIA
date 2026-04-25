@@ -51,7 +51,7 @@ merged.
 | 1a | DB Baseline                         | Done        | 100%      | RESOLVED                  | ~~Hand-written `2026-04-16-1200_baseline.py` migration missing~~ — closed via PR #52 (f2b3055 + 3bc14f0) |
 | 1b | DB Dashboard/Scheduler/Notif        | Done        | 100%      | RESOLVED                  | ~~`mr_dashboard_state` + `rs_classification_log` model/migration drift~~ — closed via PR #52 (f2b3055 + 3bc14f0) |
 | 2  | Auth & Secrets                      | Done        | 100%      | RESOLVED                  | ~~`build_require_auth` returns `Depends()` and breaks nested deps~~ — claim retired (FastAPI resolves the default fine); shipped P0-02-01..P2-02-05 via PR for branch `fix/phase-2-auth-secrets` |
-| 3  | Data Provider Adapter               | Done        | ~95%      | DEFERRED                  | Cleanest phase — only `company_fundamentals` capability deferred             |
+| 3  | Data Provider Adapter               | Done        | 100%      | RESOLVED                  | ~~Cleanest phase — only `company_fundamentals` capability deferred~~ — closed via Phase 3 fix-plan (P0-3-01..P0-3-04, P1-3-05..P1-3-12, NEW-3-01..NEW-3-08) |
 | 4  | LLM Provider System                 | Done        | ~72%      | IMPLEMENTER               | User-preference HTTP routes never wired (service layer present)              |
 | 5  | LLM Runtime                         | Done        | ~88%      | IMPLEMENTER               | `await_with_grace` unused; MR/MB prompt files absent; no startup slot check  |
 | 6  | Background Scheduler                | Done        | ~92%      | IMPLEMENTER               | `batch_runner=None` → MR jobs crash; dual `MRScheduleService` instances      |
@@ -631,7 +631,7 @@ instead of all 1,000+.
 | 1a | ~~[phase-1a-database-baseline.md](./fix-plans/phase-1a-database-baseline.md)~~ | 100% | RESOLVED (PR #52) |
 | 1b | ~~[phase-1b-db-dashboard-scheduler-notifications.md](./fix-plans/phase-1b-db-dashboard-scheduler-notifications.md)~~ | 100% | RESOLVED (PR #52) |
 | 2 | ~~[phase-2-auth-secrets.md](./fix-plans/phase-2-auth-secrets.md)~~ | 100% | RESOLVED |
-| 3 | [phase-3-data-provider-adapter.md](./fix-plans/phase-3-data-provider-adapter.md) | ~95% plan / ~55% spec | SPEC_DRIFT |
+| 3 | ~~[phase-3-data-provider-adapter.md](./fix-plans/phase-3-data-provider-adapter.md)~~ | 100% | RESOLVED (fix/phase-3-data-provider-adapter) |
 | 4 | [phase-4-llm-provider-system.md](./fix-plans/phase-4-llm-provider-system.md) | ~72% | mixed |
 | 5 | [phase-5-llm-runtime.md](./fix-plans/phase-5-llm-runtime.md) | ~88% | IMPLEMENTER |
 | 6 | [phase-6-background-task-scheduling.md](./fix-plans/phase-6-background-task-scheduling.md) | ~92% | IMPLEMENTER |
@@ -687,9 +687,14 @@ deferrals, missing submodules, per-phase test debt slices).
 | ~~NEW-1b-11~~ | 1b    | ~~Phase-15/16 tables mis-attributed to 1b in P0-09~~ — fix-plan header re-scoped to 12-table boundary (3bc14f0) | P2 |
 | ~~NEW-1b-12~~ | 1b    | ~~`JobRun` relationship() decision undocumented~~ — model docstring records explicit-join design (3bc14f0) | P2 |
 | NEW-2-01      | 2     | Auth rate-limit threshold test                               | P2       |
-| NEW-3-01      | 3     | `catalog`/`review`/`dispatch`/`python_providers`/`sentiment` stubs | P2 |
-| NEW-3-02      | 3     | Data-provider spec amendment header                          | P2       |
-| NEW-3-03      | 3     | `auto_map` mode-docstring audit                              | P2       |
+| ~~NEW-3-01~~  | 3     | ~~`catalog`/`review`/`dispatch`/`python_providers`/`sentiment` stubs~~ — packages added with `__deferred__ = True` markers | P2 |
+| ~~NEW-3-02~~  | 3     | ~~Data-provider spec amendment header~~ — Implementation Status table prepended to `data-provider-design.md` | P2 |
+| ~~NEW-3-03~~  | 3     | ~~`auto_map` mode-docstring audit~~ — service docstring + route response now both note `mode: heuristic`, NOT the spec's AI review | P2 |
+| ~~NEW-3-04~~  | 3     | ~~Setup Wizard Step 2 thin wrapper decision~~ — DECISION: no thin wrapper. Step 2 reuses the existing `POST /settings/data-providers` admin route directly; the wizard frontend will call it. Logged for Plan 10 owners. | P2 |
+| ~~NEW-3-05~~  | 3     | ~~Alembic migration for `category`/`mode`/`mcp_url`/`mcp_auth_header`~~ — migration `2026-04-24-0400_data_providers_category_mode_mcp.py` with backfill | P1 |
+| ~~NEW-3-06~~  | 3     | ~~`ProviderEntry.extra_config` immutability~~ — wrapped in `MappingProxyType` at validation time | P2 |
+| ~~NEW-3-07~~  | 3     | ~~EODHD `_format_ticker` exchange suffix~~ — sourced from `extra_config["exchange_suffix"]` (default `US`) | P2 |
+| ~~NEW-3-08~~  | 3     | ~~Better error for legacy MCP rows missing both `base_url` and `mcp_url`~~ — `ProviderEntry._transport_requirements` includes provider id in the message | P2 |
 | NEW-4-01      | 4     | `build_llm_user_router` (sub of P2-12)                       | P1       |
 | NEW-4-02      | 4     | `openlia.llm` / `services.auth` public exports alignment     | P2       |
 | NEW-4-03      | 4     | Connection-test adapter-registry coverage                    | P2       |

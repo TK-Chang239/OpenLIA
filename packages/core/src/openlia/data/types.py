@@ -7,15 +7,17 @@ database themselves.
 """
 
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ProviderCategory(StrEnum):
     FINANCIAL = "financial"
     NEWS = "news"
     SOCIAL_MEDIA = "social_media"
+    SEARCH = "search"
 
 
 class ProviderMode(StrEnum):
@@ -33,7 +35,7 @@ class ProviderEntry(BaseModel):
     when iterating providers for a specific requirement, or defaults to 100.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     id: str
     kind: str
@@ -47,16 +49,27 @@ class ProviderEntry(BaseModel):
     mcp_url: str | None = None
     mcp_auth_header: str | None = None
 
-    extra_config: dict[str, Any] = Field(default_factory=dict)
+    extra_config: MappingProxyType[str, Any] = Field(default_factory=lambda: MappingProxyType({}))
     is_enabled: bool = True
     priority: int = 100
+
+    @field_validator("extra_config", mode="before")
+    @classmethod
+    def _freeze_extra_config(cls, value: Any) -> MappingProxyType[str, Any]:
+        if value is None:
+            return MappingProxyType({})
+        if isinstance(value, MappingProxyType):
+            return value
+        if isinstance(value, dict):
+            return MappingProxyType(dict(value))
+        raise TypeError(f"extra_config must be a mapping, got {type(value).__name__}")
 
     @model_validator(mode="after")
     def _transport_requirements(self) -> "ProviderEntry":
         if self.mode is ProviderMode.API_KEY and not self.base_url:
-            raise ValueError("api_key mode requires base_url")
+            raise ValueError(f"api_key mode requires base_url (provider id={self.id!r})")
         if self.mode is ProviderMode.MCP and not self.mcp_url:
-            raise ValueError("mcp mode requires mcp_url")
+            raise ValueError(f"mcp mode requires mcp_url (provider id={self.id!r})")
         return self
 
 

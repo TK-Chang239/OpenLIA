@@ -23,12 +23,13 @@ from openlia_server.services import data_providers as svc
 class _CreateDataProviderIn(BaseModel):
     kind: str
     label: str
-    category: Literal["financial", "news", "social_media"]
+    category: Literal["financial", "news", "social_media", "search"]
     mode: Literal["api_key", "mcp"]
     api_key: str | None = None
     env_var_name: str | None = None
     base_url: str | None = None
     mcp_url: str | None = None
+    mcp_auth_header: str | None = None
     extra_config: dict[str, Any] | None = None
 
 
@@ -37,6 +38,8 @@ class _UpdateDataProviderIn(BaseModel):
     api_key: str | None = None
     env_var_name: str | None = None
     base_url: str | None = None
+    mcp_url: str | None = None
+    mcp_auth_header: str | None = None
     extra_config: dict[str, Any] | None = None
     is_enabled: bool | None = None
 
@@ -45,11 +48,18 @@ class _DataProviderOut(BaseModel):
     id: str
     kind: str
     label: str
+    category: str
+    mode: str
     base_url: str | None
+    mcp_url: str | None
     env_var_name: str | None
     has_api_key: bool
     is_enabled: bool
     extra_config: dict[str, Any] = Field(default_factory=dict)
+
+
+class _PriorityIn(BaseModel):
+    priority: int
 
 
 def _row_to_out(row) -> _DataProviderOut:
@@ -57,7 +67,10 @@ def _row_to_out(row) -> _DataProviderOut:
         id=row.id,
         kind=row.kind,
         label=row.label,
+        category=row.category,
+        mode=row.mode,
         base_url=row.base_url,
+        mcp_url=row.mcp_url,
         env_var_name=row.env_var_name,
         has_api_key=row.api_key_encrypted is not None,
         is_enabled=row.is_enabled,
@@ -106,6 +119,8 @@ def build_data_providers_router(
                 api_key=body.api_key,
                 env_var_name=body.env_var_name,
                 base_url=body.base_url,
+                mcp_url=body.mcp_url,
+                mcp_auth_header=body.mcp_auth_header,
                 extra_config=body.extra_config,
             )
         except svc.UnknownProviderKindError as exc:
@@ -123,10 +138,16 @@ def build_data_providers_router(
 
     @router.post("/auto-map")
     def auto_map_endpoint(_admin=require_admin, session: DBSession = Depends(session_dep)) -> dict:
+        """Run the deterministic, heuristic provider-to-requirement mapper.
+
+        First-match-wins by admin-set priority. NOT the spec's AI review;
+        see openlia.data.review (deferred).
+        """
         from openlia.data.manifest import load_manifest
 
         summary = svc.auto_map(session, manifest=load_manifest())
         return {
+            "mode": "heuristic",
             "mapped": [
                 {"requirement_type": m.requirement_type, "provider_id": m.provider_id}
                 for m in summary.mapped
@@ -225,6 +246,8 @@ def build_data_providers_router(
                 api_key=body.api_key,
                 env_var_name=body.env_var_name,
                 base_url=body.base_url,
+                mcp_url=body.mcp_url,
+                mcp_auth_header=body.mcp_auth_header,
                 extra_config=body.extra_config,
                 is_enabled=body.is_enabled,
             )
@@ -232,6 +255,26 @@ def build_data_providers_router(
             raise HTTPException(status_code=404, detail="not_found") from exc
         row = svc.get_provider(session, provider_id)
         return _row_to_out(row).model_dump()
+
+    @router.patch("/{provider_id}/priority")
+    def patch_priority(
+        provider_id: str,
+        body: _PriorityIn,
+        _admin=require_admin,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        try:
+            svc.set_provider_default_priority(
+                session, provider_id=provider_id, priority=body.priority
+            )
+        except svc.ProviderNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="not_found") from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"error": "invalid_priority", "message": str(exc)},
+            ) from exc
+        return {"provider_id": provider_id, "priority": body.priority}
 
     @router.delete("/{provider_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_provider(
@@ -256,10 +299,27 @@ def build_data_providers_router(
         except svc.ProviderNotFoundError as exc:
             raise HTTPException(status_code=404, detail="not_found") from exc
         from openlia.data.adapters import ADAPTERS
+        from openlia.data.adapters._stub import _StubAdapter
 
         adapter_cls = ADAPTERS.get(entry.kind)
         if adapter_cls is None:
-            return {"ok": False}
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "error": "adapter_not_implemented",
+                    "message": f"no adapter shipped for kind {entry.kind!r}",
+                },
+            )
+        if issubclass(adapter_cls, _StubAdapter):
+            raise HTTPException(
+                status_code=501,
+                detail={
+                    "error": "adapter_not_implemented",
+                    "message": (
+                        f"adapter {entry.kind!r} is a registry stub; implementation deferred"
+                    ),
+                },
+            )
         adapter = adapter_cls(entry)
         return {"ok": await adapter.health_check()}
 

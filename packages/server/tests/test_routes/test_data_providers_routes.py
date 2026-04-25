@@ -211,12 +211,25 @@ def test_auto_map_returns_summary(personal_client) -> None:
     resp2 = personal_client.post("/settings/data-providers/auto-map")
     assert resp2.status_code == 200, resp2.text
     body = resp2.json()
-    # EODHD covers 4 of equity_research's basic+advanced requirements
+    assert body["mode"] == "heuristic"
+    # EODHD now covers 5 of equity_research's basic+advanced requirements
+    # (P0-3-04 added company_fundamentals).
     covered_types = {m["requirement_type"] for m in body["mapped"]}
-    assert {"stock_quote", "historical_prices", "company_profile", "company_news"} <= covered_types
-    # stock_grade, insider_transactions, company_fundamentals remain unmet
+    assert {
+        "stock_quote",
+        "historical_prices",
+        "company_profile",
+        "company_news",
+        "company_fundamentals",
+    } <= covered_types
+    # stock_grade and insider_transactions remain unmet.
     unmet_types = {u["requirement_type"] for u in body["unmet"]}
     assert {"stock_grade", "insider_transactions"} <= unmet_types
+    # company_fundamentals must NOT be unmet anymore (P0-3-04 acceptance).
+    assert "company_fundamentals" not in unmet_types
+    # No duplicate (requirement_type, provider_id) pairs (P0-3-03 acceptance).
+    pairs = [(m["requirement_type"], m["provider_id"]) for m in body["mapped"]]
+    assert len(pairs) == len({*pairs})
 
 
 def test_list_requirement_mappings(personal_client) -> None:
@@ -262,3 +275,135 @@ def test_set_and_delete_individual_mapping(personal_client) -> None:
 
     resp_del = personal_client.delete(f"/settings/data-providers/mappings/stock_quote/{pid}")
     assert resp_del.status_code == 204
+
+
+def test_test_connection_returns_501_for_stub_kind(personal_client) -> None:
+    resp = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "fmp",
+            "label": "F",
+            "category": "financial",
+            "mode": "api_key",
+            "api_key": "k",
+            "base_url": "https://fmp.test",
+        },
+    )
+    pid = resp.json()["id"]
+    resp2 = personal_client.post(f"/settings/data-providers/{pid}/test-connection")
+    assert resp2.status_code == 501
+    body = resp2.json()
+    detail = body.get("detail", body)
+    assert detail.get("error") == "adapter_not_implemented"
+
+
+def test_create_mcp_provider_roundtrips_via_route(personal_client) -> None:
+    resp = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "E-MCP",
+            "category": "financial",
+            "mode": "mcp",
+            "mcp_url": "https://mcp.test/sse",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["mode"] == "mcp"
+    assert body["mcp_url"] == "https://mcp.test/sse"
+
+    resp2 = personal_client.get("/settings/data-providers")
+    listed = next(p for p in resp2.json()["providers"] if p["id"] == body["id"])
+    assert listed["mcp_url"] == "https://mcp.test/sse"
+    assert listed["mode"] == "mcp"
+
+
+def test_create_mcp_provider_without_mcp_url_returns_400(personal_client) -> None:
+    resp = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "bad",
+            "category": "financial",
+            "mode": "mcp",
+        },
+    )
+    assert resp.status_code == 400
+    body = resp.json()
+    detail = body.get("detail", body)
+    assert detail.get("error") == "invalid_provider"
+
+
+def test_patch_provider_priority(personal_client) -> None:
+    resp = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "E",
+            "category": "financial",
+            "mode": "api_key",
+            "api_key": "k",
+            "base_url": "https://eodhd.com/api",
+        },
+    )
+    pid = resp.json()["id"]
+    resp2 = personal_client.patch(
+        f"/settings/data-providers/{pid}/priority",
+        json={"priority": 25},
+    )
+    assert resp2.status_code == 200
+    assert resp2.json() == {"provider_id": pid, "priority": 25}
+
+
+def test_patch_provider_priority_rejects_negative(personal_client) -> None:
+    resp = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "E",
+            "category": "financial",
+            "mode": "api_key",
+            "api_key": "k",
+            "base_url": "https://eodhd.com/api",
+        },
+    )
+    pid = resp.json()["id"]
+    resp2 = personal_client.patch(
+        f"/settings/data-providers/{pid}/priority",
+        json={"priority": -1},
+    )
+    assert resp2.status_code == 400
+
+
+def test_patch_provider_priority_reorders_auto_map(personal_client) -> None:
+    a = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "A",
+            "category": "financial",
+            "mode": "api_key",
+            "api_key": "k",
+            "base_url": "https://eodhd.com/api",
+        },
+    ).json()["id"]
+    b = personal_client.post(
+        "/settings/data-providers",
+        json={
+            "kind": "eodhd",
+            "label": "B",
+            "category": "financial",
+            "mode": "api_key",
+            "api_key": "k",
+            "base_url": "https://eodhd.com/api",
+        },
+    ).json()["id"]
+    personal_client.patch(f"/settings/data-providers/{a}/priority", json={"priority": 50})
+    personal_client.patch(f"/settings/data-providers/{b}/priority", json={"priority": 10})
+
+    resp = personal_client.post("/settings/data-providers/auto-map")
+    body = resp.json()
+    # B (priority 10) wins; only B is mapped.
+    for entry in body["mapped"]:
+        assert entry["provider_id"] == b
