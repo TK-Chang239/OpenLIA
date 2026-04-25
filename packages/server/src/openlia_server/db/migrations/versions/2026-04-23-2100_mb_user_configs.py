@@ -57,7 +57,7 @@ def upgrade() -> None:
             "reference_portfolio",
             sa.Boolean(),
             nullable=False,
-            server_default=sa.text("0"),
+            server_default=sa.false(),
         ),
         sa.Column(
             "created_at",

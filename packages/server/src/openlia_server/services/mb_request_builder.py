@@ -7,7 +7,6 @@ through to `ReportRunner`.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 
 from openlia.llm.runtime.messages import ReportRequest
@@ -48,21 +47,9 @@ class MbRequestBuilderImpl:
             if holdings:
                 reference_portfolio = holdings
 
-        # The prompt consumes enabled_sections, section_topics, custom_sections,
-        # and reference_portfolio directly. Plan 5's ReportRequest carries:
-        #   mode, user_input, enabled_sections, custom_sections, length
-        # Section topics and reference_portfolio ride inside `user_input` as
-        # a JSON block the template can parse (no retroactive extension of
-        # ReportRequest). Ancillary fields are serialized deterministically
-        # so the prompt render matches regardless of dict ordering.
-        extras = {
-            "section_topics": cfg.section_topics,
-            "reference_portfolio": reference_portfolio,
-        }
         user_input = (
             "Generate today's Morning Briefing using the user's coverage list "
-            "and configured topics.\n\n"
-            "MB_EXTRAS_JSON:\n" + json.dumps(extras, sort_keys=True)
+            "and configured topics."
         )
 
         return ReportRequest(
@@ -71,4 +58,6 @@ class MbRequestBuilderImpl:
             enabled_sections=list(cfg.enabled_section_ids),
             custom_sections=list(cfg.custom_sections),
             length=_LENGTH_MAP.get(cfg.report_length, "standard"),
+            section_topics=dict(cfg.section_topics) if cfg.section_topics else None,
+            reference_portfolio=reference_portfolio,
         )

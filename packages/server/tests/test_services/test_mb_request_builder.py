@@ -69,6 +69,8 @@ def test_build_passes_enabled_sections_and_customs(create_tables, db_session: Se
     assert req.enabled_sections == ["executive_summary", "global_macro"]
     assert req.length == "long"
     assert any(cs["title"] == "My Focus" for cs in req.custom_sections)
+    assert req.section_topics == {"global_macro": [{"topic": "War", "notes": "Ukraine"}]}
+    assert "MB_EXTRAS_JSON" not in req.user_input
 
 
 def test_build_injects_reference_portfolio_when_enabled(create_tables, db_session: Session) -> None:
@@ -89,8 +91,11 @@ def test_build_injects_reference_portfolio_when_enabled(create_tables, db_sessio
     db_session.commit()
     builder = MbRequestBuilderImpl()
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
-    assert "AAPL" in req.user_input
-    assert "NVDA" in req.user_input
+    assert req.reference_portfolio is not None
+    tickers = [h["ticker"] for h in req.reference_portfolio]
+    assert "AAPL" in tickers
+    assert "NVDA" in tickers
+    assert "MB_EXTRAS_JSON" not in req.user_input
 
 
 def test_build_skips_reference_portfolio_when_toggle_off(
@@ -112,6 +117,7 @@ def test_build_skips_reference_portfolio_when_toggle_off(
     db_session.commit()
     builder = MbRequestBuilderImpl()
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
+    assert req.reference_portfolio is None
     assert "AAPL" not in req.user_input
 
 
@@ -152,4 +158,5 @@ def test_build_user_scoped_portfolio(create_tables, db_session: Session) -> None
     db_session.commit()
     builder = MbRequestBuilderImpl()
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
+    assert req.reference_portfolio is None
     assert "TSLA" not in req.user_input

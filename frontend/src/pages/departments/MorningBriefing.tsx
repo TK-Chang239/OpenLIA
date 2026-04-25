@@ -157,27 +157,46 @@ export default function MorningBriefing() {
 
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Morning Briefings</h1>
-          <p className="text-sm text-muted-foreground">
-            Your daily multi-section briefing. Covers macro, markets, sectors,
-            stocks, and upcoming events.
-          </p>
+      <header
+        className="h-14 flex items-center justify-between flex-shrink-0"
+        style={{ borderColor: "var(--color-border-subtle)" }}
+      >
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold truncate">Morning Briefings</h1>
         </div>
-        <OnDemandBriefingButton
-          onSaved={onReportSaved}
-          onError={setErrorMsg}
-        />
+        <div className="flex items-center gap-2">
+          <OnDemandBriefingButton
+            onSaved={onReportSaved}
+            onError={setErrorMsg}
+          />
+          <button
+            type="button"
+            onClick={() => setTab("settings")}
+            className="text-sm underline"
+            data-testid="mb-header-settings"
+          >
+            {"⚙ Settings"}
+          </button>
+        </div>
       </header>
 
       {errorMsg && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+        <div
+          className="rounded-[var(--radius-lg,0.5rem)] border p-3 text-sm"
+          style={{
+            borderColor: "var(--color-feedback-error)",
+            color: "var(--color-feedback-error)",
+            background: "var(--color-bg-base)",
+          }}
+        >
           {errorMsg}
         </div>
       )}
 
-      <div className="flex gap-2 border-b border-border">
+      <div
+        className="flex gap-2 border-b"
+        style={{ borderColor: "var(--color-border-subtle)" }}
+      >
         {(
           [
             { id: "archive", label: "Archive" },
@@ -200,11 +219,28 @@ export default function MorningBriefing() {
         ))}
       </div>
 
+      {tab === "settings" && (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setTab("archive")}
+            className="text-sm underline"
+            data-testid="mb-settings-back"
+          >
+            {"← Back to Reports"}
+          </button>
+          <span className="text-sm font-medium">
+            Morning Briefings Settings
+          </span>
+        </div>
+      )}
+
       {tab === "archive" ? (
         <MBArchiveView
           reports={reports}
           loading={reportsLoading}
           onOpen={onOpen}
+          onGoToSettings={() => setTab("settings")}
         />
       ) : tab === "chat" ? (
         <div className="h-[600px]" data-testid="mb-chat-tab">
