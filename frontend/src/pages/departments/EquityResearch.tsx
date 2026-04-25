@@ -1,14 +1,23 @@
-import { Settings } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { RotateCcw, Settings } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { createSession } from "../../api/chat";
-import { fetchReport, reportPdfUrl, type ReportSchema } from "../../api/reports";
-import { ChatInterface } from "../../components/chat/ChatInterface";
+import { saveReportToRepo } from "../../api/repo";
+import {
+  fetchReport,
+  reportDocxUrl,
+  reportPdfUrl,
+  type ReportSchema,
+} from "../../api/reports";
+import {
+  ChatInterface,
+  type InlineExtraMessage,
+} from "../../components/chat/ChatInterface";
 import { ReportCard } from "../../components/equity-research/ReportCard";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
 import { SuggestionChips } from "../../components/equity-research/SuggestionChips";
-import { ReportRenderer } from "../../components/report/ReportRenderer";
 import { useReportStream } from "../../components/report/useReportStream";
+import { useFileViewer } from "../../components/viewer/FileViewerContext";
 import { useErConfig } from "../../hooks/useErConfig";
 
 export default function EquityResearch() {
@@ -19,18 +28,18 @@ export default function EquityResearch() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
   const [schema, setSchema] = useState<ReportSchema | null>(null);
-  const [viewerOpen, setViewerOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const { state: reportState, start: startReport, reset: resetReport } = useReportStream();
+  const fileViewer = useFileViewer();
+  const {
+    state: reportState,
+    start: startReport,
+    reset: resetReport,
+    retry: retryReport,
+  } = useReportStream();
 
-  const onChipSelect = (value: string) => {
-    setInput(value);
-    inputRef.current?.focus();
-  };
-
-  const onSend = async () => {
+  const dispatchReport = async (text: string) => {
     if (!config) return;
-    const trimmed = input.trim();
+    const trimmed = text.trim();
     if (!trimmed) return;
     setInput("");
     setStartError(null);
@@ -56,6 +65,15 @@ export default function EquityResearch() {
     }
   };
 
+  const onChipSelect = (value: string) => {
+    setInput(value);
+    void dispatchReport(value);
+  };
+
+  const onSend = () => {
+    void dispatchReport(input);
+  };
+
   // Fetch the persisted schema once the server signals `report.saved`.
   useEffect(() => {
     if (reportState.status !== "complete" || !reportState.reportId) return;
@@ -75,14 +93,87 @@ export default function EquityResearch() {
   }, [reportState.status, reportState.reportId, schema]);
 
   if (loading || !config) {
-    return <div className="p-6 text-sm text-[--color-text-tertiary]">Loading…</div>;
+    return <PageSkeleton />;
   }
 
   const active = sessionId !== null;
 
-  const downloadPdf = (id: string) => {
-    window.open(reportPdfUrl(id), "_blank", "noopener");
+  const handleDownload = (id: string, fmt: "pdf" | "docx") => {
+    const url = fmt === "pdf" ? reportPdfUrl(id) : reportDocxUrl(id);
+    window.open(url, "_blank", "noopener");
   };
+
+  const handleSave = async (id: string): Promise<void> => {
+    await saveReportToRepo(id);
+  };
+
+  const openReport = (id: string) => {
+    if (!schema) return;
+    fileViewer.open({
+      filename: schema.cover.title || "Report",
+      kind: "pdf",
+      metadata: schema.cover.subtitle ?? "",
+      source: { kind: "report", reportId: id },
+    });
+  };
+
+  const inline = useMemo<InlineExtraMessage[]>(() => {
+    const items: InlineExtraMessage[] = [];
+    if (reportState.status === "starting" || reportState.status === "writing") {
+      items.push({
+        after: "end",
+        key: "report-progress",
+        node: (
+          <ReportProgressBubble
+            phase={reportState.phase}
+            sections={reportState.sections}
+            sectionTitles={reportState.sectionTitles}
+          />
+        ),
+      });
+    }
+    if (reportState.status === "error") {
+      items.push({
+        after: "end",
+        key: "report-error",
+        node: (
+          <ReportErrorBubble
+            message={reportState.errorMessage}
+            onRetry={() => retryReport()}
+          />
+        ),
+      });
+    }
+    if (
+      reportState.status === "complete" &&
+      schema &&
+      reportState.reportId
+    ) {
+      items.push({
+        after: "end",
+        key: `report-card-${reportState.reportId}`,
+        node: (
+          <div data-testid="er-report-card">
+            <ReportCard
+              reportId={reportState.reportId}
+              mode={config.report_mode}
+              subject={subject}
+              companyName={null}
+              createdAt={schema.generated_at ?? new Date().toISOString()}
+              preview={schema.cover.tagline || schema.cover.subtitle || ""}
+              onOpen={openReport}
+              onDownload={handleDownload}
+              onSave={handleSave}
+            />
+          </div>
+        ),
+      });
+    }
+    return items;
+    // openReport / handleSave are stable enough for inline rendering; we
+    // rely on identity-stable refs to avoid spurious chat re-renders.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportState, schema, config?.report_mode, subject]);
 
   return (
     <div className="flex flex-col h-full">
@@ -123,14 +214,14 @@ export default function EquityResearch() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    void onSend();
+                    onSend();
                   }
                 }}
                 className="flex-1 rounded-xl border border-[--color-border-subtle] bg-[--color-bg-input] px-4 py-3 text-md resize-none"
               />
               <button
                 type="button"
-                onClick={() => void onSend()}
+                onClick={onSend}
                 disabled={!input.trim()}
                 aria-label="Send"
                 className="w-8 h-8 rounded-[--radius-md] bg-[--color-accent-primary] text-white disabled:opacity-40 flex items-center justify-center"
@@ -143,57 +234,17 @@ export default function EquityResearch() {
       )}
 
       {active && sessionId && (
-        <div className="flex flex-1 min-h-0">
-          <div className="w-[360px] flex-shrink-0 border-r border-[--color-border-subtle] overflow-y-auto p-4 space-y-3">
-            <ReportStatusPanel
-              status={reportState.status}
-              phase={reportState.phase}
-              sectionTitles={reportState.sectionTitles}
-              errorMessage={reportState.errorMessage}
-            />
-            {schema && reportState.reportId ? (
-              <ReportCard
-                reportId={reportState.reportId}
-                mode={config.report_mode}
-                subject={subject}
-                companyName={null}
-                createdAt={schema.generated_at ?? new Date().toISOString()}
-                preview={schema.cover.tagline || schema.cover.subtitle || ""}
-                onOpen={() => setViewerOpen(true)}
-                onDownload={(id) => downloadPdf(id)}
-                onSave={() => {
-                  /* Save-to-repo handled by Phase 12 SaveToRepoButton inside the viewer. */
-                }}
-              />
-            ) : null}
-          </div>
-          <div className="flex-1 min-w-0">
-            {viewerOpen && schema ? (
-              <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between border-b border-[--color-border-subtle] px-4 py-2">
-                  <h2 className="text-sm font-medium">{schema.cover.title}</h2>
-                  <button
-                    type="button"
-                    onClick={() => setViewerOpen(false)}
-                    className="text-sm text-[--color-text-secondary]"
-                  >
-                    Close
-                  </button>
-                </div>
-                <div className="flex-1 overflow-y-auto">
-                  <ReportRenderer schema={schema} />
-                </div>
-              </div>
-            ) : (
-              <ChatInterface
-                sessionId={sessionId}
-                greeting="Researching…"
-                subtext=""
-                chips={[]}
-                inputPlaceholder="Ask a follow-up question about the company, sector, or report..."
-              />
-            )}
-          </div>
+        <div className="flex-1 min-h-0">
+          <ChatInterface
+            sessionId={sessionId}
+            greeting="Researching…"
+            subtext=""
+            chips={[]}
+            inputPlaceholder="Ask a follow-up question about the company, sector, or report..."
+            streamUrl="/api/departments/equity-research/chat"
+            bodyExtras={{ session_id: sessionId }}
+            extraInlineMessages={inline}
+          />
         </div>
       )}
 
@@ -223,48 +274,96 @@ function SendArrow(): JSX.Element {
   );
 }
 
-interface PanelProps {
-  status: string;
-  phase: string | null;
-  sectionTitles: string[];
-  errorMessage: string | null;
+function PageSkeleton(): JSX.Element {
+  return (
+    <div className="flex flex-col h-full">
+      <header className="h-14 flex-shrink-0 flex items-center justify-between border-b border-[--color-border-subtle] px-6">
+        <div
+          className="h-5 w-40 rounded bg-[--color-border-subtle] animate-pulse"
+          aria-hidden="true"
+        />
+        <div
+          className="h-8 w-32 rounded bg-[--color-border-subtle] animate-pulse"
+          aria-hidden="true"
+        />
+      </header>
+      <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
+        <div className="space-y-3 text-center">
+          <div className="h-7 w-56 mx-auto rounded bg-[--color-border-subtle] animate-pulse" />
+          <div className="h-4 w-72 mx-auto rounded bg-[--color-border-subtle] animate-pulse" />
+        </div>
+        <div className="flex flex-wrap gap-2 justify-center">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="h-9 w-20 rounded-full bg-[--color-border-subtle] animate-pulse"
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function ReportStatusPanel({ status, phase, sectionTitles, errorMessage }: PanelProps): JSX.Element {
-  if (status === "error") {
-    return (
-      <div className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-error]">
-        {errorMessage ?? "Report generation failed."}
-      </div>
-    );
-  }
-  if (status === "complete") {
-    return (
-      <div className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-secondary]">
-        Report ready.
-      </div>
-    );
-  }
+interface ProgressProps {
+  phase: string | null;
+  sections: { id: string; title: string; status: "pending" | "writing" | "done" }[];
+  sectionTitles: string[];
+}
+
+function ReportProgressBubble({ phase, sections, sectionTitles }: ProgressProps): JSX.Element {
   const label =
-    status === "starting"
-      ? "Starting…"
-      : phase === "fetching_data"
-        ? "Fetching data…"
-        : phase === "writing"
-          ? "Writing…"
-          : phase === "finalizing"
-            ? "Finalizing…"
-            : "Generating…";
+    phase === "fetching_data"
+      ? "Fetching data…"
+      : phase === "writing"
+        ? "Writing…"
+        : phase === "finalizing"
+          ? "Finalizing…"
+          : "Generating…";
+  const items = sections.length > 0
+    ? sections
+    : sectionTitles.map((t) => ({ id: t, title: t, status: "pending" as const }));
   return (
-    <div className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-secondary]">
+    <div
+      className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-secondary] max-w-[560px]"
+      data-testid="report-progress"
+    >
       <div className="font-medium text-[--color-text-primary]">{label}</div>
-      {sectionTitles.length > 0 ? (
-        <ul className="mt-2 list-disc list-inside space-y-0.5 text-xs">
-          {sectionTitles.map((t) => (
-            <li key={t}>{t}</li>
+      {items.length > 0 ? (
+        <ul className="mt-2 space-y-0.5 text-xs">
+          {items.map((s) => (
+            <li key={`${s.id}-${s.title}`} className="flex items-center gap-2">
+              <span aria-hidden="true">
+                {s.status === "done" ? "✓" : s.status === "writing" ? "⏳" : "•"}
+              </span>
+              <span>{s.title}</span>
+            </li>
           ))}
         </ul>
       ) : null}
+    </div>
+  );
+}
+
+interface ErrorProps {
+  message: string | null;
+  onRetry: () => void;
+}
+
+function ReportErrorBubble({ message, onRetry }: ErrorProps): JSX.Element {
+  return (
+    <div
+      className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-error] max-w-[560px] flex items-start gap-3"
+      data-testid="report-error"
+    >
+      <div className="flex-1">{message ?? "Report generation failed."}</div>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex items-center gap-1 px-2 h-7 rounded-[--radius-md] border border-[--color-border-subtle] text-[--color-text-secondary] hover:bg-[--color-surface-hover]"
+      >
+        <RotateCcw size={12} /> Try again
+      </button>
     </div>
   );
 }

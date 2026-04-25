@@ -73,6 +73,30 @@ def test_export_pdf_streams_pdf_bytes(personal_client: TestClient, db_session: S
     assert r.content[:4] == b"%PDF"
 
 
+def test_export_docx_streams_docx_bytes(personal_client: TestClient, db_session: Session) -> None:
+    rid = _seed_report(db_session, "local")
+    db_session.commit()
+    r = personal_client.get(f"/reports/{rid}/docx")
+    assert r.status_code == 200
+    assert (
+        r.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "attachment" in r.headers["content-disposition"]
+    # .docx files are zip archives — verify the PK\x03\x04 magic header.
+    assert r.content[:4] == b"PK\x03\x04"
+
+
+def test_export_docx_404_when_missing(personal_client: TestClient) -> None:
+    r = personal_client.get("/reports/does-not-exist/docx")
+    assert r.status_code == 404
+
+
+def test_export_docx_requires_auth(company_client_anon: TestClient) -> None:
+    r = company_client_anon.get("/reports/anything/docx")
+    assert r.status_code == 401
+
+
 def test_render_route_returns_spa_shell_when_bundle_present(
     personal_client: TestClient, db_session: Session, monkeypatch
 ) -> None:
