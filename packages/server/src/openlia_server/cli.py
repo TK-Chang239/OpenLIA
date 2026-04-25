@@ -52,11 +52,30 @@ def _version_callback(value: bool) -> None:
         print_version_and_exit()
 
 
+def _no_color_callback(value: bool) -> bool:
+    if value:
+        # Disable colored output everywhere: Click's own help, Rich's help
+        # renderer used by Typer, and any downstream child process that
+        # respects NO_COLOR. Must run before --help so eager ordering matters.
+        os.environ["NO_COLOR"] = "1"
+        os.environ.pop("FORCE_COLOR", None)
+        os.environ.pop("PY_COLORS", None)
+        import typer.rich_utils as rich_utils
+
+        rich_utils.FORCE_TERMINAL = False
+        rich_utils.COLOR_SYSTEM = None
+    return value
+
+
 @app.callback()
 def _root(
     ctx: typer.Context,
     no_color: bool = typer.Option(
-        False, "--no-color", help="Disable colored output (for piping/scripting)."
+        False,
+        "--no-color",
+        help="Disable colored output (for piping/scripting).",
+        is_eager=True,
+        callback=_no_color_callback,
     ),
     db_url: str | None = typer.Option(
         None,
