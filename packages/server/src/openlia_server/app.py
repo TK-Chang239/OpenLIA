@@ -355,6 +355,7 @@ def _make_lifespan(
                 finally:
                     await scheduler_svc.shutdown()
                     await browser_launcher.shutdown()
+                    await _cancel_wizard_background_tasks(app)
 
             return
 
@@ -363,8 +364,23 @@ def _make_lifespan(
             yield
         finally:
             await browser_launcher.shutdown()
+            await _cancel_wizard_background_tasks(app)
 
     return lifespan
+
+
+async def _cancel_wizard_background_tasks(app: FastAPI) -> None:
+    tasks = getattr(app.state, "setup_background_tasks", None)
+    if not tasks:
+        return
+    pending = [t for t in list(tasks) if not t.done()]
+    for t in pending:
+        t.cancel()
+    if pending:
+        try:
+            await asyncio.gather(*pending, return_exceptions=True)
+        except Exception:
+            pass
 
 
 def create_app(
@@ -389,13 +405,15 @@ def create_app(
     ):
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
-    app.include_router(
-        build_setup_router(
-            db_session_factory=factory,
-            mode=mode,
-            is_loopback_request=is_loopback_request or _is_loopback_request,
-        )
+    setup_router = build_setup_router(
+        db_session_factory=factory,
+        mode=mode,
+        is_loopback_request=is_loopback_request or _is_loopback_request,
     )
+    app.include_router(setup_router)
+    # Expose the wizard background-task set so the lifespan can cancel it on
+    # shutdown (no leaks in tests that spin the app up multiple times).
+    app.state.setup_background_tasks = getattr(setup_router, "state_background_tasks", set())
 
     if mode == "company":
         app.include_router(build_auth_router(db_session_factory=factory))

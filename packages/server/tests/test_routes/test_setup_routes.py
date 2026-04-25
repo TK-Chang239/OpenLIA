@@ -284,3 +284,388 @@ def test_finish_company_mode_redirects_to_login(wizard_company_client: TestClien
     wizard_company_client.post("/setup/mode", json={"mode": "company"})
     resp = wizard_company_client.post("/setup/finish")
     assert resp.json()["redirect"] == "/login"
+
+
+# ---------------------------------------------------------------------------
+# Task 9 (Phase 10): POST /setup/models
+# ---------------------------------------------------------------------------
+
+
+def _ollama_payload() -> dict:
+    return {
+        "thinking": [
+            {
+                "provider": "ollama",
+                "model": "llama3.1:70b",
+                "base_url": "http://localhost:11434",
+                "is_tier_default": True,
+            }
+        ],
+        "everyday": [
+            {
+                "provider": "ollama",
+                "model": "llama3.1:8b",
+                "base_url": "http://localhost:11434",
+                "is_tier_default": True,
+            }
+        ],
+        "quick": [
+            {
+                "provider": "ollama",
+                "model": "qwen2.5:7b",
+                "base_url": "http://localhost:11434",
+                "is_tier_default": True,
+            }
+        ],
+    }
+
+
+def test_post_models_roundtrip(wizard_personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.config import LLMModel, LLMProvider
+
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    resp = wizard_personal_client.post("/setup/models", json=_ollama_payload())
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    assert db_session.query(LLMProvider).count() == 3
+    assert db_session.query(LLMModel).count() == 3
+
+
+def test_post_models_idempotent_on_second_post(
+    wizard_personal_client: TestClient, db_session
+) -> None:
+    from openlia_server.db.models.config import LLMModel, LLMProvider
+
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    wizard_personal_client.post("/setup/models", json=_ollama_payload())
+    # Second POST replaces wizard-staged models — same row counts, no constraint clash.
+    resp = wizard_personal_client.post("/setup/models", json=_ollama_payload())
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    assert db_session.query(LLMProvider).count() == 3
+    assert db_session.query(LLMModel).count() == 3
+
+
+def test_post_models_410_after_completion(wizard_personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.infrastructure import ConfigStore
+
+    db_session.add(ConfigStore(key="wizard.completed", value="true"))
+    db_session.commit()
+    resp = wizard_personal_client.post("/setup/models", json=_ollama_payload())
+    assert resp.status_code == 410
+
+
+def test_post_models_409_without_session_token(wizard_personal_client: TestClient) -> None:
+    # No /setup/mode call -> no cookie issued.
+    resp = wizard_personal_client.post("/setup/models", json=_ollama_payload())
+    assert resp.status_code == 409
+
+
+def test_post_models_test_success(wizard_personal_client: TestClient, monkeypatch) -> None:
+    from openlia_server.routes import settings as settings_routes
+
+    class _FakeResult:
+        ok = True
+        latency_ms = 12
+        error_class = None
+        error_msg = None
+
+        def model_dump(self) -> dict:
+            return {
+                "ok": True,
+                "latency_ms": 12,
+                "error_class": None,
+                "error_msg": None,
+            }
+
+    async def _fake(*args, **kwargs):
+        return _FakeResult()
+
+    monkeypatch.setattr(settings_routes, "_run_connection_test", _fake)
+
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    resp = wizard_personal_client.post(
+        "/setup/models/test",
+        json={"provider": "ollama", "model": "x", "base_url": "http://localhost"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is True
+    assert body["latency_ms"] == 12
+
+
+def test_post_models_test_failure(wizard_personal_client: TestClient, monkeypatch) -> None:
+    from openlia_server.routes import settings as settings_routes
+
+    class _FakeResult:
+        def model_dump(self) -> dict:
+            return {
+                "ok": False,
+                "latency_ms": 0,
+                "error_class": "ConnectionError",
+                "error_msg": "could not reach host",
+            }
+
+    async def _fake(*args, **kwargs):
+        return _FakeResult()
+
+    monkeypatch.setattr(settings_routes, "_run_connection_test", _fake)
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    resp = wizard_personal_client.post(
+        "/setup/models/test",
+        json={"provider": "ollama", "model": "x", "base_url": "http://localhost"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["ok"] is False
+    assert body["error"] == "could not reach host"
+
+
+def test_post_models_rejects_unknown_provider(wizard_personal_client: TestClient) -> None:
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    payload = {
+        "thinking": [
+            {
+                "provider": "imaginary_kind",
+                "model": "x",
+                "base_url": "http://localhost",
+                "is_tier_default": True,
+            }
+        ],
+        "everyday": [],
+        "quick": [],
+    }
+    resp = wizard_personal_client.post("/setup/models", json=payload)
+    # `services.llm_providers.create_provider` raises on unknown kind; the
+    # request rolls back and returns 500 — the wizard treats that as a
+    # validation error in the UI. We accept 4xx OR 5xx but assert non-200.
+    assert resp.status_code != 200
+
+
+def test_post_models_loopback_required(db_session) -> None:
+    from fastapi.testclient import TestClient
+    from openlia_server.app import create_app
+    from openlia_server.db import session as session_mod
+
+    app = create_app(
+        db_session_factory=session_mod.SessionLocal,
+        is_loopback_request=lambda _: False,
+    )
+    client = TestClient(app)
+    resp = client.post("/setup/mode", json={"mode": "personal"})
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "loopback_required"
+
+
+# ---------------------------------------------------------------------------
+# Task 10 (Phase 10): /setup/providers + required_tiers
+# ---------------------------------------------------------------------------
+
+
+def _seed_session(client: TestClient) -> None:
+    client.post("/setup/mode", json={"mode": "personal"})
+
+
+def test_get_providers_empty(wizard_personal_client: TestClient) -> None:
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.get("/setup/providers")
+    assert resp.status_code == 200
+    assert resp.json() == {"providers": []}
+
+
+def test_post_provider_persists_with_status(wizard_personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.config import DataProvider
+
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "fmp",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["entry_id"]
+    db_session.expire_all()
+    rows = db_session.query(DataProvider).all()
+    assert len(rows) == 1
+    assert rows[0].kind == "fmp"
+    assert (rows[0].extra_config or {}).get("wizard_status") in ("ok", "error")
+
+
+def test_providers_confirm_requires_pair(wizard_personal_client: TestClient) -> None:
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.post("/setup/providers/confirm")
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "providers_incomplete"
+
+
+def test_providers_confirm_advances_after_pair(wizard_personal_client: TestClient) -> None:
+    _seed_session(wizard_personal_client)
+    # FMP + NewsAPI.org are both stubs — health_check returns True for stubs
+    # so wizard_status persists as "ok".
+    wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "fmp",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "news",
+            "entry": {
+                "mode": "builtin",
+                "provider": "newsapi_org",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    # Now advance via the dedicated confirm endpoint.
+    resp = wizard_personal_client.post("/setup/providers/confirm")
+    assert resp.status_code == 200
+    status = wizard_personal_client.get("/setup/status").json()
+    assert "providers" in status["completed_steps"]
+
+
+def test_provider_delete_removes_row(wizard_personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.config import DataProvider
+
+    _seed_session(wizard_personal_client)
+    add = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "fmp",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    pid = add.json()["entry_id"]
+    resp = wizard_personal_client.delete(f"/setup/providers/{pid}")
+    assert resp.status_code == 200
+    db_session.expire_all()
+    assert db_session.query(DataProvider).count() == 0
+
+
+def test_provider_patch_priority(wizard_personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.config import DataProvider
+
+    _seed_session(wizard_personal_client)
+    add = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "fmp",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    pid = add.json()["entry_id"]
+    resp = wizard_personal_client.patch(f"/setup/providers/{pid}", json={"priority": 5})
+    assert resp.status_code == 200
+    db_session.expire_all()
+    row = db_session.query(DataProvider).filter_by(id=pid).one()
+    assert (row.extra_config or {}).get("default_priority") == 5
+
+
+def test_provider_test_endpoint(wizard_personal_client: TestClient) -> None:
+    _seed_session(wizard_personal_client)
+    add = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "fmp",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    pid = add.json()["entry_id"]
+    resp = wizard_personal_client.post(f"/setup/providers/{pid}/test")
+    assert resp.status_code == 200
+    assert resp.json()["ok"] in (True, False)
+
+
+def test_post_provider_410_after_completion(wizard_personal_client: TestClient, db_session) -> None:
+    from openlia_server.db.models.infrastructure import ConfigStore
+
+    db_session.add(ConfigStore(key="wizard.completed", value="true"))
+    db_session.commit()
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {"mode": "builtin", "provider": "fmp"},
+        },
+    )
+    assert resp.status_code == 410
+
+
+def test_post_provider_409_without_session_token(wizard_personal_client: TestClient) -> None:
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {"mode": "builtin", "provider": "fmp"},
+        },
+    )
+    assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# NEW-10-02: GET /setup/required_tiers
+# ---------------------------------------------------------------------------
+
+
+def test_required_tiers_reads_from_registry(wizard_personal_client: TestClient) -> None:
+    resp = wizard_personal_client.get("/setup/required_tiers")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body["required_tiers"]) <= {"thinking", "everyday", "quick"}
+    assert "secretary" in body["enabled_departments"]
+    # Real registry has thinking + everyday + quick across departments.
+    assert "thinking" in body["required_tiers"]
+
+
+# ---------------------------------------------------------------------------
+# NEW-10-04: review poll shape
+# ---------------------------------------------------------------------------
+
+
+def test_review_poll_returns_canonical_shape(wizard_personal_client: TestClient) -> None:
+    from openlia_server.ai_review import store as store_mod
+
+    fresh = store_mod.ReviewStore()
+    rid = fresh.create()
+    fresh.update(rid, state="complete", progress=100, result={"summary": "ok"})
+
+    # Inject the entry into the default store so the route can read it.
+    store_mod.DEFAULT_STORE._entries[rid] = fresh._entries[rid]  # type: ignore[attr-defined]
+
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    resp = wizard_personal_client.get(f"/setup/review/{rid}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body.keys()) == {"state", "progress", "result", "error"}

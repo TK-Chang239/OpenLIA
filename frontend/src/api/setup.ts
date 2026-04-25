@@ -118,3 +118,11 @@ export const pollReview = (id: string) => fetchJson<ReviewPoll>(`/api/setup/revi
 
 export const finish = () =>
   fetchJson<{ redirect: string; mode: Mode }>("/api/setup/finish", { method: "POST" });
+
+export const confirmProviders = () =>
+  fetchJson<{ ok: boolean }>("/api/setup/providers/confirm", { method: "POST" });
+
+export const getRequiredTiers = () =>
+  fetchJson<{ required_tiers: string[]; enabled_departments: string[] }>(
+    "/api/setup/required_tiers",
+  );

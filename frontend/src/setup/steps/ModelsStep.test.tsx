@@ -16,6 +16,18 @@ describe("ModelsStep", () => {
     expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
   });
 
+  it("Next disabled when quick tier has no green entry", () => {
+    render(
+      <ModelsStep
+        totalSteps={5}
+        requiredTiers={["quick"]}
+        onBack={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
+  });
+
   it("enables Next after adding a model in each required tier", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(
