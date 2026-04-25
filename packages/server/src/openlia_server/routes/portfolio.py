@@ -1,12 +1,14 @@
-"""Portfolio routes — CRUD + analytics + CSV + price refresh."""
+"""Portfolio routes — CRUD + analytics + CSV + price refresh + groups + search."""
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import Callable
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session as DBSession
 
@@ -19,6 +21,8 @@ from openlia_server.services.portfolio_prices import (
     get_default_cache,
     get_default_provider,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class HoldingIn(BaseModel):
@@ -54,6 +58,25 @@ class HoldingOut(BaseModel):
     updated_at: str
 
 
+class SearchResultOut(BaseModel):
+    ticker: str
+    name: str | None
+    exchange: str | None = None
+    already_added: bool = False
+
+
+class GroupCreateIn(BaseModel):
+    name: str
+
+
+class GroupRenameIn(BaseModel):
+    new_name: str
+
+
+class GroupReorderIn(BaseModel):
+    order: list[str]
+
+
 def _dto_to_out(dto: svc.HoldingDTO) -> HoldingOut:
     return HoldingOut(
         id=dto.id,
@@ -66,6 +89,32 @@ def _dto_to_out(dto: svc.HoldingDTO) -> HoldingOut:
         notes_text=dto.notes_text,
         added_at=dto.added_at,
         updated_at=dto.updated_at,
+    )
+
+
+def _resolve_financial_adapter(request: Request) -> Any | None:
+    return getattr(request.app.state, "financial_adapter", None)
+
+
+def _profile_to_search_row(symbol: str, payload: Any) -> SearchResultOut | None:
+    """Map an EODHD `company_profile` General block to a search row.
+
+    EODHD returns ``{"General": {"Code": "AAPL", "Name": "Apple Inc.",
+    "Exchange": "NASDAQ", ...}}``. We tolerate raw dict shapes too.
+    """
+    if payload is None:
+        return None
+    if isinstance(payload, dict) and "General" in payload:
+        general = payload.get("General") or {}
+    else:
+        general = payload if isinstance(payload, dict) else {}
+    code = str(general.get("Code") or symbol).upper()
+    name = general.get("Name")
+    exchange = general.get("Exchange")
+    return SearchResultOut(
+        ticker=code,
+        name=str(name) if name else None,
+        exchange=str(exchange) if exchange else None,
     )
 
 
@@ -195,9 +244,8 @@ def build_portfolio_router(
         with _session() as s:
             holdings = svc.list_holdings(s, user_id=user.id)
         provider = provider_factory()
-        # Force-refresh: clear these tickers from cache first.
-        for h in holdings:
-            cache._cache.pop(h.ticker.upper(), None)
+        # Force-refresh: drop these tickers from the cache via the public API.
+        cache.invalidate([h.ticker for h in holdings])
         prices = cache.fetch_many(provider, [h.ticker for h in holdings])
         cache.mark_refresh(user.id)
         return {"prices": {t: (str(p) if p is not None else None) for t, p in prices.items()}}
@@ -223,15 +271,76 @@ def build_portfolio_router(
         )
 
     @router.get("/search")
-    def search(q: str, user: User = require_user) -> dict:
-        """Minimal ticker search — v1 is a pass-through returning the query.
+    def search(q: str, request: Request, user: User = require_user) -> dict:
+        """Adapter-backed ticker lookup over `company_profile`.
 
-        A real adapter-backed search is deferred to a follow-up polish pass
-        (spec: EODHD symbol-search endpoint).
+        Empty query returns ``[]``. Adapter errors degrade to ``[]`` (no 5xx).
+        Rows for tickers already in the user's portfolio carry
+        ``already_added: True``.
         """
-        q = q.strip().upper()
-        if not q:
+        q_clean = q.strip().upper()
+        if not q_clean:
             return {"results": []}
-        return {"results": [{"ticker": q, "name": None}]}
+        adapter = _resolve_financial_adapter(request)
+        rows: list[SearchResultOut] = []
+        if adapter is not None:
+            try:
+                result = asyncio.run(adapter.fetch("company_profile", {"symbol": q_clean}))
+            except Exception as exc:
+                logger.debug("portfolio search fetch failed for %s: %s", q_clean, exc)
+                return {"results": []}
+            row = _profile_to_search_row(q_clean, getattr(result, "payload", None))
+            if row is not None:
+                rows.append(row)
+        else:
+            # No adapter configured: return a minimal stub so the UI can still
+            # surface the typed query as a candidate symbol.
+            rows.append(SearchResultOut(ticker=q_clean, name=None, exchange=None))
+        with _session() as s:
+            existing = {h.ticker for h in svc.list_holdings(s, user_id=user.id)}
+        for r in rows:
+            if r.ticker in existing:
+                r.already_added = True
+        return {"results": [r.model_dump() for r in rows]}
+
+    # ---------- Groups ------------------------------------------------------
+
+    @router.get("/groups")
+    def list_groups(user: User = require_user) -> dict:
+        with _session() as s:
+            return {"groups": svc.list_groups(s, user_id=user.id)}
+
+    @router.post("/groups", status_code=201)
+    def create_group(body: GroupCreateIn, user: User = require_user) -> dict:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name is required")
+        with _session() as s:
+            svc.create_group(s, user_id=user.id, name=name)
+            return {"groups": svc.list_groups(s, user_id=user.id)}
+
+    @router.patch("/groups/{name}")
+    def rename_group(name: str, body: GroupRenameIn, user: User = require_user) -> dict:
+        new_name = body.new_name.strip()
+        if not new_name:
+            raise HTTPException(status_code=400, detail="new_name is required")
+        with _session() as s:
+            try:
+                svc.rename_group(s, user_id=user.id, old_name=name, new_name=new_name)
+            except svc.GroupNotFoundError as exc:
+                raise HTTPException(status_code=404, detail="group not found") from exc
+            return {"groups": svc.list_groups(s, user_id=user.id)}
+
+    @router.post("/groups/reorder")
+    def reorder_groups(body: GroupReorderIn, user: User = require_user) -> dict:
+        with _session() as s:
+            svc.reorder_groups(s, user_id=user.id, order=body.order)
+            return {"groups": svc.list_groups(s, user_id=user.id)}
+
+    @router.delete("/groups/{name}")
+    def delete_group(name: str, user: User = require_user) -> dict:
+        with _session() as s:
+            svc.delete_group(s, user_id=user.id, name=name)
+            return {"groups": svc.list_groups(s, user_id=user.id)}
 
     return router

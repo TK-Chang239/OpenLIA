@@ -204,12 +204,17 @@ Router: `build_retail_sentiment_router` mounted at `/departments/retail-sentimen
 
 Router: `build_portfolio_router` mounted at `/portfolio`.
 
-- `/portfolio/holdings` (GET/POST/PATCH/DELETE, `require_auth` + owner scope).
+- `/portfolio/holdings` (GET, POST, `require_auth` + owner scope).
+- `/portfolio/holdings/{id}` (PATCH, DELETE, `require_auth` + owner scope) — note PATCH (not PUT).
 - `/portfolio/analytics` (GET, `require_auth`).
-- `/portfolio/refresh-prices` (POST, `require_auth`).
-- `/portfolio/import-csv` (POST, `require_auth`) / `/portfolio/export-csv` (GET, `require_auth`).
-- `/portfolio/search` (GET, `require_auth`).
-- Test file: `packages/server/tests/test_routes_portfolio.py`.
+- `/portfolio/refresh-prices` (POST, `require_auth`) — 30s per-user cooldown via `PriceCache.refresh_cooldown_remaining`; returns 429 with `{detail.retry_after}` when within cooldown. Force-refresh routes through `PriceCache.invalidate(tickers)`; production resolves prices via `AdapterPriceProvider` wrapping `app.state.financial_adapter`.
+- `/portfolio/import-csv` (POST, `require_auth`) — note `/import-csv` (not `/holdings/import`).
+- `/portfolio/export-csv` (GET, `require_auth`) — note `/export-csv` (not `/holdings/export`).
+- `/portfolio/search` (GET, `require_auth`) — adapter-backed ticker lookup over `company_profile`; empty query → `[]`; adapter errors degrade to `[]`. Response shape: `{results: [{ticker, name, exchange, already_added}]}`.
+- `/portfolio/groups` (GET, POST, `require_auth` + owner scope) — list and create user-visible group names.
+- `/portfolio/groups/{name}` (PATCH, DELETE, `require_auth` + owner scope) — rename in a single transaction (updates every holding whose `groups` contains the old name); delete strips membership and preserves tickers in All.
+- `/portfolio/groups/reorder` (POST, `require_auth` + owner scope) — body `{order: [name, ...]}`; persists order across reload.
+- Test file: `packages/server/tests/test_routes/test_portfolio_routes.py`.
 
 ### Plan 22 — Repository (shipped)
 

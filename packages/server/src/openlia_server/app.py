@@ -430,7 +430,30 @@ def create_app(
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
-    app.include_router(build_portfolio_router(db_session_factory=factory, mode=mode))
+
+    # Portfolio — production price provider wraps app.state.financial_adapter
+    # (a configured Plan 3 ProviderAdapter exposing stock_quote). When no
+    # adapter is registered we fall back to a no-op provider so the page
+    # degrades gracefully (sparkline/price render as `—`) instead of 5xx-ing.
+    def _portfolio_price_provider_factory() -> Any:
+        from openlia_server.services.portfolio_prices import (
+            AdapterPriceProvider,
+            _NoopPriceProvider,
+        )
+
+        adapter = getattr(app.state, "financial_adapter", None)
+        if adapter is None:
+            log.warning("portfolio: no financial_adapter on app.state; using no-op price provider")
+            return _NoopPriceProvider()
+        return AdapterPriceProvider(adapter)
+
+    app.include_router(
+        build_portfolio_router(
+            db_session_factory=factory,
+            mode=mode,
+            price_provider_factory=_portfolio_price_provider_factory,
+        )
+    )
 
     # Macro Research — singletons for dashboard CRUD, cache, runner, schedule.
     from openlia_server.services.mr_cache import MRCacheStoreImpl

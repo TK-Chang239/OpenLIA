@@ -92,6 +92,18 @@ describe("EquityResearchPage", () => {
     expect(screen.getByRole("button", { name: "AAPL" })).toBeInTheDocument();
   });
 
+  it("pre-fills the input from the ?ticker= query param (NEW-21-09)", () => {
+    render(
+      <MemoryRouter initialEntries={["/equity-research?ticker=NVDA"]}>
+        <FileViewerProvider>
+          <EquityResearch />
+        </FileViewerProvider>
+      </MemoryRouter>,
+    );
+    const textarea = screen.getByPlaceholderText(/Enter a ticker/i) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("NVDA");
+  });
+
   it("Report Settings button opens the modal", () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /report settings/i }));

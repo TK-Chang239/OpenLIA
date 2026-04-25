@@ -29,6 +29,15 @@ class HoldingNotFoundError(LookupError):
     """Raised when a holding does not exist for the given user."""
 
 
+class GroupNotFoundError(LookupError):
+    """Raised when a group rename targets a non-existent group."""
+
+
+# Reserved sentinel used to persist user-visible group ordering and
+# empty groups inside a hidden PortfolioHolding row.
+_GROUPS_META_TICKER = "__GROUPS__"
+
+
 @dataclass(frozen=True)
 class HoldingDTO:
     id: str
@@ -103,6 +112,8 @@ def create_holding(
     ticker = ticker.strip().upper()
     if not ticker:
         raise ValueError("ticker is required")
+    if ticker == _GROUPS_META_TICKER:
+        raise ValueError("reserved ticker")
     existing = (
         session.query(PortfolioHolding).filter_by(user_id=user_id, ticker=ticker).one_or_none()
     )
@@ -131,7 +142,7 @@ def list_holdings(session: Session, *, user_id: str) -> list[HoldingDTO]:
         .order_by(PortfolioHolding.ticker.asc())
         .all()
     )
-    return [_row_to_dto(r) for r in rows]
+    return [_row_to_dto(r) for r in rows if r.ticker != _GROUPS_META_TICKER]
 
 
 def get_holding(session: Session, *, user_id: str, holding_id: str) -> HoldingDTO:
@@ -184,6 +195,153 @@ def delete_holding(session: Session, *, user_id: str, holding_id: str) -> None:
     session.commit()
 
 
+# ---------- Groups ------------------------------------------------------------
+
+
+def _get_groups_meta(session: Session, *, user_id: str) -> list[str]:
+    row = (
+        session.query(PortfolioHolding)
+        .filter_by(user_id=user_id, ticker=_GROUPS_META_TICKER)
+        .one_or_none()
+    )
+    if row is None or row.notes is None:
+        return []
+    try:
+        parsed = json.loads(row.notes)
+    except (ValueError, TypeError):
+        return []
+    if isinstance(parsed, dict):
+        order = parsed.get("order", [])
+        if isinstance(order, list):
+            return [str(g) for g in order]
+    return []
+
+
+def _set_groups_meta(session: Session, *, user_id: str, order: list[str]) -> None:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for name in order:
+        if name and name not in seen:
+            seen.add(name)
+            deduped.append(name)
+    payload = json.dumps({"order": deduped}, sort_keys=True)
+    row = (
+        session.query(PortfolioHolding)
+        .filter_by(user_id=user_id, ticker=_GROUPS_META_TICKER)
+        .one_or_none()
+    )
+    if row is None:
+        row = PortfolioHolding(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            ticker=_GROUPS_META_TICKER,
+            name=None,
+            shares=None,
+            cost_basis=None,
+            currency="USD",
+            notes=payload,
+        )
+        session.add(row)
+    else:
+        row.notes = payload
+    session.commit()
+
+
+def list_groups(session: Session, *, user_id: str) -> list[str]:
+    """Return the ordered list of user-visible groups.
+
+    Order = persisted meta order (when present), then any newly-discovered
+    groups from holding membership appended in alpha order.
+    """
+    persisted = _get_groups_meta(session, user_id=user_id)
+    seen = set(persisted)
+    discovered: set[str] = set()
+    for h in list_holdings(session, user_id=user_id):
+        for g in h.groups:
+            if g and g not in seen:
+                discovered.add(g)
+    return list(persisted) + sorted(discovered)
+
+
+def create_group(session: Session, *, user_id: str, name: str) -> list[str]:
+    name = name.strip()
+    if not name:
+        raise ValueError("name is required")
+    current = list_groups(session, user_id=user_id)
+    if name not in current:
+        current.append(name)
+    _set_groups_meta(session, user_id=user_id, order=current)
+    return current
+
+
+def rename_group(session: Session, *, user_id: str, old_name: str, new_name: str) -> list[str]:
+    old_name = old_name.strip()
+    new_name = new_name.strip()
+    if not new_name:
+        raise ValueError("new_name is required")
+    current = list_groups(session, user_id=user_id)
+    if old_name not in current:
+        raise GroupNotFoundError(f"group {old_name!r} not found")
+    # Update every holding that references old_name in a single transaction.
+    rows = session.query(PortfolioHolding).filter_by(user_id=user_id).all()
+    for row in rows:
+        if row.ticker == _GROUPS_META_TICKER:
+            continue
+        groups, text = _decode_notes(row.notes)
+        if old_name in groups:
+            new_groups = [new_name if g == old_name else g for g in groups]
+            row.notes = _encode_notes(new_groups, text)
+    new_order = [new_name if g == old_name else g for g in current]
+    payload = json.dumps({"order": new_order}, sort_keys=True)
+    meta = (
+        session.query(PortfolioHolding)
+        .filter_by(user_id=user_id, ticker=_GROUPS_META_TICKER)
+        .one_or_none()
+    )
+    if meta is None:
+        meta = PortfolioHolding(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            ticker=_GROUPS_META_TICKER,
+            name=None,
+            shares=None,
+            cost_basis=None,
+            currency="USD",
+            notes=payload,
+        )
+        session.add(meta)
+    else:
+        meta.notes = payload
+    session.commit()
+    return new_order
+
+
+def reorder_groups(session: Session, *, user_id: str, order: list[str]) -> list[str]:
+    existing = set(list_groups(session, user_id=user_id))
+    cleaned = [name for name in order if name in existing]
+    # Append any existing groups not present in the supplied order so reorder
+    # is non-destructive when partial.
+    for name in sorted(existing - set(cleaned)):
+        cleaned.append(name)
+    _set_groups_meta(session, user_id=user_id, order=cleaned)
+    return cleaned
+
+
+def delete_group(session: Session, *, user_id: str, name: str) -> list[str]:
+    name = name.strip()
+    rows = session.query(PortfolioHolding).filter_by(user_id=user_id).all()
+    for row in rows:
+        if row.ticker == _GROUPS_META_TICKER:
+            continue
+        groups, text = _decode_notes(row.notes)
+        if name in groups:
+            new_groups = [g for g in groups if g != name]
+            row.notes = _encode_notes(new_groups, text)
+    current = [g for g in list_groups(session, user_id=user_id) if g != name]
+    _set_groups_meta(session, user_id=user_id, order=current)
+    return current
+
+
 def get_reference_holdings(session: Session, *, user_id: str) -> list[ReferenceHolding]:
     """Cross-plan helper consumed by Morning Briefing (Plan 16).
 
@@ -203,6 +361,7 @@ def get_reference_holdings(session: Session, *, user_id: str) -> list[ReferenceH
             currency=r.currency,
         )
         for r in rows
+        if r.ticker != _GROUPS_META_TICKER
     ]
 
 

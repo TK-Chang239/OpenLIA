@@ -230,11 +230,16 @@ Endpoints: provider CRUD + model CRUD + `remote-models` discovery + department t
 
 | Route | Access | Owner scope | Must-change-password |
 |---|---|---|---|
-| `GET/POST/PATCH/DELETE /portfolio/holdings` | `require_auth` | `PortfolioHolding.user_id` | blocked |
+| `GET /portfolio/holdings`, `POST /portfolio/holdings` | `require_auth` | `PortfolioHolding.user_id` | blocked |
+| `PATCH /portfolio/holdings/{id}`, `DELETE /portfolio/holdings/{id}` | `require_auth` | `PortfolioHolding.user_id` | blocked |
 | `GET /portfolio/analytics` | `require_auth` | derived from user's holdings | blocked |
 | `POST /portfolio/refresh-prices` | `require_auth` | operates on user's holdings | blocked |
-| `POST /portfolio/import-csv` / `GET /portfolio/export-csv` | `require_auth` | user's holdings only | blocked |
-| `GET /portfolio/search` | `require_auth` | provider-backed ticker search; no PII | blocked |
+| `POST /portfolio/import-csv` | `require_auth` | user's holdings only | blocked |
+| `GET /portfolio/export-csv` | `require_auth` | user's holdings only | blocked |
+| `GET /portfolio/search` | `require_auth` | adapter-backed ticker lookup; no PII | blocked |
+| `GET /portfolio/groups`, `POST /portfolio/groups` | `require_auth` | derived from user's holdings | blocked |
+| `PATCH /portfolio/groups/{name}`, `DELETE /portfolio/groups/{name}` | `require_auth` | mutates only this user's holdings | blocked |
+| `POST /portfolio/groups/reorder` | `require_auth` | persists per-user group order | blocked |
 
 ### Plan 22 — Repository (shipped)
 
