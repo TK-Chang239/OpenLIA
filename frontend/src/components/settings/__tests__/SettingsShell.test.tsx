@@ -1,16 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { SettingsShell } from '../SettingsShell';
 
 function renderAt(path: string, role: 'user' | 'admin' = 'user') {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/settings/*" element={<SettingsShell userRole={role} />} />
-      </Routes>
-    </MemoryRouter>,
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/settings/*',
+        element: <SettingsShell userRole={role} />,
+        children: [
+          { path: 'general', element: <p>general body</p> },
+          { path: 'account', element: <p>account body</p> },
+          { path: 'models', element: <p>models body</p> },
+          { path: 'admin', element: <p>admin body</p> },
+        ],
+      },
+    ],
+    { initialEntries: [path] },
   );
+  return render(<RouterProvider router={router} />);
 }
 
 describe('SettingsShell', () => {

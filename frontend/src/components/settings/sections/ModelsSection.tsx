@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   ApiError,
+  DepartmentDefaultRow,
   deleteModelPreference,
+  getDepartmentDefaults,
   getModelPreferences,
   getModelsRoster,
   ModelsRoster,
@@ -32,14 +34,16 @@ function entriesFor(roster: ModelsRoster, tier: Tier): RosterEntry[] {
 
 export function ModelsSection(): JSX.Element {
   const [roster, setRoster] = useState<ModelsRoster | null>(null);
+  const [departmentDefaults, setDepartmentDefaults] = useState<DepartmentDefaultRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<Record<Tier, TierRowState>>({} as Record<Tier, TierRowState>);
   const [topError, setTopError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getModelsRoster(), getModelPreferences()])
-      .then(([rosterResp, prefsResp]) => {
+    Promise.all([getModelsRoster(), getModelPreferences(), getDepartmentDefaults()])
+      .then(([rosterResp, prefsResp, defaultsResp]) => {
         setRoster(rosterResp);
+        setDepartmentDefaults(defaultsResp.departments ?? []);
         const byTier = prefsResp.preferences ?? {};
         const next = {} as Record<Tier, TierRowState>;
         for (const t of TIERS) {
@@ -83,6 +87,30 @@ export function ModelsSection(): JSX.Element {
         </p>
       </header>
       <InlineFeedback kind={topError ? 'error' : null} message={topError ?? ''} />
+      {departmentDefaults.length > 0 ? (
+        <SettingGroup
+          title="Per-department tier defaults"
+          description="Each department picks the tier that matches its workload. Hover for the rationale."
+        >
+          <ul role="list" aria-label="Per-department tier defaults" className="text-sm text-text-primary">
+            {departmentDefaults.map((row) => (
+              <li
+                key={row.department_id}
+                className="flex items-center justify-between border-b border-border-subtle py-1.5 last:border-0"
+              >
+                <span className="capitalize">{row.department_id.replaceAll('_', ' ')}</span>
+                <span
+                  title={row.reason}
+                  aria-label={`${row.department_id} default tier ${row.tier}: ${row.reason}`}
+                  className="text-text-secondary"
+                >
+                  {row.tier}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SettingGroup>
+      ) : null}
       {TIERS.map((t) => {
         const row = rows[t.tier];
         const entries = roster ? entriesFor(roster, t.tier) : [];

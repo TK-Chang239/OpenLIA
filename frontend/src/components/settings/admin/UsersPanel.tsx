@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
-import { adminResetPassword, AdminUserRow, ApiError, disableUser, enableUser, listAdminUsers } from '../../../api/admin';
+import {
+  adminResetPassword,
+  AdminUserRow,
+  ApiError,
+  disableUser,
+  enableUser,
+  listAdminUsers,
+} from '../../../api/admin';
 import { InlineFeedback } from '../InlineFeedback';
+import { OneTimeSecretModal } from '../OneTimeSecretModal';
 
 interface Props {
   currentUserId: string;
@@ -9,6 +17,8 @@ interface Props {
 export function UsersPanel({ currentUserId }: Props): JSX.Element {
   const [items, setItems] = useState<AdminUserRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [tempPasswordEmail, setTempPasswordEmail] = useState<string>('');
 
   const refresh = async () => {
     try {
@@ -19,7 +29,9 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
     }
   };
 
-  useEffect(() => { refresh(); }, []);
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const toggle = async (u: AdminUserRow) => {
     const action = u.is_disabled ? 'enable' : 'disable';
@@ -34,11 +46,16 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
   };
 
   const reset = async (u: AdminUserRow) => {
-    if (!window.confirm(`Reset password for ${u.email}? They will be forced to change it on next login.`)) return;
-    const newPassword = window.prompt('Enter a temporary replacement password');
-    if (!newPassword) return;
+    if (
+      !window.confirm(
+        `Reset password for ${u.email}? A new temporary password will be generated and shown once.`,
+      )
+    )
+      return;
     try {
-      await adminResetPassword(u.id, newPassword);
+      const result = await adminResetPassword(u.id);
+      setTempPassword(result.temporary_password);
+      setTempPasswordEmail(u.email);
       await refresh();
     } catch (e) {
       setError((e as ApiError).message);
@@ -63,58 +80,78 @@ export function UsersPanel({ currentUserId }: Props): JSX.Element {
           </thead>
           <tbody>
             {items === null ? (
-              <tr><td colSpan={6} className="px-3 py-4 text-text-secondary">Loading...</td></tr>
-            ) : items.map((u) => (
-              <tr key={u.id} className="border-t border-border-subtle">
-                <td className="px-3 py-2 text-text-primary">{u.email}</td>
-                <td className="px-3 py-2 text-text-primary">{u.display_name}</td>
-                <td className="px-3 py-2 text-text-primary">{u.is_admin ? 'admin' : 'user'}</td>
-                <td className="px-3 py-2">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    u.is_disabled
-                      ? 'bg-feedback-error/10 text-feedback-error'
-                      : 'bg-feedback-success/10 text-feedback-success'
-                  }`}>
-                    {u.is_disabled ? 'Disabled' : 'Enabled'}
-                  </span>
-                  {u.must_change_password ? (
-                    <span className="ml-1 inline-block rounded-full bg-feedback-warning/10 px-2 py-0.5 text-xs font-medium text-feedback-warning">
-                      Must change pw
-                    </span>
-                  ) : null}
-                </td>
-                <td className="px-3 py-2 text-text-secondary">
-                  {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—'}
-                </td>
-                <td className="px-3 py-2 text-right space-x-3">
-                  {u.id !== currentUserId ? (
-                    <>
-                      <button
-                        type="button"
-                        data-action="reset"
-                        onClick={() => reset(u)}
-                        className="text-sm text-accent-primary hover:underline"
-                      >
-                        Reset password
-                      </button>
-                      <button
-                        type="button"
-                        data-action="disable"
-                        onClick={() => toggle(u)}
-                        className={`text-sm ${u.is_disabled ? 'text-feedback-success' : 'text-feedback-error'} hover:underline`}
-                      >
-                        {u.is_disabled ? 'Enable' : 'Disable'}
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-xs text-text-secondary">You</span>
-                  )}
+              <tr>
+                <td colSpan={6} className="px-3 py-4 text-text-secondary">
+                  Loading...
                 </td>
               </tr>
-            ))}
+            ) : (
+              items.map((u) => (
+                <tr key={u.id} className="border-t border-border-subtle">
+                  <td className="px-3 py-2 text-text-primary">{u.email}</td>
+                  <td className="px-3 py-2 text-text-primary">{u.display_name}</td>
+                  <td className="px-3 py-2 text-text-primary">{u.is_admin ? 'admin' : 'user'}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                        u.is_disabled
+                          ? 'bg-feedback-error/10 text-feedback-error'
+                          : 'bg-feedback-success/10 text-feedback-success'
+                      }`}
+                    >
+                      {u.is_disabled ? 'Disabled' : 'Enabled'}
+                    </span>
+                    {u.must_change_password ? (
+                      <span className="ml-1 inline-block rounded-full bg-feedback-warning/10 px-2 py-0.5 text-xs font-medium text-feedback-warning">
+                        Must change pw
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-text-secondary">
+                    {u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—'}
+                  </td>
+                  <td className="px-3 py-2 text-right space-x-3">
+                    {u.id !== currentUserId ? (
+                      <>
+                        <button
+                          type="button"
+                          data-action="reset"
+                          onClick={() => reset(u)}
+                          className="text-sm text-accent-primary hover:underline"
+                        >
+                          Reset password
+                        </button>
+                        <button
+                          type="button"
+                          data-action="disable"
+                          onClick={() => toggle(u)}
+                          className={`text-sm ${
+                            u.is_disabled ? 'text-feedback-success' : 'text-feedback-error'
+                          } hover:underline`}
+                        >
+                          {u.is_disabled ? 'Enable' : 'Disable'}
+                        </button>
+                      </>
+                    ) : (
+                      <span className="text-xs text-text-secondary">You</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
+      <OneTimeSecretModal
+        open={tempPassword !== null}
+        title={`Temporary password for ${tempPasswordEmail}`}
+        secret={tempPassword ?? ''}
+        description="Hand this password to the user. They will be required to set a new one on next login. This value will not be shown again."
+        onClose={() => {
+          setTempPassword(null);
+          setTempPasswordEmail('');
+        }}
+      />
     </div>
   );
 }
