@@ -65,8 +65,14 @@ class BaseExecutor:
         schedule_id: str | None,
         cancel_token: CancellationToken | None = None,
         retry_of: str | None = None,
+        run_id: str | None = None,
     ) -> str:
-        run_id = self._start_run(user_id=user_id, schedule_id=schedule_id, retry_of=retry_of)
+        # If the caller pre-allocated a job_runs row (e.g. an HTTP route that
+        # needs a real id to return synchronously), reuse it; otherwise open
+        # a fresh one. Either way the executor owns transition to terminal
+        # states (completed/failed/cancelled).
+        if run_id is None:
+            run_id = self._start_run(user_id=user_id, schedule_id=schedule_id, retry_of=retry_of)
 
         if cancel_token is not None and cancel_token.is_cancelled:
             self._cancel(run_id, "Cancelled before execution")

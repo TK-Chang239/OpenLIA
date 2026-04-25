@@ -64,4 +64,12 @@ describe("AllWeatherView", () => {
     const hits = await screen.findAllByText("7.5%");
     expect(hits.length).toBeGreaterThan(0);
   });
+
+  it("does not render a Run-assessment button (P1-06a)", async () => {
+    render(<AllWeatherView />);
+    await screen.findByTestId("fallback-banner");
+    expect(
+      screen.queryByRole("button", { name: /run assessment now/i }),
+    ).toBeNull();
+  });
 });

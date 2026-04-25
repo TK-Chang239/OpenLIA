@@ -7,6 +7,7 @@ import {
 import {
   AssessmentBlock,
   ErrorBlock,
+  FreshnessBadge,
   LoadingBlock,
   Panel,
   SeverityPill,
@@ -26,8 +27,8 @@ export default function DebtCycleView(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
 
-  const load = useCallback(() => {
-    getDashboard("debt_cycle")
+  const load = useCallback((sm: boolean) => {
+    getDashboard("debt_cycle", sm)
       .then((r) => {
         setData(r);
         setError(null);
@@ -36,14 +37,14 @@ export default function DebtCycleView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    load(smartMode);
+  }, [load, smartMode]);
 
   const onRun = async () => {
     setRunning(true);
     try {
       await runAssessment("debt_cycle");
-      load();
+      load(smartMode);
     } catch (e) {
       setError(String(e));
     } finally {
@@ -76,6 +77,7 @@ export default function DebtCycleView(): JSX.Element {
             Debt Cycle
           </h2>
           <SeverityPill severity={data.severity} />
+          <FreshnessBadge generatedAt={data.generated_at} />
         </div>
         <div className="flex items-center gap-3">
           <SmartModeToggle value={smartMode} onChange={setSmartMode} />

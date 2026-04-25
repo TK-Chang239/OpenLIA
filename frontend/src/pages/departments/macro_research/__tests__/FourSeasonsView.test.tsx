@@ -59,4 +59,12 @@ describe("FourSeasonsView", () => {
       ).toBeInTheDocument(),
     );
   });
+
+  it("does not render a Run-assessment button (P1-06b)", async () => {
+    render(<FourSeasonsView />);
+    await screen.findByText("Spring");
+    expect(
+      screen.queryByRole("button", { name: /run assessment now/i }),
+    ).toBeNull();
+  });
 });

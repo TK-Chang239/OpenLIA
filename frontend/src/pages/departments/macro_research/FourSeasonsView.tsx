@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   getDashboard,
-  runAssessment,
   type DashboardResult,
 } from "../../../api/macro_research";
 import {
-  AssessmentBlock,
   ErrorBlock,
+  FreshnessBadge,
   LoadingBlock,
   Panel,
   SeverityPill,
@@ -27,10 +26,9 @@ export default function FourSeasonsView(): JSX.Element {
   const [data, setData] = useState<DashboardResult | null>(null);
   const [smartMode, setSmartMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
 
-  const load = useCallback(() => {
-    getDashboard("four_seasons")
+  const load = useCallback((sm: boolean) => {
+    getDashboard("four_seasons", sm)
       .then((r) => {
         setData(r);
         setError(null);
@@ -39,26 +37,13 @@ export default function FourSeasonsView(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  const onRun = async () => {
-    setRunning(true);
-    try {
-      await runAssessment("four_seasons");
-      load();
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setRunning(false);
-    }
-  };
+    load(smartMode);
+  }, [load, smartMode]);
 
   if (error) return <ErrorBlock message={error} />;
   if (!data) return <LoadingBlock label="Four Seasons" />;
 
   const t3 = tierOf(data, "T3")?.data as T3 | undefined;
-  const t4 = tierOf(data, "T4")?.data as { assessment?: string } | undefined;
   const playbook = t3?.asset_playbook ?? { best: [], worst: [] };
 
   return (
@@ -69,17 +54,10 @@ export default function FourSeasonsView(): JSX.Element {
             Four Seasons
           </h2>
           <SeverityPill severity={data.severity} />
+          <FreshnessBadge generatedAt={data.generated_at} />
         </div>
         <div className="flex items-center gap-3">
           <SmartModeToggle value={smartMode} onChange={setSmartMode} />
-          <button
-            type="button"
-            disabled={running}
-            onClick={onRun}
-            className="rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-sm text-[--color-text-primary] disabled:opacity-60"
-          >
-            {running ? "Running…" : "Run assessment now"}
-          </button>
         </div>
       </header>
 
@@ -134,10 +112,6 @@ export default function FourSeasonsView(): JSX.Element {
         </Panel>
       </div>
 
-      <AssessmentBlock
-        text={t4?.assessment ?? null}
-        generatedAt={data.generated_at}
-      />
       {smartMode ? (
         <div className="text-xs text-[--color-text-tertiary]">
           Smart Mode adjusts axis thresholds based on recent surprises.

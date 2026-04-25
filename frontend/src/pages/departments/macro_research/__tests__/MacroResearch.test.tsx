@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,6 +23,11 @@ vi.mock("../../../../api/macro_research", () => ({
     generated_at: "2026-04-24T00:00:00+00:00",
     smart_mode_active: false,
   }),
+  getConfig: vi
+    .fn()
+    .mockResolvedValue({ view_config: {}, threshold_overrides: {} }),
+  putConfig: vi.fn(),
+  putThresholdOverrides: vi.fn(),
   runAssessment: vi.fn(),
   getSchedule: vi.fn().mockResolvedValue({ cron_expression: null }),
   putSchedule: vi.fn(),
@@ -65,5 +70,23 @@ describe("MacroResearch shell", () => {
     const summary = screen.getByTestId("mr-summary-view");
     expect(summary.textContent).toMatch(/Debt Cycle/);
     expect(summary.textContent).toMatch(/Five Forces/);
+  });
+
+  it("opens MR Settings panel from the Settings button (NEW-19-01)", async () => {
+    renderAt("/macro-research");
+    const btn = await screen.findByTestId("mr-settings-button");
+    fireEvent.click(btn);
+    expect(await screen.findByTestId("mr-settings-panel")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("mr-settings-threshold-section"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the auto-refresh interval dropdown (NEW-19-02)", async () => {
+    renderAt("/macro-research");
+    const select = await screen.findByTestId("mr-refresh-select");
+    expect(select).toBeInTheDocument();
+    // Default state: Off (no value selected).
+    expect((select as HTMLSelectElement).value).toBe("");
   });
 });

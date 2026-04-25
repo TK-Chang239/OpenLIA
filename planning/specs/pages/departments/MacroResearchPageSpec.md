@@ -124,7 +124,15 @@ Collapsible drawer or modal. Contains:
 
 **Per-Dashboard Settings (T3):** Portfolio source, volatility estimates, coverage thresholds.
 
-**Per-Dashboard Settings (T4, T5):** Assessment schedule, LLM model, manual "Run assessment now" button, scoring anchors. (News-trigger keywords and sensitivity controls are deferred to v2 -- see `macro-research-dalio-dashboards-design.md`.)
+**Per-Dashboard Settings (T4, T5):** LLM model, manual "Run assessment now" button, scoring anchors. (News-trigger keywords and sensitivity controls are deferred to v2 -- see `macro-research-dalio-dashboards-design.md`.)
+
+> **Implementation note (Phase 19, NEW-19-12):** the assessment schedule
+> is stored as a single user-level recurring cron persisted on the
+> canonical `world_order` `mr_dashboard_state` row (see
+> `services/mr_schedules.py:CANONICAL_DASHBOARD`). One scheduled run
+> assesses every T4/T5-bearing dashboard for the user. Per-dashboard
+> schedules are deferred — the manual "Run assessment now" button on
+> each T4/T5 tab covers the per-dashboard ad-hoc case.
 
 See design spec Section "Settings Panel" for full detail.
 

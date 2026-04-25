@@ -173,15 +173,19 @@ See `packages/server/src/openlia_server/routes/departments/panic_thermometer.py`
 
 ### Plan 19 — Macro Research (shipped)
 
-Router: `build_macro_research_router` mounted at `/departments/macro-research`.
+Router: `build_macro_research_router` mounted at `/departments/macro_research`. Schedule routes mounted by `build_mr_schedule_router` at `/departments/macro_research/schedule`.
 
-- `/departments/macro-research/dashboards` (GET, `require_auth`) — enumerates the five Dalio dashboards.
-- `/departments/macro-research/dashboards/{slug}` (GET, `require_auth`) — snapshot for one dashboard (`debt_cycle`, `four_seasons`, `all_weather`, `world_order`, `five_forces`).
-- `/departments/macro-research/dashboards/{slug}/config` (GET/PUT, `require_auth`) — per-user config.
-- `/departments/macro-research/dashboards/{slug}/assessment/run` (POST 202, `require_auth`) — kicks off assessment.
-- `/departments/macro-research/schedule` (GET/PUT/DELETE, `require_auth`) via `build_mr_schedules_router` — single recurring assessment schedule per user.
-- Test files: `packages/server/tests/test_routes_macro_research.py`, `test_routes_mr_schedules.py`.
-- Frontend client: `frontend/src/api/macro-research.ts`.
+- `GET /departments/macro_research/dashboards` (`require_auth`) — enumerates the five Dalio dashboards. Response: `{ "dashboards": [{ "slug": str, "display_name": str }] }`.
+- `GET /departments/macro_research/dashboards/{slug}?smart_mode=<bool>` (`require_auth`) — snapshot for one dashboard (`debt_cycle`, `four_seasons`, `all_weather`, `world_order`, `five_forces`). Optional `smart_mode` query flag is forwarded to `mr_runner.run`. Response: `DashboardResult` (slug, display_name, severity, tiers, headline, generated_at, smart_mode_active).
+- `GET /departments/macro_research/dashboards/{slug}/config` (`require_auth`) — returns `{ "view_config": {...}, "threshold_overrides": {...} }`.
+- `PUT /departments/macro_research/dashboards/{slug}/config` (`require_auth`) — body `{ "view_config"?: {...}, "threshold_overrides"?: {...} }`; returns the merged row.
+- `PUT /departments/macro_research/dashboards/{slug}/threshold-overrides` (`require_auth`, NEW-19-08) — body `{ "threshold_overrides": {...} }`; returns the merged row. Use this when you only need to mutate threshold overrides; the combined `/config` endpoint stays for view_config writes.
+- `POST /departments/macro_research/dashboards/{slug}/assessment/run` (`require_auth`, 202) — body `{ "force"?: bool }`. Inserts a `JobRun` row keyed to `JobType.MR_ASSESSMENT` + `user_id` + `schedule_id=slug`, then dispatches via `app.state.scheduler.run_now`. Returns `{ "job_run_id": str, "status": "queued" | "cancelled" }` (cancelled when scheduler is disabled).
+- `GET /departments/macro_research/schedule` (`require_auth`) — returns `{ "cron_expression": str | null, "last_assessment_at": str | null }`.
+- `PUT /departments/macro_research/schedule` (`require_auth`) — body `{ "cron_expression": str }`; 400 on invalid crontab. Persists on the canonical `world_order` `mr_dashboard_state` row (see NEW-19-12 implementation note in `MacroResearchPageSpec.md`).
+- `DELETE /departments/macro_research/schedule` (`require_auth`, 204).
+- Test files: `packages/server/tests/test_macro_research/test_routes_macro_research.py`, `packages/server/tests/test_macro_research/test_routes_mr_schedules.py`.
+- Frontend client: `frontend/src/api/macro_research.ts`.
 
 ### Plan 20 — Retail Sentiment (shipped)
 

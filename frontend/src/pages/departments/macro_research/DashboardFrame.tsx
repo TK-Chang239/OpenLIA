@@ -125,3 +125,30 @@ export function ErrorBlock({ message }: { message: string }): JSX.Element {
     </div>
   );
 }
+
+export function FreshnessBadge({
+  generatedAt,
+  ttlMinutes = 60,
+}: {
+  generatedAt: string | null | undefined;
+  ttlMinutes?: number;
+}): JSX.Element | null {
+  if (!generatedAt) return null;
+  const ts = Date.parse(generatedAt);
+  if (Number.isNaN(ts)) return null;
+  const ageMinutes = (Date.now() - ts) / 60_000;
+  const stale = ageMinutes > ttlMinutes;
+  const cls = stale
+    ? "bg-[--color-bg-elevated] text-[--color-text-tertiary]"
+    : "bg-[--color-feedback-success]/10 text-[--color-feedback-success]";
+  return (
+    <span
+      data-testid="freshness-badge"
+      data-fresh={stale ? "stale" : "fresh"}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide ${cls}`}
+      title={new Date(ts).toLocaleString()}
+    >
+      {stale ? "Stale" : "Fresh"}
+    </span>
+  );
+}

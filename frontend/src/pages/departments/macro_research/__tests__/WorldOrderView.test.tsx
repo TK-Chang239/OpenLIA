@@ -70,4 +70,20 @@ describe("WorldOrderView", () => {
       expect(mocks.runAssessment).toHaveBeenCalledWith("world_order"),
     );
   });
+
+  it("re-fetches with smart_mode=true when the toggle flips (NEW-19-06)", async () => {
+    render(<WorldOrderView />);
+    await waitFor(() => expect(mocks.getDashboard).toHaveBeenCalled());
+    const initialCalls = mocks.getDashboard.mock.calls.length;
+    fireEvent.click(screen.getByRole("switch", { name: /smart mode/i }));
+    await waitFor(() =>
+      expect(mocks.getDashboard.mock.calls.length).toBeGreaterThan(
+        initialCalls,
+      ),
+    );
+    const lastCall =
+      mocks.getDashboard.mock.calls[mocks.getDashboard.mock.calls.length - 1];
+    expect(lastCall[0]).toBe("world_order");
+    expect(lastCall[1]).toBe(true);
+  });
 });
