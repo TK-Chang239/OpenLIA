@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { JSX } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { ChevronLeft, ChevronRight, LogOut, Settings, User } from "lucide-react";
 import { CORE_NAV, DEPARTMENT_NAV } from "./navData";
 import { NavItem } from "./NavItem";
@@ -31,7 +31,7 @@ export function Sidebar(): JSX.Element {
     <nav
       aria-label="Main navigation"
       className={[
-        "flex flex-col h-screen bg-sidebar-bg",
+        "hidden md:flex flex-col h-screen bg-sidebar-bg",
         "transition-[width] duration-normal ease-in-out",
         collapsed ? "w-[52px]" : "w-[220px]",
       ].join(" ")}
@@ -135,11 +135,20 @@ export function Sidebar(): JSX.Element {
           collapsed={collapsed}
           hasUnread={false}
         />
-        <div
+        <NavLink
+          to="/settings/account"
+          aria-label={collapsed ? "Account" : undefined}
           className={[
-            "flex items-center gap-[10px] px-2 py-[9px]",
+            "flex items-center gap-[10px] px-2 py-[9px] rounded-md w-full",
+            "transition-colors duration-normal ease-out",
             collapsed ? "justify-center" : "",
           ].join(" ")}
+          style={({ isActive }: { isActive: boolean }) => ({
+            background: isActive ? "var(--color-sidebar-active)" : "transparent",
+            color: isActive
+              ? "var(--color-sidebar-text-strong)"
+              : "var(--color-sidebar-text)",
+          })}
         >
           <span
             className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center"
@@ -152,11 +161,9 @@ export function Sidebar(): JSX.Element {
             />
           </span>
           {collapsed ? null : (
-            <span className="text-[13px]" style={{ color: "var(--color-sidebar-text)" }}>
-              Account
-            </span>
+            <span className="text-[13px]">Account</span>
           )}
-        </div>
+        </NavLink>
         {status === "authenticated" && (
           <button
             type="button"
