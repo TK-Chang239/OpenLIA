@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { CheckCircle } from "lucide-react";
+
+import type { WatchlistEntry } from "../../api/earnings-update";
 
 interface Props {
   open: boolean;
@@ -8,6 +11,17 @@ interface Props {
   startReport: (payload: {
     ticker: string;
   }) => Promise<{ report_id: string; title: string }>;
+  entries?: WatchlistEntry[];
+}
+
+function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export function OnDemandReportModal({
@@ -15,17 +29,24 @@ export function OnDemandReportModal({
   onClose,
   onReportReady,
   startReport,
+  entries,
 }: Props) {
   const [ticker, setTicker] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const trimmed = ticker.trim().toUpperCase();
+  const matchedEntry = useMemo(() => {
+    if (!entries || !trimmed) return null;
+    return entries.find((e) => e.ticker.toUpperCase() === trimmed) ?? null;
+  }, [entries, trimmed]);
 
   async function handleGenerate() {
     setErr(null);
     setSubmitting(true);
     try {
       const result = await startReport({
-        ticker: ticker.trim().toUpperCase(),
+        ticker: trimmed,
       });
       onReportReady(result);
       onClose();
@@ -40,7 +61,7 @@ export function OnDemandReportModal({
     <Dialog.Root open={open} onOpenChange={(v) => (!v ? onClose() : null)}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] bg-[--color-bg-elevated] rounded-[--radius-lg] p-6 shadow-lg">
+        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] max-w-[480px] bg-[--color-bg-elevated] rounded-[--radius-lg] p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold mb-1">
             On-Demand Earnings Update
           </Dialog.Title>
@@ -54,6 +75,25 @@ export function OnDemandReportModal({
             placeholder="Ticker symbol (e.g. AAPL)"
             className="w-full bg-[--color-bg-base] border border-[--color-border-subtle] rounded-[--radius-sm] px-3 h-9 text-sm text-[--color-text-primary]"
           />
+          {matchedEntry ? (
+            <div
+              data-testid="selected-company"
+              className="mt-2 flex items-center gap-2 text-sm text-[--color-text-primary]"
+            >
+              <CheckCircle
+                size={16}
+                className="text-[--color-feedback-success]"
+                aria-hidden
+              />
+              <span className="font-semibold">{matchedEntry.ticker}</span>
+              <span className="text-[--color-text-secondary]">
+                — {matchedEntry.company_name}
+              </span>
+              <span className="text-[--color-text-tertiary] ml-auto">
+                Last earnings: {formatDate(matchedEntry.next_earnings_date)}
+              </span>
+            </div>
+          ) : null}
           {err ? (
             <p className="text-xs text-[--color-feedback-error] mt-2">{err}</p>
           ) : null}
@@ -67,7 +107,7 @@ export function OnDemandReportModal({
             </button>
             <button
               type="button"
-              disabled={!ticker.trim() || submitting}
+              disabled={!trimmed || submitting}
               onClick={() => void handleGenerate()}
               className="text-sm bg-[--color-accent-primary] text-white px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover] disabled:opacity-50"
             >

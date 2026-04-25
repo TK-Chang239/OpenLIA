@@ -13,7 +13,9 @@ describe("WatchlistRow", () => {
       />,
     );
     expect(
-      screen.getByText(/Add companies to your watchlist/i),
+      screen.getByText(
+        "Add companies to your watchlist to track upcoming earnings",
+      ),
     ).toBeInTheDocument();
   });
 

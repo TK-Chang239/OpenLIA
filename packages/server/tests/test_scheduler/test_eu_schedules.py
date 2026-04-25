@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
-from openlia_server.routes.eu_schedules import build_eu_schedules_router
+from openlia_server.routes.departments.earnings_update import build_earnings_update_router
 from openlia_server.scheduler import wiring as wiring_mod
 from openlia_server.scheduler.registry import JobType, job_key
 from openlia_server.scheduler.settings import SchedulerSettings
@@ -94,7 +94,7 @@ def eu_fixtures(eu_session_factory):
 
     app = FastAPI(lifespan=lifespan)
     app.include_router(
-        build_eu_schedules_router(db_session_factory=eu_session_factory, mode="personal")
+        build_earnings_update_router(db_session_factory=eu_session_factory, mode="personal")
     )
 
     with TestClient(app) as client:
@@ -120,7 +120,7 @@ def client_no_scheduler(eu_session_factory):
     app = FastAPI()
     app.state.scheduler = None
     app.include_router(
-        build_eu_schedules_router(db_session_factory=eu_session_factory, mode="personal")
+        build_earnings_update_router(db_session_factory=eu_session_factory, mode="personal")
     )
     with TestClient(app) as client:
         yield client
@@ -241,3 +241,59 @@ def test_post_with_scheduler_disabled_returns_503(client_no_scheduler) -> None:
         json={"time": "07:00", "timezone": "UTC", "days_of_week": [0], "is_enabled": True},
     )
     assert r.status_code == 503
+
+
+def test_post_invalid_time_returns_422(eu_fixtures) -> None:
+    client, _ = eu_fixtures
+    r = client.post(
+        "/departments/earnings-update/schedules",
+        json={"time": "25:99", "timezone": "UTC", "days_of_week": [0], "is_enabled": True},
+    )
+    assert r.status_code == 422
+
+
+def test_post_invalid_timezone_returns_422(eu_fixtures) -> None:
+    client, _ = eu_fixtures
+    r = client.post(
+        "/departments/earnings-update/schedules",
+        json={
+            "time": "07:00",
+            "timezone": "Not/A/Real/Zone",
+            "days_of_week": [0],
+            "is_enabled": True,
+        },
+    )
+    assert r.status_code == 422
+
+
+def test_post_empty_days_returns_422(eu_fixtures) -> None:
+    client, _ = eu_fixtures
+    r = client.post(
+        "/departments/earnings-update/schedules",
+        json={"time": "07:00", "timezone": "UTC", "days_of_week": [], "is_enabled": True},
+    )
+    assert r.status_code == 422
+
+
+def test_post_invalid_day_index_returns_422(eu_fixtures) -> None:
+    client, _ = eu_fixtures
+    r = client.post(
+        "/departments/earnings-update/schedules",
+        json={"time": "07:00", "timezone": "UTC", "days_of_week": [99], "is_enabled": True},
+    )
+    assert r.status_code == 422
+
+
+def test_patch_foreign_user_returns_404(eu_fixtures) -> None:
+    client, _ = eu_fixtures
+    r = client.patch(
+        "/departments/earnings-update/schedules/does-not-exist",
+        json={"time": "07:00", "timezone": "UTC", "days_of_week": [0], "is_enabled": True},
+    )
+    assert r.status_code == 404
+
+
+def test_delete_foreign_user_returns_404(eu_fixtures) -> None:
+    client, _ = eu_fixtures
+    r = client.delete("/departments/earnings-update/schedules/does-not-exist")
+    assert r.status_code == 404
