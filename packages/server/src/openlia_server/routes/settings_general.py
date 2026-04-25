@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.middleware.auth import build_require_auth
+from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import user_prefs as svc
 
 
@@ -46,7 +46,7 @@ def _to_out(user: User, prefs) -> PrefsOut:
 
 def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/settings", tags=["settings"])
-    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
+    require_auth = build_require_active_user(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get("/prefs", response_model=PrefsOut)

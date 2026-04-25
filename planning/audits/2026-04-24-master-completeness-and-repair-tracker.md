@@ -48,9 +48,9 @@ merged.
 
 | #  | Plan                                | Plan status | Shipped % | Dominant root cause       | Headline gap                                                                 |
 |----|-------------------------------------|-------------|-----------|---------------------------|-------------------------------------------------------------------------------|
-| 1a | DB Baseline                         | Done        | ~90%      | IMPLEMENTER               | Hand-written `2026-04-16-1200_baseline.py` migration missing                 |
-| 1b | DB Dashboard/Scheduler/Notif        | Done        | ~95%      | IMPLEMENTER               | `mr_dashboard_state` + `rs_classification_log` model/migration drift          |
-| 2  | Auth & Secrets                      | Done        | ~92%      | IMPLEMENTER               | `build_require_auth` returns `Depends()` and breaks nested deps              |
+| 1a | DB Baseline                         | Done        | 100%      | RESOLVED                  | ~~Hand-written `2026-04-16-1200_baseline.py` migration missing~~ — closed via PR #52 (f2b3055 + 3bc14f0) |
+| 1b | DB Dashboard/Scheduler/Notif        | Done        | 100%      | RESOLVED                  | ~~`mr_dashboard_state` + `rs_classification_log` model/migration drift~~ — closed via PR #52 (f2b3055 + 3bc14f0) |
+| 2  | Auth & Secrets                      | Done        | 100%      | RESOLVED                  | ~~`build_require_auth` returns `Depends()` and breaks nested deps~~ — claim retired (FastAPI resolves the default fine); shipped P0-02-01..P2-02-05 via PR for branch `fix/phase-2-auth-secrets` |
 | 3  | Data Provider Adapter               | Done        | ~95%      | DEFERRED                  | Cleanest phase — only `company_fundamentals` capability deferred             |
 | 4  | LLM Provider System                 | Done        | ~72%      | IMPLEMENTER               | User-preference HTTP routes never wired (service layer present)              |
 | 5  | LLM Runtime                         | Done        | ~88%      | IMPLEMENTER               | `await_with_grace` unused; MR/MB prompt files absent; no startup slot check  |
@@ -59,7 +59,7 @@ merged.
 | 8  | Frontend Shell                      | Done        | ~95%      | IMPLEMENTER + SPEC_DRIFT  | Design tokens diverged to Wondermakers/Acid Yellow palette                   |
 | 9  | Login / Account UI                  | Done        | ~88%      | IMPLEMENTER               | Server requires `display_name`; `aria-describedby` missing                   |
 | 10 | Setup Wizard                        | Done        | ~72%      | IMPLEMENTER               | Step 3 (Models) backend handlers don't exist (frontend hits 404)             |
-| 11 | Settings Page                       | Done        | ~72%      | IMPLEMENTER               | New routes use `build_require_auth`, bypass must-change-password             |
+| 11 | Settings Page                       | Done        | ~75%      | IMPLEMENTER               | ~~New routes use `build_require_auth`, bypass must-change-password~~ — closed via Phase 2 fix-plan P0-02-01; remaining Phase 11 gaps tracked in `phase-11-settings-page.md` |
 | 12 | Shared Chat Components              | Done        | ~90%      | IMPLEMENTER               | `Department` union covers 2 of 7; zero frontend vitests                      |
 | 13 | Report Pipeline & Secretary         | Done        | ~75%      | IMPLEMENTER               | Secretary HTTP route never created                                           |
 | 14 | Equity Research                     | Done        | ~83%      | IMPLEMENTER               | Active layout diverges from spec; `POST /chat` drops `session_id`            |
@@ -120,22 +120,29 @@ real use), not polish. Each line links the gap to the source review.
   - Files: `packages/server/src/openlia_server/app.py` (~lines 283 + 388).
   - Source: Phase 6 review.
 
-- [ ] **P0-06 — Fix `build_require_auth` return shape.**
+- [x] ~~**P0-06 — Fix `build_require_auth` return shape.**
   - Bug: returns `Depends(require_auth)`; FastAPI does not evaluate nested
     `Depends` stored as inner-function defaults. Already observed as test
     failure (memory observation 850).
   - Files: `packages/server/src/openlia_server/middleware/auth.py` ~lines
     68–75 and 91–100.
-  - Source: Phase 2 review.
+  - Source: Phase 2 review.~~ **Retired by Phase 2 fix-plan rewrite** —
+  the 13-test `test_must_change_password_gate.py` suite plus every
+  middleware/auth_routes test pass against the shipped factories. FastAPI
+  does evaluate `user=require_auth` (where the default is `Depends(...)`)
+  via its parameter-default scan. The original bug claim was wrong.
 
-- [ ] **P0-07 — Apply `build_require_active_user` to `/settings/prefs`,
+- [x] ~~**P0-07 — Apply `build_require_active_user` to `/settings/prefs`,
   `/settings/email`, `/settings/admin/llm`.**
   - Bug: shipped routes use `build_require_auth`; must-change-password users
     can edit settings. Direct violation of REM-P1-001 acceptance criteria.
   - Files: `packages/server/src/openlia_server/routes/settings_general.py`
     (line 49), `routes/settings_email.py` (line 22),
     `routes/settings_models.py` (line 24).
-  - Source: Phase 11 review.
+  - Source: Phase 11 review.~~ **Resolved Phase 2 fix-plan P0-02-01** —
+  all three settings routers swapped to `build_require_active_user`; gate
+  test extended with 5 new methods covering prefs GET/PATCH, email PATCH,
+  models GET/PUT.
 
 - [ ] **P0-08 — Fix `display_name` requirement on `/auth/register`.**
   - Bug: server requires non-empty `display_name`; spec and frontend treat
@@ -363,15 +370,21 @@ keeps the project navigable.
       `test_wheel_contents.py`, cookie/proxy integration tests,
       env-snapshot test.
 
-- [ ] **P2-02 — `route-authorization-matrix.md` path inconsistency.**
+- [x] ~~**P2-02 — `route-authorization-matrix.md` path inconsistency.**
   REM-P0-006 references `planning/route-authorization-matrix.md`; file
   resolves at `planning/implementation-plans/route-authorization-matrix.md`.
-  Either move the file or update the cross-references.
+  Either move the file or update the cross-references.~~ **Resolved Phase 2
+  fix-plan P2-02-01** — verified all live cross-references already use the
+  canonical `planning/implementation-plans/route-authorization-matrix.md`
+  path. Only stale prose lived in this entry and the fix-plan write-up; no
+  file move required.
 
-- [ ] **P2-03 — `services/auth/__init__.py` is empty.** Plan required
+- [x] ~~**P2-03 — `services/auth/__init__.py` is empty.** Plan required
   re-exports of public API. Consumers import sub-modules directly today
   (works), but `from openlia_server.services.auth import authenticate`
-  fails contract.
+  fails contract.~~ **Resolved Phase 2 fix-plan P1-02-01** — populated
+  `services/auth/__init__.py` with the full public API and added an import
+  smoke test (`tests/test_services/test_auth/test_public_api.py`).
 
 - [x] ~~**P2-04 — Phase 1a `models/__init__.py` includes `dashboard`,
   `scheduler`, `departments`** alongside Plan-1A modules; docstring still
@@ -553,8 +566,8 @@ P1 in the same PR.
 
 **Sprint B — auth & scheduler correctness (1–2 days)**
 
-6. P0-06 Fix `build_require_auth` return shape.
-7. P0-07 Apply `build_require_active_user` to settings routes.
+6. ~~P0-06 Fix `build_require_auth` return shape.~~ — RETIRED (claim was wrong; see P0-06 entry above).
+7. ~~P0-07 Apply `build_require_active_user` to settings routes.~~ — DONE via Phase 2 fix-plan P0-02-01.
 8. P0-04 + P0-05 Wire `BatchRunner` and unify `MRScheduleService`.
 9. P0-08 Fix `display_name` requirement.
 
@@ -615,9 +628,9 @@ instead of all 1,000+.
 
 | Phase | File | Current | Root cause |
 |-------|------|---------|------------|
-| 1a | [phase-1a-database-baseline.md](./fix-plans/phase-1a-database-baseline.md) | ~90% | mixed |
-| 1b | [phase-1b-db-dashboard-scheduler-notifications.md](./fix-plans/phase-1b-db-dashboard-scheduler-notifications.md) | ~95% | IMPLEMENTER |
-| 2 | [phase-2-auth-secrets.md](./fix-plans/phase-2-auth-secrets.md) | ~92% | IMPLEMENTER |
+| 1a | ~~[phase-1a-database-baseline.md](./fix-plans/phase-1a-database-baseline.md)~~ | 100% | RESOLVED (PR #52) |
+| 1b | ~~[phase-1b-db-dashboard-scheduler-notifications.md](./fix-plans/phase-1b-db-dashboard-scheduler-notifications.md)~~ | 100% | RESOLVED (PR #52) |
+| 2 | ~~[phase-2-auth-secrets.md](./fix-plans/phase-2-auth-secrets.md)~~ | 100% | RESOLVED |
 | 3 | [phase-3-data-provider-adapter.md](./fix-plans/phase-3-data-provider-adapter.md) | ~95% plan / ~55% spec | SPEC_DRIFT |
 | 4 | [phase-4-llm-provider-system.md](./fix-plans/phase-4-llm-provider-system.md) | ~72% | mixed |
 | 5 | [phase-5-llm-runtime.md](./fix-plans/phase-5-llm-runtime.md) | ~88% | IMPLEMENTER |
@@ -659,9 +672,20 @@ deferrals, missing submodules, per-phase test debt slices).
 
 | ID            | Phase | Title                                                        | Severity |
 |---------------|-------|--------------------------------------------------------------|----------|
-| NEW-1a-01     | 1a    | Spec-required `CHECK` constraints audit in baseline          | P1       |
-| NEW-1a-02     | 1a    | Nightly maintenance sweep job                                | P2       |
-| NEW-1b-01     | 1b    | `job_runs` FK cascade audit                                  | P2       |
+| ~~NEW-1a-01~~ | 1a    | ~~Spec-required `CHECK` constraints audit in baseline~~ — migration `2026-04-24-0300_spec_check_constraints.py` + `test_spec_check_constraints.py` (f2b3055) | P1 |
+| ~~NEW-1a-02~~ | 1a    | ~~Nightly maintenance sweep job~~ — already shipped in Phase 6 (`scheduler/executors/maintenance.py`); cross-link verified (3bc14f0) | P2 |
+| ~~NEW-1b-01~~ | 1b    | ~~`job_runs` FK cascade audit~~ — RETIRED; `schedule_id` is soft-polymorphic per spec (no FK by design) | P2 |
+| ~~NEW-1b-02~~ | 1b    | ~~`mb_schedules`/`eu_schedules` `is_enabled` `server_default`~~ — migration `2026-04-24-0200_plan_1b_server_defaults_and_checks.py` + ORM mirror (f2b3055) | P1 |
+| ~~NEW-1b-03~~ | 1b    | ~~`pt_presets.is_shipped` `server_default`~~ — same migration (f2b3055) | P1 |
+| ~~NEW-1b-04~~ | 1b    | ~~`composite_settings`/`view_config`/`threshold_overrides` JSON `server_default`~~ — same migration (f2b3055) | P1 |
+| ~~NEW-1b-05~~ | 1b    | ~~`mr_dashboard_state.assessment_schedule` enum CHECK~~ — added in 0200 migration + ORM `__table_args__` (f2b3055) | P1 |
+| ~~NEW-1b-06~~ | 1b    | ~~`rs_snapshots` index missing `DESC`~~ — index recreated DESC on `captured_at` (f2b3055) | P1 |
+| ~~NEW-1b-07~~ | 1b    | ~~`database-design.md` §7 stale~~ — spec amended for `rs_classification_log`, MR new columns, table count (f2b3055) | P1 |
+| ~~NEW-1b-08~~ | 1b    | ~~Frozen-schema parity test~~ — `test_migration_parity.py` (f2b3055) | P1 |
+| ~~NEW-1b-09~~ | 1b    | ~~Catch-up migration step tests~~ — covered in `test_migration_parity.py` (f2b3055) | P1 |
+| ~~NEW-1b-10~~ | 1b    | ~~Plan-vs-reality table count (11→12)~~ — Phase 1b plan amended; scope note added to fix plan header (3bc14f0) | P2 |
+| ~~NEW-1b-11~~ | 1b    | ~~Phase-15/16 tables mis-attributed to 1b in P0-09~~ — fix-plan header re-scoped to 12-table boundary (3bc14f0) | P2 |
+| ~~NEW-1b-12~~ | 1b    | ~~`JobRun` relationship() decision undocumented~~ — model docstring records explicit-join design (3bc14f0) | P2 |
 | NEW-2-01      | 2     | Auth rate-limit threshold test                               | P2       |
 | NEW-3-01      | 3     | `catalog`/`review`/`dispatch`/`python_providers`/`sentiment` stubs | P2 |
 | NEW-3-02      | 3     | Data-provider spec amendment header                          | P2       |
