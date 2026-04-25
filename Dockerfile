@@ -56,7 +56,10 @@ COPY packages/core/pyproject.toml packages/core/pyproject.toml
 COPY packages/server/pyproject.toml packages/server/pyproject.toml
 
 ENV UV_PROJECT_ENVIRONMENT=/app/.venv
-RUN uv sync --frozen --no-dev --all-packages --no-install-project
+# First pass: only resolve and install third-party deps. --no-install-workspace
+# skips building any workspace member, since their source is not yet copied
+# (uv_build would otherwise demand packages/<member>/src/<module>/__init__.py).
+RUN uv sync --frozen --no-dev --all-packages --no-install-workspace
 
 # Copy the actual source and re-sync to install the local workspace.
 COPY packages/ packages/
