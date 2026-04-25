@@ -1,6 +1,8 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { logoutAll } from "../../api/auth";
+import { ApiError } from "../../api/client";
+import { mapTransportError } from "../../api/errors";
 import { Banner, type BannerVariant } from "../../components/primitives/Banner";
 
 export function SessionsPanel() {
@@ -15,11 +17,18 @@ export function SessionsPanel() {
     try {
       await logoutAll();
       setBanner({ message: "Other sessions signed out.", variant: "success" });
-    } catch {
-      setBanner({
-        message: "Unable to sign out other sessions. Please try again.",
-        variant: "error",
-      });
+    } catch (err) {
+      if (
+        err instanceof TypeError ||
+        (err instanceof ApiError && (err.status === 0 || err.status >= 500))
+      ) {
+        setBanner(mapTransportError(err));
+      } else {
+        setBanner({
+          message: "Unable to sign out other sessions. Please try again.",
+          variant: "error",
+        });
+      }
     } finally {
       setSubmitting(false);
     }
@@ -33,7 +42,9 @@ export function SessionsPanel() {
       {banner && <Banner variant={banner.variant} message={banner.message} />}
       <button
         type="button"
-        onClick={onClick}
+        onClick={() => {
+          void onClick();
+        }}
         disabled={submitting}
         aria-busy={submitting}
         className="h-10 px-4 rounded-md border border-border-subtle bg-bg-elevated text-sm font-medium text-text-primary hover:bg-surface-hover transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
