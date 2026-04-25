@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -15,8 +16,12 @@ from openlia.formula import (
 )
 from openlia.panic_thermometer.composite import compute_composite
 from openlia.panic_thermometer.panels import PANELS
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from openlia_server.db.models.dashboard import PtTriggerEvent
+from openlia_server.scheduler.registry import NotificationType
+from openlia_server.scheduler.services import notifications as notifications_svc
 from openlia_server.services.pt_config import PtConfigService
 
 
@@ -216,17 +221,78 @@ class PtRunner:
                 panel_statuses[panel_id] = "disabled"
 
         composite = compute_composite(panel_statuses, cfg.composite_settings)
+        composite_dict = {
+            "level": composite.level,
+            "score": composite.score,
+            "red_count": composite.red_count,
+            "mode": composite.mode,
+        }
+        self._record_level_transition(
+            user_id=user_id,
+            composite=composite_dict,
+            panel_statuses=panel_statuses,
+        )
         return DashboardPayload(
             panels=panels_out,
-            composite={
-                "level": composite.level,
-                "score": composite.score,
-                "red_count": composite.red_count,
-                "mode": composite.mode,
-            },
+            composite=composite_dict,
             generated_at=datetime.now(UTC).isoformat(),
             warnings=all_warnings,
         )
+
+    def _record_level_transition(
+        self,
+        *,
+        user_id: str,
+        composite: dict[str, Any],
+        panel_statuses: dict[str, str],
+    ) -> None:
+        """Insert a PtTriggerEvent + notification when composite level changes."""
+
+        session = self.session_factory()
+        try:
+            stmt = (
+                select(PtTriggerEvent)
+                .where(PtTriggerEvent.user_id == user_id)
+                .order_by(desc(PtTriggerEvent.occurred_at))
+                .limit(1)
+            )
+            latest = session.execute(stmt).scalar_one_or_none()
+            new_level = composite["level"]
+            if latest is not None and latest.level_to == new_level:
+                return
+
+            from_level = latest.level_to if latest is not None else None
+            now = datetime.now(UTC)
+            event = PtTriggerEvent(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                level_from=from_level,
+                level_to=new_level,
+                occurred_at=now,
+                payload_json={
+                    "composite": composite,
+                    "panel_statuses": panel_statuses,
+                },
+            )
+            session.add(event)
+
+            message = (
+                f"Panic level: {from_level} -> {new_level}"
+                if from_level
+                else f"Panic level: {new_level}"
+            )
+            notifications_svc.insert(
+                session,
+                user_id=user_id,
+                type=NotificationType.PANIC_LEVEL_CHANGE,
+                department="panic_thermometer",
+                message=message,
+                job_run_id=None,
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 
     def cached_panel_inputs(self, user_id: str, panel_id: str) -> dict[str, Any] | None:
         return self._cache.get((user_id, panel_id))

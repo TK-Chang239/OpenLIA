@@ -63,6 +63,8 @@ EXPECTED_TABLES = {
     "eu_user_configs",
     # --- Plan 16 Morning Briefing ---
     "mb_user_configs",
+    # --- Plan 18 Panic Thermometer transition log ---
+    "pt_trigger_events",
 }
 
 

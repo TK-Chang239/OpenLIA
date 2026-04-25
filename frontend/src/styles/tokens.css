@@ -111,10 +111,11 @@
   --color-accent-primary-rgb: 212, 255, 0;
 
   /* ── Semantic — Feedback ─────────────────────────────────── */
-  --color-feedback-success: #6B8200;
-  --color-feedback-error:   #E05C30;
-  --color-feedback-warning: #DC9614;
-  --color-feedback-info:    #6B8200;
+  --color-feedback-success:      #6B8200;
+  --color-feedback-error:        #E05C30;
+  --color-feedback-error-strong: #8E1F08;
+  --color-feedback-warning:      #DC9614;
+  --color-feedback-info:         #6B8200;
 
   --focus-ring-color: #D4FF00;
 
