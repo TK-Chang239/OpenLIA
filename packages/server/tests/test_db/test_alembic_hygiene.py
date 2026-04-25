@@ -14,14 +14,7 @@ import subprocess
 from pathlib import Path
 
 REPO_ROOT_SERVER = Path(__file__).resolve().parents[2]  # packages/server
-VERSIONS_DIR = (
-    REPO_ROOT_SERVER
-    / "src"
-    / "openlia_server"
-    / "db"
-    / "migrations"
-    / "versions"
-)
+VERSIONS_DIR = REPO_ROOT_SERVER / "src" / "openlia_server" / "db" / "migrations" / "versions"
 DB_PKG_ROOT = REPO_ROOT_SERVER / "src" / "openlia_server" / "db"
 
 
@@ -61,13 +54,10 @@ def _extract_body(file_path: Path, func_name: str) -> str:
                 )
             ]
             body_statements = [
-                stmt
-                for stmt in body_statements
-                if not _is_rs_snapshot_index_statement(stmt)
+                stmt for stmt in body_statements if not _is_rs_snapshot_index_statement(stmt)
             ]
             if not body_statements or (
-                len(body_statements) == 1
-                and isinstance(body_statements[0], ast.Pass)
+                len(body_statements) == 1 and isinstance(body_statements[0], ast.Pass)
             ):
                 return ""
             return ast.unparse(ast.Module(body=body_statements, type_ignores=[]))
@@ -80,8 +70,7 @@ def _is_rs_snapshot_index_statement(stmt: ast.stmt) -> bool:
         return False
     source = ast.unparse(stmt)
     return (
-        "batch_alter_table('rs_snapshots'" in source
-        and "ix_rs_snapshots_ticker_captured" in source
+        "batch_alter_table('rs_snapshots'" in source and "ix_rs_snapshots_ticker_captured" in source
     )
 
 

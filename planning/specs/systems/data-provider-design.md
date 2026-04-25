@@ -4,6 +4,23 @@ Multi-provider, requirements-first data system for OpenLIA. Allows users to conf
 
 > **Cross-reference note (2026-04-15):** This spec has been updated to reflect decisions from `database-design.md`: admin-only data provider configuration (no per-user BYO keys), `data_providers` and `data_provider_requirement_mapping` tables for storage, and AES-256-GCM encryption at rest for API keys.
 
+## Implementation Status (2026-04-24)
+
+The Phase 3 implementation ships the requirements manifest, the EODHD adapter (5 capabilities), the deterministic resolver, the `auto_map` heuristic mapper, and the full `/settings/data-providers/*` CRUD surface (including MCP-mode persistence and the `PATCH /{id}/priority` endpoint). The following spec sections are NOT in Phase 3 scope and remain tracked for follow-up phases:
+
+| Spec section                                | Status        | Owning phase           |
+|---------------------------------------------|---------------|------------------------|
+| Provider Catalog (machine-readable metadata) | Deferred stub | Plan 5 (dispatch)      |
+| AI Review (LLM-driven endpoint mapping)      | Deferred stub | Plan 5 / 6 (review)    |
+| Runtime Dispatch Router (Plan 5)             | Deferred stub | Plan 5                 |
+| Runtime Expansion (LLM-triggered catalog)    | Deferred stub | Plan 5                 |
+| MCP Client (live MCP transport)              | DB-only today | Plan 5 / dispatch      |
+| Python Provider Runtime                      | Deferred stub | Plan 21+               |
+| Retail Sentiment Availability Checker        | Deferred stub | Retail Sentiment phase |
+| FMP / Finnhub / yfinance / news adapters     | Registry stubs (raise DataNotAvailable) | Per-adapter phases |
+
+The `openlia.data.{catalog,review,dispatch,python_providers,sentiment}` subpackages exist as marker namespaces with `__deferred__ = True` so downstream consumers can feature-detect.
+
 ## Core Concepts
 
 **Requirements-first:** OpenLIA ships with a department requirements manifest that defines what *types* of data each department needs — not specific endpoint IDs. Requirements are split into basic (must be satisfied) and advanced (optional). Provider endpoint documentation is only installed when the admin configures a provider.
