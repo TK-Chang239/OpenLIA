@@ -14,6 +14,7 @@ terminal event when flipped.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -22,7 +23,7 @@ from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
-from openlia.llm.runtime.cancellation import CancellationToken
+from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.events import (
     ChatDone,
     ChatError,
@@ -34,7 +35,7 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import Attachment, ChatMessage
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import ToolCallResult, ToolDispatcher
+from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolCallResult, ToolDispatcher
 from openlia.llm.types import (
     LLMRequest,
     Message,
@@ -43,6 +44,16 @@ from openlia.llm.types import (
 
 ResolveFn = Callable[..., ResolvedModel]
 ProviderFactory = Callable[[ResolvedModel], LLMProvider]
+
+
+def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
+    """Truncate `s` at a codepoint boundary so the result never cuts a
+    multi-byte UTF-8 character (str slicing is codepoint-safe in Python,
+    but we expose a named helper to make the intent explicit and keep the
+    truncation behavior tested + reusable)."""
+    if len(s) <= max_len:
+        return s
+    return s[:max_len]
 
 
 class ChatRunner:
@@ -100,20 +111,27 @@ class ChatRunner:
 
         conversation = [Message(role=m.role, content=m.content) for m in messages]
 
-        # Tool loop — up to 10 rounds to stop runaway expansions.
+        # Tool loop — bounded by MAX_TOOL_TURNS (32) as an outer runaway guard.
+        # Per the spec, Secretary (chat) is unlimited on `find_more_data`
+        # expansions; the budget arg is None here so only the outer cap fires.
         # Only runs when tools are configured; otherwise falls through to streaming.
-        for _ in range(10) if tools else range(0):
+        for _ in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
             try:
-                response = await provider.generate(
-                    LLMRequest(
-                        messages=conversation,
-                        system=system,
-                        tools=tools or None,
-                        max_tokens=2048,
-                    )
+                response = await self._await(
+                    provider.generate(
+                        LLMRequest(
+                            messages=conversation,
+                            system=system,
+                            tools=tools or None,
+                            max_tokens=2048,
+                        )
+                    ),
+                    cancel_token=cancel_token,
                 )
+            except asyncio.CancelledError:
+                return
             except LLMProviderError as exc:
                 yield ChatError(
                     message_id=message_id,
@@ -126,17 +144,28 @@ class ChatRunner:
                 break
 
             for call in response.tool_calls:
+                args_preview = _unicode_safe_truncate(
+                    json.dumps(call.arguments, separators=(",", ":"), ensure_ascii=False),
+                    max_len=120,
+                )
                 yield ChatToolCallStart(
                     message_id=message_id,
                     call_id=call.id,
                     tool_name=call.name,
-                    args_preview=json.dumps(call.arguments, separators=(",", ":"))[:120],
+                    args_preview=args_preview,
                 )
-            results: list[ToolCallResult] = await self._tools.dispatch_many(
-                department_id=department_id,
-                calls=response.tool_calls,
-                extra_tool_names=extra_tool_names,
-            )
+            try:
+                results: list[ToolCallResult] = await self._await(
+                    self._tools.dispatch_many(
+                        department_id=department_id,
+                        calls=response.tool_calls,
+                        extra_tool_names=extra_tool_names,
+                        max_expansions=None,  # Secretary: unlimited.
+                    ),
+                    cancel_token=cancel_token,
+                )
+            except asyncio.CancelledError:
+                return
             for r in results:
                 yield ChatToolCallResult(
                     message_id=message_id,
@@ -155,14 +184,24 @@ class ChatRunner:
         if cancel_token is not None and cancel_token.is_cancelled:
             return
         try:
-            async for chunk in provider.stream(
+            stream_iter = provider.stream(
                 LLMRequest(
                     messages=conversation,
                     system=system,
                     max_tokens=2048,
                 )
-            ):
+            ).__aiter__()
+            while True:
                 if cancel_token is not None and cancel_token.is_cancelled:
+                    return
+                try:
+                    chunk = await self._await(
+                        stream_iter.__anext__(),
+                        cancel_token=cancel_token,
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.CancelledError:
                     return
                 if chunk.delta:
                     yield ChatToken(message_id=message_id, text=chunk.delta)
@@ -177,3 +216,13 @@ class ChatRunner:
         if cancel_token is not None and cancel_token.is_cancelled:
             return
         yield ChatDone(message_id=message_id, stop_reason="complete")
+
+    @staticmethod
+    async def _await(awaitable, *, cancel_token: CancellationToken | None):
+        """Wrap an awaitable in `await_with_grace` when a token is provided.
+
+        A `None` token short-circuits to direct `await` (no grace path).
+        """
+        if cancel_token is None:
+            return await awaitable
+        return await await_with_grace(awaitable, token=cancel_token)

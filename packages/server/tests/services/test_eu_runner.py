@@ -49,6 +49,7 @@ class ScriptedRunner:
         department_id: str,
         user_id: str,
         request: ReportRequest,
+        cancel_token=None,
     ) -> AsyncIterator[SseEvent]:
         self.received.append((department_id, user_id, request))
         for e in self.events:

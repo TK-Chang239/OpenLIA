@@ -330,9 +330,13 @@ async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> N
 
 
 async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> None:
+    from openlia.llm.runtime.tools import MAX_TOOL_TURNS
+
     call = ToolCall(id="cx", name="stock_quote", arguments={"symbol": "X"})
     provider = FakeProvider(
-        script=FakeProviderScript(turns=[("tool_calls", [call])] * 10 + [("tokens", ["done"])])
+        script=FakeProviderScript(
+            turns=[("tool_calls", [call])] * MAX_TOOL_TURNS + [("tokens", ["done"])]
+        )
     )
     manifest = {
         "secretary": {
@@ -369,6 +373,63 @@ async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> Non
     assert type(events[-1]) is ChatDone
     tokens = [e.text for e in events if isinstance(e, ChatToken)]
     assert "".join(tokens) == "done"
+
+
+async def test_args_preview_unicode_safe(prompts_root: Path) -> None:
+    """P2-NEW-5-09: args_preview must not slice mid-codepoint when the
+    arguments contain multi-byte / non-ASCII characters. Python str slicing
+    is codepoint-safe, so the round-trip through `_unicode_safe_truncate`
+    must preserve full characters and never crash."""
+    long_payload = "公司财报新闻" * 30  # 6-char unit, 30 repeats = 180 codepoints.
+    call = ToolCall(id="c1", name="stock_quote", arguments={"q": long_payload})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [call]),
+                ("final", ""),
+                ("tokens", ["ok"]),
+            ]
+        )
+    )
+    manifest = {
+        "secretary": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"q": {"type": "string"}},
+                    "required": ["q"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {}})
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="hi")],
+        )
+    )
+    starts = [e for e in events if isinstance(e, ChatToolCallStart)]
+    assert len(starts) == 1
+    preview = starts[0].args_preview
+    # Must round-trip through encode/decode without a UnicodeDecodeError —
+    # i.e. the truncation never lands inside a codepoint.
+    preview.encode("utf-8").decode("utf-8")
+    assert len(preview) <= 120
 
 
 async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) -> None:

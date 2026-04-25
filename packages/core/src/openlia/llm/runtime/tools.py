@@ -23,6 +23,11 @@ from typing import Any, Protocol, runtime_checkable
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import ToolCall, ToolSchema
 
+# Hard outer cap on tool-loop iterations; per spec, Secretary (chat) is
+# unlimited on `find_more_data` expansions, but this guard still prevents
+# runaway provider calls if a model loops on a non-expansion tool.
+MAX_TOOL_TURNS = 32
+
 _FIND_MORE_DATA_SCHEMA = ToolSchema(
     name="find_more_data",
     description=(
@@ -141,6 +146,10 @@ class ToolDispatcher:
         self._data = data_dispatcher
         self._web_search = web_search
         self._expanded: dict[str, list[ToolSchema]] = {}  # per-department
+        # Per-department count of successful + attempted `find_more_data`
+        # invocations against the budget. Counts every call regardless of
+        # outcome so a stream of misses cannot bypass the cap.
+        self._expansion_count: dict[str, int] = {}
 
     async def build(
         self,
@@ -184,12 +193,15 @@ class ToolDispatcher:
         department_id: str,
         call: ToolCall,
         extra_tool_names: frozenset[str] = frozenset(),
+        max_expansions: int | None = None,
     ) -> ToolCallResult:
         name = call.name
         if name in extra_tool_names:
             return self._dispatch_structured_echo(call)
         if name == "find_more_data":
-            return await self._dispatch_find_more_data(department_id, call)
+            return await self._dispatch_find_more_data(
+                department_id, call, max_expansions=max_expansions
+            )
         if name == "web_search":
             return await self._dispatch_web_search(call)
         return await self._dispatch_requirement(call)
@@ -200,9 +212,15 @@ class ToolDispatcher:
         department_id: str,
         calls: list[ToolCall],
         extra_tool_names: frozenset[str] = frozenset(),
+        max_expansions: int | None = None,
     ) -> list[ToolCallResult]:
         coros = [
-            self.dispatch(department_id=department_id, call=c, extra_tool_names=extra_tool_names)
+            self.dispatch(
+                department_id=department_id,
+                call=c,
+                extra_tool_names=extra_tool_names,
+                max_expansions=max_expansions,
+            )
             for c in calls
         ]
         return await asyncio.gather(*coros)
@@ -240,7 +258,24 @@ class ToolDispatcher:
             payload=_normalize_payload(payload),
         )
 
-    async def _dispatch_find_more_data(self, department_id: str, call: ToolCall) -> ToolCallResult:
+    async def _dispatch_find_more_data(
+        self,
+        department_id: str,
+        call: ToolCall,
+        *,
+        max_expansions: int | None = None,
+    ) -> ToolCallResult:
+        if max_expansions is not None:
+            used = self._expansion_count.get(department_id, 0)
+            if used >= max_expansions:
+                return ToolCallResult(
+                    call_id=call.id,
+                    ok=False,
+                    summary="expansion budget exhausted",
+                    payload={"error": "expansion budget exhausted", "found": False},
+                )
+        # Charge the budget before calling the catalog so misses still count.
+        self._expansion_count[department_id] = self._expansion_count.get(department_id, 0) + 1
         description = str(call.arguments.get("description", ""))
         try:
             entry = await self._data.find_more_data(

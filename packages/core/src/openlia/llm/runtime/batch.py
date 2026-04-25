@@ -16,6 +16,7 @@ from pydantic import BaseModel, ValidationError
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
+from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.messages import BatchItem, BatchResult
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.types import (
@@ -52,6 +53,7 @@ class BatchRunner:
         schema: type[BaseModel],
         concurrency: int = 8,
         user_id: str | None = None,
+        cancel_token: CancellationToken | None = None,
     ) -> list[BatchResult]:
         try:
             resolved = self._resolve(
@@ -73,7 +75,7 @@ class BatchRunner:
             async with sema:
                 user = self._prompts.render(department_id, user_slot, **item.context)
                 try:
-                    response = await provider.generate(
+                    awaitable = provider.generate(
                         LLMRequest(
                             messages=[Message(role="user", content=user)],
                             system=system,
@@ -81,6 +83,12 @@ class BatchRunner:
                             max_tokens=1024,
                         )
                     )
+                    if cancel_token is None:
+                        response = await awaitable
+                    else:
+                        response = await await_with_grace(awaitable, token=cancel_token)
+                except asyncio.CancelledError:
+                    return BatchResult(id=item.id, ok=False, data=None, error="cancelled")
                 except LLMProviderError as exc:
                     return BatchResult(
                         id=item.id,

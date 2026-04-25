@@ -187,6 +187,122 @@ async def test_report_start_includes_section_titles_after_filter(
     assert start.section_titles == ["Overview", "Thesis"]
 
 
+async def test_report_tool_call_carries_call_id_through_to_event(
+    prompts_root: Path, frameworks_root: Path
+) -> None:
+    """NEW-5-02: ReportToolCall events carry the dispatcher's call_id so the
+    FE can correlate them with the preceding report.tool_call.start."""
+    call = ToolCall(id="c_42", name="stock_quote", arguments={"symbol": "AAPL"})
+    filled = {"title": "x", "sections": []}
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [call]),
+                ("final", ""),
+                ("final_json", json.dumps(filled)),
+            ]
+        )
+    )
+    manifest = {
+        "equity_research": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+    tool_calls = [e for e in events if isinstance(e, ReportToolCall)]
+    assert len(tool_calls) == 1
+    assert tool_calls[0].call_id == "c_42"
+
+
+async def test_report_tool_call_start_event_emitted_before_dispatch(
+    prompts_root: Path, frameworks_root: Path
+) -> None:
+    """NEW-5-03: report.tool_call.start fires before the tool runs so the FE
+    can show progress while a long-running tool is in flight."""
+    from openlia.llm.runtime.events import ReportToolCallStart
+
+    call = ToolCall(id="c_42", name="stock_quote", arguments={"symbol": "AAPL"})
+    filled = {"title": "x", "sections": []}
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [call]),
+                ("final", ""),
+                ("final_json", json.dumps(filled)),
+            ]
+        )
+    )
+    manifest = {
+        "equity_research": {
+            "stock_quote": {
+                "name": "stock_quote",
+                "description": "Quote",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        }
+    }
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_1",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+    starts = [e for e in events if isinstance(e, ReportToolCallStart)]
+    results = [e for e in events if isinstance(e, ReportToolCall)]
+    assert len(starts) == 1
+    assert starts[0].call_id == "c_42"
+    assert starts[0].tool_name == "stock_quote"
+    # Order: start before result.
+    start_idx = events.index(starts[0])
+    result_idx = events.index(results[0])
+    assert start_idx < result_idx
+
+
 async def test_report_tool_loop_emits_tool_events(
     prompts_root: Path, frameworks_root: Path
 ) -> None:
@@ -356,9 +472,13 @@ async def test_two_round_tool_loop_uses_both_results(
 async def test_max_rounds_falls_through_to_writing(
     prompts_root: Path, frameworks_root: Path
 ) -> None:
+    from openlia.llm.runtime.tools import MAX_TOOL_TURNS
+
     call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     filled = {"title": "AAPL Initiation", "sections": [{"id": "overview", "body": "..."}]}
-    turns: list[Any] = [("tool_calls", [call])] * 10 + [("final_json", json.dumps(filled))]
+    turns: list[Any] = [("tool_calls", [call])] * MAX_TOOL_TURNS + [
+        ("final_json", json.dumps(filled))
+    ]
     provider = FakeProvider(script=FakeProviderScript(turns=turns))
     manifest = {
         "equity_research": {

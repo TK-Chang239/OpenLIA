@@ -16,6 +16,7 @@ On cancellation: stop yielding, no terminal event.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 import uuid
@@ -27,24 +28,32 @@ from typing import Any
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
-from openlia.llm.runtime.cancellation import CancellationToken
+from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.events import (
     ReportComplete,
     ReportError,
     ReportPhase,
     ReportStart,
     ReportToolCall,
+    ReportToolCallStart,
     SseEvent,
 )
 from openlia.llm.runtime.messages import ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import ToolDispatcher
+from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolDispatcher
 from openlia.llm.types import (
     LLMRequest,
     Message,
     ResolvedModel,
     ResponseFormat,
 )
+
+
+def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
+    if len(s) <= max_len:
+        return s
+    return s[:max_len]
+
 
 ResolveFn = Callable[..., ResolvedModel]
 ProviderFactory = Callable[[ResolvedModel], LLMProvider]
@@ -117,6 +126,7 @@ class ReportRunner:
         user_id: str | None,
         request: ReportRequest,
         cancel_token: CancellationToken | None = None,
+        max_expansions: int | None = None,
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
@@ -163,18 +173,23 @@ class ReportRunner:
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
-        for _ in range(10) if tools else range(0):
+        for _ in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
             try:
-                response = await provider.generate(
-                    LLMRequest(
-                        messages=conversation,
-                        system=system,
-                        tools=tools or None,
-                        max_tokens=2048,
-                    )
+                response = await self._await(
+                    provider.generate(
+                        LLMRequest(
+                            messages=conversation,
+                            system=system,
+                            tools=tools or None,
+                            max_tokens=2048,
+                        )
+                    ),
+                    cancel_token=cancel_token,
                 )
+            except asyncio.CancelledError:
+                return
             except LLMProviderError as exc:
                 yield ReportError(
                     report_id=report_id,
@@ -184,14 +199,34 @@ class ReportRunner:
                 return
             if not response.tool_calls:
                 break
-            results = await self._tools.dispatch_many(
-                department_id=department_id, calls=response.tool_calls
-            )
+            for call in response.tool_calls:
+                args_preview = _unicode_safe_truncate(
+                    json.dumps(call.arguments, separators=(",", ":"), ensure_ascii=False),
+                    max_len=120,
+                )
+                yield ReportToolCallStart(
+                    report_id=report_id,
+                    call_id=call.id,
+                    tool_name=call.name,
+                    args_preview=args_preview,
+                )
+            try:
+                results = await self._await(
+                    self._tools.dispatch_many(
+                        department_id=department_id,
+                        calls=response.tool_calls,
+                        max_expansions=max_expansions,
+                    ),
+                    cancel_token=cancel_token,
+                )
+            except asyncio.CancelledError:
+                return
             for r in results:
                 yield ReportToolCall(
                     report_id=report_id,
                     tool_name=_tool_name_for_result(response, r.call_id),
                     summary=r.summary,
+                    call_id=r.call_id,
                 )
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
             if cancel_token is not None and cancel_token.is_cancelled:
@@ -203,14 +238,19 @@ class ReportRunner:
             return
 
         try:
-            final = await provider.generate(
-                LLMRequest(
-                    messages=conversation,
-                    system=system,
-                    response_format=ResponseFormat(kind="json_schema", json_schema=framework),
-                    max_tokens=4096,
-                )
+            final = await self._await(
+                provider.generate(
+                    LLMRequest(
+                        messages=conversation,
+                        system=system,
+                        response_format=ResponseFormat(kind="json_schema", json_schema=framework),
+                        max_tokens=4096,
+                    )
+                ),
+                cancel_token=cancel_token,
             )
+        except asyncio.CancelledError:
+            return
         except LLMProviderError as exc:
             yield ReportError(
                 report_id=report_id,
@@ -234,3 +274,9 @@ class ReportRunner:
             return
 
         yield ReportComplete(report_id=report_id, schema=schema_payload)
+
+    @staticmethod
+    async def _await(awaitable, *, cancel_token: CancellationToken | None):
+        if cancel_token is None:
+            return await awaitable
+        return await await_with_grace(awaitable, token=cancel_token)
