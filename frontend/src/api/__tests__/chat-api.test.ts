@@ -31,7 +31,7 @@ describe("chat api", () => {
 
   it("listSessions with includeArchived adds query param", async () => {
     mockFetch({ items: [] });
-    await listSessions(true);
+    await listSessions({ include_archived: true });
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toContain("include_archived=true");
   });

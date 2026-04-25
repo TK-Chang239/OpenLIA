@@ -84,6 +84,14 @@ def build_chat_stream_router(
         )
         db.commit()
 
+        # Auto-title the session from the first user message — no-op when
+        # the title has already been set to anything other than "New chat".
+        try:
+            svc.ensure_titled(db, session_id=session_id, first_user_text=q)
+        except Exception:
+            # auto-title is best-effort; never fail user request on title bug.
+            log.warning("ensure_titled failed", exc_info=True)
+
         rows = svc.list_messages(db, session_id=session_id, user_id=user.id)
         messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows]
 
@@ -139,11 +147,13 @@ class _Persistence:
         *,
         content: str,
         tool_calls: list[dict[str, Any]] | None,
+        stopped: bool = False,
     ) -> None:
         if not content and not tool_calls:
             return
         db = self._factory()
         try:
+            now = datetime.now(UTC)
             db.add(
                 ChatMessage(
                     id=str(uuid.uuid4()),
@@ -151,7 +161,8 @@ class _Persistence:
                     role="assistant",
                     content=content,
                     tool_calls=tool_calls,
-                    created_at=datetime.now(UTC),
+                    created_at=now,
+                    stopped_at=now if stopped else None,
                 )
             )
             db.commit()
@@ -208,13 +219,20 @@ async def _event_source(
                         break
             yield _sse_frame(wire)
 
-        if persist is not None and not token.is_cancelled:
+        if persist is not None:
             persist.save_assistant(
                 content="".join(assistant_text),
                 tool_calls=tool_calls_log or None,
+                stopped=token.is_cancelled,
             )
     except asyncio.CancelledError:
         token.cancel()
+        if persist is not None:
+            persist.save_assistant(
+                content="".join(assistant_text),
+                tool_calls=tool_calls_log or None,
+                stopped=True,
+            )
         raise
     except Exception as exc:
         log.warning("chat stream terminated with error", exc_info=True)

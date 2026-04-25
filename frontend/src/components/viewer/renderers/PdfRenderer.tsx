@@ -1,47 +1,85 @@
 import { useEffect, useRef, useState } from "react";
-import * as pdfjs from "pdfjs-dist";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type FileSource } from "../FileViewerContext";
 import { sourceUrl } from "./sourceUrl";
+import { RendererError, RendererLoading } from "./RendererStates";
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url,
-).toString();
+// pdfjs-dist runs only in real browsers (it touches `DOMMatrix`/canvas).
+// We dynamic-import it on first effect so the module graph doesn't drag the
+// dependency into jsdom-driven tests that never mount the renderer.
+let pdfjsModule: typeof import("pdfjs-dist") | null = null;
+async function getPdfJs(): Promise<typeof import("pdfjs-dist")> {
+  if (pdfjsModule) return pdfjsModule;
+  const mod = await import("pdfjs-dist");
+  mod.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url,
+  ).toString();
+  pdfjsModule = mod;
+  return mod;
+}
 
 export function PdfRenderer({ source }: { source: FileSource }): JSX.Element {
   const [numPages, setNumPages] = useState(0);
   const [page, setPage] = useState(1);
+  const [error, setError] = useState<Error | null>(null);
+  const [tick, setTick] = useState(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const pdfRef = useRef<any>(null);
 
   useEffect(() => {
-    const task = pdfjs.getDocument(sourceUrl(source));
-    task.promise.then((doc) => {
-      pdfRef.current = doc;
-      setNumPages(doc.numPages);
-      setPage(1);
-    });
+    setError(null);
+    setNumPages(0);
+    let cancelled = false;
+    getPdfJs()
+      .then((pdfjs) => {
+        const task = pdfjs.getDocument(sourceUrl(source));
+        return task.promise;
+      })
+      .then((doc) => {
+        if (cancelled) return;
+        pdfRef.current = doc;
+        setNumPages(doc.numPages);
+        setPage(1);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err : new Error(String(err)));
+      });
     return () => {
+      cancelled = true;
       pdfRef.current?.destroy?.();
       pdfRef.current = null;
     };
-  }, [source]);
+  }, [source, tick]);
 
   useEffect(() => {
     if (!pdfRef.current || !canvasRef.current || numPages === 0) return;
-    pdfRef.current.getPage(page).then((p: { getViewport: (o: { scale: number }) => { width: number; height: number }; render: (o: unknown) => { promise: Promise<void> } }) => {
-      const viewport = p.getViewport({ scale: 1.3 });
-      const canvas = canvasRef.current!;
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      p.render({ canvasContext: canvas.getContext("2d"), viewport });
-    });
+    pdfRef.current
+      .getPage(page)
+      .then(
+        (p: {
+          getViewport: (o: { scale: number }) => { width: number; height: number };
+          render: (o: unknown) => { promise: Promise<void> };
+        }) => {
+          const viewport = p.getViewport({ scale: 1.3 });
+          const canvas = canvasRef.current!;
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          p.render({ canvasContext: canvas.getContext("2d"), viewport });
+        },
+      )
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err : new Error(String(err)));
+      });
   }, [page, numPages]);
 
-  if (numPages === 0)
-    return <div className="p-6 text-sm text-[--color-text-secondary]">Loading…</div>;
+  if (error)
+    return (
+      <RendererError message={error.message} onRetry={() => setTick((t) => t + 1)} />
+    );
+  if (numPages === 0) return <RendererLoading />;
 
   return (
     <div className="flex h-full flex-col">

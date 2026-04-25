@@ -8,6 +8,7 @@ vi.mock("../useChatStream", () => ({
     state: {
       status: "idle",
       message: "",
+      chunks: [],
       toolCalls: [],
       reportThumbnails: [],
       errorMessage: null,

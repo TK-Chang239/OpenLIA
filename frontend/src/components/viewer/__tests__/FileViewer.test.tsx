@@ -8,15 +8,34 @@ vi.mock("pdfjs-dist", () => ({
 
 vi.mock("framer-motion", async (importOriginal) => {
   const actual = await importOriginal<typeof import("framer-motion")>();
+  type AnyProps = Record<string, unknown> & { children?: React.ReactNode };
+  const stripFmProps = (props: AnyProps) => {
+    const {
+      initial: _i,
+      animate: _a,
+      exit: _e,
+      transition: _t,
+      whileHover: _w,
+      ...rest
+    } = props;
+    return rest;
+  };
   return {
     ...actual,
     AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
     motion: {
       ...actual.motion,
-      aside: ({ children, ...props }: React.ComponentPropsWithoutRef<"aside">) => (
-        <aside {...props}>{children}</aside>
+      aside: ({ children, ...props }: AnyProps) => (
+        <aside {...stripFmProps(props)}>{children}</aside>
+      ),
+      div: ({ children, ...props }: AnyProps) => (
+        <div {...stripFmProps(props)}>{children}</div>
+      ),
+      button: ({ children, ...props }: AnyProps) => (
+        <button {...stripFmProps(props)}>{children}</button>
       ),
     },
+    useReducedMotion: () => false,
   };
 });
 import { FileViewer } from "../FileViewer";

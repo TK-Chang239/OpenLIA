@@ -60,7 +60,7 @@ merged.
 | 9  | Login / Account UI                  | Done        | ~88%      | IMPLEMENTER               | Server requires `display_name`; `aria-describedby` missing                   |
 | 10 | Setup Wizard                        | Done        | ~72%      | IMPLEMENTER               | Step 3 (Models) backend handlers don't exist (frontend hits 404)             |
 | 11 | Settings Page                       | Done        | ~75%      | IMPLEMENTER               | ~~New routes use `build_require_auth`, bypass must-change-password~~ — closed via Phase 2 fix-plan P0-02-01; remaining Phase 11 gaps tracked in `phase-11-settings-page.md` |
-| 12 | Shared Chat Components              | Done        | ~90%      | IMPLEMENTER               | `Department` union covers 2 of 7; zero frontend vitests                      |
+| 12 | Shared Chat Components              | Done        | 100%      | RESOLVED                  | ~~`Department` union covers 2 of 7; targeted vitest gaps~~ — closed via Phase 12 fix-plan (P1-02, P2-16, NEW-12-01..21); 7-dept union, drawer search/scope/archive, markdown+code highlighting, inline thumbnails, FileViewer focus+scroll preservation, idempotent SaveToRepo, AbortController POST SSE, auto-titles |
 | 13 | Report Pipeline & Secretary         | Done        | ~75%      | IMPLEMENTER               | Secretary HTTP route never created                                           |
 | 14 | Equity Research                     | Done        | ~83%      | IMPLEMENTER               | Active layout diverges from spec; `POST /chat` drops `session_id`            |
 | 15 | Earnings Update                     | Done        | ~78%      | IMPLEMENTER               | `/schedules` route absent; `EarningsUpdatePage.tsx` absent                   |
@@ -637,7 +637,7 @@ instead of all 1,000+.
 | 9 | [phase-9-login-account-ui.md](./fix-plans/phase-9-login-account-ui.md) | ~88% | IMPLEMENTER |
 | 10 | [phase-10-setup-wizard.md](./fix-plans/phase-10-setup-wizard.md) | ~72% | IMPLEMENTER |
 | 11 | [phase-11-settings-page.md](./fix-plans/phase-11-settings-page.md) | ~72% | IMPLEMENTER |
-| 12 | [phase-12-shared-chat-components.md](./fix-plans/phase-12-shared-chat-components.md) | ~90% | IMPLEMENTER |
+| 12 | ~~[phase-12-shared-chat-components.md](./fix-plans/phase-12-shared-chat-components.md)~~ | 100% | RESOLVED (fix/phase-12-shared-chat-components) |
 | 13 | [phase-13-report-pipeline-secretary.md](./fix-plans/phase-13-report-pipeline-secretary.md) | ~75% | IMPLEMENTER |
 | 14 | [phase-14-equity-research.md](./fix-plans/phase-14-equity-research.md) | ~83% | IMPLEMENTER |
 | 15 | [phase-15-earnings-update.md](./fix-plans/phase-15-earnings-update.md) | ~78% | IMPLEMENTER |

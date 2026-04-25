@@ -132,3 +132,44 @@ def test_get_session_not_found_raises(db_session):
     u = _make_user(db_session, "notfound@example.com")
     with pytest.raises(LookupError):
         svc.get_session(db_session, session_id="nonexistent", user_id=u.id)
+
+
+def test_ensure_titled_replaces_default(db_session):
+    u = _make_user(db_session, "auto-title@example.com")
+    s = svc.create_session(db_session, user_id=u.id, department="secretary", title="New chat")
+    svc.ensure_titled(db_session, session_id=s.id, first_user_text="What moved markets today?")
+    db_session.refresh(s)
+    assert s.title == "What moved markets today?"
+
+
+def test_ensure_titled_truncates_to_48(db_session):
+    u = _make_user(db_session, "auto-title-long@example.com")
+    s = svc.create_session(db_session, user_id=u.id, department="secretary", title="New chat")
+    long = "x" * 200
+    svc.ensure_titled(db_session, session_id=s.id, first_user_text=long)
+    db_session.refresh(s)
+    assert s.title == "x" * 48
+
+
+def test_ensure_titled_no_op_when_title_already_set(db_session):
+    u = _make_user(db_session, "auto-title-set@example.com")
+    s = svc.create_session(db_session, user_id=u.id, department="secretary", title="Already named")
+    svc.ensure_titled(db_session, session_id=s.id, first_user_text="should not replace")
+    db_session.refresh(s)
+    assert s.title == "Already named"
+
+
+def test_list_sessions_filters_by_department(db_session):
+    u = _make_user(db_session, "dep-filter@example.com")
+    svc.create_session(db_session, user_id=u.id, department="secretary", title="S")
+    svc.create_session(db_session, user_id=u.id, department="morning_briefing", title="M")
+    rows = svc.list_sessions(db_session, user_id=u.id, department="secretary")
+    assert {r.title for r in rows} == {"S"}
+
+
+def test_list_sessions_q_filter_lowercases(db_session):
+    u = _make_user(db_session, "q-filter@example.com")
+    svc.create_session(db_session, user_id=u.id, department="secretary", title="Alpha Bravo")
+    svc.create_session(db_session, user_id=u.id, department="secretary", title="Charlie")
+    rows = svc.list_sessions(db_session, user_id=u.id, q="alpha")
+    assert {r.title for r in rows} == {"Alpha Bravo"}
