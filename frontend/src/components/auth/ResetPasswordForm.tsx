@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { consumePasswordReset } from "../../api/auth";
 import { ApiError } from "../../api/client";
+import { mapTransportError } from "../../api/errors";
 import { Banner, type BannerVariant } from "../primitives/Banner";
 import { FormField } from "../primitives/FormField";
 import { PasswordInput } from "../primitives/PasswordInput";
@@ -53,27 +54,28 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       setDone(true);
     } catch (err) {
       if (err instanceof ApiError) {
-        const body = (err.body as ServerError | null) ?? {};
-        if (body.code === "token_invalid" || body.code === "token_expired") {
-          setBanner({
-            message:
-              body.message ??
-              "This reset link has expired or has already been used. Contact your administrator for a new one.",
-            variant: "error",
-          });
-        } else if (body.field) {
-          setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+        if (err.status === 0 || err.status >= 500) {
+          setBanner(mapTransportError(err));
         } else {
-          setBanner({
-            message: body.message ?? "Reset failed. Please try again.",
-            variant: "error",
-          });
+          const body = (err.body as ServerError | null) ?? {};
+          if (body.code === "token_invalid" || body.code === "token_expired") {
+            setBanner({
+              message:
+                body.message ??
+                "This reset link has expired or has already been used. Contact your administrator for a new one.",
+              variant: "error",
+            });
+          } else if (body.field) {
+            setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+          } else {
+            setBanner({
+              message: body.message ?? "Reset failed. Please try again.",
+              variant: "error",
+            });
+          }
         }
       } else {
-        setBanner({
-          message: "Unexpected error. Please try again.",
-          variant: "error",
-        });
+        setBanner(mapTransportError(err));
       }
     } finally {
       setSubmitting(false);
@@ -115,6 +117,9 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           autoComplete="new-password"
           hasError={Boolean(fieldErrors.new_password)}
           disabled={submitting}
+          describedBy={
+            fieldErrors.new_password ? "new_password-error" : undefined
+          }
         />
         <PasswordStrengthMeter value={newPw} />
       </FormField>
@@ -131,6 +136,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           autoComplete="new-password"
           hasError={Boolean(fieldErrors.confirm)}
           disabled={submitting}
+          describedBy={fieldErrors.confirm ? "confirm-error" : undefined}
         />
       </FormField>
 

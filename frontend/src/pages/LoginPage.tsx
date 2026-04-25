@@ -1,15 +1,36 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { getSignupPolicy, type SignupPolicy } from "../api/auth";
 import { AuthCard } from "../components/auth/AuthCard";
 import { AuthLayout } from "../components/auth/AuthLayout";
 import { LoginForm } from "../components/auth/LoginForm";
 import { useAuth } from "../auth/AuthContext";
+
+const FALLBACK_POLICY: SignupPolicy = {
+  mode: "invite_only",
+  invite_required: true,
+};
 
 export function LoginPage() {
   const { status } = useAuth();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const invite = searchParams.get("invite") ?? undefined;
+  const [policy, setPolicy] = useState<SignupPolicy>(FALLBACK_POLICY);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSignupPolicy()
+      .then((p) => {
+        if (!cancelled) setPolicy(p);
+      })
+      .catch(() => {
+        if (!cancelled) setPolicy(FALLBACK_POLICY);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (status === "authenticated" || status === "personal") {
@@ -21,7 +42,7 @@ export function LoginPage() {
   return (
     <AuthLayout>
       <AuthCard>
-        <LoginForm inviteToken={invite} />
+        <LoginForm inviteToken={invite} policyMode={policy.mode} />
       </AuthCard>
     </AuthLayout>
   );

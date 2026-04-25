@@ -2,7 +2,9 @@ import { Loader2 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { requestPasswordReset } from "../../api/auth";
-import { Banner } from "../primitives/Banner";
+import { ApiError } from "../../api/client";
+import { mapTransportError } from "../../api/errors";
+import { Banner, type BannerVariant } from "../primitives/Banner";
 import { FormField } from "../primitives/FormField";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -14,10 +16,14 @@ export function ForgotPasswordForm() {
   const [emailError, setEmailError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [banner, setBanner] = useState<
+    { message: string; variant: BannerVariant } | null
+  >(null);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setEmailError(null);
+    setBanner(null);
     if (!EMAIL_RE.test(email)) {
       setEmailError("Enter a valid email address.");
       return;
@@ -25,11 +31,24 @@ export function ForgotPasswordForm() {
     setSubmitting(true);
     try {
       await requestPasswordReset(email.trim());
-    } catch {
-      // Anti-enumeration: even on unexpected errors, show neutral message.
+      setDone(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        setBanner({
+          message: "Too many requests. Please wait and try again.",
+          variant: "warning",
+        });
+      } else if (
+        err instanceof TypeError ||
+        (err instanceof ApiError && (err.status === 0 || err.status >= 500))
+      ) {
+        setBanner(mapTransportError(err));
+      } else {
+        // Anti-enumeration on 4xx: still show neutral confirmation.
+        setDone(true);
+      }
     } finally {
       setSubmitting(false);
-      setDone(true);
     }
   }
 
@@ -48,6 +67,7 @@ export function ForgotPasswordForm() {
 
   return (
     <form onSubmit={onSubmit} noValidate>
+      {banner && <Banner variant={banner.variant} message={banner.message} />}
       <p className="text-sm text-text-secondary mb-5">
         Enter your email and we&apos;ll notify your admin to approve a password
         reset.
@@ -61,6 +81,7 @@ export function ForgotPasswordForm() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           disabled={submitting}
+          aria-describedby={emailError ? "email-error" : undefined}
           className={`w-full h-10 rounded-md border bg-bg-input px-3 text-sm text-text-primary outline-none transition-colors duration-fast ${
             emailError
               ? "border-feedback-error ring-2 ring-feedback-error/20"

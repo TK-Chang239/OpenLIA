@@ -34,7 +34,7 @@ def register(
     *,
     email: str,
     password: str,
-    display_name: str,
+    display_name: str | None,
     invite_token: str | None,
 ) -> User:
     signup_policy.assert_registration_open(db)
@@ -55,11 +55,13 @@ def register(
     if existing is not None:
         raise RegistrationFailedError("Registration failed.")
 
+    display_name_final = (display_name or "").strip() or email_norm.split("@", 1)[0]
+
     now = datetime.now(UTC)
     user = User(
         id=str(uuid.uuid4()),
         email=email_norm,
-        display_name=display_name or email_norm.split("@", 1)[0],
+        display_name=display_name_final,
         password_hash=passwords.hash_password(password),
         is_admin=False,
         is_disabled=False,

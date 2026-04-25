@@ -134,6 +134,88 @@ class TestSignupPolicyEndpoint:
         assert data["invite_required"] is True
 
 
+class TestRegisterDisplayName:
+    def test_register_accepts_missing_display_name(
+        self, company_client: TestClient, seeded_invite, db_session
+    ):
+        from openlia_server.db.models.auth import User
+
+        resp = company_client.post(
+            "/auth/register",
+            json={
+                "email": "alice@example.com",
+                "password": "correct-horse-battery-staple",
+                "invite_token": "valid-invite",
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        # Backend defaults display_name to email local-part on blank input.
+        assert body["display_name"] == "alice"
+        # All five fields are present on the register response (NEW-9-04 shape).
+        assert set(body.keys()) >= {
+            "user_id",
+            "email",
+            "display_name",
+            "is_admin",
+            "must_change_password",
+        }
+        assert body["is_admin"] is False
+        assert body["must_change_password"] is False
+
+        db_session.expire_all()
+        user = db_session.query(User).filter_by(email="alice@example.com").one()
+        assert user.display_name == "alice"
+
+    def test_register_accepts_blank_display_name(self, company_client: TestClient, seeded_invite):
+        resp = company_client.post(
+            "/auth/register",
+            json={
+                "email": "bob@example.com",
+                "password": "correct-horse-battery-staple",
+                "display_name": "   ",
+                "invite_token": "valid-invite",
+            },
+        )
+        assert resp.status_code == 201
+        assert resp.json()["display_name"] == "bob"
+
+
+class TestLoginLockoutPayload:
+    def test_account_locked_payload_three_keys(self, company_client: TestClient, seeded_invite):
+        # Register a user, then bombard with bad-password attempts to trigger
+        # AccountLockedError. Threshold is 5 (see services/auth/login.py).
+        company_client.post(
+            "/auth/register",
+            json={
+                "email": "alice@example.com",
+                "password": "correct-horse-battery-staple",
+                "invite_token": "valid-invite",
+            },
+        )
+        company_client.post("/auth/logout")
+
+        last = None
+        for _ in range(6):
+            last = company_client.post(
+                "/auth/login",
+                json={
+                    "email": "alice@example.com",
+                    "password": "wrong",
+                    "persistent": False,
+                },
+            )
+        assert last is not None
+        assert last.status_code == 423
+        body = last.json()
+        assert body["code"] == "account_locked"
+        assert body["message"] == "Account is temporarily locked."
+        assert isinstance(body["metadata"], dict)
+        assert "retry_after_seconds" in body["metadata"]
+        assert isinstance(body["metadata"]["retry_after_seconds"], int)
+        assert body["metadata"]["retry_after_seconds"] > 0
+
+
 class TestRegisterErrors:
     def test_without_invite(self, company_client: TestClient):
         resp = company_client.post(
