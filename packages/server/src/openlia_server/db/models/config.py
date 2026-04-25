@@ -1,3 +1,9 @@
+"""Plan 1a configuration tables: llm_providers, llm_models,
+user_llm_preferences, data_providers, data_provider_requirement_mapping,
+web_search_providers, plus Plan 11's user_prefs. Spec reference:
+`database-design.md` §4 and §7 (user_prefs).
+"""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -65,6 +71,10 @@ class LLMModel(Base, TimestampMixin):
             unique=True,
             sqlite_where=text("is_tier_default = 1"),
         ),
+        CheckConstraint(
+            "tier IN ('thinking', 'everyday', 'quick')",
+            name="tier_enum",
+        ),
     )
 
 
@@ -83,6 +93,13 @@ class UserLLMPreference(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "tier IN ('thinking', 'everyday', 'quick')",
+            name="tier_enum",
+        ),
     )
 
 
@@ -138,12 +155,24 @@ class UserPrefs(Base):
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    theme: Mapped[str] = mapped_column(String(16), nullable=False, default="system")
-    notify_inapp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    notify_email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    display_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
-    response_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
-    report_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    theme: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="system", server_default="system"
+    )
+    notify_inapp: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    notify_email: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    display_language: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="en", server_default="en"
+    )
+    response_language: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="en", server_default="en"
+    )
+    report_language: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="en", server_default="en"
+    )
 
 
 class WebSearchProvider(Base, TimestampMixin):

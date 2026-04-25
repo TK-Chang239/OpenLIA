@@ -38,7 +38,7 @@ def db_url(db_path: Path) -> str:
 
 @pytest.fixture
 def engine(db_url: str) -> Iterator[Engine]:
-    import openlia_server.db.models  # noqa: F401 — register all models
+    import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
     from openlia_server.db import session as session_mod
     from openlia_server.db.base import Base
 
@@ -60,7 +60,7 @@ def db_session(engine: Engine) -> Iterator[Session]:
 
 @pytest.fixture
 def create_tables(engine: Engine) -> Iterator[None]:
-    import openlia_server.db.models  # noqa: F401 — register all models
+    import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
     from openlia_server.db.base import Base
 
     Base.metadata.create_all(engine)

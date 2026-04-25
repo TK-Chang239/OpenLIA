@@ -977,7 +977,14 @@ class SignupInvite(Base, TimestampMixin):
     __tablename__ = "signup_invites"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    # 2026-04-24 amendment: shipped as `token_hash` (SHA-256 hex of the opaque
+    # bearer token). Raw token is handed to the creator once on issuance and
+    # never persisted. Migration `2026-04-20-0001_add_signup_invites_token.py`
+    # introduced `token_hash` alongside `token`; migration
+    # `2026-04-22-2000_drop_signup_invite_raw_token.py` dropped the plaintext
+    # `token` column. See `database-design.md` §3 `signup_invites` and §5
+    # "Non-encrypted credential columns" for the final shape.
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     label: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_by_user_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -1967,6 +1974,15 @@ from openlia_server.db.base import Base
 class WizardState(Base):
     __tablename__ = "wizard_state"
 
+    # 2026-04-24 amendment: shape finalized by Plan 10 (setup wizard). The
+    # original Plan 1a shape (`current_step: Integer default=1`) was reshaped
+    # by migration `2026-04-21-0001_reshape_wizard_state.py` to a String-valued
+    # step slug plus `completed_steps` (JSON list) and `active_session_token`
+    # (SHA-256 hex). Migration `2026-04-22-1800_drop_wizard_state_legacy_columns.py`
+    # then removed the vestigial integer column. The listing below is the
+    # Plan 1a baseline shape for historical reference; the as-shipped ORM lives
+    # in `infrastructure.py` and matches Plan 10's final form. See
+    # `database-design.md` §7 `wizard_state` for the authoritative columns.
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="not_started")
     current_step: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -2297,6 +2313,7 @@ git commit -m "feat(db): Alembic scaffold — env.py, alembic.ini, script templa
 
 **Files:**
 - Create: `packages/server/src/openlia_server/db/migrations/versions/2026-04-16-1200_baseline.py`
+  (**2026-04-24 amendment:** shipped as `2026-04-18-1609_baseline.py` with Alembic revision ID `01526cb27f5e`. The file contents match this task's spec; only the timestamp in the filename differs. Every downstream migration's `down_revision` already points to `01526cb27f5e`, so renaming the file would be a churn-for-no-gain change. References to `2026-04-16-1200_baseline.py` elsewhere in this plan should be read as "the Plan 1a baseline migration, shipped at `2026-04-18-1609_baseline.py`".)
 - Modify: `packages/server/tests/test_db/test_migrations.py`
 
 - [ ] **Step 1: Extend the test**

@@ -14,6 +14,9 @@ select = [
 
 [lint.per-file-ignores]
 "**/tests/**" = ["B011"]  # allow `assert False` patterns in tests
+# Semantic (dependency-depth) import order is load-bearing here — don't let
+# isort resort the model registration list.
+"**/db/models/register_all.py" = ["I001"]
 
 [lint.flake8-bugbear]
 # FastAPI idiom: `def handler(db = Depends(dep))` — the framework expects the

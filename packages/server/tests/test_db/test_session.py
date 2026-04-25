@@ -62,3 +62,38 @@ def test_dispose_engine_is_idempotent() -> None:
 
     session_mod.dispose_engine()  # no-op when nothing configured
     session_mod.dispose_engine()
+
+
+def test_get_db_session_commits_on_success(engine: Engine, create_tables) -> None:
+    """Plan 1a P1-1a-08: the FastAPI dependency must commit the session on clean exit."""
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.infrastructure import ConfigStore
+
+    gen = session_mod.get_db_session()
+    s = next(gen)
+    s.add(ConfigStore(key="gds.commit", value="yes"))
+    # Normal iterator exhaustion triggers the session.commit() branch.
+    with pytest.raises(StopIteration):
+        next(gen)
+
+    with session_mod.SessionLocal() as reader:
+        row = reader.get(ConfigStore, "gds.commit")
+        assert row is not None
+        assert row.value == "yes"
+
+
+def test_get_db_session_rolls_back_on_error(engine: Engine, create_tables) -> None:
+    """Plan 1a P1-1a-08: the FastAPI dependency must roll back on exception."""
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.infrastructure import ConfigStore
+
+    gen = session_mod.get_db_session()
+    s = next(gen)
+    s.add(ConfigStore(key="gds.rollback", value="should-not-persist"))
+
+    with pytest.raises(RuntimeError, match="boom"):
+        gen.throw(RuntimeError("boom"))
+
+    with session_mod.SessionLocal() as reader:
+        row = reader.get(ConfigStore, "gds.rollback")
+        assert row is None
