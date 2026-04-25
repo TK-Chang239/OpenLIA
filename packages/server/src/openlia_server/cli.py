@@ -374,6 +374,11 @@ def admin_create_invite(
     expires: str | None = typer.Option(
         None, "--expires", help="Expiry duration (e.g. 7d, 24h, 30m, 2w)."
     ),
+    json_output: bool = typer.Option(
+        False,
+        "--json",
+        help="Print machine-readable JSON ({invite_id, token, url}).",
+    ),
 ) -> None:
     """Create a signup invite and print the URL + metadata."""
     expires_at = None
@@ -404,8 +409,14 @@ def admin_create_invite(
         )
         db.commit()
         base_url = os.environ.get("OPENLIA_PUBLIC_URL", "http://localhost:8000")
+        url = f"{base_url}/register?invite={raw_token}"
+        if json_output:
+            import json as _json
+
+            typer.echo(_json.dumps({"invite_id": invite.id, "token": raw_token, "url": url}))
+            return
         typer.echo("Invite created.")
-        typer.echo(f"URL:      {base_url}/register?invite={raw_token}")
+        typer.echo(f"URL:      {url}")
         typer.echo(f"ID:       {invite.id}")
         typer.echo(f"Label:    {label or '--'}")
         typer.echo(f"Max uses: {max_uses if max_uses is not None else 'unlimited'}")

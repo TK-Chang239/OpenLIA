@@ -1,0 +1,56 @@
+# Caddy reverse-proxy deployment.
+#
+# Caddy binds 80/443 on the host, terminates TLS via automatic Let's
+# Encrypt certificate provisioning, and forwards traffic to the OpenLIA
+# container over the docker network. Requires a public DNS A/AAAA record
+# pointing OPENLIA_HOSTNAME at this host.
+#
+# Required environment variables (see .env.example):
+#   OPENLIA_IMAGE          ghcr.io/<org>/openlia:<tag>
+#   OPENLIA_SECRET_KEY     base64 32-byte AES-256-GCM key
+#   OPENLIA_HOSTNAME       FQDN that resolves to this host (e.g. lia.example.com)
+#
+# Start:
+#   cp .env.example .env && $EDITOR .env
+#   docker compose up -d
+services:
+  openlia:
+    image: ${OPENLIA_IMAGE:-ghcr.io/openlia/openlia:latest}
+    restart: unless-stopped
+    environment:
+      OPENLIA_MODE: company
+      OPENLIA_TRUST_PROXY_HEADERS: "true"
+      OPENLIA_COOKIE_SECURE: "true"
+      OPENLIA_DB_URL: sqlite:////home/openlia/.openlia/openlia.db
+      OPENLIA_SCHEDULER_ENABLED: "true"
+      OPENLIA_SECRET_KEY: ${OPENLIA_SECRET_KEY:-}
+    volumes:
+      - openlia_data:/home/openlia/.openlia
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      OPENLIA_HOSTNAME: ${OPENLIA_HOSTNAME:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      openlia:
+        condition: service_healthy
+
+volumes:
+  openlia_data:
+  caddy_data:
+  caddy_config:

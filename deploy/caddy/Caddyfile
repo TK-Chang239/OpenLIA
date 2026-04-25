@@ -1,0 +1,20 @@
+# Caddyfile — terminates TLS and proxies to the OpenLIA container.
+# OPENLIA_HOSTNAME must be a public FQDN with DNS pointing here so Caddy
+# can complete the ACME (Let's Encrypt) challenge automatically.
+
+{$OPENLIA_HOSTNAME} {
+	encode zstd gzip
+
+	# Streaming endpoints (SSE chat + report streams). Disable proxy
+	# response buffering so each event flushes to the browser immediately.
+	@sse {
+		path /api/chat/sessions/*/stream
+		path /api/departments/*/report
+	}
+	reverse_proxy @sse openlia:8000 {
+		flush_interval -1
+	}
+
+	# Everything else: standard reverse proxy.
+	reverse_proxy openlia:8000
+}

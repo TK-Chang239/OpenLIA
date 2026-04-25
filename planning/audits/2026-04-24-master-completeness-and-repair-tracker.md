@@ -71,7 +71,7 @@ merged.
 | 20 | Retail Sentiment                    | Done        | 100%      | RESOLVED                  | ~~v2-full deferred; `rs_classification_log` migration unconfirmed~~ — closed via Phase 20 fix-plan (NEW-20-01..15): RS scheduler integration shipped, Evidence/Insights/Settings/Deep-Dive UI shipped, metrics 8/9/11/12 + spec-correct Buzz Volume + insights synthesis shipped, `reliability.py` extracted, schedule routes shipped |
 | 21 | Portfolio                           | Done        | 100%      | RESOLVED                  | ~~17-component frontend collapsed to monolith; price provider noop~~ — closed via Phase 21 fix-plan (NEW-21-01..15); AdapterPriceProvider, adapter-backed search, 14 components + 4 hooks, group endpoints + tabs + context menu, ER deep-link, Toast/Undo, AddEdit/CSV dialogs |
 | 22 | Repository                          | Done        | 100%      | RESOLVED                  | ~~FileViewer click-to-open missing; UI monolith~~ — closed via Phase 22 fix-plan (NEW-22-01..15); row click → FileViewer with hideSaveToRepoButton flag, useRepoList hook with URL-state + IntersectionObserver, RepoFilterBar/Chips/Sort/List/Skeleton/Empty/Dialog components, undo toast |
-| 23 | Docker / Acceptance                 | Done        | ~55%      | IMPLEMENTER + DEFERRED    | Smoke suite, CI Docker job, RELEASING.md absent; deploy structure wrong      |
+| 23 | Docker / Acceptance                 | Done        | 100%      | RESOLVED                  | ~~Smoke suite, CI Docker job, RELEASING.md absent; deploy structure wrong~~ — closed via Phase 23 fix-plan (P0-10, P1-22..24, NEW-23-01..12); container smoke harness, CI docker job, RELEASING.md, 3-recipe deploy layout (cloudflare-tunnel/caddy/lan), gated PyPI publish, wheel-contents tests, scripts/acceptance.sh |
 | 24 | Design System Refresh               | Done        | 100%      | RESOLVED                  | ~~Button fill-wipe missing; Setup wizard sweep skipped; Card test shallow~~ — closed via Phase 24 fix-plan (P1-28, NEW-24-01..11); Button hover overlay shipped, Setup wizard tokens normalized, Card hover contract tested, no-hex/no-blue vitest locks |
 
 ---
@@ -652,7 +652,7 @@ instead of all 1,000+.
 | 20 | ~~[phase-20-retail-sentiment.md](./fix-plans/phase-20-retail-sentiment.md)~~ | 100% | RESOLVED (fix/phase-20-retail-sentiment) |
 | 21 | ~~[phase-21-portfolio.md](./fix-plans/phase-21-portfolio.md)~~ | 100% | RESOLVED (fix/phase-21-portfolio) |
 | 22 | ~~[phase-22-repository.md](./fix-plans/phase-22-repository.md)~~ | 100% | RESOLVED (fix/phase-22-repository) |
-| 23 | [phase-23-docker-packaging-acceptance.md](./fix-plans/phase-23-docker-packaging-acceptance.md) | ~55% | DEFERRED + IMPLEMENTER |
+| 23 | ~~[phase-23-docker-packaging-acceptance.md](./fix-plans/phase-23-docker-packaging-acceptance.md)~~ | 100% | RESOLVED (fix/phase-23-docker-packaging-acceptance) |
 | 24 | ~~[phase-24-design-system-refresh.md](./fix-plans/phase-24-design-system-refresh.md)~~ | 100% | RESOLVED (fix/phase-24-design-system-refresh) |
 
 **How to use:**

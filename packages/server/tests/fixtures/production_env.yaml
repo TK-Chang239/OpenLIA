@@ -1,0 +1,15 @@
+# Frozen production-env snapshot.
+#
+# These keys are the documented contract between the deploy/* recipes and
+# the FastAPI app. Adding or renaming a key requires updating
+# deploy/README.md and (usually) the .env.example files in deploy/*.
+#
+# `test_production_env_snapshot.py` asserts that each key in this YAML
+# remains present so accidental drops are caught in CI.
+
+OPENLIA_MODE: company
+OPENLIA_DB_URL: sqlite:////home/openlia/.openlia/openlia.db
+OPENLIA_FRONTEND_DIST: /app/frontend/dist
+OPENLIA_TRUST_PROXY_HEADERS: "true"
+OPENLIA_COOKIE_SECURE: "true"
+OPENLIA_SCHEDULER_ENABLED: "true"

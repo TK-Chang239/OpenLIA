@@ -6,7 +6,7 @@ build-backend = "uv_build"
 name = "openlia"
 version = "0.1.0"
 description = "OpenLIA — open-source, self-hosted AI investor assistant. FastAPI server, CLI, and persistence layer."
-readme = "../../README.md"
+readme = "README.md"
 requires-python = ">=3.12"
 authors = [{name = "OpenLIA contributors"}]
 license = {text = "MIT"}
