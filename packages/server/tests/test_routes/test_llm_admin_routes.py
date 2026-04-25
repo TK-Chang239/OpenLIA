@@ -439,9 +439,7 @@ def test_create_openai_compat_model_persists_capability_override(
     assert override == {"tool_calling": True, "structured_output": False}
 
 
-def test_create_provider_runs_test_by_default(
-    company_client, make_user, monkeypatch
-) -> None:
+def test_create_provider_runs_test_by_default(company_client, make_user, monkeypatch) -> None:
     """NEW-4-27: omitting run_test triggers connection test (no test_model -> 400)."""
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
     make_user(email="admin@example.com", password="pw-12345678", is_admin=True)

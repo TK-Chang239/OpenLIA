@@ -52,7 +52,7 @@ merged.
 | 1b | DB Dashboard/Scheduler/Notif        | Done        | 100%      | RESOLVED                  | ~~`mr_dashboard_state` + `rs_classification_log` model/migration drift~~ — closed via PR #52 (f2b3055 + 3bc14f0) |
 | 2  | Auth & Secrets                      | Done        | 100%      | RESOLVED                  | ~~`build_require_auth` returns `Depends()` and breaks nested deps~~ — claim retired (FastAPI resolves the default fine); shipped P0-02-01..P2-02-05 via PR for branch `fix/phase-2-auth-secrets` |
 | 3  | Data Provider Adapter               | Done        | 100%      | RESOLVED                  | ~~Cleanest phase — only `company_fundamentals` capability deferred~~ — closed via Phase 3 fix-plan (P0-3-01..P0-3-04, P1-3-05..P1-3-12, NEW-3-01..NEW-3-08) |
-| 4  | LLM Provider System                 | Done        | ~72%      | IMPLEMENTER               | User-preference HTTP routes never wired (service layer present)              |
+| 4  | LLM Provider System                 | Done        | 100%      | RESOLVED                  | ~~User-preference HTTP routes never wired~~ — closed via Phase 4 fix-plan (NEW-4-10/11/20-27, 30-40 + P2-11/12) on `fix/phase-4-llm-provider-system` |
 | 5  | LLM Runtime                         | Done        | ~88%      | IMPLEMENTER               | `await_with_grace` unused; MR/MB prompt files absent; no startup slot check  |
 | 6  | Background Scheduler                | Done        | ~92%      | IMPLEMENTER               | `batch_runner=None` → MR jobs crash; dual `MRScheduleService` instances      |
 | 7  | CLI Surface                         | Done        | ~97%      | RESOLVED                  | Best-shipped phase — only `serve` startup banner missing                     |
