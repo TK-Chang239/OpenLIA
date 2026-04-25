@@ -4,7 +4,7 @@ import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { ProviderRow } from "./ProviderRow";
 import { AddProviderForm } from "./AddProviderForm";
-import { deleteProvider, listProviders } from "../../api/setup";
+import { confirmProviders, deleteProvider, listProviders } from "../../api/setup";
 import type { ProviderRow as Row } from "../../api/setup";
 
 type Category = "financial" | "news" | "social" | "web_search";
@@ -52,6 +52,7 @@ export function ProvidersStep({
   const onNext = async () => {
     setLoading(true);
     try {
+      await confirmProviders();
       onSaved();
     } finally {
       setLoading(false);

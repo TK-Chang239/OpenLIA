@@ -35,4 +35,22 @@ describe("ProvidersStep", () => {
     await waitFor(() => screen.getByRole("tablist"));
     expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
   });
+
+  it("Next disabled when no green News provider (financial green only)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          providers: [
+            { id: "p1", category: "financial", mode: "builtin", provider: "eodhd", priority: 0, status: "ok" },
+            { id: "p2", category: "news", mode: "builtin", provider: "newsapi_org", priority: 0, status: "error" },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+
+    render(<ProvidersStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />);
+    await waitFor(() => screen.getByRole("tablist"));
+    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
+  });
 });

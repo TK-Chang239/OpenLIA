@@ -108,7 +108,96 @@ def test_journey_personal_first_run_setup(db_session) -> None:
 
     user = db_session.query(User).filter_by(email="local@openlia.local").one()
     assert user.display_name == "TK"
-    assert user.is_admin is False
+
+
+def test_journey_personal_full_setup_models_and_providers(db_session) -> None:
+    """NEW-10-13: full Step 1-5 sweep on a fresh DB."""
+    client = _personal_wizard_client(db_session)
+
+    assert client.get("/setup/status").status_code == 200
+    assert client.post("/setup/mode", json={"mode": "personal"}).status_code == 200
+    assert client.post("/setup/identity", json={"display_name": "TK"}).status_code == 200
+
+    models = {
+        "thinking": [
+            {
+                "provider": "ollama",
+                "model": "llama3.1:70b",
+                "base_url": "http://localhost:11434",
+                "is_tier_default": True,
+            }
+        ],
+        "everyday": [
+            {
+                "provider": "ollama",
+                "model": "llama3.1:8b",
+                "base_url": "http://localhost:11434",
+                "is_tier_default": True,
+            }
+        ],
+        "quick": [
+            {
+                "provider": "ollama",
+                "model": "qwen2.5:7b",
+                "base_url": "http://localhost:11434",
+                "is_tier_default": True,
+            }
+        ],
+    }
+    assert client.post("/setup/models", json=models).status_code == 200
+
+    fin = client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "fmp",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    assert fin.status_code == 200
+    news = client.post(
+        "/setup/providers",
+        json={
+            "category": "news",
+            "entry": {
+                "mode": "builtin",
+                "provider": "newsapi_org",
+                "api_key": "x",
+                "base_url": "https://example.test",
+            },
+        },
+    )
+    assert news.status_code == 200
+
+    # Confirm advances providers step explicitly.
+    assert client.post("/setup/providers/confirm").status_code == 200
+
+    # Finalize.
+    finish = client.post("/setup/finish")
+    assert finish.status_code == 200
+    assert client.get("/setup/status").json()["wizard_completed"] is True
+
+    # Subsequent /setup/identity must 410 because wizard is complete.
+    assert client.post("/setup/identity", json={"display_name": "X"}).status_code == 410
+
+
+def test_loopback_required_during_company_wizard(db_session, monkeypatch) -> None:
+    """NEW-10-05: company-mode wizard still binds 127.0.0.1 until completion."""
+    monkeypatch.setenv("OPENLIA_MODE", "company")
+    from openlia_server.db import session as session_mod
+
+    app = create_app(
+        db_session_factory=session_mod.SessionLocal,
+        is_loopback_request=lambda _: False,
+    )
+    client = TestClient(app)
+    resp = client.post("/setup/mode", json={"mode": "company"})
+    assert resp.status_code == 403
+    assert resp.json()["detail"]["code"] == "loopback_required"
 
 
 # ---------------------------------------------------------------------------

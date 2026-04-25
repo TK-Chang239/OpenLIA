@@ -12,36 +12,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from openlia_server.ai_review import store as review_store_mod
-from openlia_server.ai_review.runner import run_review as _run_review
 from openlia_server.db.deps import make_session_dependency
-from openlia_server.middleware.wizard_gate import require_wizard_active, require_wizard_session
+from openlia_server.middleware.wizard_gate import build_wizard_gate
 from openlia_server.services import wizard as wizard_svc
 
-# Departments and their basic data requirements for the AI review step.
-_background_tasks: set[asyncio.Task[Any]] = set()
 
-_DEPT_REQS: dict[str, list[str]] = {
-    "secretary": [],
-    "equity_research": ["stock_quote", "company_profile", "financial_statements"],
-    "earnings_update": ["earnings_data", "stock_quote"],
-    "morning_briefing": ["market_news", "stock_quote"],
-    "retail_sentiment": ["social_posts"],
-    "macro_research": ["macro_indicators", "stock_quote"],
-    "panic_thermometer": ["market_news", "stock_quote"],
-}
+def _dept_reqs() -> dict[str, list[str]]:
+    """Read department requirements from the registry (no duplicate dict)."""
+    from openlia.departments import get_department_data_requirements
 
-
-class _ReviewLLMWrapper:
-    """Bridges the runner's (prompt, max_tokens) protocol with the real LLM adapter."""
-
-    def __init__(self, adapter: Any) -> None:
-        self._adapter = adapter
-
-    async def generate(self, *, prompt: str, max_tokens: int) -> Any:
-        from openlia.llm.types import LLMRequest, Message
-
-        req = LLMRequest(messages=[Message(role="user", content=prompt)], max_tokens=max_tokens)
-        return await self._adapter.generate(req)
+    return get_department_data_requirements()
 
 
 def _set_wizard_cookie(response: Response, token: str) -> None:
@@ -113,6 +93,31 @@ class ModelsTestIn(BaseModel):
     env_var_name: str | None = None
 
 
+class _ProviderEntryIn(BaseModel):
+    mode: str = Field(pattern="^(builtin|mcp|openapi)$")
+    provider: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
+    mcp_url: str | None = None
+    mcp_auth_header: str | None = None
+    openapi_spec_url: str | None = None
+
+
+class ProviderAddIn(BaseModel):
+    category: str = Field(pattern="^(financial|news|social|social_media|web_search|search)$")
+    entry: _ProviderEntryIn
+
+
+class ProviderPatchIn(BaseModel):
+    priority: int | None = None
+    api_key: str | None = None
+
+
+class RequiredTiersOut(BaseModel):
+    required_tiers: list[str]
+    enabled_departments: list[str]
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -126,14 +131,24 @@ def build_setup_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/setup", tags=["setup"])
     session_dep = make_session_dependency(db_session_factory)
+    require_wizard_active, require_wizard_session = build_wizard_gate(session_dep)
 
-    def require_loopback_if_personal(request: Request) -> None:
-        if mode == "personal" and not is_loopback_request(request):
+    # Background tasks live in a closure so each app gets its own set;
+    # `lifespan` (in app.py) cancels them via `app.state.setup_background_tasks`.
+    background_tasks: set[asyncio.Task[Any]] = set()
+
+    def require_loopback_during_wizard(request: Request) -> None:
+        """Loopback gate: the wizard binds to 127.0.0.1 during setup regardless of mode.
+
+        Once `wizard.completed == true`, this gate is irrelevant — the
+        `require_wizard_active` 410-gate blocks /setup/* writes anyway.
+        """
+        if not is_loopback_request(request):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={
                     "code": "loopback_required",
-                    "message": "Setup writes require a local connection in personal mode.",
+                    "message": "Setup must be accessed via a local connection.",
                 },
             )
 
@@ -148,9 +163,23 @@ def build_setup_router(
             env_overrides=s.env_overrides,
         )
 
+    @router.get("/required_tiers", response_model=RequiredTiersOut)
+    def get_required_tiers(db: Session = Depends(session_dep)) -> RequiredTiersOut:
+        from openlia.departments import (
+            get_enabled_default_tiers,
+            get_registered_department_ids,
+        )
+
+        enabled = get_registered_department_ids()
+        tiers = get_enabled_default_tiers(enabled)
+        # Stable ordering: thinking > everyday > quick (most-demanding first).
+        order = ["thinking", "everyday", "quick"]
+        ordered = [t for t in order if t in tiers]
+        return RequiredTiersOut(required_tiers=ordered, enabled_departments=enabled)
+
     @router.post(
         "/mode",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_mode(
         payload: ModeIn,
@@ -168,7 +197,7 @@ def build_setup_router(
         _set_wizard_cookie(response, token)
         return {"mode": payload.mode}
 
-    @router.post("/takeover", dependencies=[Depends(require_loopback_if_personal)])
+    @router.post("/takeover", dependencies=[Depends(require_loopback_during_wizard)])
     def post_takeover(response: Response, db: Session = Depends(session_dep)) -> dict[str, bool]:
         token = wizard_svc.rotate_session_token(db)
         _set_wizard_cookie(response, token)
@@ -176,7 +205,7 @@ def build_setup_router(
 
     @router.post(
         "/identity",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_identity(
         payload: IdentityIn,
@@ -189,7 +218,7 @@ def build_setup_router(
 
     @router.post(
         "/admin",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_admin(
         payload: AdminIn,
@@ -211,7 +240,7 @@ def build_setup_router(
 
     @router.post(
         "/access_control",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_access_control(
         payload: AccessControlIn,
@@ -234,56 +263,23 @@ def build_setup_router(
 
     @router.post(
         "/review/run",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     async def post_review_run(
         db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, str]:
-        from openlia.llm.adapters import build_adapter
-        from openlia.llm.capabilities import capabilities_for
-        from openlia.llm.types import ModelTier
-
-        from openlia_server.services.data_providers import list_providers as list_dp
-        from openlia_server.services.llm_registry import SQLModelRegistry
+        from openlia_server.services.wizard_review import schedule_review
 
         store = review_store_mod.DEFAULT_STORE
-        review_id = store.create()
-
-        registry = SQLModelRegistry(db)
-        row = registry.get_tier_default(ModelTier.QUICK) or registry.get_any_in_tier(
-            ModelTier.QUICK
+        departments = list(_dept_reqs().items())
+        review_id = schedule_review(
+            db=db,
+            db_session_factory=db_session_factory,
+            background_tasks=background_tasks,
+            store=store,
+            departments=departments,
         )
-
-        departments = list(_DEPT_REQS.items())
-        dp_rows = list_dp(db)
-        providers = [{"id": r.id, "category": r.kind, "provider": r.kind} for r in dp_rows]
-
-        if row is None:
-            store.update(review_id, state="failed", error="No Quick-tier LLM configured.")
-        else:
-            adapter = build_adapter(
-                kind=row.provider_kind,
-                credentials=row.credentials,
-                model=row.model_ref,
-                capabilities=capabilities_for(
-                    row.provider_kind, row.model_ref, row.capability_override
-                ),
-            )
-            llm_wrapper = _ReviewLLMWrapper(adapter)
-            task = asyncio.create_task(
-                _run_review(
-                    review_id=review_id,
-                    db=db,
-                    llm=llm_wrapper,
-                    departments=departments,
-                    providers=providers,
-                    store=store,
-                )
-            )
-            _background_tasks.add(task)
-            task.add_done_callback(_background_tasks.discard)
-
         return {"review_id": review_id}
 
     @router.get("/review/{review_id}")
@@ -297,51 +293,38 @@ def build_setup_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"code": "review_not_found", "message": "Unknown review id."},
             )
-        return entry
+        # Contract: {state, progress, result, error}.
+        return {
+            "state": entry.get("state"),
+            "progress": entry.get("progress", 0),
+            "result": entry.get("result"),
+            "error": entry.get("error"),
+        }
 
     @router.post(
         "/models",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_models(
         payload: ModelsIn,
         db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, bool]:
-        from openlia_server.services import llm_providers as llm_svc
+        from openlia_server.services.wizard_models import UnknownLLMKindError, save_models
 
-        for tier_name in ("thinking", "everyday", "quick"):
-            entries = getattr(payload, tier_name)
-            for entry in entries:
-                created = llm_svc.create_provider(
-                    db,
-                    kind=entry.provider,
-                    label=f"{entry.provider} ({tier_name})",
-                    api_key=entry.api_key,
-                    base_url=entry.base_url,
-                    env_var_name=entry.env_var_name,
-                )
-                llm_svc.create_model(
-                    db,
-                    provider_id=created.id,
-                    tier=tier_name,
-                    model_ref=entry.model,
-                    display_name=entry.model,
-                    is_tier_default=entry.is_tier_default,
-                )
-                if entry.provider == "openai_compat" and entry.capabilities:
-                    llm_svc.set_capability_override(
-                        db,
-                        provider_kind="openai_compat",
-                        model=entry.model,
-                        override=entry.capabilities,
-                    )
+        try:
+            save_models(db, payload)
+        except UnknownLLMKindError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "unknown_llm_kind", "message": str(exc)},
+            ) from exc
         wizard_svc.advance_step(db, "models", "shared")
         return {"ok": True}
 
     @router.post(
         "/models/test",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     async def post_models_test(
         payload: ModelsTestIn,
@@ -356,11 +339,132 @@ def build_setup_router(
             env_var_name=payload.env_var_name,
             model=payload.model,
         )
-        return result.model_dump()
+        # Frontend expects {ok, latency_ms, error}; settings returns
+        # {ok, latency_ms, error_class, error_msg}. Map down.
+        out = result.model_dump()
+        return {
+            "ok": out.get("ok", False),
+            "latency_ms": out.get("latency_ms"),
+            "error": out.get("error_msg") or out.get("error_class"),
+        }
+
+    @router.get("/providers")
+    def get_providers(
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, Any]:
+        # Async helper but we can call it synchronously since list_providers
+        # itself is sync; wrap minimally.
+        # Simple sync inline build — avoid running an event loop just for this.
+        from openlia_server.services.data_providers import list_providers as list_dp
+
+        out: list[dict[str, Any]] = []
+        for r in list_dp(db):
+            cfg = r.extra_config or {}
+            wstatus = cfg.get("wizard_status") or "pending"
+            out.append(
+                {
+                    "id": r.id,
+                    "category": r.category,
+                    "mode": r.mode,
+                    "provider": r.kind,
+                    "priority": int(cfg.get("default_priority", 100)),
+                    "status": wstatus,
+                }
+            )
+        return {"providers": out}
+
+    @router.post(
+        "/providers",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    async def post_provider(
+        payload: ProviderAddIn,
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, Any]:
+        from openlia_server.services import wizard_providers as wp_svc
+
+        result = await wp_svc.add_provider(db, category=payload.category, entry=payload.entry)
+        if not result.get("ok") and result.get("entry_id") is None:
+            # Validation/unknown-kind failure — return 400.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "invalid_provider", "message": result.get("error", "")},
+            )
+        # Auto-advance once we have at least one green financial AND one green news.
+        if wp_svc.has_green_pair(db):
+            current_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
+            wizard_svc.advance_step(db, "providers", current_mode)
+        return result
+
+    @router.patch(
+        "/providers/{provider_id}",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    def patch_provider(
+        provider_id: str,
+        payload: ProviderPatchIn,
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, bool]:
+        from openlia_server.services import wizard_providers as wp_svc
+
+        wp_svc.patch_provider(db, provider_id, priority=payload.priority, api_key=payload.api_key)
+        return {"ok": True}
+
+    @router.delete(
+        "/providers/{provider_id}",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    def delete_provider(
+        provider_id: str,
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, bool]:
+        from openlia_server.services import wizard_providers as wp_svc
+
+        wp_svc.delete_provider(db, provider_id)
+        return {"ok": True}
+
+    @router.post(
+        "/providers/{provider_id}/test",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    async def post_provider_test(
+        provider_id: str,
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, Any]:
+        from openlia_server.services import wizard_providers as wp_svc
+
+        return await wp_svc.retest_provider(db, provider_id)
+
+    @router.post(
+        "/providers/confirm",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    def post_providers_confirm(
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, bool]:
+        from openlia_server.services import wizard_providers as wp_svc
+
+        if not wp_svc.has_green_pair(db):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "providers_incomplete",
+                    "message": "At least one OK financial and one OK news provider required.",
+                },
+            )
+        current_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
+        wizard_svc.advance_step(db, "providers", current_mode)
+        return {"ok": True}
 
     @router.post(
         "/finish",
-        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_finish(
         db: Session = Depends(session_dep),
@@ -370,5 +474,8 @@ def build_setup_router(
         wizard_svc.finalize(db, mode)
         redirect = "/" if mode == "personal" else "/login"
         return {"redirect": redirect, "mode": mode}
+
+    # Expose the closure-local task set to the lifespan for cancellation.
+    router.state_background_tasks = background_tasks  # type: ignore[attr-defined]
 
     return router

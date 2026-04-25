@@ -98,3 +98,27 @@ def test_production_wiring_has_batch_runner() -> None:
         with TestClient(app):
             mr_exec = app.state.scheduler.executors[JobType.MR_ASSESSMENT]
             assert mr_exec._batch_runner is not None
+
+
+def test_lifespan_exposes_wizard_background_task_set() -> None:
+    """NEW-10-14: the lifespan exposes the wizard background-task set so it can
+    cancel any in-flight review on shutdown. The set lives on app.state and is
+    distinct per-app (router-factory closure, not module scope)."""
+    from openlia_server.app import create_app
+
+    with patch.dict(
+        os.environ,
+        {
+            "OPENLIA_SCHEDULER_ENABLED": "0",
+            "OPENLIA_DB_URL": "sqlite:///:memory:",
+        },
+        clear=False,
+    ):
+        app = create_app()
+        with TestClient(app):
+            assert isinstance(app.state.setup_background_tasks, set)
+
+        # Two apps should have independent task sets — proves the set lives in
+        # the router-factory closure, not at module scope.
+        app2 = create_app()
+        assert app.state.setup_background_tasks is not app2.state.setup_background_tasks

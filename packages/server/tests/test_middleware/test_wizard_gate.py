@@ -5,18 +5,19 @@ from __future__ import annotations
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.infrastructure import ConfigStore
-from openlia_server.middleware.wizard_gate import require_wizard_active
+from openlia_server.middleware.wizard_gate import build_wizard_gate
 
 
 @pytest.fixture
 def app_with_gate(db_session_factory):
     app = FastAPI()
-
-    from openlia_server.db.session import get_db_session
+    session_dep = make_session_dependency(db_session_factory)
+    require_wizard_active, _ = build_wizard_gate(session_dep)
 
     @app.get("/setup/mode")
-    def setup_mode(db=Depends(get_db_session), _=Depends(require_wizard_active)):
+    def setup_mode(db=Depends(session_dep), _=Depends(require_wizard_active)):
         return {"ok": True}
 
     return TestClient(app)
