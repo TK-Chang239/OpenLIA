@@ -89,6 +89,30 @@ class AccessControlIn(BaseModel):
     bind_port: int = Field(ge=1, le=65535)
 
 
+class _SetupTierEntryIn(BaseModel):
+    provider: str
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+    env_var_name: str | None = None
+    capabilities: dict | None = None
+    is_tier_default: bool = True
+
+
+class ModelsIn(BaseModel):
+    thinking: list[_SetupTierEntryIn] = Field(default_factory=list)
+    everyday: list[_SetupTierEntryIn] = Field(default_factory=list)
+    quick: list[_SetupTierEntryIn] = Field(default_factory=list)
+
+
+class ModelsTestIn(BaseModel):
+    provider: str
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+    env_var_name: str | None = None
+
+
 # ---------------------------------------------------------------------------
 # Router factory
 # ---------------------------------------------------------------------------
@@ -274,6 +298,65 @@ def build_setup_router(
                 detail={"code": "review_not_found", "message": "Unknown review id."},
             )
         return entry
+
+    @router.post(
+        "/models",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
+    def post_models(
+        payload: ModelsIn,
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, bool]:
+        from openlia_server.services import llm_providers as llm_svc
+
+        for tier_name in ("thinking", "everyday", "quick"):
+            entries = getattr(payload, tier_name)
+            for entry in entries:
+                created = llm_svc.create_provider(
+                    db,
+                    kind=entry.provider,
+                    label=f"{entry.provider} ({tier_name})",
+                    api_key=entry.api_key,
+                    base_url=entry.base_url,
+                    env_var_name=entry.env_var_name,
+                )
+                llm_svc.create_model(
+                    db,
+                    provider_id=created.id,
+                    tier=tier_name,
+                    model_ref=entry.model,
+                    display_name=entry.model,
+                    is_tier_default=entry.is_tier_default,
+                )
+                if entry.provider == "openai_compat" and entry.capabilities:
+                    llm_svc.set_capability_override(
+                        db,
+                        provider_kind="openai_compat",
+                        model=entry.model,
+                        override=entry.capabilities,
+                    )
+        wizard_svc.advance_step(db, "models", "shared")
+        return {"ok": True}
+
+    @router.post(
+        "/models/test",
+        dependencies=[Depends(require_loopback_if_personal), Depends(require_wizard_active)],
+    )
+    async def post_models_test(
+        payload: ModelsTestIn,
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, Any]:
+        from openlia_server.routes.settings import _run_connection_test
+
+        result = await _run_connection_test(
+            payload.provider,
+            api_key=payload.api_key,
+            base_url=payload.base_url,
+            env_var_name=payload.env_var_name,
+            model=payload.model,
+        )
+        return result.model_dump()
 
     @router.post(
         "/finish",

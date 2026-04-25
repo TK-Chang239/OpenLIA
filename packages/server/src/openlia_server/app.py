@@ -475,9 +475,9 @@ def create_app(
 
     app.include_router(build_settings_email_router(db_session_factory=factory, mode=mode))
 
-    from openlia_server.routes.settings_models import build_settings_models_router
+    from openlia_server.routes.settings_llm_user import build_llm_user_router
 
-    app.include_router(build_settings_models_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_llm_user_router(db_session_factory=factory, mode=mode))
 
     from openlia_server.routes.eu_schedules import build_eu_schedules_router
 

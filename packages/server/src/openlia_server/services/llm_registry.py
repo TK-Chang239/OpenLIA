@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from openlia.llm.resolver import ModelRegistry, ResolvedModelRow
 from openlia.llm.types import ModelTier, ProviderCredentials
 from sqlalchemy import select
@@ -9,11 +11,29 @@ from openlia_server.db.models.config import LLMModel, LLMProvider
 from openlia_server.services import llm_providers as svc
 
 
+def _env_var_for_department(department_id: str) -> str:
+    return f"OPENLIA_LLM_DEPARTMENT_{department_id.upper()}_TIER"
+
+
+def department_tier_from_env(department_id: str) -> ModelTier | None:
+    """Return the env-supplied tier override for the given department, or None."""
+    raw = os.environ.get(_env_var_for_department(department_id))
+    if not raw:
+        return None
+    try:
+        return ModelTier(raw.lower())
+    except ValueError:
+        return None
+
+
 class SQLModelRegistry(ModelRegistry):
     def __init__(self, db: Session) -> None:
         self._db = db
 
     def get_department_tier_override(self, department_id: str) -> ModelTier | None:
+        env_override = department_tier_from_env(department_id)
+        if env_override is not None:
+            return env_override
         raw = svc.get_department_tier_override(self._db, department_id)
         if raw is None:
             return None

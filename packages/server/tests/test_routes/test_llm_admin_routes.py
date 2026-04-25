@@ -328,3 +328,144 @@ def test_capability_override_roundtrip(company_client, make_user, monkeypatch) -
     assert resp.status_code == 200
     resp = company_client.post("/settings/admin/llm/capability_override/openai/gpt-5.4", json=None)
     assert resp.status_code == 200
+
+
+# -- NEW-4-10 / NEW-4-24 / NEW-4-25 / NEW-4-27 fix-plan additions ---------------
+
+
+def test_update_model_persists_tier_and_model_ref(
+    company_client, make_user, monkeypatch, db_session
+) -> None:
+    """NEW-4-10: PUT /models/{id} persists tier + model_ref + provider_id."""
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+
+    p = svc.create_provider(db_session, kind="openai", label="OAI")
+    db_session.commit()
+    m = svc.create_model(
+        db_session,
+        provider_id=p.id,
+        tier="quick",
+        model_ref="gpt-5.4-mini",
+        display_name="GPT 5.4 mini",
+        is_tier_default=True,
+    )
+    db_session.commit()
+
+    resp = company_client.put(
+        f"/settings/admin/llm/models/{m.id}",
+        json={
+            "provider_id": p.id,
+            "tier": "everyday",
+            "model_ref": "gpt-5.4",
+            "display_name": "GPT 5.4",
+            "is_tier_default": True,
+            "is_enabled": True,
+            "overrides": None,
+        },
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["tier"] == "everyday"
+    assert body["model_ref"] == "gpt-5.4"
+
+
+def test_remote_models_skipped_for_openrouter(
+    company_client, make_user, monkeypatch, db_session
+) -> None:
+    """NEW-4-24: openrouter -> {skipped:true}."""
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+
+    p = svc.create_provider(db_session, kind="openrouter", label="OpenRouter")
+    db_session.commit()
+
+    resp = company_client.get(f"/settings/admin/llm/providers/{p.id}/remote-models")
+    assert resp.status_code == 200
+    assert resp.json() == {"skipped": True, "reason": "manual entry"}
+
+
+def test_remote_models_skipped_for_ollama(
+    company_client, make_user, monkeypatch, db_session
+) -> None:
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+
+    p = svc.create_provider(db_session, kind="ollama", label="Local Ollama")
+    db_session.commit()
+
+    resp = company_client.get(f"/settings/admin/llm/providers/{p.id}/remote-models")
+    assert resp.status_code == 200
+    assert resp.json() == {"skipped": True, "reason": "manual entry"}
+
+
+def test_create_openai_compat_model_persists_capability_override(
+    company_client, make_user, monkeypatch, db_session
+) -> None:
+    """NEW-4-25: openai_compat capability checkboxes persisted."""
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+
+    p = svc.create_provider(
+        db_session, kind="openai_compat", label="Grok", base_url="https://example.com"
+    )
+    db_session.commit()
+
+    resp = company_client.post(
+        "/settings/admin/llm/models",
+        json={
+            "provider_id": p.id,
+            "tier": "everyday",
+            "model_ref": "grok-pro",
+            "display_name": "Grok Pro",
+            "is_tier_default": True,
+            "is_enabled": True,
+            "advertised_capabilities": {
+                "tool_calling": True,
+                "structured_output": False,
+            },
+        },
+    )
+    assert resp.status_code == 201, resp.text
+
+    db_session.expire_all()
+    override = svc.get_capability_override(
+        db_session, provider_kind="openai_compat", model="grok-pro"
+    )
+    assert override == {"tool_calling": True, "structured_output": False}
+
+
+def test_create_provider_runs_test_by_default(
+    company_client, make_user, monkeypatch
+) -> None:
+    """NEW-4-27: omitting run_test triggers connection test (no test_model -> 400)."""
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+
+    resp = company_client.post(
+        "/settings/admin/llm/providers",
+        json={"kind": "openai", "label": "OAI", "api_key": "sk-x"},
+    )
+    assert resp.status_code == 400
+    assert "test_model required" in resp.text
+
+
+def test_create_provider_run_test_false_requires_skip_reason(
+    company_client, make_user, monkeypatch
+) -> None:
+    """NEW-4-27: explicit run_test=False without skip_reason rejected."""
+    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
+    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
+    _login(company_client)
+
+    resp = company_client.post(
+        "/settings/admin/llm/providers",
+        json={"kind": "openai", "label": "OAI", "api_key": "sk-x", "run_test": False},
+    )
+    assert resp.status_code == 400
+    assert "skip_reason" in resp.text

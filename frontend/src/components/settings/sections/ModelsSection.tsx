@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
-import { deleteModelPreference, getModelPreferences, putModelPreference, Tier, ApiError } from '../../../api/settings';
+import {
+  ApiError,
+  deleteModelPreference,
+  getModelPreferences,
+  getModelsRoster,
+  ModelsRoster,
+  putModelPreference,
+  RosterEntry,
+  Tier,
+} from '../../../api/settings';
 import { SaveButton, SaveState } from '../SaveButton';
 import { SettingGroup } from '../SettingGroup';
 import { InlineFeedback } from '../InlineFeedback';
 
-interface CatalogModel {
-  id: string;
-  tier: Tier;
-  label: string;
-}
-interface CatalogProvider {
-  provider_id: string;
-  provider_label: string;
-  models: CatalogModel[];
-}
-
 const TIERS: { tier: Tier; title: string; desc: string }[] = [
+  { tier: 'thinking', title: 'Thinking', desc: 'Deep reasoning for Equity Research and Panic Thermometer.' },
   { tier: 'everyday', title: 'Everyday', desc: 'Default for Secretary and short chats.' },
   { tier: 'quick', title: 'Quick', desc: 'Fast reasoning for Retail Sentiment and wizard AI review.' },
-  { tier: 'thinking', title: 'Thinking', desc: 'Deep reasoning for Equity Research and Panic Thermometer.' },
 ];
 
 interface TierRowState {
@@ -28,20 +26,21 @@ interface TierRowState {
   initial: string;
 }
 
+function entriesFor(roster: ModelsRoster, tier: Tier): RosterEntry[] {
+  return roster[tier] ?? [];
+}
+
 export function ModelsSection(): JSX.Element {
-  const [catalog, setCatalog] = useState<CatalogProvider[]>([]);
+  const [roster, setRoster] = useState<ModelsRoster | null>(null);
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState<Record<Tier, TierRowState>>({} as Record<Tier, TierRowState>);
   const [topError, setTopError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/llm/catalog', { credentials: 'same-origin' }).then((r) => r.json()),
-      getModelPreferences(),
-    ])
-      .then(([cat, prefs]) => {
-        setCatalog(cat.items ?? []);
-        const byTier = prefs.preferences ?? {};
+    Promise.all([getModelsRoster(), getModelPreferences()])
+      .then(([rosterResp, prefsResp]) => {
+        setRoster(rosterResp);
+        const byTier = prefsResp.preferences ?? {};
         const next = {} as Record<Tier, TierRowState>;
         for (const t of TIERS) {
           const v = byTier[t.tier] ?? '';
@@ -55,18 +54,6 @@ export function ModelsSection(): JSX.Element {
         setLoading(false);
       });
   }, []);
-
-  const optionsFor = (tier: Tier): { value: string; label: string }[] => {
-    const opts: { value: string; label: string }[] = [];
-    for (const prov of catalog) {
-      for (const m of prov.models) {
-        if (m.tier === tier) {
-          opts.push({ value: m.id, label: `${prov.provider_label} — ${m.label}` });
-        }
-      }
-    }
-    return opts;
-  };
 
   const save = async (tier: Tier) => {
     setRows((r) => ({ ...r, [tier]: { ...r[tier], state: 'saving', error: null } }));
@@ -98,11 +85,29 @@ export function ModelsSection(): JSX.Element {
       <InlineFeedback kind={topError ? 'error' : null} message={topError ?? ''} />
       {TIERS.map((t) => {
         const row = rows[t.tier];
-        const opts = optionsFor(t.tier);
+        const entries = roster ? entriesFor(roster, t.tier) : [];
         const isDirty = row?.value !== row?.initial;
         return (
           <SettingGroup key={t.tier} title={t.title} description={t.desc}>
-            <div className="flex items-center gap-3">
+            <ul className="space-y-1 text-xs text-text-secondary">
+              {entries.length === 0 ? (
+                <li>(No models registered for this tier.)</li>
+              ) : (
+                entries.map((entry) => (
+                  <li key={entry.id} className="flex justify-between gap-2">
+                    <span>
+                      {entry.display_name}{' '}
+                      <span className="opacity-70">({entry.provider_kind})</span>
+                      {entry.is_tier_default ? ' - default' : ''}
+                    </span>
+                    <span className={entry.is_enabled ? 'text-success' : 'text-text-tertiary'}>
+                      {entry.is_enabled ? 'enabled' : 'disabled'}
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+            <div className="mt-2 flex items-center gap-3">
               <select
                 aria-label={`${t.title} model`}
                 value={row?.value ?? ''}
@@ -112,9 +117,13 @@ export function ModelsSection(): JSX.Element {
                 className="flex-1 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary"
               >
                 <option value="">(Use server default)</option>
-                {opts.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
+                {entries
+                  .filter((e) => e.is_enabled)
+                  .map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.display_name} ({entry.provider_kind})
+                    </option>
+                  ))}
               </select>
               <SaveButton state={row?.state ?? 'idle'} isDirty={isDirty} onClick={() => save(t.tier)} />
             </div>

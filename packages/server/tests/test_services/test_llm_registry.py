@@ -275,3 +275,28 @@ def test_resolve_raises_tier_not_configured_when_all_disabled(_env_secret, db_se
     reg = SQLModelRegistry(db_session)
     with pytest.raises(TierNotConfiguredError):
         resolve(department_id="equity_research", registry=reg, user_id=None)
+
+
+def test_get_department_tier_override_env_var_takes_precedence(
+    _env_secret, db_session, monkeypatch
+) -> None:
+    """NEW-4-39: OPENLIA_LLM_DEPARTMENT_<UPPER_ID>_TIER overrides ConfigStore."""
+    svc.set_department_tier_override(db_session, "macro_research", "thinking")
+    db_session.commit()
+
+    monkeypatch.setenv("OPENLIA_LLM_DEPARTMENT_MACRO_RESEARCH_TIER", "quick")
+
+    reg = SQLModelRegistry(db_session)
+    assert reg.get_department_tier_override("macro_research") == ModelTier.QUICK
+
+
+def test_get_department_tier_override_env_var_invalid_returns_config(
+    _env_secret, db_session, monkeypatch
+) -> None:
+    svc.set_department_tier_override(db_session, "macro_research", "thinking")
+    db_session.commit()
+
+    monkeypatch.setenv("OPENLIA_LLM_DEPARTMENT_MACRO_RESEARCH_TIER", "not-a-tier")
+
+    reg = SQLModelRegistry(db_session)
+    assert reg.get_department_tier_override("macro_research") == ModelTier.THINKING
