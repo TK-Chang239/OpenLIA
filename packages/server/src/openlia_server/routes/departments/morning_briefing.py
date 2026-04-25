@@ -217,14 +217,20 @@ def build_morning_briefing_router(
     ) -> StreamingResponse:
         user_id = user.id
 
+        from openlia.llm.runtime.cancellation import CancellationToken
+
+        cancel_token = CancellationToken()
+
         async def gen() -> AsyncIterator[bytes]:
             try:
                 async for event in mb_runner.run_on_demand(
                     session=db,
                     user_id=user_id,
                     report_runner=runner,
+                    cancel_token=cancel_token,
                 ):
                     if await request.is_disconnected():
+                        cancel_token.cancel()
                         break
                     if isinstance(event, mb_runner.ReportSavedEvent):
                         wire = {

@@ -97,11 +97,29 @@ def build_chat_stream_router(
                 factory=factory,
                 department=session_row.department,
                 persist=persist,
+                request=request,
             ),
             media_type="text/event-stream",
         )
 
     return router
+
+
+async def _watch_disconnect(request: Request, token: CancellationToken) -> None:
+    """Poll `request.is_disconnected()` every 250ms; flip the token on True.
+
+    Spawned as a background task by `_event_source`; cancelled in its finally
+    block so a clean stream completion doesn't leave the watcher orphaned.
+    """
+    while True:
+        try:
+            disconnected = await request.is_disconnected()
+        except Exception:
+            return
+        if disconnected:
+            token.cancel()
+            return
+        await asyncio.sleep(0.25)
 
 
 class _Persistence:
@@ -148,12 +166,17 @@ async def _event_source(
     factory: Callable[[], ChatRunner],
     department: str,
     persist: _Persistence | None = None,
+    request: Request | None = None,
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
 
     assistant_text: list[str] = []
     tool_calls_log: list[dict[str, Any]] = []
+
+    watcher: asyncio.Task[None] | None = None
+    if request is not None:
+        watcher = asyncio.create_task(_watch_disconnect(request, token))
 
     try:
         async for event in runner.run(
@@ -185,7 +208,7 @@ async def _event_source(
                         break
             yield _sse_frame(wire)
 
-        if persist is not None:
+        if persist is not None and not token.is_cancelled:
             persist.save_assistant(
                 content="".join(assistant_text),
                 tool_calls=tool_calls_log or None,
@@ -201,3 +224,10 @@ async def _event_source(
             message=str(exc),
         )
         yield _sse_frame(to_wire(error_event))
+    finally:
+        if watcher is not None and not watcher.done():
+            watcher.cancel()
+            try:
+                await watcher
+            except (asyncio.CancelledError, Exception):
+                pass

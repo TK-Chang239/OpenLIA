@@ -13,6 +13,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
+from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import to_wire
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
@@ -208,6 +209,8 @@ def build_earnings_update_router(
     ) -> StreamingResponse:
         user_id = user.id
 
+        cancel_token = CancellationToken()
+
         async def gen() -> AsyncIterator[bytes]:
             try:
                 async for event in eu_runner.run_on_demand(
@@ -215,8 +218,10 @@ def build_earnings_update_router(
                     user_id=user_id,
                     ticker=payload.ticker,
                     report_runner=runner,
+                    cancel_token=cancel_token,
                 ):
                     if await request.is_disconnected():
+                        cancel_token.cancel()
                         break
                     wire = to_wire(event)
                     yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()

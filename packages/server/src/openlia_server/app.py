@@ -37,6 +37,7 @@ from apscheduler import AsyncScheduler
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from openlia.llm.runtime.prompts import PromptLoader
 from sqlalchemy.orm import Session as DBSession
 from sqlalchemy.orm import sessionmaker
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
@@ -84,6 +85,37 @@ from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
 from openlia_server.services.report_export import BrowserLauncher
 from openlia_server.services.runtime import build_chat_runner, build_report_runner
+
+# Per-department expected prompt slots; validated at startup so a missing or
+# renamed slot fails the boot rather than the first user request.
+_DEPARTMENT_SLOTS: dict[str, list[str]] = {
+    "secretary": ["chat.system", "chat.welcome"],
+    "equity_research": [
+        "chat.system",
+        "report.system",
+        "report.stock_initiation.user",
+        "report.stock_update.user",
+        "report.sector_research.user",
+    ],
+    "earnings_update": [
+        "report.system",
+        "report.earnings_update.user",
+    ],
+    "morning_briefing": [
+        "report.system",
+        "report.morning_briefing.user",
+    ],
+    "macro_research": [
+        "batch.t4_assessment.system",
+        "batch.t4_assessment.user",
+        "batch.t5_assessment.system",
+        "batch.t5_assessment.user",
+    ],
+    "retail_sentiment": [
+        "batch.classify_sentiment.system",
+        "batch.classify_sentiment.user",
+    ],
+}
 
 
 class _NoopPtDispatcher:
@@ -214,6 +246,13 @@ def _make_lifespan(
             # uses Alembic migrations so create_all is a no-op there.
             if engine.url.drivername == "sqlite":
                 Base.metadata.create_all(engine)
+
+        # Validate prompt slots once at boot. PromptSlotNotFound propagates
+        # and prevents the server from starting if any slot is missing.
+        prompt_root = getattr(app.state, "prompt_root", None)
+        prompt_loader = PromptLoader(root=prompt_root) if prompt_root else PromptLoader()
+        for department_id, slots in _DEPARTMENT_SLOTS.items():
+            prompt_loader.validate_department_slots(department_id, expected=slots)
 
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher

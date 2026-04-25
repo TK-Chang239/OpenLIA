@@ -24,7 +24,7 @@ class _ScriptedRunner:
         self._events = events
         self.received: list = []
 
-    async def run(self, *, department_id: str, user_id: str, request):
+    async def run(self, *, department_id: str, user_id: str, request, cancel_token=None):
         self.received.append((department_id, user_id, request))
         for e in self._events:
             yield e

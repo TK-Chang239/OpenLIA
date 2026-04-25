@@ -44,13 +44,18 @@ def test_secretary_exposes_suggest_redirect_tool():
     }.issubset(enum)
 
 
-def test_prompt_file_loads_system_and_user_sections():
+def test_prompt_file_loads_chat_section():
+    """P2-10: orphan top-level `system`/`user` keys removed; only nested
+    `chat.*` slots are valid per the runtime spec."""
     from pathlib import Path
 
     import yaml
 
     path = Path(__file__).resolve().parents[2] / "src/openlia/prompts/secretary.yaml"
     content = yaml.safe_load(path.read_text())
-    assert "system" in content
-    assert "user" in content
-    assert "suggest_redirect" in content["system"]
+    assert "chat" in content
+    assert "system" in content["chat"]
+    assert "welcome" in content["chat"]
+    # Top-level orphan keys must be gone.
+    assert "user" not in content
+    assert content.get("system") is None or "chat" in content
