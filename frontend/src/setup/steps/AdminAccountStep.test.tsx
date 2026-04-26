@@ -40,4 +40,29 @@ describe("AdminAccountStep", () => {
     await userEvent.click(screen.getByRole("button", { name: /next/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
   });
+
+  it("restores email and display name on remount; clears password fields", async () => {
+    const onSaved = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ email: "boss@example.com" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const first = render(<AdminAccountStep onBack={vi.fn()} onSaved={onSaved} />);
+    await userEvent.type(screen.getByLabelText(/email/i), "boss@example.com");
+    await userEvent.type(screen.getByLabelText(/^password$/i), "CorrectHorseBattery9!");
+    await userEvent.type(screen.getByLabelText(/confirm password/i), "CorrectHorseBattery9!");
+    await userEvent.type(screen.getByLabelText(/display name/i), "Boss");
+    await userEvent.click(screen.getByRole("button", { name: /next/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    first.unmount();
+
+    render(<AdminAccountStep onBack={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.getByLabelText(/email/i)).toHaveValue("boss@example.com");
+    expect(screen.getByLabelText(/display name/i)).toHaveValue("Boss");
+    expect(screen.getByLabelText(/^password$/i)).toHaveValue("");
+    expect(screen.getByLabelText(/confirm password/i)).toHaveValue("");
+  });
 });

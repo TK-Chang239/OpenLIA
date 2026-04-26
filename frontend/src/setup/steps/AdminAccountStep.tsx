@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { FormField } from "../../components/primitives/FormField";
@@ -6,6 +6,28 @@ import { Input } from "../../components/primitives/Input";
 import { PasswordInput } from "../../components/primitives/PasswordInput";
 import { PasswordStrengthMeter } from "../../components/primitives/PasswordStrengthMeter";
 import { setAdmin } from "../../api/setup";
+import { WIZARD_STORAGE_KEYS } from "../storage";
+
+// Persist non-secret fields across back/forward navigation. Passwords are
+// intentionally held in component state only — they are never written to
+// sessionStorage.
+const STORAGE_KEY: (typeof WIZARD_STORAGE_KEYS)[number] = "openlia.wizard.admin";
+
+interface PersistedAdmin {
+  email: string;
+  displayName: string;
+}
+
+function loadPersisted(): PersistedAdmin {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return { email: "", displayName: "" };
+    const parsed = JSON.parse(raw) as Partial<PersistedAdmin>;
+    return { email: parsed.email ?? "", displayName: parsed.displayName ?? "" };
+  } catch {
+    return { email: "", displayName: "" };
+  }
+}
 
 export function AdminAccountStep({
   onBack,
@@ -14,12 +36,21 @@ export function AdminAccountStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const [email, setEmail] = useState("");
+  const persisted = loadPersisted();
+  const [email, setEmail] = useState(persisted.email);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useState(persisted.displayName);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ email, displayName }));
+    } catch {
+      /* ignore */
+    }
+  }, [email, displayName]);
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
   const passwordValid = password.length >= 12;
@@ -36,6 +67,8 @@ export function AdminAccountStep({
     setError(null);
     try {
       await setAdmin({ email, password, display_name: displayName.trim() });
+      // Persist past Next; the wizard-wide clear runs after /setup/finish.
+      // Password fields are component-only and remain blank on revisit.
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create admin.");

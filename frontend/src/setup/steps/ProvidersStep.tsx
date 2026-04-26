@@ -34,7 +34,16 @@ export function ProvidersStep({
   const [rows, setRows] = useState<Row[]>([]);
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [testError, setTestError] = useState<string | null>(null);
+  // Errors are scoped per category so a failure in one tab does not bleed
+  // into the others.
+  const [testErrors, setTestErrors] = useState<Partial<Record<Category, string>>>({});
+  const setTestErrorFor = (cat: Category, msg: string | null) =>
+    setTestErrors((prev) => {
+      const next = { ...prev };
+      if (msg) next[cat] = msg;
+      else delete next[cat];
+      return next;
+    });
 
   const refresh = async () => {
     const resp = await listProviders();
@@ -110,19 +119,19 @@ export function ProvidersStep({
               onCancel={() => setAdding(false)}
               onSaved={async (err) => {
                 setAdding(false);
-                setTestError(err ?? null);
+                setTestErrorFor(active, err ?? null);
                 await refresh();
               }}
             />
           ) : (
             <>
-              {testError ? (
+              {testErrors[active] ? (
                 <div className="mb-3 px-3 py-2 rounded-[--radius-md] bg-[--color-feedback-error]/10 border border-[--color-feedback-error]/30 text-sm text-[--color-feedback-error] flex justify-between gap-3">
-                  <span className="break-words">{testError}</span>
+                  <span className="break-words">{testErrors[active]}</span>
                   <button
                     type="button"
                     aria-label="Dismiss error"
-                    onClick={() => setTestError(null)}
+                    onClick={() => setTestErrorFor(active, null)}
                     className="text-[--color-text-secondary] flex-shrink-0"
                   >
                     ×
@@ -142,7 +151,10 @@ export function ProvidersStep({
                     onUpdateKey={async (apiKey) => {
                       await patchProvider(r.id, { api_key: apiKey });
                       const result = await retestProvider(r.id);
-                      setTestError(result.ok ? null : result.error || "Provider test failed.");
+                      setTestErrorFor(
+                        active,
+                        result.ok ? null : result.error || "Provider test failed.",
+                      );
                       await refresh();
                     }}
                   />

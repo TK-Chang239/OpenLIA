@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from openlia.data.adapters import ADAPTERS
+from openlia.data.types import ProviderCategory
 from openlia.llm.adapters import build_adapter
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.batch import BatchRunner
@@ -18,9 +20,10 @@ from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.llm.runtime.web_search import WebSearchAdapter, WebSearchResolution
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.services import data_providers as dp_svc
 from openlia_server.services.llm_registry import SQLModelRegistry
 
 
@@ -41,11 +44,47 @@ class _EmptyDataDispatcher:
         return None
 
 
-def _build_chat_runner_with_registry(registry: SQLModelRegistry) -> ChatRunner:
+def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
+    """Pick the highest-priority enabled SEARCH provider and wrap it as a
+    WebSearchResolution. Returns an unavailable resolution if none configured.
+
+    Priority is read from `extra_config.default_priority` (lower wins, default 100),
+    matching the wizard convention. When no SEARCH provider is configured or the
+    chosen one fails to instantiate, returns an unavailable resolution so the
+    runtime omits the `web_search` tool.
+    """
+    rows = [
+        r
+        for r in dp_svc.list_providers_by_category(db, category=ProviderCategory.SEARCH)
+        if r.is_enabled
+    ]
+    if not rows:
+        return WebSearchResolution(available=False, variant=None, adapter=None)
+    rows.sort(key=lambda r: int((r.extra_config or {}).get("default_priority", 100)))
+    for row in rows:
+        adapter_cls = ADAPTERS.get(row.kind)
+        if adapter_cls is None:
+            continue
+        try:
+            entry = dp_svc.load_provider_entry(db, row.id)
+            adapter = adapter_cls(entry)
+        except Exception:
+            continue
+        if not isinstance(adapter, WebSearchAdapter):
+            continue
+        return WebSearchResolution(available=True, variant="configured", adapter=adapter)
+    return WebSearchResolution(available=False, variant=None, adapter=None)
+
+
+def _build_chat_runner_with_registry(
+    registry: SQLModelRegistry,
+    *,
+    web_search: WebSearchResolution,
+) -> ChatRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
         data_dispatcher=_EmptyDataDispatcher(),
-        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        web_search=web_search,
     )
 
     def _provider_factory(resolved):
@@ -88,7 +127,8 @@ class RefreshingChatRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            runner = _build_chat_runner_with_registry(registry)
+            web_search = _resolve_configured_search(db)
+            runner = _build_chat_runner_with_registry(registry, web_search=web_search)
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -109,11 +149,15 @@ def build_chat_runner(
     return RefreshingChatRunner(db_session_factory)
 
 
-def _build_report_runner_with_registry(registry: SQLModelRegistry) -> ReportRunner:
+def _build_report_runner_with_registry(
+    registry: SQLModelRegistry,
+    *,
+    web_search: WebSearchResolution,
+) -> ReportRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
         data_dispatcher=_EmptyDataDispatcher(),
-        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        web_search=web_search,
     )
 
     def _provider_factory(resolved):
@@ -150,7 +194,8 @@ class RefreshingReportRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            runner = _build_report_runner_with_registry(registry)
+            web_search = _resolve_configured_search(db)
+            runner = _build_report_runner_with_registry(registry, web_search=web_search)
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,

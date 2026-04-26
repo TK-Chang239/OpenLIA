@@ -68,4 +68,33 @@ describe("ModelsStep", () => {
       expect(screen.getByRole("button", { name: /next/i })).toBeEnabled(),
     );
   });
+
+  it("restores saved keys on remount (back-navigation case)", async () => {
+    const first = render(
+      <ModelsStep
+        totalSteps={5}
+        requiredTiers={["thinking", "everyday", "quick"]}
+        onBack={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+    await userEvent.type(screen.getByPlaceholderText(/Label/i), "My OpenAI");
+    await userEvent.type(screen.getByPlaceholderText(/^API key$/i), "sk-test");
+    await userEvent.click(screen.getByText(/Save key/i));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /next/i })).toBeEnabled(),
+    );
+    first.unmount();
+
+    render(
+      <ModelsStep
+        totalSteps={5}
+        requiredTiers={["thinking", "everyday", "quick"]}
+        onBack={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    );
+    // The saved key surfaces an "Edit key" affordance; the empty state has none.
+    expect(screen.getByRole("button", { name: /edit key/i })).toBeInTheDocument();
+  });
 });

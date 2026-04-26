@@ -132,13 +132,13 @@ def test_build_provider_payload_marks_unknown_kinds() -> None:
     assert payload[0]["declared_capabilities"] == []
 
 
-def test_build_provider_payload_includes_stub_with_empty_capabilities() -> None:
+def test_build_provider_payload_surfaces_social_capabilities_for_known_kind() -> None:
     catalog = build_catalog()
     payload = _build_provider_payload(
         [_row(id="p1", kind="reddit", category="social_media")], catalog
     )
     assert payload[0]["unknown"] is False
-    assert payload[0]["declared_capabilities"] == []
+    assert "social_sentiment" in payload[0]["declared_capabilities"]
 
 
 def test_deterministic_review_returns_ready_when_basics_covered() -> None:

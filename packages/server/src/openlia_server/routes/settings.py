@@ -336,7 +336,10 @@ def build_data_providers_router(
                     ),
                 },
             )
-        adapter = adapter_cls(entry)
+        try:
+            adapter = adapter_cls(entry)
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
         return {"ok": await adapter.health_check()}
 
     return router
