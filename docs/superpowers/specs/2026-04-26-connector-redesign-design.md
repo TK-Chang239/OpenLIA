@@ -283,7 +283,25 @@ The prompt is fully deterministic in inputs → no temperature override needed b
 | Modes | M1 — allowlist per-department only | Overscoping is cheap; underscoping is the bug |
 | Adapter LLM | User-configured "quick" tier via existing resolver | Reuses the LLM module's fallback chain |
 
-## 12. Open items
+## 12. Day-1 built-in catalog
 
-- Final built-in catalog (which providers ship as built-ins on day 1) — to be re-picked by user before implementation planning.
+Three built-ins ship at launch. Kept deliberately small so the new system can be exercised end-to-end before more providers are added.
+
+| `provider_id` | Category | Notes |
+|---------------|----------|-------|
+| `eodhd`       | financial | Large tool surface (~77 tools); good stress test for the scoping pass and prefix-collision handling. |
+| `fmp`         | financial | Two financial built-ins exercises within-category collisions (`get_quote` vs `quote`). |
+| `newsapi_ai`  | news     | Single news built-in; covers the second category. |
+
+`social` and `web_search` have no built-ins at launch. Departments that declare those categories as `required` will be Not Ready until the user adds a Remote MCP or CLI MCP connector for them. Departments with these categories as `optional` are unaffected.
+
+Each built-in template ships:
+- `launch`: MCPLaunchSpec (typically a `CliMCP` invocation of the provider's official MCP server)
+- `canary_tool`: name of a known-cheap tool used by V2 validation
+- `shipped_allowlist`: hand-authored mapping of `tool_name → [department_ids]`, frozen with the release
+
+The shipped allowlists also act as a regression baseline for the adapter LLM. During development, the adapter is run against each built-in's tool list (treating it as if it were a user-MCP) and its output diffed against the shipped map. Large drift signals a regression in the prompt, the requirements YAMLs, or the model.
+
+## 13. Open items
+
 - Adapter LLM prompt text — drafted during implementation; spec sets only the input/output contract.
