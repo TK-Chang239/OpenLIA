@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { setAccessControl } from "../../api/setup";
-import { WIZARD_STORAGE_KEYS } from "../storage";
+import { useWizardField } from "../storage";
 
 type Policy = "invite_only" | "closed";
-
-const STORAGE_KEY: (typeof WIZARD_STORAGE_KEYS)[number] = "openlia.wizard.access_control";
 
 interface PersistedAccess {
   policy: Policy;
@@ -22,20 +20,14 @@ const DEFAULT_ACCESS: PersistedAccess = {
   port: 8000,
 };
 
-function loadPersisted(): PersistedAccess {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_ACCESS;
-    const parsed = JSON.parse(raw) as Partial<PersistedAccess>;
-    return {
-      policy: parsed.policy === "closed" ? "closed" : "invite_only",
-      domains: parsed.domains ?? "",
-      host: parsed.host ?? DEFAULT_ACCESS.host,
-      port: typeof parsed.port === "number" ? parsed.port : DEFAULT_ACCESS.port,
-    };
-  } catch {
-    return DEFAULT_ACCESS;
-  }
+function parseAccess(raw: unknown): PersistedAccess {
+  const r = (raw ?? {}) as Partial<PersistedAccess>;
+  return {
+    policy: r.policy === "closed" ? "closed" : "invite_only",
+    domains: r.domains ?? DEFAULT_ACCESS.domains,
+    host: r.host ?? DEFAULT_ACCESS.host,
+    port: typeof r.port === "number" ? r.port : DEFAULT_ACCESS.port,
+  };
 }
 
 export function AccessControlStep({
@@ -45,24 +37,18 @@ export function AccessControlStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const persisted = loadPersisted();
-  const [policy, setPolicy] = useState<Policy>(persisted.policy);
-  const [domains, setDomains] = useState(persisted.domains);
-  const [host, setHost] = useState(persisted.host);
-  const [port, setPort] = useState(persisted.port);
+  const [access, setAccess] = useWizardField<PersistedAccess>(
+    "openlia.wizard.access_control",
+    DEFAULT_ACCESS,
+    parseAccess,
+  );
+  const { policy, domains, host, port } = access;
+  const setPolicy = (value: Policy) => setAccess((p) => ({ ...p, policy: value }));
+  const setDomains = (value: string) => setAccess((p) => ({ ...p, domains: value }));
+  const setHost = (value: string) => setAccess((p) => ({ ...p, host: value }));
+  const setPort = (value: number) => setAccess((p) => ({ ...p, port: value }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({ policy, domains, host, port }),
-      );
-    } catch {
-      /* ignore */
-    }
-  }, [policy, domains, host, port]);
 
   const onNext = async () => {
     setLoading(true);

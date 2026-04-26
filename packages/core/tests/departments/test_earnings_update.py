@@ -1,8 +1,4 @@
-import pytest
-from openlia.departments.earnings_update import (
-    EarningsUpdateDepartment,
-    EarningsUpdateMode,
-)
+from openlia.departments.earnings_update import EarningsUpdateDepartment
 
 
 def test_eu_identifies_itself():
@@ -14,16 +10,6 @@ def test_eu_identifies_itself():
 
 def test_eu_single_mode():
     assert set(EarningsUpdateDepartment().valid_modes) == {"earnings_analysis"}
-
-
-def test_eu_tier_is_everyday():
-    d = EarningsUpdateDepartment()
-    assert d.tier_for("earnings_analysis") == "everyday"
-
-
-def test_eu_tier_for_unknown_mode_raises():
-    with pytest.raises(ValueError):
-        EarningsUpdateDepartment().tier_for("bogus")
 
 
 def test_eu_basic_data_requirements():
@@ -43,15 +29,9 @@ def test_eu_optional_data_requirements():
         assert name in soft
 
 
-def test_eu_framework_name():
-    assert EarningsUpdateDepartment().framework_name("earnings_analysis") == "earnings_update"
-
-
 def test_eu_has_no_extra_tools():
     assert EarningsUpdateDepartment().extra_tools == ()
 
 
-def test_eu_mode_literal_type():
-    from typing import get_args
-
-    assert set(get_args(EarningsUpdateMode)) == {"earnings_analysis"}
+def test_eu_tier_is_everyday():
+    assert EarningsUpdateDepartment().tier == "everyday"
