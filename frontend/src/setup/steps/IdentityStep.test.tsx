@@ -23,4 +23,23 @@ describe("IdentityStep", () => {
     await userEvent.click(screen.getByRole("button", { name: /next/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
   });
+
+  it("restores the display name on remount after Next", async () => {
+    const onSaved = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ display_name: "Alice" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const first = render(<IdentityStep onBack={vi.fn()} onSaved={onSaved} />);
+    await userEvent.type(screen.getByLabelText(/display name/i), "Alice");
+    await userEvent.click(screen.getByRole("button", { name: /next/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    first.unmount();
+
+    render(<IdentityStep onBack={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.getByLabelText(/display name/i)).toHaveValue("Alice");
+  });
 });

@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 from openlia.departments.base import Tier
-
-EarningsUpdateMode = Literal["earnings_analysis"]
 
 
 @dataclass(frozen=True)
@@ -28,17 +26,4 @@ class EarningsUpdateDepartment:
         "analyst_ratings",
     )
     extra_tools: tuple[dict[str, Any], ...] = ()
-
-    @property
-    def valid_modes(self) -> tuple[EarningsUpdateMode, ...]:
-        return ("earnings_analysis",)
-
-    def tier_for(self, mode: str) -> Tier:
-        if mode not in self.valid_modes:
-            raise ValueError(f"unknown EU mode: {mode}")
-        return "everyday"
-
-    def framework_name(self, mode: str) -> str:
-        if mode not in self.valid_modes:
-            raise ValueError(f"unknown EU mode: {mode}")
-        return "earnings_update"
+    valid_modes: tuple[str, ...] = ("earnings_analysis",)

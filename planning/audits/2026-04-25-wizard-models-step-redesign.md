@@ -461,3 +461,149 @@ shorter list (or none) on a default EODHD-only personal-mode setup.
   relative to their underlying APIs (e.g. yfinance has no `earnings_data`
   routing despite the `earnings` module). Lower priority — EODHD is the
   default.
+
+---
+
+## 2026-04-26 — Provider-tab fixes + back-navigation persistence
+
+A third manual smoke pass surfaced six more wizard issues. Fixed in two
+batches: the first five were small bugs in the providers step; the sixth
+("going back deletes data") needed a design pass and got a separate spec
+under `docs/superpowers/specs/2026-04-26-wizard-back-nav-persistence-design.md`.
+
+### 17. `web_search` providers added in the wizard never appeared in the list
+
+The `_coerce_category` helper in
+`packages/server/src/openlia_server/services/wizard_providers.py` maps the
+wizard UI's `"web_search"` and `"social"` strings to the underlying
+`ProviderCategory.SEARCH` and `ProviderCategory.SOCIAL_MEDIA` enum values
+when **writing**. The read path
+(`GET /api/setup/providers` in `routes/setup.py`) returned `r.category`
+verbatim — `"search"` and `"social_media"` — but the React wizard buckets
+results into `{financial, news, social, web_search}`. The optional-chain
+`out[r.category]?.push(r)` silently dropped every web_search and social
+provider, so adding a Brave/Tavily/Reddit/X provider looked like a no-op.
+
+Fix: `routes/setup.py:get_providers` now maps DB categories back to wizard
+keys (`social_media → social`, `search → web_search`) before returning.
+
+### 18. Provider-add form retained the previous attempt's state
+
+`AddProviderForm.tsx` persisted its `Draft` to `sessionStorage` on every
+keystroke and only cleared on a successful save. After a failed add (bad
+key, MCP unreachable), the next "Add provider" click rendered the same
+filled-in form, so users had to manually clear fields before retrying.
+
+Fix: removed the sessionStorage layer entirely from `AddProviderForm`.
+Each form open starts from `EMPTY_DRAFT` via `useState`. (Per-step draft
+persistence is handled at a higher level — see #22 — but the *Add Provider*
+sub-form should not carry state across attempts.)
+
+### 19. "Standard Config" provider mode
+
+Added a third tab beside Built-in / Custom Connector. The user pastes a
+JSON object matching the existing `ProviderEntry` schema:
+
+```json
+{
+  "mode": "builtin",
+  "provider": "newsapi_ai",
+  "api_key": "your_api_key_here"
+}
+```
+
+`parseConfigJson` validates `mode in {"builtin", "mcp"}` and forwards
+recognized fields (`provider`, `api_key`, `mcp_url`, `mcp_auth_header`,
+`oauth_client_id`, `oauth_client_secret`). No backend change — the parsed
+object goes through the same `POST /api/setup/providers` path as the form
+modes. Useful for copy-pasting known-good configs across machines or
+sharing one with a teammate.
+
+### 20. Provider error message bled across category tabs
+
+`ProvidersStep` held `testError` as a single `string | null`, so a failed
+add in News showed the same red banner when the user clicked over to
+Financial / Social / Web Search.
+
+Fix: state is now `Partial<Record<Category, string>>` keyed by tab. Both
+the AddProviderForm save path and the per-row `onUpdateKey` retest path
+write to the active tab's slot via `setTestErrorFor(active, msg)`. The
+banner reads `testErrors[active]`; switching tabs naturally hides errors
+that belong to other categories.
+
+### 21. `newsapi_ai` adapter rebuild check
+
+User reconnected the upstream MCP and asked for a rebuild. The shipped
+`NewsAPIAIAdapter` is REST-based against `https://eventregistry.org/api/v1`
+and is registered in `ADAPTERS`; all 8 declared capabilities
+(`company_news`, `general_news`, `topic_news`, `news_archive`,
+`trending_news`, `entity_news`, `event_summary`, `event_search`) round-trip
+cleanly and the 20 unit tests in
+`packages/core/tests/test_data/test_adapters/test_newsapi_ai.py` pass.
+No code change required.
+
+### 22. Going back to a previous step still showed a blank form
+
+The 2026-04-25 fix (issue #10 above) only added persistence to
+`ModelsStep`. Manual smoke confirmed every other step still wiped its
+fields on Back. The previous prototype I wrote earlier in this session
+added sessionStorage to `IdentityStep`, `AdminAccountStep`, and
+`AccessControlStep`, but cleared each key after a successful Next — so
+the second time the user revisited a step the data was gone. Wrong end-
+state.
+
+User-stated requirement: "when the user hits next, the data he inputted
+for a page is saved so when he returns to the page it is exactly like
+how it was when he hit next." Choice C from the brainstorming session
+applies — persist API keys, but **not** the admin password and confirm-
+password fields.
+
+Design: `docs/superpowers/specs/2026-04-26-wizard-back-nav-persistence-design.md`.
+
+Implementation:
+
+- New `frontend/src/setup/storage.ts` centralizes the four wizard keys
+  and exports `clearAllWizardStorage()`.
+- `IdentityStep.tsx`, `AdminAccountStep.tsx`, `AccessControlStep.tsx`,
+  and `ModelsStep.tsx` no longer clear their key after a successful
+  Next. Persist-on-keystroke (already in place) is kept.
+- `ReviewStep.tsx:onFinish` calls `clearAllWizardStorage()` after
+  `await finish()` succeeds and before redirecting. The wizard's
+  completion is now the only event that wipes draft state.
+- `AdminAccountStep` continues to hold `password` and `confirm` in
+  component state only (never written to sessionStorage); on revisit
+  email and display name restore but the two password inputs are blank.
+- `setupTests.ts` gained an `afterEach(() => sessionStorage.clear())`
+  so the persisted state from one test doesn't leak into the next.
+- One restoration test added per affected step: type → click Next →
+  unmount → remount → assert input still holds its value.
+
+### Verification (this pass)
+
+- `npm run lint`: clean.
+- `npm test -- --run`: **735/735 passing** (one unrelated pre-existing
+  unhandled rejection in `SettingsShellBlocker.test.tsx`, not introduced
+  here).
+- `uv run pytest packages/server/tests/test_routes/test_setup_routes.py`:
+  42/42 passing.
+- `uv run pytest packages/core/tests/test_data/test_adapters/test_newsapi_ai.py`:
+  20/20 passing.
+
+### What this still does *not* change
+
+- No backend route shapes (other than the read-side category remap in
+  `GET /api/setup/providers`, which only affects how the existing rows
+  are bucketed in the UI — the DB column and write path are unchanged).
+- No DB migration; `wizard_state.current_step` semantics intact.
+- No effect on the post-wizard Settings page.
+
+### Follow-ups
+
+- The Add Provider form's "Standard Config" mode currently accepts only
+  `mode`, `provider`, `api_key`, `mcp_url`, `mcp_auth_header`, and OAuth
+  client id/secret. If `extra_config` ever needs to round-trip through
+  the wizard, extend `parseConfigJson` to forward it. Out of scope for
+  now — the Settings page is the place for advanced provider config.
+- `ProvidersStep.tsx` still keys per-tab errors only at the
+  `Add provider` and `update API key` paths. If a future "retest all"
+  bulk action lands, it should write to the matching tab too.

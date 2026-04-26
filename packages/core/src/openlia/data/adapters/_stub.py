@@ -1,16 +1,18 @@
-"""Deferred-implementation adapter stubs.
+"""Deferred-implementation adapter base.
 
-Each registers a `kind` so admins can create DataProvider rows for them
-through `/settings/data-providers` (auto-map will then list their
-capabilities as unmet). Calling `fetch` always raises DataNotAvailable.
-Implementation is owned by a future phase per data-provider-design.md.
+`_StubAdapter` exists so server callers (`routes/settings.py`,
+`services/wizard_providers.py`) can do `issubclass(adapter_cls, _StubAdapter)`
+to short-circuit live health checks for any future provider whose adapter
+has not been implemented yet. As of the 2026-04-25 expansion, no concrete
+adapter inherits from this class — every registered `kind` ships with a
+real HTTP implementation.
 """
 
 from typing import Any, ClassVar
 
 from openlia.data.base import ProviderAdapter
 from openlia.data.errors import DataNotAvailable
-from openlia.data.types import ProviderCategory, ToolResult
+from openlia.data.types import ToolResult
 
 
 class _StubAdapter(ProviderAdapter):
@@ -27,28 +29,3 @@ class _StubAdapter(ProviderAdapter):
 
     async def health_check(self) -> bool:
         return False
-
-
-class RedditAdapter(_StubAdapter):
-    kind: ClassVar[str] = "reddit"
-    category: ClassVar[ProviderCategory] = ProviderCategory.SOCIAL_MEDIA
-
-
-class XAdapter(_StubAdapter):
-    kind: ClassVar[str] = "x"
-    category: ClassVar[ProviderCategory] = ProviderCategory.SOCIAL_MEDIA
-
-
-class BraveSearchAdapter(_StubAdapter):
-    kind: ClassVar[str] = "brave"
-    category: ClassVar[ProviderCategory] = ProviderCategory.SEARCH
-
-
-class TavilyAdapter(_StubAdapter):
-    kind: ClassVar[str] = "tavily"
-    category: ClassVar[ProviderCategory] = ProviderCategory.SEARCH
-
-
-class SerperAdapter(_StubAdapter):
-    kind: ClassVar[str] = "serper"
-    category: ClassVar[ProviderCategory] = ProviderCategory.SEARCH

@@ -1,14 +1,13 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { saveModels } from "../../api/setup";
 import { KeysScreen } from "./KeysScreen";
 import type { ApiKey } from "./KeysScreen";
 import { TiersScreen } from "./TiersScreen";
 import type { TierEntry, TierMap, TierName } from "./TiersScreen";
 import { inferProvider } from "./inferProvider";
+import { useWizardField } from "../storage";
 
 type Screen = "keys" | "tiers";
-
-const STORAGE_KEY = "openlia.wizard.models";
 
 interface PersistedState {
   screen: Screen;
@@ -16,30 +15,19 @@ interface PersistedState {
   tiers: TierMap;
 }
 
-function loadPersisted(): PersistedState | null {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as PersistedState;
-  } catch {
-    return null;
-  }
-}
+const MODELS_DEFAULTS: PersistedState = {
+  screen: "keys",
+  keys: [],
+  tiers: { thinking: [], everyday: [], quick: [] },
+};
 
-function savePersisted(state: PersistedState): void {
-  try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  } catch {
-    // Ignore quota / disabled storage; state will reset but the wizard still works.
-  }
-}
-
-function clearPersisted(): void {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* noop */
-  }
+function parseModels(raw: unknown): PersistedState {
+  const r = (raw ?? {}) as Partial<PersistedState>;
+  return {
+    screen: r.screen === "tiers" ? "tiers" : "keys",
+    keys: Array.isArray(r.keys) ? r.keys : [],
+    tiers: r.tiers ?? MODELS_DEFAULTS.tiers,
+  };
 }
 
 export function ModelsStep({
@@ -53,26 +41,31 @@ export function ModelsStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const persisted = loadPersisted();
-  const [screen, setScreen] = useState<Screen>(persisted?.screen ?? "keys");
-  const [keys, setKeys] = useState<ApiKey[]>(persisted?.keys ?? []);
-  const [tiers, setTiers] = useState<TierMap>(
-    persisted?.tiers ?? { thinking: [], everyday: [], quick: [] },
+  const [state, setState] = useWizardField<PersistedState>(
+    "openlia.wizard.models",
+    MODELS_DEFAULTS,
+    parseModels,
   );
+  const { screen, keys, tiers } = state;
+  const setScreen = (value: Screen) => setState((s) => ({ ...s, screen: value }));
+  const setTiers = (next: TierMap | ((prev: TierMap) => TierMap)) =>
+    setState((s) => ({
+      ...s,
+      tiers: typeof next === "function" ? next(s.tiers) : next,
+    }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    savePersisted({ screen, keys, tiers });
-  }, [screen, keys, tiers]);
-
   const updateKeys = (next: ApiKey[]) => {
     const validIds = new Set(next.map((k) => k.id));
-    setKeys(next);
-    setTiers((prev) => ({
-      thinking: prev.thinking.filter((e) => validIds.has(e.key_id)),
-      everyday: prev.everyday.filter((e) => validIds.has(e.key_id)),
-      quick: prev.quick.filter((e) => validIds.has(e.key_id)),
+    setState((s) => ({
+      ...s,
+      keys: next,
+      tiers: {
+        thinking: s.tiers.thinking.filter((e) => validIds.has(e.key_id)),
+        everyday: s.tiers.everyday.filter((e) => validIds.has(e.key_id)),
+        quick: s.tiers.quick.filter((e) => validIds.has(e.key_id)),
+      },
     }));
   };
 
@@ -97,7 +90,7 @@ export function ModelsStep({
         everyday: expand(tiers.everyday),
         quick: expand(tiers.quick),
       });
-      clearPersisted();
+      // Persist past Next; the wizard-wide clear runs after /setup/finish.
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save models.");

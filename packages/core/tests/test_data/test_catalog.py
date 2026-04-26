@@ -34,17 +34,26 @@ def test_catalog_find_returns_none_for_unknown_kind() -> None:
     assert catalog.find("polygon") is None
 
 
-def test_catalog_includes_stub_adapters_with_empty_capabilities() -> None:
-    """Stub adapters declare an empty `capabilities` frozenset.
+def test_catalog_includes_social_and_search_adapters_with_capabilities() -> None:
+    """Reddit, X, Brave, Tavily, and Serper now ship with full capability sets.
 
-    The catalog must surface that as an empty tuple — not omit them — so the
-    review flow can distinguish "registered but covers nothing" from
-    "unregistered/unknown".
+    The catalog must surface every registered adapter and report a non-empty,
+    sorted capability tuple for each — the review flow needs that to map
+    department requirements (social_sentiment, web_search, etc.) onto these
+    providers.
     """
     catalog = build_catalog()
+    for kind in ("reddit", "x", "brave", "tavily", "serper"):
+        entry = catalog.find(kind)
+        assert entry is not None, kind
+        assert len(entry.capabilities) > 0, kind
+        assert tuple(entry.capabilities) == tuple(sorted(entry.capabilities)), kind
     reddit = catalog.find("reddit")
     assert reddit is not None
-    assert reddit.capabilities == ()
+    assert "social_sentiment" in reddit.capabilities
+    brave = catalog.find("brave")
+    assert brave is not None
+    assert "web_search" in brave.capabilities
 
 
 def test_explicit_adapters_arg_isolates_from_live_registry() -> None:

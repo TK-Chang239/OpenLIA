@@ -1,8 +1,4 @@
-import pytest
-from openlia.departments.morning_briefing import (
-    MorningBriefingDepartment,
-    MorningBriefingMode,
-)
+from openlia.departments.morning_briefing import MorningBriefingDepartment
 
 
 def test_mb_identifies_itself():
@@ -14,16 +10,6 @@ def test_mb_identifies_itself():
 
 def test_mb_single_mode():
     assert set(MorningBriefingDepartment().valid_modes) == {"morning_briefing"}
-
-
-def test_mb_tier_is_everyday():
-    d = MorningBriefingDepartment()
-    assert d.tier_for("morning_briefing") == "everyday"
-
-
-def test_mb_tier_for_unknown_mode_raises():
-    with pytest.raises(ValueError):
-        MorningBriefingDepartment().tier_for("bogus")
 
 
 def test_mb_basic_data_requirements():
@@ -42,15 +28,9 @@ def test_mb_optional_data_requirements():
         assert name in soft
 
 
-def test_mb_framework_name():
-    assert MorningBriefingDepartment().framework_name("morning_briefing") == "morning_briefing"
-
-
 def test_mb_has_no_extra_tools():
     assert MorningBriefingDepartment().extra_tools == ()
 
 
-def test_mb_mode_literal_type():
-    from typing import get_args
-
-    assert set(get_args(MorningBriefingMode)) == {"morning_briefing"}
+def test_mb_tier_is_everyday():
+    assert MorningBriefingDepartment().tier == "everyday"
