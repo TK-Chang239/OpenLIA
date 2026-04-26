@@ -1,0 +1,20 @@
+financial:
+  required: true
+  description: |
+    Need historical_prices and stock_quote across major indices and
+    volatility proxies (VIX, breadth measures) to compute market-wide
+    stress signals. Economic_events surface scheduled risk-off catalysts
+    such as central bank decisions and major data prints that drive the
+    panic thermometer reading.
+news:
+  required: true
+  description: |
+    Stress-relevant headlines via company_news, covering credit events,
+    geopolitical shocks, and risk-off narratives. Required to corroborate
+    quantitative volatility signals with the qualitative stress picture.
+social:
+  required: false
+  description: |
+    Reddit and X chatter as an early retail panic signal, used to detect
+    crowd-driven capitulation or euphoria spikes when available but not
+    required for the dashboard to render.

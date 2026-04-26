@@ -60,7 +60,6 @@ def test_loader_rejects_empty_description(tmp_path):
         load_requirements_yaml(p)
 
 
-@pytest.mark.xfail(reason="department YAMLs land in tasks D2-D8", strict=False)
 def test_get_all_requirements_returns_known_departments():
     """After Phase D YAMLs land, every department class has loadable requirements."""
 
