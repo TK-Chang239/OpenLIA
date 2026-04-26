@@ -100,6 +100,10 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
             raise HTTPException(status_code=404, detail="connector not found")
         return _to_out(row)
 
+    @router.get("/review")
+    def review(db: DBSession = Depends(session_dep)) -> dict[str, Any]:
+        return {"departments": connectors_service.compute_readiness(db)}
+
     @router.post("/review/scope", response_model=ScopeResponse)
     async def scope(body: ScopeRequestIn, db: DBSession = Depends(session_dep)) -> ScopeResponse:
         from openlia.departments import get_all_requirements
