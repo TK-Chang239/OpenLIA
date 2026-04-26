@@ -31,9 +31,9 @@ def test_eodhd_declared_metadata() -> None:
 async def test_fetch_rejects_unknown_capability() -> None:
     adapter = EODHDAdapter(_entry())
     with pytest.raises(DataNotAvailable) as exc:
-        await adapter.fetch("insider_transactions", {"symbol": "AAPL"})
+        await adapter.fetch("not_a_real_capability", {"symbol": "AAPL"})
     assert exc.value.provider_kind == "eodhd"
-    assert exc.value.capability == "insider_transactions"
+    assert exc.value.capability == "not_a_real_capability"
 
 
 @respx.mock
@@ -149,11 +149,11 @@ def test_registry_exposes_eodhd() -> None:
     assert ADAPTERS["eodhd"] is EODHDAdapter
 
 
-# ---------- P0-3-04: company_fundamentals ----------
+# ---------- P0-3-04: financial_statements ----------
 
 
 @respx.mock
-async def test_fetch_company_fundamentals_extracts_financials_block() -> None:
+async def test_fetch_financial_statements_extracts_financials_block() -> None:
     respx.get("https://eodhd.com/api/fundamentals/AAPL.US").mock(
         return_value=httpx.Response(
             200,
@@ -164,15 +164,15 @@ async def test_fetch_company_fundamentals_extracts_financials_block() -> None:
         )
     )
     adapter = EODHDAdapter(_entry())
-    result = await adapter.fetch("company_fundamentals", {"symbol": "AAPL"})
-    assert result.capability == "company_fundamentals"
+    result = await adapter.fetch("financial_statements", {"symbol": "AAPL"})
+    assert result.capability == "financial_statements"
     assert "Financials" in result.payload
     # General block should be stripped — only Financials returned.
     assert "General" not in result.payload
 
 
 @respx.mock
-async def test_fetch_company_fundamentals_missing_block_raises() -> None:
+async def test_fetch_financial_statements_missing_block_raises() -> None:
     respx.get("https://eodhd.com/api/fundamentals/MSFT.US").mock(
         return_value=httpx.Response(200, json={"General": {"Code": "MSFT"}}),
     )
@@ -180,7 +180,7 @@ async def test_fetch_company_fundamentals_missing_block_raises() -> None:
 
     adapter = EODHDAdapter(_entry())
     with pytest.raises(DataNotAvailable):
-        await adapter.fetch("company_fundamentals", {"symbol": "MSFT"})
+        await adapter.fetch("financial_statements", {"symbol": "MSFT"})
 
 
 # ---------- P1-3-06: typed errors for auth/transient/RFC1123 ----------
@@ -308,3 +308,172 @@ async def test_format_ticker_honors_extra_config_suffix() -> None:
     adapter = EODHDAdapter(entry)
     await adapter.fetch("stock_quote", {"symbol": "HSBA"})
     assert route.called
+
+
+# ---------- NEW: extended capabilities (earnings/economic/macro/insider/sentiment/...) ----------
+
+
+@respx.mock
+async def test_fetch_economic_events_calls_endpoint_and_passes_params() -> None:
+    route = respx.get("https://eodhd.com/api/economic-events").mock(
+        return_value=httpx.Response(200, json=[{"event": "CPI", "country": "US"}]),
+    )
+    adapter = EODHDAdapter(_entry())
+    result = await adapter.fetch(
+        "economic_events",
+        {"country": "US", "from": "2026-01-01", "to": "2026-01-31"},
+    )
+    assert route.called
+    qp = route.calls.last.request.url.params
+    assert qp["country"] == "US"
+    assert qp["from"] == "2026-01-01"
+    assert result.capability == "economic_events"
+
+
+@respx.mock
+async def test_fetch_earnings_data_uses_calendar_earnings_endpoint() -> None:
+    route = respx.get("https://eodhd.com/api/calendar/earnings").mock(
+        return_value=httpx.Response(200, json={"earnings": []}),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("earnings_data", {"symbol": "AAPL"})
+    assert route.called
+    assert route.calls.last.request.url.params["symbols"] == "AAPL.US"
+
+
+@respx.mock
+async def test_fetch_earnings_data_works_without_symbol() -> None:
+    route = respx.get("https://eodhd.com/api/calendar/earnings").mock(
+        return_value=httpx.Response(200, json={"earnings": []}),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("earnings_data", {"from": "2026-04-01", "to": "2026-04-30"})
+    assert route.called
+    assert route.calls.last.request.url.params["from"] == "2026-04-01"
+
+
+@respx.mock
+async def test_fetch_macro_indicator_uses_country_path() -> None:
+    route = respx.get("https://eodhd.com/api/macro-indicator/USA").mock(
+        return_value=httpx.Response(200, json=[{"Indicator": "GDP", "Value": 1.0}]),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("macro_indicator", {"indicator": "gdp_current_usd"})
+    assert route.called
+    assert route.calls.last.request.url.params["indicator"] == "gdp_current_usd"
+
+
+@respx.mock
+async def test_fetch_macro_indicator_honors_country_param() -> None:
+    route = respx.get("https://eodhd.com/api/macro-indicator/DEU").mock(
+        return_value=httpx.Response(200, json=[]),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("macro_indicator", {"country": "DEU"})
+    assert route.called
+
+
+@respx.mock
+async def test_fetch_insider_transactions_passes_code_filter() -> None:
+    route = respx.get("https://eodhd.com/api/insider-transactions").mock(
+        return_value=httpx.Response(200, json=[]),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("insider_transactions", {"symbol": "AAPL"})
+    assert route.called
+    assert route.calls.last.request.url.params["code"] == "AAPL.US"
+
+
+@respx.mock
+async def test_fetch_insider_transactions_works_without_symbol() -> None:
+    route = respx.get("https://eodhd.com/api/insider-transactions").mock(
+        return_value=httpx.Response(200, json=[]),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("insider_transactions", {"limit": 200})
+    assert route.called
+    assert "code" not in route.calls.last.request.url.params
+
+
+@respx.mock
+async def test_fetch_social_sentiment_passes_symbol() -> None:
+    route = respx.get("https://eodhd.com/api/sentiments").mock(
+        return_value=httpx.Response(200, json={"AAPL.US": []}),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("social_sentiment", {"symbol": "AAPL"})
+    assert route.called
+    assert route.calls.last.request.url.params["s"] == "AAPL.US"
+
+
+@respx.mock
+async def test_fetch_analyst_ratings_extracts_block() -> None:
+    respx.get("https://eodhd.com/api/fundamentals/AAPL.US").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "General": {"Code": "AAPL"},
+                "AnalystRatings": {"Rating": 1.5, "TargetPrice": 200.0},
+            },
+        )
+    )
+    adapter = EODHDAdapter(_entry())
+    result = await adapter.fetch("analyst_ratings", {"symbol": "AAPL"})
+    assert "AnalystRatings" in result.payload
+    assert "General" not in result.payload
+
+
+@respx.mock
+async def test_fetch_analyst_ratings_missing_block_raises() -> None:
+    respx.get("https://eodhd.com/api/fundamentals/MSFT.US").mock(
+        return_value=httpx.Response(200, json={"General": {"Code": "MSFT"}}),
+    )
+    adapter = EODHDAdapter(_entry())
+    with pytest.raises(DataNotAvailable):
+        await adapter.fetch("analyst_ratings", {"symbol": "MSFT"})
+
+
+@respx.mock
+async def test_fetch_dividends_path() -> None:
+    route = respx.get("https://eodhd.com/api/div/AAPL.US").mock(
+        return_value=httpx.Response(200, json=[]),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("dividends", {"symbol": "AAPL"})
+    assert route.called
+
+
+@respx.mock
+async def test_fetch_splits_path() -> None:
+    route = respx.get("https://eodhd.com/api/splits/AAPL.US").mock(
+        return_value=httpx.Response(200, json=[]),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("splits", {"symbol": "AAPL"})
+    assert route.called
+
+
+@respx.mock
+async def test_fetch_ipo_calendar_works_without_symbol() -> None:
+    route = respx.get("https://eodhd.com/api/calendar/ipos").mock(
+        return_value=httpx.Response(200, json={"ipos": []}),
+    )
+    adapter = EODHDAdapter(_entry())
+    await adapter.fetch("ipo_calendar", {"from": "2026-04-01", "to": "2026-04-30"})
+    assert route.called
+
+
+def test_eodhd_declares_extended_capabilities() -> None:
+    must_cover = {
+        "economic_events",
+        "earnings_data",
+        "macro_indicator",
+        "insider_transactions",
+        "social_sentiment",
+        "analyst_ratings",
+        "dividends",
+        "splits",
+        "ipo_calendar",
+        "financial_statements",
+    }
+    assert must_cover <= EODHDAdapter.capabilities

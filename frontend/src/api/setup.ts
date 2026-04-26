@@ -94,10 +94,10 @@ export const listProviders = () =>
   fetchJson<{ providers: ProviderRow[] }>("/api/setup/providers");
 
 export const addProvider = (payload: { category: string; entry: ProviderEntry }) =>
-  fetchJson<{ ok: boolean; entry_id: string }>("/api/setup/providers", {
-    method: "POST",
-    json: payload,
-  });
+  fetchJson<{ ok: boolean; entry_id: string | null; error?: string | null }>(
+    "/api/setup/providers",
+    { method: "POST", json: payload },
+  );
 
 export const patchProvider = (id: string, patch: { priority?: number; api_key?: string }) =>
   fetchJson<{ ok: boolean }>(`/api/setup/providers/${id}`, { method: "PATCH", json: patch });

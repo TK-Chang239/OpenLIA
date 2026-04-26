@@ -29,31 +29,26 @@ class _StubAdapter(ProviderAdapter):
         return False
 
 
-class FMPAdapter(_StubAdapter):
-    kind: ClassVar[str] = "fmp"
-    category: ClassVar[ProviderCategory] = ProviderCategory.FINANCIAL
+class RedditAdapter(_StubAdapter):
+    kind: ClassVar[str] = "reddit"
+    category: ClassVar[ProviderCategory] = ProviderCategory.SOCIAL_MEDIA
 
 
-class FinnhubAdapter(_StubAdapter):
-    kind: ClassVar[str] = "finnhub"
-    category: ClassVar[ProviderCategory] = ProviderCategory.FINANCIAL
+class XAdapter(_StubAdapter):
+    kind: ClassVar[str] = "x"
+    category: ClassVar[ProviderCategory] = ProviderCategory.SOCIAL_MEDIA
 
 
-class YFinanceAdapter(_StubAdapter):
-    kind: ClassVar[str] = "yfinance"
-    category: ClassVar[ProviderCategory] = ProviderCategory.FINANCIAL
+class BraveSearchAdapter(_StubAdapter):
+    kind: ClassVar[str] = "brave"
+    category: ClassVar[ProviderCategory] = ProviderCategory.SEARCH
 
 
-class NewsAPIAIAdapter(_StubAdapter):
-    kind: ClassVar[str] = "newsapi_ai"
-    category: ClassVar[ProviderCategory] = ProviderCategory.NEWS
+class TavilyAdapter(_StubAdapter):
+    kind: ClassVar[str] = "tavily"
+    category: ClassVar[ProviderCategory] = ProviderCategory.SEARCH
 
 
-class NewsAPIOrgAdapter(_StubAdapter):
-    kind: ClassVar[str] = "newsapi_org"
-    category: ClassVar[ProviderCategory] = ProviderCategory.NEWS
-
-
-class MediastackAdapter(_StubAdapter):
-    kind: ClassVar[str] = "mediastack"
-    category: ClassVar[ProviderCategory] = ProviderCategory.NEWS
+class SerperAdapter(_StubAdapter):
+    kind: ClassVar[str] = "serper"
+    category: ClassVar[ProviderCategory] = ProviderCategory.SEARCH

@@ -45,6 +45,10 @@ def test_check_email_allowed_allowlist(db_session):
         signup_policy.check_email_allowed(db_session, "not@other.com")
 
 
-def test_get_policy_raises_if_missing(db_session):
-    with pytest.raises(RuntimeError):
-        signup_policy.get_policy(db_session)
+def test_get_policy_returns_none_if_missing(db_session):
+    assert signup_policy.get_policy(db_session) is None
+
+
+def test_assert_registration_open_fails_closed_when_missing(db_session):
+    with pytest.raises(signup_policy.SignupClosedError):
+        signup_policy.assert_registration_open(db_session)

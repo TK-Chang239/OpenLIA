@@ -31,7 +31,7 @@ def test_spa_served_from_root(run_container: Callable[..., dict[str, Any]]) -> N
 
 def test_setup_wizard_reachable(run_container: Callable[..., dict[str, Any]]) -> None:
     info = run_container(env={"OPENLIA_MODE": "personal"})
-    resp = httpx.get(f"{info['base_url']}/api/setup/state", timeout=5.0)
+    resp = httpx.get(f"{info['base_url']}/api/setup/status", timeout=5.0)
     # 200 (wizard pending) or 403 (already complete) — either proves the route is wired.
     assert resp.status_code in {200, 403}
 

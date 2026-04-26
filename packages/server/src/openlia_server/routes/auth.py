@@ -230,9 +230,11 @@ def build_auth_router(*, db_session_factory: Callable[[], DBSession]) -> APIRout
     @router.get("/signup-policy")
     def get_signup_policy(db: DBSession = Depends(session_dep)):
         policy = signup_policy.get_policy(db)
+        # Pre-wizard: signup_policy row not yet seeded — registration is closed.
+        mode = policy.mode if policy is not None else "closed"
         return {
-            "mode": policy.mode,
-            "invite_required": policy.mode == "invite_only",
+            "mode": mode,
+            "invite_required": mode == "invite_only",
         }
 
     @router.post("/password-reset/request")

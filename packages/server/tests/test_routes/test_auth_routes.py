@@ -476,29 +476,32 @@ class TestCookieFlags:
         assert "secure" not in header.lower()
 
 
+# Tests use /api/* paths because that's how real browsers call the API —
+# the strip-prefix middleware turns /api/... into /... before routing, and
+# tags the scope so the SPA fallback knows not to serve index.html on miss.
 _AUTH_ROUTE_CASES = [
-    ("post", "/auth/register", {"email": "x@y.z", "password": "x", "display_name": "X"}),
-    ("post", "/auth/login", {"email": "x@y.z", "password": "x", "persistent": False}),
-    ("post", "/auth/logout", None),
-    ("post", "/auth/logout-all", None),
-    ("get", "/auth/session", None),
-    ("get", "/auth/signup-policy", None),
-    ("post", "/auth/password-reset/request", {"email": "x@y.z"}),
-    ("post", "/auth/password-reset/consume", {"token": "x", "new_password": "12345678"}),
-    ("post", "/auth/change-password", {"current_password": "x", "new_password": "12345678"}),
+    ("post", "/api/auth/register", {"email": "x@y.z", "password": "x", "display_name": "X"}),
+    ("post", "/api/auth/login", {"email": "x@y.z", "password": "x", "persistent": False}),
+    ("post", "/api/auth/logout", None),
+    ("post", "/api/auth/logout-all", None),
+    ("get", "/api/auth/session", None),
+    ("get", "/api/auth/signup-policy", None),
+    ("post", "/api/auth/password-reset/request", {"email": "x@y.z"}),
+    ("post", "/api/auth/password-reset/consume", {"token": "x", "new_password": "12345678"}),
+    ("post", "/api/auth/change-password", {"current_password": "x", "new_password": "12345678"}),
 ]
 
 _ADMIN_ROUTE_CASES = [
-    ("get", "/admin/invites", None),
-    ("post", "/admin/invites", {"label": "x"}),
-    ("post", "/admin/invites/x/revoke", None),
-    ("get", "/admin/users", None),
-    ("post", "/admin/users/x/disable", None),
-    ("post", "/admin/users/x/enable", None),
-    ("post", "/admin/users/x/reset-password", None),
-    ("get", "/admin/password-reset-requests", None),
-    ("post", "/admin/password-reset-requests/x/approve", None),
-    ("post", "/admin/password-reset-requests/x/reject", None),
+    ("get", "/api/admin/invites", None),
+    ("post", "/api/admin/invites", {"label": "x"}),
+    ("post", "/api/admin/invites/x/revoke", None),
+    ("get", "/api/admin/users", None),
+    ("post", "/api/admin/users/x/disable", None),
+    ("post", "/api/admin/users/x/enable", None),
+    ("post", "/api/admin/users/x/reset-password", None),
+    ("get", "/api/admin/password-reset-requests", None),
+    ("post", "/api/admin/password-reset-requests/x/approve", None),
+    ("post", "/api/admin/password-reset-requests/x/reject", None),
 ]
 
 

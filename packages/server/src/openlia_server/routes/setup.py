@@ -25,13 +25,16 @@ def _dept_reqs() -> dict[str, list[str]]:
 
 
 def _set_wizard_cookie(response: Response, token: str) -> None:
+    # Path "/" because the browser hits /api/setup/* while the server
+    # strips /api before routing — a /setup-scoped cookie would never be
+    # sent. The cookie is httponly + samesite=lax so broader scope is safe.
     response.set_cookie(
         "openlia_wizard_session",
         token,
         httponly=True,
         samesite="lax",
         secure=False,
-        path="/setup",
+        path="/",
     )
 
 

@@ -24,10 +24,13 @@ def test_api_prefix_is_stripped_in_production(monkeypatch, tmp_path) -> None:
 def test_api_prefix_strip_leaves_non_api_paths_untouched(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{tmp_path}/x.db")
-    monkeypatch.delenv("OPENLIA_FRONTEND_DIST", raising=False)
+    # Point OPENLIA_FRONTEND_DIST at a non-existent path so the SPA
+    # fallback isn't mounted — this test is purely about strip-prefix
+    # behavior, not SPA serving.
+    monkeypatch.setenv("OPENLIA_FRONTEND_DIST", str(tmp_path / "nope"))
     app = create_app()
     client = TestClient(app)
 
     assert client.get("/healthz").status_code == 200
-    # /api-ish but not /api/ — must not be stripped.
+    # /api-ish but not /api/ — must not be stripped to /doc.
     assert client.get("/apidoc").status_code == 404

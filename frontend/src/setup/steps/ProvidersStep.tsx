@@ -4,7 +4,13 @@ import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { ProviderRow } from "./ProviderRow";
 import { AddProviderForm } from "./AddProviderForm";
-import { confirmProviders, deleteProvider, listProviders } from "../../api/setup";
+import {
+  confirmProviders,
+  deleteProvider,
+  listProviders,
+  patchProvider,
+  retestProvider,
+} from "../../api/setup";
 import type { ProviderRow as Row } from "../../api/setup";
 
 type Category = "financial" | "news" | "social" | "web_search";
@@ -28,6 +34,7 @@ export function ProvidersStep({
   const [rows, setRows] = useState<Row[]>([]);
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
 
   const refresh = async () => {
     const resp = await listProviders();
@@ -101,13 +108,27 @@ export function ProvidersStep({
             <AddProviderForm
               category={active}
               onCancel={() => setAdding(false)}
-              onSaved={async () => {
+              onSaved={async (err) => {
                 setAdding(false);
+                setTestError(err ?? null);
                 await refresh();
               }}
             />
           ) : (
             <>
+              {testError ? (
+                <div className="mb-3 px-3 py-2 rounded-[--radius-md] bg-[--color-feedback-error]/10 border border-[--color-feedback-error]/30 text-sm text-[--color-feedback-error] flex justify-between gap-3">
+                  <span className="break-words">{testError}</span>
+                  <button
+                    type="button"
+                    aria-label="Dismiss error"
+                    onClick={() => setTestError(null)}
+                    className="text-[--color-text-secondary] flex-shrink-0"
+                  >
+                    ×
+                  </button>
+                </div>
+              ) : null}
               <ul className="flex flex-col">
                 {byCategory[active].map((r, i) => (
                   <ProviderRow
@@ -116,6 +137,12 @@ export function ProvidersStep({
                     priorityIndex={i}
                     onRemove={async () => {
                       await deleteProvider(r.id);
+                      await refresh();
+                    }}
+                    onUpdateKey={async (apiKey) => {
+                      await patchProvider(r.id, { api_key: apiKey });
+                      const result = await retestProvider(r.id);
+                      setTestError(result.ok ? null : result.error || "Provider test failed.");
                       await refresh();
                     }}
                   />
