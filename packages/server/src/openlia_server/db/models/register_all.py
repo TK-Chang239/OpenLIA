@@ -29,4 +29,5 @@ from openlia_server.db.models import (  # noqa: F401
     dashboard,
     departments,
     scheduler,
+    connectors,
 )
