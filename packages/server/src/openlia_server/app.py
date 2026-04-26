@@ -49,6 +49,7 @@ from openlia_server.db.session import SessionLocal, configure_engine, get_engine
 from openlia_server.routes.admin import build_admin_router
 from openlia_server.routes.auth import build_auth_router
 from openlia_server.routes.chat_stream import build_chat_stream_router
+from openlia_server.routes.connectors import build_connectors_router
 from openlia_server.routes.departments.earnings_update import (
     build_earnings_update_router,
 )
@@ -422,6 +423,7 @@ def create_app(
         app.include_router(build_admin_router(db_session_factory=factory))
 
     app.include_router(build_data_providers_router(db_session_factory=factory))
+    app.include_router(build_connectors_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
@@ -629,9 +631,7 @@ def _mount_frontend(app: FastAPI) -> None:
         candidates.append("/app/frontend/dist")
         here = os.path.dirname(os.path.abspath(__file__))
         # Walk: openlia_server → src → server → packages → repo root.
-        repo_dist = os.path.normpath(
-            os.path.join(here, "..", "..", "..", "..", "frontend", "dist")
-        )
+        repo_dist = os.path.normpath(os.path.join(here, "..", "..", "..", "..", "frontend", "dist"))
         candidates.append(repo_dist)
 
     resolved: tuple[str, str] | None = None
