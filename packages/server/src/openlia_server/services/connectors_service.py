@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from openlia.connectors.builtins import get_builtin
 from openlia.connectors.mcp_transport import default_session_factory
@@ -200,3 +201,59 @@ async def scope_connectors(
             counts[row.id] = len(scoped)
     session.commit()
     return counts
+
+
+def compute_readiness(session: Session) -> list[dict[str, Any]]:
+    """Compute per-department readiness from VALIDATED connectors + their allowlist rows.
+
+    See spec §5 Phase 4b. Per-(department, category) status:
+      required + >=1 row -> "ok"
+      required + 0 rows  -> "missing"
+      optional + >=1 row -> "enhanced"
+      optional + 0 rows  -> "basic"
+    department.ready iff every required category is "ok".
+    """
+
+    from openlia.departments import get_all_requirements
+
+    reqs = get_all_requirements()
+    conns = {
+        r.id: r
+        for r in session.query(Connector)
+        .filter(Connector.status == ConnectorStatus.VALIDATED.value)
+        .all()
+    }
+    rows = session.query(ToolAllowlist).all()
+
+    out: list[dict[str, Any]] = []
+    for dep_id, dep_req in reqs.items():
+        cats: list[dict[str, Any]] = []
+        ready = True
+        for cat_value, body in dep_req.per_category.items():
+            relevant = [
+                r
+                for r in rows
+                if r.department_id == dep_id
+                and r.connector_id in conns
+                and conns[r.connector_id].category == cat_value
+            ]
+            providers = sorted({conns[r.connector_id].provider_id for r in relevant})
+            tool_count = len(relevant)
+            required = bool(body["required"])
+            if required:
+                cat_status = "ok" if tool_count > 0 else "missing"
+                if tool_count == 0:
+                    ready = False
+            else:
+                cat_status = "enhanced" if tool_count > 0 else "basic"
+            cats.append(
+                {
+                    "category": cat_value,
+                    "required": required,
+                    "status": cat_status,
+                    "tool_count": tool_count,
+                    "providers": providers,
+                }
+            )
+        out.append({"department_id": dep_id, "ready": ready, "categories": cats})
+    return out
