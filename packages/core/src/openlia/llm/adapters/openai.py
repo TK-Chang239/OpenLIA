@@ -28,6 +28,11 @@ from openlia.llm.types import (
 _BASE_URL = "https://api.openai.com"
 
 
+def _is_reasoning_model(model: str) -> bool:
+    m = model.lower()
+    return m.startswith(("o1", "o3", "o4", "gpt-5"))
+
+
 def _to_openai_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
@@ -86,9 +91,12 @@ class OpenAIAdapter(LLMProvider):
         payload: dict = {
             "model": self.model,
             "messages": _to_openai_messages(request),
-            "max_tokens": request.max_tokens,
-            "temperature": request.temperature,
         }
+        if _is_reasoning_model(self.model):
+            payload["max_completion_tokens"] = request.max_tokens
+        else:
+            payload["max_tokens"] = request.max_tokens
+            payload["temperature"] = request.temperature
         if request.stop:
             payload["stop"] = request.stop
         if request.tools:
@@ -160,7 +168,7 @@ class OpenAIAdapter(LLMProvider):
             await probe.generate(
                 LLMRequest(
                     messages=[Message(role="user", content="ping")],
-                    max_tokens=1,
+                    max_tokens=16,
                     temperature=0.0,
                 )
             )

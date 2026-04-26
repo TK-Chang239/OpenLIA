@@ -38,15 +38,14 @@ def seed_signup_policy(db: DBSession, *, mode_flag: Literal["personal", "company
     db.commit()
 
 
-def get_policy(db: DBSession) -> SignupPolicy:
-    row = db.execute(select(SignupPolicy).where(SignupPolicy.id == 1)).scalar_one_or_none()
-    if row is None:
-        raise RuntimeError("signup_policy row is missing; bootstrap did not run")
-    return row
+def get_policy(db: DBSession) -> SignupPolicy | None:
+    return db.execute(select(SignupPolicy).where(SignupPolicy.id == 1)).scalar_one_or_none()
 
 
 def check_email_allowed(db: DBSession, email: str) -> None:
     policy = get_policy(db)
+    if policy is None:
+        return
     domains: list[str] = policy.allowed_email_domains or []
     if not domains:
         return
@@ -57,6 +56,10 @@ def check_email_allowed(db: DBSession, email: str) -> None:
 
 def assert_registration_open(db: DBSession) -> None:
     policy = get_policy(db)
+    # Pre-wizard: signup_policy row is wizard-owned and seeded by
+    # `services.wizard.finalize`. Until then, fail closed.
+    if policy is None:
+        raise SignupClosedError("Registration is closed.")
     if policy.mode == "closed":
         raise SignupClosedError("Registration is closed.")
     if policy.mode == "open":

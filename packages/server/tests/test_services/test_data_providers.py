@@ -198,20 +198,20 @@ def test_auto_map_populates_mappings_for_every_basic_and_advanced_type(
     )
     summary = svc.auto_map(db_session, manifest=load_manifest())
     # EODHDAdapter declares stock_quote, historical_prices, company_profile,
-    # company_news, company_fundamentals (P0-3-04).
+    # company_news, financial_statements (P0-3-04).
     covered = {m.requirement_type for m in summary.mapped}
     assert {
         "stock_quote",
         "historical_prices",
         "company_profile",
         "company_news",
-        "company_fundamentals",
+        "financial_statements",
     } <= covered
     assert all(m.provider_id == p.id for m in summary.mapped)
-    # stock_grade / insider_transactions remain unmet (no adapter covers them yet).
+    # stock_grade still unmet (EODHD declares insider_transactions now).
     unmet_types = {u.requirement_type for u in summary.unmet}
-    assert {"stock_grade", "insider_transactions"} <= unmet_types
-    assert "company_fundamentals" not in unmet_types
+    assert "stock_grade" in unmet_types
+    assert "financial_statements" not in unmet_types
 
 
 def test_auto_map_first_match_wins(db_session) -> None:

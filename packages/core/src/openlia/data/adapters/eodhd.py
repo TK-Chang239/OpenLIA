@@ -1,11 +1,20 @@
 """EODHD adapter — the default financial provider.
 
-Covers five capabilities in Plan 3:
+Capabilities mapped to EODHD REST endpoints:
     stock_quote            GET /real-time/{ticker}
     historical_prices      GET /eod/{ticker}
     company_profile        GET /fundamentals/{ticker} (General block)
     company_news           GET /news?s={ticker}
-    company_fundamentals   GET /fundamentals/{ticker} (Financials block)
+    financial_statements   GET /fundamentals/{ticker} (Financials block)
+    analyst_ratings        GET /fundamentals/{ticker} (AnalystRatings block)
+    economic_events        GET /economic-events
+    earnings_data          GET /calendar/earnings
+    macro_indicator        GET /macro-indicator/{country}
+    insider_transactions   GET /insider-transactions
+    social_sentiment       GET /sentiments?s={tickers}
+    dividends              GET /div/{ticker}
+    splits                 GET /splits/{ticker}
+    ipo_calendar           GET /calendar/ipos
 
 Authentication: `?api_token=<key>` query param (EODHD's documented auth
 method). We pass the key on every request.
@@ -13,6 +22,9 @@ method). We pass the key on every request.
 Symbol convention: EODHD requires `{SYMBOL}.{EXCHANGE}` (e.g. AAPL.US).
 The exchange suffix defaults to `US` and can be overridden per-provider via
 `extra_config["exchange_suffix"]`.
+
+Macro country convention: ISO-3166 alpha-3 (e.g. USA, FRA, DEU). Defaults
+to `USA` and can be overridden via `params["country"]`.
 """
 
 from datetime import UTC
@@ -34,6 +46,29 @@ from openlia.data.types import ProviderCategory, ProviderEntry, ToolResult
 _HEALTH_CHECK_PATH = "/user"
 _REQUEST_TIMEOUT_SECONDS = 30.0
 
+# Capabilities that need a `symbol` param.
+_REQUIRES_SYMBOL: frozenset[str] = frozenset(
+    {
+        "stock_quote",
+        "historical_prices",
+        "company_profile",
+        "company_news",
+        "financial_statements",
+        "analyst_ratings",
+        "dividends",
+        "splits",
+        "social_sentiment",
+    }
+)
+
+# Sub-block extraction from the unified /fundamentals payload. The endpoint
+# returns one large object; we slice it down to just the block the caller
+# asked for so the LLM isn't paying tokens for irrelevant data.
+_FUNDAMENTALS_BLOCK: dict[str, str] = {
+    "financial_statements": "Financials",
+    "analyst_ratings": "AnalystRatings",
+}
+
 
 class EODHDAdapter(ProviderAdapter):
     """EODHD financial-data adapter."""
@@ -46,7 +81,16 @@ class EODHDAdapter(ProviderAdapter):
             "historical_prices",
             "company_profile",
             "company_news",
-            "company_fundamentals",
+            "financial_statements",
+            "analyst_ratings",
+            "economic_events",
+            "earnings_data",
+            "macro_indicator",
+            "insider_transactions",
+            "social_sentiment",
+            "dividends",
+            "splits",
+            "ipo_calendar",
         }
     )
 
@@ -69,51 +113,27 @@ class EODHDAdapter(ProviderAdapter):
                 reason=f"capability {capability!r} not declared by eodhd",
             )
 
-        symbol = params.get("symbol")
-        if not symbol:
+        if capability in _REQUIRES_SYMBOL and not params.get("symbol"):
             raise DataNotAvailable(
                 provider_kind=self.kind,
                 capability=capability,
                 reason="`symbol` parameter is required",
             )
-        ticker = self._format_ticker(str(symbol))
 
-        if capability == "stock_quote":
-            path = f"/real-time/{ticker}"
-            query: dict[str, Any] = {"fmt": "json"}
-        elif capability == "historical_prices":
-            path = f"/eod/{ticker}"
-            query = {"fmt": "json"}
-            if "from" in params:
-                query["from"] = params["from"]
-            if "to" in params:
-                query["to"] = params["to"]
-        elif capability == "company_profile":
-            path = f"/fundamentals/{ticker}"
-            query = {"fmt": "json"}
-        elif capability == "company_news":
-            path = "/news"
-            query = {"s": ticker, "limit": params.get("limit", 50)}
-        elif capability == "company_fundamentals":
-            path = f"/fundamentals/{ticker}"
-            query = {"fmt": "json"}
-        else:  # pragma: no cover - guarded above
-            raise DataNotAvailable(
-                provider_kind=self.kind,
-                capability=capability,
-                reason="internal routing bug",
-            )
-
+        path, query = self._route(capability, params)
         payload = await self._get_json(path, query)
-        if capability == "company_fundamentals" and isinstance(payload, dict):
-            financials = payload.get("Financials")
-            if financials is None:
+
+        block = _FUNDAMENTALS_BLOCK.get(capability)
+        if block is not None and isinstance(payload, dict):
+            sub = payload.get(block)
+            if sub is None:
                 raise DataNotAvailable(
                     provider_kind=self.kind,
                     capability=capability,
-                    reason="no Financials block in response",
+                    reason=f"no {block} block in response",
                 )
-            payload = {"Financials": financials}
+            payload = {block: sub}
+
         return ToolResult(
             provider_kind=self.kind,
             capability=capability,
@@ -132,6 +152,102 @@ class EODHDAdapter(ProviderAdapter):
         ):
             return False
         return True
+
+    def _route(
+        self,
+        capability: str,
+        params: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        ticker = self._format_ticker(str(params["symbol"])) if params.get("symbol") else None
+
+        if capability == "stock_quote":
+            return f"/real-time/{ticker}", {"fmt": "json"}
+        if capability == "historical_prices":
+            query: dict[str, Any] = {"fmt": "json"}
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return f"/eod/{ticker}", query
+        if capability == "company_profile":
+            return f"/fundamentals/{ticker}", {"fmt": "json"}
+        if capability == "company_news":
+            return "/news", {"s": ticker, "limit": params.get("limit", 50)}
+        if capability in ("financial_statements", "analyst_ratings"):
+            return f"/fundamentals/{ticker}", {"fmt": "json"}
+        if capability == "economic_events":
+            query = {"fmt": "json"}
+            for key in ("country", "type", "comparison"):
+                if key in params:
+                    query[key] = params[key]
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            query["limit"] = params.get("limit", 50)
+            if "offset" in params:
+                query["offset"] = params["offset"]
+            return "/economic-events", query
+        if capability == "earnings_data":
+            query = {"fmt": "json"}
+            symbols = _resolve_symbols_param(params, ticker)
+            if symbols:
+                query["symbols"] = symbols
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return "/calendar/earnings", query
+        if capability == "macro_indicator":
+            country = str(params.get("country") or "USA").upper()
+            query = {
+                "fmt": "json",
+                "indicator": params.get("indicator", "gdp_current_usd"),
+            }
+            return f"/macro-indicator/{country}", query
+        if capability == "insider_transactions":
+            query = {"fmt": "json", "limit": params.get("limit", 100)}
+            if ticker is not None:
+                query["code"] = ticker
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return "/insider-transactions", query
+        if capability == "social_sentiment":
+            symbols = _resolve_symbols_param(params, ticker) or ticker
+            query = {"fmt": "json", "s": symbols}
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return "/sentiments", query
+        if capability == "dividends":
+            query = {"fmt": "json"}
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return f"/div/{ticker}", query
+        if capability == "splits":
+            query = {"fmt": "json"}
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return f"/splits/{ticker}", query
+        if capability == "ipo_calendar":
+            query = {"fmt": "json"}
+            if "from" in params:
+                query["from"] = params["from"]
+            if "to" in params:
+                query["to"] = params["to"]
+            return "/calendar/ipos", query
+        raise DataNotAvailable(  # pragma: no cover - guarded above
+            provider_kind=self.kind,
+            capability=capability,
+            reason="internal routing bug",
+        )
 
     def _format_ticker(self, symbol: str) -> str:
         if "." in symbol:
@@ -209,6 +325,21 @@ class EODHDAdapter(ProviderAdapter):
             status_code=resp.status_code,
             detail=resp.text[:500],
         )
+
+
+def _resolve_symbols_param(params: dict[str, Any], ticker: str | None) -> str | None:
+    """Extract a comma-joined symbols string from `symbols` or fall back to `ticker`.
+
+    EODHD endpoints that accept multiple symbols use a single comma-separated
+    value (e.g. `s=AAPL.US,MSFT.US`). Callers may pass `symbols` as a list or
+    a pre-joined string; otherwise we use the single resolved ticker.
+    """
+    raw = params.get("symbols")
+    if raw is None:
+        return ticker
+    if isinstance(raw, list):
+        return ",".join(str(s) for s in raw) if raw else None
+    return str(raw)
 
 
 def _parse_retry_after(value: str | None) -> int | None:
