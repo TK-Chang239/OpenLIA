@@ -11,11 +11,18 @@ from datetime import UTC, datetime
 
 from openlia.connectors.builtins import get_builtin
 from openlia.connectors.mcp_transport import default_session_factory
+from openlia.connectors.scope import (
+    DepartmentRequirements,
+    ScopeLLMClient,
+    scope_connector,
+)
 from openlia.connectors.types import (
     Category,
     ConnectorSource,
     ConnectorStatus,
     MCPLaunchSpec,
+    ScopedBy,
+    ToolDefinition,
 )
 from openlia.connectors.validate import (
     ValidationFailure,
@@ -24,7 +31,7 @@ from openlia.connectors.validate import (
 )
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.connectors import Connector
+from openlia_server.db.models.connectors import Connector, ToolAllowlist
 
 
 def _resolve_launch_for_validation(spec: MCPLaunchSpec) -> tuple[MCPLaunchSpec, str | None]:
@@ -123,3 +130,73 @@ async def revalidate_connector(session: Session, connector_id: str) -> Connector
     session.commit()
     session.refresh(row)
     return row
+
+
+async def scope_connectors(
+    session: Session,
+    *,
+    connector_ids: list[str] | None,
+    llm: ScopeLLMClient,
+    requirements: dict[str, DepartmentRequirements],
+) -> dict[str, int]:
+    """Scope each VALIDATED connector to departments.
+
+    BUILT_IN copies the shipped allowlist; user MCP/CLI calls the LLM.
+    Returns a dict of connector_id -> rows_written.
+    """
+
+    rows = list_connectors(session)
+    if connector_ids is not None:
+        wanted = set(connector_ids)
+        rows = [r for r in rows if r.id in wanted]
+    rows = [r for r in rows if r.status == ConnectorStatus.VALIDATED.value]
+
+    counts: dict[str, int] = {}
+    for row in rows:
+        # Wipe any previous allowlist for this connector first.
+        session.query(ToolAllowlist).filter_by(connector_id=row.id).delete()
+
+        if row.source == ConnectorSource.BUILT_IN.value:
+            spec = MCPLaunchSpec.from_json(row.launch)
+            tpl = get_builtin(spec.template_id or "")
+            for a in tpl.shipped_allowlist:
+                session.add(
+                    ToolAllowlist(
+                        id=str(uuid.uuid4()),
+                        department_id=a.department_id,
+                        connector_id=row.id,
+                        tool_name=a.tool_name,
+                        scoped_by=ScopedBy.BUILT_IN_MAP.value,
+                    )
+                )
+            counts[row.id] = len(tpl.shipped_allowlist)
+        else:
+            tools = [
+                ToolDefinition(
+                    name=t["name"],
+                    description=t.get("description", ""),
+                    input_schema=t.get("input_schema", {}),
+                )
+                for t in (row.cached_tools or [])
+            ]
+            scoped = await scope_connector(
+                connector_id=row.id,
+                provider_id=row.provider_id,
+                category=Category(row.category),
+                tools=tools,
+                requirements=requirements,
+                llm=llm,
+            )
+            for s in scoped:
+                session.add(
+                    ToolAllowlist(
+                        id=str(uuid.uuid4()),
+                        department_id=s.department_id,
+                        connector_id=row.id,
+                        tool_name=s.tool_name,
+                        scoped_by=ScopedBy.LLM_ADAPTER.value,
+                    )
+                )
+            counts[row.id] = len(scoped)
+    session.commit()
+    return counts

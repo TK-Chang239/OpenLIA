@@ -41,6 +41,20 @@ class ConnectorOut(BaseModel):
     cached_tools_count: int
 
 
+class ScopeRequestIn(BaseModel):
+    connector_ids: list[str] | None = None
+
+
+class ScopeResponseRow(BaseModel):
+    connector_id: str
+    rows_written: int
+
+
+class ScopeResponse(BaseModel):
+    scoped: int
+    per_connector: list[ScopeResponseRow]
+
+
 def _to_out(row: Any) -> ConnectorOut:
     tools = row.cached_tools or []
     return ConnectorOut(
@@ -85,5 +99,24 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
         if row is None:
             raise HTTPException(status_code=404, detail="connector not found")
         return _to_out(row)
+
+    @router.post("/review/scope", response_model=ScopeResponse)
+    async def scope(body: ScopeRequestIn, db: DBSession = Depends(session_dep)) -> ScopeResponse:
+        from openlia.departments import get_all_requirements
+
+        from openlia_server.services.scope_llm_client import QuickTierScopeClient
+
+        counts = await connectors_service.scope_connectors(
+            db,
+            connector_ids=body.connector_ids,
+            llm=QuickTierScopeClient(db),
+            requirements=get_all_requirements(),
+        )
+        return ScopeResponse(
+            scoped=sum(counts.values()),
+            per_connector=[
+                ScopeResponseRow(connector_id=k, rows_written=v) for k, v in counts.items()
+            ],
+        )
 
     return router
