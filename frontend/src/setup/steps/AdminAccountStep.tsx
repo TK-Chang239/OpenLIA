@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { FormField } from "../../components/primitives/FormField";
@@ -6,27 +6,20 @@ import { Input } from "../../components/primitives/Input";
 import { PasswordInput } from "../../components/primitives/PasswordInput";
 import { PasswordStrengthMeter } from "../../components/primitives/PasswordStrengthMeter";
 import { setAdmin } from "../../api/setup";
-import { WIZARD_STORAGE_KEYS } from "../storage";
+import { useWizardField } from "../storage";
 
-// Persist non-secret fields across back/forward navigation. Passwords are
-// intentionally held in component state only — they are never written to
-// sessionStorage.
-const STORAGE_KEY: (typeof WIZARD_STORAGE_KEYS)[number] = "openlia.wizard.admin";
-
+// Passwords are held in component state only and never passed to
+// useWizardField, so they cannot reach sessionStorage.
 interface PersistedAdmin {
   email: string;
   displayName: string;
 }
 
-function loadPersisted(): PersistedAdmin {
-  try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return { email: "", displayName: "" };
-    const parsed = JSON.parse(raw) as Partial<PersistedAdmin>;
-    return { email: parsed.email ?? "", displayName: parsed.displayName ?? "" };
-  } catch {
-    return { email: "", displayName: "" };
-  }
+const ADMIN_DEFAULTS: PersistedAdmin = { email: "", displayName: "" };
+
+function parseAdmin(raw: unknown): PersistedAdmin {
+  const r = (raw ?? {}) as Partial<PersistedAdmin>;
+  return { email: r.email ?? "", displayName: r.displayName ?? "" };
 }
 
 export function AdminAccountStep({
@@ -36,21 +29,20 @@ export function AdminAccountStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const persisted = loadPersisted();
-  const [email, setEmail] = useState(persisted.email);
+  const [persisted, setPersisted] = useWizardField<PersistedAdmin>(
+    "openlia.wizard.admin",
+    ADMIN_DEFAULTS,
+    parseAdmin,
+  );
+  const { email, displayName } = persisted;
+  const setEmail = (value: string) =>
+    setPersisted((prev) => ({ ...prev, email: value }));
+  const setDisplayName = (value: string) =>
+    setPersisted((prev) => ({ ...prev, displayName: value }));
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [displayName, setDisplayName] = useState(persisted.displayName);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    try {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ email, displayName }));
-    } catch {
-      /* ignore */
-    }
-  }, [email, displayName]);
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
   const passwordValid = password.length >= 12;
