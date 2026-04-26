@@ -1,0 +1,14 @@
+social:
+  required: true
+  description: |
+    Need social_sentiment covering Reddit and X mention volumes and
+    sentiment scores per ticker. This is the core signal for the retail
+    sentiment dashboard; without it the department cannot rank or surface
+    the names retail is currently rotating into or out of.
+news:
+  required: false
+  description: |
+    Company-tagged news (company_news) provides catalyst context for
+    retail-driven moves. Stock_quote, historical_prices, options_data,
+    short_interest, and institutional_holdings are pulled opportunistically
+    to corroborate the sentiment picture but are not strictly required.

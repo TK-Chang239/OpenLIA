@@ -1,0 +1,20 @@
+financial:
+  required: true
+  description: |
+    Need economic_events covering overnight macro releases, central bank
+    actions, and scheduled data prints. Stock_quote and historical_prices
+    surface market state, key index moves, and notable movers; macro_indicator
+    series provide additional context on the prevailing rate and growth
+    backdrop for the morning_briefing report.
+news:
+  required: true
+  description: |
+    Company-tagged and macro news (company_news) covering overnight
+    headlines, regulatory developments, and corporate actions that moved
+    markets between the prior close and the current open.
+social:
+  required: false
+  description: |
+    Reddit and X chatter for an early sentiment pulse on names trending
+    pre-market, used opportunistically when the signal adds color to the
+    overnight news flow.
