@@ -301,7 +301,13 @@ def test_set_and_delete_individual_mapping(personal_client) -> None:
     assert resp_del.status_code == 204
 
 
-def test_test_connection_returns_501_for_stub_kind(personal_client) -> None:
+def test_test_connection_returns_ok_false_when_adapter_misconfigured(personal_client) -> None:
+    """Reddit adapter raises ValueError when api_key isn't 'client_id:client_secret'.
+
+    The route must catch construction errors and surface them as ok=false rather
+    than bubbling a 500. (Replaces the legacy "stub kind returns 501" check —
+    no concrete adapters are stubs any more.)
+    """
     resp = personal_client.post(
         "/settings/data-providers",
         json={
@@ -309,16 +315,16 @@ def test_test_connection_returns_501_for_stub_kind(personal_client) -> None:
             "label": "R",
             "category": "social_media",
             "mode": "api_key",
-            "api_key": "k",
+            "api_key": "missing-colon",
             "base_url": "https://oauth.reddit.com",
         },
     )
     pid = resp.json()["id"]
     resp2 = personal_client.post(f"/settings/data-providers/{pid}/test-connection")
-    assert resp2.status_code == 501
+    assert resp2.status_code == 200
     body = resp2.json()
-    detail = body.get("detail", body)
-    assert detail.get("error") == "adapter_not_implemented"
+    assert body["ok"] is False
+    assert "client_id:client_secret" in body.get("error", "")
 
 
 def test_create_mcp_provider_roundtrips_via_route(personal_client) -> None:

@@ -63,11 +63,15 @@ def create_provider(
     extra_config: dict | None = None,
     created_by_user_id: str | None = None,
 ) -> ProviderCreated:
-    _require_known_kind(kind)
-    if mode is ProviderMode.API_KEY and not base_url:
-        raise ValueError("api_key mode requires base_url")
-    if mode is ProviderMode.API_KEY and not (api_key or env_var_name):
-        raise ValueError("api_key mode requires api_key or env_var_name")
+    # API_KEY mode requires a built-in adapter; MCP mode accepts any kind
+    # because the runtime dispatches via list_tools() rather than a hand-written
+    # adapter, so we don't need to ship code for that provider.
+    if mode is ProviderMode.API_KEY:
+        _require_known_kind(kind)
+        if not base_url:
+            raise ValueError("api_key mode requires base_url")
+        if not (api_key or env_var_name):
+            raise ValueError("api_key mode requires api_key or env_var_name")
     if mode is ProviderMode.MCP and not mcp_url:
         raise ValueError("mcp mode requires mcp_url")
 

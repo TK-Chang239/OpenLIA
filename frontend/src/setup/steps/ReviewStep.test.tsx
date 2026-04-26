@@ -11,6 +11,9 @@ const json = (body: unknown) =>
 describe("ReviewStep", () => {
   it("polls /setup/review/{id} and renders readiness cards", async () => {
     vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        json({ required_tiers: ["quick"], enabled_departments: ["secretary"] }),
+      )
       .mockResolvedValueOnce(json({ review_id: "rev-1" }))
       .mockResolvedValueOnce(
         json({
@@ -26,6 +29,7 @@ describe("ReviewStep", () => {
                 basic: [{ type: "stock_quote", provider: "eodhd", confidence: 0.9 }],
                 advanced: [],
                 unmet: [],
+                check_status: "checked",
               },
             ],
           },
@@ -41,6 +45,9 @@ describe("ReviewStep", () => {
 
   it("Finish enabled when a department is blocked, with a warning banner listing it", async () => {
     vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        json({ required_tiers: ["quick"], enabled_departments: ["equity_research"] }),
+      )
       .mockResolvedValueOnce(json({ review_id: "rev-1" }))
       .mockResolvedValueOnce(
         json({
@@ -56,6 +63,7 @@ describe("ReviewStep", () => {
                 basic: [],
                 advanced: [],
                 unmet: ["stock_quote"],
+                check_status: "checked",
               },
             ],
           },

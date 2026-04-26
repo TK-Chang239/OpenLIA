@@ -2,8 +2,33 @@ import { useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { setAccessControl } from "../../api/setup";
+import { useWizardField } from "../storage";
 
 type Policy = "invite_only" | "closed";
+
+interface PersistedAccess {
+  policy: Policy;
+  domains: string;
+  host: string;
+  port: number;
+}
+
+const DEFAULT_ACCESS: PersistedAccess = {
+  policy: "invite_only",
+  domains: "",
+  host: "0.0.0.0",
+  port: 8000,
+};
+
+function parseAccess(raw: unknown): PersistedAccess {
+  const r = (raw ?? {}) as Partial<PersistedAccess>;
+  return {
+    policy: r.policy === "closed" ? "closed" : "invite_only",
+    domains: r.domains ?? DEFAULT_ACCESS.domains,
+    host: r.host ?? DEFAULT_ACCESS.host,
+    port: typeof r.port === "number" ? r.port : DEFAULT_ACCESS.port,
+  };
+}
 
 export function AccessControlStep({
   onBack,
@@ -12,10 +37,16 @@ export function AccessControlStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const [policy, setPolicy] = useState<Policy>("invite_only");
-  const [domains, setDomains] = useState("");
-  const [host, setHost] = useState("0.0.0.0");
-  const [port, setPort] = useState(8000);
+  const [access, setAccess] = useWizardField<PersistedAccess>(
+    "openlia.wizard.access_control",
+    DEFAULT_ACCESS,
+    parseAccess,
+  );
+  const { policy, domains, host, port } = access;
+  const setPolicy = (value: Policy) => setAccess((p) => ({ ...p, policy: value }));
+  const setDomains = (value: string) => setAccess((p) => ({ ...p, domains: value }));
+  const setHost = (value: string) => setAccess((p) => ({ ...p, host: value }));
+  const setPort = (value: number) => setAccess((p) => ({ ...p, port: value }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,6 +60,7 @@ export function AccessControlStep({
         bind_host: host,
         bind_port: port,
       });
+      // Persist past Next; the wizard-wide clear runs after /setup/finish.
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save access control.");

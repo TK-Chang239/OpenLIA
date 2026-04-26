@@ -3,6 +3,7 @@ import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { Input } from "../../components/primitives/Input";
 import { setIdentity } from "../../api/setup";
+import { useWizardField } from "../storage";
 
 export function IdentityStep({
   onBack,
@@ -11,7 +12,11 @@ export function IdentityStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const [displayName, setDisplayName] = useState("");
+  const [displayName, setDisplayName] = useWizardField<string>(
+    "openlia.wizard.identity",
+    "",
+    (raw) => (typeof raw === "string" ? raw : ""),
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +27,8 @@ export function IdentityStep({
     setError(null);
     try {
       await setIdentity(displayName.trim());
+      // Persist past Next so revisiting via Back restores the entered value.
+      // The wizard-wide storage clear happens after POST /setup/finish.
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save identity.");

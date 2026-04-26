@@ -203,10 +203,11 @@ function TierCard({
       <ul className="flex flex-col gap-2 mb-3">
         {entries.map((entry) => {
           const key = keys.find((k) => k.id === entry.key_id);
+          const isEditing = editor.mode === "edit" && editor.ui_id === entry.ui_id;
           return (
             <li
               key={entry.ui_id}
-              className="flex flex-col gap-1 px-3 py-2 border border-[--color-border-subtle] rounded-[--radius-md] bg-[--color-bg-base]"
+              className="flex flex-col gap-2 px-3 py-2 border border-[--color-border-subtle] rounded-[--radius-md] bg-[--color-bg-base]"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 min-w-0">
@@ -241,10 +242,12 @@ function TierCard({
                   ) : null}
                   <button
                     type="button"
-                    aria-label="Edit model"
+                    aria-label={isEditing ? "Close editor" : "Edit model"}
                     data-test="edit"
-                    onClick={() => startEdit(entry)}
-                    className="text-[--color-text-secondary] hover:text-[--color-text-primary]"
+                    onClick={() => (isEditing ? closeEditor() : startEdit(entry))}
+                    className={`text-[--color-text-secondary] hover:text-[--color-text-primary] ${
+                      isEditing ? "text-[--color-text-primary]" : ""
+                    }`}
                   >
                     <Pencil size={14} />
                   </button>
@@ -258,60 +261,22 @@ function TierCard({
                   </button>
                 </div>
               </div>
-              {entry.status === "error" && entry.error ? (
+              {entry.status === "error" && entry.error && !isEditing ? (
                 <p className="text-xs text-[--color-feedback-error] break-words">{entry.error}</p>
               ) : null}
+              {isEditing ? <EditorBlock keys={keys} draft={draft} setDraft={setDraft} onCancel={closeEditor} onSave={saveDraft} /> : null}
             </li>
           );
         })}
       </ul>
-      {editor.mode !== "closed" ? (
-        <div className="flex flex-col gap-2 border border-[--color-border-subtle] rounded-[--radius-md] p-3 bg-[--color-bg-base]">
-          <select
-            name="key_id"
-            value={draft.key_id}
-            onChange={(e) => setDraft({ ...draft, key_id: e.target.value })}
-            className="h-9 px-2 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
-          >
-            {keys.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.label}
-              </option>
-            ))}
-          </select>
-          <input
-            name="model"
-            value={draft.model}
-            onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-            placeholder="Model ID (e.g. gpt-4o, claude-sonnet-4-5, gemini-2.5-pro)"
-            className="h-9 px-2 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              data-test="cancel"
-              className="h-8 px-3 rounded-[--radius-md] text-sm text-[--color-text-secondary]"
-              onClick={closeEditor}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              data-test="test"
-              disabled={!draft.key_id || !draft.model.trim()}
-              onClick={saveDraft}
-              className="h-8 px-3 rounded-[--radius-md] text-sm border border-[--color-border-secondary] disabled:opacity-50"
-            >
-              Test &amp; Save
-            </button>
-          </div>
-        </div>
+      {editor.mode === "add" ? (
+        <EditorBlock keys={keys} draft={draft} setDraft={setDraft} onCancel={closeEditor} onSave={saveDraft} />
       ) : (
         <button
           type="button"
           data-test="add"
           onClick={startAdd}
-          disabled={keys.length === 0}
+          disabled={keys.length === 0 || editor.mode === "edit"}
           className="inline-flex items-center gap-2 h-8 px-3 rounded-[--radius-md] border border-dashed border-[--color-border-secondary] text-sm text-[--color-text-secondary] hover:text-[--color-text-primary] disabled:opacity-50"
         >
           <Plus size={14} />
@@ -319,5 +284,62 @@ function TierCard({
         </button>
       )}
     </section>
+  );
+}
+
+function EditorBlock({
+  keys,
+  draft,
+  setDraft,
+  onCancel,
+  onSave,
+}: {
+  keys: ApiKey[];
+  draft: { key_id: string; model: string };
+  setDraft: (next: { key_id: string; model: string }) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border border-[--color-border-subtle] rounded-[--radius-md] p-3 bg-[--color-bg-base] mt-1">
+      <select
+        name="key_id"
+        value={draft.key_id}
+        onChange={(e) => setDraft({ ...draft, key_id: e.target.value })}
+        className="h-9 px-2 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
+      >
+        {keys.map((k) => (
+          <option key={k.id} value={k.id}>
+            {k.label}
+          </option>
+        ))}
+      </select>
+      <input
+        name="model"
+        value={draft.model}
+        onChange={(e) => setDraft({ ...draft, model: e.target.value })}
+        placeholder="Model ID (e.g. gpt-4o, claude-sonnet-4-5, gemini-2.5-pro)"
+        className="h-9 px-2 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          data-test="cancel"
+          className="h-8 px-3 rounded-[--radius-md] text-sm text-[--color-text-secondary]"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-test="test"
+          disabled={!draft.key_id || !draft.model.trim()}
+          onClick={onSave}
+          className="h-8 px-3 rounded-[--radius-md] text-sm border border-[--color-border-secondary] disabled:opacity-50"
+        >
+          Test &amp; Save
+        </button>
+      </div>
+    </div>
   );
 }

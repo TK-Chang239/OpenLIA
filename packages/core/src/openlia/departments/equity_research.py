@@ -7,12 +7,6 @@ from openlia.departments.base import Tier
 
 EquityResearchMode = Literal["stock_initiation", "stock_update", "sector_research"]
 
-_TIER_BY_MODE: dict[str, Tier] = {
-    "stock_initiation": "thinking",
-    "stock_update": "everyday",
-    "sector_research": "thinking",
-}
-
 
 @dataclass(frozen=True)
 class EquityResearchDepartment:
@@ -38,13 +32,3 @@ class EquityResearchDepartment:
         "stock_update",
         "sector_research",
     )
-
-    def tier_for(self, mode: str) -> Tier:
-        if mode not in _TIER_BY_MODE:
-            raise ValueError(f"Unknown equity research mode: {mode}")
-        return _TIER_BY_MODE[mode]
-
-    def framework_name(self, mode: str) -> str:
-        if mode not in _TIER_BY_MODE:
-            raise ValueError(f"Unknown equity research mode: {mode}")
-        return mode

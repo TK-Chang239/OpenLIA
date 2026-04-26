@@ -97,13 +97,28 @@ class ModelsTestIn(BaseModel):
 
 
 class _ProviderEntryIn(BaseModel):
-    mode: str = Field(pattern="^(builtin|mcp|openapi)$")
+    """Wizard input for adding a data provider.
+
+    Two modes are accepted:
+      - `builtin`: kind must be one of OpenLIA's shipped adapters (eodhd, fmp,
+        finnhub, yfinance, newsapi_ai, newsapi_org, mediastack, brave, tavily,
+        serper, reddit, x). The user supplies an `api_key`.
+      - `mcp`: any other provider. The user MUST supply `mcp_url`; OpenLIA
+        speaks to the provider via MCP `list_tools()` instead of a hand-written
+        adapter. `provider` is the human-readable kind label (e.g. "polygon").
+
+    The legacy `openapi` mode has been removed — non-built-in providers must
+    expose an MCP server.
+    """
+
+    mode: str = Field(pattern="^(builtin|mcp)$")
     provider: str | None = None
     api_key: str | None = None
     base_url: str | None = None
     mcp_url: str | None = None
     mcp_auth_header: str | None = None
-    openapi_spec_url: str | None = None
+    oauth_client_id: str | None = None
+    oauth_client_secret: str | None = None
 
 
 class ProviderAddIn(BaseModel):
@@ -361,6 +376,11 @@ def build_setup_router(
         # Simple sync inline build — avoid running an event loop just for this.
         from openlia_server.services.data_providers import list_providers as list_dp
 
+        # The wizard UI buckets are "social" and "web_search"; the DB stores
+        # the underlying ProviderCategory values "social_media" and "search".
+        # Map back so each row lands in the right tab.
+        ui_category = {"social_media": "social", "search": "web_search"}
+
         out: list[dict[str, Any]] = []
         for r in list_dp(db):
             cfg = r.extra_config or {}
@@ -368,7 +388,7 @@ def build_setup_router(
             out.append(
                 {
                     "id": r.id,
-                    "category": r.category,
+                    "category": ui_category.get(r.category, r.category),
                     "mode": r.mode,
                     "provider": r.kind,
                     "priority": int(cfg.get("default_priority", 100)),
