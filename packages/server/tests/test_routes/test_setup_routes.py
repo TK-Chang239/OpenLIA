@@ -499,6 +499,94 @@ def test_post_provider_persists_with_status(wizard_personal_client: TestClient, 
     assert (rows[0].extra_config or {}).get("wizard_status") in ("ok", "error")
 
 
+def test_post_provider_builtin_mode_rejects_non_built_in_kind(
+    wizard_personal_client: TestClient,
+) -> None:
+    """Built-in mode is gated to OpenLIA's shipped adapters. An unknown kind
+    must surface a clear 'use MCP mode' error instead of being persisted."""
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "builtin",
+                "provider": "polygon",
+                "api_key": "x",
+            },
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    detail = resp.json()["detail"]
+    assert detail["code"] == "invalid_provider"
+    assert "MCP" in detail["message"]
+
+
+def test_post_provider_mcp_mode_requires_mcp_url(wizard_personal_client: TestClient) -> None:
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "mcp",
+                "provider": "polygon",
+            },
+        },
+    )
+    assert resp.status_code == 400, resp.text
+    assert "mcp_url" in resp.json()["detail"]["message"]
+
+
+def test_post_provider_mcp_mode_accepts_unknown_kind_with_url(
+    wizard_personal_client: TestClient, db_session, monkeypatch
+) -> None:
+    """Non-built-in providers ship through MCP mode: arbitrary kind name plus a
+    valid MCP URL is the only accepted shape."""
+    from openlia_server.db.models.config import DataProvider
+    from openlia_server.services import wizard_providers
+
+    async def _ok(_row):
+        return True, None
+
+    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "mcp",
+                "provider": "polygon",
+                "mcp_url": "https://example.com/mcp",
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    db_session.expire_all()
+    rows = db_session.query(DataProvider).filter_by(kind="polygon").all()
+    assert len(rows) == 1
+    assert rows[0].mode == "mcp"
+    assert rows[0].mcp_url == "https://example.com/mcp"
+
+
+def test_post_provider_openapi_mode_rejected(wizard_personal_client: TestClient) -> None:
+    """The legacy `openapi` mode is gone; pydantic should 422 on the input."""
+    _seed_session(wizard_personal_client)
+    resp = wizard_personal_client.post(
+        "/setup/providers",
+        json={
+            "category": "financial",
+            "entry": {
+                "mode": "openapi",
+                "openapi_spec_url": "https://example.com/openapi.json",
+                "api_key": "x",
+            },
+        },
+    )
+    assert resp.status_code == 422
+
+
 def test_providers_confirm_requires_pair(wizard_personal_client: TestClient) -> None:
     _seed_session(wizard_personal_client)
     resp = wizard_personal_client.post("/setup/providers/confirm")

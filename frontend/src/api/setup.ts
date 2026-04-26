@@ -32,12 +32,13 @@ export interface ModelsPayload {
 }
 
 export interface ProviderEntry {
-  mode: "builtin" | "mcp" | "openapi";
+  mode: "builtin" | "mcp";
   provider?: string;
   api_key?: string;
   mcp_url?: string;
   mcp_auth_header?: string;
-  openapi_spec_url?: string;
+  oauth_client_id?: string;
+  oauth_client_secret?: string;
 }
 
 export interface ProviderRow {

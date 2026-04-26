@@ -73,14 +73,24 @@ def _build_provider_payload(
         else:
             declared = entry.capabilities
             unknown = False
+        cfg = getattr(r, "extra_config", None) or {}
+        mode = getattr(r, "mode", None) or "builtin"
+        url = (
+            getattr(r, "mcp_url", None)
+            if mode == "mcp"
+            else getattr(r, "base_url", None)
+        )
         payload.append(
             {
                 "id": r.id,
                 "category": getattr(r, "category", None) or r.kind,
                 "kind": r.kind,
                 "provider": r.kind,
-                "priority": getattr(r, "priority", None)
-                or (r.extra_config or {}).get("default_priority", 100),
+                "label": getattr(r, "label", None) or r.kind,
+                "mode": mode,
+                "url": url,
+                "status": cfg.get("wizard_status") or "pending",
+                "priority": getattr(r, "priority", None) or cfg.get("default_priority", 100),
                 "declared_capabilities": list(declared),
                 "unknown": unknown,
             }
@@ -104,24 +114,21 @@ def _try_deterministic_review(
     if any(p.get("unknown") for p in providers):
         return None
 
-    by_capability: dict[str, str] = {}
+    by_capability: dict[str, dict[str, object]] = {}
     for p in providers:
-        kind = str(p.get("kind") or p.get("provider") or "")
         for cap in p.get("declared_capabilities", []) or []:
-            by_capability.setdefault(cap, kind)
+            by_capability.setdefault(cap, p)
 
     department_results: list[DepartmentReadiness] = []
     for dept_id, basic_reqs in departments:
         basic: list[RequirementMapping] = []
         unmet: list[str] = []
         for req in basic_reqs:
-            provider_kind = by_capability.get(req)
-            if provider_kind is None:
+            prov = by_capability.get(req)
+            if prov is None:
                 unmet.append(req)
             else:
-                basic.append(
-                    RequirementMapping(type=req, provider=provider_kind, confidence=1.0)
-                )
+                basic.append(_mapping_from_provider(req, prov, confidence=1.0))
         state = ReadinessState.READY if not unmet else ReadinessState.BLOCKED
         department_results.append(
             DepartmentReadiness(
@@ -131,12 +138,32 @@ def _try_deterministic_review(
                 basic=basic,
                 advanced=[],
                 unmet=unmet,
+                check_status="checked",
             )
         )
 
     ready_count = sum(1 for d in department_results if d.state == ReadinessState.READY)
     summary = f"{ready_count} of {len(department_results)} ready."
     return ReviewResult(summary=summary, departments=department_results)
+
+
+def _mapping_from_provider(
+    req: str,
+    prov: dict[str, object],
+    *,
+    confidence: float,
+) -> RequirementMapping:
+    """Build a RequirementMapping enriched with provider wiring details."""
+    return RequirementMapping(
+        type=req,
+        provider=str(prov.get("kind") or prov.get("provider") or "") or None,
+        confidence=confidence,
+        provider_id=str(prov.get("id")) if prov.get("id") is not None else None,
+        provider_label=str(prov.get("label") or prov.get("kind") or "") or None,
+        provider_mode=str(prov.get("mode") or "") or None,
+        provider_url=str(prov.get("url") or "") or None,
+        provider_status=str(prov.get("status") or "") or None,
+    )
 
 
 async def _run_with_own_session(
@@ -176,9 +203,11 @@ def schedule_review(
 ) -> str:
     """Run deterministic resolver first; fall back to LLM only when needed.
 
-    Returns the new review_id. The background task (when scheduled) opens its
-    own DB session — the request-scoped `db` is only used here to read the
-    registry and provider rows synchronously before scheduling.
+    Returns the new review_id. The background task opens its own DB session —
+    the request-scoped `db` is only used here to read the registry and
+    provider rows synchronously before scheduling. The deterministic path
+    is now also background-scheduled so per-department progress updates
+    reach the UI as each department is verified.
     """
     from openlia.llm.adapters import build_adapter
     from openlia.llm.capabilities import capabilities_for
@@ -193,14 +222,22 @@ def schedule_review(
     dp_rows = list_dp(db)
     providers = _build_provider_payload(dp_rows, catalog)
 
-    deterministic = _try_deterministic_review(departments, providers)
-    if deterministic is not None:
-        store.update(
-            review_id,
-            state="complete",
-            progress=100,
-            result=deterministic.model_dump(),
+    has_unknown = any(p.get("unknown") for p in providers)
+
+    if not has_unknown:
+        # Deterministic path: still run as a background task so the UI sees
+        # departments verified one-by-one with real per-provider health pings.
+        task = asyncio.create_task(
+            _run_deterministic_progressive(
+                review_id=review_id,
+                departments=departments,
+                providers=providers,
+                store=store,
+                db_session_factory=db_session_factory,
+            )
         )
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
         return review_id
 
     registry = SQLModelRegistry(db)
@@ -235,3 +272,164 @@ def schedule_review(
     background_tasks.add(task)
     task.add_done_callback(background_tasks.discard)
     return review_id
+
+
+async def _run_deterministic_progressive(
+    *,
+    review_id: str,
+    departments: list[tuple[str, list[str]]],
+    providers: list[dict[str, object]],
+    store: review_store_mod.ReviewStore,
+    db_session_factory: Callable[[], Session],
+) -> None:
+    """Run the deterministic resolver one department at a time.
+
+    For each department:
+      1. Build the requirement→provider mapping.
+      2. Re-run the wizard health-check on each unique provider involved
+         (cached per provider so we ping once per review).
+      3. Mark the department as ready/blocked, write to the store, and pause
+         briefly so the UI's poll picks up the progressive update.
+    """
+    from openlia_server.services.wizard_providers import _run_health_check
+
+    by_capability: dict[str, dict[str, object]] = {}
+    for p in providers:
+        for cap in p.get("declared_capabilities", []) or []:
+            by_capability.setdefault(cap, p)
+
+    # Build initial pending-list of all departments so the UI can show them
+    # immediately — none of them are yet verified.
+    initial_departments = [
+        DepartmentReadiness(
+            id=dept_id,
+            state=ReadinessState.READY,
+            note=None,
+            basic=[],
+            advanced=[],
+            unmet=[],
+            check_status="pending",
+        )
+        for dept_id, _ in departments
+    ]
+    store.update(
+        review_id,
+        state="running",
+        progress=0,
+        result={
+            "summary": "Checking departments…",
+            "departments": [d.model_dump() for d in initial_departments],
+        },
+    )
+
+    # Cache per-provider health-check results so we ping each provider once.
+    provider_health: dict[str, tuple[bool, str | None]] = {}
+
+    session = db_session_factory()
+    try:
+        from openlia_server.services.data_providers import get_provider as _get_provider
+
+        completed: list[DepartmentReadiness] = []
+        for index, (dept_id, basic_reqs) in enumerate(departments):
+            basic: list[RequirementMapping] = []
+            unmet: list[str] = []
+            providers_for_dept: set[str] = set()
+            for req in basic_reqs:
+                prov = by_capability.get(req)
+                if prov is None:
+                    unmet.append(req)
+                    continue
+                pid = str(prov.get("id") or "")
+                providers_for_dept.add(pid)
+                basic.append(_mapping_from_provider(req, prov, confidence=1.0))
+
+            # Verify each unique provider this department depends on by
+            # re-running the live health check (cached per provider).
+            blocked_by_health: list[str] = []
+            for pid in providers_for_dept:
+                if not pid:
+                    continue
+                if pid not in provider_health:
+                    try:
+                        row = _get_provider(session, pid)
+                    except Exception:
+                        provider_health[pid] = (False, "provider not found")
+                    else:
+                        provider_health[pid] = await _run_health_check(row)
+                ok, err = provider_health[pid]
+                if not ok:
+                    blocked_by_health.append(err or "health check failed")
+
+            if unmet:
+                state = ReadinessState.BLOCKED
+            elif blocked_by_health:
+                state = ReadinessState.BLOCKED
+                # Annotate the mapping(s) with the failure message so the UI
+                # surfaces it under the adapter setup view.
+                for m in basic:
+                    if m.provider_status not in ("ok",):
+                        m.provider_status = m.provider_status or "error"
+            else:
+                state = ReadinessState.READY
+
+            note = "; ".join(blocked_by_health) if blocked_by_health else None
+            completed.append(
+                DepartmentReadiness(
+                    id=dept_id,
+                    state=state,
+                    note=note,
+                    basic=basic,
+                    advanced=[],
+                    unmet=unmet,
+                    check_status="checked",
+                )
+            )
+
+            # Build the running list: completed departments first, then the
+            # remaining ones still pending.
+            remaining = [
+                DepartmentReadiness(
+                    id=did,
+                    state=ReadinessState.READY,
+                    note=None,
+                    basic=[],
+                    advanced=[],
+                    unmet=[],
+                    check_status="pending",
+                )
+                for did, _ in departments[index + 1 :]
+            ]
+            running_departments = completed + remaining
+            ready_count = sum(
+                1 for d in completed if d.state == ReadinessState.READY
+            )
+            store.update(
+                review_id,
+                state="running",
+                progress=int(((index + 1) / max(1, len(departments))) * 100),
+                result={
+                    "summary": (
+                        f"Checked {index + 1} of {len(departments)} "
+                        f"({ready_count} ready)"
+                    ),
+                    "departments": [d.model_dump() for d in running_departments],
+                },
+            )
+            # Brief pause so the UI poll (1.5s) catches the intermediate state.
+            await asyncio.sleep(0.4)
+
+        ready_count = sum(1 for d in completed if d.state == ReadinessState.READY)
+        store.update(
+            review_id,
+            state="complete",
+            progress=100,
+            result={
+                "summary": f"{ready_count} of {len(completed)} ready",
+                "departments": [d.model_dump() for d in completed],
+            },
+        )
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass

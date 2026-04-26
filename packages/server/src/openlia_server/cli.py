@@ -693,15 +693,35 @@ wizard_app = typer.Typer(
 def wizard_reset(
     ctx: typer.Context,
     yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    purge: bool = typer.Option(
+        False,
+        "--purge",
+        help=(
+            "Also delete all configured data providers, LLM providers, and LLM keys "
+            "so the wizard starts from a truly clean slate."
+        ),
+    ),
 ) -> None:
-    """Reset the setup wizard to run from step 1 on next visit."""
+    """Reset the setup wizard to run from step 1 on next visit.
+
+    By default, existing configuration (data providers, LLM keys, user
+    accounts) is preserved and only the wizard completion flag is cleared.
+    Pass `--purge` to additionally wipe data providers and LLM credentials.
+    User accounts are always preserved.
+    """
     if not yes:
-        confirmed = typer.confirm(
-            "This will reset the setup wizard. Existing configuration "
-            "(API keys, providers, user accounts) is preserved — only the "
-            "wizard completion flag is cleared. Continue?",
-            default=False,
+        prompt = (
+            "This will reset the setup wizard AND DELETE all configured data "
+            "providers, LLM providers, and LLM keys. User accounts are preserved. "
+            "Continue?"
+            if purge
+            else (
+                "This will reset the setup wizard. Existing configuration "
+                "(API keys, providers, user accounts) is preserved — only the "
+                "wizard completion flag is cleared. Continue?"
+            )
         )
+        confirmed = typer.confirm(prompt, default=False)
         if not confirmed:
             raise typer.Exit(code=1)
 
@@ -737,8 +757,32 @@ def wizard_reset(
             db.add(ConfigStore(key="wizard.completed", value=False))
         else:
             wc.value = False
+
+        purged_summary = ""
+        if purge:
+            from openlia_server.db.models.config import (
+                DataProvider,
+                DataProviderRequirementMapping,
+                LLMModel,
+                LLMProvider,
+                UserLLMPreference,
+            )
+
+            mapping_count = db.query(DataProviderRequirementMapping).delete()
+            dp_count = db.query(DataProvider).delete()
+            user_pref_count = db.query(UserLLMPreference).delete()
+            llm_model_count = db.query(LLMModel).delete()
+            llm_provider_count = db.query(LLMProvider).delete()
+            purged_summary = (
+                f" Purged {dp_count} data provider(s), {mapping_count} requirement "
+                f"mapping(s), {llm_model_count} LLM model(s), {llm_provider_count} "
+                f"LLM provider(s), and {user_pref_count} user LLM preference(s)."
+            )
+
         db.commit()
-        typer.echo("Wizard state reset. The setup wizard will run on next visit.")
+        typer.echo(
+            "Wizard state reset. The setup wizard will run on next visit." + purged_summary
+        )
     finally:
         db.close()
 

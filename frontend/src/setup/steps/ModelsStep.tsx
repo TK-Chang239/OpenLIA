@@ -5,10 +5,11 @@ import type { ApiKey } from "./KeysScreen";
 import { TiersScreen } from "./TiersScreen";
 import type { TierEntry, TierMap, TierName } from "./TiersScreen";
 import { inferProvider } from "./inferProvider";
+import { WIZARD_STORAGE_KEYS } from "../storage";
 
 type Screen = "keys" | "tiers";
 
-const STORAGE_KEY = "openlia.wizard.models";
+const STORAGE_KEY: (typeof WIZARD_STORAGE_KEYS)[number] = "openlia.wizard.models";
 
 interface PersistedState {
   screen: Screen;
@@ -31,14 +32,6 @@ function savePersisted(state: PersistedState): void {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Ignore quota / disabled storage; state will reset but the wizard still works.
-  }
-}
-
-function clearPersisted(): void {
-  try {
-    sessionStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* noop */
   }
 }
 
@@ -97,7 +90,7 @@ export function ModelsStep({
         everyday: expand(tiers.everyday),
         quick: expand(tiers.quick),
       });
-      clearPersisted();
+      // Persist past Next; the wizard-wide clear runs after /setup/finish.
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save models.");

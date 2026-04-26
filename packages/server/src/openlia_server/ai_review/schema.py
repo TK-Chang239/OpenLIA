@@ -18,6 +18,11 @@ class RequirementMapping(BaseModel):
     type: str
     provider: str | None
     confidence: float
+    provider_id: str | None = None
+    provider_label: str | None = None
+    provider_mode: str | None = None
+    provider_url: str | None = None
+    provider_status: str | None = None
 
 
 class DepartmentReadiness(BaseModel):
@@ -27,6 +32,7 @@ class DepartmentReadiness(BaseModel):
     basic: list[RequirementMapping]
     advanced: list[RequirementMapping]
     unmet: list[str]
+    check_status: str = "pending"
 
 
 class ReviewResult(BaseModel):

@@ -1,9 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { setAccessControl } from "../../api/setup";
+import { WIZARD_STORAGE_KEYS } from "../storage";
 
 type Policy = "invite_only" | "closed";
+
+const STORAGE_KEY: (typeof WIZARD_STORAGE_KEYS)[number] = "openlia.wizard.access_control";
+
+interface PersistedAccess {
+  policy: Policy;
+  domains: string;
+  host: string;
+  port: number;
+}
+
+const DEFAULT_ACCESS: PersistedAccess = {
+  policy: "invite_only",
+  domains: "",
+  host: "0.0.0.0",
+  port: 8000,
+};
+
+function loadPersisted(): PersistedAccess {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULT_ACCESS;
+    const parsed = JSON.parse(raw) as Partial<PersistedAccess>;
+    return {
+      policy: parsed.policy === "closed" ? "closed" : "invite_only",
+      domains: parsed.domains ?? "",
+      host: parsed.host ?? DEFAULT_ACCESS.host,
+      port: typeof parsed.port === "number" ? parsed.port : DEFAULT_ACCESS.port,
+    };
+  } catch {
+    return DEFAULT_ACCESS;
+  }
+}
 
 export function AccessControlStep({
   onBack,
@@ -12,12 +45,24 @@ export function AccessControlStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const [policy, setPolicy] = useState<Policy>("invite_only");
-  const [domains, setDomains] = useState("");
-  const [host, setHost] = useState("0.0.0.0");
-  const [port, setPort] = useState(8000);
+  const persisted = loadPersisted();
+  const [policy, setPolicy] = useState<Policy>(persisted.policy);
+  const [domains, setDomains] = useState(persisted.domains);
+  const [host, setHost] = useState(persisted.host);
+  const [port, setPort] = useState(persisted.port);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ policy, domains, host, port }),
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [policy, domains, host, port]);
 
   const onNext = async () => {
     setLoading(true);
@@ -29,6 +74,7 @@ export function AccessControlStep({
         bind_host: host,
         bind_port: port,
       });
+      // Persist past Next; the wizard-wide clear runs after /setup/finish.
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save access control.");
