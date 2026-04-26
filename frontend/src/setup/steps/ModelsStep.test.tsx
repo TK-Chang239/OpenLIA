@@ -1,10 +1,14 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ModelsStep } from "./ModelsStep";
 
 describe("ModelsStep", () => {
-  it("disables Next when any required tier has no entries", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+  });
+
+  it("starts on the keys screen with Next disabled until a key is added", async () => {
     render(
       <ModelsStep
         totalSteps={5}
@@ -14,21 +18,20 @@ describe("ModelsStep", () => {
       />,
     );
     expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
-  });
 
-  it("Next disabled when quick tier has no green entry", () => {
-    render(
-      <ModelsStep
-        totalSteps={5}
-        requiredTiers={["quick"]}
-        onBack={vi.fn()}
-        onSaved={vi.fn()}
-      />,
+    await userEvent.type(
+      screen.getByPlaceholderText(/Label/i),
+      "My OpenAI",
     );
-    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
+    await userEvent.type(screen.getByPlaceholderText(/^API key$/i), "sk-test");
+    await userEvent.click(screen.getByText(/Save key/i));
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /next/i })).toBeEnabled(),
+    );
   });
 
-  it("enables Next after adding a model in each required tier", async () => {
+  it("on the tiers screen, Next is gated on at least one green entry per required tier", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(() =>
       Promise.resolve(
         new Response(JSON.stringify({ ok: true, latency_ms: 42, error: null }), {
@@ -46,11 +49,19 @@ describe("ModelsStep", () => {
         onSaved={vi.fn()}
       />,
     );
+
+    // Add one key on screen 1.
+    await userEvent.type(screen.getByPlaceholderText(/Label/i), "My OpenAI");
+    await userEvent.type(screen.getByPlaceholderText(/^API key$/i), "sk-test");
+    await userEvent.click(screen.getByText(/Save key/i));
+    await userEvent.click(screen.getByRole("button", { name: /next/i }));
+
+    // Now on screen 2: add a model in each required tier.
+    expect(screen.getByRole("button", { name: /next/i })).toBeDisabled();
     for (const tier of ["thinking", "everyday", "quick"]) {
       const section = screen.getByTestId(`tier-${tier}`);
       await userEvent.click(section.querySelector("button[data-test=add]")!);
-      await userEvent.type(section.querySelector("input[name=model]")!, "gpt-5.4");
-      await userEvent.type(section.querySelector("input[name=api_key]")!, "sk-test");
+      await userEvent.type(section.querySelector("input[name=model]")!, "gpt-4o");
       await userEvent.click(section.querySelector("button[data-test=test]")!);
     }
     await waitFor(() =>

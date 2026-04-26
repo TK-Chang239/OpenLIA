@@ -35,7 +35,7 @@ export function AddProviderForm({
 }: {
   category: Category;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (testError?: string | null) => void;
 }) {
   const allowMcp = category !== "web_search";
   const [mode, setMode] = useState<Mode>("builtin");
@@ -59,8 +59,12 @@ export function AddProviderForm({
           ? { mode: "mcp", mcp_url: mcpUrl, mcp_auth_header: mcpAuth || undefined }
           : { mode: "openapi", openapi_spec_url: openapiUrl, api_key: apiKey };
     try {
-      await addProvider({ category, entry });
-      onSaved();
+      const result = await addProvider({ category, entry });
+      if (!result.ok) {
+        onSaved(result.error || "Provider test failed. Check your API key and try again.");
+        return;
+      }
+      onSaved(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to add provider.");
     } finally {

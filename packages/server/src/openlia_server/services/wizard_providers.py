@@ -23,6 +23,24 @@ _STATUS_OK = "ok"
 _STATUS_ERROR = "error"
 _STATUS_PENDING = "pending"
 
+# Default base URLs for builtin provider kinds. The wizard's "builtin" mode
+# lets the user pick a known provider without typing a URL; we inject the
+# canonical base_url here so create_provider's API_KEY validation passes.
+_DEFAULT_BASE_URLS: dict[str, str] = {
+    "eodhd": "https://eodhd.com/api",
+    "fmp": "https://financialmodelingprep.com/api/v3",
+    "finnhub": "https://finnhub.io/api/v1",
+    "yfinance": "https://query1.finance.yahoo.com",
+    "newsapi_ai": "https://eventregistry.org/api/v1",
+    "newsapi_org": "https://newsapi.org/v2",
+    "mediastack": "https://api.mediastack.com/v1",
+    "reddit": "https://oauth.reddit.com",
+    "x": "https://api.x.com/2",
+    "brave": "https://api.search.brave.com/res/v1",
+    "tavily": "https://api.tavily.com",
+    "serper": "https://google.serper.dev",
+}
+
 
 def _read_status(row: Any) -> str:
     cfg = row.extra_config or {}
@@ -97,6 +115,8 @@ async def add_provider(
     kind = entry.provider or category  # fall back to category as kind if missing
 
     base_url = getattr(entry, "base_url", None)
+    if entry.mode == "builtin" and not base_url:
+        base_url = _DEFAULT_BASE_URLS.get(kind)
     api_key = getattr(entry, "api_key", None)
     mcp_url = getattr(entry, "mcp_url", None)
     mcp_auth_header = getattr(entry, "mcp_auth_header", None)

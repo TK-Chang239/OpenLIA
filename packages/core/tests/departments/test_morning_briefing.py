@@ -37,7 +37,7 @@ def test_mb_optional_data_requirements():
     for name in (
         "stock_quote",
         "historical_prices",
-        "macro_indicators",
+        "macro_indicator",
     ):
         assert name in soft
 

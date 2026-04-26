@@ -60,8 +60,8 @@ export function ReviewStep({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const blocked = useMemo(
-    () => result?.departments.some((d) => d.state === "blocked") ?? false,
+  const blockedDepts = useMemo(
+    () => result?.departments.filter((d) => d.state === "blocked") ?? [],
     [result],
   );
 
@@ -87,7 +87,7 @@ export function ReviewStep({
           onBack={onBack}
           onNext={onFinish}
           nextLabel="Finish"
-          nextDisabled={state !== "complete" || blocked}
+          nextDisabled={state !== "complete"}
           loading={finishing}
         />
       }
@@ -147,10 +147,25 @@ export function ReviewStep({
               </article>
             ))}
           </div>
-          {blocked ? (
-            <p className="text-sm text-[--color-feedback-error] mt-4">
-              Go back to Data Providers to cover the unmet requirements.
-            </p>
+          {blockedDepts.length > 0 ? (
+            <div className="mt-4 px-3 py-2 rounded-[--radius-md] bg-[--color-feedback-warning]/10 border border-[--color-feedback-warning]/30 text-sm text-[--color-text-primary]">
+              <p className="font-medium mb-1">
+                {blockedDepts.length === 1
+                  ? "1 department will be unavailable:"
+                  : `${blockedDepts.length} departments will be unavailable:`}
+              </p>
+              <ul className="list-disc list-inside text-[--color-text-secondary]">
+                {blockedDepts.map((d) => (
+                  <li key={d.id} className="capitalize">
+                    {d.id.replace(/_/g, " ")} — needs {d.unmet.join(", ")}
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[--color-text-secondary]">
+                You can finish setup now. To enable these later, add a provider that covers
+                the missing capabilities in Settings → Data Providers.
+              </p>
+            </div>
           ) : null}
         </>
       ) : null}

@@ -237,20 +237,20 @@ def test_auto_map_returns_summary(personal_client) -> None:
     body = resp2.json()
     assert body["mode"] == "heuristic"
     # EODHD now covers 5 of equity_research's basic+advanced requirements
-    # (P0-3-04 added company_fundamentals).
+    # (P0-3-04 added financial_statements).
     covered_types = {m["requirement_type"] for m in body["mapped"]}
     assert {
         "stock_quote",
         "historical_prices",
         "company_profile",
         "company_news",
-        "company_fundamentals",
+        "financial_statements",
     } <= covered_types
-    # stock_grade and insider_transactions remain unmet.
+    # stock_grade remains unmet (EODHD covers insider_transactions now).
     unmet_types = {u["requirement_type"] for u in body["unmet"]}
-    assert {"stock_grade", "insider_transactions"} <= unmet_types
-    # company_fundamentals must NOT be unmet anymore (P0-3-04 acceptance).
-    assert "company_fundamentals" not in unmet_types
+    assert "stock_grade" in unmet_types
+    # financial_statements must NOT be unmet anymore (P0-3-04 acceptance).
+    assert "financial_statements" not in unmet_types
     # No duplicate (requirement_type, provider_id) pairs (P0-3-03 acceptance).
     pairs = [(m["requirement_type"], m["provider_id"]) for m in body["mapped"]]
     assert len(pairs) == len({*pairs})
@@ -305,12 +305,12 @@ def test_test_connection_returns_501_for_stub_kind(personal_client) -> None:
     resp = personal_client.post(
         "/settings/data-providers",
         json={
-            "kind": "fmp",
-            "label": "F",
-            "category": "financial",
+            "kind": "reddit",
+            "label": "R",
+            "category": "social_media",
             "mode": "api_key",
             "api_key": "k",
-            "base_url": "https://fmp.test",
+            "base_url": "https://oauth.reddit.com",
         },
     )
     pid = resp.json()["id"]

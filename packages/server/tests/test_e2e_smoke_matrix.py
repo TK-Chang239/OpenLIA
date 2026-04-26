@@ -110,8 +110,14 @@ def test_journey_personal_first_run_setup(db_session) -> None:
     assert user.display_name == "TK"
 
 
-def test_journey_personal_full_setup_models_and_providers(db_session) -> None:
+def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatch) -> None:
     """NEW-10-13: full Step 1-5 sweep on a fresh DB."""
+    from openlia_server.services import wizard_providers
+
+    async def _ok(_row):
+        return True, None
+
+    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
     client = _personal_wizard_client(db_session)
 
     assert client.get("/setup/status").status_code == 200

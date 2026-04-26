@@ -35,7 +35,6 @@ def test_public_surface_exports_all() -> None:
 
 def test_deferred_subpackages_importable() -> None:
     for mod in (
-        "openlia.data.catalog",
         "openlia.data.review",
         "openlia.data.dispatch",
         "openlia.data.python_providers",
@@ -43,3 +42,13 @@ def test_deferred_subpackages_importable() -> None:
     ):
         m = importlib.import_module(mod)
         assert getattr(m, "__deferred__", False) is True
+
+
+def test_catalog_module_active() -> None:
+    """Catalog is no longer deferred — exposes build_catalog + ProviderCatalog."""
+    from openlia.data import catalog
+
+    assert getattr(catalog, "__deferred__", False) is False
+    assert callable(catalog.build_catalog)
+    assert hasattr(catalog, "ProviderCatalog")
+    assert hasattr(catalog, "CatalogEntry")

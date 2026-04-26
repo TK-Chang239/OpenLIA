@@ -1,11 +1,46 @@
-import { useMemo, useState } from "react";
-import { WizardShell } from "../WizardShell";
-import { WizardFooter } from "../WizardFooter";
-import { TierSlotCard } from "./TierSlotCard";
-import type { TierEntryWithStatus } from "./TierSlotCard";
+import { useEffect, useState } from "react";
 import { saveModels } from "../../api/setup";
+import { KeysScreen } from "./KeysScreen";
+import type { ApiKey } from "./KeysScreen";
+import { TiersScreen } from "./TiersScreen";
+import type { TierEntry, TierMap, TierName } from "./TiersScreen";
+import { inferProvider } from "./inferProvider";
 
-type TierName = "thinking" | "everyday" | "quick";
+type Screen = "keys" | "tiers";
+
+const STORAGE_KEY = "openlia.wizard.models";
+
+interface PersistedState {
+  screen: Screen;
+  keys: ApiKey[];
+  tiers: TierMap;
+}
+
+function loadPersisted(): PersistedState | null {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PersistedState;
+  } catch {
+    return null;
+  }
+}
+
+function savePersisted(state: PersistedState): void {
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignore quota / disabled storage; state will reset but the wizard still works.
+  }
+}
+
+function clearPersisted(): void {
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* noop */
+  }
+}
 
 export function ModelsStep({
   totalSteps,
@@ -18,33 +53,51 @@ export function ModelsStep({
   onBack: () => void;
   onSaved: () => void;
 }) {
-  const [thinking, setThinking] = useState<TierEntryWithStatus[]>([]);
-  const [everyday, setEveryday] = useState<TierEntryWithStatus[]>([]);
-  const [quick, setQuick] = useState<TierEntryWithStatus[]>([]);
+  const persisted = loadPersisted();
+  const [screen, setScreen] = useState<Screen>(persisted?.screen ?? "keys");
+  const [keys, setKeys] = useState<ApiKey[]>(persisted?.keys ?? []);
+  const [tiers, setTiers] = useState<TierMap>(
+    persisted?.tiers ?? { thinking: [], everyday: [], quick: [] },
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const tierHasGreen = (entries: TierEntryWithStatus[]) => entries.some((e) => e.status === "ok");
+  useEffect(() => {
+    savePersisted({ screen, keys, tiers });
+  }, [screen, keys, tiers]);
 
-  const canSubmit = useMemo(
-    () =>
-      requiredTiers.every((tier) => {
-        if (tier === "thinking") return tierHasGreen(thinking);
-        if (tier === "everyday") return tierHasGreen(everyday);
-        return tierHasGreen(quick);
-      }),
-    [requiredTiers, thinking, everyday, quick],
-  );
+  const updateKeys = (next: ApiKey[]) => {
+    const validIds = new Set(next.map((k) => k.id));
+    setKeys(next);
+    setTiers((prev) => ({
+      thinking: prev.thinking.filter((e) => validIds.has(e.key_id)),
+      everyday: prev.everyday.filter((e) => validIds.has(e.key_id)),
+      quick: prev.quick.filter((e) => validIds.has(e.key_id)),
+    }));
+  };
 
-  const onNext = async () => {
+  const onSave = async () => {
     setLoading(true);
     setError(null);
     try {
+      const expand = (entries: TierEntry[]) =>
+        entries
+          .filter((e) => e.status === "ok")
+          .map((e) => {
+            const key = keys.find((k) => k.id === e.key_id)!;
+            return {
+              provider: inferProvider(e.model, key.api_key, key.base_url),
+              model: e.model,
+              api_key: key.api_key,
+              base_url: key.base_url,
+            };
+          });
       await saveModels({
-        thinking: thinking.filter((e) => e.status === "ok").map(stripUi),
-        everyday: everyday.filter((e) => e.status === "ok").map(stripUi),
-        quick: quick.filter((e) => e.status === "ok").map(stripUi),
+        thinking: expand(tiers.thinking),
+        everyday: expand(tiers.everyday),
+        quick: expand(tiers.quick),
       });
+      clearPersisted();
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save models.");
@@ -53,29 +106,29 @@ export function ModelsStep({
     }
   };
 
-  return (
-    <WizardShell
-      title="AI Models"
-      stepIndex={2}
-      totalSteps={totalSteps}
-      footer={<WizardFooter onBack={onBack} onNext={onNext} nextDisabled={!canSubmit} loading={loading} />}
-    >
-      <p className="text-sm text-[--color-text-secondary] mb-4">
-        OpenLIA uses a top-tier Thinking model for deep analysis, an Everyday model for general
-        chat, and a Quick model for classification and lightweight jobs.
-      </p>
-      <p className="text-xs text-[--color-text-tertiary] mb-6">
-        Required by your enabled departments: <strong>{requiredTiers.join(", ")}</strong>.
-      </p>
-      <TierSlotCard tierLabel="Thinking" tierValue="thinking" entries={thinking} onChange={setThinking} />
-      <TierSlotCard tierLabel="Everyday" tierValue="everyday" entries={everyday} onChange={setEveryday} />
-      <TierSlotCard tierLabel="Quick" tierValue="quick" entries={quick} onChange={setQuick} />
-      {error ? <p className="text-sm text-[--color-feedback-error] mt-4">{error}</p> : null}
-    </WizardShell>
-  );
-}
+  if (screen === "keys") {
+    return (
+      <KeysScreen
+        totalSteps={totalSteps}
+        keys={keys}
+        onChange={updateKeys}
+        onBack={onBack}
+        onNext={() => setScreen("tiers")}
+      />
+    );
+  }
 
-function stripUi(e: TierEntryWithStatus) {
-  const { ui_id, status, error: _err, ...rest } = e;
-  return rest;
+  return (
+    <TiersScreen
+      totalSteps={totalSteps}
+      requiredTiers={requiredTiers}
+      keys={keys}
+      tiers={tiers}
+      onChange={setTiers}
+      onBack={() => setScreen("keys")}
+      onNext={onSave}
+      loading={loading}
+      submitError={error}
+    />
+  );
 }

@@ -444,6 +444,46 @@ def admin_create_invite(
         db.close()
 
 
+# --- seed-policy ------------------------------------------------------------
+
+
+@admin_app.command("seed-policy")
+def admin_seed_policy(
+    ctx: typer.Context,
+    mode: str = typer.Option(
+        "invite_only",
+        "--mode",
+        help="Signup policy mode: invite_only or closed.",
+    ),
+) -> None:
+    """Seed signup_policy for headless company-mode deployments.
+
+    The setup wizard normally seeds this row on completion. For headless
+    container operators who skip the wizard UI, this command writes the
+    singleton row directly. Idempotent: if the row already exists, the
+    mode is updated in place.
+    """
+    if mode not in ("invite_only", "closed"):
+        echo_error("--mode must be 'invite_only' or 'closed'")
+        raise typer.Exit(code=1)
+
+    from openlia_server.db.models.auth import SignupPolicy
+
+    db = build_session(ctx.obj["db_url"])
+    try:
+        row = db.get(SignupPolicy, 1)
+        if row is None:
+            db.add(SignupPolicy(id=1, mode=mode, allowed_email_domains=[]))
+            action = "seeded"
+        else:
+            row.mode = mode
+            action = "updated"
+        db.commit()
+        typer.echo(f"signup_policy {action}: mode={mode}")
+    finally:
+        db.close()
+
+
 # --- list-invites -----------------------------------------------------------
 
 

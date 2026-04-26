@@ -506,10 +506,19 @@ def test_providers_confirm_requires_pair(wizard_personal_client: TestClient) -> 
     assert resp.json()["detail"]["code"] == "providers_incomplete"
 
 
-def test_providers_confirm_advances_after_pair(wizard_personal_client: TestClient) -> None:
+def test_providers_confirm_advances_after_pair(
+    wizard_personal_client: TestClient, monkeypatch
+) -> None:
     _seed_session(wizard_personal_client)
-    # FMP + NewsAPI.org are both stubs — health_check returns True for stubs
-    # so wizard_status persists as "ok".
+    # Force the per-provider health check to succeed without hitting the
+    # network — fmp/newsapi_org are real adapters now and example.test is
+    # not reachable in CI.
+    from openlia_server.services import wizard_providers
+
+    async def _ok(_row):
+        return True, None
+
+    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
     wizard_personal_client.post(
         "/setup/providers",
         json={
