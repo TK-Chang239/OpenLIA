@@ -104,7 +104,7 @@ class OllamaAdapter(LLMProvider):
             await probe.generate(
                 LLMRequest(
                     messages=[Message(role="user", content="ping")],
-                    max_tokens=1,
+                    max_tokens=16,
                     temperature=0.0,
                 )
             )

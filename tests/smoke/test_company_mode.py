@@ -28,6 +28,15 @@ def _exec_json(name: str, args: list[str]) -> dict[str, Any]:
     raise AssertionError(f"No JSON object in stdout: {result.stdout!r}")
 
 
+def _exec(name: str, args: list[str]) -> None:
+    subprocess.run(
+        ["docker", "exec", name, "openlia", *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def test_company_mode_end_to_end(
     run_container: Callable[..., dict[str, Any]],
 ) -> None:
@@ -39,6 +48,10 @@ def test_company_mode_end_to_end(
     )
     name = info["name"]
     base = info["base_url"]
+
+    # Headless deploy: seed signup_policy directly since the wizard UI
+    # is skipped in this smoke flow.
+    _exec(name, ["admin", "seed-policy", "--mode", "invite_only"])
 
     payload = _exec_json(
         name,
@@ -59,7 +72,7 @@ def test_company_mode_end_to_end(
     register = httpx.post(
         f"{base}/api/auth/register",
         json={
-            "invite": token,
+            "invite_token": token,
             "email": "smoke@example.com",
             "password": "SmokeTest!123",
             "display_name": "Smoke",
@@ -74,7 +87,7 @@ def test_company_mode_end_to_end(
             json={"email": "smoke@example.com", "password": "SmokeTest!123"},
         )
         assert login.status_code == 200
-        me = client.get("/api/auth/me")
+        me = client.get("/api/auth/session")
         assert me.status_code == 200
         assert me.json().get("email") == "smoke@example.com"
 
@@ -92,6 +105,7 @@ def test_cookie_secure_flag_propagates(
     name = info["name"]
     base = info["base_url"]
 
+    _exec(name, ["admin", "seed-policy", "--mode", "invite_only"])
     payload = _exec_json(
         name,
         ["admin", "create-invite", "--max-uses", "1", "--json"],
@@ -99,7 +113,7 @@ def test_cookie_secure_flag_propagates(
     register = httpx.post(
         f"{base}/api/auth/register",
         json={
-            "invite": payload["token"],
+            "invite_token": payload["token"],
             "email": "secure@example.com",
             "password": "SmokeTest!123",
             "display_name": "Secure",

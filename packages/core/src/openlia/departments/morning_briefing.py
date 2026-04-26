@@ -23,7 +23,7 @@ class MorningBriefingDepartment:
     optional_requirement_types: tuple[str, ...] = (
         "stock_quote",
         "historical_prices",
-        "macro_indicators",
+        "macro_indicator",
     )
     extra_tools: tuple[dict[str, Any], ...] = ()
 

@@ -232,6 +232,7 @@ class _StripApiPrefixMiddleware:
                 new_path = path[4:] or "/"
                 scope = dict(scope)
                 scope["path"] = new_path
+                scope["openlia_was_api"] = True
                 if raw_path is not None and (raw_path.startswith(b"/api/") or raw_path == b"/api"):
                     scope["raw_path"] = raw_path[4:] or b"/"
         await self._app(scope, receive, send)
@@ -609,26 +610,6 @@ def create_app(
     return app
 
 
-_API_PREFIXES = (
-    "auth",
-    "admin",
-    "settings",
-    "setup",
-    "jobs",
-    "notifications",
-    "reports",
-    "departments",
-    "chat",
-    "portfolio",
-    "repo",
-    "healthz",
-    "health",
-    "docs",
-    "redoc",
-    "openapi.json",
-)
-
-
 def _mount_frontend(app: FastAPI) -> None:
     """Serve `frontend/dist` with SPA fallback when configured.
 
@@ -647,8 +628,9 @@ def _mount_frontend(app: FastAPI) -> None:
     else:
         candidates.append("/app/frontend/dist")
         here = os.path.dirname(os.path.abspath(__file__))
+        # Walk: openlia_server → src → server → packages → repo root.
         repo_dist = os.path.normpath(
-            os.path.join(here, "..", "..", "..", "..", "..", "frontend", "dist")
+            os.path.join(here, "..", "..", "..", "..", "frontend", "dist")
         )
         candidates.append(repo_dist)
 
@@ -671,10 +653,17 @@ def _mount_frontend(app: FastAPI) -> None:
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.get("/{full_path:path}", include_in_schema=False)
-    def spa_fallback(full_path: str) -> FileResponse:
-        head = full_path.split("/", 1)[0]
-        if head in _API_PREFIXES:
+    @app.api_route(
+        "/{full_path:path}",
+        include_in_schema=False,
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    )
+    def spa_fallback(full_path: str, request: Request) -> FileResponse:
+        # Requests that originally had /api/... should 404 as JSON, not
+        # serve the SPA shell. Same for any non-GET (SPA shell is only
+        # ever rendered for GET — POST/PUT/PATCH/DELETE on unmatched
+        # paths means a missing API endpoint, not a navigation).
+        if request.scope.get("openlia_was_api") or request.method != "GET":
             raise HTTPException(status_code=404)
         candidate_file = os.path.normpath(os.path.join(dist_dir, full_path))
         if (

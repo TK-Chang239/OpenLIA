@@ -39,7 +39,7 @@ describe("ReviewStep", () => {
     expect(screen.getByText(/secretary/i)).toBeInTheDocument();
   });
 
-  it("Finish disabled when a department is blocked", async () => {
+  it("Finish enabled when a department is blocked, with a warning banner listing it", async () => {
     vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(json({ review_id: "rev-1" }))
       .mockResolvedValueOnce(
@@ -65,6 +65,8 @@ describe("ReviewStep", () => {
 
     render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
     await waitFor(() => screen.getByText(/0 of 1 ready/i));
-    expect(screen.getByRole("button", { name: /finish/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /finish/i })).toBeEnabled();
+    expect(screen.getByText(/1 department will be unavailable/i)).toBeInTheDocument();
+    expect(screen.getByText(/equity research — needs stock_quote/i)).toBeInTheDocument();
   });
 });

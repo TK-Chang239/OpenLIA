@@ -1,9 +1,24 @@
 """Setup-wizard AI review orchestration.
 
-Owns session lifetime for the background task. Handlers schedule the task,
-this module opens its own DB session via the factory passed in — never
-captures a request-scoped session that FastAPI will close before the task
-finishes.
+Two-stage flow:
+
+1. Deterministic short-circuit. For every configured provider whose `kind` is
+   in the adapter catalog, the resolver maps the department's basic
+   requirements directly against the adapter's declared capabilities. If
+   every basic requirement resolves and no unknown providers are configured,
+   we emit the `ReviewResult` immediately without calling the LLM. This is
+   exact, fast, and free.
+
+2. LLM fallback. Only when the deterministic stage cannot resolve every
+   department (an unknown-kind provider is configured, or a known provider's
+   capabilities are missing in subtle ways) do we hand the enriched payload —
+   including each provider's `declared_capabilities` and `unknown` flag — to
+   the LLM. The prompt instructs it to ground confident mappings in the
+   declared capabilities and cap unknown-provider confidence at 0.5.
+
+The background task opens its own DB session via the factory passed in —
+never captures a request-scoped session that FastAPI will close before the
+task finishes.
 """
 
 from __future__ import annotations
@@ -12,10 +27,17 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
+from openlia.data.catalog import ProviderCatalog, build_catalog
 from sqlalchemy.orm import Session
 
 from openlia_server.ai_review import store as review_store_mod
 from openlia_server.ai_review.runner import run_review as _run_review_impl
+from openlia_server.ai_review.schema import (
+    DepartmentReadiness,
+    ReadinessState,
+    RequirementMapping,
+    ReviewResult,
+)
 
 
 class _ReviewLLMWrapper:
@@ -31,15 +53,26 @@ class _ReviewLLMWrapper:
         return await self._adapter.generate(req)
 
 
-def _build_provider_payload(rows: list[Any]) -> list[dict[str, object]]:
+def _build_provider_payload(
+    rows: list[Any],
+    catalog: ProviderCatalog,
+) -> list[dict[str, object]]:
     """Build the provider payload for the AI review prompt.
 
-    Includes both `category` (financial/news/...) and `kind` (eodhd/fmp/...)
-    so the LLM can route requirements correctly. `provider` mirrors `kind`
-    for backwards compatibility with the older payload shape.
+    Enriches each provider row with `declared_capabilities` (sorted tuple of
+    capability strings the adapter advertises) and `unknown: True` when the
+    provider's `kind` is not in the live adapter catalog. The LLM uses this
+    to ground its mappings instead of guessing from the name alone.
     """
     payload: list[dict[str, object]] = []
     for r in rows:
+        entry = catalog.find(r.kind)
+        if entry is None:
+            declared: tuple[str, ...] = ()
+            unknown = True
+        else:
+            declared = entry.capabilities
+            unknown = False
         payload.append(
             {
                 "id": r.id,
@@ -48,9 +81,62 @@ def _build_provider_payload(rows: list[Any]) -> list[dict[str, object]]:
                 "provider": r.kind,
                 "priority": getattr(r, "priority", None)
                 or (r.extra_config or {}).get("default_priority", 100),
+                "declared_capabilities": list(declared),
+                "unknown": unknown,
             }
         )
     return payload
+
+
+def _try_deterministic_review(
+    departments: list[tuple[str, list[str]]],
+    providers: list[dict[str, object]],
+) -> ReviewResult | None:
+    """Resolve every basic requirement against declared_capabilities.
+
+    Returns a complete `ReviewResult` when every basic requirement matches at
+    least one provider's declared_capabilities and no `unknown=True`
+    providers exist. Returns None when the LLM must adjudicate.
+
+    Confidence is fixed at 1.0 for deterministic matches — the resolver is
+    set-membership, so there's no inference involved.
+    """
+    if any(p.get("unknown") for p in providers):
+        return None
+
+    by_capability: dict[str, str] = {}
+    for p in providers:
+        kind = str(p.get("kind") or p.get("provider") or "")
+        for cap in p.get("declared_capabilities", []) or []:
+            by_capability.setdefault(cap, kind)
+
+    department_results: list[DepartmentReadiness] = []
+    for dept_id, basic_reqs in departments:
+        basic: list[RequirementMapping] = []
+        unmet: list[str] = []
+        for req in basic_reqs:
+            provider_kind = by_capability.get(req)
+            if provider_kind is None:
+                unmet.append(req)
+            else:
+                basic.append(
+                    RequirementMapping(type=req, provider=provider_kind, confidence=1.0)
+                )
+        state = ReadinessState.READY if not unmet else ReadinessState.BLOCKED
+        department_results.append(
+            DepartmentReadiness(
+                id=dept_id,
+                state=state,
+                note=None,
+                basic=basic,
+                advanced=[],
+                unmet=unmet,
+            )
+        )
+
+    ready_count = sum(1 for d in department_results if d.state == ReadinessState.READY)
+    summary = f"{ready_count} of {len(department_results)} ready."
+    return ReviewResult(summary=summary, departments=department_results)
 
 
 async def _run_with_own_session(
@@ -88,11 +174,11 @@ def schedule_review(
     store: review_store_mod.ReviewStore,
     departments: list[tuple[str, list[str]]],
 ) -> str:
-    """Build the LLM adapter, snapshot providers, and start the review task.
+    """Run deterministic resolver first; fall back to LLM only when needed.
 
-    Returns the new review_id. The task opens its own DB session — the
-    request-scoped `db` is only used here to read the registry and provider
-    rows synchronously before scheduling.
+    Returns the new review_id. The background task (when scheduled) opens its
+    own DB session — the request-scoped `db` is only used here to read the
+    registry and provider rows synchronously before scheduling.
     """
     from openlia.llm.adapters import build_adapter
     from openlia.llm.capabilities import capabilities_for
@@ -103,11 +189,22 @@ def schedule_review(
 
     review_id = store.create()
 
+    catalog = build_catalog()
+    dp_rows = list_dp(db)
+    providers = _build_provider_payload(dp_rows, catalog)
+
+    deterministic = _try_deterministic_review(departments, providers)
+    if deterministic is not None:
+        store.update(
+            review_id,
+            state="complete",
+            progress=100,
+            result=deterministic.model_dump(),
+        )
+        return review_id
+
     registry = SQLModelRegistry(db)
     row = registry.get_tier_default(ModelTier.QUICK) or registry.get_any_in_tier(ModelTier.QUICK)
-
-    dp_rows = list_dp(db)
-    providers = _build_provider_payload(dp_rows)
 
     if row is None:
         store.update(review_id, state="failed", error="No Quick-tier LLM configured.")
@@ -117,7 +214,11 @@ def schedule_review(
         kind=row.provider_kind,
         credentials=row.credentials,
         model=row.model_ref,
-        capabilities=capabilities_for(row.provider_kind, row.model_ref, row.capability_override),
+        capabilities=capabilities_for(
+            provider_kind=row.provider_kind,
+            model=row.model_ref,
+            override=row.capability_override,
+        ),
     )
     llm_wrapper = _ReviewLLMWrapper(adapter)
 
