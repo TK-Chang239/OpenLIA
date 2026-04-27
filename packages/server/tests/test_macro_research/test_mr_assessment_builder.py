@@ -9,9 +9,7 @@ from openlia_server.services.mr_assessment import MRAssessmentBuilderImpl
 
 @pytest.fixture
 def builder() -> MRAssessmentBuilderImpl:
-    provider = MagicMock()
-    provider.fetch.return_value = {"price": 100.0}
-    return MRAssessmentBuilderImpl(data_provider=provider)
+    return MRAssessmentBuilderImpl()
 
 
 def test_builds_batch_items_for_t4_dashboards(builder: MRAssessmentBuilderImpl) -> None:

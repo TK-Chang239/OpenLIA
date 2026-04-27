@@ -14,10 +14,6 @@ from openlia.macro_research.schemas import (
 )
 
 
-class _DataProvider(Protocol):
-    def fetch(self, *, requirement: str, **kwargs: Any) -> Any: ...
-
-
 class _LLMClient(Protocol):
     async def run(self, *, prompt: str, **kwargs: Any) -> dict[str, Any]: ...
 
@@ -30,15 +26,19 @@ def _worst(a: SeverityLevel, b: SeverityLevel) -> SeverityLevel:
 
 
 class DashboardAssembler:
-    """Runs T1->T5 for one dashboard and returns a DashboardResult."""
+    """Runs T1->T5 for one dashboard and returns a DashboardResult.
+
+    NOTE: MR runtime data wiring is a follow-up after the connector cutover.
+    Until that lands, T1 inputs and T2 direct-metric lookups resolve to None
+    (the upstream `_DataProvider` plumbing was dead code in production —
+    `app.state.mr_data_provider` was never set on production paths).
+    """
 
     def __init__(
         self,
         *,
-        data_provider: _DataProvider,
         llm_client: _LLMClient | None = None,
     ) -> None:
-        self._data = data_provider
         self._llm = llm_client
         self._engine = FormulaEngine()
 
@@ -60,19 +60,13 @@ class DashboardAssembler:
         tiers: list[DashboardTierOutput] = []
 
         # --- T1 ---
-        t1_data: dict[str, Any] = {}
-        for req in dashboard.T1_REQUIREMENTS:
-            t1_data[req] = self._data.fetch(requirement=req)
+        # Data fetching is stubbed pending MR runtime wiring through the
+        # connector dispatcher; T1 inputs resolve to None until that lands.
+        t1_data: dict[str, Any] = dict.fromkeys(dashboard.T1_REQUIREMENTS)
         tiers.append(DashboardTierOutput(tier="T1", data={"inputs": t1_data}, generated_at=now))
 
         # --- T2 ---
         flat_values = self._flatten(t1_data)
-        # Merge any metrics already supplied directly by the data provider (tests pass
-        # {"force_debt_money": 8} style inputs through FakeDataProvider).
-        for req in dashboard.T2_FORMULAS:
-            direct = self._data.fetch(requirement=req)
-            if isinstance(direct, (int, float, bool)):
-                flat_values.setdefault(req, direct)
         typed_values: dict[str, float | bool | str] = {}
         for key, value in flat_values.items():
             if isinstance(value, bool):
