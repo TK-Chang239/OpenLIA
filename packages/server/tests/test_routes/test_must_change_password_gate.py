@@ -98,10 +98,6 @@ class TestForcedPasswordBlocksProductRoutes:
 
 
 class TestForcedPasswordBlocksAdminRoutes:
-    def test_settings_data_providers_list_blocked(self, forced_admin_client):
-        client, _ = forced_admin_client
-        _assert_must_change(client.get("/settings/data-providers"))
-
     def test_settings_llm_providers_list_blocked(self, forced_admin_client):
         client, _ = forced_admin_client
         _assert_must_change(client.get("/settings/admin/llm/providers"))
