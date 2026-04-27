@@ -8,16 +8,6 @@ from typing import Any
 
 
 @dataclass
-class FakeDataProvider:
-    """Return canned values keyed by requirement name."""
-
-    values: dict[str, Any] = field(default_factory=dict)
-
-    def fetch(self, *, requirement: str, **kwargs: Any) -> Any:
-        return self.values.get(requirement)
-
-
-@dataclass
 class FakeLLMClient:
     """Record every call; return a scripted response."""
 

@@ -8,7 +8,7 @@ from openlia.connectors.dispatch import (
     DispatchError,
     PreparedConnector,
 )
-from openlia.connectors.types import ToolDefinition
+from openlia.connectors.types import Category, ToolDefinition
 
 
 def _td(name: str) -> ToolDefinition:
@@ -116,6 +116,27 @@ async def test_dispatch_missing_separator_raises():
     d = Dispatcher(connectors={}, allowlist={})
     with pytest.raises(DispatchError, match="prefix"):
         await d.dispatch_tool_use("noprefix", {})
+
+
+def test_tools_for_department_filters_by_category():
+    fin_t = _FakeTransport()
+    news_t = _FakeTransport()
+    d = Dispatcher(
+        connectors={
+            "c-fin": PreparedConnector("c-fin", "eodhd", fin_t, {"q": _td("q")}),
+            "c-news": PreparedConnector("c-news", "newsapi", news_t, {"s": _td("s")}),
+        },
+        allowlist={"er": [("c-fin", "q"), ("c-news", "s")]},
+        connector_categories={
+            "c-fin": Category.FINANCIAL,
+            "c-news": Category.NEWS,
+        },
+    )
+    out = d.tools_for_department("er", include_categories={Category.FINANCIAL})
+    assert {t["name"] for t in out} == {"eodhd__q"}
+
+    out_all = d.tools_for_department("er")
+    assert len(out_all) == 2
 
 
 async def test_dispatch_unknown_tool_for_known_provider_raises():

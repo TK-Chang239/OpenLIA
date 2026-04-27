@@ -10,7 +10,6 @@ Asserts:
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
 
 from openlia.retail_sentiment.schemas import (
     BatchClassifyResult,
@@ -35,20 +34,6 @@ class _BullishClassifier:
                 for p in posts
             ]
         )
-
-
-class _StaticProvider:
-    def fetch(self, *, requirement: str, ticker: str, **_):
-        if requirement == "social_sentiment":
-            return [
-                {
-                    "id": "p1",
-                    "text": "great quarter",
-                    "source": "social_media",
-                    "created_at": datetime.now(UTC).isoformat(),
-                }
-            ]
-        return None
 
 
 class _SnapshotStub:
@@ -89,7 +74,6 @@ def test_narrative_synthesizer_populates_snapshot_narrative() -> None:
 
     runner = RsRunner(
         session_factory=_factory,
-        data_provider=_StaticProvider(),
         classifier=_BullishClassifier(),
         snapshot_service=snaps,  # type: ignore[arg-type]
         classification_log_service=_AuditStub(),  # type: ignore[arg-type]
@@ -104,7 +88,6 @@ def test_no_synthesizer_means_narrative_is_none() -> None:
     snaps = _SnapshotStub()
     runner = RsRunner(
         session_factory=_factory,
-        data_provider=_StaticProvider(),
         classifier=_BullishClassifier(),
         snapshot_service=snaps,  # type: ignore[arg-type]
         classification_log_service=_AuditStub(),  # type: ignore[arg-type]
@@ -121,7 +104,6 @@ def test_synthesizer_failure_swallowed_to_none() -> None:
     snaps = _SnapshotStub()
     runner = RsRunner(
         session_factory=_factory,
-        data_provider=_StaticProvider(),
         classifier=_BullishClassifier(),
         snapshot_service=snaps,  # type: ignore[arg-type]
         classification_log_service=_AuditStub(),  # type: ignore[arg-type]

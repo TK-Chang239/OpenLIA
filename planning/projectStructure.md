@@ -441,7 +441,7 @@ Defined in `database-design.md`. Grouped by concern:
 |---|---|
 | Identity & auth | `users`, `sessions`, `signup_invites`, `signup_policy`, `password_reset_requests`, `auth_events` |
 | LLM config | `llm_providers`, `llm_models`, `user_llm_preferences` |
-| Data providers | `data_providers`, `data_provider_requirement_mapping`, `web_search_providers` |
+| Connectors | `connectors`, `tool_allowlists`, `web_search_providers` |
 | Chat & reports | `chat_sessions`, `chat_messages`, `chat_attachments`, `reports`, `report_versions` |
 | Portfolio | `portfolio_holdings`, `watchlists`, `watchlist_items` |
 | Setup & config | `wizard_state`, `config_store` |

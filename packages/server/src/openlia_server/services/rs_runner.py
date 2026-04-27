@@ -35,10 +35,6 @@ from openlia_server.services.rs_classification_log import RsClassificationLogSer
 from openlia_server.services.rs_snapshot import RsSnapshotService
 
 
-class _DataProvider(Protocol):
-    def fetch(self, *, requirement: str, ticker: str, **kwargs: Any) -> Any: ...
-
-
 class _Classifier(Protocol):
     def classify_batch(
         self, *, ticker: str, posts: Sequence[RawSocialPost]
@@ -80,27 +76,17 @@ class RsRunResult:
     spike: SpikeEvent | None
 
 
-_OPTIONAL_REQUIREMENTS: tuple[str, ...] = (
-    "options_data",
-    "short_interest",
-    "institutional_holdings",
-    "historical_prices",
-)
-
-
 class RsRunner:
     def __init__(
         self,
         *,
         session_factory: Callable[[], Session],
-        data_provider: _DataProvider | None,
         classifier: _Classifier | None = None,
         snapshot_service: RsSnapshotService | None = None,
         classification_log_service: RsClassificationLogService | None = None,
         narrative_synthesizer: NarrativeSynthesizer | None = None,
     ) -> None:
         self._factory = session_factory
-        self._data = data_provider
         self._classifier = classifier or NeutralClassifier()
         self._snapshots = snapshot_service or RsSnapshotService(session_factory=session_factory)
         self._classification_log = classification_log_service or RsClassificationLogService(
@@ -109,31 +95,13 @@ class RsRunner:
         self._narrative_synthesizer = narrative_synthesizer
 
     def _fetch_posts(self, ticker: str) -> list[RawSocialPost]:
-        if self._data is None:
-            return []
-        posts: list[RawSocialPost] = []
-        for requirement in ("social_sentiment", "company_news"):
-            try:
-                raw = self._data.fetch(requirement=requirement, ticker=ticker)
-            except Exception:
-                raw = None
-            if not raw:
-                continue
-            posts.extend(_coerce_posts(raw, ticker=ticker, source=requirement))
-        return posts
+        # RS runtime data wiring through the connector dispatcher is a follow-up
+        # to the connector cutover; production was already silently empty here
+        # because the legacy provider hook was never set on production paths.
+        return []
 
     def _fetch_optional(self, ticker: str) -> dict[str, Any]:
-        if self._data is None:
-            return {}
-        out: dict[str, Any] = {}
-        for requirement in _OPTIONAL_REQUIREMENTS:
-            try:
-                raw = self._data.fetch(requirement=requirement, ticker=ticker)
-            except Exception:
-                raw = None
-            if raw is not None:
-                out[requirement] = raw
-        return out
+        return {}
 
     def run_ticker(self, ticker: str) -> RsRunResult:
         posts = self._fetch_posts(ticker)
@@ -182,39 +150,3 @@ class RsRunner:
             return asyncio.run(synth(snap, signals))
         except Exception:
             return None
-
-
-def _coerce_posts(raw: Any, *, ticker: str, source: str) -> list[RawSocialPost]:
-    """Best-effort coercion of adapter payloads into RawSocialPost."""
-    out: list[RawSocialPost] = []
-    if not isinstance(raw, list):
-        return out
-    for idx, item in enumerate(raw):
-        if not isinstance(item, dict):
-            continue
-        text = item.get("text") or item.get("title") or item.get("summary") or ""
-        if not text:
-            continue
-        created_at = item.get("created_at") or item.get("published_at")
-        if isinstance(created_at, str):
-            try:
-                created_dt = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            except ValueError:
-                created_dt = datetime.now(UTC)
-        elif isinstance(created_at, datetime):
-            created_dt = created_at
-        else:
-            created_dt = datetime.now(UTC)
-        if created_dt.tzinfo is None:
-            created_dt = created_dt.replace(tzinfo=UTC)
-        out.append(
-            RawSocialPost(
-                id=str(item.get("id") or f"{source}:{ticker}:{idx}"),
-                ticker=ticker,
-                source=str(item.get("source") or source),
-                text=str(text),
-                engagement=item.get("engagement") or {},
-                created_at=created_dt,
-            )
-        )
-    return out

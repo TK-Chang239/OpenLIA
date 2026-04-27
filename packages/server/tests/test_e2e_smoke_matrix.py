@@ -110,14 +110,14 @@ def test_journey_personal_first_run_setup(db_session) -> None:
     assert user.display_name == "TK"
 
 
-def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatch) -> None:
-    """NEW-10-13: full Step 1-5 sweep on a fresh DB."""
-    from openlia_server.services import wizard_providers
+def test_journey_personal_full_setup_models(db_session) -> None:
+    """NEW-10-13: full Step 1-5 sweep on a fresh DB.
 
-    async def _ok(_row):
-        return True, None
-
-    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
+    The legacy /setup/providers endpoints were removed during the connector
+    cutover; provider configuration now lives under /api/connectors and is
+    covered by tests/test_routes/test_connectors_routes.py. This journey
+    therefore covers mode + identity + models + finish.
+    """
     client = _personal_wizard_client(db_session)
 
     assert client.get("/setup/status").status_code == 200
@@ -151,36 +151,6 @@ def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatc
         ],
     }
     assert client.post("/setup/models", json=models).status_code == 200
-
-    fin = client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    assert fin.status_code == 200
-    news = client.post(
-        "/setup/providers",
-        json={
-            "category": "news",
-            "entry": {
-                "mode": "builtin",
-                "provider": "newsapi_org",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    assert news.status_code == 200
-
-    # Confirm advances providers step explicitly.
-    assert client.post("/setup/providers/confirm").status_code == 200
 
     # Finalize.
     finish = client.post("/setup/finish")

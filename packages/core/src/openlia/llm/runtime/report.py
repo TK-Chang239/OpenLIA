@@ -25,6 +25,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from openlia.connectors.dispatch import Dispatcher
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
@@ -42,13 +43,25 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolDispatcher
+from openlia.llm.runtime.runtime_dispatch import (
+    ToolCallRequest,
+    ToolCallResult,
+    dispatch_many,
+    tools_for_run,
+)
 from openlia.llm.types import (
     LLMRequest,
     Message,
     ResolvedModel,
     ResponseFormat,
 )
+
+# Outer runaway guard for the report tool loop. Matches the legacy
+# `MAX_TOOL_TURNS` constant from `openlia.llm.runtime.tools` so the cap is
+# unchanged post-cutover. The connector dispatcher has no built-in
+# expansion budget; the loop terminates when the model returns no more
+# tool_use blocks or when this cap is reached.
+MAX_TOOL_TURNS = 32
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
@@ -104,7 +117,7 @@ class ReportRunner:
         self,
         *,
         prompts: PromptLoader,
-        tools: ToolDispatcher,
+        dispatcher: Dispatcher,
         resolve: ResolveFn,
         registry: ModelRegistry,
         provider_factory: ProviderFactory,
@@ -112,7 +125,7 @@ class ReportRunner:
         report_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._prompts = prompts
-        self._tools = tools
+        self._dispatcher = dispatcher
         self._resolve = resolve
         self._registry = registry
         self._provider_factory = provider_factory
@@ -173,11 +186,16 @@ class ReportRunner:
         )
 
         conversation = [Message(role="user", content=user_msg)]
-        tools = await self._tools.build(department_id, has_web_search=True)
+        tools = tools_for_run(self._dispatcher, department_id, has_web_search=True)
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
-        for _ in range(MAX_TOOL_TURNS) if tools else range(0):
+        # Tool-expansion loop. `max_expansions` caps the number of
+        # follow-up data-fetch rounds driven by the model. `None` means
+        # "use the runaway guard only" (MAX_TOOL_TURNS). The loop also
+        # terminates whenever the model returns no tool_use blocks.
+        loop_cap = MAX_TOOL_TURNS if max_expansions is None else min(MAX_TOOL_TURNS, max_expansions)
+        for _ in range(loop_cap) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
             try:
@@ -214,13 +232,17 @@ class ReportRunner:
                     tool_name=call.name,
                     args_preview=args_preview,
                 )
+            requests = [
+                ToolCallRequest(
+                    prefixed_name=call.name,
+                    arguments=call.arguments,
+                    call_id=call.id,
+                )
+                for call in response.tool_calls
+            ]
             try:
-                results = await self._await(
-                    self._tools.dispatch_many(
-                        department_id=department_id,
-                        calls=response.tool_calls,
-                        max_expansions=max_expansions,
-                    ),
+                results: list[ToolCallResult] = await self._await(
+                    dispatch_many(self._dispatcher, requests),
                     cancel_token=cancel_token,
                 )
             except asyncio.CancelledError:
@@ -235,7 +257,7 @@ class ReportRunner:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
-            tools = await self._tools.build(department_id, has_web_search=True)
+            tools = tools_for_run(self._dispatcher, department_id, has_web_search=True)
 
         yield ReportPhase(report_id=report_id, phase="writing")
         if cancel_token is not None and cancel_token.is_cancelled:

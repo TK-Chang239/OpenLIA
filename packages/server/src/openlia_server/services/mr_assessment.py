@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Protocol
+from typing import Any
 
 from openlia.llm.runtime.messages import BatchItem, BatchResult, ReportRequest
 from openlia.macro_research.dashboards import DASHBOARDS
@@ -12,10 +12,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from openlia_server.scheduler.payloads import MRAssessmentPayload
-
-
-class _DataProvider(Protocol):
-    def fetch(self, *, requirement: str, **kwargs: Any) -> Any: ...
 
 
 class T4Output(BaseModel):
@@ -26,10 +22,14 @@ class T4Output(BaseModel):
 
 
 class MRAssessmentBuilderImpl:
-    """Builds the batch payload that MRAssessmentExecutor feeds to BatchRunner."""
+    """Builds the batch payload that MRAssessmentExecutor feeds to BatchRunner.
 
-    def __init__(self, *, data_provider: _DataProvider | None = None) -> None:
-        self._data = data_provider
+    NOTE: MR runtime data wiring is a follow-up after the connector cutover;
+    until then, T4 batch items are emitted with empty `inputs` context.
+    """
+
+    def __init__(self) -> None:
+        pass
 
     def build(self, *, session: Session, user_id: str) -> MRAssessmentPayload:
         items: list[BatchItem] = []
@@ -38,9 +38,6 @@ class MRAssessmentBuilderImpl:
             if dashboard.T4_PROMPT_KEY is None:
                 continue
             context_data: dict[str, Any] = {}
-            if self._data is not None:
-                for req in dashboard.T1_REQUIREMENTS:
-                    context_data[req] = self._data.fetch(requirement=req)
             items.append(
                 BatchItem(
                     id=slug,

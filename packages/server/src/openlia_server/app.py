@@ -74,10 +74,7 @@ from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.portfolio import build_portfolio_router
 from openlia_server.routes.reports import build_reports_router
-from openlia_server.routes.settings import (
-    build_data_providers_router,
-    build_llm_providers_admin_router,
-)
+from openlia_server.routes.settings import build_llm_providers_admin_router
 from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
@@ -318,8 +315,7 @@ def _make_lifespan(
             from openlia_server.services.mr_schedules import MRScheduleService
             from openlia_server.services.reports import ReportStoreImpl
 
-            mr_data_provider = getattr(app.state, "mr_data_provider", None)
-            mr_builder = MRAssessmentBuilderImpl(data_provider=mr_data_provider)
+            mr_builder = MRAssessmentBuilderImpl()
             mr_cache_store_lifespan = MRCacheStoreImpl()
             report_store_impl = ReportStoreImpl()
 
@@ -422,7 +418,6 @@ def create_app(
         app.include_router(build_auth_router(db_session_factory=factory))
         app.include_router(build_admin_router(db_session_factory=factory))
 
-    app.include_router(build_data_providers_router(db_session_factory=factory))
     app.include_router(build_connectors_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
@@ -466,32 +461,12 @@ def create_app(
 
     mr_dashboard_svc = MRDashboardService(session_factory=factory)
     mr_cache_store = MRCacheStoreImpl()
-    mr_data_provider = getattr(app.state, "mr_data_provider", None) or _NoopPtDispatcher()
 
-    class _MRDataFetchAdapter:
-        """Wrap a PT-style dispatcher to expose the simpler fetch(requirement=...)
-        signature the MR assembler expects.
-
-        NEW-19-10: only the signature-mismatch fallback is swallowed; real
-        fetch failures escape so a misconfigured provider surfaces in the
-        route response instead of silently masking dashboards as zeroed.
-        Production wiring should install a registry-backed adapter onto
-        `app.state.mr_data_provider` before the first request; the noop
-        dispatcher remains as a default for tests and dev with no provider.
-        """
-
-        def __init__(self, inner: Any) -> None:
-            self._inner = inner
-
-        def fetch(self, *, requirement: str, **kwargs: Any) -> Any:
-            try:
-                return self._inner.fetch(requirement=requirement, panel_id="mr", params={})
-            except TypeError:
-                # Inner already matches MR signature — call it directly.
-                return self._inner.fetch(requirement=requirement)
-
+    # MR runtime data wiring through the connector dispatcher is a follow-up
+    # to the connector cutover; the runner currently produces stubbed T1/T2
+    # outputs with None inputs. The previous `app.state.mr_data_provider`
+    # plumbing was dead code in production (never set on production paths).
     mr_runner = MRRunner(
-        data_provider=_MRDataFetchAdapter(mr_data_provider),
         cache_store=mr_cache_store,
         dashboard_service=mr_dashboard_svc,
         session_factory=factory,
@@ -522,22 +497,21 @@ def create_app(
         )
     )
 
-    # Retail Sentiment — runner singleton (per-process). Data provider optional;
-    # when absent the runner produces empty-posts snapshots (useful for tests).
-    # Classifier resolves the configured LLM model per call and falls back to
-    # neutral when none is configured, so the runner is safe to install in
-    # environments where no provider is set up yet.
+    # Retail Sentiment — runner singleton (per-process). Classifier resolves
+    # the configured LLM model per call and falls back to neutral when none
+    # is configured. RS runtime data wiring through the connector dispatcher
+    # is a follow-up to the connector cutover; the runner currently produces
+    # empty-posts snapshots. The previous app.state provider plumbing was
+    # dead code in production (never set on production paths).
     from openlia_server.services.rs_runner import RsRunner as _RsRunner
     from openlia_server.services.rs_sync_classifier import RefreshingSyncLlmClassifier
 
-    rs_data_provider = getattr(app.state, "rs_data_provider", None)
     rs_classifier = getattr(app.state, "rs_classifier", None) or RefreshingSyncLlmClassifier(
         db_session_factory=factory,
     )
     app.state.rs_classifier = rs_classifier
     app.state.rs_runner = _RsRunner(
         session_factory=factory,
-        data_provider=rs_data_provider,
         classifier=rs_classifier,
     )
     app.include_router(build_retail_sentiment_router(db_session_factory=factory, mode=mode))

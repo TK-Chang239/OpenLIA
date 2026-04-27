@@ -32,6 +32,7 @@ from openlia.connectors.validate import (
 )
 from sqlalchemy.orm import Session
 
+from openlia_server.db.crypto import encrypt_for_row
 from openlia_server.db.models.connectors import Connector, ToolAllowlist
 
 
@@ -54,7 +55,7 @@ async def create_connector(
     source: ConnectorSource,
     category: Category,
     launch: MCPLaunchSpec,
-    credentials_ref: str | None,
+    api_key: str | None,
 ) -> Connector:
     cid = str(uuid.uuid4())
     row = Connector(
@@ -63,11 +64,12 @@ async def create_connector(
         source=source.value,
         category=category.value,
         launch=launch.to_json(),
-        credentials_ref=credentials_ref,
         status=ConnectorStatus.PENDING.value,
     )
     session.add(row)
     session.flush()
+    if api_key is not None:
+        row.api_key_encrypted = encrypt_for_row(row.id, api_key)
 
     resolved_spec, canary = _resolve_launch_for_validation(launch)
     result = await validate_connector(

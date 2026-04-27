@@ -12,10 +12,6 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 
-class _DataProvider(Protocol):
-    def fetch(self, *, requirement: str, **kwargs: Any) -> Any: ...
-
-
 class _CacheStore(Protocol):
     def read_latest(
         self, *, session: Session, user_id: str, dashboard: str, assessment_type: str
@@ -26,16 +22,14 @@ class MRRunner:
     def __init__(
         self,
         *,
-        data_provider: _DataProvider,
         cache_store: _CacheStore,
         dashboard_service: Any,
         session_factory: Callable[[], Session],
     ) -> None:
-        self._data = data_provider
         self._cache = cache_store
         self._dashboard = dashboard_service
         self._factory = session_factory
-        self._asm = DashboardAssembler(data_provider=data_provider)
+        self._asm = DashboardAssembler()
 
     def run(
         self,

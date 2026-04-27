@@ -18,12 +18,10 @@ EXPECTED_TABLES = {
     "signup_policy",
     "password_reset_requests",
     "auth_events",
-    # Config (6)
+    # Config (4)
     "llm_providers",
     "llm_models",
     "user_llm_preferences",
-    "data_providers",
-    "data_provider_requirement_mapping",
     "web_search_providers",
     # Content (8)
     "chat_sessions",

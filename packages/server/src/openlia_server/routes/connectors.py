@@ -28,7 +28,7 @@ class ConnectorCreate(BaseModel):
     source: str = Field(pattern="^(built_in|remote_mcp|cli_mcp)$")
     category: str = Field(pattern="^(financial|news|social|web_search)$")
     launch: LaunchIn
-    credentials_ref: str | None = None
+    api_key: str | None = None
 
 
 class ConnectorOut(BaseModel):
@@ -81,7 +81,7 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
             source=ConnectorSource(body.source),
             category=Category(body.category),
             launch=spec,
-            credentials_ref=body.credentials_ref,
+            api_key=body.api_key,
         )
         return _to_out(row)
 
