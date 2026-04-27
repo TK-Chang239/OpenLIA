@@ -21,8 +21,6 @@ from openlia.retail_sentiment.schemas import (
 from openlia_server.db.models.dashboard import RsClassificationLog
 from openlia_server.services.rs_runner import RsRunner
 
-from ._rs_fakes import FakeRsDataProvider
-
 
 class _AuditingClassifier:
     def __init__(self, *, audits: list[ClassificationAudit]) -> None:
@@ -46,11 +44,8 @@ def rs_runner_with_classifier(company_client, auth_user):
     from openlia_server.db import session as session_mod
 
     def _build(*, classifier) -> None:
-        provider = FakeRsDataProvider.with_default_posts("AAPL")
-        company_client.app.state.rs_data_provider = provider
         company_client.app.state.rs_runner = RsRunner(
             session_factory=session_mod.SessionLocal,
-            data_provider=provider,
             classifier=classifier,
         )
 
@@ -60,11 +55,8 @@ def rs_runner_with_classifier(company_client, auth_user):
 def test_run_default_classifier_writes_no_audit_rows(company_client, auth_user, db_session) -> None:
     from openlia_server.db import session as session_mod
 
-    provider = FakeRsDataProvider.with_default_posts("AAPL")
-    company_client.app.state.rs_data_provider = provider
     company_client.app.state.rs_runner = RsRunner(
         session_factory=session_mod.SessionLocal,
-        data_provider=provider,
     )
 
     r = company_client.post("/departments/retail_sentiment/run", json={"tickers": ["AAPL"]})
