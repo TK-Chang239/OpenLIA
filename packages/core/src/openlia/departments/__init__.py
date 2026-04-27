@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from openlia.connectors.scope import DepartmentRequirements
 from openlia.departments.base import Department
 from openlia.departments.earnings_update import EarningsUpdateDepartment
 from openlia.departments.equity_research import (
@@ -7,6 +10,7 @@ from openlia.departments.equity_research import (
 from openlia.departments.macro_research import MacroResearchDepartment
 from openlia.departments.morning_briefing import MorningBriefingDepartment
 from openlia.departments.panic_thermometer import PanicThermometerDepartment
+from openlia.departments.requirements_loader import load_department_requirements
 from openlia.departments.retail_sentiment import RetailSentimentDepartment
 from openlia.departments.secretary import SecretaryDepartment
 
@@ -67,6 +71,34 @@ def get_department_data_requirements() -> dict[str, list[str]]:
     return out
 
 
+_DEPT_REQUIREMENTS_DIR = Path(__file__).parent
+
+_DEPT_TO_REQUIREMENTS_FILE: dict[str, str] = {
+    "secretary": "secretary.requirements.yaml",
+    "equity_research": "equity_research.requirements.yaml",
+    "earnings_update": "earnings_update.requirements.yaml",
+    "morning_briefing": "morning_briefing.requirements.yaml",
+    "retail_sentiment": "retail_sentiment.requirements.yaml",
+    "macro_research": "macro_research.requirements.yaml",
+    "panic_thermometer": "panic_thermometer.requirements.yaml",
+}
+
+
+def get_all_requirements() -> dict[str, DepartmentRequirements]:
+    """Load every existing department requirements YAML.
+
+    YAML files that don't exist yet (during the connector-redesign rollout)
+    are silently skipped. Tasks D2-D8 fill them in.
+    """
+
+    out: dict[str, DepartmentRequirements] = {}
+    for dep_id, fname in _DEPT_TO_REQUIREMENTS_FILE.items():
+        path = _DEPT_REQUIREMENTS_DIR / fname
+        if path.exists():
+            out[dep_id] = load_department_requirements(dep_id, path)
+    return out
+
+
 __all__ = [
     "Department",
     "EarningsUpdateDepartment",
@@ -77,6 +109,7 @@ __all__ = [
     "PanicThermometerDepartment",
     "RetailSentimentDepartment",
     "SecretaryDepartment",
+    "get_all_requirements",
     "get_department",
     "get_department_data_requirements",
     "get_enabled_default_tiers",

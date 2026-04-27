@@ -1,0 +1,21 @@
+financial:
+  required: true
+  description: |
+    Need company fundamentals via stock_quote, company_profile, and
+    financial_statements (income statement, balance sheet, cash flow).
+    Also consumes historical_prices, analyst_ratings, earnings_data, and
+    insider_transactions when available to build a stock_initiation,
+    stock_update, or sector_research report.
+news:
+  required: true
+  description: |
+    Company-tagged news (company_news) with publication date and source.
+    Recent press releases, regulatory filings, and analyst commentary on
+    names in the target ticker universe are required to contextualize
+    the fundamental picture.
+social:
+  required: false
+  description: |
+    Reddit and X mentions for ticker sentiment, useful when available
+    but not required to ship a stock_initiation, stock_update, or
+    sector_research report.

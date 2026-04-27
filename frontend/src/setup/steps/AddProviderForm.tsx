@@ -1,90 +1,54 @@
-import { useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ChevronLeft, Plus, Trash2 } from "lucide-react";
 import { MCPInfoCard } from "./MCPInfoCard";
-import { addProvider } from "../../api/setup";
-import type { ProviderEntry } from "../../api/setup";
+import { createConnector } from "../../api/connectors";
+import type { Category, CreateConnectorInput, LaunchSpec } from "../../api/connectors";
+import { builtinsForCategory } from "../../api/builtins";
 
-type Mode = "builtin" | "mcp" | "config";
-type Category = "financial" | "news" | "social" | "web_search";
+type Method = "built_in" | "remote_mcp" | "cli_mcp";
 
-const PLACEHOLDER = "";
-
-const BUILTIN_CATALOG: Record<Category, { value: string; label: string }[]> = {
-  financial: [
-    { value: "eodhd", label: "EODHD" },
-    { value: "fmp", label: "Financial Modeling Prep" },
-    { value: "finnhub", label: "Finnhub" },
-  ],
-  news: [
-    { value: "newsapi_ai", label: "News API AI" },
-    { value: "mediastack", label: "Mediastack" },
-  ],
-  social: [
-    { value: "reddit", label: "Reddit" },
-    { value: "x", label: "X / Twitter" },
-  ],
-  web_search: [
-    { value: "brave", label: "Brave Search" },
-    { value: "tavily", label: "Tavily" },
-    { value: "serper", label: "Serper" },
-    { value: "firecrawl", label: "Firecrawl" },
-  ],
-};
-
-interface Draft {
-  mode: Mode;
-  builtinProvider: string;
-  apiKey: string;
-  mcpName: string;
-  mcpUrl: string;
-  mcpAuth: string;
-  oauthClientId: string;
-  oauthClientSecret: string;
-  configJson: string;
+interface EnvRow {
+  key: string;
+  value: string;
 }
 
-const CONFIG_PLACEHOLDER = `{
-  "mode": "builtin",
-  "provider": "newsapi_ai",
-  "api_key": "your_api_key_here"
-}`;
+interface Draft {
+  method: Method;
+  builtinTemplate: string;
+  apiKey: string;
+  remoteUrl: string;
+  remoteAuth: string;
+  remoteProviderId: string;
+  cliProviderId: string;
+  cliArgv: string;
+  cliEnv: EnvRow[];
+}
 
 const EMPTY_DRAFT: Draft = {
-  mode: "builtin",
-  builtinProvider: PLACEHOLDER,
+  method: "built_in",
+  builtinTemplate: "",
   apiKey: "",
-  mcpName: "",
-  mcpUrl: "",
-  mcpAuth: "",
-  oauthClientId: "",
-  oauthClientSecret: "",
-  configJson: "",
+  remoteUrl: "",
+  remoteAuth: "",
+  remoteProviderId: "",
+  cliProviderId: "",
+  cliArgv: "",
+  cliEnv: [],
 };
 
-function parseConfigJson(raw: string): { entry: ProviderEntry } | { error: string } {
-  let parsed: unknown;
+const METHOD_LABEL: Record<Method, string> = {
+  built_in: "Built-in",
+  remote_mcp: "Remote MCP",
+  cli_mcp: "CLI install",
+};
+
+function deriveProviderIdFromUrl(url: string): string {
   try {
-    parsed = JSON.parse(raw);
-  } catch (err) {
-    return { error: err instanceof Error ? `Invalid JSON: ${err.message}` : "Invalid JSON." };
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return "";
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { error: "Config must be a JSON object." };
-  }
-  const obj = parsed as Record<string, unknown>;
-  const mode = obj.mode;
-  if (mode !== "builtin" && mode !== "mcp") {
-    return { error: 'Field "mode" must be "builtin" or "mcp".' };
-  }
-  const entry: ProviderEntry = { mode };
-  if (typeof obj.provider === "string") entry.provider = obj.provider;
-  if (typeof obj.api_key === "string") entry.api_key = obj.api_key;
-  if (typeof obj.mcp_url === "string") entry.mcp_url = obj.mcp_url;
-  if (typeof obj.mcp_auth_header === "string") entry.mcp_auth_header = obj.mcp_auth_header;
-  if (typeof obj.oauth_client_id === "string") entry.oauth_client_id = obj.oauth_client_id;
-  if (typeof obj.oauth_client_secret === "string")
-    entry.oauth_client_secret = obj.oauth_client_secret;
-  return { entry };
 }
 
 export function AddProviderForm({
@@ -106,59 +70,107 @@ export function AddProviderForm({
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
 
+  const builtins = useMemo(() => builtinsForCategory(category), [category]);
+
+  const updateEnvRow = (idx: number, patch: Partial<EnvRow>) =>
+    setDraft((d) => ({
+      ...d,
+      cliEnv: d.cliEnv.map((row, i) => (i === idx ? { ...row, ...patch } : row)),
+    }));
+
+  const addEnvRow = () =>
+    setDraft((d) => ({ ...d, cliEnv: [...d.cliEnv, { key: "", value: "" }] }));
+
+  const removeEnvRow = (idx: number) =>
+    setDraft((d) => ({ ...d, cliEnv: d.cliEnv.filter((_, i) => i !== idx) }));
+
+  const buildPayload = (): { input: CreateConnectorInput } | { error: string } => {
+    if (draft.method === "built_in") {
+      if (!draft.builtinTemplate) return { error: "Please select a built-in provider." };
+      const launch: LaunchSpec = {
+        kind: "built_in",
+        template_id: draft.builtinTemplate,
+      };
+      const input: CreateConnectorInput = {
+        provider_id: draft.builtinTemplate,
+        source: "built_in",
+        category,
+        launch,
+      };
+      // Personal-mode hosted demo: send the raw API key as credentials_ref.
+      // The server stores it via the existing wizard secret-store path.
+      if (draft.apiKey.trim()) input.credentials_ref = draft.apiKey.trim();
+      return { input };
+    }
+    if (draft.method === "remote_mcp") {
+      const url = draft.remoteUrl.trim();
+      if (!url) return { error: "Remote MCP server URL is required." };
+      const headers: Record<string, string> = {};
+      if (draft.remoteAuth.trim()) headers["Authorization"] = draft.remoteAuth.trim();
+      const launch: LaunchSpec = {
+        kind: "remote_mcp",
+        url,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
+      };
+      const providerId = draft.remoteProviderId.trim() || deriveProviderIdFromUrl(url) || url;
+      return {
+        input: {
+          provider_id: providerId,
+          source: "remote_mcp",
+          category,
+          launch,
+        },
+      };
+    }
+    // cli_mcp
+    const providerId = draft.cliProviderId.trim();
+    if (!providerId) return { error: "Provider ID is required for a CLI install." };
+    const argv = draft.cliArgv.trim().split(/\s+/).filter(Boolean);
+    if (argv.length === 0) return { error: "argv is required for a CLI install." };
+    const env: Record<string, string> = {};
+    for (const row of draft.cliEnv) {
+      const k = row.key.trim();
+      if (!k) continue;
+      env[k] = row.value;
+    }
+    const launch: LaunchSpec = {
+      kind: "cli_mcp",
+      argv,
+      ...(Object.keys(env).length > 0 ? { env } : {}),
+    };
+    return {
+      input: {
+        provider_id: providerId,
+        source: "cli_mcp",
+        category,
+        launch,
+      },
+    };
+  };
+
   const onSave = async () => {
     setLoading(true);
     setError(null);
 
-    let entry: ProviderEntry;
-    if (draft.mode === "builtin") {
-      if (!draft.builtinProvider) {
-        setError("Please select a provider.");
-        setLoading(false);
-        return;
-      }
-      entry = {
-        mode: "builtin",
-        provider: draft.builtinProvider,
-        api_key: draft.apiKey,
-      };
-    } else if (draft.mode === "mcp") {
-      if (!draft.mcpUrl.trim()) {
-        setError("Remote MCP server URL is required for a custom connector.");
-        setLoading(false);
-        return;
-      }
-      entry = {
-        mode: "mcp",
-        provider: draft.mcpName.trim() || undefined,
-        mcp_url: draft.mcpUrl.trim(),
-        mcp_auth_header: draft.mcpAuth || undefined,
-        oauth_client_id: draft.oauthClientId.trim() || undefined,
-        oauth_client_secret: draft.oauthClientSecret || undefined,
-      };
-    } else {
-      // Standard config: user pastes a JSON object matching ProviderEntry.
-      const parsed = parseConfigJson(draft.configJson);
-      if ("error" in parsed) {
-        setError(parsed.error);
-        setLoading(false);
-        return;
-      }
-      entry = parsed.entry;
+    const built = buildPayload();
+    if ("error" in built) {
+      setError(built.error);
+      setLoading(false);
+      return;
     }
 
     try {
-      const result = await addProvider({ category, entry });
-      if (!result.ok) {
-        const message =
-          result.error || "Provider test failed. Check your inputs and try again.";
+      const result = await createConnector(built.input);
+      if (result.status === "failed") {
+        const message = result.last_error || "Provider test failed. Check your inputs and try again.";
         setError(message);
         onSaved(message);
         return;
       }
       onSaved(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add provider.");
+      const message = err instanceof Error ? err.message : "Failed to add provider.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -177,38 +189,41 @@ export function AddProviderForm({
       <h3 className="text-lg font-semibold text-[--color-text-primary] mb-4">
         Add {category.replace("_", " ")} provider
       </h3>
-      <div className="flex p-1 bg-[--color-surface-hover] rounded-[--radius-md] w-fit mb-5">
-        {(["builtin", "mcp", "config"] as Mode[]).map((m) => (
-          <button
+      <div role="radiogroup" aria-label="Connector method" className="flex flex-col gap-2 mb-5">
+        {(Object.keys(METHOD_LABEL) as Method[]).map((m) => (
+          <label
             key={m}
-            type="button"
-            onClick={() => update("mode", m)}
-            className={`px-3 py-1.5 rounded-[--radius-sm] text-sm capitalize ${
-              draft.mode === m ? "bg-[--color-bg-elevated] shadow-sm font-medium" : ""
+            className={`flex items-center gap-2 px-3 py-2 rounded-[--radius-md] border cursor-pointer ${
+              draft.method === m
+                ? "border-[--color-accent-primary] bg-[--color-surface-hover]"
+                : "border-[--color-border-subtle]"
             }`}
           >
-            {m === "mcp"
-              ? "Custom Connector"
-              : m === "config"
-                ? "Standard Config"
-                : "Built-in"}
-          </button>
+            <input
+              type="radio"
+              name="connector-method"
+              value={m}
+              checked={draft.method === m}
+              onChange={() => update("method", m)}
+            />
+            <span className="text-sm text-[--color-text-primary]">{METHOD_LABEL[m]}</span>
+          </label>
         ))}
       </div>
 
-      {draft.mode === "builtin" ? (
+      {draft.method === "built_in" ? (
         <>
           <label className="flex flex-col gap-1.5 mb-5">
             <span className="text-sm font-medium text-[--color-text-primary]">Provider</span>
             <select
-              value={draft.builtinProvider}
-              onChange={(e) => update("builtinProvider", e.target.value)}
+              value={draft.builtinTemplate}
+              onChange={(e) => update("builtinTemplate", e.target.value)}
               className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
             >
-              <option value={PLACEHOLDER}>Please select a provider</option>
-              {BUILTIN_CATALOG[category].map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+              <option value="">Please select a provider</option>
+              {builtins.map((opt) => (
+                <option key={opt.template_id} value={opt.template_id}>
+                  {opt.display_name}
                 </option>
               ))}
             </select>
@@ -222,24 +237,26 @@ export function AddProviderForm({
               className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
             />
           </label>
-          <p className="text-xs text-[--color-text-secondary] mb-5">
-            Need a provider that isn't listed? Switch to <strong>Custom Connector</strong> and
-            paste the provider's MCP server URL.
-          </p>
+          {builtins.length === 0 ? (
+            <p className="text-xs text-[--color-text-secondary] mb-5">
+              No built-in templates for this category. Try <strong>Remote MCP</strong> or{" "}
+              <strong>CLI install</strong>.
+            </p>
+          ) : null}
         </>
-      ) : draft.mode === "mcp" ? (
+      ) : draft.method === "remote_mcp" ? (
         <>
           <MCPInfoCard />
           <label className="flex flex-col gap-1.5 mb-5">
             <span className="text-sm font-medium text-[--color-text-primary]">
-              Name
+              Provider ID
               <span className="text-[--color-text-secondary] font-normal ml-2">
                 (label, e.g. polygon)
               </span>
             </span>
             <input
-              value={draft.mcpName}
-              onChange={(e) => update("mcpName", e.target.value)}
+              value={draft.remoteProviderId}
+              onChange={(e) => update("remoteProviderId", e.target.value)}
               placeholder="polygon"
               className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
             />
@@ -249,75 +266,97 @@ export function AddProviderForm({
               Remote MCP server URL <span className="text-[--color-feedback-error]">*</span>
             </span>
             <input
-              value={draft.mcpUrl}
-              onChange={(e) => update("mcpUrl", e.target.value)}
+              value={draft.remoteUrl}
+              onChange={(e) => update("remoteUrl", e.target.value)}
               placeholder="https://example.com/mcp"
               required
               className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
             />
           </label>
-          <details className="mb-5">
-            <summary className="text-sm text-[--color-text-secondary] cursor-pointer">
-              Advanced
-            </summary>
-            <label className="flex flex-col gap-1.5 mt-3">
-              <span className="text-sm font-medium text-[--color-text-primary]">
-                OAuth Client ID
-                <span className="text-[--color-text-secondary] font-normal ml-2">(optional)</span>
-              </span>
-              <input
-                value={draft.oauthClientId}
-                onChange={(e) => update("oauthClientId", e.target.value)}
-                placeholder="client_id"
-                className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 mt-3">
-              <span className="text-sm font-medium text-[--color-text-primary]">
-                OAuth Client Secret
-                <span className="text-[--color-text-secondary] font-normal ml-2">(optional)</span>
-              </span>
-              <input
-                type="password"
-                value={draft.oauthClientSecret}
-                onChange={(e) => update("oauthClientSecret", e.target.value)}
-                placeholder="client_secret"
-                className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 mt-3">
-              <span className="text-sm font-medium text-[--color-text-primary]">
-                Auth header
-                <span className="text-[--color-text-secondary] font-normal ml-2">
-                  (optional, used if no OAuth credentials)
-                </span>
-              </span>
-              <input
-                value={draft.mcpAuth}
-                onChange={(e) => update("mcpAuth", e.target.value)}
-                placeholder="Bearer sk_…"
-                className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
-              />
-            </label>
-          </details>
+          <label className="flex flex-col gap-1.5 mb-5">
+            <span className="text-sm font-medium text-[--color-text-primary]">
+              Bearer token / Authorization header
+              <span className="text-[--color-text-secondary] font-normal ml-2">(optional)</span>
+            </span>
+            <input
+              value={draft.remoteAuth}
+              onChange={(e) => update("remoteAuth", e.target.value)}
+              placeholder="Bearer sk_…"
+              className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
+            />
+          </label>
         </>
       ) : (
         <>
-          <p className="text-xs text-[--color-text-secondary] mb-3">
-            Paste a JSON object matching the provider config schema. Useful when copying a
-            known-good config across machines or sharing one with your team.
-          </p>
           <label className="flex flex-col gap-1.5 mb-5">
-            <span className="text-sm font-medium text-[--color-text-primary]">Provider config</span>
-            <textarea
-              value={draft.configJson}
-              onChange={(e) => update("configJson", e.target.value)}
-              placeholder={CONFIG_PLACEHOLDER}
-              rows={10}
-              spellCheck={false}
-              className="px-3 py-2 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm font-mono"
+            <span className="text-sm font-medium text-[--color-text-primary]">
+              Provider ID <span className="text-[--color-feedback-error]">*</span>
+            </span>
+            <input
+              value={draft.cliProviderId}
+              onChange={(e) => update("cliProviderId", e.target.value)}
+              placeholder="my-mcp-server"
+              required
+              className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
             />
           </label>
+          <label className="flex flex-col gap-1.5 mb-5">
+            <span className="text-sm font-medium text-[--color-text-primary]">
+              argv <span className="text-[--color-feedback-error]">*</span>
+              <span className="text-[--color-text-secondary] font-normal ml-2">
+                (whitespace-separated)
+              </span>
+            </span>
+            <input
+              value={draft.cliArgv}
+              onChange={(e) => update("cliArgv", e.target.value)}
+              placeholder="npx -y my-mcp-server"
+              required
+              className="h-10 px-3 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm font-mono"
+            />
+          </label>
+          <div className="mb-5">
+            <span className="text-sm font-medium text-[--color-text-primary] block mb-2">
+              Environment variables
+              <span className="text-[--color-text-secondary] font-normal ml-2">(optional)</span>
+            </span>
+            <ul className="flex flex-col gap-2">
+              {draft.cliEnv.map((row, idx) => (
+                <li key={idx} className="flex items-center gap-2">
+                  <input
+                    aria-label={`env key ${idx}`}
+                    value={row.key}
+                    onChange={(e) => updateEnvRow(idx, { key: e.target.value })}
+                    placeholder="KEY"
+                    className="h-9 px-2 flex-1 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm font-mono"
+                  />
+                  <input
+                    aria-label={`env value ${idx}`}
+                    value={row.value}
+                    onChange={(e) => updateEnvRow(idx, { value: e.target.value })}
+                    placeholder="value"
+                    className="h-9 px-2 flex-1 rounded-[--radius-md] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm font-mono"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`remove env ${idx}`}
+                    onClick={() => removeEnvRow(idx)}
+                    className="text-[--color-text-secondary] hover:text-[--color-feedback-error]"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={addEnvRow}
+              className="inline-flex items-center gap-1 text-sm text-[--color-text-secondary] mt-2"
+            >
+              <Plus size={12} />
+              Add env var
+            </button>
+          </div>
         </>
       )}
 

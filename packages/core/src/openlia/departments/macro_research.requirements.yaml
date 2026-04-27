@@ -1,0 +1,15 @@
+financial:
+  required: true
+  description: |
+    Need macro_indicator series for CPI, GDP, unemployment, policy rates,
+    UST yield curves, and FX. Stock_quote provides cross-asset reference
+    levels (indices, commodities, rate proxies) that anchor the macro
+    dashboard panels covering oil, inflation, fed_language, wage_growth,
+    and related themes.
+news:
+  required: true
+  description: |
+    Macro, policy, and geopolitics coverage via company_news and broader
+    headline streams. Central bank communications, fiscal updates, and
+    diplomacy stories feed the dashboard's narrative panels alongside the
+    quantitative macro_indicator series.
