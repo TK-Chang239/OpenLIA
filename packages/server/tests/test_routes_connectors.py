@@ -49,7 +49,7 @@ def test_create_connector_validated(client, monkeypatch):
             "category": "financial",
             "provider_id": "eodhd",
             "launch": {"kind": "built_in", "template_id": "eodhd"},
-            "credentials_ref": "secret://eodhd/key",
+            "api_key": "real-secret",
         },
     )
     assert resp.status_code == 201, resp.text
@@ -151,3 +151,37 @@ def test_delete_cascades_allowlist(client, monkeypatch, db_session):
 def test_revalidate_404_for_unknown(client):
     resp = client.post("/api/connectors/no-such-id/validate")
     assert resp.status_code == 404
+
+
+def test_create_connector_encrypts_api_key(client, monkeypatch, db_session):
+    async def fake_validate(**kwargs):
+        return ValidationOk(tools=[])
+
+    monkeypatch.setattr(
+        "openlia_server.services.connectors_service.validate_connector",
+        fake_validate,
+    )
+
+    plaintext = "real-secret"
+    resp = client.post(
+        "/api/connectors",
+        json={
+            "source": "built_in",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "launch": {"kind": "built_in", "template_id": "eodhd"},
+            "api_key": plaintext,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    cid = resp.json()["id"]
+
+    from openlia_server.db.crypto import decrypt_for_row
+    from openlia_server.db.models.connectors import Connector
+
+    db_session.expire_all()
+    row = db_session.get(Connector, cid)
+    assert row is not None
+    assert row.api_key_encrypted is not None
+    assert row.api_key_encrypted != plaintext
+    assert decrypt_for_row(row.id, row.api_key_encrypted) == plaintext

@@ -32,7 +32,6 @@ class Connector(Base):
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     launch: Mapped[dict] = mapped_column(JSON, nullable=False)
-    credentials_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
     cached_tools: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(
