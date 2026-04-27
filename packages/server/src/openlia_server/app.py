@@ -74,10 +74,7 @@ from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.portfolio import build_portfolio_router
 from openlia_server.routes.reports import build_reports_router
-from openlia_server.routes.settings import (
-    build_data_providers_router,
-    build_llm_providers_admin_router,
-)
+from openlia_server.routes.settings import build_llm_providers_admin_router
 from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
@@ -421,7 +418,6 @@ def create_app(
         app.include_router(build_auth_router(db_session_factory=factory))
         app.include_router(build_admin_router(db_session_factory=factory))
 
-    app.include_router(build_data_providers_router(db_session_factory=factory))
     app.include_router(build_connectors_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
