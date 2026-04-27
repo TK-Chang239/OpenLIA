@@ -936,9 +936,7 @@ How does the user "install" a Python library for a connector? Three options: (a)
 
 (a) is the most user-friendly but means OpenLIA is mutating its own environment based on user input — operationally fragile. (b) is the simplest to ship but burdens the user. (c) is the cleanest isolation model but adds significant complexity (per-connector venvs, IPC for invocation).
 
-Day-1 default in this redesign: option (b) — the user pip-installs in their venv before configuring the connector. The wizard validates by attempting to import. Future evolution may add (a) or (c).
-
-Needs its own decision in a follow-up brainstorm.
+**Decided (2026-04-27):** option (b). OpenLIA runs locally on the user's own laptop with API keys stored locally; trust and sandboxing concerns that would push toward (a) or (c) do not apply. The user pip-installs the package in their OpenLIA venv before configuring the connector. The wizard validates by attempting to import. No follow-up brainstorm required.
 
 ### 13.3 Per-mode validation detail
 
@@ -950,7 +948,9 @@ The high-level validation contract per access mode is defined in §6.3. The impl
 
 ### 13.5 Day-1 catalog of built-ins
 
-Whether day-1 ships any built-in templates with both MCP and python_lib modes pre-wired (e.g., EODHD with both shipped), or whether users always start from an empty catalog and configure their own. This is a content question more than an architectural one.
+**Decided (2026-04-27):** the day-1 built-in template catalog ships **empty**. The redesign PR removes the existing stub registrations for EODHD, FMP, and NewsAPI.ai (which carried placeholder `shipped_allowlist` entries that this redesign makes obsolete). The registry infrastructure (`register`, `get_builtin`, `all_builtins`) stays so future built-ins can plug in. Users configure connectors directly via the wizard's three non-built-in paths: remote MCP URL, local CLI MCP launch, or Python library.
+
+Specific built-in templates (which providers to ship pre-wired, with which access modes) are content decisions to be made in a future PR or content session.
 
 ### 13.6 Multi-connector dynamic selection for runner needs
 
