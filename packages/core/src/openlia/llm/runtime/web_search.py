@@ -1,15 +1,13 @@
 """Web search resolution.
 
 The runtime sees web search through one abstraction: `WebSearchResolution`
-with `available`, `variant` ("native" | "configured"), and an optional
-`adapter`. When `native`, the tool is handed to the provider via
-`LLMRequest.tools` with a provider-specific name (the adapter layer
-recognizes `web_search` and swaps in the native tool). When `configured`,
-`ToolDispatcher.dispatch()` calls `adapter.search(query)`.
-
-The server layer builds the adapter factory from the `search` data-provider
-category (Brave / Tavily / Serper / You.com) and passes it in. The runtime
-never reads DB state directly.
+with `available` and `variant` ("native"). When `native`, the tool is
+handed to the provider via `LLMRequest.tools` with a provider-specific
+name (the adapter layer recognizes `web_search` and swaps in the native
+tool). The "configured" variant — where a separate adapter implemented
+`adapter.search(query)` — was retired in the connector cutover; configured
+search is now a normal `web_search`-category Connector dispatched through
+`Dispatcher` like every other tool.
 """
 
 from __future__ import annotations

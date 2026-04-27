@@ -3,9 +3,6 @@
 Covers `ToolCallResult` envelope shaping, `dispatch_with_envelope`'s
 success / error / non-dict payload / truncation paths, and `dispatch_many`'s
 order-preservation, mixed-outcome handling, and actual parallelism.
-
-Pin the truncation rule against the legacy `_normalize_payload` from
-`openlia.llm.runtime.tools` so consumer behavior is identical post-migration.
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ from typing import Any
 import pytest
 from openlia.connectors.dispatch import Dispatcher, PreparedConnector
 from openlia.connectors.types import ToolDefinition
-from openlia.llm.runtime.tools import _normalize_payload as _legacy_normalize
 from openlia_server.services.runtime_dispatch import (
     ToolCallRequest,
     ToolCallResult,
@@ -177,29 +173,33 @@ async def test_dispatch_with_envelope_summary_uses_subject_keys():
 
 
 # ---------------------------------------------------------------------------
-# Pin: helper output matches legacy ToolDispatcher behavior on identical input
+# Helper behavior pins (subject-key summary, _normalize_payload edge cases)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "raw",
+    "raw,expected",
     [
-        {"a": 1, "b": None, "c": [1, 2, 3]},
-        {"items": list(range(120))},
-        {"deep": {"x": None}},  # nested nulls preserved (legacy did not recurse)
-        ["plain", "list"],
-        "scalar",
-        7,
+        ({"a": 1, "b": None, "c": [1, 2, 3]}, {"a": 1, "c": [1, 2, 3]}),
+        ({"deep": {"x": None}}, {"deep": {"x": None}}),  # nested nulls preserved
+        (["plain", "list"], {"value": ["plain", "list"]}),
+        ("scalar", {"value": "scalar"}),
+        (7, {"value": 7}),
     ],
 )
-def test_normalize_payload_matches_legacy(raw: Any):
-    assert _normalize_payload(raw) == _legacy_normalize(raw)
+def test_normalize_payload_edge_cases(raw: Any, expected: dict[str, Any]):
+    assert _normalize_payload(raw) == expected
 
 
-def test_summary_for_matches_legacy_subject_format():
-    # The legacy ToolDispatcher formatted successful requirement summaries as
-    # `Fetched <name> for <subject>` when `symbol|ticker|query|name` was in the
-    # arguments. Pin both branches.
+def test_normalize_payload_truncates_long_lists():
+    out = _normalize_payload({"items": list(range(120))})
+    assert len(out["items"]) == 50
+    assert out["truncated"] is True
+
+
+def test_summary_for_subject_format():
+    # Successful requirement summaries: `Fetched <name> for <subject>` when
+    # `symbol|ticker|query|name` is present; otherwise `Fetched <name>`.
     assert _summary_for("prov__t", {"symbol": "AAPL"}) == "Fetched prov__t for AAPL"
     assert _summary_for("prov__t", {}) == "Fetched prov__t"
 
