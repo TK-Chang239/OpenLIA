@@ -50,7 +50,7 @@ def _fake_inner(monkeypatch):
             yield {"type": "chat.start", "label": self.label, "run": self.runs}
             yield {"type": "chat.done"}
 
-    def _fake_build(registry, *, dispatcher=None, web_search=None):
+    def _fake_build(registry, *, dispatcher=None):
         return _FakeRunner(label="fake")
 
     monkeypatch.setattr(svc, "_build_chat_runner_with_registry", _fake_build)
@@ -61,15 +61,6 @@ def _fake_inner(monkeypatch):
             self.db = db
 
     monkeypatch.setattr(svc, "SQLModelRegistry", _NoopRegistry)
-
-    # Skip the real DB-backed search-provider lookup in tests.
-    from openlia.llm.runtime.web_search import WebSearchResolution
-
-    monkeypatch.setattr(
-        svc,
-        "_resolve_configured_search",
-        lambda db: WebSearchResolution(available=False, variant=None, adapter=None),
-    )
 
     # Stub the dispatcher factory: the spy session has no `.query` method,
     # and these tests are about session lifecycle, not dispatcher hydration.
@@ -125,7 +116,7 @@ async def test_refreshing_chat_runner_closes_session_on_exception(monkeypatch) -
     monkeypatch.setattr(
         svc,
         "_build_chat_runner_with_registry",
-        lambda r, *, dispatcher=None, web_search=None: _BoomRunner(),
+        lambda r, *, dispatcher=None: _BoomRunner(),
     )
 
     factory = _SpyFactory()

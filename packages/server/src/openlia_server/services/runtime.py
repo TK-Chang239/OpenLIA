@@ -11,65 +11,23 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from openlia.connectors.dispatch import Dispatcher
-from openlia.data.adapters import ADAPTERS
-from openlia.data.types import ProviderCategory
 from openlia.llm.adapters import build_adapter
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.batch import BatchRunner
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
-from openlia.llm.runtime.web_search import WebSearchAdapter, WebSearchResolution
 from sqlalchemy.orm import Session as DBSession
 
-from openlia_server.services import data_providers as dp_svc
 from openlia_server.services.dispatcher_factory import build_dispatcher_for_session
 from openlia_server.services.llm_registry import SQLModelRegistry
-
-
-def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
-    """Pick the highest-priority enabled SEARCH provider and wrap it as a
-    WebSearchResolution. Returns an unavailable resolution if none configured.
-
-    Priority is read from `extra_config.default_priority` (lower wins, default 100),
-    matching the wizard convention. When no SEARCH provider is configured or the
-    chosen one fails to instantiate, returns an unavailable resolution so the
-    runtime omits the `web_search` tool.
-    """
-    rows = [
-        r
-        for r in dp_svc.list_providers_by_category(db, category=ProviderCategory.SEARCH)
-        if r.is_enabled
-    ]
-    if not rows:
-        return WebSearchResolution(available=False, variant=None, adapter=None)
-    rows.sort(key=lambda r: int((r.extra_config or {}).get("default_priority", 100)))
-    for row in rows:
-        adapter_cls = ADAPTERS.get(row.kind)
-        if adapter_cls is None:
-            continue
-        try:
-            entry = dp_svc.load_provider_entry(db, row.id)
-            adapter = adapter_cls(entry)
-        except Exception:
-            continue
-        if not isinstance(adapter, WebSearchAdapter):
-            continue
-        return WebSearchResolution(available=True, variant="configured", adapter=adapter)
-    return WebSearchResolution(available=False, variant=None, adapter=None)
 
 
 def _build_chat_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     dispatcher: Dispatcher,
-    web_search: WebSearchResolution | None = None,
 ) -> ChatRunner:
-    # `web_search` is retained for signature compatibility with existing
-    # call sites (and tests that monkey-patch this factory) but is no
-    # longer consumed: the new connector dispatcher handles search-tool
-    # gating via `Category.WEB_SEARCH` allowlist filtering.
-    del web_search
     prompts = PromptLoader()
 
     def _provider_factory(resolved):
@@ -138,12 +96,7 @@ def _build_report_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     dispatcher: Dispatcher,
-    web_search: WebSearchResolution | None = None,
 ) -> ReportRunner:
-    # `web_search` retained for signature compatibility with existing call
-    # sites; the new connector dispatcher handles search-tool gating via
-    # `Category.WEB_SEARCH` allowlist filtering.
-    del web_search
     prompts = PromptLoader()
 
     def _provider_factory(resolved):
