@@ -761,28 +761,24 @@ def wizard_reset(
         purged_summary = ""
         if purge:
             from openlia_server.db.models.config import (
-                DataProvider,
-                DataProviderRequirementMapping,
                 LLMModel,
                 LLMProvider,
                 UserLLMPreference,
             )
+            from openlia_server.db.models.connectors import Connector
 
-            mapping_count = db.query(DataProviderRequirementMapping).delete()
-            dp_count = db.query(DataProvider).delete()
+            connector_count = db.query(Connector).delete()
             user_pref_count = db.query(UserLLMPreference).delete()
             llm_model_count = db.query(LLMModel).delete()
             llm_provider_count = db.query(LLMProvider).delete()
             purged_summary = (
-                f" Purged {dp_count} data provider(s), {mapping_count} requirement "
-                f"mapping(s), {llm_model_count} LLM model(s), {llm_provider_count} "
-                f"LLM provider(s), and {user_pref_count} user LLM preference(s)."
+                f" Purged {connector_count} connector(s), {llm_model_count} LLM "
+                f"model(s), {llm_provider_count} LLM provider(s), and "
+                f"{user_pref_count} user LLM preference(s)."
             )
 
         db.commit()
-        typer.echo(
-            "Wizard state reset. The setup wizard will run on next visit." + purged_summary
-        )
+        typer.echo("Wizard state reset. The setup wizard will run on next visit." + purged_summary)
     finally:
         db.close()
 
@@ -802,10 +798,10 @@ from sqlalchemy.exc import OperationalError  # noqa: E402
 from openlia_server.db import crypto as crypto_module  # noqa: E402
 from openlia_server.db.bootstrap import openlia_home  # noqa: E402
 from openlia_server.db.models.config import (  # noqa: E402
-    DataProvider,
     LLMProvider,
     WebSearchProvider,
 )
+from openlia_server.db.models.connectors import Connector  # noqa: E402
 
 secrets_app = typer.Typer(
     name="secrets",
@@ -893,7 +889,7 @@ def secrets_rotate_key(
         total = 0
         for model, pk_attr in (
             (LLMProvider, "id"),
-            (DataProvider, "id"),
+            (Connector, "id"),
             (WebSearchProvider, "id"),
         ):
             rows = (
