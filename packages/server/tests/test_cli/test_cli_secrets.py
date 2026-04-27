@@ -6,10 +6,10 @@ import pytest
 from openlia_server.cli import app
 from openlia_server.db import crypto
 from openlia_server.db.models.config import (
-    DataProvider,
     LLMProvider,
     WebSearchProvider,
 )
+from openlia_server.db.models.connectors import Connector
 from sqlalchemy import select
 
 
@@ -23,10 +23,12 @@ def seeded_encrypted_rows(cli_session, cli_secret_key):
         label="OpenAI",
         api_key_encrypted=crypto.encrypt_with_key(old_key, "llm_1", "sk-llm-secret"),
     )
-    data = DataProvider(
+    data = Connector(
         id="data_1",
-        kind="eodhd",
-        label="EODHD",
+        provider_id="eodhd",
+        source="built_in",
+        category="financial",
+        launch={"transport": "api_key"},
         api_key_encrypted=crypto.encrypt_with_key(old_key, "data_1", "eodhd-secret"),
     )
     ws = WebSearchProvider(
@@ -66,7 +68,7 @@ class TestRotateKey:
         s = SessionLocal()
         try:
             llm = s.execute(select(LLMProvider)).scalar_one()
-            data = s.execute(select(DataProvider)).scalar_one()
+            data = s.execute(select(Connector)).scalar_one()
             ws = s.execute(select(WebSearchProvider)).scalar_one()
             assert (
                 crypto.decrypt_with_key(new_key, "llm_1", llm.api_key_encrypted) == "sk-llm-secret"
@@ -99,7 +101,7 @@ class TestRotateKey:
         try:
             for row_id, Model, plaintext in [
                 ("llm_1", LLMProvider, "sk-llm-secret"),
-                ("data_1", DataProvider, "eodhd-secret"),
+                ("data_1", Connector, "eodhd-secret"),
                 ("ws_1", WebSearchProvider, "brave-secret"),
             ]:
                 row = s.get(Model, row_id)

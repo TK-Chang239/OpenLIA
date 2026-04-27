@@ -6,10 +6,10 @@ import pytest
 from openlia_server.cli import app
 from openlia_server.db import crypto
 from openlia_server.db.models.config import (
-    DataProvider,
     LLMProvider,
     WebSearchProvider,
 )
+from openlia_server.db.models.connectors import Connector
 from sqlalchemy import select
 
 
@@ -52,7 +52,7 @@ class TestRotateKeyCLI:
     Phase 2 fix-plan P2-02-03 — the rotation CLI was previously only covered
     in `test_cli_secrets.py::TestRotateKey`; this suite freezes the contract
     that *this* file (the natural home for crypto rotation tests) exercises
-    the full LLMProvider/DataProvider/WebSearchProvider triple.
+    the full LLMProvider/Connector/WebSearchProvider triple.
     """
 
     @pytest.fixture
@@ -66,10 +66,12 @@ class TestRotateKeyCLI:
                     label="OpenAI",
                     api_key_encrypted=crypto.encrypt_with_key(old, "llm-1", "sk-llm"),
                 ),
-                DataProvider(
+                Connector(
                     id="data-1",
-                    kind="eodhd",
-                    label="EODHD",
+                    provider_id="eodhd",
+                    source="built_in",
+                    category="financial",
+                    launch={"transport": "api_key"},
                     api_key_encrypted=crypto.encrypt_with_key(old, "data-1", "eodhd"),
                 ),
                 WebSearchProvider(
@@ -103,7 +105,7 @@ class TestRotateKeyCLI:
 
         with SessionLocal() as s:
             llm = s.execute(select(LLMProvider)).scalar_one()
-            data = s.execute(select(DataProvider)).scalar_one()
+            data = s.execute(select(Connector)).scalar_one()
             ws = s.execute(select(WebSearchProvider)).scalar_one()
             assert crypto.decrypt_with_key(new_key, "llm-1", llm.api_key_encrypted) == "sk-llm"
             assert crypto.decrypt_with_key(new_key, "data-1", data.api_key_encrypted) == "eodhd"
