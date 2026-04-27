@@ -9,7 +9,6 @@ this blocker the Secretary tool dispatcher returns no tools.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
 
 from openlia.connectors.dispatch import Dispatcher
 from openlia.data.adapters import ADAPTERS
@@ -20,30 +19,12 @@ from openlia.llm.runtime.batch import BatchRunner
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
-from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchAdapter, WebSearchResolution
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.services import data_providers as dp_svc
 from openlia_server.services.dispatcher_factory import build_dispatcher_for_session
 from openlia_server.services.llm_registry import SQLModelRegistry
-
-
-class _EmptyDataDispatcher:
-    """No data-provider tools wired in this blocker. Plan 13 replaces this."""
-
-    async def list_requirement_tools(self, department_id: str) -> list[dict[str, Any]]:
-        return []
-
-    async def dispatch_requirement(
-        self, *, tool_name: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
-        raise RuntimeError(f"no data-provider tools registered (attempted {tool_name!r})")
-
-    async def find_more_data(
-        self, *, department_id: str, description: str
-    ) -> dict[str, Any] | None:
-        return None
 
 
 def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
@@ -156,13 +137,14 @@ def build_chat_runner(
 def _build_report_runner_with_registry(
     registry: SQLModelRegistry,
     *,
-    web_search: WebSearchResolution,
+    dispatcher: Dispatcher,
+    web_search: WebSearchResolution | None = None,
 ) -> ReportRunner:
+    # `web_search` retained for signature compatibility with existing call
+    # sites; the new connector dispatcher handles search-tool gating via
+    # `Category.WEB_SEARCH` allowlist filtering.
+    del web_search
     prompts = PromptLoader()
-    tools = ToolDispatcher(
-        data_dispatcher=_EmptyDataDispatcher(),
-        web_search=web_search,
-    )
 
     def _provider_factory(resolved):
         return build_adapter(
@@ -174,7 +156,7 @@ def _build_report_runner_with_registry(
 
     return ReportRunner(
         prompts=prompts,
-        tools=tools,
+        dispatcher=dispatcher,
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
@@ -198,8 +180,8 @@ class RefreshingReportRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            web_search = _resolve_configured_search(db)
-            runner = _build_report_runner_with_registry(registry, web_search=web_search)
+            dispatcher = build_dispatcher_for_session(db)
+            runner = _build_report_runner_with_registry(registry, dispatcher=dispatcher)
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
