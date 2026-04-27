@@ -1,80 +1,165 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ReviewStep } from "./ReviewStep";
+import * as connectorsApi from "../../api/connectors";
 
-const json = (body: unknown) =>
-  new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+vi.mock("../../api/connectors", async () => {
+  const actual = await vi.importActual<typeof connectorsApi>(
+    "../../api/connectors",
+  );
+  return {
+    ...actual,
+    scopeAll: vi.fn(),
+    getReview: vi.fn(),
+  };
+});
+
+const mockedScopeAll = vi.mocked(connectorsApi.scopeAll);
+const mockedGetReview = vi.mocked(connectorsApi.getReview);
+
+const READY_AND_NOT_READY = {
+  departments: [
+    {
+      department_id: "secretary",
+      ready: true,
+      categories: [
+        {
+          category: "financial" as const,
+          required: true,
+          status: "ok" as const,
+          tool_count: 5,
+          providers: ["eodhd"],
+        },
+        {
+          category: "news" as const,
+          required: true,
+          status: "ok" as const,
+          tool_count: 2,
+          providers: ["newsapi"],
+        },
+        {
+          category: "social" as const,
+          required: false,
+          status: "basic" as const,
+          tool_count: 0,
+          providers: [],
+        },
+        {
+          category: "web_search" as const,
+          required: false,
+          status: "enhanced" as const,
+          tool_count: 3,
+          providers: ["serper"],
+        },
+      ],
+    },
+    {
+      department_id: "equity_research",
+      ready: false,
+      categories: [
+        {
+          category: "financial" as const,
+          required: true,
+          status: "missing" as const,
+          tool_count: 0,
+          providers: [],
+        },
+        {
+          category: "news" as const,
+          required: true,
+          status: "ok" as const,
+          tool_count: 2,
+          providers: ["newsapi"],
+        },
+      ],
+    },
+  ],
+};
+
+beforeEach(() => {
+  mockedScopeAll.mockReset();
+  mockedGetReview.mockReset();
+});
 
 describe("ReviewStep", () => {
-  it("polls /setup/review/{id} and renders readiness cards", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        json({ required_tiers: ["quick"], enabled_departments: ["secretary"] }),
-      )
-      .mockResolvedValueOnce(json({ review_id: "rev-1" }))
-      .mockResolvedValueOnce(
-        json({
-          state: "complete",
-          progress: 100,
-          result: {
-            summary: "1 of 1 ready.",
-            departments: [
-              {
-                id: "secretary",
-                state: "ready",
-                note: null,
-                basic: [{ type: "stock_quote", provider: "eodhd", confidence: 0.9 }],
-                advanced: [],
-                unmet: [],
-                check_status: "checked",
-              },
-            ],
-          },
-          error: null,
-        }),
-      )
-      .mockResolvedValueOnce(json({ redirect: "/", mode: "personal" }));
+  it("calls scopeAll once on mount and renders Ready and Not Ready departments", async () => {
+    mockedScopeAll.mockResolvedValue({ scoped: 0, per_connector: [] });
+    mockedGetReview.mockResolvedValue(READY_AND_NOT_READY);
 
     render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
-    await waitFor(() => screen.getByText(/1 of 1 ready/i));
-    expect(screen.getByText(/secretary/i)).toBeInTheDocument();
+
+    await waitFor(() => screen.getByText(/secretary/i));
+    expect(mockedScopeAll).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByLabelText(/secretary Ready/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/equity_research Not Ready/i)).toBeInTheDocument();
+    expect(screen.getByText(/✓ financial: 5 tools — eodhd/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/✗ financial: 0 tools — add a financial connector/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/social: basic — no connector/)).toBeInTheDocument();
+    expect(screen.getByText(/web search: enhanced — 3 tools, serper/)).toBeInTheDocument();
   });
 
-  it("Finish enabled when a department is blocked, with a warning banner listing it", async () => {
-    vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        json({ required_tiers: ["quick"], enabled_departments: ["equity_research"] }),
-      )
-      .mockResolvedValueOnce(json({ review_id: "rev-1" }))
-      .mockResolvedValueOnce(
-        json({
-          state: "complete",
-          progress: 100,
-          result: {
-            summary: "0 of 1 ready.",
-            departments: [
-              {
-                id: "equity_research",
-                state: "blocked",
-                note: null,
-                basic: [],
-                advanced: [],
-                unmet: ["stock_quote"],
-                check_status: "checked",
-              },
-            ],
-          },
-          error: null,
-        }),
-      );
+  it("places Not Ready departments before Ready ones", async () => {
+    mockedScopeAll.mockResolvedValue({ scoped: 0, per_connector: [] });
+    mockedGetReview.mockResolvedValue(READY_AND_NOT_READY);
 
     render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
-    await waitFor(() => screen.getByText(/0 of 1 ready/i));
-    expect(screen.getByRole("button", { name: /finish/i })).toBeEnabled();
-    expect(screen.getByText(/1 department will be unavailable/i)).toBeInTheDocument();
-    expect(screen.getByText(/equity research — needs stock_quote/i)).toBeInTheDocument();
+
+    await waitFor(() => screen.getByText(/secretary/i));
+    const headings = screen.getAllByRole("heading", { level: 4 });
+    expect(headings[0]).toHaveTextContent(/equity research/i);
+    expect(headings[1]).toHaveTextContent(/secretary/i);
+  });
+
+  it("Re-scope all triggers scopeAll then getReview in order", async () => {
+    const callOrder: string[] = [];
+    mockedScopeAll.mockImplementation(async () => {
+      callOrder.push("scopeAll");
+      return { scoped: 0, per_connector: [] };
+    });
+    mockedGetReview.mockImplementation(async () => {
+      callOrder.push("getReview");
+      return READY_AND_NOT_READY;
+    });
+
+    render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
+    await waitFor(() => screen.getByText(/secretary/i));
+
+    expect(callOrder).toEqual(["scopeAll", "getReview"]);
+
+    const button = screen.getByRole("button", { name: /re-scope all/i });
+    await userEvent.click(button);
+
+    await waitFor(() => expect(mockedScopeAll).toHaveBeenCalledTimes(2));
+    expect(callOrder).toEqual([
+      "scopeAll",
+      "getReview",
+      "scopeAll",
+      "getReview",
+    ]);
+    expect(mockedGetReview).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces an error message when scopeAll throws", async () => {
+    mockedScopeAll.mockRejectedValue(new Error("scope boom"));
+
+    render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
+
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert")).toHaveTextContent(/scope boom/i);
+    expect(mockedGetReview).not.toHaveBeenCalled();
+  });
+
+  it("surfaces an error message when getReview throws", async () => {
+    mockedScopeAll.mockResolvedValue({ scoped: 0, per_connector: [] });
+    mockedGetReview.mockRejectedValue(new Error("review boom"));
+
+    render(<ReviewStep totalSteps={5} onBack={vi.fn()} />);
+
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert")).toHaveTextContent(/review boom/i);
   });
 });
