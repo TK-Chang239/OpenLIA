@@ -6,7 +6,8 @@ from textwrap import dedent
 from typing import Any
 
 import pytest
-from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
+from _dispatcher_helpers import build_dispatcher as _build_dispatcher
+from _fakes import FakeProvider, FakeProviderScript
 from openlia.llm.exceptions import CapabilityError, LLMProviderError, TierNotConfiguredError
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import (
@@ -21,8 +22,6 @@ from openlia.llm.runtime.events import (
 from openlia.llm.runtime.messages import ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
-from openlia.llm.runtime.tools import ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     Capabilities,
     ModelTier,
@@ -30,6 +29,17 @@ from openlia.llm.types import (
     ResolvedModel,
     ToolCall,
 )
+
+_STOCK_QUOTE_TOOL = {
+    "stock_quote": {
+        "description": "Quote",
+        "input_schema": {
+            "type": "object",
+            "properties": {"symbol": {"type": "string"}},
+            "required": ["symbol"],
+        },
+    }
+}
 
 pytestmark = pytest.mark.asyncio
 
@@ -126,13 +136,9 @@ async def test_report_run_emits_start_phases_and_complete(
 ) -> None:
     filled = {"title": "AAPL Initiation", "sections": [{"id": "overview", "body": "..."}]}
     provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
-    data = FakeDataDispatcher(manifest={"equity_research": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=_build_dispatcher(department_id="equity_research"),
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -160,13 +166,9 @@ async def test_report_start_includes_section_titles_after_filter(
 ) -> None:
     filled = {"title": "x", "sections": []}
     provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
-    data = FakeDataDispatcher(manifest={"equity_research": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=_build_dispatcher(department_id="equity_research"),
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -205,25 +207,12 @@ async def test_report_tool_call_carries_call_id_through_to_event(
             ]
         )
     )
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
+            results={"stock_quote": {"symbol": "AAPL"}},
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -261,25 +250,12 @@ async def test_report_tool_call_start_event_emitted_before_dispatch(
             ]
         )
     )
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
+            results={"stock_quote": {}},
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -319,27 +295,12 @@ async def test_report_tool_loop_emits_tool_events(
             ]
         )
     )
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(
-        manifest=manifest, results={"stock_quote": {"symbol": "AAPL", "price": 190}}
-    )
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
+            results={"stock_quote": {"symbol": "AAPL", "price": 190}},
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -361,13 +322,9 @@ async def test_report_tier_not_configured_emits_report_error(
     prompts_root: Path, frameworks_root: Path
 ) -> None:
     provider = FakeProvider(script=FakeProviderScript(turns=[]))
-    data = FakeDataDispatcher(manifest={"equity_research": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=_build_dispatcher(department_id="equity_research"),
         resolve=_raises(TierNotConfiguredError("thinking")),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -393,13 +350,9 @@ async def test_report_capability_error_terminates(
             raise CapabilityError("no structured output")
 
     provider = _FailingProvider()
-    data = FakeDataDispatcher(manifest={"equity_research": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=_build_dispatcher(department_id="equity_research"),
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -433,25 +386,12 @@ async def test_two_round_tool_loop_uses_both_results(
             ]
         )
     )
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 100}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
+            results={"stock_quote": {"price": 100}},
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -474,7 +414,7 @@ async def test_two_round_tool_loop_uses_both_results(
 async def test_max_rounds_falls_through_to_writing(
     prompts_root: Path, frameworks_root: Path
 ) -> None:
-    from openlia.llm.runtime.tools import MAX_TOOL_TURNS
+    from openlia.llm.runtime.report import MAX_TOOL_TURNS
 
     call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     filled = {"title": "AAPL Initiation", "sections": [{"id": "overview", "body": "..."}]}
@@ -482,25 +422,12 @@ async def test_max_rounds_falls_through_to_writing(
         ("final_json", json.dumps(filled))
     ]
     provider = FakeProvider(script=FakeProviderScript(turns=turns))
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 100}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
+            results={"stock_quote": {"price": 100}},
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -529,25 +456,12 @@ async def test_provider_error_in_report_tool_loop_emits_report_error(
 
     call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     provider = _LoopErrorProvider(script=FakeProviderScript(turns=[("tool_calls", [call])]))
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 100}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
+            results={"stock_quote": {"price": 100}},
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -578,26 +492,12 @@ async def test_report_cancellation_stops_yielding(
             ]
         )
     )
-    manifest = {
-        "equity_research": {
-            "stock_quote": {
-                "name": "stock_quote",
-                "description": "Quote",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"symbol": {"type": "string"}},
-                    "required": ["symbol"],
-                },
-            }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest)
     token = CancellationToken()
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
+        dispatcher=_build_dispatcher(
+            department_id="equity_research",
+            tools=_STOCK_QUOTE_TOOL,
         ),
         resolve=_always(_resolved()),
         registry=_Registry(),
@@ -630,13 +530,9 @@ async def test_report_emits_per_section_events(prompts_root: Path, frameworks_ro
         ],
     }
     provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
-    data = FakeDataDispatcher(manifest={"equity_research": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=_build_dispatcher(department_id="equity_research"),
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -714,13 +610,9 @@ async def test_report_forwards_section_topics_and_reference_portfolio(
 
     filled = {"title": "MB", "sections": [{"id": "global_macro", "blocks": []}]}
     provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
-    data = FakeDataDispatcher(manifest={"morning_briefing": {}})
     runner = ReportRunner(
         prompts=PromptLoader(root=proots),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=_build_dispatcher(department_id="morning_briefing"),
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
