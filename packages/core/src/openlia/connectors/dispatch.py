@@ -10,10 +10,10 @@ so the server layer can hydrate them from SQLAlchemy.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from openlia.connectors.types import ToolDefinition
+from openlia.connectors.types import Category, ToolDefinition
 
 PREFIX_SEP = "__"
 
@@ -41,14 +41,25 @@ class Dispatcher:
     """Keyed by connector_id."""
     allowlist: dict[str, list[tuple[str, str]]]
     """department_id -> list of (connector_id, tool_name)."""
+    connector_categories: dict[str, Category] = field(default_factory=dict)
+    """Maps connector_id -> Category. Populated alongside `connectors`."""
 
-    def tools_for_department(self, department_id: str) -> list[dict[str, Any]]:
+    def tools_for_department(
+        self,
+        department_id: str,
+        *,
+        include_categories: set[Category] | None = None,
+    ) -> list[dict[str, Any]]:
         rows = self.allowlist.get(department_id, [])
         out: list[dict[str, Any]] = []
         for connector_id, tool_name in rows:
             conn = self.connectors.get(connector_id)
             if conn is None:
                 continue
+            if include_categories is not None:
+                cat = self.connector_categories.get(connector_id)
+                if cat is None or cat not in include_categories:
+                    continue
             td = conn.tools.get(tool_name)
             if td is None:
                 continue
