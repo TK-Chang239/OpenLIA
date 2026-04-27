@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from openlia.connectors.dispatch import Dispatcher
 from openlia.data.adapters import ADAPTERS
 from openlia.data.types import ProviderCategory
 from openlia.llm.adapters import build_adapter
@@ -24,6 +25,7 @@ from openlia.llm.runtime.web_search import WebSearchAdapter, WebSearchResolution
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.services import data_providers as dp_svc
+from openlia_server.services.dispatcher_factory import build_dispatcher_for_session
 from openlia_server.services.llm_registry import SQLModelRegistry
 
 
@@ -79,13 +81,15 @@ def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
 def _build_chat_runner_with_registry(
     registry: SQLModelRegistry,
     *,
-    web_search: WebSearchResolution,
+    dispatcher: Dispatcher,
+    web_search: WebSearchResolution | None = None,
 ) -> ChatRunner:
+    # `web_search` is retained for signature compatibility with existing
+    # call sites (and tests that monkey-patch this factory) but is no
+    # longer consumed: the new connector dispatcher handles search-tool
+    # gating via `Category.WEB_SEARCH` allowlist filtering.
+    del web_search
     prompts = PromptLoader()
-    tools = ToolDispatcher(
-        data_dispatcher=_EmptyDataDispatcher(),
-        web_search=web_search,
-    )
 
     def _provider_factory(resolved):
         return build_adapter(
@@ -97,7 +101,7 @@ def _build_chat_runner_with_registry(
 
     return ChatRunner(
         prompts=prompts,
-        tools=tools,
+        dispatcher=dispatcher,
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
@@ -127,8 +131,8 @@ class RefreshingChatRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            web_search = _resolve_configured_search(db)
-            runner = _build_chat_runner_with_registry(registry, web_search=web_search)
+            dispatcher = build_dispatcher_for_session(db)
+            runner = _build_chat_runner_with_registry(registry, dispatcher=dispatcher)
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,

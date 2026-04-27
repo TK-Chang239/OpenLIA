@@ -5,7 +5,8 @@ from textwrap import dedent
 from typing import Any
 
 import pytest
-from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
+from _dispatcher_helpers import build_dispatcher as _build_dispatcher
+from _fakes import FakeProvider, FakeProviderScript
 from openlia.llm.exceptions import TierNotConfiguredError
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
@@ -19,8 +20,6 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import ChatMessage
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     Capabilities,
     ModelTier,
@@ -101,13 +100,10 @@ async def test_streams_simple_reply_with_no_tools(prompts_root: Path) -> None:
     provider = FakeProvider(
         script=FakeProviderScript(turns=[("final", ""), ("tokens", ["Hi", " there"])])
     )
-    data = FakeDataDispatcher(manifest={"secretary": {}})
+    dispatcher = _build_dispatcher(department_id="secretary")
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -139,29 +135,23 @@ async def test_tool_calling_turn_emits_tool_events(prompts_root: Path) -> None:
             ]
         )
     )
-    manifest = {
-        "secretary": {
+    dispatcher = _build_dispatcher(
+        department_id="secretary",
+        tools={
             "stock_quote": {
-                "name": "stock_quote",
                 "description": "Stock quote",
-                "parameters": {
+                "input_schema": {
                     "type": "object",
                     "properties": {"symbol": {"type": "string"}},
                     "required": ["symbol"],
                 },
             }
-        }
-    }
-    data = FakeDataDispatcher(
-        manifest=manifest,
+        },
         results={"stock_quote": {"symbol": "AAPL", "price": 190}},
     )
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -182,13 +172,10 @@ async def test_tool_calling_turn_emits_tool_events(prompts_root: Path) -> None:
 
 async def test_tier_not_configured_emits_chat_error_and_stops(prompts_root: Path) -> None:
     provider = FakeProvider(script=FakeProviderScript(turns=[]))
-    data = FakeDataDispatcher(manifest={"secretary": {}})
+    dispatcher = _build_dispatcher(department_id="secretary")
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_raises(),
         registry=_Registry(raises=True),
         provider_factory=lambda resolved: provider,
@@ -215,14 +202,11 @@ async def test_cancellation_stops_yielding_without_terminal_event(
     provider = FakeProvider(
         script=FakeProviderScript(turns=[("final", ""), ("tokens", ["A", "B", "C", "D", "E"])])
     )
-    data = FakeDataDispatcher(manifest={"secretary": {}})
+    dispatcher = _build_dispatcher(department_id="secretary")
     token = CancellationToken()
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -246,13 +230,10 @@ async def test_cancellation_stops_yielding_without_terminal_event(
 
 async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
     provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])]))
-    data = FakeDataDispatcher(manifest={"secretary": {}})
+    dispatcher = _build_dispatcher(department_id="secretary")
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -287,29 +268,23 @@ async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> N
             ]
         )
     )
-    manifest = {
-        "secretary": {
+    dispatcher = _build_dispatcher(
+        department_id="secretary",
+        tools={
             "stock_quote": {
-                "name": "stock_quote",
                 "description": "Quote",
-                "parameters": {
+                "input_schema": {
                     "type": "object",
                     "properties": {"symbol": {"type": "string"}},
                     "required": ["symbol"],
                 },
             }
-        }
-    }
-    data = FakeDataDispatcher(
-        manifest=manifest,
+        },
         results={"stock_quote": {"price": 100}},
     )
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -330,7 +305,7 @@ async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> N
 
 
 async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> None:
-    from openlia.llm.runtime.tools import MAX_TOOL_TURNS
+    from openlia.llm.runtime.chat import MAX_TOOL_TURNS
 
     call = ToolCall(id="cx", name="stock_quote", arguments={"symbol": "X"})
     provider = FakeProvider(
@@ -338,26 +313,23 @@ async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> Non
             turns=[("tool_calls", [call])] * MAX_TOOL_TURNS + [("tokens", ["done"])]
         )
     )
-    manifest = {
-        "secretary": {
+    dispatcher = _build_dispatcher(
+        department_id="secretary",
+        tools={
             "stock_quote": {
-                "name": "stock_quote",
                 "description": "Quote",
-                "parameters": {
+                "input_schema": {
                     "type": "object",
                     "properties": {"symbol": {"type": "string"}},
                     "required": ["symbol"],
                 },
             }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 1}})
+        },
+        results={"stock_quote": {"price": 1}},
+    )
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -391,26 +363,23 @@ async def test_args_preview_unicode_safe(prompts_root: Path) -> None:
             ]
         )
     )
-    manifest = {
-        "secretary": {
+    dispatcher = _build_dispatcher(
+        department_id="secretary",
+        tools={
             "stock_quote": {
-                "name": "stock_quote",
                 "description": "Quote",
-                "parameters": {
+                "input_schema": {
                     "type": "object",
                     "properties": {"q": {"type": "string"}},
                     "required": ["q"],
                 },
             }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {}})
+        },
+        results={"stock_quote": {}},
+    )
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
@@ -445,26 +414,23 @@ async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) 
             return await super().generate(request)
 
     provider = _LoopErrorProvider(script=FakeProviderScript(turns=[("tool_calls", [call])]))
-    manifest = {
-        "secretary": {
+    dispatcher = _build_dispatcher(
+        department_id="secretary",
+        tools={
             "stock_quote": {
-                "name": "stock_quote",
                 "description": "Quote",
-                "parameters": {
+                "input_schema": {
                     "type": "object",
                     "properties": {"symbol": {"type": "string"}},
                     "required": ["symbol"],
                 },
             }
-        }
-    }
-    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"price": 1}})
+        },
+        results={"stock_quote": {"price": 1}},
+    )
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,

@@ -19,14 +19,13 @@ from textwrap import dedent
 from typing import Any
 
 import pytest
-from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
+from _dispatcher_helpers import build_dispatcher
+from _fakes import FakeProvider, FakeProviderScript
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.events import ChatDone, ChatError, ChatToken
 from openlia.llm.runtime.messages import ChatMessage
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import ToolCallResult, ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     Capabilities,
     LLMChunk,
@@ -110,14 +109,11 @@ class _SlowStreamProvider(FakeProvider):
 
 async def test_token_flipped_midstream_stops_within_grace_window(prompts_root: Path) -> None:
     provider = _SlowStreamProvider(tokens=["A", "B", "C", "D", "E"], per_token_delay=0.05)
-    data = FakeDataDispatcher(manifest={"secretary": {}})
+    dispatcher = build_dispatcher(department_id="secretary")
     token = CancellationToken()
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -142,63 +138,53 @@ async def test_token_flipped_midstream_stops_within_grace_window(prompts_root: P
     assert ChatError not in types
 
 
-class _SlowToolDispatcher(ToolDispatcher):
-    """Dispatcher whose `dispatch_many` blocks until released for testing grace."""
+class _SlowConnectorTransport:
+    """Transport whose `call_tool` blocks until released (or the finish window
+    elapses) so cancellation behavior past the grace window can be observed.
+    """
 
-    def __init__(self, *args, hold: asyncio.Event, finish_within: float, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *, hold: asyncio.Event, finish_within: float) -> None:
         self._hold = hold
         self._finish_within = finish_within
+        self.calls: list[tuple[str, dict[str, Any]]] = []
 
-    async def dispatch_many(  # type: ignore[override]
-        self,
-        *,
-        department_id,
-        calls,
-        extra_tool_names=frozenset(),
-        max_expansions=None,
-    ):
-        # Wait either for the release event OR until exceeding the finish window.
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        self.calls.append((name, arguments))
         try:
             await asyncio.wait_for(self._hold.wait(), timeout=self._finish_within)
         except TimeoutError:
-            return [
-                ToolCallResult(call_id=c.id, ok=True, summary="late", payload={}) for c in calls
-            ]
-        return [ToolCallResult(call_id=c.id, ok=True, summary="ok", payload={}) for c in calls]
+            return {"status": "late"}
+        return {"status": "ok"}
 
 
 async def test_slow_tool_call_running_past_grace_terminates_iterator(prompts_root: Path) -> None:
     """A tool call still running past the grace window forces the iterator
     to stop without emitting a terminal event."""
-    call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "X"})
+    # Prefixed name (`<provider_id>__<tool>`) so `dispatch_tool_use` actually
+    # reaches the transport's `call_tool` — the empty `provider_id=""` used by
+    # `build_dispatcher` produces the `__stock_quote` form.
+    call = ToolCall(id="c1", name="__stock_quote", arguments={"symbol": "X"})
     provider = FakeProvider(script=FakeProviderScript(turns=[("tool_calls", [call])]))
-    data = FakeDataDispatcher(
-        manifest={
-            "secretary": {
-                "stock_quote": {
-                    "name": "stock_quote",
-                    "description": "Quote",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"symbol": {"type": "string"}},
-                        "required": ["symbol"],
-                    },
-                }
-            }
-        }
-    )
     hold = asyncio.Event()
-    tools = _SlowToolDispatcher(
-        data_dispatcher=data,
-        web_search=WebSearchResolution(False, None, None),
-        hold=hold,
-        finish_within=10.0,
+    transport = _SlowConnectorTransport(hold=hold, finish_within=10.0)
+    dispatcher = build_dispatcher(
+        department_id="secretary",
+        tools={
+            "stock_quote": {
+                "description": "Quote",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                    "required": ["symbol"],
+                },
+            }
+        },
+        transport=transport,
     )
     token = CancellationToken()
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=tools,
+        dispatcher=dispatcher,
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
@@ -239,13 +225,10 @@ async def test_none_token_short_circuits_to_direct_await(prompts_root: Path) -> 
             return await super().generate(request)
 
     provider = _SimpleProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["hi"])]))
-    data = FakeDataDispatcher(manifest={"secretary": {}})
+    dispatcher = build_dispatcher(department_id="secretary")
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
-        tools=ToolDispatcher(
-            data_dispatcher=data,
-            web_search=WebSearchResolution(False, None, None),
-        ),
+        dispatcher=dispatcher,
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,

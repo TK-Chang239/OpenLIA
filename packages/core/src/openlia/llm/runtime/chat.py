@@ -19,6 +19,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator, Callable
 
+from openlia.connectors.dispatch import Dispatcher
 from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
@@ -35,7 +36,12 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import Attachment, ChatMessage
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolCallResult, ToolDispatcher
+from openlia.llm.runtime.runtime_dispatch import (
+    ToolCallRequest,
+    ToolCallResult,
+    dispatch_many,
+    tools_for_run,
+)
 from openlia.llm.types import (
     LLMRequest,
     Message,
@@ -44,6 +50,12 @@ from openlia.llm.types import (
 
 ResolveFn = Callable[..., ResolvedModel]
 ProviderFactory = Callable[[ResolvedModel], LLMProvider]
+
+# Outer runaway guard for the tool loop. Matches the legacy
+# `MAX_TOOL_TURNS` constant from `openlia.llm.runtime.tools` so the cap is
+# unchanged post-cutover; once `tools.py` is removed this constant becomes
+# the single source of truth.
+MAX_TOOL_TURNS = 32
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
@@ -61,14 +73,14 @@ class ChatRunner:
         self,
         *,
         prompts: PromptLoader,
-        tools: ToolDispatcher,
+        dispatcher: Dispatcher,
         resolve: ResolveFn,
         registry: ModelRegistry,
         provider_factory: ProviderFactory,
         message_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._prompts = prompts
-        self._tools = tools
+        self._dispatcher = dispatcher
         self._resolve = resolve
         self._registry = registry
         self._provider_factory = provider_factory
@@ -108,17 +120,20 @@ class ChatRunner:
         system = self._prompts.render(department_id, "chat.system")
         dept = get_department(department_id)
         extra_tool_specs = dept.extra_tools if dept is not None else ()
-        extra_tool_names = frozenset(spec["name"] for spec in extra_tool_specs)
-        tools = await self._tools.build(
-            department_id, has_web_search=True, extra_tools=extra_tool_specs
+        tools = tools_for_run(
+            self._dispatcher,
+            department_id,
+            has_web_search=True,
+            extra_tools=extra_tool_specs,
         )
 
         conversation = [Message(role=m.role, content=m.content) for m in messages]
 
-        # Tool loop — bounded by MAX_TOOL_TURNS (32) as an outer runaway guard.
+        # Tool loop — bounded by MAX_TOOL_TURNS as an outer runaway guard.
         # Per the spec, Secretary (chat) is unlimited on `find_more_data`
-        # expansions; the budget arg is None here so only the outer cap fires.
-        # Only runs when tools are configured; otherwise falls through to streaming.
+        # expansions; the new dispatcher has no expansion budget concept,
+        # so the outer cap is the only guard. Only runs when tools are
+        # configured; otherwise falls through to streaming.
         for _ in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
@@ -158,18 +173,45 @@ class ChatRunner:
                     tool_name=call.name,
                     args_preview=args_preview,
                 )
+            extra_tool_names = frozenset(spec["name"] for spec in extra_tool_specs)
+            requests: list[ToolCallRequest] = []
+            request_index_by_call_id: dict[str, int] = {}
+            echo_results: dict[str, ToolCallResult] = {}
+            for call in response.tool_calls:
+                if call.name in extra_tool_names:
+                    # Department-supplied UI tools (e.g. Secretary's
+                    # `suggest_redirect`) have no connector transport;
+                    # echo their arguments as a structured payload so the
+                    # frontend can render UI cards.
+                    echo_results[call.id] = ToolCallResult(
+                        call_id=call.id,
+                        ok=True,
+                        summary=f"{call.name} suggested",
+                        payload={"ack": True},
+                        structured=dict(call.arguments),
+                    )
+                    continue
+                request_index_by_call_id[call.id] = len(requests)
+                requests.append(
+                    ToolCallRequest(
+                        prefixed_name=call.name,
+                        arguments=call.arguments,
+                        call_id=call.id,
+                    )
+                )
             try:
-                results: list[ToolCallResult] = await self._await(
-                    self._tools.dispatch_many(
-                        department_id=department_id,
-                        calls=response.tool_calls,
-                        extra_tool_names=extra_tool_names,
-                        max_expansions=None,  # Secretary: unlimited.
-                    ),
+                dispatched: list[ToolCallResult] = await self._await(
+                    dispatch_many(self._dispatcher, requests),
                     cancel_token=cancel_token,
                 )
             except asyncio.CancelledError:
                 return
+            results: list[ToolCallResult] = []
+            for call in response.tool_calls:
+                if call.id in echo_results:
+                    results.append(echo_results[call.id])
+                else:
+                    results.append(dispatched[request_index_by_call_id[call.id]])
             for r in results:
                 yield ChatToolCallResult(
                     message_id=message_id,
@@ -180,8 +222,11 @@ class ChatRunner:
                 )
             for r in results:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
-            tools = await self._tools.build(
-                department_id, has_web_search=True, extra_tools=extra_tool_specs
+            tools = tools_for_run(
+                self._dispatcher,
+                department_id,
+                has_web_search=True,
+                extra_tools=extra_tool_specs,
             )
 
         # Final text turn — stream tokens.
