@@ -4496,6 +4496,134 @@ Expected: PASS.
 git commit -m "refactor(departments): delete legacy *.requirements.yaml and loader"
 ```
 
+### Task 9.3 — Empty the built-in template catalog
+
+The cutover branch (and current `main`) ship stub built-in template registrations for EODHD, FMP, and NewsAPI.ai with placeholder allowlists. The redesign defers the day-1 catalog decision (per spec §13.5) — no built-in MCP templates or Python libs are shipped pre-wired. The registry infrastructure (`register`, `get_builtin`, `all_builtins`) stays so future built-ins can plug in.
+
+**Files:**
+- Delete: `packages/core/src/openlia/connectors/builtins/eodhd.py`
+- Delete: `packages/core/src/openlia/connectors/builtins/fmp.py`
+- Delete: `packages/core/src/openlia/connectors/builtins/newsapi_ai.py`
+- Delete: `packages/core/tests/test_connectors/test_builtins_eodhd.py`
+- Delete: `packages/core/tests/test_connectors/test_builtins_fmp.py`
+- Delete: `packages/core/tests/test_connectors/test_builtins_newsapi_ai.py`
+- Modify: `packages/core/tests/test_connectors/test_builtins_registry.py` — replace `eodhd`-specific tests with registry-shape tests using a synthetic template
+
+- [ ] **Step 1: Verify no production code currently fails when the registry is empty**
+
+```bash
+grep -rn 'get_builtin\("eodhd"\|get_builtin\("fmp"\|get_builtin\("newsapi' packages/ --include="*.py"
+```
+
+Expected: matches only inside test files (which we delete or rewrite below). If production code references `get_builtin("eodhd")` etc., that's a bug — the wizard chooses templates by user input, not by hardcoded id. Track down and replace with parameterized lookups before continuing.
+
+- [ ] **Step 2: Delete the three stub registration files**
+
+```bash
+git rm packages/core/src/openlia/connectors/builtins/eodhd.py
+git rm packages/core/src/openlia/connectors/builtins/fmp.py
+git rm packages/core/src/openlia/connectors/builtins/newsapi_ai.py
+```
+
+- [ ] **Step 3: Delete the three template-specific test files**
+
+```bash
+git rm packages/core/tests/test_connectors/test_builtins_eodhd.py
+git rm packages/core/tests/test_connectors/test_builtins_fmp.py
+git rm packages/core/tests/test_connectors/test_builtins_newsapi_ai.py
+```
+
+- [ ] **Step 4: Rewrite `test_builtins_registry.py` to exercise the registry shape, not specific templates**
+
+Replace the contents of `packages/core/tests/test_connectors/test_builtins_registry.py`:
+```python
+"""Registry shape tests — no specific built-ins ship day-1."""
+
+from __future__ import annotations
+
+import pytest
+
+from openlia.connectors.builtins import (
+    BuiltInTemplate,
+    all_builtins,
+    get_builtin,
+    register,
+)
+from openlia.connectors.builtins._types import ShippedAssignment
+from openlia.connectors.types import Category
+
+
+def test_registry_is_empty_day_1():
+    assert all_builtins() == []
+
+
+def test_get_builtin_unknown_raises():
+    with pytest.raises(KeyError):
+        get_builtin("nope")
+
+
+def test_register_then_lookup_round_trip(monkeypatch):
+    """Registry mechanics: a template can be registered and retrieved."""
+
+    # The registry holds module-level state; isolate to this test by
+    # registering a unique template_id and verifying lookup.
+    template_id = "test_template_for_registry_round_trip"
+    tpl = BuiltInTemplate(
+        template_id=template_id,
+        display_name="Test",
+        category=Category.FINANCIAL,
+        api_key_env_var="TEST_API_KEY",
+        cli_argv=("uvx", "test-mcp"),
+        canary_tool=None,
+        shipped_allowlist=(),
+    )
+    register(tpl)
+    try:
+        assert get_builtin(template_id) is tpl
+        assert any(t.template_id == template_id for t in all_builtins())
+    finally:
+        # Clean up to keep test isolation: clear the registered entry.
+        from openlia.connectors.builtins import _REGISTRY
+
+        _REGISTRY.pop(template_id, None)
+```
+
+If the existing `builtins/__init__.py` does not expose `_REGISTRY` directly, expose it (or add a small `_test_only_clear(template_id)` helper) so the test can clean up.
+
+- [ ] **Step 5: Verify no consumers fail with empty catalog**
+
+```bash
+uv run pytest 2>&1 | tail -10
+```
+
+Expected: PASS. Wizard tests that previously assumed a populated catalog should be parameterized over user-supplied connectors only.
+
+- [ ] **Step 6: Verify the wizard's templates-list endpoint returns []**
+
+```bash
+rm -f .openlia.dev.db
+uv run alembic -c packages/server/alembic.ini upgrade head
+uv run openlia serve &
+SERVER_PID=$!
+sleep 3
+curl -s http://localhost:8000/api/connectors/templates
+kill $SERVER_PID
+```
+
+Expected: `[]` (assuming the templates route is `/api/connectors/templates` — verify against the actual route name on the branch).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/core/src/openlia/connectors/builtins/ packages/core/tests/test_connectors/test_builtins_registry.py
+git commit -m "refactor(connectors): empty the built-in template catalog day-1
+
+Per design spec §13.5, no specific built-in templates are decided yet.
+Registry infrastructure stays for future built-ins to plug into; the
+day-1 catalog ships empty. Users add connectors directly via the wizard
+(remote MCP URL, CLI MCP launch, or Python library)."
+```
+
 ---
 
 ## Phase 10 — Frontend
