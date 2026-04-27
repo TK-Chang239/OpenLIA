@@ -1,102 +1,91 @@
 import { useState } from "react";
-import { Trash2, GripVertical, Pencil, Check, X } from "lucide-react";
-import type { ProviderRow as Row } from "../../api/setup";
+import { Trash2, GripVertical, RefreshCw } from "lucide-react";
+import type { ConnectorRow, ConnectorSource } from "../../api/connectors";
+
+const SOURCE_LABEL: Record<ConnectorSource, string> = {
+  built_in: "built-in",
+  remote_mcp: "remote MCP",
+  cli_mcp: "CLI MCP",
+};
 
 export function ProviderRow({
   row,
   priorityIndex,
   onRemove,
-  onUpdateKey,
+  onRetest,
 }: {
-  row: Row;
+  row: ConnectorRow;
   priorityIndex: number;
-  onRemove: () => void;
-  onUpdateKey: (apiKey: string) => Promise<void>;
+  onRemove: () => Promise<void> | void;
+  onRetest: () => Promise<void> | void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
 
   const pillCls =
-    row.status === "ok"
+    row.status === "validated"
       ? "bg-[--color-feedback-success]/15 text-[--color-feedback-success]"
-      : "bg-[--color-feedback-error]/15 text-[--color-feedback-error]";
+      : row.status === "failed"
+        ? "bg-[--color-feedback-error]/15 text-[--color-feedback-error]"
+        : "bg-[--color-surface-active] text-[--color-text-secondary]";
 
-  const onSave = async () => {
+  const handleRetest = async () => {
     setBusy(true);
     try {
-      await onUpdateKey(apiKey);
-      setEditing(false);
-      setApiKey("");
+      await onRetest();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRemove = async () => {
+    setBusy(true);
+    try {
+      await onRemove();
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <li className="flex items-center justify-between px-3 py-2 border border-[--color-border-subtle] rounded-[--radius-md] bg-[--color-bg-base] mb-2">
-      <div className="flex items-center gap-3 flex-1 min-w-0">
-        <GripVertical size={14} className="text-[--color-text-tertiary] cursor-grab" />
-        <span className="text-xs text-[--color-text-tertiary] w-4">{priorityIndex}</span>
-        <span className="text-sm text-[--color-text-primary] font-medium">
-          {row.provider ?? row.mode}
-        </span>
-        <span className={`text-xs px-2 py-0.5 rounded-full ${pillCls}`}>{row.status}</span>
-        {editing ? (
-          <input
-            type="password"
-            placeholder="New API key"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="flex-1 h-8 px-2 ml-2 rounded-[--radius-sm] bg-[--color-bg-elevated] border border-[--color-border-subtle] text-sm"
-          />
-        ) : null}
+    <li className="flex flex-col px-3 py-2 border border-[--color-border-subtle] rounded-[--radius-md] bg-[--color-bg-base] mb-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <GripVertical size={14} className="text-[--color-text-tertiary] cursor-grab" />
+          <span className="text-xs text-[--color-text-tertiary] w-4">{priorityIndex}</span>
+          <span className="text-sm text-[--color-text-primary] font-medium truncate">
+            {row.provider_id}
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[--color-surface-hover] text-[--color-text-tertiary] uppercase tracking-wide">
+            {SOURCE_LABEL[row.source]}
+          </span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${pillCls}`}>{row.status}</span>
+        </div>
+        <div className="flex items-center gap-1 ml-2">
+          <button
+            type="button"
+            aria-label="Retest provider"
+            onClick={handleRetest}
+            disabled={busy}
+            className="text-[--color-text-secondary] hover:text-[--color-text-primary] disabled:opacity-40"
+          >
+            <RefreshCw size={14} />
+          </button>
+          <button
+            type="button"
+            aria-label="Remove provider"
+            onClick={handleRemove}
+            disabled={busy}
+            className="text-[--color-text-secondary] hover:text-[--color-feedback-error] disabled:opacity-40"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-1 ml-2">
-        {editing ? (
-          <>
-            <button
-              type="button"
-              aria-label="Save API key"
-              onClick={onSave}
-              disabled={busy || !apiKey}
-              className="text-[--color-feedback-success] disabled:opacity-40"
-            >
-              <Check size={14} />
-            </button>
-            <button
-              type="button"
-              aria-label="Cancel edit"
-              onClick={() => {
-                setEditing(false);
-                setApiKey("");
-              }}
-              className="text-[--color-text-secondary]"
-            >
-              <X size={14} />
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              aria-label="Edit API key"
-              onClick={() => setEditing(true)}
-              className="text-[--color-text-secondary] hover:text-[--color-text-primary]"
-            >
-              <Pencil size={14} />
-            </button>
-            <button
-              type="button"
-              aria-label="Remove provider"
-              onClick={onRemove}
-              className="text-[--color-text-secondary] hover:text-[--color-feedback-error]"
-            >
-              <Trash2 size={14} />
-            </button>
-          </>
-        )}
-      </div>
+      {row.status === "failed" && row.last_error ? (
+        <p className="text-xs text-[--color-feedback-error] mt-2 ml-7 break-words">
+          {row.last_error}
+        </p>
+      ) : null}
     </li>
   );
 }

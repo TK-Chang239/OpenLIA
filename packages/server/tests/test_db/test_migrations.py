@@ -66,6 +66,9 @@ EXPECTED_TABLES = {
     "mb_user_configs",
     # --- Plan 18 Panic Thermometer transition log ---
     "pt_trigger_events",
+    # --- Connector redesign (replaces data_providers + data_provider_requirement_mapping) ---
+    "connectors",
+    "tool_allowlists",
 }
 
 

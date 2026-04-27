@@ -5,15 +5,12 @@ import { WizardFooter } from "../WizardFooter";
 import { ProviderRow } from "./ProviderRow";
 import { AddProviderForm } from "./AddProviderForm";
 import {
-  confirmProviders,
-  deleteProvider,
-  listProviders,
-  patchProvider,
-  retestProvider,
-} from "../../api/setup";
-import type { ProviderRow as Row } from "../../api/setup";
+  deleteConnector,
+  listConnectors,
+  revalidateConnector,
+} from "../../api/connectors";
+import type { Category, ConnectorRow } from "../../api/connectors";
 
-type Category = "financial" | "news" | "social" | "web_search";
 const CATEGORIES: { value: Category; label: string; required?: boolean }[] = [
   { value: "financial", label: "Financial", required: true },
   { value: "news", label: "News", required: true },
@@ -31,7 +28,7 @@ export function ProvidersStep({
   onSaved: () => void;
 }) {
   const [active, setActive] = useState<Category>("financial");
-  const [rows, setRows] = useState<Row[]>([]);
+  const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [adding, setAdding] = useState(false);
   const [loading, setLoading] = useState(false);
   // Errors are scoped per category so a failure in one tab does not bleed
@@ -46,29 +43,33 @@ export function ProvidersStep({
     });
 
   const refresh = async () => {
-    const resp = await listProviders();
-    setRows(resp.providers);
+    const resp = await listConnectors();
+    setRows(resp);
   };
 
   useEffect(() => {
     void refresh();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const byCategory = useMemo(() => {
-    const out: Record<Category, Row[]> = { financial: [], news: [], social: [], web_search: [] };
-    for (const r of rows) out[r.category as Category]?.push(r);
+    const out: Record<Category, ConnectorRow[]> = {
+      financial: [],
+      news: [],
+      social: [],
+      web_search: [],
+    };
+    for (const r of rows) out[r.category]?.push(r);
     return out;
   }, [rows]);
 
   const canAdvance =
-    byCategory.financial.some((r) => r.status === "ok") &&
-    byCategory.news.some((r) => r.status === "ok");
+    byCategory.financial.some((r) => r.status === "validated") &&
+    byCategory.news.some((r) => r.status === "validated");
 
   const onNext = async () => {
     setLoading(true);
     try {
-      await confirmProviders();
       onSaved();
     } finally {
       setLoading(false);
@@ -145,16 +146,24 @@ export function ProvidersStep({
                     row={r}
                     priorityIndex={i}
                     onRemove={async () => {
-                      await deleteProvider(r.id);
+                      await deleteConnector(r.id);
                       await refresh();
                     }}
-                    onUpdateKey={async (apiKey) => {
-                      await patchProvider(r.id, { api_key: apiKey });
-                      const result = await retestProvider(r.id);
-                      setTestErrorFor(
-                        active,
-                        result.ok ? null : result.error || "Provider test failed.",
-                      );
+                    onRetest={async () => {
+                      try {
+                        const result = await revalidateConnector(r.id);
+                        setTestErrorFor(
+                          active,
+                          result.status === "validated"
+                            ? null
+                            : result.last_error || "Provider test failed.",
+                        );
+                      } catch (err) {
+                        setTestErrorFor(
+                          active,
+                          err instanceof Error ? err.message : "Provider test failed.",
+                        );
+                      }
                       await refresh();
                     }}
                   />
