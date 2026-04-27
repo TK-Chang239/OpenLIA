@@ -190,12 +190,10 @@ class ReportRunner:
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
-        # Tool-expansion loop. The legacy ToolDispatcher carried a
-        # `max_expansions` budget for its `find_more_data` rounds; with the
-        # connector Dispatcher that concept moves into the runner as an
-        # outer cap. `max_expansions=None` means "use the runaway guard
-        # only" (MAX_TOOL_TURNS). The loop also terminates whenever the
-        # model returns no tool_use blocks.
+        # Tool-expansion loop. `max_expansions` caps the number of
+        # follow-up data-fetch rounds driven by the model. `None` means
+        # "use the runaway guard only" (MAX_TOOL_TURNS). The loop also
+        # terminates whenever the model returns no tool_use blocks.
         loop_cap = MAX_TOOL_TURNS if max_expansions is None else min(MAX_TOOL_TURNS, max_expansions)
         for _ in range(loop_cap) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:

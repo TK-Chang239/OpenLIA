@@ -34,11 +34,7 @@ from openlia.llm.runtime.messages import (
 )
 from openlia.llm.runtime.prompts import PromptLoader, PromptSlotNotFound
 from openlia.llm.runtime.report import ReportRunner
-from openlia.llm.runtime.tools import (
-    DataProviderDispatcher,
-    ToolCallResult,
-    ToolDispatcher,
-)
+from openlia.llm.runtime.runtime_dispatch import ToolCallResult
 from openlia.llm.runtime.web_search import (
     WebSearchAdapter,
     WebSearchResolution,
@@ -61,7 +57,6 @@ __all__ = [
     "ChatToken",
     "ChatToolCallResult",
     "ChatToolCallStart",
-    "DataProviderDispatcher",
     "PromptLoader",
     "PromptSlotNotFound",
     "ReportComplete",
@@ -73,7 +68,6 @@ __all__ = [
     "ReportToolCall",
     "SseEvent",
     "ToolCallResult",
-    "ToolDispatcher",
     "WebSearchAdapter",
     "WebSearchResolution",
     "WebSearchResult",

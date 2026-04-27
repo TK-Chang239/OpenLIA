@@ -4,13 +4,11 @@
 whatever the connector emits. The runners (chat / report) need a shaped
 envelope with `ok`, a one-line `summary`, a normalized `payload`, and a
 `structured` field for UI-consumable tools. This module supplies that
-shaping plus parallel-fan-out, mirroring the behavior previously hosted by
-`openlia.llm.runtime.tools.ToolDispatcher` so consumers can swap import
-paths without behavior change.
+shaping plus parallel-fan-out.
 
-Field names match the legacy `ToolCallResult` (`call_id`, `ok`, `summary`,
-`payload`, `structured`) so ChatRunner / ReportRunner only need an import
-swap during the H3.3 cutover.
+`ToolCallResult` carries `call_id`, `ok`, `summary`, `payload`, and
+`structured` — the single tool-result envelope ChatRunner and ReportRunner
+consume.
 
 This module is core-pure: it depends only on `openlia.connectors.*` and
 `openlia.llm.types` — no FastAPI / SQLAlchemy / HTTP imports.

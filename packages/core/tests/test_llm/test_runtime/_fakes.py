@@ -1,4 +1,4 @@
-"""Shared fakes for runtime tests: FakeProvider, FakeDataDispatcher, FakeSearchAdapter."""
+"""Shared fakes for runtime tests: FakeProvider, FakeSearchAdapter."""
 
 from __future__ import annotations
 
@@ -112,30 +112,6 @@ class FakeProvider(LLMProvider):
             yield LLMChunk(delta=payload, finish_reason="stop")
             return
         raise AssertionError(f"unknown stream turn {kind}")
-
-
-@dataclass
-class FakeDataDispatcher:
-    """Implements the DataProviderDispatcher Protocol used by ToolDispatcher."""
-
-    manifest: dict[str, dict[str, Any]] = field(default_factory=dict)
-    results: dict[str, dict[str, Any]] = field(default_factory=dict)
-    raise_for: set[str] = field(default_factory=set)
-
-    async def list_requirement_tools(self, department_id: str) -> list[dict[str, Any]]:
-        return list(self.manifest.get(department_id, {}).values())
-
-    async def dispatch_requirement(
-        self, *, tool_name: str, arguments: dict[str, Any]
-    ) -> dict[str, Any]:
-        if tool_name in self.raise_for:
-            raise RuntimeError(f"provider blew up for {tool_name}")
-        return self.results.get(tool_name, {"tool": tool_name, "args": arguments})
-
-    async def find_more_data(
-        self, *, department_id: str, description: str
-    ) -> dict[str, Any] | None:
-        return self.results.get(f"expand::{description}")
 
 
 @dataclass
