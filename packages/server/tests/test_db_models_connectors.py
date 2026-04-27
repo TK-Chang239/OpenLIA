@@ -42,7 +42,6 @@ def test_connector_round_trip(engine):
                 source="built_in",
                 category="financial",
                 launch={"kind": "built_in", "template_id": "eodhd"},
-                credentials_ref="secret://eodhd/key",
                 cached_tools=[{"name": "get_quote", "description": "...", "input_schema": {}}],
                 status="validated",
                 last_validated_at=datetime.now(UTC),
