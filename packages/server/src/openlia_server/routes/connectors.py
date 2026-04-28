@@ -25,15 +25,17 @@ class LaunchIn(BaseModel):
 
 class ConnectorCreate(BaseModel):
     provider_id: str = Field(min_length=1, max_length=64)
-    source: str = Field(pattern="^(built_in|remote_mcp|cli_mcp)$")
+    display_name: str = Field(min_length=1, max_length=128)
+    source: str = Field(pattern="^(built_in|remote_mcp|cli_mcp|python_lib|skill)$")
     category: str = Field(pattern="^(financial|news|social|web_search)$")
     launch: LaunchIn
-    credentials_ref: str | None = None
+    secrets: dict[str, str] | None = None
 
 
 class ConnectorOut(BaseModel):
     id: str
     provider_id: str
+    display_name: str
     source: str
     category: str
     status: str
@@ -41,25 +43,12 @@ class ConnectorOut(BaseModel):
     cached_tools_count: int
 
 
-class ScopeRequestIn(BaseModel):
-    connector_ids: list[str] | None = None
-
-
-class ScopeResponseRow(BaseModel):
-    connector_id: str
-    rows_written: int
-
-
-class ScopeResponse(BaseModel):
-    scoped: int
-    per_connector: list[ScopeResponseRow]
-
-
 def _to_out(row: Any) -> ConnectorOut:
     tools = row.cached_tools or []
     return ConnectorOut(
         id=row.id,
         provider_id=row.provider_id,
+        display_name=row.display_name,
         source=row.source,
         category=row.category,
         status=row.status,
@@ -78,10 +67,11 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
         row = await connectors_service.create_connector(
             db,
             provider_id=body.provider_id,
+            display_name=body.display_name,
             source=ConnectorSource(body.source),
             category=Category(body.category),
             launch=spec,
-            credentials_ref=body.credentials_ref,
+            secrets=body.secrets,
         )
         return _to_out(row)
 
@@ -99,28 +89,5 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
         if row is None:
             raise HTTPException(status_code=404, detail="connector not found")
         return _to_out(row)
-
-    @router.get("/review")
-    def review(db: DBSession = Depends(session_dep)) -> dict[str, Any]:
-        return {"departments": connectors_service.compute_readiness(db)}
-
-    @router.post("/review/scope", response_model=ScopeResponse)
-    async def scope(body: ScopeRequestIn, db: DBSession = Depends(session_dep)) -> ScopeResponse:
-        from openlia.departments import get_all_requirements
-
-        from openlia_server.services.scope_llm_client import QuickTierScopeClient
-
-        counts = await connectors_service.scope_connectors(
-            db,
-            connector_ids=body.connector_ids,
-            llm=QuickTierScopeClient(db),
-            requirements=get_all_requirements(),
-        )
-        return ScopeResponse(
-            scoped=sum(counts.values()),
-            per_connector=[
-                ScopeResponseRow(connector_id=k, rows_written=v) for k, v in counts.items()
-            ],
-        )
 
     return router
