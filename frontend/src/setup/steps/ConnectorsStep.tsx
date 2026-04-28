@@ -1,0 +1,319 @@
+import { useEffect, useState } from "react";
+import { Plus } from "lucide-react";
+import { WizardShell } from "../WizardShell";
+import { WizardFooter } from "../WizardFooter";
+import { AddConnectorForm } from "./AddConnectorForm";
+import { PerNeedReviewCard } from "./PerNeedReviewCard";
+import {
+  deleteConnector,
+  listConnectors,
+  listProposedSpecs,
+  reResolveSpecs,
+  validateConnector,
+  type ConnectorRow,
+  type ProposedSpec,
+} from "../../api/connectors";
+import { refreshDeptHealth } from "../../store/dept-health";
+
+interface Props {
+  totalSteps: number;
+  onBack: () => void;
+  onSaved: () => void;
+}
+
+interface ConnectorReviewState {
+  proposals: ProposedSpec[];
+  loading: boolean;
+  error: string | null;
+}
+
+export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
+  const [rows, setRows] = useState<ConnectorRow[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [activeReview, setActiveReview] = useState<string | null>(null);
+  const [reviewByConnector, setReviewByConnector] = useState<
+    Record<string, ConnectorReviewState>
+  >({});
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    try {
+      const r = await listConnectors();
+      setRows(r);
+      await refreshDeptHealth();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load connectors.");
+    }
+  };
+
+  useEffect(() => {
+    void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const onCreated = async (row: ConnectorRow) => {
+    setAdding(false);
+    await refresh();
+    // Fetch initial proposals (may be empty in Phase 6 stub).
+    await loadProposalsFor(row.id);
+    setActiveReview(row.id);
+  };
+
+  const loadProposalsFor = async (connectorId: string) => {
+    setReviewByConnector((prev) => ({
+      ...prev,
+      [connectorId]: { proposals: [], loading: true, error: null },
+    }));
+    try {
+      const proposals = await listProposedSpecs(connectorId);
+      setReviewByConnector((prev) => ({
+        ...prev,
+        [connectorId]: { proposals, loading: false, error: null },
+      }));
+    } catch (err) {
+      setReviewByConnector((prev) => ({
+        ...prev,
+        [connectorId]: {
+          proposals: [],
+          loading: false,
+          error: err instanceof Error ? err.message : "Failed to load proposals.",
+        },
+      }));
+    }
+  };
+
+  const onResolveAgain = async (connectorId: string) => {
+    setReviewByConnector((prev) => ({
+      ...prev,
+      [connectorId]: {
+        ...(prev[connectorId] ?? { proposals: [], error: null }),
+        loading: true,
+      } as ConnectorReviewState,
+    }));
+    try {
+      const proposals = await reResolveSpecs(connectorId);
+      setReviewByConnector((prev) => ({
+        ...prev,
+        [connectorId]: { proposals, loading: false, error: null },
+      }));
+    } catch (err) {
+      setReviewByConnector((prev) => ({
+        ...prev,
+        [connectorId]: {
+          proposals: prev[connectorId]?.proposals ?? [],
+          loading: false,
+          error: err instanceof Error ? err.message : "Re-resolve failed.",
+        },
+      }));
+    }
+  };
+
+  const onValidate = async (id: string) => {
+    try {
+      await validateConnector(id);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Validation failed.");
+    }
+  };
+
+  const onDelete = async (id: string) => {
+    try {
+      await deleteConnector(id);
+      await refresh();
+      setReviewByConnector((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      if (activeReview === id) setActiveReview(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed.");
+    }
+  };
+
+  const onNext = async () => {
+    setLoading(true);
+    try {
+      onSaved();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const canAdvance = rows.some((r) => r.status === "validated");
+
+  return (
+    <WizardShell
+      title="Connectors"
+      stepIndex={3}
+      totalSteps={totalSteps}
+      footer={
+        <WizardFooter
+          onBack={onBack}
+          onNext={onNext}
+          nextDisabled={!canAdvance}
+          loading={loading}
+        />
+      }
+    >
+      <div className="space-y-6">
+        <section>
+          <header className="mb-2">
+            <h3 className="text-sm font-medium text-text-primary">
+              Built-in templates
+            </h3>
+            <p className="text-xs text-text-secondary">
+              No built-in templates available — add a custom connector below.
+            </p>
+          </header>
+        </section>
+
+        <section className="space-y-3">
+          <header className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-text-primary">Connectors</h3>
+            <button
+              type="button"
+              onClick={() => setAdding((v) => !v)}
+              className="inline-flex items-center gap-2 rounded-md border border-dashed border-border-secondary px-3 py-1 text-xs text-text-secondary hover:text-text-primary"
+            >
+              <Plus size={14} />
+              {adding ? "Cancel" : "Add custom connector"}
+            </button>
+          </header>
+
+          {adding ? (
+            <AddConnectorForm
+              onCancel={() => setAdding(false)}
+              onCreated={onCreated}
+            />
+          ) : null}
+
+          {error ? (
+            <p role="alert" className="text-xs text-feedback-error">
+              {error}
+            </p>
+          ) : null}
+
+          {rows.length === 0 ? (
+            <p className="text-sm text-text-secondary">
+              No connectors yet. Click "Add custom connector" to add one.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {rows.map((r) => (
+                <li
+                  key={r.id}
+                  className="rounded-md border border-border-subtle bg-bg-elevated p-3"
+                  data-testid={`connector-row-${r.id}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-text-primary">
+                        {r.display_name || r.provider_id}{" "}
+                        <span className="text-xs text-text-secondary">
+                          ({r.source} · {r.category})
+                        </span>
+                      </p>
+                      <p className="text-xs text-text-secondary">
+                        status: {r.status}
+                        {r.last_error ? ` — ${r.last_error}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => onValidate(r.id)}
+                        className="text-accent-primary hover:underline"
+                      >
+                        Validate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveReview(r.id);
+                          void loadProposalsFor(r.id);
+                        }}
+                        className="text-accent-primary hover:underline"
+                      >
+                        Review specs
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDelete(r.id)}
+                        className="text-feedback-error hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+
+                  {activeReview === r.id ? (
+                    <ReviewPane
+                      connectorId={r.id}
+                      state={
+                        reviewByConnector[r.id] ?? {
+                          proposals: [],
+                          loading: false,
+                          error: null,
+                        }
+                      }
+                      onChanged={() => loadProposalsFor(r.id)}
+                      onResolveAll={() => onResolveAgain(r.id)}
+                    />
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </WizardShell>
+  );
+}
+
+interface ReviewPaneProps {
+  connectorId: string;
+  state: ConnectorReviewState;
+  onChanged: () => void;
+  onResolveAll: () => void;
+}
+
+function ReviewPane({ connectorId, state, onChanged, onResolveAll }: ReviewPaneProps) {
+  return (
+    <div className="mt-3 space-y-2 border-t border-border-subtle pt-3">
+      <div className="flex items-center justify-between">
+        <h5 className="text-xs font-medium text-text-primary">
+          Per-need proposals
+        </h5>
+        <button
+          type="button"
+          onClick={onResolveAll}
+          className="text-xs text-accent-primary hover:underline"
+        >
+          Re-resolve all
+        </button>
+      </div>
+      {state.loading ? (
+        <p className="text-xs text-text-secondary">Loading...</p>
+      ) : null}
+      {state.error ? (
+        <p role="alert" className="text-xs text-feedback-error">
+          {state.error}
+        </p>
+      ) : null}
+      {!state.loading && state.proposals.length === 0 ? (
+        <p className="text-xs text-text-secondary">No proposals at this time.</p>
+      ) : null}
+      {state.proposals.map((p) => (
+        <PerNeedReviewCard
+          key={`${p.department_id}-${p.need_id}`}
+          connectorId={connectorId}
+          proposal={p}
+          onChanged={onChanged}
+        />
+      ))}
+    </div>
+  );
+}
