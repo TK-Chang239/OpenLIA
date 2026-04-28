@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import sys
 import uuid
 from datetime import UTC, datetime
 
@@ -775,14 +774,69 @@ def wizard_reset(
             )
 
         db.commit()
-        typer.echo(
-            "Wizard state reset. The setup wizard will run on next visit." + purged_summary
-        )
+        typer.echo("Wizard state reset. The setup wizard will run on next visit." + purged_summary)
     finally:
         db.close()
 
 
 app.add_typer(wizard_app, name="wizard")
+
+
+# ---------------------------------------------------------------------------
+# connectors sub-app
+# ---------------------------------------------------------------------------
+
+import asyncio  # noqa: E402
+
+from openlia_server.services.connectors_service import (  # noqa: E402
+    list_connectors,
+    revalidate_connector,
+)
+
+connectors_app = typer.Typer(
+    name="connectors",
+    help="Manage connector entries.",
+    no_args_is_help=True,
+)
+
+
+@connectors_app.command("list")
+def connectors_list(ctx: typer.Context) -> None:
+    """List all connectors with status."""
+    db = build_session(ctx.obj["db_url"])
+    try:
+        rows = list_connectors(db)
+        if not rows:
+            typer.echo("No connectors configured.")
+            return
+        for row in rows:
+            typer.echo(
+                f"  {row.id}  {row.provider_id}  {row.display_name}  [{row.category}]  {row.status}"
+            )
+    finally:
+        db.close()
+
+
+@connectors_app.command("validate")
+def connectors_validate(
+    ctx: typer.Context,
+    connector_id: str = typer.Argument(..., help="Connector id to revalidate."),
+) -> None:
+    """Re-run validation for a connector by id."""
+    db = build_session(ctx.obj["db_url"])
+    try:
+        row = asyncio.run(revalidate_connector(db, connector_id))
+        if row is None:
+            echo_error(f"connector {connector_id!r} not found")
+            raise typer.Exit(code=1)
+        typer.echo(f"  {row.id}  status={row.status}  validated_at={row.validated_at}")
+        if row.status == "failed":
+            typer.echo(f"  error: {row.last_error}")
+    finally:
+        db.close()
+
+
+app.add_typer(connectors_app, name="connectors")
 
 
 # ---------------------------------------------------------------------------
