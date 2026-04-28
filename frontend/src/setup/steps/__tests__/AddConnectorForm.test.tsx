@@ -32,6 +32,59 @@ beforeEach(() => {
 });
 
 describe("AddConnectorForm", () => {
+  it("populates argv, env keys, secrets, and provider id from a pasted MCP config JSON", async () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+
+    const blob = JSON.stringify({
+      mcpServers: {
+        newsapi: {
+          command: "npx",
+          args: ["-y", "newsapi-mcp"],
+          env: { NEWSAPI_KEY: "sk-test-123" },
+        },
+      },
+    });
+
+    fireEvent.change(screen.getByLabelText(/paste mcp config/i), {
+      target: { value: blob },
+    });
+
+    expect(
+      (screen.getByLabelText(/provider id/i) as HTMLInputElement).value,
+    ).toBe("newsapi");
+    expect(
+      (screen.getByLabelText(/argv \(space-separated\)/i) as HTMLInputElement)
+        .value,
+    ).toBe("npx -y newsapi-mcp");
+    expect(
+      (screen.getByLabelText(/env keys \(comma-separated\)/i) as HTMLInputElement)
+        .value,
+    ).toBe("NEWSAPI_KEY");
+    expect((screen.getByLabelText(/secret key 0/i) as HTMLInputElement).value).toBe(
+      "NEWSAPI_KEY",
+    );
+    expect((screen.getByLabelText(/secret value 0/i) as HTMLInputElement).value).toBe(
+      "sk-test-123",
+    );
+  });
+
+  it("shows inline error and preserves manually-typed fields when pasted JSON is malformed", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/argv \(space-separated\)/i), {
+      target: { value: "uvx already-typed" },
+    });
+    fireEvent.change(screen.getByLabelText(/paste mcp config/i), {
+      target: { value: "{ not json" },
+    });
+
+    expect(screen.getByRole("alert").textContent).toMatch(/json|parse/i);
+    expect(
+      (screen.getByLabelText(/argv \(space-separated\)/i) as HTMLInputElement)
+        .value,
+    ).toBe("uvx already-typed");
+  });
+
   it("submits cli_mcp with parsed argv list and env_keys", async () => {
     const onCreated = vi.fn();
     render(<AddConnectorForm onCancel={vi.fn()} onCreated={onCreated} />);
