@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from openlia.connectors.types import ToolDefinition
-from openlia.connectors.validate import ValidationFailure, ValidationOk
+from openlia_server.services import connectors_service
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
@@ -17,7 +17,6 @@ from sqlalchemy.engine import Engine
 def client(engine: Engine, db_session_factory) -> Iterator[TestClient]:
     from openlia_server.routes.connectors import build_connectors_router
 
-    # SQLite needs FK enforcement enabled per-connection for cascade delete to fire.
     @event.listens_for(engine, "connect")
     def _fk_on(dbapi_conn, _):  # type: ignore[no-untyped-def]
         cur = dbapi_conn.cursor()
@@ -31,25 +30,43 @@ def client(engine: Engine, db_session_factory) -> Iterator[TestClient]:
     yield TestClient(app)
 
 
-def test_create_connector_validated(client, monkeypatch):
-    async def fake_validate(*, spec, canary_tool, session_factory):
-        return ValidationOk(
-            tools=[ToolDefinition(name="get_quote", description="d", input_schema={})]
+def _patch_validation_ok(monkeypatch, tools=None, callables=None):
+    async def fake(launch, secrets):
+        return connectors_service.ValidationOk(
+            tools=tools
+            or [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.input_schema,
+                }
+                for t in [ToolDefinition(name="get_quote", description="d", input_schema={})]
+            ],
+            python_callables=callables or [],
         )
 
-    monkeypatch.setattr(
-        "openlia_server.services.connectors_service.validate_connector",
-        fake_validate,
-    )
+    monkeypatch.setattr("openlia_server.services.connectors_service._validate_launch", fake)
 
+
+def _patch_validation_failure(monkeypatch, message="bad key"):
+    async def fake(launch, secrets):
+        return connectors_service.ValidationFailure(error=message)
+
+    monkeypatch.setattr("openlia_server.services.connectors_service._validate_launch", fake)
+
+
+def test_create_connector_validated(client, monkeypatch):
+    _patch_validation_ok(monkeypatch)
     resp = client.post(
         "/api/connectors",
         json={
-            "source": "built_in",
+            "source": "cli_mcp",
             "category": "financial",
             "provider_id": "eodhd",
             "display_name": "EODHD",
-            "launch": {"kind": "built_in", "template_id": "eodhd"},
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["uvx", "eodhd-mcp"], "env_keys": []}]
+            },
             "secrets": {"EODHD_API_KEY": "k"},
         },
     )
@@ -60,14 +77,7 @@ def test_create_connector_validated(client, monkeypatch):
 
 
 def test_create_connector_failed(client, monkeypatch):
-    async def fake_validate(**kwargs):
-        return ValidationFailure(error="bad key")
-
-    monkeypatch.setattr(
-        "openlia_server.services.connectors_service.validate_connector",
-        fake_validate,
-    )
-
+    _patch_validation_failure(monkeypatch, "bad key")
     resp = client.post(
         "/api/connectors",
         json={
@@ -75,7 +85,7 @@ def test_create_connector_failed(client, monkeypatch):
             "category": "news",
             "provider_id": "user_mcp_news1",
             "display_name": "Custom News MCP",
-            "launch": {"kind": "remote_mcp", "url": "https://x", "headers": {}},
+            "launch": {"modes": [{"kind": "remote_mcp", "url": "https://x", "headers": {}}]},
         },
     )
     assert resp.status_code == 201
@@ -85,22 +95,17 @@ def test_create_connector_failed(client, monkeypatch):
 
 
 def test_list_connectors(client, monkeypatch):
-    async def fake_validate(**kwargs):
-        return ValidationOk(tools=[])
-
-    monkeypatch.setattr(
-        "openlia_server.services.connectors_service.validate_connector",
-        fake_validate,
-    )
-
+    _patch_validation_ok(monkeypatch, tools=[])
     client.post(
         "/api/connectors",
         json={
-            "source": "built_in",
+            "source": "cli_mcp",
             "category": "financial",
             "provider_id": "eodhd",
             "display_name": "EODHD",
-            "launch": {"kind": "built_in", "template_id": "eodhd"},
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["uvx", "eodhd-mcp"], "env_keys": []}]
+            },
         },
     )
     resp = client.get("/api/connectors")

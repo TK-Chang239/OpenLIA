@@ -149,8 +149,7 @@ def test_runner_dept_rs_active_when_all_required_categories_and_needs_resolved()
     dept = RetailSentimentDepartment()
     needs = load_needs(dept.name)
     connectors = [
-        _Conn(category=cat, status=ConnectorStatus.VALIDATED)
-        for cat in dept.required_categories
+        _Conn(category=cat, status=ConnectorStatus.VALIDATED) for cat in dept.required_categories
     ]
     specs = [_Spec(department_id=dept.name, need_id=n.id) for n in needs]
     health = check_dept_health(dept, validated_connectors=connectors, runner_specs=specs)

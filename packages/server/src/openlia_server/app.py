@@ -69,6 +69,7 @@ from openlia_server.routes.departments.retail_sentiment import (
     build_retail_sentiment_router,
 )
 from openlia_server.routes.departments.secretary import build_secretary_router
+from openlia_server.routes.dept_health import build_dept_health_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
@@ -277,6 +278,20 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        # Phase 10: populate dept-health cache. Every dept-route handler
+        # and every scheduled-job pre-flight reads from app.state.dept_health.
+        from openlia_server.services.dept_health import compute_all as _compute_all_health
+
+        _sf = db_session_factory or _default_session_factory
+        _health_session = _sf()
+        try:
+            app.state.dept_health = _compute_all_health(_health_session)
+        except Exception:
+            log.exception("startup dept_health computation failed; defaulting to empty map")
+            app.state.dept_health = {}
+        finally:
+            _health_session.close()
+
         scheduler_settings = SchedulerSettings.from_env()
         scheduler_svc: SchedulerService | None = None
 
@@ -422,6 +437,50 @@ def create_app(
         app.include_router(build_admin_router(db_session_factory=factory))
 
     app.include_router(build_connectors_router(db_session_factory=factory))
+    app.include_router(build_dept_health_router())
+
+    # Phase 10: dept-health cache. Populated lazily on first read in tests
+    # (see dept_health.compute_all) and refreshed at startup in the lifespan
+    # below so the GET /api/dept-health endpoint always returns fresh state.
+    # Type: dict[str, openlia.departments.health.DepartmentHealth].
+    app.state.dept_health = {}
+
+    # Wire connector + runner-spec mutation hooks so the health cache stays
+    # in sync without route handlers needing to know about it.
+    from openlia_server.services import (
+        connectors_service as _connectors_service,
+    )
+    from openlia_server.services import (
+        dept_health as _dept_health_svc,
+    )
+    from openlia_server.services import (
+        runner_specs_service as _runner_specs_service,
+    )
+
+    def _recompute_dept_health(session: DBSession) -> None:
+        app.state.dept_health = _dept_health_svc.compute_all(session)
+
+    _connectors_service.set_dept_health_hook(_recompute_dept_health)
+    _runner_specs_service.set_dept_health_hook(_recompute_dept_health)
+
+    # Mount the wizard-time runner specs router. Production wiring of a
+    # real Quick-tier LLM client lives in the wizard adapter integration
+    # work (Phase 9 follow-up); the placeholder below raises loudly when
+    # the resolver runs without a configured provider so misconfiguration
+    # surfaces as a proposal-level error instead of silently dropping
+    # drafts.
+    from openlia_server.routes.runner_specs import build_runner_specs_router
+
+    class _UnconfiguredLlmClient:
+        async def generate_json(self, *, prompt: str) -> dict[str, Any]:
+            raise RuntimeError("wizard-time adapter LLM client is not configured for this server")
+
+    app.include_router(
+        build_runner_specs_router(
+            db_session_factory=factory,
+            llm_client_factory=_UnconfiguredLlmClient,
+        )
+    )
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))

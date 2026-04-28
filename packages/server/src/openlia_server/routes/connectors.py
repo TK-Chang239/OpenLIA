@@ -1,4 +1,9 @@
-"""Routes for the connector subsystem under /connectors (mounted under /api by the app)."""
+"""Routes for the connector subsystem under /connectors.
+
+V2 (connector-redesign-v2): the request/response models track the
+multi-mode `LaunchSpec` shape. Each mode dict matches `{"kind": ...,
+... mode-specific fields ...}`.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from openlia.connectors.types import Category, ConnectorSource, MCPLaunchSpec
+from openlia.connectors.types import Category, ConnectorSource
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -14,13 +19,23 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.services import connectors_service
 
 
-class LaunchIn(BaseModel):
+class ModeIn(BaseModel):
     kind: str
+    # cli_mcp
+    argv: list[str] | None = None
+    env_keys: list[str] | None = None
+    # remote_mcp
     url: str | None = None
     headers: dict[str, str] | None = None
-    argv: list[str] | None = None
-    env: dict[str, str] | None = None
-    template_id: str | None = None
+    # python_lib
+    pip_name: str | None = None
+    pip_version: str | None = None
+    import_module: str | None = None
+    instance_factory: dict[str, Any] | None = None
+
+
+class LaunchIn(BaseModel):
+    modes: list[ModeIn]
 
 
 class ConnectorCreate(BaseModel):
@@ -63,14 +78,14 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
 
     @router.post("", status_code=status.HTTP_201_CREATED, response_model=ConnectorOut)
     async def create(body: ConnectorCreate, db: DBSession = Depends(session_dep)) -> ConnectorOut:
-        spec = MCPLaunchSpec.from_json(body.launch.model_dump(exclude_none=True))
+        launch_dict = body.launch.model_dump(exclude_none=True)
         row = await connectors_service.create_connector(
             db,
             provider_id=body.provider_id,
             display_name=body.display_name,
             source=ConnectorSource(body.source),
             category=Category(body.category),
-            launch=spec,
+            launch=launch_dict,
             secrets=body.secrets,
         )
         return _to_out(row)
