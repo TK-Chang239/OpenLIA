@@ -29,9 +29,11 @@ describe("api/connectors", () => {
       .mockResolvedValue(jsonResponse({ id: "c1" }));
     const input: connectors.CreateConnectorInput = {
       provider_id: "eodhd",
-      source: "built_in",
+      display_name: "EODHD",
+      source: "remote_mcp",
       category: "financial",
-      launch: { kind: "built_in", template_id: "eodhd" },
+      launch: { modes: [{ kind: "remote_mcp", url: "https://x" }] },
+      secrets: { API_KEY: "k" },
     };
     await connectors.createConnector(input);
     expect(spy).toHaveBeenCalledWith(
@@ -53,49 +55,59 @@ describe("api/connectors", () => {
     );
   });
 
-  it("revalidateConnector POSTs /api/connectors/<id>/validate", async () => {
+  it("validateConnector POSTs /api/connectors/<id>/validate", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(jsonResponse({ id: "abc" }));
-    await connectors.revalidateConnector("abc");
+    await connectors.validateConnector("abc");
     expect(spy).toHaveBeenCalledWith(
       "/api/connectors/abc/validate",
       expect.objectContaining({ method: "POST" }),
     );
   });
 
-  it("scopeAll(undefined) POSTs {connector_ids: null}", async () => {
+  it("listProposedSpecs GETs /api/connectors/<id>/proposed-specs", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(jsonResponse({ scoped: 0, per_connector: [] }));
-    await connectors.scopeAll();
+      .mockResolvedValue(jsonResponse([]));
+    await connectors.listProposedSpecs("abc");
     expect(spy).toHaveBeenCalledWith(
-      "/api/connectors/review/scope",
+      "/api/connectors/abc/proposed-specs",
+      expect.anything(),
+    );
+  });
+
+  it("reResolveSpecs POSTs /api/connectors/<id>/proposed-specs/resolve", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse([]));
+    await connectors.reResolveSpecs("abc");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/connectors/abc/proposed-specs/resolve",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("approveSpec POSTs department_id+need_id", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonResponse({
+          id: "rcs1",
+          department_id: "mr",
+          need_id: "n",
+          connector_id: "c",
+          access_mode: "remote_mcp",
+        }),
+      );
+    await connectors.approveSpec("c", "mr", "n");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/connectors/c/proposed-specs/approve",
       expect.objectContaining({ method: "POST" }),
     );
     const init = spy.mock.calls[0][1] as RequestInit;
-    expect(init.body).toBe(JSON.stringify({ connector_ids: null }));
-  });
-
-  it("scopeAll([\"a\",\"b\"]) POSTs {connector_ids: [\"a\",\"b\"]}", async () => {
-    const spy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(jsonResponse({ scoped: 0, per_connector: [] }));
-    await connectors.scopeAll(["a", "b"]);
-    const init = spy.mock.calls[0][1] as RequestInit;
-    expect(init.body).toBe(JSON.stringify({ connector_ids: ["a", "b"] }));
-  });
-
-  it("getReview GETs /api/connectors/review", async () => {
-    const spy = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(jsonResponse({ departments: [] }));
-    await connectors.getReview();
-    expect(spy).toHaveBeenCalledWith(
-      "/api/connectors/review",
-      expect.anything(),
+    expect(init.body).toBe(
+      JSON.stringify({ department_id: "mr", need_id: "n" }),
     );
-    const init = spy.mock.calls[0][1] as RequestInit;
-    expect(init.method ?? "GET").toBe("GET");
   });
 });

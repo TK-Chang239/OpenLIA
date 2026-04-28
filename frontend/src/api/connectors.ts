@@ -1,18 +1,32 @@
 import { fetchJson } from "./client";
 
 export type Category = "financial" | "news" | "social" | "web_search";
-export type ConnectorSource = "built_in" | "remote_mcp" | "cli_mcp";
+export type ConnectorSource = "built_in" | "remote_mcp" | "cli_mcp" | "python_lib" | "skill";
 export type ConnectorStatus = "pending" | "validated" | "failed";
-export type CategoryStatus = "ok" | "missing" | "enhanced" | "basic";
 
-export type LaunchSpec =
-  | { kind: "built_in"; template_id: string }
-  | { kind: "remote_mcp"; url: string; headers?: Record<string, string> }
-  | { kind: "cli_mcp"; argv: string[]; env?: Record<string, string> };
+export interface ModeIn {
+  kind: string;
+  // cli_mcp
+  argv?: string[];
+  env_keys?: string[];
+  // remote_mcp
+  url?: string;
+  headers?: Record<string, string>;
+  // python_lib
+  pip_name?: string;
+  pip_version?: string;
+  import_module?: string;
+  instance_factory?: Record<string, unknown>;
+}
+
+export interface LaunchIn {
+  modes: ModeIn[];
+}
 
 export interface ConnectorRow {
   id: string;
   provider_id: string;
+  display_name: string;
   source: ConnectorSource;
   category: Category;
   status: ConnectorStatus;
@@ -22,38 +36,29 @@ export interface ConnectorRow {
 
 export interface CreateConnectorInput {
   provider_id: string;
+  display_name: string;
   source: ConnectorSource;
   category: Category;
-  launch: LaunchSpec;
-  credentials_ref?: string;
+  launch: LaunchIn;
+  secrets?: Record<string, string>;
 }
 
-export interface ScopeResponseRow {
-  connector_id: string;
-  rows_written: number;
-}
-
-export interface ScopeResponse {
-  scoped: number;
-  per_connector: ScopeResponseRow[];
-}
-
-export interface ReviewCategoryRow {
-  category: Category;
-  required: boolean;
-  status: CategoryStatus;
-  tool_count: number;
-  providers: string[];
-}
-
-export interface ReviewDepartmentRow {
+export interface ProposedSpec {
   department_id: string;
-  ready: boolean;
-  categories: ReviewCategoryRow[];
+  need_id: string;
+  proposed_spec: Record<string, unknown>;
+  canary_value: unknown;
+  canary_ok: boolean;
+  shape_match: boolean;
+  error: string | null;
 }
 
-export interface ReviewResponse {
-  departments: ReviewDepartmentRow[];
+export interface ApprovalOut {
+  id: string;
+  department_id: string;
+  need_id: string;
+  connector_id: string;
+  access_mode: string;
 }
 
 export const listConnectors = () =>
@@ -71,17 +76,35 @@ export const deleteConnector = async (id: string): Promise<void> => {
   });
 };
 
-export const revalidateConnector = (id: string) =>
+export const validateConnector = (id: string) =>
   fetchJson<ConnectorRow>(
     `/api/connectors/${encodeURIComponent(id)}/validate`,
     { method: "POST" },
   );
 
-export const scopeAll = (connectorIds?: string[]) =>
-  fetchJson<ScopeResponse>("/api/connectors/review/scope", {
-    method: "POST",
-    json: { connector_ids: connectorIds ?? null },
-  });
+// Backward-compatible alias used by older callers.
+export const revalidateConnector = validateConnector;
 
-export const getReview = () =>
-  fetchJson<ReviewResponse>("/api/connectors/review");
+export const listProposedSpecs = (connectorId: string) =>
+  fetchJson<ProposedSpec[]>(
+    `/api/connectors/${encodeURIComponent(connectorId)}/proposed-specs`,
+  );
+
+export const reResolveSpecs = (connectorId: string) =>
+  fetchJson<ProposedSpec[]>(
+    `/api/connectors/${encodeURIComponent(connectorId)}/proposed-specs/resolve`,
+    { method: "POST" },
+  );
+
+export const approveSpec = (
+  connectorId: string,
+  departmentId: string,
+  needId: string,
+) =>
+  fetchJson<ApprovalOut>(
+    `/api/connectors/${encodeURIComponent(connectorId)}/proposed-specs/approve`,
+    {
+      method: "POST",
+      json: { department_id: departmentId, need_id: needId },
+    },
+  );
