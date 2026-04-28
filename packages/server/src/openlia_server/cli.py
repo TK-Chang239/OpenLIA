@@ -761,21 +761,16 @@ def wizard_reset(
         purged_summary = ""
         if purge:
             from openlia_server.db.models.config import (
-                DataProvider,
-                DataProviderRequirementMapping,
                 LLMModel,
                 LLMProvider,
                 UserLLMPreference,
             )
 
-            mapping_count = db.query(DataProviderRequirementMapping).delete()
-            dp_count = db.query(DataProvider).delete()
             user_pref_count = db.query(UserLLMPreference).delete()
             llm_model_count = db.query(LLMModel).delete()
             llm_provider_count = db.query(LLMProvider).delete()
             purged_summary = (
-                f" Purged {dp_count} data provider(s), {mapping_count} requirement "
-                f"mapping(s), {llm_model_count} LLM model(s), {llm_provider_count} "
+                f" Purged {llm_model_count} LLM model(s), {llm_provider_count} "
                 f"LLM provider(s), and {user_pref_count} user LLM preference(s)."
             )
 
@@ -802,7 +797,6 @@ from sqlalchemy.exc import OperationalError  # noqa: E402
 from openlia_server.db import crypto as crypto_module  # noqa: E402
 from openlia_server.db.bootstrap import openlia_home  # noqa: E402
 from openlia_server.db.models.config import (  # noqa: E402
-    DataProvider,
     LLMProvider,
     WebSearchProvider,
 )
@@ -893,7 +887,6 @@ def secrets_rotate_key(
         total = 0
         for model, pk_attr in (
             (LLMProvider, "id"),
-            (DataProvider, "id"),
             (WebSearchProvider, "id"),
         ):
             rows = (
