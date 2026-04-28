@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from openlia.connectors.adapter import (
     LlmClient,
     ResolverError,
@@ -37,9 +36,7 @@ def _need() -> RunnerNeed:
         id="real_time_quote",
         description="Latest trade price for a US-listed equity.",
         parameters=[
-            NeedParameter(
-                name="ticker", description="Ticker symbol", type="str", required=True
-            )
+            NeedParameter(name="ticker", description="Ticker symbol", type="str", required=True)
         ],
         shape="float",
     )

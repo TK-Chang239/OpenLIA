@@ -43,8 +43,7 @@ def _bind_args(spec: CallableSpec, sample_args: dict[str, Any]) -> dict[str, Any
         if binding.transform is not None:
             if binding.transform not in ALLOWED_TRANSFORMS:
                 raise ValueError(
-                    f"unknown transform {binding.transform!r} on need "
-                    f"{spec.need_id!r}"
+                    f"unknown transform {binding.transform!r} on need {spec.need_id!r}"
                 )
             value = TRANSFORMS[binding.transform](value)
         bound[binding.to_arg] = value

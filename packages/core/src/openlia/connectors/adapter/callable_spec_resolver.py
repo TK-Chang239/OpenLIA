@@ -77,7 +77,10 @@ Respond with a JSON object of the form:
   "tool_name": "<MCP tool name, or null for python_lib>",
   "method": "<python_lib method qualname, or null for MCP>",
   "param_bindings": {{
-    "<need parameter name>": {{"to_arg": "<actual arg on the tool/method>", "transform": "<transform name or null>"}}
+    "<need parameter name>": {{
+      "to_arg": "<actual arg on the tool/method>",
+      "transform": "<transform name or null>"
+    }}
   }},
   "constants": {{"<arg name>": <JSON value>}}
 }}
@@ -146,9 +149,7 @@ def _python_method_args(qualname: str, defs: list[CallableDefinition]) -> set[st
                 # eval-free helper: extract the parameter names from "( ... )".
                 return _parse_signature_args(d.signature)
             except Exception as exc:
-                raise ResolverError(
-                    f"could not parse signature for {qualname!r}: {exc}"
-                ) from exc
+                raise ResolverError(f"could not parse signature for {qualname!r}: {exc}") from exc
     raise ResolverError(f"qualname {qualname!r} not found in inventory")
 
 
@@ -218,9 +219,7 @@ def _coerce_param_bindings(raw: Any) -> dict[str, ParamBinding]:
     out: dict[str, ParamBinding] = {}
     for caller_name, binding in raw.items():
         if not isinstance(binding, dict) or "to_arg" not in binding:
-            raise ResolverError(
-                f"`param_bindings.{caller_name}` must be an object with `to_arg`"
-            )
+            raise ResolverError(f"`param_bindings.{caller_name}` must be an object with `to_arg`")
         out[caller_name] = ParamBinding(
             to_arg=str(binding["to_arg"]),
             transform=(binding.get("transform") or None),
@@ -266,9 +265,7 @@ async def resolve_callable_spec(
             None,
         )
         if match is None:
-            raise ResolverError(
-                f"tool_name {tool_name!r} not found in connector inventory"
-            )
+            raise ResolverError(f"tool_name {tool_name!r} not found in connector inventory")
         valid_args = _tool_args_from_schema(match.input_schema)
         method = None
     elif access_mode == "python_lib":
@@ -305,8 +302,7 @@ async def resolve_callable_spec(
         for const_arg in constants:
             if const_arg not in valid_args:
                 raise ResolverError(
-                    f"constant {const_arg!r} does not match any parameter of "
-                    f"the chosen callable"
+                    f"constant {const_arg!r} does not match any parameter of the chosen callable"
                 )
 
     return CallableSpec(
