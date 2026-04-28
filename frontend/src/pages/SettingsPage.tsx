@@ -8,6 +8,8 @@ import { InvitesPanel } from '../components/settings/admin/InvitesPanel';
 import { UsersPanel } from '../components/settings/admin/UsersPanel';
 import { ResetRequestsPanel } from '../components/settings/admin/ResetRequestsPanel';
 import { ModelsAdminPanel } from '../components/settings/admin/ModelsAdminPanel';
+import { ConnectorsAdminPanel } from '../components/settings/admin/ConnectorsAdminPanel';
+import { RunnerCallableSpecsAdminPanel } from '../components/settings/admin/RunnerCallableSpecsAdminPanel';
 import { useCurrentUser } from '../auth/useCurrentUser';
 
 export function SettingsPage(): JSX.Element {
@@ -36,6 +38,8 @@ export function SettingsPage(): JSX.Element {
             <Route path="users" element={<UsersPanel currentUserId={user.id} />} />
             <Route path="reset-requests" element={<ResetRequestsPanel />} />
             <Route path="models" element={<ModelsAdminPanel />} />
+            <Route path="connectors" element={<ConnectorsAdminPanel />} />
+            <Route path="runner-specs" element={<RunnerCallableSpecsAdminPanel />} />
           </Route>
         ) : null}
         <Route path="*" element={<Navigate to="general" replace />} />

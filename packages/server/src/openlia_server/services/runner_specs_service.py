@@ -127,6 +127,16 @@ def clear_proposed_specs(connector_id: str) -> None:
     _PROPOSALS.pop(connector_id, None)
 
 
+def list_runner_specs(
+    session: Session, *, department_id: str | None = None
+) -> list[RunnerCallableSpec]:
+    """List persisted `runner_callable_specs`, optionally scoped to a dept."""
+    stmt = select(RunnerCallableSpec)
+    if department_id is not None:
+        stmt = stmt.where(RunnerCallableSpec.department_id == department_id)
+    return list(session.execute(stmt).scalars().all())
+
+
 # ---------------------------------------------------------------------------
 # CallableSpec (de)serialization helpers.
 # ---------------------------------------------------------------------------

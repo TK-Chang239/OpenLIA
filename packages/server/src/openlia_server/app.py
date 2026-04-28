@@ -473,7 +473,10 @@ def create_app(
     # the resolver runs without a configured provider so misconfiguration
     # surfaces as a proposal-level error instead of silently dropping
     # drafts.
-    from openlia_server.routes.runner_specs import build_runner_specs_router
+    from openlia_server.routes.runner_specs import (
+        build_runner_specs_list_router,
+        build_runner_specs_router,
+    )
 
     class _UnconfiguredLlmClient:
         async def generate_json(self, *, prompt: str) -> dict[str, Any]:
@@ -485,6 +488,7 @@ def create_app(
             llm_client_factory=_UnconfiguredLlmClient,
         )
     )
+    app.include_router(build_runner_specs_list_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
