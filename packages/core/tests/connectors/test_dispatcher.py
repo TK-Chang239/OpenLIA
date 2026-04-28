@@ -1,0 +1,233 @@
+"""Dispatcher tests (v2): candidate pool, fetch_need, in_department."""
+
+from __future__ import annotations
+
+import pytest
+
+from openlia.connectors.dispatch import (
+    DispatchError,
+    Dispatcher,
+    NeedNotResolved,
+    PreparedConnector,
+)
+from openlia.connectors.types import (
+    CallableDefinition,
+    CallableSpec,
+    Category,
+    ConnectorStatus,
+    ParamBinding,
+    ToolDefinition,
+)
+
+
+def _td(name: str) -> ToolDefinition:
+    return ToolDefinition(
+        name=name, description=f"desc-{name}", input_schema={"type": "object"}
+    )
+
+
+def _cd(qualname: str) -> CallableDefinition:
+    return CallableDefinition(qualname=qualname, signature="(...)->Any", doc="")
+
+
+class _FakeTransport:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+
+    async def call_tool(self, name: str, arguments: dict) -> object:
+        self.calls.append((name, arguments))
+        return {"name": name, "args": arguments}
+
+
+def _eodhd_mcp() -> PreparedConnector:
+    return PreparedConnector(
+        connector_id="c1",
+        provider_id="eodhd",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FakeTransport(),
+        tools={"get_quote": _td("get_quote")},
+    )
+
+
+def _fmp_mcp() -> PreparedConnector:
+    return PreparedConnector(
+        connector_id="c2",
+        provider_id="fmp",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FakeTransport(),
+        tools={"quote": _td("quote")},
+    )
+
+
+def _pending_conn() -> PreparedConnector:
+    return PreparedConnector(
+        connector_id="c3",
+        provider_id="newsapi",
+        category=Category.NEWS,
+        status=ConnectorStatus.PENDING,
+        transport=_FakeTransport(),
+        tools={"search": _td("search")},
+    )
+
+
+# ----- candidate_tools -----
+
+
+def test_candidate_tools_includes_only_validated_connectors():
+    d = Dispatcher(
+        connectors={
+            "c1": _eodhd_mcp(),
+            "c2": _fmp_mcp(),
+            "c3": _pending_conn(),
+        }
+    )
+    out = d.candidate_tools()
+    names = {t["name"] for t in out}
+    assert names == {"eodhd__get_quote", "fmp__quote"}
+    assert all(t["input_schema"] == {"type": "object"} for t in out)
+
+
+def test_candidate_tools_empty_when_no_validated_connectors():
+    d = Dispatcher(connectors={"c3": _pending_conn()})
+    assert d.candidate_tools() == []
+
+
+# ----- dispatch_tool_use -----
+
+
+async def test_dispatch_routes_to_correct_connector_by_prefix():
+    eod = _eodhd_mcp()
+    fmp = _fmp_mcp()
+    d = Dispatcher(connectors={"c1": eod, "c2": fmp})
+
+    await d.dispatch_tool_use("eodhd__get_quote", {"ticker": "AAPL"})
+    await d.dispatch_tool_use("fmp__quote", {"ticker": "MSFT"})
+
+    assert eod.transport.calls == [("get_quote", {"ticker": "AAPL"})]  # type: ignore[attr-defined]
+    assert fmp.transport.calls == [("quote", {"ticker": "MSFT"})]  # type: ignore[attr-defined]
+
+
+async def test_dispatch_unknown_provider_raises():
+    d = Dispatcher(connectors={})
+    with pytest.raises(DispatchError, match="no connector"):
+        await d.dispatch_tool_use("bogus__tool", {})
+
+
+async def test_dispatch_missing_separator_raises():
+    d = Dispatcher(connectors={})
+    with pytest.raises(DispatchError, match="prefix"):
+        await d.dispatch_tool_use("noprefix", {})
+
+
+# ----- in_department / fetch_need -----
+
+
+async def test_fetch_need_without_department_context_raises():
+    d = Dispatcher(connectors={})
+    with pytest.raises(DispatchError, match="in_department"):
+        await d.fetch_need("debt_gdp", country="US")
+
+
+async def test_fetch_need_with_no_resolved_spec_raises_need_not_resolved():
+    d = Dispatcher(connectors={"c1": _eodhd_mcp()}, callable_specs={})
+    async with d.in_department("macro_research"):
+        with pytest.raises(NeedNotResolved):
+            await d.fetch_need("debt_gdp", country="US")
+
+
+async def test_fetch_need_mcp_spec_happy_path_with_transform_and_constants():
+    eod = _eodhd_mcp()
+    eod.tools["get_economic_indicator"] = _td("get_economic_indicator")
+    spec = CallableSpec(
+        need_id="debt_gdp",
+        access_mode="cli_mcp",
+        tool_name="get_economic_indicator",
+        param_bindings={"country": ParamBinding(to_arg="country", transform="upper")},
+        constants={"indicator": "DEBT_GDP_PCT"},
+        shape="float",
+    )
+    d = Dispatcher(
+        connectors={"c1": eod},
+        callable_specs={("macro_research", "debt_gdp"): spec},
+    )
+    async with d.in_department("macro_research"):
+        result = await d.fetch_need("debt_gdp", country="us")
+
+    assert eod.transport.calls == [  # type: ignore[attr-defined]
+        ("get_economic_indicator", {"country": "US", "indicator": "DEBT_GDP_PCT"}),
+    ]
+    assert result == {
+        "name": "get_economic_indicator",
+        "args": {"country": "US", "indicator": "DEBT_GDP_PCT"},
+    }
+
+
+async def test_fetch_need_python_lib_spec_happy_path():
+    transport = _FakeTransport()
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="eodhd",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=transport,
+        tools={},
+        callables={"economic_data": _cd("APIClient.economic_data")},
+    )
+    spec = CallableSpec(
+        need_id="debt_gdp",
+        access_mode="python_lib",
+        module="eodhd",
+        method="economic_data",
+        param_bindings={"country": ParamBinding(to_arg="country_code", transform=None)},
+        constants={"indicator": "DEBT_GDP_PCT"},
+        shape="float",
+    )
+    d = Dispatcher(
+        connectors={"c1": conn},
+        callable_specs={("macro_research", "debt_gdp"): spec},
+    )
+    async with d.in_department("macro_research"):
+        await d.fetch_need("debt_gdp", country="US")
+
+    assert transport.calls == [
+        ("economic_data", {"country_code": "US", "indicator": "DEBT_GDP_PCT"}),
+    ]
+
+
+async def test_fetch_need_unknown_transform_raises():
+    eod = _eodhd_mcp()
+    eod.tools["get_thing"] = _td("get_thing")
+    spec = CallableSpec(
+        need_id="x",
+        access_mode="cli_mcp",
+        tool_name="get_thing",
+        param_bindings={"v": ParamBinding(to_arg="v", transform="bogus_transform")},
+    )
+    d = Dispatcher(
+        connectors={"c1": eod},
+        callable_specs={("dept", "x"): spec},
+    )
+    async with d.in_department("dept"):
+        with pytest.raises(DispatchError, match="unknown transform"):
+            await d.fetch_need("x", v="hi")
+
+
+# ----- callable_specs_for -----
+
+
+def test_callable_specs_for_filters_by_department():
+    spec_a = CallableSpec(need_id="a", access_mode="cli_mcp", tool_name="t")
+    spec_b = CallableSpec(need_id="b", access_mode="cli_mcp", tool_name="t")
+    spec_c = CallableSpec(need_id="c", access_mode="cli_mcp", tool_name="t")
+    d = Dispatcher(
+        connectors={},
+        callable_specs={
+            ("macro_research", "a"): spec_a,
+            ("macro_research", "b"): spec_b,
+            ("retail_sentiment", "c"): spec_c,
+        },
+    )
+    out = d.callable_specs_for("macro_research")
+    assert {s.need_id for s in out} == {"a", "b"}
