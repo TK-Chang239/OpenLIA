@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
+from openlia.connectors.types import Category
 from openlia.departments.base import Tier
 
 
@@ -14,14 +15,17 @@ class MorningBriefingDepartment:
     display_name: str = "Morning Briefings"
     prompt_name: str = "morning_briefing"
     tier: Tier = "everyday"
-    data_requirement_types: tuple[str, ...] = (
-        "company_news",
-        "economic_events",
+
+    # Connector dependencies (spec §10.1).
+    required_categories: ClassVar[tuple[Category, ...]] = (
+        Category.FINANCIAL,
+        Category.NEWS,
     )
-    optional_requirement_types: tuple[str, ...] = (
-        "stock_quote",
-        "historical_prices",
-        "macro_indicator",
-    )
+    optional_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
+
+    # Runtime behavior (spec §5.2).
+    requires_runner: ClassVar[bool] = False
+    disable_runtime_routing: ClassVar[bool] = False
+
     extra_tools: tuple[dict[str, Any], ...] = ()
     valid_modes: tuple[str, ...] = ("morning_briefing",)

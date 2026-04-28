@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import ClassVar
+
+from openlia.connectors.types import Category
 
 
 @dataclass(frozen=True)
@@ -10,12 +13,16 @@ class PanicThermometerDepartment:
     name: str = "panic_thermometer"
     display_name: str = "Panic Thermometer"
     is_dashboard: bool = True
-    data_requirement_types: tuple[str, ...] = (
-        "historical_prices",
-        "stock_quote",
-        "economic_events",
-    )
-    optional_requirement_types: tuple[str, ...] = ("company_news",)
+
+    # Connector dependencies (spec §10.1).
+    required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
+    optional_categories: ClassVar[tuple[Category, ...]] = (Category.NEWS,)
+
+    # Runtime behavior (spec §5.2). PT is dashboard-only with no chat surface
+    # today; runtime routing flag stays False.
+    requires_runner: ClassVar[bool] = False
+    disable_runtime_routing: ClassVar[bool] = False
+
     panel_ids: tuple[str, ...] = (
         "oil",
         "inflation",
