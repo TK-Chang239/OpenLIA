@@ -111,13 +111,18 @@ def test_journey_personal_first_run_setup(db_session) -> None:
 
 
 def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatch) -> None:
-    """NEW-10-13: full Step 1-5 sweep on a fresh DB."""
-    from openlia_server.services import wizard_providers
+    """Full personal wizard sweep on a fresh DB.
 
-    async def _ok(_row):
-        return True, None
+    Connector setup happens via the v2 `/api/connectors` flow (validation is
+    monkey-patched to short-circuit MCP transports). The legacy
+    `/setup/providers/*` step has been retired in connector v2.
+    """
+    from openlia_server.services import connectors_service
 
-    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
+    async def _validate_ok(_launch, _secrets):
+        return connectors_service.ValidationOk(tools=[], python_callables=[])
+
+    monkeypatch.setattr(connectors_service, "_validate_launch", _validate_ok)
     client = _personal_wizard_client(db_session)
 
     assert client.get("/setup/status").status_code == 200
@@ -152,35 +157,21 @@ def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatc
     }
     assert client.post("/setup/models", json=models).status_code == 200
 
+    # v2 connectors flow — single category-financial CLI MCP connector.
     fin = client.post(
-        "/setup/providers",
+        "/api/connectors",
         json={
+            "source": "cli_mcp",
             "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
+            "provider_id": "eodhd",
+            "display_name": "EODHD",
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["uvx", "eodhd-mcp"], "env_keys": []}]
             },
+            "secrets": {},
         },
     )
-    assert fin.status_code == 200
-    news = client.post(
-        "/setup/providers",
-        json={
-            "category": "news",
-            "entry": {
-                "mode": "builtin",
-                "provider": "newsapi_org",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    assert news.status_code == 200
-
-    # Confirm advances providers step explicitly.
-    assert client.post("/setup/providers/confirm").status_code == 200
+    assert fin.status_code == 201, fin.text
 
     # Finalize.
     finish = client.post("/setup/finish")
