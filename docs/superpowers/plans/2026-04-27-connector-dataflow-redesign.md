@@ -1,5 +1,7 @@
 # Connector Data Flow Redesign — Implementation Plan
 
+> **SUPERSEDED 2026-04-28** by `docs/superpowers/plans/2026-04-28-connector-redesign-v2.md`. The strategy described here (amend cutover branch in place — Path A) was abandoned in favor of a fresh rebuild from `main` (Path B). Technical content remains useful as reference; do not execute the steps in this document.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Implement the connector data flow redesign — three-layer customization (MCP / skills slot / Python lib), unified Connector with multi-mode launch, structured callable_specs for runner needs, conversation-scoped runtime tool routing with an escalation tool, and graceful department disable.
