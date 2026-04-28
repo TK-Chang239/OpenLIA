@@ -14,11 +14,14 @@ from openlia.connectors.adapter.callable_spec_resolver import (
     ResolverError,
     resolve_callable_spec,
 )
+from openlia.connectors.adapter.canary import CanaryResult, run_canary
 from openlia.connectors.adapter.introspect import introspect_python_lib
 
 __all__ = [
+    "CanaryResult",
     "LlmClient",
     "ResolverError",
     "introspect_python_lib",
     "resolve_callable_spec",
+    "run_canary",
 ]
