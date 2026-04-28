@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
+from openlia.connectors.types import Category
 from openlia.departments.base import Tier
 
 _SUGGEST_REDIRECT_TOOL: dict[str, Any] = {
@@ -67,15 +68,15 @@ class SecretaryDepartment:
     display_name: str = "Secretary"
     prompt_name: str = "secretary"
     tier: Tier = "everyday"
-    data_requirement_types: tuple[str, ...] = (
-        "stock_quote",
-        "company_profile",
-    )
-    optional_requirement_types: tuple[str, ...] = (
-        "company_news",
-        "historical_prices",
-        "economic_events",
-    )
+
+    # Connector dependencies (spec §10.1).
+    required_categories: ClassVar[tuple[Category, ...]] = ()
+    optional_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
+
+    # Runtime behavior (spec §5.2).
+    requires_runner: ClassVar[bool] = False
+    disable_runtime_routing: ClassVar[bool] = False
+
     extra_tools: tuple[dict[str, Any], ...] = (
         _SUGGEST_REDIRECT_TOOL,
         _SAVE_REPORT_TO_REPO_TOOL,

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Literal, Protocol, runtime_checkable
 
+from openlia.connectors.types import Category
+
 Tier = Literal["thinking", "everyday", "quick"]
 
 
@@ -11,6 +13,8 @@ class Department(Protocol):
     display_name: str
     prompt_name: str
     tier: Tier
-    data_requirement_types: tuple[str, ...]
-    optional_requirement_types: tuple[str, ...]
+    required_categories: tuple[Category, ...]
+    optional_categories: tuple[Category, ...]
+    requires_runner: bool
+    disable_runtime_routing: bool
     extra_tools: tuple[dict[str, Any], ...]

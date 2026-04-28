@@ -1,3 +1,4 @@
+from openlia.connectors.types import Category
 from openlia.departments.panic_thermometer import PanicThermometerDepartment
 
 
@@ -19,15 +20,18 @@ def test_pt_has_five_panels():
     }
 
 
-def test_pt_basic_data_requirements():
-    reqs = PanicThermometerDepartment().data_requirement_types
-    for name in ("historical_prices", "stock_quote", "economic_events"):
-        assert name in reqs
+def test_pt_required_categories():
+    # Spec §10.1.
+    assert PanicThermometerDepartment.required_categories == (Category.FINANCIAL,)
 
 
-def test_pt_optional_data_requirements():
-    soft = PanicThermometerDepartment().optional_requirement_types
-    assert "company_news" in soft
+def test_pt_optional_categories():
+    assert Category.NEWS in PanicThermometerDepartment.optional_categories
+
+
+def test_pt_does_not_require_runner():
+    assert PanicThermometerDepartment.requires_runner is False
+    assert PanicThermometerDepartment.disable_runtime_routing is False
 
 
 def test_pt_has_no_report_modes():
