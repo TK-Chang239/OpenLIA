@@ -21,10 +21,11 @@ are passed in so the server layer can hydrate them from SQLAlchemy.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, AsyncIterator, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from openlia.connectors.types import (
     ALLOWED_TRANSFORMS,
@@ -38,7 +39,7 @@ from openlia.connectors.types import (
 
 if TYPE_CHECKING:  # Phase 5 will provide the canonical Protocol module.
     from openlia.connectors.transports.base import (
-        CallableTransport as CallableTransport,  # noqa: F401
+        CallableTransport as CallableTransport,
     )
 
 
@@ -48,7 +49,7 @@ _current_dept: ContextVar[str | None] = ContextVar("_current_dept", default=None
 
 
 @runtime_checkable
-class CallableTransport(Protocol):  # noqa: F811 — placeholder until Phase 5.
+class CallableTransport(Protocol):
     """Forward-compatible Protocol; Phase 5 introduces the canonical module."""
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any: ...
@@ -101,9 +102,7 @@ class Dispatcher:
                 )
         return out
 
-    async def dispatch_tool_use(
-        self, prefixed_name: str, arguments: dict[str, Any]
-    ) -> Any:
+    async def dispatch_tool_use(self, prefixed_name: str, arguments: dict[str, Any]) -> Any:
         if PREFIX_SEP not in prefixed_name:
             raise DispatchError(f"missing prefix in {prefixed_name!r}")
         provider_id, _, raw_name = prefixed_name.partition(PREFIX_SEP)
@@ -130,22 +129,16 @@ class Dispatcher:
             )
         spec = self.callable_specs.get((dept, need_id))
         if spec is None:
-            raise NeedNotResolved(
-                f"no resolved callable spec for ({dept!r}, {need_id!r})"
-            )
+            raise NeedNotResolved(f"no resolved callable spec for ({dept!r}, {need_id!r})")
         conn = self._connector_for_spec(dept, need_id, spec)
         return await self._invoke_spec(conn, spec, runtime_args)
 
     def callable_specs_for(self, department_id: str) -> list[CallableSpec]:
-        return [
-            spec for (d, _), spec in self.callable_specs.items() if d == department_id
-        ]
+        return [spec for (d, _), spec in self.callable_specs.items() if d == department_id]
 
     # ----- private helpers -----
 
-    def _connector_for_spec(
-        self, dept: str, need_id: str, spec: CallableSpec
-    ) -> PreparedConnector:
+    def _connector_for_spec(self, dept: str, need_id: str, spec: CallableSpec) -> PreparedConnector:
         """Locate the connector that owns this spec.
 
         For MCP modes the connector is whichever one exposes `spec.tool_name`.
@@ -159,9 +152,7 @@ class Dispatcher:
         if access_mode in {"cli_mcp", "remote_mcp"}:
             tool_name = spec.tool_name
             if tool_name is None:
-                raise DispatchError(
-                    f"spec for ({dept!r}, {need_id!r}) is MCP but has no tool_name"
-                )
+                raise DispatchError(f"spec for ({dept!r}, {need_id!r}) is MCP but has no tool_name")
             for conn in self.connectors.values():
                 if tool_name in conn.tools:
                     return conn
@@ -187,9 +178,7 @@ class Dispatcher:
             for conn in self.connectors.values():
                 if conn.callables:
                     return conn
-            raise DispatchError(
-                f"no python_lib connector available for ({dept!r}, {need_id!r})"
-            )
+            raise DispatchError(f"no python_lib connector available for ({dept!r}, {need_id!r})")
         raise DispatchError(f"unknown access_mode {access_mode!r}")
 
     async def _invoke_spec(
@@ -214,8 +203,7 @@ class Dispatcher:
             if binding.transform is not None:
                 if binding.transform not in ALLOWED_TRANSFORMS:
                     raise DispatchError(
-                        f"unknown transform {binding.transform!r} in spec for "
-                        f"need {spec.need_id!r}"
+                        f"unknown transform {binding.transform!r} in spec for need {spec.need_id!r}"
                     )
                 value = TRANSFORMS[binding.transform](value)
             bound[binding.to_arg] = value
@@ -229,17 +217,13 @@ class Dispatcher:
         if spec.access_mode in ("cli_mcp", "remote_mcp"):
             tool_name = spec.tool_name
             if tool_name is None:
-                raise DispatchError(
-                    f"spec for need {spec.need_id!r} missing tool_name"
-                )
+                raise DispatchError(f"spec for need {spec.need_id!r} missing tool_name")
             return await conn.transport.call_tool(tool_name, bound)
 
         if spec.access_mode == "python_lib":
             method = spec.method
             if method is None:
-                raise DispatchError(
-                    f"spec for need {spec.need_id!r} missing method"
-                )
+                raise DispatchError(f"spec for need {spec.need_id!r} missing method")
             # The PythonLibTransport (Phase 5) handles instance instantiation
             # and method dispatch internally; we just hand it the method name
             # and bound kwargs.

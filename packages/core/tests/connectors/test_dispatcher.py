@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.connectors.dispatch import (
-    DispatchError,
     Dispatcher,
+    DispatchError,
     NeedNotResolved,
     PreparedConnector,
 )
@@ -21,9 +20,7 @@ from openlia.connectors.types import (
 
 
 def _td(name: str) -> ToolDefinition:
-    return ToolDefinition(
-        name=name, description=f"desc-{name}", input_schema={"type": "object"}
-    )
+    return ToolDefinition(name=name, description=f"desc-{name}", input_schema={"type": "object"})
 
 
 def _cd(qualname: str) -> CallableDefinition:

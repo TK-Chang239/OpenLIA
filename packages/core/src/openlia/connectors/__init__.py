@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from openlia.connectors.dispatch import (
     PREFIX_SEP,
-    DispatchError,
     Dispatcher,
+    DispatchError,
     NeedNotResolved,
     PreparedConnector,
 )
