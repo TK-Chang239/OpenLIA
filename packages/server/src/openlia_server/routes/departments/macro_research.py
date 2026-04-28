@@ -53,14 +53,14 @@ def build_macro_research_router(
         }
 
     @router.get("/dashboards/{slug}")
-    def get_dashboard(
+    async def get_dashboard(
         slug: str,
         smart_mode: bool = Query(False),
         user: User = require_auth,
     ) -> dict[str, Any]:
         if slug not in DASHBOARDS:
             raise HTTPException(status_code=404, detail=f"dashboard {slug!r} not found")
-        result = mr_runner.run(
+        result = await mr_runner.run(
             user_id=user.id, dashboard_slug=slug, portfolio=None, smart_mode=smart_mode
         )
         return result.model_dump(mode="json")

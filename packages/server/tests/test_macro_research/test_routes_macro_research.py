@@ -46,14 +46,16 @@ def fake_scheduler():
 def client(session_factory, fake_scheduler) -> TestClient:
     app = FastAPI()
     runner = MagicMock()
-    runner.run.return_value = DashboardResult(
-        slug="debt_cycle",
-        display_name="Debt Cycle",
-        severity="amber",
-        tiers=[],
-        headline="Plateau",
-        generated_at=datetime.now(UTC),
-        smart_mode_active=False,
+    runner.run = AsyncMock(
+        return_value=DashboardResult(
+            slug="debt_cycle",
+            display_name="Debt Cycle",
+            severity="amber",
+            tiers=[],
+            headline="Plateau",
+            generated_at=datetime.now(UTC),
+            smart_mode_active=False,
+        )
     )
     dashboard_svc = MagicMock()
     dashboard_svc.list_for_user.return_value = []
