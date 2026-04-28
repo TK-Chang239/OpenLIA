@@ -3,6 +3,7 @@ import { render, screen, waitFor, act, fireEvent } from "@testing-library/react"
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { AuthProvider } from "../../auth/AuthContext";
+import { useDeptHealth } from "../../store/dept-health";
 
 function renderAt(route: string) {
   return render(
@@ -125,6 +126,32 @@ describe("Sidebar", () => {
       const nav = screen.getByRole("navigation", { name: /main navigation/i });
       expect(nav.className).toContain("w-[52px]");
     });
+  });
+
+  it("mutes a disabled dept link and exposes the reason as tooltip title", () => {
+    useDeptHealth.setState({
+      healths: {
+        macro_research: {
+          department_id: "macro_research",
+          status: "disabled",
+          reason: "Missing required categories: financial",
+          missing_categories: ["financial"],
+          unresolved_needs: [],
+        },
+      },
+      loaded: true,
+      loading: false,
+      error: null,
+    });
+    renderAt("/");
+    const link = screen.getByRole("link", { name: /macro research/i });
+    expect(link.className).toContain("opacity-50");
+    expect(link).toHaveAttribute(
+      "title",
+      "Missing required categories: financial",
+    );
+    // Reset for unrelated tests.
+    useDeptHealth.setState({ healths: {}, loaded: false, loading: false, error: null });
   });
 
   it("is hidden below md breakpoint via tailwind classes", () => {

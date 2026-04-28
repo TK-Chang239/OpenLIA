@@ -7,10 +7,12 @@ import { NavItem } from "./NavItem";
 import { useCollapsed } from "./useCollapsed";
 import { useNotificationPoll } from "./useNotificationPoll";
 import { useAuth } from "../../auth/AuthContext";
+import { useDeptHealth } from "../../store/dept-health";
 
 export function Sidebar(): JSX.Element {
   const [collapsed, setCollapsed] = useCollapsed();
   const { unreadByDepartment, markRead } = useNotificationPoll();
+  const healths = useDeptHealth((s) => s.healths);
   const location = useLocation();
   const { status, logout } = useAuth();
   const navigate = useNavigate();
@@ -104,19 +106,27 @@ export function Sidebar(): JSX.Element {
           </div>
         )}
 
-        {DEPARTMENT_NAV.map((entry) => (
-          <NavItem
-            key={entry.id}
-            label={entry.label}
-            icon={entry.icon}
-            path={entry.path}
-            collapsed={collapsed}
-            hasUnread={
-              entry.departmentId !== null &&
-              (unreadByDepartment[entry.departmentId] ?? 0) > 0
-            }
-          />
-        ))}
+        {DEPARTMENT_NAV.map((entry) => {
+          const health = entry.departmentId
+            ? healths[entry.departmentId]
+            : undefined;
+          const disabledReason =
+            health?.status === "disabled" ? (health.reason ?? "") : null;
+          return (
+            <NavItem
+              key={entry.id}
+              label={entry.label}
+              icon={entry.icon}
+              path={entry.path}
+              collapsed={collapsed}
+              hasUnread={
+                entry.departmentId !== null &&
+                (unreadByDepartment[entry.departmentId] ?? 0) > 0
+              }
+              disabledReason={disabledReason}
+            />
+          );
+        })}
       </div>
 
       <footer
