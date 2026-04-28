@@ -36,6 +36,9 @@ frontend/vitest.config.js
 # OpenLIA runtime user data (lives under ~/.openlia, but block accidental commits if someone runs from repo)
 .openlia/
 
+# Brainstorming visual companion sessions
+.superpowers/
+
 # Build artifacts
 dist/
 build/
