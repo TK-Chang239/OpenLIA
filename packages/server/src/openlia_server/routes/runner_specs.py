@@ -50,6 +50,19 @@ class ApprovalOut(BaseModel):
     access_mode: str
 
 
+class RunnerSpecRow(BaseModel):
+    id: str
+    department_id: str
+    need_id: str
+    connector_id: str
+    access_mode: str
+    spec: dict[str, Any]
+    canary_value: dict[str, Any] | None
+    canary_at: str | None
+    created_at: str | None
+    updated_at: str | None
+
+
 def build_runner_specs_router(
     *,
     db_session_factory: Callable[[], DBSession],
@@ -115,5 +128,37 @@ def build_runner_specs_router(
             connector_id=row.connector_id,
             access_mode=row.access_mode,
         )
+
+    return router
+
+
+def build_runner_specs_list_router(
+    *, db_session_factory: Callable[[], DBSession]
+) -> APIRouter:
+    """Mounts `GET /api/runner-specs?department_id=...` for the admin panel."""
+    router = APIRouter(prefix="/runner-specs", tags=["runner-specs"])
+    session_dep = make_session_dependency(db_session_factory)
+
+    @router.get("", response_model=list[RunnerSpecRow])
+    def list_runner_specs(
+        department_id: str | None = None,
+        db: DBSession = Depends(session_dep),
+    ) -> list[RunnerSpecRow]:
+        rows = runner_specs_service.list_runner_specs(db, department_id=department_id)
+        return [
+            RunnerSpecRow(
+                id=r.id,
+                department_id=r.department_id,
+                need_id=r.need_id,
+                connector_id=r.connector_id,
+                access_mode=r.access_mode,
+                spec=r.spec,
+                canary_value=r.canary_value,
+                canary_at=r.canary_at.isoformat() if r.canary_at else None,
+                created_at=r.created_at.isoformat() if r.created_at else None,
+                updated_at=r.updated_at.isoformat() if r.updated_at else None,
+            )
+            for r in rows
+        ]
 
     return router
