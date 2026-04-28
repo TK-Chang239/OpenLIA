@@ -24,7 +24,7 @@ def test_llm_providers_columns(create_tables) -> None:
         "id",
         "kind",
         "label",
-        "api_key_encrypted",
+        "api_key",
         "env_var_name",
         "base_url",
         "extra_config",

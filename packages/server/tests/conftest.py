@@ -12,20 +12,6 @@ import pytest
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
-# 32 zero bytes encoded as base64 — valid key for all crypto operations in tests
-_TEST_SECRET_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-
-
-@pytest.fixture(autouse=True)
-def _secret_key(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
-    from openlia_server.db.crypto import _reset_cached_key
-
-    monkeypatch.setenv("OPENLIA_SECRET_KEY", _TEST_SECRET_KEY)
-    _reset_cached_key()
-    yield
-    _reset_cached_key()
-
-
 @pytest.fixture
 def db_path(tmp_path: Path) -> Path:
     return tmp_path / "test.db"
