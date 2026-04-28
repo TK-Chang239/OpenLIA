@@ -4,7 +4,7 @@ import { ModeStep } from "../setup/steps/ModeStep";
 import { IdentityStep } from "../setup/steps/IdentityStep";
 import { AdminAccountStep } from "../setup/steps/AdminAccountStep";
 import { ModelsStep } from "../setup/steps/ModelsStep";
-import { ProvidersStep } from "../setup/steps/ProvidersStep";
+import { ConnectorsStep } from "../setup/steps/ConnectorsStep";
 import { AccessControlStep } from "../setup/steps/AccessControlStep";
 import { ReviewStep } from "../setup/steps/ReviewStep";
 import { getRequiredTiers } from "../api/setup";
@@ -55,7 +55,7 @@ function Inner() {
       />
     );
   if (step === "providers")
-    return <ProvidersStep totalSteps={total} onBack={onBack} onSaved={refresh} />;
+    return <ConnectorsStep totalSteps={total} onBack={onBack} onSaved={refresh} />;
   if (step === "access_control")
     return <AccessControlStep onBack={onBack} onSaved={refresh} />;
   if (step === "review")
