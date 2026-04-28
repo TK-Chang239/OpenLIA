@@ -37,9 +37,6 @@ vi.mock('../components/settings/admin/ResetRequestsPanel', () => ({
 vi.mock('../components/settings/admin/ModelsAdminPanel', () => ({
   ModelsAdminPanel: () => null,
 }));
-vi.mock('../components/settings/admin/DataProvidersAdminPanel', () => ({
-  DataProvidersAdminPanel: () => null,
-}));
 
 function renderAt(path: string) {
   const router = createMemoryRouter(
