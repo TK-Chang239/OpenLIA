@@ -25,8 +25,9 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import Any
 
+from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
     ALLOWED_TRANSFORMS,
     TRANSFORMS,
@@ -37,22 +38,9 @@ from openlia.connectors.types import (
     ToolDefinition,
 )
 
-if TYPE_CHECKING:  # Phase 5 will provide the canonical Protocol module.
-    from openlia.connectors.transports.base import (
-        CallableTransport as CallableTransport,
-    )
-
-
 PREFIX_SEP = "__"
 
 _current_dept: ContextVar[str | None] = ContextVar("_current_dept", default=None)
-
-
-@runtime_checkable
-class CallableTransport(Protocol):
-    """Forward-compatible Protocol; Phase 5 introduces the canonical module."""
-
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any: ...
 
 
 class DispatchError(RuntimeError):
