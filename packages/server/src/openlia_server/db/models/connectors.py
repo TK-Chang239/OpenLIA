@@ -12,11 +12,9 @@ from datetime import datetime
 from sqlalchemy import (
     JSON,
     CheckConstraint,
-    ForeignKey,
     Index,
     String,
     Text,
-    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -62,33 +60,3 @@ class Connector(Base):
     )
 
 
-class ToolAllowlist(Base):
-    __tablename__ = "tool_allowlists"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    department_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    connector_id: Mapped[str] = mapped_column(
-        String(36),
-        ForeignKey("connectors.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    scoped_at: Mapped[datetime] = mapped_column(
-        UTCDateTime(), nullable=False, server_default=func.now()
-    )
-    scoped_by: Mapped[str] = mapped_column(String(16), nullable=False)
-
-    __table_args__ = (
-        UniqueConstraint(
-            "department_id",
-            "connector_id",
-            "tool_name",
-            name="uq_tool_allowlists_dep_conn_tool",
-        ),
-        Index("ix_tool_allowlists_department_id", "department_id"),
-        Index("ix_tool_allowlists_connector_id", "connector_id"),
-        CheckConstraint(
-            "scoped_by IN ('built_in_map', 'llm_adapter')",
-            name="scoped_by",
-        ),
-    )
