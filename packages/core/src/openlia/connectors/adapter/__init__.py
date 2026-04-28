@@ -9,8 +9,16 @@ draft `CallableSpec` row that the wizard surfaces for admin approval.
 
 from __future__ import annotations
 
+from openlia.connectors.adapter.callable_spec_resolver import (
+    LlmClient,
+    ResolverError,
+    resolve_callable_spec,
+)
 from openlia.connectors.adapter.introspect import introspect_python_lib
 
 __all__ = [
+    "LlmClient",
+    "ResolverError",
     "introspect_python_lib",
+    "resolve_callable_spec",
 ]
