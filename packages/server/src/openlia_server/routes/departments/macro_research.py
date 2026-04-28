@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.scheduler import JobRun
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.routes.dept_health import gate_dept_or_409
 from openlia_server.scheduler.registry import JobStatus, JobType
 
 
@@ -120,6 +121,7 @@ def build_macro_research_router(
         request: Request,
         user: User = require_auth,
     ) -> dict[str, Any]:
+        gate_dept_or_409(request, "macro_research")
         if slug not in DASHBOARDS:
             raise HTTPException(status_code=404, detail=f"dashboard {slug!r} not found")
 

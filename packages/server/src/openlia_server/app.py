@@ -350,6 +350,10 @@ def _make_lifespan(
                     report_store=report_store_impl,
                     mr_cache_store=mr_cache_store_lifespan,
                 )
+                # Phase 10: scheduler skip-on-disabled. Reads the live cache
+                # off app.state at fire time so invalidation-driven recomputes
+                # are picked up without a scheduler restart.
+                scheduler_svc.dept_health_provider = lambda: getattr(app.state, "dept_health", None)
                 await scheduler_svc.start()
 
                 # Bind the scheduler-aware MRScheduleService onto app.state

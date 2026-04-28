@@ -45,3 +45,21 @@ def serialize(health: DepartmentHealth) -> dict:
         "missing_categories": [c.value for c in health.missing_categories],
         "unresolved_needs": list(health.unresolved_needs),
     }
+
+
+def is_disabled(
+    state_map: dict[str, DepartmentHealth] | None, dept_id: str
+) -> tuple[bool, str | None]:
+    """Return `(disabled, reason)` for `dept_id` against a cache map.
+
+    A missing entry is treated as not-disabled so depts that haven't been
+    computed yet (e.g. tests bypassing the lifespan) don't 409 spuriously.
+    """
+    if not state_map:
+        return False, None
+    health = state_map.get(dept_id)
+    if health is None:
+        return False, None
+    if health.status == "disabled":
+        return True, health.reason
+    return False, None
