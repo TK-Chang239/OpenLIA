@@ -48,8 +48,9 @@ def test_create_connector_validated(client, monkeypatch):
             "source": "built_in",
             "category": "financial",
             "provider_id": "eodhd",
+            "display_name": "EODHD",
             "launch": {"kind": "built_in", "template_id": "eodhd"},
-            "credentials_ref": "secret://eodhd/key",
+            "secrets": {"EODHD_API_KEY": "k"},
         },
     )
     assert resp.status_code == 201, resp.text
@@ -73,6 +74,7 @@ def test_create_connector_failed(client, monkeypatch):
             "source": "remote_mcp",
             "category": "news",
             "provider_id": "user_mcp_news1",
+            "display_name": "Custom News MCP",
             "launch": {"kind": "remote_mcp", "url": "https://x", "headers": {}},
         },
     )
@@ -97,6 +99,7 @@ def test_list_connectors(client, monkeypatch):
             "source": "built_in",
             "category": "financial",
             "provider_id": "eodhd",
+            "display_name": "EODHD",
             "launch": {"kind": "built_in", "template_id": "eodhd"},
         },
     )

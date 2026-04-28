@@ -43,19 +43,21 @@ async def create_connector(
     session: Session,
     *,
     provider_id: str,
+    display_name: str,
     source: ConnectorSource,
     category: Category,
     launch: MCPLaunchSpec,
-    credentials_ref: str | None,
+    secrets: dict[str, str] | None = None,
 ) -> Connector:
     cid = str(uuid.uuid4())
     row = Connector(
         id=cid,
         provider_id=provider_id,
+        display_name=display_name,
         source=source.value,
         category=category.value,
         launch=launch.to_json(),
-        credentials_ref=credentials_ref,
+        secrets=secrets or {},
         status=ConnectorStatus.PENDING.value,
     )
     session.add(row)
@@ -73,7 +75,7 @@ async def create_connector(
             {"name": t.name, "description": t.description, "input_schema": t.input_schema}
             for t in result.tools
         ]
-        row.last_validated_at = datetime.now(UTC)
+        row.validated_at = datetime.now(UTC)
         row.last_error = None
     else:
         assert isinstance(result, ValidationFailure)
@@ -114,7 +116,7 @@ async def revalidate_connector(session: Session, connector_id: str) -> Connector
             {"name": t.name, "description": t.description, "input_schema": t.input_schema}
             for t in result.tools
         ]
-        row.last_validated_at = datetime.now(UTC)
+        row.validated_at = datetime.now(UTC)
         row.last_error = None
     else:
         assert isinstance(result, ValidationFailure)

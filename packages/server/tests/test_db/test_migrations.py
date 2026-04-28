@@ -66,6 +66,7 @@ EXPECTED_TABLES = {
     "pt_trigger_events",
     # --- Connector redesign (replaces data_providers + data_provider_requirement_mapping) ---
     "connectors",
+    "runner_callable_specs",
 }
 
 
