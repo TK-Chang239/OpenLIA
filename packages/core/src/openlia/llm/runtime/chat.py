@@ -10,20 +10,35 @@ Loop contract:
 
 Cancellation: poll cancel_token between yields; stop yielding with no
 terminal event when flipped.
+
+When constructed with a v2 connector `dispatcher` plus a `router_llm_client`,
+the runner additionally performs spec-§8 routing: it asks a small Haiku-tier
+LLM to pick a tool subset from the dispatcher's `candidate_tools()`, places
+a cache breakpoint marker before that subset in the system prompt, and
+exposes the `request_additional_tools` escalation tool. Without those
+constructor args the runner falls back to the legacy ToolDispatcher path.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator, Callable
+from typing import Any
 
 from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
+from openlia.llm.runtime.escalation import (
+    ESCALATION_TOOL_DEFINITION,
+    ESCALATION_TOOL_NAME,
+    merge_escalation,
+    summarize_added,
+)
 from openlia.llm.runtime.events import (
     ChatDone,
     ChatError,
@@ -35,15 +50,27 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import Attachment, ChatMessage
 from openlia.llm.runtime.prompts import PromptLoader
+from openlia.llm.runtime.router import LlmClient as RouterLlmClient
+from openlia.llm.runtime.router import route_tools
 from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolCallResult, ToolDispatcher
 from openlia.llm.types import (
     LLMRequest,
     Message,
     ResolvedModel,
+    ToolCall,
+    ToolSchema,
 )
+
+logger = logging.getLogger(__name__)
 
 ResolveFn = Callable[..., ResolvedModel]
 ProviderFactory = Callable[[ResolvedModel], LLMProvider]
+
+# Marker emitted in the system prompt where an Anthropic prompt-cache
+# breakpoint should be placed (spec §8.6). Provider adapters that
+# support cache_control can split on this token; adapters that don't
+# simply strip it and treat the prompt as plain text.
+CACHE_BREAKPOINT_MARKER = "<<<openlia:cache_breakpoint>>>"
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
@@ -66,6 +93,9 @@ class ChatRunner:
         registry: ModelRegistry,
         provider_factory: ProviderFactory,
         message_id_factory: Callable[[], str] | None = None,
+        dispatcher: Any | None = None,
+        router_llm_client: RouterLlmClient | None = None,
+        routing_context_loader: Callable[[str], str] | None = None,
     ) -> None:
         self._prompts = prompts
         self._tools = tools
@@ -73,6 +103,19 @@ class ChatRunner:
         self._registry = registry
         self._provider_factory = provider_factory
         self._message_id_factory = message_id_factory or (lambda: f"m_{uuid.uuid4().hex[:12]}")
+        # Phase 9: v2 connector dispatcher + Haiku-tier router. When all
+        # three are present the runner uses the spec §8 routing flow;
+        # otherwise it falls through to the legacy ToolDispatcher path.
+        self._dispatcher = dispatcher
+        self._router_llm = router_llm_client
+        self._routing_context_loader = routing_context_loader
+
+    def _v2_routing_enabled(self) -> bool:
+        return (
+            self._dispatcher is not None
+            and self._router_llm is not None
+            and self._routing_context_loader is not None
+        )
 
     async def run(
         self,
@@ -109,6 +152,24 @@ class ChatRunner:
         dept = get_department(department_id)
         extra_tool_specs = dept.extra_tools if dept is not None else ()
         extra_tool_names = frozenset(spec["name"] for spec in extra_tool_specs)
+
+        # Phase 9 / spec §8: when a v2 dispatcher and router are wired,
+        # route through the connector subsystem and yield from the v2
+        # implementation. The legacy ToolDispatcher path remains for
+        # tests and pre-v2 wiring.
+        if self._v2_routing_enabled():
+            async for event in self._run_v2_routed(
+                provider=provider,
+                system=system,
+                department_id=department_id,
+                dept=dept,
+                messages=messages,
+                cancel_token=cancel_token,
+                message_id=message_id,
+            ):
+                yield event
+            return
+
         tools = await self._tools.build(
             department_id, has_web_search=True, extra_tools=extra_tool_specs
         )
@@ -230,3 +291,277 @@ class ChatRunner:
         if cancel_token is None:
             return await awaitable
         return await await_with_grace(awaitable, token=cancel_token)
+
+    # ---- Phase 9: v2 routed chat path (spec §8) ----
+
+    async def _run_v2_routed(
+        self,
+        *,
+        provider: LLMProvider,
+        system: str,
+        department_id: str,
+        dept: Any,
+        messages: list[ChatMessage],
+        cancel_token: CancellationToken | None,
+        message_id: str,
+    ) -> AsyncIterator[SseEvent]:
+        """Route + escalate per spec §8.
+
+        - Build candidate pool from dispatcher.candidate_tools().
+        - If `dept.disable_runtime_routing` is False, invoke the router
+          LLM once on conversation start to pick a subset; otherwise
+          expose the full pool with no escalation tool.
+        - Place a cache-breakpoint marker before the routed-tools section
+          in the system prompt so escalations only invalidate the suffix.
+        - On `request_additional_tools` tool_use, re-invoke the router
+          and continue with the merged set.
+        """
+        assert self._dispatcher is not None
+        assert self._router_llm is not None
+        assert self._routing_context_loader is not None
+
+        candidate_tools: list[dict[str, Any]] = self._dispatcher.candidate_tools()
+
+        disable_routing = bool(getattr(dept, "disable_runtime_routing", False))
+
+        if disable_routing:
+            routed_names = [t["name"] for t in candidate_tools]
+            include_escalation = False
+        else:
+            user_first = next(
+                (m.content for m in messages if m.role == "user"),
+                "",
+            )
+            try:
+                routing_context = self._routing_context_loader(department_id)
+            except FileNotFoundError as exc:
+                logger.warning(
+                    "routing_context missing for dept %s; skipping router: %s",
+                    department_id,
+                    exc,
+                )
+                routing_context = ""
+            routed_names = await route_tools(
+                department_id=department_id,
+                routing_context=routing_context,
+                user_prompt=user_first,
+                candidate_tools=candidate_tools,
+                llm_client=self._router_llm,
+            )
+            include_escalation = True
+
+        candidate_by_name = {t["name"]: t for t in candidate_tools}
+        # When routing is enabled but the router selected nothing, fall
+        # back to a small empty subset; the escalation tool still lets
+        # the model pull tools in mid-conversation.
+
+        async with self._dispatcher.in_department(department_id):
+            async for event in self._v2_loop(
+                provider=provider,
+                system=system,
+                department_id=department_id,
+                routing_context_loader=self._routing_context_loader,
+                candidate_by_name=candidate_by_name,
+                routed_names=list(routed_names),
+                include_escalation=include_escalation,
+                messages=messages,
+                cancel_token=cancel_token,
+                message_id=message_id,
+                disable_routing=disable_routing,
+            ):
+                yield event
+
+    async def _v2_loop(
+        self,
+        *,
+        provider: LLMProvider,
+        system: str,
+        department_id: str,
+        routing_context_loader: Callable[[str], str],
+        candidate_by_name: dict[str, dict[str, Any]],
+        routed_names: list[str],
+        include_escalation: bool,
+        messages: list[ChatMessage],
+        cancel_token: CancellationToken | None,
+        message_id: str,
+        disable_routing: bool,
+    ) -> AsyncIterator[SseEvent]:
+        assert self._dispatcher is not None
+        conversation = [Message(role=m.role, content=m.content) for m in messages]
+
+        candidate_list = list(candidate_by_name.values())
+
+        def _build_main_tools(names: list[str]) -> list[ToolSchema]:
+            schemas: list[ToolSchema] = []
+            for name in names:
+                td = candidate_by_name.get(name)
+                if td is None:
+                    continue
+                schemas.append(
+                    ToolSchema(
+                        name=td["name"],
+                        description=td.get("description", ""),
+                        parameters=td.get("input_schema", {"type": "object", "properties": {}}),
+                    )
+                )
+            if include_escalation:
+                schemas.append(
+                    ToolSchema(
+                        name=ESCALATION_TOOL_DEFINITION["name"],
+                        description=ESCALATION_TOOL_DEFINITION["description"],
+                        parameters=ESCALATION_TOOL_DEFINITION["input_schema"],
+                    )
+                )
+            return schemas
+
+        def _build_system(names: list[str]) -> str:
+            # Spec §8.6: cache breakpoint sits BEFORE the routed-tools
+            # description so an escalation only invalidates the suffix.
+            tool_section_lines = ["", "## Available tools (routed)"]
+            for name in names:
+                td = candidate_by_name.get(name)
+                if td is None:
+                    continue
+                tool_section_lines.append(f"- {td['name']}: {td.get('description', '')}")
+            tool_section = "\n".join(tool_section_lines)
+            return f"{system}\n{CACHE_BREAKPOINT_MARKER}{tool_section}"
+
+        tools = _build_main_tools(routed_names)
+        system_prompt = _build_system(routed_names)
+
+        for _ in range(MAX_TOOL_TURNS):
+            if cancel_token is not None and cancel_token.is_cancelled:
+                return
+            try:
+                response = await self._await(
+                    provider.generate(
+                        LLMRequest(
+                            messages=conversation,
+                            system=system_prompt,
+                            tools=tools or None,
+                            max_tokens=2048,
+                        )
+                    ),
+                    cancel_token=cancel_token,
+                )
+            except asyncio.CancelledError:
+                return
+            except LLMProviderError as exc:
+                yield ChatError(
+                    message_id=message_id,
+                    error_class=type(exc).__name__,
+                    message=str(exc),
+                )
+                return
+
+            if not response.tool_calls:
+                break
+
+            # Emit start events for every call before dispatching.
+            for call in response.tool_calls:
+                args_preview = _unicode_safe_truncate(
+                    json.dumps(call.arguments, separators=(",", ":"), ensure_ascii=False),
+                    max_len=120,
+                )
+                yield ChatToolCallStart(
+                    message_id=message_id,
+                    call_id=call.id,
+                    tool_name=call.name,
+                    args_preview=args_preview,
+                )
+
+            # Dispatch each call: escalation -> re-route + summarize;
+            # otherwise -> dispatcher.dispatch_tool_use.
+            for call in response.tool_calls:
+                if call.name == ESCALATION_TOOL_NAME and include_escalation:
+                    before = list(routed_names)
+                    try:
+                        routing_context = routing_context_loader(department_id)
+                    except FileNotFoundError:
+                        routing_context = ""
+                    routed_names = await merge_escalation(
+                        department_id=department_id,
+                        routing_context=routing_context,
+                        current_tools=routed_names,
+                        escalation_arguments=call.arguments,
+                        candidate_tools=candidate_list,
+                        llm_client=self._router_llm,  # type: ignore[arg-type]
+                    )
+                    summary = summarize_added(before, routed_names)
+                    yield ChatToolCallResult(
+                        message_id=message_id,
+                        call_id=call.id,
+                        ok=True,
+                        summary=summary,
+                        structured=None,
+                    )
+                    conversation.append(
+                        Message(role="tool", content=json.dumps({"summary": summary}))
+                    )
+                    # Rebuild tool list and system prompt with the
+                    # expanded routed set; the cache breakpoint stays
+                    # in the same place so the prefix remains hot.
+                    tools = _build_main_tools(routed_names)
+                    system_prompt = _build_system(routed_names)
+                    continue
+
+                payload, ok, summary_text = await self._dispatch_v2_call(call)
+                yield ChatToolCallResult(
+                    message_id=message_id,
+                    call_id=call.id,
+                    ok=ok,
+                    summary=summary_text,
+                    structured=None,
+                )
+                conversation.append(Message(role="tool", content=json.dumps(payload)))
+
+        # Final streaming turn — same shape as the legacy path.
+        del disable_routing  # currently unused after build; reserved for telemetry
+        if cancel_token is not None and cancel_token.is_cancelled:
+            return
+        try:
+            stream_iter = provider.stream(
+                LLMRequest(
+                    messages=conversation,
+                    system=system_prompt,
+                    max_tokens=2048,
+                )
+            ).__aiter__()
+            while True:
+                if cancel_token is not None and cancel_token.is_cancelled:
+                    return
+                try:
+                    chunk = await self._await(
+                        stream_iter.__anext__(),
+                        cancel_token=cancel_token,
+                    )
+                except StopAsyncIteration:
+                    break
+                except asyncio.CancelledError:
+                    return
+                if chunk.delta:
+                    yield ChatToken(message_id=message_id, text=chunk.delta)
+        except LLMProviderError as exc:
+            yield ChatError(
+                message_id=message_id,
+                error_class=type(exc).__name__,
+                message=str(exc),
+            )
+            return
+
+        if cancel_token is not None and cancel_token.is_cancelled:
+            return
+        yield ChatDone(message_id=message_id, stop_reason="complete")
+
+    async def _dispatch_v2_call(self, call: ToolCall) -> tuple[dict[str, Any], bool, str]:
+        """Dispatch a v2 prefixed tool_use through the connector dispatcher."""
+        assert self._dispatcher is not None
+        try:
+            raw = await self._dispatcher.dispatch_tool_use(call.name, call.arguments)
+        except Exception as exc:
+            return ({"error": str(exc)}, False, f"{call.name} failed: {exc!s}")
+        if isinstance(raw, dict):
+            payload = raw
+        else:
+            payload = {"value": raw}
+        return (payload, True, f"Called {call.name}")
