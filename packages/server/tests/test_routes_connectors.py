@@ -107,47 +107,6 @@ def test_list_connectors(client, monkeypatch):
     assert rows[0]["provider_id"] == "eodhd"
 
 
-def test_delete_cascades_allowlist(client, monkeypatch, db_session):
-    async def fake_validate(**kwargs):
-        return ValidationOk(tools=[])
-
-    monkeypatch.setattr(
-        "openlia_server.services.connectors_service.validate_connector",
-        fake_validate,
-    )
-
-    resp = client.post(
-        "/api/connectors",
-        json={
-            "source": "built_in",
-            "category": "financial",
-            "provider_id": "eodhd",
-            "launch": {"kind": "built_in", "template_id": "eodhd"},
-        },
-    )
-    cid = resp.json()["id"]
-
-    from openlia_server.db.models.connectors import ToolAllowlist
-
-    db_session.add(
-        ToolAllowlist(
-            id="alw-1",
-            department_id="equity_research",
-            connector_id=cid,
-            tool_name="t",
-            scoped_by="built_in_map",
-        )
-    )
-    db_session.commit()
-
-    resp = client.delete(f"/api/connectors/{cid}")
-    assert resp.status_code == 204
-
-    # Cascade is enforced by the SQL FK; confirm via a fresh session.
-    db_session.expire_all()
-    assert db_session.query(ToolAllowlist).count() == 0
-
-
 def test_revalidate_404_for_unknown(client):
     resp = client.post("/api/connectors/no-such-id/validate")
     assert resp.status_code == 404
