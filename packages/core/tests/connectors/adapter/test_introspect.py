@@ -8,7 +8,7 @@ from pathlib import Path
 # Make the local fixture package importable as a top-level module.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from openlia.connectors.adapter import introspect_python_lib  # noqa: E402
+from openlia.connectors.adapter import introspect_python_lib
 
 
 def _qualnames(defs) -> set[str]:
@@ -57,9 +57,7 @@ def test_introspect_skips_signature_failures(monkeypatch) -> None:
             raise ValueError("synthetic introspection failure")
         return real_signature(obj, *args, **kwargs)
 
-    monkeypatch.setattr(
-        "openlia.connectors.adapter.introspect.inspect.signature", maybe_raise
-    )
+    monkeypatch.setattr("openlia.connectors.adapter.introspect.inspect.signature", maybe_raise)
     defs = introspect_python_lib("_adapter_fixture_lib")
     qns = _qualnames(defs)
     assert "Client.quote" in qns

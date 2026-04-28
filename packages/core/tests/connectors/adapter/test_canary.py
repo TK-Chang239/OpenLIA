@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from openlia.connectors.adapter import CanaryResult, run_canary
 from openlia.connectors.types import CallableSpec, ParamBinding
 
@@ -177,8 +176,6 @@ async def test_canary_unknown_transform_returns_failure() -> None:
         shape="float",
     )
     transport = _FakeTransport(value=1.0)
-    result = await run_canary(
-        spec=spec, transport=transport, sample_args={"ticker": "aapl"}
-    )
+    result = await run_canary(spec=spec, transport=transport, sample_args={"ticker": "aapl"})
     assert result.ok is False
     assert "ghost" in (result.error or "")
