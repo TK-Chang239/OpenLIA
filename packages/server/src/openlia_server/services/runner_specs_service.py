@@ -19,7 +19,9 @@ still works end-to-end so frontend work in Phase 11 can stub against it.
 
 from __future__ import annotations
 
+import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
@@ -45,6 +47,29 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
 from openlia_server.services.dispatcher_factory import _prepare_connector
+
+log = logging.getLogger(__name__)
+
+
+# Phase 10: dept-health recompute hook. Installed at app startup so every
+# spec persistence keeps `app.state.dept_health` in sync with the row state.
+_invalidation_hook: Callable[[Session], None] | None = None
+
+
+def set_dept_health_hook(hook: Callable[[Session], None] | None) -> None:
+    """Install the dept-health recompute callback."""
+    global _invalidation_hook
+    _invalidation_hook = hook
+
+
+def _invalidate(session: Session) -> None:
+    if _invalidation_hook is None:
+        return
+    try:
+        _invalidation_hook(session)
+    except Exception:
+        log.exception("dept_health recompute failed during runner-spec mutation")
+
 
 # ---------------------------------------------------------------------------
 # Phase 8 will replace these stubs with real lookups.
@@ -370,6 +395,7 @@ def approve_spec(
 
     session.commit()
     session.refresh(row)
+    _invalidate(session)
     return row
 
 
