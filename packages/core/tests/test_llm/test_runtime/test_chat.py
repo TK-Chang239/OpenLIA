@@ -479,3 +479,226 @@ async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) 
     )
     assert type(events[-1]) is ChatError
     assert "mid-loop failure" in events[-1].message
+
+
+# --- Phase 9: v2 routed chat path tests ---
+
+
+class _StubRouterLlm:
+    def __init__(self, responses: list) -> None:
+        self._responses = list(responses)
+        self.call_count = 0
+
+    async def generate_json(self, *, prompt: str):
+        self.call_count += 1
+        if not self._responses:
+            return []
+        return self._responses.pop(0)
+
+
+class _StubDispatcher:
+    def __init__(self, candidates: list[dict], dispatch_results: dict | None = None) -> None:
+        self._candidates = candidates
+        self._dispatch_results = dispatch_results or {}
+        self.dispatched: list[tuple[str, dict]] = []
+
+    def candidate_tools(self) -> list[dict]:
+        return list(self._candidates)
+
+    def in_department(self, dept: str):
+        class _Ctx:
+            async def __aenter__(self_inner):
+                return None
+
+            async def __aexit__(self_inner, *exc):
+                return False
+
+        return _Ctx()
+
+    async def dispatch_tool_use(self, prefixed_name: str, arguments: dict):
+        self.dispatched.append((prefixed_name, arguments))
+        return self._dispatch_results.get(prefixed_name, {"called": prefixed_name})
+
+
+_V2_CANDIDATES = [
+    {
+        "name": "eodhd__get_quote",
+        "description": "Latest quote",
+        "input_schema": {
+            "type": "object",
+            "properties": {"symbol": {"type": "string"}},
+            "required": ["symbol"],
+        },
+    },
+    {
+        "name": "fmp__get_company_profile",
+        "description": "Company profile",
+        "input_schema": {
+            "type": "object",
+            "properties": {"symbol": {"type": "string"}},
+            "required": ["symbol"],
+        },
+    },
+    {
+        "name": "newsapi_ai__search",
+        "description": "News search",
+        "input_schema": {
+            "type": "object",
+            "properties": {"q": {"type": "string"}},
+            "required": ["q"],
+        },
+    },
+]
+
+
+async def test_v2_router_happy_path_passes_subset_to_main_llm(prompts_root: Path) -> None:
+    # Router picks eodhd__get_quote; main LLM emits no tool_calls and streams
+    # final text. Verify the main-LLM tool list contains the routed pick PLUS
+    # the escalation tool, and that the system prompt has the cache breakpoint
+    # marker placed before the tool section.
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["hi"])]))
+    router = _StubRouterLlm([["eodhd__get_quote"]])
+    dispatcher = _StubDispatcher(_V2_CANDIDATES)
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL?")],
+        )
+    )
+    # Router was invoked exactly once at conversation start.
+    assert router.call_count == 1
+    # Main-LLM request had routed tool + escalation tool.
+    main_request = provider.captured_requests[0]
+    tool_names = {t.name for t in (main_request.tools or [])}
+    assert "eodhd__get_quote" in tool_names
+    assert "request_additional_tools" in tool_names
+    assert "fmp__get_company_profile" not in tool_names
+    # Cache breakpoint marker placed before tool section in system prompt.
+    from openlia.llm.runtime.chat import CACHE_BREAKPOINT_MARKER
+
+    assert main_request.system is not None
+    assert CACHE_BREAKPOINT_MARKER in main_request.system
+    assert main_request.system.index(CACHE_BREAKPOINT_MARKER) < main_request.system.index(
+        "eodhd__get_quote"
+    )
+    assert type(events[-1]) is ChatDone
+
+
+async def test_v2_escalation_grows_tool_set_and_summarizes(prompts_root: Path) -> None:
+    # Round 1: router returns ["eodhd__get_quote"]. Main LLM emits an
+    # escalation call. Router re-invoked, returns ["fmp__get_company_profile"].
+    # Round 2: main LLM emits no tool_calls, streams final text.
+    escalation_call = ToolCall(
+        id="esc_1",
+        name="request_additional_tools",
+        arguments={"reason": "I need company profile"},
+    )
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [escalation_call]),
+                ("final", ""),
+                ("tokens", ["done"]),
+            ]
+        )
+    )
+    router = _StubRouterLlm(
+        [
+            ["eodhd__get_quote"],  # initial route
+            ["fmp__get_company_profile"],  # escalation route
+        ]
+    )
+    dispatcher = _StubDispatcher(_V2_CANDIDATES)
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL?")],
+        )
+    )
+    assert router.call_count == 2
+    # Second main-LLM request should now have BOTH routed tools.
+    second_request = provider.captured_requests[1]
+    tool_names_second = {t.name for t in (second_request.tools or [])}
+    assert "eodhd__get_quote" in tool_names_second
+    assert "fmp__get_company_profile" in tool_names_second
+    assert "request_additional_tools" in tool_names_second
+    # Tool result for the escalation should describe what was added.
+    results = [e for e in events if isinstance(e, ChatToolCallResult)]
+    assert any("fmp__get_company_profile" in r.summary for r in results)
+    assert type(events[-1]) is ChatDone
+
+
+async def test_v2_disable_runtime_routing_skips_router(prompts_root: Path, monkeypatch) -> None:
+    # When dept.disable_runtime_routing=True, router must not be called and
+    # the escalation tool must NOT be present in the main LLM's tool list.
+    from openlia import departments as depts_pkg
+
+    secretary = depts_pkg.get_department("secretary")
+    monkeypatch.setattr(type(secretary), "disable_runtime_routing", True, raising=False)
+
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])]))
+
+    class _Sentinel:
+        async def generate_json(self, *, prompt: str):
+            raise AssertionError("router must not be invoked when disabled")
+
+    dispatcher = _StubDispatcher(_V2_CANDIDATES)
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=_Sentinel(),
+        routing_context_loader=lambda dept: "ctx",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="hi")],
+        )
+    )
+    main_request = provider.captured_requests[0]
+    tool_names = {t.name for t in (main_request.tools or [])}
+    # Full pool is exposed; escalation tool is omitted.
+    assert "eodhd__get_quote" in tool_names
+    assert "fmp__get_company_profile" in tool_names
+    assert "newsapi_ai__search" in tool_names
+    assert "request_additional_tools" not in tool_names
+    assert type(events[-1]) is ChatDone
