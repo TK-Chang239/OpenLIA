@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from "react";
+import { useEffect, type JSX, type ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { TopBar } from "../components/shell/TopBar";
@@ -9,6 +9,7 @@ import { crumbsForPath, stampsForNow } from "./shellState";
 import { FileViewerProvider } from "../components/viewer/FileViewerContext";
 import { FileViewer } from "../components/viewer/FileViewer";
 import { ToastProvider } from "../components/primitives/Toast";
+import { useDeptHealth } from "../store/dept-health";
 
 interface AppLayoutProps {
   children?: ReactNode;
@@ -18,6 +19,10 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
   const { pathname } = useLocation();
   const crumbs = crumbsForPath(pathname);
   const { open, setOpen } = useMobileNav();
+  const refreshHealth = useDeptHealth((s) => s.refresh);
+  useEffect(() => {
+    void refreshHealth();
+  }, [refreshHealth]);
   return (
     <div
       className="grid h-screen w-full bg-bg-base text-text-primary"
