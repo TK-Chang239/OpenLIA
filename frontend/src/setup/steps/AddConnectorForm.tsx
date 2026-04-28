@@ -7,6 +7,7 @@ import {
   type CreateConnectorInput,
   type ModeIn,
 } from "../../api/connectors";
+import { parseMcpConfig } from "./parseMcpConfig";
 
 type Source = "cli_mcp" | "remote_mcp" | "python_lib";
 
@@ -65,6 +66,8 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
   // cli_mcp
   const [argvText, setArgvText] = useState("");
   const [envKeysText, setEnvKeysText] = useState("");
+  const [mcpJsonText, setMcpJsonText] = useState("");
+  const [mcpJsonError, setMcpJsonError] = useState<string | null>(null);
 
   // remote_mcp
   const [url, setUrl] = useState("");
@@ -92,6 +95,26 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
   const addKV =
     (setter: (rows: KV[]) => void, rows: KV[]) =>
     () => setter([...rows, { key: "", value: "" }]);
+
+  const onMcpJsonChange = (text: string) => {
+    setMcpJsonText(text);
+    if (text.trim().length === 0) {
+      setMcpJsonError(null);
+      return;
+    }
+    const result = parseMcpConfig(text);
+    if (!result.ok) {
+      setMcpJsonError(result.error);
+      return;
+    }
+    setMcpJsonError(null);
+    setProviderId(result.providerId);
+    setArgvText(result.argv.join(" "));
+    setEnvKeysText(result.envKeys.join(", "));
+    setSecrets(
+      result.secrets.length > 0 ? result.secrets : [{ key: "", value: "" }],
+    );
+  };
 
   const buildMode = (): ModeIn => {
     if (source === "cli_mcp") {
@@ -208,6 +231,22 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
 
       {source === "cli_mcp" ? (
         <div className="space-y-2">
+          <label className="block text-xs text-text-secondary">
+            Paste MCP config (JSON)
+            <textarea
+              aria-label="paste mcp config"
+              rows={4}
+              placeholder='{ "mcpServers": { "newsapi": { "command": "npx", "args": ["-y", "newsapi-mcp"], "env": { "NEWSAPI_KEY": "..." } } } }'
+              value={mcpJsonText}
+              onChange={(e) => onMcpJsonChange(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
+            />
+          </label>
+          {mcpJsonError ? (
+            <p role="alert" className="text-xs text-feedback-error">
+              {mcpJsonError}
+            </p>
+          ) : null}
           <label className="block text-xs text-text-secondary">
             argv (space-separated)
             <input
