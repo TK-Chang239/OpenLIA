@@ -26,18 +26,19 @@ class MRRunner:
     def __init__(
         self,
         *,
-        data_provider: _DataProvider,
+        data_provider: _DataProvider | None = None,
         cache_store: _CacheStore,
         dashboard_service: Any,
         session_factory: Callable[[], Session],
+        dispatcher: Any | None = None,
     ) -> None:
         self._data = data_provider
         self._cache = cache_store
         self._dashboard = dashboard_service
         self._factory = session_factory
-        self._asm = DashboardAssembler(data_provider=data_provider)
+        self._asm = DashboardAssembler(data_provider=data_provider, dispatcher=dispatcher)
 
-    def run(
+    async def run(
         self,
         *,
         user_id: str,
@@ -66,7 +67,7 @@ class MRRunner:
                     dashboard=dashboard_slug,
                     assessment_type="synthesis",
                 )
-        return self._asm.run(
+        return await self._asm.run(
             dashboard_slug=dashboard_slug,
             user_id=user_id,
             portfolio=portfolio,

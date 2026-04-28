@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from openlia.formula import EvaluationContext, FormulaEngine, FormulaError
+from openlia.llm.runtime.deterministic import fetch_mr_t1_data
 from openlia.macro_research.dashboards import DASHBOARDS
 from openlia.macro_research.schemas import (
     DashboardResult,
@@ -26,19 +27,40 @@ def _worst(a: SeverityLevel, b: SeverityLevel) -> SeverityLevel:
 
 
 class DashboardAssembler:
-    """Runs T1->T5 for one dashboard and returns a DashboardResult."""
+    """Runs T1->T5 for one dashboard and returns a DashboardResult.
+
+    Two T1 fetch modes:
+
+      - Legacy: pass `data_provider` whose `fetch(requirement=...)` is
+        called per requirement string. Used by existing tests and by
+        the in-flight server wiring until Phase 9 hands T1 over to the
+        v2 dispatcher.
+      - v2 (Phase 9 / spec §9.4): pass `dispatcher` (a connector
+        Dispatcher). The assembler enters
+        `dispatcher.in_department("macro_research")` and resolves each
+        T1 requirement via `dispatcher.fetch_need(need_id, ...)` per
+        the `needs.yaml` declarations. T2 formula-only metrics still
+        flow through `data_provider.fetch(...)` when present, since
+        formula metrics live above the connector layer.
+    """
 
     def __init__(
         self,
         *,
-        data_provider: Any,
+        data_provider: Any | None = None,
         llm_client: _LLMClient | None = None,
+        dispatcher: Any | None = None,
     ) -> None:
+        if data_provider is None and dispatcher is None:
+            raise ValueError(
+                "DashboardAssembler needs either `data_provider` (legacy) or `dispatcher` (v2)"
+            )
         self._data = data_provider
         self._llm = llm_client
+        self._dispatcher = dispatcher
         self._engine = FormulaEngine()
 
-    def run(
+    async def run(
         self,
         *,
         dashboard_slug: str,
@@ -56,19 +78,29 @@ class DashboardAssembler:
         tiers: list[DashboardTierOutput] = []
 
         # --- T1 ---
-        t1_data: dict[str, Any] = {}
-        for req in dashboard.T1_REQUIREMENTS:
-            t1_data[req] = self._data.fetch(requirement=req)
+        t1_data: dict[str, Any]
+        if self._dispatcher is not None:
+            async with self._dispatcher.in_department("macro_research"):
+                t1_data = await fetch_mr_t1_data(
+                    dispatcher=self._dispatcher,
+                    requirements=dashboard.T1_REQUIREMENTS,
+                )
+        else:
+            t1_data = {req: self._data.fetch(requirement=req) for req in dashboard.T1_REQUIREMENTS}
         tiers.append(DashboardTierOutput(tier="T1", data={"inputs": t1_data}, generated_at=now))
 
         # --- T2 ---
         flat_values = self._flatten(t1_data)
         # Merge any metrics already supplied directly by the data provider (tests pass
-        # {"force_debt_money": 8} style inputs through FakeDataProvider).
-        for req in dashboard.T2_FORMULAS:
-            direct = self._data.fetch(requirement=req)
-            if isinstance(direct, (int, float, bool)):
-                flat_values.setdefault(req, direct)
+        # {"force_debt_money": 8} style inputs through FakeDataProvider). The v2
+        # dispatcher path does not surface formula-direct metrics through the
+        # connector layer; callers needing five-forces-style scalar inputs must
+        # still pass a `data_provider`.
+        if self._data is not None:
+            for req in dashboard.T2_FORMULAS:
+                direct = self._data.fetch(requirement=req)
+                if isinstance(direct, (int, float, bool)):
+                    flat_values.setdefault(req, direct)
         typed_values: dict[str, float | bool | str] = {}
         for key, value in flat_values.items():
             if isinstance(value, bool):

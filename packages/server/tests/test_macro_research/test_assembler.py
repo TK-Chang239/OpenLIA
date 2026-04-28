@@ -6,6 +6,8 @@ import pytest
 from _macro_research_fakes import FakeDataProvider, FakeLLMClient
 from openlia.macro_research.assembler import DashboardAssembler
 
+pytestmark = pytest.mark.asyncio
+
 
 @pytest.fixture
 def assembler() -> DashboardAssembler:
@@ -26,8 +28,8 @@ def assembler() -> DashboardAssembler:
     return DashboardAssembler(data_provider=data, llm_client=llm)
 
 
-def test_runs_t1_t2_t3_live(assembler: DashboardAssembler) -> None:
-    result = assembler.run(
+async def test_runs_t1_t2_t3_live(assembler: DashboardAssembler) -> None:
+    result = await assembler.run(
         dashboard_slug="debt_cycle",
         user_id="u-1",
         portfolio=None,
@@ -38,13 +40,13 @@ def test_runs_t1_t2_t3_live(assembler: DashboardAssembler) -> None:
     assert {"T1", "T2", "T3"}.issubset(tiers)
 
 
-def test_honours_cached_t4(assembler: DashboardAssembler) -> None:
+async def test_honours_cached_t4(assembler: DashboardAssembler) -> None:
     cached = {
         "assessment": "cached text",
         "severity": "red",
         "generated_at": datetime.now(UTC),
     }
-    result = assembler.run(
+    result = await assembler.run(
         dashboard_slug="world_order",
         user_id="u-1",
         portfolio=None,
@@ -55,7 +57,7 @@ def test_honours_cached_t4(assembler: DashboardAssembler) -> None:
     assert t4.data["assessment"] == "cached text"
 
 
-def test_debt_cycle_t2_metrics_populate_from_stub_provider() -> None:
+async def test_debt_cycle_t2_metrics_populate_from_stub_provider() -> None:
     """NEW-19-10: T2 metrics should resolve through the data provider so a
     stubbed registry returns the values the dashboard surfaces in T3."""
     data = FakeDataProvider(
@@ -70,7 +72,7 @@ def test_debt_cycle_t2_metrics_populate_from_stub_provider() -> None:
         data_provider=data,
         llm_client=FakeLLMClient(scripted_response={}),
     )
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="debt_cycle",
         user_id="u-1",
         portfolio=None,
@@ -83,9 +85,9 @@ def test_debt_cycle_t2_metrics_populate_from_stub_provider() -> None:
     assert t2.data.get("debt_gdp") == 130.0
 
 
-def test_unknown_slug_raises(assembler: DashboardAssembler) -> None:
+async def test_unknown_slug_raises(assembler: DashboardAssembler) -> None:
     with pytest.raises(KeyError):
-        assembler.run(
+        await assembler.run(
             dashboard_slug="nonexistent",
             user_id="u-1",
             portfolio=None,
@@ -94,8 +96,8 @@ def test_unknown_slug_raises(assembler: DashboardAssembler) -> None:
         )
 
 
-def test_severity_derives_from_worst_tier(assembler: DashboardAssembler) -> None:
-    result = assembler.run(
+async def test_severity_derives_from_worst_tier(assembler: DashboardAssembler) -> None:
+    result = await assembler.run(
         dashboard_slug="debt_cycle",
         user_id="u-1",
         portfolio=None,
@@ -109,7 +111,7 @@ def test_severity_derives_from_worst_tier(assembler: DashboardAssembler) -> None
     assert result.severity == "red"
 
 
-def test_integration_debt_cycle_red_phase() -> None:
+async def test_integration_debt_cycle_red_phase() -> None:
     data = FakeDataProvider(
         values={
             "macro_indicator:debt_gdp": 130.0,
@@ -119,7 +121,7 @@ def test_integration_debt_cycle_red_phase() -> None:
         }
     )
     asm = DashboardAssembler(data_provider=data, llm_client=FakeLLMClient())
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="debt_cycle",
         user_id="u-1",
         portfolio=None,
@@ -135,7 +137,7 @@ def test_integration_debt_cycle_red_phase() -> None:
     assert t3.data["phase"] == "Deleveraging"
 
 
-def test_smart_mode_propagates_to_t5_tier() -> None:
+async def test_smart_mode_propagates_to_t5_tier() -> None:
     data = FakeDataProvider(
         values={
             "macro_indicator:debt_gdp": 95.0,
@@ -145,7 +147,7 @@ def test_smart_mode_propagates_to_t5_tier() -> None:
         }
     )
     asm = DashboardAssembler(data_provider=data)
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="debt_cycle",
         user_id="u-1",
         portfolio=None,
@@ -156,7 +158,7 @@ def test_smart_mode_propagates_to_t5_tier() -> None:
     assert t5.data["smart_mode"] is True
 
 
-def test_integration_four_seasons_summer() -> None:
+async def test_integration_four_seasons_summer() -> None:
     data = FakeDataProvider(
         values={
             "macro_indicator:pmi": 55.0,
@@ -168,7 +170,7 @@ def test_integration_four_seasons_summer() -> None:
         }
     )
     asm = DashboardAssembler(data_provider=data)
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="four_seasons",
         user_id="u-1",
         portfolio=None,
@@ -179,9 +181,9 @@ def test_integration_four_seasons_summer() -> None:
     assert t3.data["season"] == "Summer"
 
 
-def test_integration_all_weather_red_on_concentration() -> None:
+async def test_integration_all_weather_red_on_concentration() -> None:
     asm = DashboardAssembler(data_provider=FakeDataProvider())
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="all_weather",
         user_id="u-1",
         portfolio={"equities": 0.95, "long_bonds": 0.05},
@@ -193,7 +195,7 @@ def test_integration_all_weather_red_on_concentration() -> None:
     assert t3.data["overall_coverage_label"] == "Concentrated"
 
 
-def test_integration_world_order_with_cached_t4() -> None:
+async def test_integration_world_order_with_cached_t4() -> None:
     data = FakeDataProvider(
         values={
             "macro_indicator:usd_fx_reserve_share": 58.0,
@@ -204,7 +206,7 @@ def test_integration_world_order_with_cached_t4() -> None:
         }
     )
     asm = DashboardAssembler(data_provider=data, llm_client=FakeLLMClient())
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="world_order",
         user_id="u-1",
         portfolio=None,
@@ -221,7 +223,7 @@ def test_integration_world_order_with_cached_t4() -> None:
     assert result.severity == "red"
 
 
-def test_integration_five_forces_turning_point() -> None:
+async def test_integration_five_forces_turning_point() -> None:
     data = FakeDataProvider(
         values={
             "force_debt_money": 8,
@@ -232,7 +234,7 @@ def test_integration_five_forces_turning_point() -> None:
         }
     )
     asm = DashboardAssembler(data_provider=data)
-    result = asm.run(
+    result = await asm.run(
         dashboard_slug="five_forces",
         user_id="u-1",
         portfolio=None,
