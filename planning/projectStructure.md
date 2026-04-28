@@ -102,7 +102,7 @@ openlia/
 │   │   │       │   ├── exceptions.py
 │   │   │       │   └── types.py                # Pydantic models: Rule, RuleSet, PanelResult, FormulaResult
 │   │   │       │
-│   │   │       ├── data/                       # Data source adapters (see data-provider-design.md)
+│   │   │       ├── connectors/                 # Connector subsystem (see connector-dataflow-design.md)
 │   │   │       │   ├── __init__.py
 │   │   │       │   ├── catalog/                # Provider catalogs (financial, news, social_media)
 │   │   │       │   │   ├── __init__.py
@@ -387,7 +387,6 @@ openlia/
 │   │   │   ├── background-task-scheduling-design.md
 │   │   │   ├── llm-provider-design.md
 │   │   │   ├── llm-runtime-design.md
-│   │   │   ├── data-provider-design.md
 │   │   │   ├── formula-engine-design.md
 │   │   │   ├── report-rendering-pipeline-design.md
 │   │   │   ├── macro-research-dalio-dashboards-design.md
@@ -441,7 +440,7 @@ Defined in `database-design.md`. Grouped by concern:
 |---|---|
 | Identity & auth | `users`, `sessions`, `signup_invites`, `signup_policy`, `password_reset_requests`, `auth_events` |
 | LLM config | `llm_providers`, `llm_models`, `user_llm_preferences` |
-| Data providers | `data_providers`, `data_provider_requirement_mapping`, `web_search_providers` |
+| Connectors | `connectors`, `web_search_providers` |
 | Chat & reports | `chat_sessions`, `chat_messages`, `chat_attachments`, `reports`, `report_versions` |
 | Portfolio | `portfolio_holdings`, `watchlists`, `watchlist_items` |
 | Setup & config | `wizard_state`, `config_store` |
