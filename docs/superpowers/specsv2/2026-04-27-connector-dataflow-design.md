@@ -129,7 +129,7 @@ class Connector(Base):
     display_name: Mapped[str]
     category: Mapped[Category]
     status: Mapped[ConnectorStatus]
-    api_key_encrypted: Mapped[bytes | None]
+    secrets: Mapped[dict]                   # {"EODHD_API_KEY": "..."} — plaintext
 
     launch: Mapped[dict]                    # see §3.3
     cached_tools: Mapped[list[dict] | None]              # MCP modes
@@ -140,7 +140,9 @@ class Connector(Base):
     validated_at: Mapped[datetime | None]
 ```
 
-One row per provider the user has added. The same `provider_id` can have multiple modes enabled but is a single row with one API key.
+One row per provider the user has added. The same `provider_id` can have multiple modes enabled but is a single row with one set of secrets.
+
+API keys live in `secrets` as a plaintext key→value map. OpenLIA's threat model is admin-hosted single-tenant: the admin runs the server on their own machine and is the only party with filesystem access. Database-level encryption added complexity without raising the bar against any plausible attacker — anyone who could read `app.db` could read the secret-key file alongside it. Operational hygiene (`.gitignore`, file permissions, exclude-from-backups) is the right control instead.
 
 ### 3.3 Multi-mode launch
 
@@ -168,7 +170,7 @@ One row per provider the user has added. The same `provider_id` can have multipl
 }
 ```
 
-Notation: `$EODHD_API_KEY` is a placeholder that the connector subsystem substitutes at instance-construction time with the decrypted value of the corresponding `env_keys` entry. The user never types the key into the launch spec; it lives in `api_key_encrypted` and is injected at use time.
+Notation: `$EODHD_API_KEY` is a placeholder that the connector subsystem substitutes at instance-construction time with the value of the corresponding entry in `Connector.secrets`. The user never types the key into the launch spec; it lives in `secrets` and is injected at use time. For `cli_mcp` modes, `env_keys` lists which `secrets` entries to copy into the subprocess environment.
 
 ### 3.4 Built-in templates
 
@@ -232,7 +234,7 @@ The wizard's add-connector flow asks the user to pick one of four sources:
 
 For built-ins, the wizard then offers checkboxes for each access mode the template ships ("Enable MCP server (recommended for chat)?" and "Enable Python library (required for runner-driven dashboards)?"). For non-built-ins, the wizard accepts the user's manual configuration.
 
-The user provides the API key. The server encrypts the key into `api_key_encrypted` — never stored or logged in plaintext — and persists the connector row with `status=PENDING`.
+The user provides the API key. The server stores it in `Connector.secrets` keyed by the env-var name (e.g. `{"EODHD_API_KEY": "..."}`) and persists the connector row with `status=PENDING`. Per §3.2, secrets are stored in plaintext under the admin-hosted threat model; the server takes care never to log secret values.
 
 ### 4.2 Validation per mode
 
@@ -463,7 +465,7 @@ The unit of "data this runner consumes" is a **need**: a stable, code-facing ide
 
 The callable spec produced by the adapter cleanly separates:
 
-- **Auth.** Handled by the connector layer. Decrypted from `api_key_encrypted` at instance-construction time. Never appears in the callable spec.
+- **Auth.** Handled by the connector layer. Resolved from `Connector.secrets` at instance-construction time (see §3.2). Never appears in the callable spec.
 - **Constants.** Baked into the callable spec at scoping time (e.g., `fmt: json`, `indicator: DEBT_GDP_PCT`).
 - **Runtime arguments.** Supplied by the runner per call; declared in the need's `parameters`.
 
@@ -890,7 +892,7 @@ Concrete scenarios that exercise the full stack.
 
 1. User picks the built-in EODHD template. Wizard shows checkboxes: ✓ MCP server, ✓ Python library.
 2. User checks both, provides API key.
-3. Server encrypts key, persists `Connector{provider_id="eodhd", launch={"modes": [cli_mcp, python_lib]}}` with `status=PENDING`.
+3. Server stores key in `Connector.secrets`, persists `Connector{provider_id="eodhd", secrets={"EODHD_API_KEY": "..."}, launch={"modes": [cli_mcp, python_lib]}}` with `status=PENDING`.
 4. CLI-MCP validation: spawn `uvx eodhd-mcp-server`, list_tools (returns ~20 tools), invoke canary tool. Cache tools.
 5. Python_lib validation: import `eodhd`, walk `APIClient` surface, cache callables.
 6. Both modes pass. Status → `VALIDATED`.
@@ -927,7 +929,7 @@ Concrete scenarios that exercise the full stack.
 4. Inside the runner: `async with dispatcher.in_department("macro_research"): ...`
 5. For each need in `dashboard.T1_NEEDS` (debt_gdp, interest_revenue, tips_quote, dxy_proxy):
    - `dispatcher.fetch_need("debt_gdp", country=user_country)` looks up the `(macro_research, debt_gdp)` row in `runner_callable_specs`, finds the EODHD python_lib spec.
-   - Walks the spec: instantiates `eodhd.APIClient(api_key=<decrypted>)`, calls `.economic_data(country_code="US", indicator="DEBT_GDP_PCT")`, returns the float result.
+   - Walks the spec: instantiates `eodhd.APIClient(api_key=secrets["EODHD_API_KEY"])`, calls `.economic_data(country_code="US", indicator="DEBT_GDP_PCT")`, returns the float result.
 6. T1 data populated. T2 formulas compute. T3 dashboard renders. T4 LLM narrative composes.
 
 ### 11.6 User removes the only EODHD connector
