@@ -14,10 +14,6 @@ from openlia.macro_research.schemas import (
 )
 
 
-class _DataProvider(Protocol):
-    def fetch(self, *, requirement: str, **kwargs: Any) -> Any: ...
-
-
 class _LLMClient(Protocol):
     async def run(self, *, prompt: str, **kwargs: Any) -> dict[str, Any]: ...
 
@@ -35,7 +31,7 @@ class DashboardAssembler:
     def __init__(
         self,
         *,
-        data_provider: _DataProvider,
+        data_provider: Any,
         llm_client: _LLMClient | None = None,
     ) -> None:
         self._data = data_provider
