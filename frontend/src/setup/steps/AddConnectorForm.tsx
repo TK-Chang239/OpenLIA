@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from "react";
 import {
   createConnector,
+  updateConnector,
   type Category,
   type ConnectorRow,
   type ConnectorSource,
   type CreateConnectorInput,
+  type LaunchIn,
   type ModeIn,
 } from "../../api/connectors";
 import { parseMcpConfig } from "./parseMcpConfig";
@@ -12,6 +14,16 @@ import { parseNpxCommand } from "./parseNpxCommand";
 import { parsePipCommand } from "./parsePipCommand";
 
 type Source = "cli_mcp" | "remote_mcp" | "python_lib";
+
+export interface EditingConnector {
+  id: string;
+  providerId: string;
+  displayName: string;
+  source: ConnectorSource;
+  category: Category;
+  launch: LaunchIn;
+  secretKeys: string[];
+}
 
 const SOURCES: { value: Source; label: string }[] = [
   { value: "cli_mcp", label: "Local MCP server (CLI / npx)" },
@@ -57,35 +69,66 @@ function kvToRecord(rows: KV[]): Record<string, string> {
 interface Props {
   onCancel: () => void;
   onCreated: (row: ConnectorRow) => void;
+  editing?: EditingConnector;
 }
 
-export function AddConnectorForm({ onCancel, onCreated }: Props) {
-  const [source, setSource] = useState<Source>("cli_mcp");
-  const [providerId, setProviderId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [category, setCategory] = useState<Category>("financial");
+function findMode(launch: LaunchIn | undefined, kind: string): ModeIn | undefined {
+  return launch?.modes.find((m) => m.kind === kind);
+}
+
+export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
+  const isEditing = editing !== undefined;
+  const initialSource: Source = (editing?.source as Source) ?? "cli_mcp";
+  const cliMode = findMode(editing?.launch, "cli_mcp");
+  const remoteMode = findMode(editing?.launch, "remote_mcp");
+  const pyMode = findMode(editing?.launch, "python_lib");
+
+  const [source, setSource] = useState<Source>(initialSource);
+  const [providerId, setProviderId] = useState(editing?.providerId ?? "");
+  const [displayName, setDisplayName] = useState(editing?.displayName ?? "");
+  const [category, setCategory] = useState<Category>(
+    editing?.category ?? "financial",
+  );
 
   // cli_mcp
-  const [argvText, setArgvText] = useState("");
-  const [envKeysText, setEnvKeysText] = useState("");
+  const [argvText, setArgvText] = useState(
+    cliMode?.argv ? cliMode.argv.join(" ") : "",
+  );
+  const [envKeysText, setEnvKeysText] = useState(
+    cliMode?.env_keys ? cliMode.env_keys.join(", ") : "",
+  );
   const [mcpJsonText, setMcpJsonText] = useState("");
   const [mcpJsonError, setMcpJsonError] = useState<string | null>(null);
 
   // remote_mcp
-  const [url, setUrl] = useState("");
-  const [headers, setHeaders] = useState<KV[]>([{ key: "", value: "" }]);
+  const [url, setUrl] = useState(remoteMode?.url ?? "");
+  const [headers, setHeaders] = useState<KV[]>(() => {
+    const h = remoteMode?.headers;
+    if (!h || Object.keys(h).length === 0) return [{ key: "", value: "" }];
+    return Object.entries(h).map(([key, value]) => ({ key, value }));
+  });
 
   // python_lib
-  const [pipName, setPipName] = useState("");
-  const [pipVersion, setPipVersion] = useState("");
-  const [importModule, setImportModule] = useState("");
-  const [factoryCls, setFactoryCls] = useState("");
-  const [factoryArgs, setFactoryArgs] = useState("{}");
+  const [pipName, setPipName] = useState(pyMode?.pip_name ?? "");
+  const [pipVersion, setPipVersion] = useState(pyMode?.pip_version ?? "");
+  const [importModule, setImportModule] = useState(pyMode?.import_module ?? "");
+  const initialFactory = (pyMode?.instance_factory ?? {}) as {
+    cls?: string;
+    args?: Record<string, unknown>;
+  };
+  const [factoryCls, setFactoryCls] = useState(initialFactory.cls ?? "");
+  const [factoryArgs, setFactoryArgs] = useState(
+    initialFactory.args ? JSON.stringify(initialFactory.args, null, 2) : "{}",
+  );
   const [pipCmdText, setPipCmdText] = useState("");
   const [pipCmdError, setPipCmdError] = useState<string | null>(null);
 
   // secrets / API keys
-  const [secrets, setSecrets] = useState<KV[]>([{ key: "", value: "" }]);
+  const [secrets, setSecrets] = useState<KV[]>(() => {
+    const keys = editing?.secretKeys ?? [];
+    if (keys.length === 0) return [{ key: "", value: "" }];
+    return keys.map((k) => ({ key: k, value: "" }));
+  });
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -186,18 +229,40 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
     setSubmitting(true);
     try {
       const mode = buildMode();
+      // In edit mode, only send `secrets` if the user typed at least one value.
+      // Empty values mean "keep the existing secret".
+      const enteredSecrets = secrets.filter(
+        (s) => s.key.trim().length > 0 && s.value.length > 0,
+      );
+      const includeSecrets = isEditing
+        ? enteredSecrets.length > 0
+        : true;
       const payload: CreateConnectorInput = {
         provider_id: providerId.trim(),
         display_name: displayName.trim() || providerId.trim(),
         source: source as ConnectorSource,
         category,
         launch: { modes: [mode] },
-        secrets: kvToRecord(secrets),
+        ...(includeSecrets
+          ? {
+              secrets: kvToRecord(
+                isEditing ? enteredSecrets : secrets,
+              ),
+            }
+          : {}),
       };
-      const row = await createConnector(payload);
+      const row = isEditing
+        ? await updateConnector(editing!.id, payload)
+        : await createConnector(payload);
       onCreated(row);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create connector.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : isEditing
+            ? "Failed to update connector."
+            : "Failed to create connector.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -336,6 +401,16 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
 
       {source === "remote_mcp" ? (
         <div className="space-y-2">
+          <p
+            data-testid="hint-remote-oauth"
+            className="rounded-md border border-border-subtle bg-bg-subtle px-2 py-1 text-[10px] text-text-secondary"
+          >
+            OAuth is not supported yet. If your provider offers both an
+            OAuth-authenticated endpoint and an API-key-in-URL endpoint, use
+            the URL form (e.g. `https://mcp.example.com/mcp?api_token=YOUR_KEY`).
+            For static bearer tokens, paste them as an `Authorization` header
+            below.
+          </p>
           <div>
             <label className="block text-xs text-text-secondary">
               URL
@@ -350,13 +425,15 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
             </label>
             <p className="mt-0.5 text-[10px] text-text-secondary">
               The MCP server's HTTPS endpoint (often ends in `/sse` or `/mcp`).
+              Include any required `?api_token=…` query parameter directly in
+              the URL.
             </p>
           </div>
           <fieldset className="space-y-1">
             <legend className="text-xs text-text-secondary">Headers</legend>
             <p className="text-[10px] text-text-secondary">
               Auth headers required by the server. Typically `Authorization: Bearer
-              &lt;token&gt;`.
+              &lt;static-token&gt;`. Leave empty if the API key is in the URL.
             </p>
             {headers.map((h, i) => (
               <div key={i} className="flex gap-2">
@@ -506,6 +583,12 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
           Stored encrypted on the server. Never sent to the LLM. Key is the env var
           name; value is the actual secret.
         </p>
+        {isEditing ? (
+          <p className="text-[10px] text-text-secondary">
+            Existing secret values are not shown. Leave a value blank to keep the
+            saved secret unchanged; type a new value to overwrite it.
+          </p>
+        ) : null}
         {secrets.map((s, i) => (
           <div key={i} className="flex gap-2">
             <input
@@ -551,7 +634,11 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
           disabled={submitting}
           className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
-          {submitting ? "Saving..." : "Create connector"}
+          {submitting
+            ? "Saving..."
+            : isEditing
+              ? "Save changes"
+              : "Create connector"}
         </button>
         <button
           type="button"

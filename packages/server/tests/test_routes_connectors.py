@@ -118,3 +118,121 @@ def test_list_connectors(client, monkeypatch):
 def test_revalidate_404_for_unknown(client):
     resp = client.post("/api/connectors/no-such-id/validate")
     assert resp.status_code == 404
+
+
+def test_get_connector_detail_returns_launch_and_secret_keys(client, monkeypatch):
+    _patch_validation_ok(monkeypatch, tools=[])
+    create = client.post(
+        "/api/connectors",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "display_name": "EODHD",
+            "launch": {
+                "modes": [
+                    {"kind": "cli_mcp", "argv": ["uvx", "eodhd-mcp"], "env_keys": ["EODHD_API_KEY"]}
+                ]
+            },
+            "secrets": {"EODHD_API_KEY": "secret-value"},
+        },
+    )
+    cid = create.json()["id"]
+
+    resp = client.get(f"/api/connectors/{cid}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["id"] == cid
+    assert body["provider_id"] == "eodhd"
+    assert body["launch"]["modes"][0]["argv"] == ["uvx", "eodhd-mcp"]
+    assert body["secret_keys"] == ["EODHD_API_KEY"]
+    assert "secrets" not in body  # values must never leak
+
+
+def test_get_connector_detail_404_for_unknown(client):
+    resp = client.get("/api/connectors/no-such-id")
+    assert resp.status_code == 404
+
+
+def test_update_connector_revalidates_and_replaces_launch(client, monkeypatch):
+    _patch_validation_ok(monkeypatch, tools=[])
+    create = client.post(
+        "/api/connectors",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "display_name": "EODHD",
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["old"], "env_keys": []}]
+            },
+            "secrets": {"EODHD_API_KEY": "old-value"},
+        },
+    )
+    cid = create.json()["id"]
+
+    resp = client.put(
+        f"/api/connectors/{cid}",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "display_name": "EODHD (renamed)",
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["new", "argv"], "env_keys": []}]
+            },
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["display_name"] == "EODHD (renamed)"
+    assert body["status"] == "validated"
+
+    detail = client.get(f"/api/connectors/{cid}").json()
+    assert detail["launch"]["modes"][0]["argv"] == ["new", "argv"]
+    # secrets omitted in PUT body -> existing secrets preserved
+    assert detail["secret_keys"] == ["EODHD_API_KEY"]
+
+
+def test_update_connector_replaces_secrets_when_provided(client, monkeypatch):
+    _patch_validation_ok(monkeypatch, tools=[])
+    create = client.post(
+        "/api/connectors",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "display_name": "EODHD",
+            "launch": {"modes": [{"kind": "cli_mcp", "argv": ["x"], "env_keys": []}]},
+            "secrets": {"OLD_KEY": "v"},
+        },
+    )
+    cid = create.json()["id"]
+
+    client.put(
+        f"/api/connectors/{cid}",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "display_name": "EODHD",
+            "launch": {"modes": [{"kind": "cli_mcp", "argv": ["x"], "env_keys": []}]},
+            "secrets": {"NEW_KEY": "v2"},
+        },
+    )
+    detail = client.get(f"/api/connectors/{cid}").json()
+    assert detail["secret_keys"] == ["NEW_KEY"]
+
+
+def test_update_connector_404_for_unknown(client):
+    resp = client.put(
+        "/api/connectors/no-such-id",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "x",
+            "display_name": "x",
+            "launch": {"modes": [{"kind": "cli_mcp", "argv": ["x"], "env_keys": []}]},
+        },
+    )
+    assert resp.status_code == 404
