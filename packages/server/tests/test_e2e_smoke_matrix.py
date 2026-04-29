@@ -39,9 +39,28 @@ def _clear_rate_limiter():
     limiter().clear()
 
 
+def _seed_local_admin_in_session(db_session) -> None:
+    from openlia_server.db.models.auth import User
+    from openlia_server.middleware.auth import LOCAL_USER_ID
+
+    db_session.merge(
+        User(
+            id=LOCAL_USER_ID,
+            email="local@openlia.local",
+            display_name="Local",
+            password_hash=None,
+            is_admin=True,
+            is_disabled=False,
+            must_change_password=False,
+        )
+    )
+    db_session.commit()
+
+
 def _personal_wizard_client(db_session):
     from openlia_server.db import session as session_mod
 
+    _seed_local_admin_in_session(db_session)
     app = create_app(
         db_session_factory=session_mod.SessionLocal,
         is_loopback_request=lambda _: True,
@@ -52,6 +71,7 @@ def _personal_wizard_client(db_session):
 def _company_wizard_client(db_session):
     from openlia_server.db import session as session_mod
 
+    _seed_local_admin_in_session(db_session)
     app = create_app(
         db_session_factory=session_mod.SessionLocal,
         is_loopback_request=lambda _: True,

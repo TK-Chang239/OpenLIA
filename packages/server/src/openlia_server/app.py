@@ -440,7 +440,9 @@ def create_app(
         app.include_router(build_auth_router(db_session_factory=factory))
         app.include_router(build_admin_router(db_session_factory=factory))
 
-    app.include_router(build_connectors_router(db_session_factory=factory))
+    app.include_router(
+        build_connectors_router(db_session_factory=factory, mode=mode)
+    )
     app.include_router(build_dept_health_router())
 
     # Phase 10: dept-health cache. Populated lazily on first read in tests

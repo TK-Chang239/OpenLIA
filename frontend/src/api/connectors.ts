@@ -84,6 +84,28 @@ export const updateConnector = (id: string, input: CreateConnectorInput) =>
     json: input,
   });
 
+export interface IntrospectedParam {
+  name: string;
+  type: string | null;
+  required: boolean;
+  default: unknown;
+}
+
+export const introspectPythonLib = (importModule: string, cls: string) =>
+  fetchJson<{ params: IntrospectedParam[] }>(
+    "/api/connectors/introspect-python-lib",
+    {
+      method: "POST",
+      json: { import_module: importModule, cls },
+    },
+  );
+
+export const installPythonPackage = (pipName: string, pipVersion: string) =>
+  fetchJson<{ stdout: string }>("/api/connectors/install-python-package", {
+    method: "POST",
+    json: { pip_name: pipName, pip_version: pipVersion },
+  });
+
 export const deleteConnector = async (id: string): Promise<void> => {
   await fetchJson<unknown>(`/api/connectors/${encodeURIComponent(id)}`, {
     method: "DELETE",
