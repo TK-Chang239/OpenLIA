@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.services import runner_specs_service
+from openlia_server.services.adapter_llm_client import AdapterLlmNotConfigured
 
 
 class ApprovalIn(BaseModel):
@@ -93,10 +94,20 @@ def build_runner_specs_router(
         connector_id: str,
         db: DBSession = Depends(session_dep),
     ) -> list[ProposedSpecOut]:
+        try:
+            llm_client = llm_client_factory()
+        except AdapterLlmNotConfigured as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "adapter_llm_not_configured",
+                    "message": str(exc),
+                },
+            ) from exc
         proposals = await runner_specs_service.propose_specs(
             db,
             connector_id=connector_id,
-            llm_client=llm_client_factory(),
+            llm_client=llm_client,
         )
         return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
 
