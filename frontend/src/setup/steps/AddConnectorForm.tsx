@@ -8,13 +8,15 @@ import {
   type ModeIn,
 } from "../../api/connectors";
 import { parseMcpConfig } from "./parseMcpConfig";
+import { parseNpxCommand } from "./parseNpxCommand";
+import { parsePipCommand } from "./parsePipCommand";
 
 type Source = "cli_mcp" | "remote_mcp" | "python_lib";
 
 const SOURCES: { value: Source; label: string }[] = [
-  { value: "cli_mcp", label: "CLI MCP" },
-  { value: "remote_mcp", label: "Remote MCP" },
-  { value: "python_lib", label: "Python library" },
+  { value: "cli_mcp", label: "Local MCP server (CLI / npx)" },
+  { value: "remote_mcp", label: "Remote MCP server (URL)" },
+  { value: "python_lib", label: "Python library (pip)" },
 ];
 
 const CATEGORIES: { value: Category; label: string }[] = [
@@ -79,6 +81,8 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
   const [importModule, setImportModule] = useState("");
   const [factoryCls, setFactoryCls] = useState("");
   const [factoryArgs, setFactoryArgs] = useState("{}");
+  const [pipCmdText, setPipCmdText] = useState("");
+  const [pipCmdError, setPipCmdError] = useState<string | null>(null);
 
   // secrets / API keys
   const [secrets, setSecrets] = useState<KV[]>([{ key: "", value: "" }]);
@@ -102,6 +106,17 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
       setMcpJsonError(null);
       return;
     }
+    if (text.trimStart().startsWith("npx")) {
+      const npx = parseNpxCommand(text);
+      if (!npx.ok) {
+        setMcpJsonError(npx.error);
+        return;
+      }
+      setMcpJsonError(null);
+      setProviderId(npx.providerId);
+      setArgvText(npx.argv.join(" "));
+      return;
+    }
     const result = parseMcpConfig(text);
     if (!result.ok) {
       setMcpJsonError(result.error);
@@ -114,6 +129,23 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
     setSecrets(
       result.secrets.length > 0 ? result.secrets : [{ key: "", value: "" }],
     );
+  };
+
+  const onPipCmdChange = (text: string) => {
+    setPipCmdText(text);
+    if (text.trim().length === 0) {
+      setPipCmdError(null);
+      return;
+    }
+    const result = parsePipCommand(text);
+    if (!result.ok) {
+      setPipCmdError(result.error);
+      return;
+    }
+    setPipCmdError(null);
+    setPipName(result.pipName);
+    setPipVersion(result.pipVersion);
+    setImportModule(result.importModule);
   };
 
   const buildMode = (): ModeIn => {
@@ -208,84 +240,124 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
             ))}
           </select>
         </label>
-        <label className="text-xs text-text-secondary">
-          Provider id
-          <input
-            type="text"
-            required
-            value={providerId}
-            onChange={(e) => setProviderId(e.target.value)}
-            className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-          />
-        </label>
-        <label className="text-xs text-text-secondary">
-          Display name
-          <input
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-          />
-        </label>
+        <div>
+          <label className="block text-xs text-text-secondary">
+            Provider id
+            <input
+              type="text"
+              required
+              value={providerId}
+              onChange={(e) => setProviderId(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+            />
+          </label>
+          <p
+            data-testid="hint-provider-id"
+            className="mt-0.5 text-[10px] text-text-secondary"
+          >
+            Short identifier (lowercase, no spaces). Used in tool names and logs.
+          </p>
+        </div>
+        <div>
+          <label className="block text-xs text-text-secondary">
+            Display name
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+            />
+          </label>
+          <p className="mt-0.5 text-[10px] text-text-secondary">
+            Friendly name shown in the UI. Optional.
+          </p>
+        </div>
       </div>
 
       {source === "cli_mcp" ? (
         <div className="space-y-2">
-          <label className="block text-xs text-text-secondary">
-            Paste MCP config (JSON)
-            <textarea
-              aria-label="paste mcp config"
-              rows={4}
-              placeholder='{ "mcpServers": { "newsapi": { "command": "npx", "args": ["-y", "newsapi-mcp"], "env": { "NEWSAPI_KEY": "..." } } } }'
-              value={mcpJsonText}
-              onChange={(e) => onMcpJsonChange(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
-            />
-          </label>
+          <div>
+            <label className="block text-xs text-text-secondary">
+              Paste MCP config (JSON) or `npx` command
+              <textarea
+                aria-label="paste mcp config"
+                rows={4}
+                placeholder='npx -y newsapi-mcp     —or—     { "mcpServers": { "newsapi": { "command": "npx", "args": ["-y", "newsapi-mcp"], "env": { "NEWSAPI_KEY": "..." } } } }'
+                value={mcpJsonText}
+                onChange={(e) => onMcpJsonChange(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
+              />
+            </label>
+            <p className="mt-0.5 text-[10px] text-text-secondary">
+              Paste what the provider's docs show — either a bare `npx ...` command or
+              the full `mcpServers` JSON. Auto-fills the fields below.
+            </p>
+          </div>
           {mcpJsonError ? (
             <p role="alert" className="text-xs text-feedback-error">
               {mcpJsonError}
             </p>
           ) : null}
-          <label className="block text-xs text-text-secondary">
-            argv (space-separated)
-            <input
-              type="text"
-              required
-              placeholder="npx -y my-mcp-server"
-              value={argvText}
-              onChange={(e) => setArgvText(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-            />
-          </label>
-          <label className="block text-xs text-text-secondary">
-            env keys (comma-separated)
-            <input
-              type="text"
-              placeholder="POLYGON_API_KEY, OTHER_VAR"
-              value={envKeysText}
-              onChange={(e) => setEnvKeysText(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-            />
-          </label>
+          <div>
+            <label className="block text-xs text-text-secondary">
+              argv (space-separated)
+              <input
+                type="text"
+                required
+                placeholder="npx -y my-mcp-server"
+                value={argvText}
+                onChange={(e) => setArgvText(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+              />
+            </label>
+            <p className="mt-0.5 text-[10px] text-text-secondary">
+              Command that launches the MCP server, split by spaces. Usually starts
+              with `npx -y …` or `uvx …`.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs text-text-secondary">
+              env keys (comma-separated)
+              <input
+                type="text"
+                placeholder="POLYGON_API_KEY, OTHER_VAR"
+                value={envKeysText}
+                onChange={(e) => setEnvKeysText(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+              />
+            </label>
+            <p className="mt-0.5 text-[10px] text-text-secondary">
+              Environment variables the server reads. Their values come from the
+              secrets section below.
+            </p>
+          </div>
         </div>
       ) : null}
 
       {source === "remote_mcp" ? (
         <div className="space-y-2">
-          <label className="block text-xs text-text-secondary">
-            URL
-            <input
-              type="url"
-              required
-              placeholder="https://mcp.example.com/sse"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-            />
-          </label>
+          <div>
+            <label className="block text-xs text-text-secondary">
+              URL
+              <input
+                type="url"
+                required
+                placeholder="https://mcp.example.com/sse"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+              />
+            </label>
+            <p className="mt-0.5 text-[10px] text-text-secondary">
+              The MCP server's HTTPS endpoint (often ends in `/sse` or `/mcp`).
+            </p>
+          </div>
           <fieldset className="space-y-1">
             <legend className="text-xs text-text-secondary">Headers</legend>
+            <p className="text-[10px] text-text-secondary">
+              Auth headers required by the server. Typically `Authorization: Bearer
+              &lt;token&gt;`.
+            </p>
             {headers.map((h, i) => (
               <div key={i} className="flex gap-2">
                 <input
@@ -323,62 +395,117 @@ export function AddConnectorForm({ onCancel, onCreated }: Props) {
 
       {source === "python_lib" ? (
         <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <label className="text-xs text-text-secondary">
-              pip name
-              <input
-                type="text"
-                required
-                value={pipName}
-                onChange={(e) => setPipName(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+          <div>
+            <label className="block text-xs text-text-secondary">
+              Paste pip install command (optional)
+              <textarea
+                rows={2}
+                aria-label="paste pip install command"
+                placeholder="python3 -m pip install eodhd -U"
+                value={pipCmdText}
+                onChange={(e) => onPipCmdChange(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
               />
             </label>
-            <label className="text-xs text-text-secondary">
-              pip version (optional)
-              <input
-                type="text"
-                value={pipVersion}
-                onChange={(e) => setPipVersion(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-              />
-            </label>
-            <label className="text-xs text-text-secondary">
-              import module
-              <input
-                type="text"
-                required
-                placeholder="eodhd"
-                value={importModule}
-                onChange={(e) => setImportModule(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-              />
-            </label>
-            <label className="text-xs text-text-secondary">
-              instance factory class
-              <input
-                type="text"
-                placeholder="APIClient"
-                value={factoryCls}
-                onChange={(e) => setFactoryCls(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
-              />
-            </label>
+            <p className="mt-0.5 text-[10px] text-text-secondary">
+              Paste the install command from the library's docs. Auto-fills the
+              package fields below.
+            </p>
           </div>
-          <label className="block text-xs text-text-secondary">
-            instance factory args (JSON)
-            <textarea
-              rows={3}
-              value={factoryArgs}
-              onChange={(e) => setFactoryArgs(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
-            />
-          </label>
+          {pipCmdError ? (
+            <p role="alert" className="text-xs text-red-500">
+              {pipCmdError}
+            </p>
+          ) : null}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-text-secondary">
+                pip name
+                <input
+                  type="text"
+                  required
+                  value={pipName}
+                  onChange={(e) => setPipName(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+                />
+              </label>
+              <p className="mt-0.5 text-[10px] text-text-secondary">
+                PyPI package name — what you'd type after `pip install`.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs text-text-secondary">
+                pip version (optional)
+                <input
+                  type="text"
+                  value={pipVersion}
+                  onChange={(e) => setPipVersion(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+                />
+              </label>
+              <p className="mt-0.5 text-[10px] text-text-secondary">
+                Pin like `==1.2.3` or `&gt;=2.0`. Leave blank for latest.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs text-text-secondary">
+                import module
+                <input
+                  type="text"
+                  required
+                  placeholder="eodhd"
+                  value={importModule}
+                  onChange={(e) => setImportModule(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+                />
+              </label>
+              <p className="mt-0.5 text-[10px] text-text-secondary">
+                What you write after `import` in Python. Often the same as the package name.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs text-text-secondary">
+                Main client class (e.g. APIClient)
+                <input
+                  type="text"
+                  placeholder="APIClient"
+                  value={factoryCls}
+                  onChange={(e) => setFactoryCls(e.target.value)}
+                  className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 text-sm text-text-primary"
+                />
+              </label>
+              <p className="mt-0.5 text-[10px] text-text-secondary">
+                Class instantiated to access the API. Check the library's quickstart.
+              </p>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-text-secondary">
+              Constructor settings (JSON)
+              <textarea
+                rows={3}
+                value={factoryArgs}
+                onChange={(e) => setFactoryArgs(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
+              />
+            </label>
+            <p
+              data-testid="hint-factory-args"
+              className="mt-0.5 text-[10px] text-text-secondary"
+            >
+              Keyword arguments passed to the class as JSON. Use `"$VAR_NAME"` to
+              reference a secret. Example: {"{"}"api_token": "$EODHD_API_KEY"{"}"}.
+            </p>
+          </div>
         </div>
       ) : null}
 
       <fieldset className="space-y-1">
         <legend className="text-xs text-text-secondary">API keys / secrets</legend>
+        <p className="text-[10px] text-text-secondary">
+          Stored encrypted on the server. Never sent to the LLM. Key is the env var
+          name; value is the actual secret.
+        </p>
         {secrets.map((s, i) => (
           <div key={i} className="flex gap-2">
             <input

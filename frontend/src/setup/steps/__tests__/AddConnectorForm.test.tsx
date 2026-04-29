@@ -68,6 +68,22 @@ describe("AddConnectorForm", () => {
     );
   });
 
+  it("populates argv and provider id from a pasted bare npx command", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/paste mcp config/i), {
+      target: { value: "npx -y newsapi-mcp" },
+    });
+
+    expect(
+      (screen.getByLabelText(/provider id/i) as HTMLInputElement).value,
+    ).toBe("newsapi");
+    expect(
+      (screen.getByLabelText(/argv \(space-separated\)/i) as HTMLInputElement)
+        .value,
+    ).toBe("npx -y newsapi-mcp");
+  });
+
   it("shows inline error and preserves manually-typed fields when pasted JSON is malformed", () => {
     render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
 
@@ -163,10 +179,10 @@ describe("AddConnectorForm", () => {
     fireEvent.change(screen.getByLabelText(/import module/i), {
       target: { value: "eodhd" },
     });
-    fireEvent.change(screen.getByLabelText(/instance factory class/i), {
+    fireEvent.change(screen.getByLabelText(/main client class/i), {
       target: { value: "APIClient" },
     });
-    fireEvent.change(screen.getByLabelText(/instance factory args/i), {
+    fireEvent.change(screen.getByLabelText(/constructor settings/i), {
       target: { value: '{"api_token": "${EODHD_API_KEY}"}' },
     });
 
@@ -201,6 +217,63 @@ describe("AddConnectorForm", () => {
     await waitFor(() => expect(mocked.createConnector).toHaveBeenCalled());
     const call = mocked.createConnector.mock.calls[0][0];
     expect(call.secrets).toEqual({ MY_KEY: "v" });
+  });
+
+  it("populates pip name, version, and import module from a pasted pip command", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+
+    fireEvent.change(screen.getByLabelText(/paste pip install command/i), {
+      target: { value: "python3 -m pip install eodhd==1.2.3 -U" },
+    });
+
+    expect((screen.getByLabelText(/pip name/i) as HTMLInputElement).value).toBe(
+      "eodhd",
+    );
+    expect(
+      (screen.getByLabelText(/pip version/i) as HTMLInputElement).value,
+    ).toBe("==1.2.3");
+    expect(
+      (screen.getByLabelText(/import module/i) as HTMLInputElement).value,
+    ).toBe("eodhd");
+  });
+
+  it("shows inline error when pasted pip command is malformed", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+
+    fireEvent.change(screen.getByLabelText(/pip name/i), {
+      target: { value: "already-typed" },
+    });
+    fireEvent.change(screen.getByLabelText(/paste pip install command/i), {
+      target: { value: "pip uninstall eodhd" },
+    });
+
+    expect(screen.getByRole("alert").textContent).toMatch(/install/i);
+    expect((screen.getByLabelText(/pip name/i) as HTMLInputElement).value).toBe(
+      "already-typed",
+    );
+  });
+
+  it("shows hint text under provider id explaining its purpose", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    expect(
+      screen.getByTestId("hint-provider-id").textContent,
+    ).toMatch(/identifier/i);
+  });
+
+  it("shows hint text under python_lib constructor settings explaining placeholders", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+    expect(
+      screen.getByTestId("hint-factory-args").textContent,
+    ).toMatch(/\$/);
   });
 
   it("cancel calls onCancel", () => {

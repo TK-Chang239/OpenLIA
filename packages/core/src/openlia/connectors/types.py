@@ -52,7 +52,7 @@ class RemoteMcpMode:
 @dataclass(frozen=True)
 class InstanceFactory:
     cls: str
-    args: dict[str, Any]  # values may be `$ENV_VAR_NAME` placeholders
+    args: dict[str, Any]  # values may be `$ENV_VAR_NAME` or `${ENV_VAR_NAME}` placeholders
 
 
 @dataclass(frozen=True)

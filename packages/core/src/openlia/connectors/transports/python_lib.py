@@ -4,10 +4,10 @@ Spec: docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md §4.2,
 §6.4. No sandboxing per locked-down §13.2.
 
 The transport lazily imports the configured module, instantiates the class
-described by `InstanceFactory` (substituting `$ENV_VAR_NAME` placeholders
-in `args` from the secrets dict supplied at construction), and routes
-`call_tool(name, **arguments)` to the corresponding bound method on the
-cached instance.
+described by `InstanceFactory` (substituting `$ENV_VAR_NAME` or `${ENV_VAR_NAME}`
+placeholders in `args` from the secrets dict supplied at construction), and
+routes `call_tool(name, **arguments)` to the corresponding bound method on
+the cached instance.
 """
 
 from __future__ import annotations
@@ -18,6 +18,15 @@ from inspect import getdoc
 from typing import Any
 
 from openlia.connectors.types import InstanceFactory
+
+
+def _resolve_placeholder(value: Any, secrets: dict[str, str]) -> Any:
+    if not isinstance(value, str) or not value.startswith("$"):
+        return value
+    name = value[1:]
+    if name.startswith("{") and name.endswith("}"):
+        name = name[1:-1]
+    return secrets[name]
 
 
 class PythonLibTransport:
@@ -41,7 +50,7 @@ class PythonLibTransport:
         mod = importlib.import_module(self._module_name)
         cls = getattr(mod, self._instance_factory.cls)
         resolved_args = {
-            k: (self._secrets[v[1:]] if isinstance(v, str) and v.startswith("$") else v)
+            k: _resolve_placeholder(v, self._secrets)
             for k, v in self._instance_factory.args.items()
         }
         self._instance = cls(**resolved_args)

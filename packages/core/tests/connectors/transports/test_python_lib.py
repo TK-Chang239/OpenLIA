@@ -62,6 +62,20 @@ async def test_placeholder_substitution_pulls_from_secrets_dict() -> None:
 
 
 @pytest.mark.asyncio
+async def test_braced_placeholder_form_also_resolves() -> None:
+    t = PythonLibTransport(
+        module="_fixture_lib",
+        instance_factory=InstanceFactory(
+            cls="Client",
+            args={"api_key": "${FIXTURE_KEY}", "region": "us"},
+        ),
+        secrets={"FIXTURE_KEY": "braced-key"},
+    )
+    result = await t.call_tool("quote", {"symbol": "AAPL"})
+    assert result["key"] == "braced-key"
+
+
+@pytest.mark.asyncio
 async def test_non_placeholder_args_pass_through_untouched() -> None:
     t = PythonLibTransport(
         module="_fixture_lib",
