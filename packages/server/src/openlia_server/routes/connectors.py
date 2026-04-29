@@ -47,6 +47,10 @@ class ConnectorCreate(BaseModel):
     secrets: dict[str, str] | None = None
 
 
+class ConnectorUpdate(ConnectorCreate):
+    pass
+
+
 class ConnectorOut(BaseModel):
     id: str
     provider_id: str
@@ -56,6 +60,11 @@ class ConnectorOut(BaseModel):
     status: str
     last_error: str | None
     cached_tools_count: int
+
+
+class ConnectorDetail(ConnectorOut):
+    launch: dict[str, Any]
+    secret_keys: list[str]
 
 
 def _to_out(row: Any) -> ConnectorOut:
@@ -69,6 +78,15 @@ def _to_out(row: Any) -> ConnectorOut:
         status=row.status,
         last_error=row.last_error,
         cached_tools_count=len(tools),
+    )
+
+
+def _to_detail(row: Any) -> ConnectorDetail:
+    base = _to_out(row)
+    return ConnectorDetail(
+        **base.model_dump(),
+        launch=row.launch or {"modes": []},
+        secret_keys=sorted((row.secrets or {}).keys()),
     )
 
 
@@ -93,6 +111,34 @@ def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> A
     @router.get("", response_model=list[ConnectorOut])
     def list_(db: DBSession = Depends(session_dep)) -> list[ConnectorOut]:
         return [_to_out(r) for r in connectors_service.list_connectors(db)]
+
+    @router.get("/{connector_id}", response_model=ConnectorDetail)
+    def get(connector_id: str, db: DBSession = Depends(session_dep)) -> ConnectorDetail:
+        row = connectors_service.get_connector(db, connector_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="connector not found")
+        return _to_detail(row)
+
+    @router.put("/{connector_id}", response_model=ConnectorOut)
+    async def update(
+        connector_id: str,
+        body: ConnectorUpdate,
+        db: DBSession = Depends(session_dep),
+    ) -> ConnectorOut:
+        launch_dict = body.launch.model_dump(exclude_none=True)
+        row = await connectors_service.update_connector(
+            db,
+            connector_id,
+            provider_id=body.provider_id,
+            display_name=body.display_name,
+            source=ConnectorSource(body.source),
+            category=Category(body.category),
+            launch=launch_dict,
+            secrets=body.secrets,
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="connector not found")
+        return _to_out(row)
 
     @router.delete("/{connector_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete(connector_id: str, db: DBSession = Depends(session_dep)) -> None:

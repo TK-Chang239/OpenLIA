@@ -10,25 +10,30 @@ vi.mock("../../../api/connectors", async () => {
   return {
     ...actual,
     createConnector: vi.fn(),
+    updateConnector: vi.fn(),
   };
 });
 
 const mocked = connectorsApi as unknown as {
   createConnector: ReturnType<typeof vi.fn>;
+  updateConnector: ReturnType<typeof vi.fn>;
+};
+
+const STUB_ROW = {
+  id: "c1",
+  provider_id: "p",
+  display_name: "p",
+  source: "cli_mcp" as const,
+  category: "financial" as const,
+  status: "pending" as const,
+  last_error: null,
+  cached_tools_count: 0,
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocked.createConnector.mockResolvedValue({
-    id: "c1",
-    provider_id: "p",
-    display_name: "p",
-    source: "cli_mcp",
-    category: "financial",
-    status: "pending",
-    last_error: null,
-    cached_tools_count: 0,
-  });
+  mocked.createConnector.mockResolvedValue(STUB_ROW);
+  mocked.updateConnector.mockResolvedValue(STUB_ROW);
 });
 
 describe("AddConnectorForm", () => {
@@ -274,6 +279,162 @@ describe("AddConnectorForm", () => {
     expect(
       screen.getByTestId("hint-factory-args").textContent,
     ).toMatch(/\$/);
+  });
+
+  it("shows hint that OAuth is not supported for remote MCP servers", () => {
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "remote_mcp" },
+    });
+    expect(
+      screen.getByTestId("hint-remote-oauth").textContent,
+    ).toMatch(/oauth is not supported/i);
+    expect(
+      screen.getByTestId("hint-remote-oauth").textContent,
+    ).toMatch(/api_token|api key/i);
+  });
+
+  it("prefills fields from existing connector when editing", () => {
+    render(
+      <AddConnectorForm
+        onCancel={vi.fn()}
+        onCreated={vi.fn()}
+        editing={{
+          id: "c-123",
+          providerId: "polygon",
+          displayName: "Polygon",
+          source: "cli_mcp",
+          category: "financial",
+          launch: {
+            modes: [
+              {
+                kind: "cli_mcp",
+                argv: ["npx", "-y", "polygon-mcp"],
+                env_keys: ["POLYGON_API_KEY"],
+              },
+            ],
+          },
+          secretKeys: ["POLYGON_API_KEY"],
+        }}
+      />,
+    );
+    expect(
+      (screen.getByLabelText(/provider id/i) as HTMLInputElement).value,
+    ).toBe("polygon");
+    expect(
+      (screen.getByLabelText(/argv \(space-separated\)/i) as HTMLInputElement)
+        .value,
+    ).toBe("npx -y polygon-mcp");
+    expect(
+      (screen.getByLabelText(/env keys \(comma-separated\)/i) as HTMLInputElement)
+        .value,
+    ).toBe("POLYGON_API_KEY");
+    expect(
+      (screen.getByLabelText(/secret key 0/i) as HTMLInputElement).value,
+    ).toBe("POLYGON_API_KEY");
+    // value blanked — server does not return secret values
+    expect(
+      (screen.getByLabelText(/secret value 0/i) as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      screen.getByRole("button", { name: /save changes/i }),
+    ).toBeTruthy();
+  });
+
+  it("submit in edit mode calls updateConnector with the editing id", async () => {
+    const onCreated = vi.fn();
+    render(
+      <AddConnectorForm
+        onCancel={vi.fn()}
+        onCreated={onCreated}
+        editing={{
+          id: "c-123",
+          providerId: "polygon",
+          displayName: "Polygon",
+          source: "cli_mcp",
+          category: "financial",
+          launch: {
+            modes: [
+              {
+                kind: "cli_mcp",
+                argv: ["npx", "-y", "polygon-mcp"],
+                env_keys: [],
+              },
+            ],
+          },
+          secretKeys: [],
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/argv \(space-separated\)/i), {
+      target: { value: "npx -y polygon-mcp@2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+
+    await waitFor(() => expect(mocked.updateConnector).toHaveBeenCalled());
+    expect(mocked.createConnector).not.toHaveBeenCalled();
+    const [id, payload] = mocked.updateConnector.mock.calls[0];
+    expect(id).toBe("c-123");
+    expect(payload.launch.modes[0].argv).toEqual([
+      "npx",
+      "-y",
+      "polygon-mcp@2",
+    ]);
+    expect(onCreated).toHaveBeenCalled();
+  });
+
+  it("edit mode omits secrets payload when no value entered (preserve existing)", async () => {
+    render(
+      <AddConnectorForm
+        onCancel={vi.fn()}
+        onCreated={vi.fn()}
+        editing={{
+          id: "c-123",
+          providerId: "polygon",
+          displayName: "Polygon",
+          source: "cli_mcp",
+          category: "financial",
+          launch: {
+            modes: [{ kind: "cli_mcp", argv: ["x"], env_keys: [] }],
+          },
+          secretKeys: ["POLYGON_API_KEY"],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(mocked.updateConnector).toHaveBeenCalled());
+    const [, payload] = mocked.updateConnector.mock.calls[0];
+    expect(payload.secrets).toBeUndefined();
+  });
+
+  it("edit mode includes secrets payload when user enters new values", async () => {
+    render(
+      <AddConnectorForm
+        onCancel={vi.fn()}
+        onCreated={vi.fn()}
+        editing={{
+          id: "c-123",
+          providerId: "polygon",
+          displayName: "Polygon",
+          source: "cli_mcp",
+          category: "financial",
+          launch: {
+            modes: [{ kind: "cli_mcp", argv: ["x"], env_keys: [] }],
+          },
+          secretKeys: ["POLYGON_API_KEY"],
+        }}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/secret value 0/i), {
+      target: { value: "new-key-value" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save changes/i }));
+    await waitFor(() => expect(mocked.updateConnector).toHaveBeenCalled());
+    const [, payload] = mocked.updateConnector.mock.calls[0];
+    expect(payload.secrets).toEqual({ POLYGON_API_KEY: "new-key-value" });
   });
 
   it("cancel calls onCancel", () => {

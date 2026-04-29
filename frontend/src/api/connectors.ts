@@ -34,6 +34,11 @@ export interface ConnectorRow {
   cached_tools_count: number;
 }
 
+export interface ConnectorDetail extends ConnectorRow {
+  launch: LaunchIn;
+  secret_keys: string[];
+}
+
 export interface CreateConnectorInput {
   provider_id: string;
   display_name: string;
@@ -67,6 +72,15 @@ export const listConnectors = () =>
 export const createConnector = (input: CreateConnectorInput) =>
   fetchJson<ConnectorRow>("/api/connectors", {
     method: "POST",
+    json: input,
+  });
+
+export const getConnector = (id: string) =>
+  fetchJson<ConnectorDetail>(`/api/connectors/${encodeURIComponent(id)}`);
+
+export const updateConnector = (id: string, input: CreateConnectorInput) =>
+  fetchJson<ConnectorRow>(`/api/connectors/${encodeURIComponent(id)}`, {
+    method: "PUT",
     json: input,
   });
 

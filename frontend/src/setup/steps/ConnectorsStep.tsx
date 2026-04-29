@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
-import { AddConnectorForm } from "./AddConnectorForm";
+import { AddConnectorForm, type EditingConnector } from "./AddConnectorForm";
 import { PerNeedReviewCard } from "./PerNeedReviewCard";
 import {
   deleteConnector,
+  getConnector,
   listConnectors,
   listProposedSpecs,
   reResolveSpecs,
@@ -30,6 +31,7 @@ interface ConnectorReviewState {
 export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<EditingConnector | null>(null);
   const [activeReview, setActiveReview] = useState<string | null>(null);
   const [reviewByConnector, setReviewByConnector] = useState<
     Record<string, ConnectorReviewState>
@@ -54,10 +56,29 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
 
   const onCreated = async (row: ConnectorRow) => {
     setAdding(false);
+    setEditing(null);
     await refresh();
     // Fetch initial proposals (may be empty in Phase 6 stub).
     await loadProposalsFor(row.id);
     setActiveReview(row.id);
+  };
+
+  const onEdit = async (id: string) => {
+    try {
+      const detail = await getConnector(id);
+      setEditing({
+        id: detail.id,
+        providerId: detail.provider_id,
+        displayName: detail.display_name,
+        source: detail.source,
+        category: detail.category,
+        launch: detail.launch,
+        secretKeys: detail.secret_keys,
+      });
+      setAdding(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load connector.");
+    }
   };
 
   const loadProposalsFor = async (connectorId: string) => {
@@ -208,46 +229,62 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
                   className="rounded-md border border-border-subtle bg-bg-elevated p-3"
                   data-testid={`connector-row-${r.id}`}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-medium text-text-primary">
-                        {r.display_name || r.provider_id}{" "}
-                        <span className="text-xs text-text-secondary">
-                          ({r.source} · {r.category})
-                        </span>
-                      </p>
-                      <p className="text-xs text-text-secondary">
-                        status: {r.status}
-                        {r.last_error ? ` — ${r.last_error}` : ""}
-                      </p>
+                  {editing && editing.id === r.id ? (
+                    <AddConnectorForm
+                      key={`edit-${editing.id}`}
+                      onCancel={() => setEditing(null)}
+                      onCreated={onCreated}
+                      editing={editing}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-text-primary">
+                          {r.display_name || r.provider_id}{" "}
+                          <span className="text-xs text-text-secondary">
+                            ({r.source} · {r.category})
+                          </span>
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                          status: {r.status}
+                          {r.last_error ? ` — ${r.last_error}` : ""}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={() => onValidate(r.id)}
+                          className="text-accent-primary hover:underline"
+                        >
+                          Validate
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onEdit(r.id)}
+                          className="text-accent-primary hover:underline"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveReview(r.id);
+                            void loadProposalsFor(r.id);
+                          }}
+                          className="text-accent-primary hover:underline"
+                        >
+                          Review specs
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDelete(r.id)}
+                          className="text-feedback-error hover:underline"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <button
-                        type="button"
-                        onClick={() => onValidate(r.id)}
-                        className="text-accent-primary hover:underline"
-                      >
-                        Validate
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveReview(r.id);
-                          void loadProposalsFor(r.id);
-                        }}
-                        className="text-accent-primary hover:underline"
-                      >
-                        Review specs
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onDelete(r.id)}
-                        className="text-feedback-error hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
+                  )}
 
                   {activeReview === r.id ? (
                     <ReviewPane

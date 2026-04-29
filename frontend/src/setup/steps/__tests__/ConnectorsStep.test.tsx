@@ -18,6 +18,8 @@ vi.mock("../../../api/connectors", async () => {
     listProposedSpecs: vi.fn(),
     reResolveSpecs: vi.fn(),
     approveSpec: vi.fn(),
+    getConnector: vi.fn(),
+    updateConnector: vi.fn(),
   };
 });
 
@@ -29,6 +31,8 @@ const mocked = connectorsApi as unknown as {
   listProposedSpecs: ReturnType<typeof vi.fn>;
   reResolveSpecs: ReturnType<typeof vi.fn>;
   approveSpec: ReturnType<typeof vi.fn>;
+  getConnector: ReturnType<typeof vi.fn>;
+  updateConnector: ReturnType<typeof vi.fn>;
 };
 
 function row(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
@@ -61,6 +65,20 @@ beforeEach(() => {
     access_mode: "remote_mcp",
   });
   vi.spyOn(deptHealthApi, "fetchDeptHealth").mockResolvedValue([]);
+  mocked.getConnector.mockResolvedValue({
+    ...row(),
+    launch: {
+      modes: [
+        {
+          kind: "remote_mcp",
+          url: "https://example.com/mcp",
+          headers: { Authorization: "Bearer x" },
+        },
+      ],
+    },
+    secret_keys: [],
+  });
+  mocked.updateConnector.mockResolvedValue(row());
 });
 
 describe("ConnectorsStep", () => {
@@ -120,6 +138,29 @@ describe("ConnectorsStep", () => {
       await screen.findByRole("button", { name: /add custom connector/i }),
     );
     expect(await screen.findByLabelText(/^source$/i)).toBeInTheDocument();
+  });
+
+  it("Edit button fetches connector detail and shows form prefilled", async () => {
+    mocked.listConnectors.mockResolvedValue([
+      row({ status: "failed", last_error: "boom" }),
+    ]);
+    render(
+      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
+    );
+    await screen.findByText("EODHD");
+
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+
+    await waitFor(() =>
+      expect(mocked.getConnector).toHaveBeenCalledWith("c1"),
+    );
+    // Form appears with the existing URL prefilled
+    const urlInput = (await screen.findByLabelText(/^url$/i)) as HTMLInputElement;
+    expect(urlInput.value).toBe("https://example.com/mcp");
+    // Save changes button is the edit-mode submit
+    expect(
+      screen.getByRole("button", { name: /save changes/i }),
+    ).toBeInTheDocument();
   });
 
   it("Review specs button fetches proposals", async () => {

@@ -223,6 +223,49 @@ def list_connectors(session: Session) -> list[Connector]:
     return list(session.query(Connector).order_by(Connector.created_at).all())
 
 
+def get_connector(session: Session, connector_id: str) -> Connector | None:
+    return session.get(Connector, connector_id)
+
+
+async def update_connector(
+    session: Session,
+    connector_id: str,
+    *,
+    provider_id: str,
+    display_name: str,
+    source: ConnectorSource,
+    category: Category,
+    launch: LaunchSpec | dict[str, Any],
+    secrets: dict[str, str] | None,
+) -> Connector | None:
+    row = session.get(Connector, connector_id)
+    if row is None:
+        return None
+    launch_json = _launch_to_dict(launch)
+    row.provider_id = provider_id
+    row.display_name = display_name
+    row.source = source.value
+    row.category = category.value
+    row.launch = launch_json
+    if secrets is not None:
+        row.secrets = secrets
+    effective_secrets = row.secrets or {}
+    result = await _validate_launch(launch_json, effective_secrets)
+    if isinstance(result, ValidationOk):
+        row.status = ConnectorStatus.VALIDATED.value
+        row.cached_tools = result.tools
+        row.cached_python_callables = result.python_callables
+        row.validated_at = datetime.now(UTC)
+        row.last_error = None
+    else:
+        row.status = ConnectorStatus.FAILED.value
+        row.last_error = result.error
+    session.commit()
+    session.refresh(row)
+    _invalidate(session)
+    return row
+
+
 def delete_connector(session: Session, connector_id: str) -> None:
     row = session.get(Connector, connector_id)
     if row is None:
