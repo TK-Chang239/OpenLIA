@@ -443,7 +443,7 @@ def create_app(
     app.include_router(
         build_connectors_router(db_session_factory=factory, mode=mode)
     )
-    app.include_router(build_dept_health_router())
+    app.include_router(build_dept_health_router(db_session_factory=factory))
 
     # Phase 10: dept-health cache. Populated lazily on first read in tests
     # (see dept_health.compute_all) and refreshed at startup in the lifespan
@@ -468,6 +468,12 @@ def create_app(
 
     _connectors_service.set_dept_health_hook(_recompute_dept_health)
     _runner_specs_service.set_dept_health_hook(_recompute_dept_health)
+
+    # Hydrate the wizard-time adapter's per-department needs/categories
+    # registry from the live `openlia.departments` module. Without this,
+    # `propose_specs` iterates empty maps and every runner-bearing dept
+    # stays permanently disabled with every need unresolved.
+    _runner_specs_service.hydrate_dept_registries()
 
     # Mount the wizard-time runner specs router. Production wiring of a
     # real Quick-tier LLM client lives in the wizard adapter integration

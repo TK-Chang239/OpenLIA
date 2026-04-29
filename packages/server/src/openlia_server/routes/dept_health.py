@@ -13,18 +13,35 @@ raises an `HTTPException(409, ...)` whose body matches the contract
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from collections.abc import Callable
 
-from openlia_server.services.dept_health import is_disabled, serialize
+from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy.orm import Session as DBSession
+
+from openlia_server.db.deps import make_session_dependency
+from openlia_server.services.dept_health import compute_all, is_disabled, serialize
 
 
-def build_dept_health_router() -> APIRouter:
+def build_dept_health_router(
+    *,
+    db_session_factory: Callable[[], DBSession] | None = None,
+) -> APIRouter:
     router = APIRouter(prefix="/dept-health", tags=["dept-health"])
 
     @router.get("", response_model=list[dict])
     def list_dept_health(request: Request) -> list[dict]:
         cache: dict = getattr(request.app.state, "dept_health", {}) or {}
         return [serialize(h) for h in cache.values()]
+
+    if db_session_factory is not None:
+        session_dep = make_session_dependency(db_session_factory)
+
+        @router.post("/refresh", response_model=list[dict])
+        def refresh_dept_health(
+            request: Request, db: DBSession = Depends(session_dep)
+        ) -> list[dict]:
+            request.app.state.dept_health = compute_all(db)
+            return [serialize(h) for h in request.app.state.dept_health.values()]
 
     return router
 

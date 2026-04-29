@@ -12,3 +12,6 @@ export interface DepartmentHealth {
 
 export const fetchDeptHealth = () =>
   fetchJson<DepartmentHealth[]>("/api/dept-health");
+
+export const recheckDeptHealth = () =>
+  fetchJson<DepartmentHealth[]>("/api/dept-health/refresh", { method: "POST" });
