@@ -11,12 +11,16 @@ vi.mock("../../../api/connectors", async () => {
     ...actual,
     createConnector: vi.fn(),
     updateConnector: vi.fn(),
+    introspectPythonLib: vi.fn(),
+    installPythonPackage: vi.fn(),
   };
 });
 
 const mocked = connectorsApi as unknown as {
   createConnector: ReturnType<typeof vi.fn>;
   updateConnector: ReturnType<typeof vi.fn>;
+  introspectPythonLib: ReturnType<typeof vi.fn>;
+  installPythonPackage: ReturnType<typeof vi.fn>;
 };
 
 const STUB_ROW = {
@@ -222,6 +226,160 @@ describe("AddConnectorForm", () => {
     await waitFor(() => expect(mocked.createConnector).toHaveBeenCalled());
     const call = mocked.createConnector.mock.calls[0][0];
     expect(call.secrets).toEqual({ MY_KEY: "v" });
+  });
+
+  it("Install package calls installPythonPackage with the typed pip name + version", async () => {
+    mocked.installPythonPackage.mockResolvedValue({
+      stdout: "Successfully installed eodhd-1.2.3",
+    });
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+    fireEvent.change(screen.getByLabelText(/pip name/i), {
+      target: { value: "eodhd" },
+    });
+    fireEvent.change(screen.getByLabelText(/pip version/i), {
+      target: { value: "==1.2.3" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /install package/i }),
+    );
+    await waitFor(() =>
+      expect(mocked.installPythonPackage).toHaveBeenCalledWith(
+        "eodhd",
+        "==1.2.3",
+      ),
+    );
+    expect(
+      (await screen.findByTestId("install-status")).textContent,
+    ).toMatch(/Successfully installed/);
+  });
+
+  it("Install package surfaces backend error inline", async () => {
+    mocked.installPythonPackage.mockRejectedValue(
+      new Error(
+        "HTTP 400: ERROR: Could not find a version that satisfies eodhd==999",
+      ),
+    );
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+    fireEvent.change(screen.getByLabelText(/pip name/i), {
+      target: { value: "eodhd" },
+    });
+    fireEvent.change(screen.getByLabelText(/pip version/i), {
+      target: { value: "==999" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /install package/i }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("install-error").textContent,
+      ).toMatch(/Could not find a version/i),
+    );
+  });
+
+  it("Detect parameters fills constructor JSON with kwarg names + secret refs", async () => {
+    mocked.introspectPythonLib.mockResolvedValue({
+      params: [{ name: "api_key", type: "str", required: true, default: null }],
+    });
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+    fireEvent.change(screen.getByLabelText(/import module/i), {
+      target: { value: "eodhd" },
+    });
+    fireEvent.change(screen.getByLabelText(/main client class/i), {
+      target: { value: "APIClient" },
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /detect parameters/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocked.introspectPythonLib).toHaveBeenCalledWith(
+        "eodhd",
+        "APIClient",
+      ),
+    );
+    const argsField = (await screen.findByLabelText(
+      /constructor settings/i,
+    )) as HTMLTextAreaElement;
+    const parsed = JSON.parse(argsField.value);
+    expect(parsed).toEqual({ api_key: "$API_KEY" });
+    // Secret row prefilled with the matching key
+    expect(
+      (screen.getByLabelText(/secret key 0/i) as HTMLInputElement).value,
+    ).toBe("API_KEY");
+  });
+
+  it("Detect parameters treats credential-named optional kwargs as secrets and shows a status", async () => {
+    // Mirrors EventRegistry.__init__: apiKey defaults to None so
+    // inspect.signature reports required=False — but it still IS the secret.
+    mocked.introspectPythonLib.mockResolvedValue({
+      params: [
+        { name: "apiKey", type: "Optional", required: false, default: null },
+        { name: "host", type: "Optional", required: false, default: null },
+        { name: "minDelayBetweenRequests", type: "float", required: false, default: 0.5 },
+      ],
+    });
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+    fireEvent.change(screen.getByLabelText(/import module/i), {
+      target: { value: "eventregistry" },
+    });
+    fireEvent.change(screen.getByLabelText(/main client class/i), {
+      target: { value: "EventRegistry" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /detect parameters/i }),
+    );
+    const argsField = (await screen.findByLabelText(
+      /constructor settings/i,
+    )) as HTMLTextAreaElement;
+    await waitFor(() => expect(argsField.value.length).toBeGreaterThan(0));
+    const parsed = JSON.parse(argsField.value);
+    expect(parsed.apiKey).toBe("$APIKEY");
+    expect(parsed.minDelayBetweenRequests).toBe(0.5);
+    expect(
+      (screen.getByLabelText(/secret key 0/i) as HTMLInputElement).value,
+    ).toBe("APIKEY");
+    expect(screen.getByTestId("detect-status").textContent).toMatch(
+      /3 parameters.*1 secret/i,
+    );
+  });
+
+  it("Detect parameters surfaces a backend error inline", async () => {
+    mocked.introspectPythonLib.mockRejectedValue(
+      new Error(
+        "HTTP 400: Module 'eodhd' is not installed in the server's Python environment...",
+      ),
+    );
+    render(<AddConnectorForm onCancel={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText(/^source$/i), {
+      target: { value: "python_lib" },
+    });
+    fireEvent.change(screen.getByLabelText(/import module/i), {
+      target: { value: "eodhd" },
+    });
+    fireEvent.change(screen.getByLabelText(/main client class/i), {
+      target: { value: "APIClient" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: /detect parameters/i }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("detect-error").textContent,
+      ).toMatch(/not installed/i),
+    );
   });
 
   it("populates pip name, version, and import module from a pasted pip command", () => {

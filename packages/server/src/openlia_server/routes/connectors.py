@@ -7,8 +7,14 @@ multi-mode `LaunchSpec` shape. Each mode dict matches `{"kind": ...,
 
 from __future__ import annotations
 
+import importlib
+import inspect
+import re
+import shutil
+import subprocess
+import sys
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from openlia.connectors.types import Category, ConnectorSource
@@ -16,6 +22,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
+from openlia_server.middleware.auth import build_require_active_admin
 from openlia_server.services import connectors_service
 
 
@@ -49,6 +56,117 @@ class ConnectorCreate(BaseModel):
 
 class ConnectorUpdate(ConnectorCreate):
     pass
+
+
+class IntrospectPythonLibIn(BaseModel):
+    import_module: str = Field(min_length=1, max_length=128)
+    cls: str = Field(min_length=1, max_length=128)
+
+
+# Strict, conservative pattern: must start with a letter or digit, then
+# letters/digits/dots/underscores/hyphens. Excludes flags ("-…"), URLs,
+# paths, shell metas. Mirrors PEP 508 distribution-name shape.
+_PIP_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+# Only the standard PEP 440 prefix operators followed by a version-ish tail.
+_PIP_VERSION_RE = re.compile(r"^(==|>=|<=|~=|!=|>|<)?[A-Za-z0-9.+!*-]{0,32}$")
+
+
+class InstallPythonPackageIn(BaseModel):
+    pip_name: str = Field(min_length=1, max_length=64)
+    pip_version: str = Field(default="", max_length=32)
+
+
+class InstallPythonPackageOut(BaseModel):
+    stdout: str
+
+
+class ParamSpec(BaseModel):
+    name: str
+    type: str | None
+    required: bool
+    default: Any | None = None
+
+
+class IntrospectPythonLibOut(BaseModel):
+    params: list[ParamSpec]
+
+
+def _annotation_str(ann: Any) -> str | None:
+    if ann is inspect.Parameter.empty:
+        return None
+    try:
+        if hasattr(ann, "__name__"):
+            return str(ann.__name__)
+        return str(ann)
+    except Exception:
+        return None
+
+
+def _introspect_init(import_module: str, cls_name: str) -> list[ParamSpec]:
+    """Return the kwarg list for `cls_name.__init__`, skipping `self`.
+
+    Raises HTTPException(400) with an actionable message when the module is
+    not installed or the class is not found.
+    """
+    try:
+        mod = importlib.import_module(import_module)
+    except ModuleNotFoundError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Module '{import_module}' is not installed in the server's "
+                f"Python environment. Run `pip install <package>` in that "
+                f"environment, restart the server, then click Detect again. "
+                f"({exc})"
+            ),
+        ) from exc
+    try:
+        cls = getattr(mod, cls_name)
+    except AttributeError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Module '{import_module}' has no attribute '{cls_name}'. "
+                f"Check the library's docs for the correct class name."
+            ),
+        ) from exc
+    try:
+        sig = inspect.signature(cls.__init__)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not introspect '{cls_name}.__init__': {exc}",
+        ) from exc
+
+    params: list[ParamSpec] = []
+    for p in sig.parameters.values():
+        if p.name == "self":
+            continue
+        if p.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+        default: Any | None = None
+        if p.default is not inspect.Parameter.empty:
+            try:
+                # Round-trip via repr so dataclasses / sentinels don't
+                # break JSON serialization. Only commit primitive defaults.
+                if isinstance(p.default, (str, int, float, bool, type(None))):
+                    default = p.default
+                else:
+                    default = repr(p.default)
+            except Exception:
+                default = None
+        params.append(
+            ParamSpec(
+                name=p.name,
+                type=_annotation_str(p.annotation),
+                required=p.default is inspect.Parameter.empty,
+                default=default,
+            )
+        )
+    return params
 
 
 class ConnectorOut(BaseModel):
@@ -90,9 +208,100 @@ def _to_detail(row: Any) -> ConnectorDetail:
     )
 
 
-def build_connectors_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
-    router = APIRouter(prefix="/connectors", tags=["connectors"])
+def build_connectors_router(
+    *,
+    db_session_factory: Callable[[], DBSession],
+    mode: Literal["personal", "company"] = "personal",
+) -> APIRouter:
+    """Mount the connector subsystem under /connectors.
+
+    The router as a whole is gated by `require_active_admin`. In personal
+    mode that dependency resolves to the synthetic `local` user with no
+    cookie required, so the wizard's existing fetches work unchanged. In
+    company mode, every /api/connectors/* route requires a valid session
+    cookie tied to a user with `is_admin = true`.
+    """
+    require_admin = build_require_active_admin(
+        db_session_factory=db_session_factory, mode=mode
+    )
+    router = APIRouter(
+        prefix="/connectors",
+        tags=["connectors"],
+        dependencies=[require_admin],
+    )
     session_dep = make_session_dependency(db_session_factory)
+
+    @router.post(
+        "/introspect-python-lib",
+        response_model=IntrospectPythonLibOut,
+    )
+    def introspect_python_lib(body: IntrospectPythonLibIn) -> IntrospectPythonLibOut:
+        params = _introspect_init(body.import_module, body.cls)
+        return IntrospectPythonLibOut(params=params)
+
+    @router.post(
+        "/install-python-package",
+        response_model=InstallPythonPackageOut,
+    )
+    def install_python_package(
+        body: InstallPythonPackageIn,
+    ) -> InstallPythonPackageOut:
+        """Install a package into the server's own interpreter.
+
+        Admin-only (router-level dependency). Inputs are restricted to a
+        plain PEP 508 name + PEP 440 version tail; URL/path installs and
+        flag-smuggling are refused before subprocess runs. After a successful
+        install we invalidate the import cache so a subsequent
+        `introspect-python-lib` call sees the freshly installed module
+        without a server restart.
+
+        Prefers `uv pip install --python <sys.executable>` because uv-managed
+        venvs ship without pip bootstrapped. Falls back to
+        `python -m pip install` when uv is not on PATH.
+        """
+        if not _PIP_NAME_RE.match(body.pip_name):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid pip name. Use a plain package name "
+                    "(letters, digits, '.', '_', '-')."
+                ),
+            )
+        if body.pip_version and not _PIP_VERSION_RE.match(body.pip_version):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid pip version. Use a PEP 440 specifier like "
+                    "'==1.2.3', '>=2.0', or leave blank for latest."
+                ),
+            )
+        spec = f"{body.pip_name}{body.pip_version or ''}"
+        uv_path = shutil.which("uv")
+        if uv_path is not None:
+            args = [uv_path, "pip", "install", "--python", sys.executable, spec]
+        else:
+            args = [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                spec,
+            ]
+        proc = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if proc.returncode != 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(proc.stderr or proc.stdout).strip()
+                or f"install {spec} failed (exit {proc.returncode}).",
+            )
+        importlib.invalidate_caches()
+        return InstallPythonPackageOut(stdout=proc.stdout or proc.stderr)
 
     @router.post("", status_code=status.HTTP_201_CREATED, response_model=ConnectorOut)
     async def create(body: ConnectorCreate, db: DBSession = Depends(session_dep)) -> ConnectorOut:

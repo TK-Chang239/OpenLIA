@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import {
   createConnector,
+  installPythonPackage,
+  introspectPythonLib,
   updateConnector,
   type Category,
   type ConnectorRow,
@@ -9,6 +11,7 @@ import {
   type LaunchIn,
   type ModeIn,
 } from "../../api/connectors";
+import { ApiError } from "../../api/client";
 import { parseMcpConfig } from "./parseMcpConfig";
 import { parseNpxCommand } from "./parseNpxCommand";
 import { parsePipCommand } from "./parsePipCommand";
@@ -122,6 +125,12 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
   );
   const [pipCmdText, setPipCmdText] = useState("");
   const [pipCmdError, setPipCmdError] = useState<string | null>(null);
+  const [detectError, setDetectError] = useState<string | null>(null);
+  const [detectStatus, setDetectStatus] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installStatus, setInstallStatus] = useState<string | null>(null);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   // secrets / API keys
   const [secrets, setSecrets] = useState<KV[]>(() => {
@@ -172,6 +181,112 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
     setSecrets(
       result.secrets.length > 0 ? result.secrets : [{ key: "", value: "" }],
     );
+  };
+
+  const onInstallPackage = async () => {
+    setInstallError(null);
+    setInstallStatus(null);
+    if (pipName.trim().length === 0) {
+      setInstallError("Fill in 'pip name' first.");
+      return;
+    }
+    setInstalling(true);
+    try {
+      const { stdout } = await installPythonPackage(
+        pipName.trim(),
+        pipVersion.trim(),
+      );
+      // Surface the most useful one-liner from pip's chatter.
+      const successLine =
+        stdout
+          .split(/\r?\n/)
+          .reverse()
+          .find((l) => /successfully installed/i.test(l)) ?? stdout.trim();
+      setInstallStatus(successLine || "Installed.");
+    } catch (err) {
+      let msg = "Install failed.";
+      if (err instanceof ApiError) {
+        const body = err.body as { detail?: string } | null;
+        msg = body?.detail ?? err.message;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setInstallError(msg);
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  const onDetectParameters = async () => {
+    setDetectError(null);
+    setDetectStatus(null);
+    if (importModule.trim().length === 0 || factoryCls.trim().length === 0) {
+      setDetectError(
+        "Fill in 'import module' and 'main client class' first.",
+      );
+      return;
+    }
+    setDetecting(true);
+    try {
+      const { params } = await introspectPythonLib(
+        importModule.trim(),
+        factoryCls.trim(),
+      );
+      // Treat any param whose name looks like a credential as a secret,
+      // regardless of whether `inspect.signature` marks it required. Many
+      // SDKs default API-key params to None and then raise at call-time,
+      // so a "not required" flag is misleading here.
+      const SECRET_RE = /(api[_-]?key|token|secret|password|passphrase)/i;
+      const args: Record<string, unknown> = {};
+      const newSecrets: KV[] = [];
+      for (const p of params) {
+        const isSecret = SECRET_RE.test(p.name);
+        if (isSecret) {
+          const secretKey = p.name.toUpperCase();
+          args[p.name] = `$${secretKey}`;
+          newSecrets.push({ key: secretKey, value: "" });
+        } else if (p.required) {
+          args[p.name] = "";
+        } else if (p.default !== null && p.default !== undefined) {
+          args[p.name] = p.default;
+        }
+      }
+      setFactoryArgs(JSON.stringify(args, null, 2));
+      setDetectStatus(
+        `Detected ${params.length} parameter${params.length === 1 ? "" : "s"} (${newSecrets.length} secret${newSecrets.length === 1 ? "" : "s"}).`,
+      );
+      // Merge detected secret keys into the existing list, preserving any
+      // already-typed values for matching keys.
+      setSecrets((prev) => {
+        const byKey = new Map<string, string>();
+        for (const row of prev) {
+          if (row.key.trim().length > 0) byKey.set(row.key.trim(), row.value);
+        }
+        const merged: KV[] = newSecrets.map((s) => ({
+          key: s.key,
+          value: byKey.get(s.key) ?? "",
+        }));
+        // Keep extra existing keys the user added that we didn't auto-detect.
+        for (const row of prev) {
+          const k = row.key.trim();
+          if (k.length > 0 && !merged.some((m) => m.key === k)) {
+            merged.push(row);
+          }
+        }
+        return merged.length > 0 ? merged : [{ key: "", value: "" }];
+      });
+    } catch (err) {
+      let msg = "Could not detect parameters.";
+      if (err instanceof ApiError) {
+        const body = err.body as { detail?: string } | null;
+        msg = body?.detail ?? err.message;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setDetectError(msg);
+    } finally {
+      setDetecting(false);
+    }
   };
 
   const onPipCmdChange = (text: string) => {
@@ -494,6 +609,38 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
               {pipCmdError}
             </p>
           ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onInstallPackage}
+              disabled={installing}
+              className="rounded-md border border-border-subtle px-2 py-1 text-xs text-text-primary hover:bg-surface-hover disabled:opacity-50"
+            >
+              {installing ? "Installing..." : "Install package"}
+            </button>
+            <p className="text-[10px] text-text-secondary">
+              Runs `pip install` on the server using the values below. Required
+              before "Detect parameters" works for new packages.
+            </p>
+          </div>
+          {installStatus ? (
+            <p
+              data-testid="install-status"
+              role="status"
+              className="text-[10px] text-feedback-success"
+            >
+              {installStatus}
+            </p>
+          ) : null}
+          {installError ? (
+            <p
+              data-testid="install-error"
+              role="alert"
+              className="text-[10px] text-feedback-error"
+            >
+              {installError}
+            </p>
+          ) : null}
           <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-xs text-text-secondary">
@@ -557,21 +704,50 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
             </div>
           </div>
           <div>
-            <label className="block text-xs text-text-secondary">
-              Constructor settings (JSON)
-              <textarea
-                rows={3}
-                value={factoryArgs}
-                onChange={(e) => setFactoryArgs(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
-              />
-            </label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-xs text-text-secondary">
+                Constructor settings (JSON)
+              </label>
+              <button
+                type="button"
+                onClick={onDetectParameters}
+                disabled={detecting}
+                className="text-xs text-accent-primary hover:underline disabled:opacity-50"
+              >
+                {detecting ? "Detecting..." : "Detect parameters"}
+              </button>
+            </div>
+            <textarea
+              aria-label="constructor settings"
+              rows={3}
+              value={factoryArgs}
+              onChange={(e) => setFactoryArgs(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-xs text-text-primary"
+            />
+            {detectError ? (
+              <p
+                data-testid="detect-error"
+                role="alert"
+                className="mt-0.5 text-[10px] text-feedback-error"
+              >
+                {detectError}
+              </p>
+            ) : null}
+            {detectStatus ? (
+              <p
+                data-testid="detect-status"
+                className="mt-0.5 text-[10px] text-feedback-success"
+              >
+                {detectStatus}
+              </p>
+            ) : null}
             <p
               data-testid="hint-factory-args"
               className="mt-0.5 text-[10px] text-text-secondary"
             >
-              Keyword arguments passed to the class as JSON. Use `"$VAR_NAME"` to
-              reference a secret. Example: {"{"}"api_token": "$EODHD_API_KEY"{"}"}.
+              Keyword arguments passed to the class as JSON. Click "Detect
+              parameters" to auto-fill from the library, or type manually using
+              `"$VAR_NAME"` to reference a secret. Example: {"{"}"api_token": "$EODHD_API_KEY"{"}"}.
             </p>
           </div>
         </div>
