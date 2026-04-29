@@ -20,6 +20,8 @@ flip a dept from active to disabled or back invokes
 from __future__ import annotations
 
 import logging
+import sys
+import traceback
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -80,6 +82,44 @@ class ValidationFailure:
 ValidationResult = ValidationOk | ValidationFailure
 
 
+def _format_list_tools_error(mode: dict[str, Any], exc: Exception) -> str:
+    """Build an actionable error string for `list_tools()` failures.
+
+    For python_lib mode we want the user to see (a) which Python interpreter
+    we tried to import from, (b) the pip package + version they should
+    install, and (c) the original exception with traceback. The wizard UI
+    truncates long messages and reveals the rest behind a "Show details"
+    toggle, so multi-line is fine and desirable here.
+    """
+    base = f"list_tools failed: {exc}"
+    if mode.get("kind") != "python_lib":
+        return base
+    if not isinstance(exc, ModuleNotFoundError):
+        return base
+
+    pip_name = mode.get("pip_name") or mode.get("import_module") or ""
+    pip_version = mode.get("pip_version") or ""
+    install_target = f"{pip_name}{pip_version}" if pip_name else "<package>"
+    import_module = mode.get("import_module", "")
+    tb = traceback.format_exception_only(type(exc), exc)
+    tb_text = "".join(tb).strip()
+
+    lines = [
+        base,
+        "",
+        f"The python_lib transport could not import '{import_module}'.",
+        f"It is not installed in this server's Python environment ({sys.executable}).",
+        "",
+        "To fix:",
+        f"  1. Activate the server's Python environment.",
+        f"  2. Run:  pip install {install_target}",
+        f"  3. Restart the server, then click Validate again.",
+        "",
+        f"Original error: {tb_text}",
+    ]
+    return "\n".join(lines)
+
+
 async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> ValidationResult:
     """Pick the highest-priority mode and exercise it via `list_tools()`.
 
@@ -100,7 +140,9 @@ async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> V
         try:
             raw_tools = await transport.list_tools()
         except Exception as exc:
-            return ValidationFailure(error=f"list_tools failed: {exc}")
+            return ValidationFailure(
+                error=_format_list_tools_error(selected_mode, exc),
+            )
 
         tools: list[dict[str, Any]] = []
         for entry in raw_tools or []:
