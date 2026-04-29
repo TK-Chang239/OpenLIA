@@ -3,7 +3,9 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { ConnectorsStep } from "../ConnectorsStep";
 import * as connectorsApi from "../../../api/connectors";
 import * as deptHealthApi from "../../../api/dept-health";
+import * as setupApi from "../../../api/setup";
 import type { ConnectorRow } from "../../../api/connectors";
+import { ApiError } from "../../../api/client";
 
 vi.mock("../../../api/connectors", async () => {
   const actual = await vi.importActual<typeof connectorsApi>(
@@ -22,6 +24,18 @@ vi.mock("../../../api/connectors", async () => {
     updateConnector: vi.fn(),
   };
 });
+
+vi.mock("../../../api/setup", async () => {
+  const actual = await vi.importActual<typeof setupApi>("../../../api/setup");
+  return {
+    ...actual,
+    saveProviders: vi.fn(),
+  };
+});
+
+const mockedSetup = setupApi as unknown as {
+  saveProviders: ReturnType<typeof vi.fn>;
+};
 
 const mocked = connectorsApi as unknown as {
   listConnectors: ReturnType<typeof vi.fn>;
@@ -65,6 +79,7 @@ beforeEach(() => {
     access_mode: "remote_mcp",
   });
   vi.spyOn(deptHealthApi, "fetchDeptHealth").mockResolvedValue([]);
+  mockedSetup.saveProviders.mockResolvedValue({ ok: true });
   mocked.getConnector.mockResolvedValue({
     ...row(),
     launch: {
@@ -116,7 +131,44 @@ describe("ConnectorsStep", () => {
     const next = await screen.findByRole("button", { name: /next/i });
     await waitFor(() => expect(next).not.toBeDisabled());
     fireEvent.click(next);
+    await waitFor(() => expect(mockedSetup.saveProviders).toHaveBeenCalled());
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
+  });
+
+  it("Next surfaces server detail.message when /setup/providers returns 422", async () => {
+    mocked.listConnectors.mockResolvedValue([row({ status: "validated" })]);
+    mockedSetup.saveProviders.mockRejectedValueOnce(
+      new ApiError(422, "HTTP 422 on /api/setup/providers", {
+        detail: {
+          code: "no_validated_connector",
+          message: "Add at least one connector and click Validate before continuing.",
+        },
+      }),
+    );
+    const onSaved = vi.fn();
+    render(
+      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={onSaved} />,
+    );
+    const next = await screen.findByRole("button", { name: /next/i });
+    await waitFor(() => expect(next).not.toBeDisabled());
+    fireEvent.click(next);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /Add at least one connector and click Validate before continuing\./,
+      ),
+    );
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("shows a hint when there are connectors but none validated", async () => {
+    mocked.listConnectors.mockResolvedValue([row({ status: "pending" })]);
+    render(
+      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
+    );
+    await screen.findByText("EODHD");
+    expect(screen.getByTestId("next-disabled-hint")).toHaveTextContent(
+      /Click Validate on at least one connector to continue\./,
+    );
   });
 
   it("delete button calls deleteConnector(id)", async () => {

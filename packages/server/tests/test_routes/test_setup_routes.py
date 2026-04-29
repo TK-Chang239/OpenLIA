@@ -332,6 +332,56 @@ def test_post_models_409_without_session_token(wizard_personal_client: TestClien
     assert resp.status_code == 409
 
 
+def _seed_connector(db_session, *, status: str) -> None:
+    import uuid
+
+    from openlia_server.db.models.connectors import Connector
+
+    db_session.add(
+        Connector(
+            id=str(uuid.uuid4()),
+            provider_id="eodhd",
+            display_name="EODHD",
+            source="cli_mcp",
+            category="financial",
+            launch={"modes": [{"kind": "cli_mcp", "argv": ["echo", "hi"], "env_keys": []}]},
+            secrets={},
+            status=status,
+        )
+    )
+    db_session.commit()
+
+
+def test_post_providers_advances_when_a_connector_is_validated(
+    wizard_personal_client: TestClient, db_session
+) -> None:
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    _seed_connector(db_session, status="validated")
+    resp = wizard_personal_client.post("/setup/providers")
+    assert resp.status_code == 200, resp.text
+    status_body = wizard_personal_client.get("/setup/status").json()
+    assert "providers" in status_body["completed_steps"]
+    assert status_body["current_step"] == "review"
+
+
+def test_post_providers_422_when_no_validated_connector(
+    wizard_personal_client: TestClient, db_session
+) -> None:
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    _seed_connector(db_session, status="pending")
+    resp = wizard_personal_client.post("/setup/providers")
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert detail["code"] == "no_validated_connector"
+
+
+def test_post_providers_409_without_session_token(
+    wizard_personal_client: TestClient,
+) -> None:
+    resp = wizard_personal_client.post("/setup/providers")
+    assert resp.status_code == 409
+
+
 def test_post_models_test_success(wizard_personal_client: TestClient, monkeypatch) -> None:
     from openlia_server.routes import settings as settings_routes
 

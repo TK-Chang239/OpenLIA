@@ -72,6 +72,9 @@ export const testModel = (payload: {
 export const saveModels = (payload: ModelsPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/models", { method: "POST", json: payload });
 
+export const saveProviders = () =>
+  fetchJson<{ ok: boolean }>("/api/setup/providers", { method: "POST" });
+
 export const setAccessControl = (payload: AccessControlPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/access_control", { method: "POST", json: payload });
 
