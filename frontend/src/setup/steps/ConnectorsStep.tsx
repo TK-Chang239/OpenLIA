@@ -15,6 +15,8 @@ import {
   type ProposedSpec,
 } from "../../api/connectors";
 import { refreshDeptHealth } from "../../store/dept-health";
+import { saveProviders } from "../../api/setup";
+import { ApiError } from "../../api/client";
 
 interface Props {
   totalSteps: number;
@@ -172,8 +174,12 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
 
   const onNext = async () => {
     setLoading(true);
+    setError(null);
     try {
+      await saveProviders();
       onSaved();
+    } catch (err) {
+      setError(extractErrorMessage(err, "Failed to advance step."));
     } finally {
       setLoading(false);
     }
@@ -230,6 +236,12 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
           {error ? (
             <p role="alert" className="text-xs text-feedback-error">
               {error}
+            </p>
+          ) : null}
+
+          {!canAdvance && rows.length > 0 ? (
+            <p className="text-xs text-text-secondary" data-testid="next-disabled-hint">
+              Click Validate on at least one connector to continue.
             </p>
           ) : null}
 
@@ -341,6 +353,22 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
       </div>
     </WizardShell>
   );
+}
+
+function extractErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const body = err.body;
+    if (body && typeof body === "object" && "detail" in body) {
+      const detail = (body as { detail: unknown }).detail;
+      if (typeof detail === "string") return detail;
+      if (detail && typeof detail === "object" && "message" in detail) {
+        const message = (detail as { message: unknown }).message;
+        if (typeof message === "string") return message;
+      }
+    }
+    return err.message;
+  }
+  return err instanceof Error ? err.message : fallback;
 }
 
 interface ErrorDetailsProps {

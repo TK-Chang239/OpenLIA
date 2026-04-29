@@ -258,6 +258,32 @@ def build_setup_router(
         return {"ok": True}
 
     @router.post(
+        "/providers",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    def post_providers(
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, bool]:
+        from openlia_server.services import connectors_service
+
+        rows = connectors_service.list_connectors(db)
+        if not any(r.status == "validated" for r in rows):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "no_validated_connector",
+                    "message": (
+                        "Add at least one connector and click Validate before "
+                        "continuing."
+                    ),
+                },
+            )
+        wizard_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
+        wizard_svc.advance_step(db, "providers", wizard_mode)
+        return {"ok": True}
+
+    @router.post(
         "/models/test",
         dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
