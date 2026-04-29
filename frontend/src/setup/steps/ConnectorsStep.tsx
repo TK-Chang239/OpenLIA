@@ -38,6 +38,11 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
   >({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validatingId, setValidatingId] = useState<string | null>(null);
+  const [validatedFlash, setValidatedFlash] = useState<{
+    id: string;
+    status: "validated" | "failed";
+  } | null>(null);
 
   const refresh = async () => {
     try {
@@ -131,11 +136,22 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
   };
 
   const onValidate = async (id: string) => {
+    setValidatingId(id);
+    setValidatedFlash(null);
     try {
-      await validateConnector(id);
+      const updated = await validateConnector(id);
       await refresh();
+      setValidatedFlash({
+        id,
+        status: updated.status === "validated" ? "validated" : "failed",
+      });
+      window.setTimeout(() => {
+        setValidatedFlash((cur) => (cur && cur.id === id ? null : cur));
+      }, 4000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Validation failed.");
+    } finally {
+      setValidatingId((cur) => (cur === id ? null : cur));
     }
   };
 
@@ -247,16 +263,33 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
                         </p>
                         <p className="text-xs text-text-secondary">
                           status: {r.status}
-                          {r.last_error ? ` — ${r.last_error}` : ""}
                         </p>
+                        {r.last_error ? (
+                          <ErrorDetails error={r.last_error} />
+                        ) : null}
+                        {validatedFlash && validatedFlash.id === r.id ? (
+                          <p
+                            className={`mt-1 text-xs ${
+                              validatedFlash.status === "validated"
+                                ? "text-feedback-success"
+                                : "text-feedback-error"
+                            }`}
+                            role="status"
+                          >
+                            {validatedFlash.status === "validated"
+                              ? "Validated successfully."
+                              : "Validation failed — see status above."}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <button
                           type="button"
                           onClick={() => onValidate(r.id)}
-                          className="text-accent-primary hover:underline"
+                          disabled={validatingId === r.id}
+                          className="text-accent-primary hover:underline disabled:opacity-50"
                         >
-                          Validate
+                          {validatingId === r.id ? "Validating..." : "Validate"}
                         </button>
                         <button
                           type="button"
@@ -307,6 +340,44 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
         </section>
       </div>
     </WizardShell>
+  );
+}
+
+interface ErrorDetailsProps {
+  error: string;
+}
+
+function ErrorDetails({ error }: ErrorDetailsProps) {
+  const [expanded, setExpanded] = useState(false);
+  const SUMMARY_LIMIT = 100;
+  const isLong = error.length > SUMMARY_LIMIT || error.includes("\n");
+  const summary = isLong
+    ? `${error.replace(/\s+/g, " ").slice(0, SUMMARY_LIMIT)}...`
+    : error;
+
+  return (
+    <div className="mt-1">
+      <p className="text-xs text-feedback-error">
+        Error: {expanded || !isLong ? null : summary}
+        {isLong ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            className="ml-1 text-feedback-error underline hover:opacity-80"
+          >
+            {expanded ? "Hide details" : "Show details"}
+          </button>
+        ) : (
+          <span>{error}</span>
+        )}
+      </p>
+      {expanded && isLong ? (
+        <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border-subtle bg-bg-base px-2 py-1 font-mono text-[11px] text-feedback-error">
+          {error}
+        </pre>
+      ) : null}
+    </div>
   );
 }
 
