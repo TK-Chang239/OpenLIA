@@ -100,6 +100,28 @@ def set_dept_categories_for_testing(
     _DEPT_CATEGORIES.update(categories)
 
 
+def hydrate_dept_registries() -> None:
+    """Populate `_DEPT_NEEDS` / `_DEPT_CATEGORIES` from the live registry.
+
+    Without this, `propose_specs` iterates over empty maps and never
+    produces drafts, so every runner-bearing dept stays disabled with
+    every need unresolved. Called once at app startup.
+    """
+    from openlia.departments import _REGISTRY
+    from openlia.departments.loader import load_needs
+
+    _DEPT_NEEDS.clear()
+    _DEPT_CATEGORIES.clear()
+    for dept_id, dept in _REGISTRY.items():
+        if not getattr(dept, "requires_runner", False):
+            continue
+        _DEPT_NEEDS[dept_id] = load_needs(dept_id)
+        _DEPT_CATEGORIES[dept_id] = (
+            set(dept.required_categories),
+            set(dept.optional_categories),
+        )
+
+
 # ---------------------------------------------------------------------------
 # In-memory proposal cache (per connector_id).
 # ---------------------------------------------------------------------------

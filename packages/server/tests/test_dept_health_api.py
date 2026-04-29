@@ -65,6 +65,47 @@ def test_get_dept_health_empty_when_cache_unset(health_client: TestClient) -> No
     assert resp.json() == []
 
 
+def test_post_dept_health_refresh_recomputes_and_returns(db_session_factory) -> None:
+    """POST /dept-health/refresh recomputes from current DB state and updates the cache."""
+    from openlia_server.routes.dept_health import build_dept_health_router
+
+    app = FastAPI()
+    app.include_router(
+        build_dept_health_router(db_session_factory=db_session_factory),
+        prefix="/api",
+    )
+    # Seed a stale cache entry the recompute should overwrite.
+    app.state.dept_health = {
+        "stale": DepartmentHealth(
+            department_id="stale",
+            status="disabled",
+            reason="stale",
+            missing_categories=[],
+            unresolved_needs=[],
+        )
+    }
+    client = TestClient(app)
+    resp = client.post("/api/dept-health/refresh")
+    assert resp.status_code == 200
+    body = resp.json()
+    ids = {row["department_id"] for row in body}
+    # Real registered depts are returned; the stale entry is gone.
+    assert "stale" not in ids
+    # Cache mutated in place.
+    assert "stale" not in app.state.dept_health
+
+
+def test_post_dept_health_refresh_404_when_factory_not_wired() -> None:
+    """Without a session factory, the refresh route is not registered (404 not 405)."""
+    from openlia_server.routes.dept_health import build_dept_health_router
+
+    app = FastAPI()
+    app.include_router(build_dept_health_router(), prefix="/api")
+    client = TestClient(app)
+    resp = client.post("/api/dept-health/refresh")
+    assert resp.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # 409 gate
 # ---------------------------------------------------------------------------
