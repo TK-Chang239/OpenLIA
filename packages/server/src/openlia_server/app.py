@@ -485,15 +485,14 @@ def create_app(
         build_runner_specs_list_router,
         build_runner_specs_router,
     )
-
-    class _UnconfiguredLlmClient:
-        async def generate_json(self, *, prompt: str) -> dict[str, Any]:
-            raise RuntimeError("wizard-time adapter LLM client is not configured for this server")
+    from openlia_server.services.adapter_llm_client import (
+        make_adapter_llm_client_factory,
+    )
 
     app.include_router(
         build_runner_specs_router(
             db_session_factory=factory,
-            llm_client_factory=_UnconfiguredLlmClient,
+            llm_client_factory=make_adapter_llm_client_factory(factory),
         )
     )
     app.include_router(build_runner_specs_list_router(db_session_factory=factory))
