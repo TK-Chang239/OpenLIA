@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 import typer
 import uvicorn
+from dotenv import load_dotenv
 from sqlalchemy import select
 
 from openlia_server._cli_support import (
@@ -38,6 +39,14 @@ from openlia_server.services.auth import sessions as sessions_service
 from openlia_server.services.auth import tokens as tokens_service
 from openlia_server.services.auth.errors import AuthError
 from openlia_server.services.auth.password_reset import TokenInvalidError
+
+# Load `.env` from the current working directory (typically the repo root)
+# before any typer command body runs. All env reads live inside command
+# functions, not at module import time, so loading here is safe.
+# `override=False` means an explicit shell `export` always wins over the
+# file. `.env.local` overlays `.env` only for keys not already present.
+load_dotenv(".env", override=False)
+load_dotenv(".env.local", override=False)
 
 app = typer.Typer(
     name="openlia",
