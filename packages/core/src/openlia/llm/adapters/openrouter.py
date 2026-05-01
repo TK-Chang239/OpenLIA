@@ -32,6 +32,34 @@ def _to_messages(req: LLMRequest) -> list[dict]:
     if req.system:
         out.append({"role": "system", "content": req.system})
     for m in req.messages:
+        if m.role == "tool":
+            out.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": m.tool_call_id or "",
+                    "content": m.content,
+                }
+            )
+            continue
+        if m.role == "assistant" and m.tool_calls:
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": m.content or None,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments),
+                            },
+                        }
+                        for tc in m.tool_calls
+                    ],
+                }
+            )
+            continue
         out.append({"role": m.role, "content": m.content})
     return out
 
