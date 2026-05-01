@@ -34,9 +34,16 @@ export interface ConnectorRow {
   cached_tools_count: number;
 }
 
+export type GroundingStatus = "none" | "pending" | "ready" | "failed";
+
 export interface ConnectorDetail extends ConnectorRow {
   launch: LaunchIn;
   secret_keys: string[];
+  source_repo_url?: string | null;
+  source_repo_revision?: string | null;
+  openapi_url?: string | null;
+  grounding_status?: GroundingStatus;
+  cached_repo_commit_sha?: string | null;
 }
 
 export interface CreateConnectorInput {
@@ -46,6 +53,9 @@ export interface CreateConnectorInput {
   category: Category;
   launch: LaunchIn;
   secrets?: Record<string, string>;
+  source_repo_url?: string | null;
+  source_repo_revision?: string | null;
+  openapi_url?: string | null;
 }
 
 export interface ProposedSpec {
@@ -56,6 +66,8 @@ export interface ProposedSpec {
   canary_ok: boolean;
   shape_match: boolean;
   error: string | null;
+  connector_id?: string | null;
+  unsatisfiable?: boolean;
 }
 
 export interface ApprovalOut {
@@ -143,4 +155,15 @@ export const approveSpec = (
       method: "POST",
       json: { department_id: departmentId, need_id: needId },
     },
+  );
+
+export const listDeptProposedSpecs = (departmentId: string) =>
+  fetchJson<ProposedSpec[]>(
+    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs`,
+  );
+
+export const resolveDeptProposedSpecs = (departmentId: string) =>
+  fetchJson<ProposedSpec[]>(
+    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/resolve`,
+    { method: "POST" },
   );

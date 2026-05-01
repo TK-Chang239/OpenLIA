@@ -2,7 +2,12 @@ import { useState } from "react";
 import { WizardShell } from "../WizardShell";
 import { WizardFooter } from "../WizardFooter";
 import { finish } from "../../api/setup";
+import {
+  RUNNER_BEARING_DEPARTMENTS,
+  RUNNER_DEPARTMENT_LABELS,
+} from "../../api/departments";
 import { clearAllWizardStorage } from "../storage";
+import { DeptResolvePanel } from "./DeptResolvePanel";
 import { FirstRunSummary } from "./FirstRunSummary";
 
 export function ReviewStep({
@@ -47,6 +52,15 @@ export function ReviewStep({
           {error}
         </p>
       ) : null}
+      <div className="space-y-3">
+        {RUNNER_BEARING_DEPARTMENTS.map((dept) => (
+          <DeptResolvePanel
+            key={dept}
+            departmentId={dept}
+            label={RUNNER_DEPARTMENT_LABELS[dept]}
+          />
+        ))}
+      </div>
       <FirstRunSummary />
     </WizardShell>
   );
