@@ -42,7 +42,7 @@ class AnthropicAdapter(LLMProvider):
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
                 try:
                     resp = await client.get("/v1/models")
-                except httpx.HTTPError as exc:
+                except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
                 if resp.status_code != 200:
                     status_to_exception(
@@ -87,7 +87,7 @@ class AnthropicAdapter(LLMProvider):
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
                 try:
                     resp = await client.post("/v1/messages", json=payload)
-                except httpx.HTTPError as exc:
+                except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
                 if resp.status_code != 200:
                     status_to_exception(

@@ -40,7 +40,7 @@ class GeminiAdapter(LLMProvider):
             async with make_client(base_url=_BASE_URL) as client:
                 try:
                     resp = await client.get("/v1beta/models", params=self._query())
-                except httpx.HTTPError as exc:
+                except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
                 if resp.status_code != 200:
                     status_to_exception(
@@ -98,7 +98,7 @@ class GeminiAdapter(LLMProvider):
             async with make_client(base_url=_BASE_URL) as client:
                 try:
                     resp = await client.post(path, params=self._query(), json=payload)
-                except httpx.HTTPError as exc:
+                except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
                 if resp.status_code != 200:
                     status_to_exception(
