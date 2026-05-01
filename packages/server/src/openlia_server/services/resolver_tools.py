@@ -9,6 +9,7 @@ raise `ResolverToolError`.
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 
@@ -51,3 +52,34 @@ def read_file(connector_root: Path, path: str, max_bytes: int = 200_000) -> str:
         return raw.decode("utf-8", errors="replace")
     head = raw[:max_bytes].decode("utf-8", errors="replace")
     return f"{head}\n\n... [truncated at {max_bytes} bytes; full file is {len(raw)} bytes]"
+
+
+def search_files(
+    connector_root: Path,
+    pattern: str,
+    glob: str = "**/*",
+    max_results: int = 200,
+) -> list[dict]:
+    root = connector_root.resolve(strict=True)
+    try:
+        regex = re.compile(pattern)
+    except re.error as exc:
+        raise ResolverToolError(f"invalid pattern {pattern!r}: {exc}") from exc
+
+    matches: list[dict] = []
+    for candidate in sorted(root.glob(glob)):
+        if len(matches) >= max_results:
+            break
+        if not candidate.is_file():
+            continue
+        try:
+            text = candidate.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        rel = candidate.relative_to(root).as_posix()
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if regex.search(line):
+                matches.append({"path": rel, "line_number": lineno, "line": line})
+                if len(matches) >= max_results:
+                    break
+    return matches
