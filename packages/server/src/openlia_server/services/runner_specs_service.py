@@ -144,6 +144,28 @@ class ProposedSpec:
 _PROPOSALS: dict[str, list[ProposedSpec]] = {}
 _DEPT_PROPOSALS: dict[str, list[ProposedSpec]] = {}
 
+# Per-(department) live event log, populated by the agentic loop while a
+# resolve is in flight so the wizard can stream a tool-call log to the
+# user. Cleared at the start of each resolve. Capped to keep the list
+# bounded under runaway loops.
+_RESOLVE_EVENT_LOG_LIMIT = 200
+_RESOLVE_EVENTS: dict[str, list[dict[str, Any]]] = {}
+
+
+def get_resolve_events(department_id: str) -> list[dict[str, Any]]:
+    return list(_RESOLVE_EVENTS.get(department_id, []))
+
+
+def _append_resolve_event(department_id: str, event: dict[str, Any]) -> None:
+    log = _RESOLVE_EVENTS.setdefault(department_id, [])
+    if len(log) >= _RESOLVE_EVENT_LOG_LIMIT:
+        return
+    log.append(event)
+
+
+def _reset_resolve_events(department_id: str) -> None:
+    _RESOLVE_EVENTS[department_id] = []
+
 
 def get_proposed_specs(connector_id: str) -> list[ProposedSpec]:
     return list(_PROPOSALS.get(connector_id, []))
@@ -388,8 +410,10 @@ async def _resolve_one_need(
     need: RunnerNeed,
     in_scope: list[Connector],
     llm_client: LlmClient | None,
-    llm_client_factory: Callable[[Path | None], LlmClient] | None,
+    llm_client_factory: Callable[..., LlmClient] | None,
 ) -> ProposedSpec:
+    from openlia.llm.types import ToolCall
+
     from openlia_server.services import grounding_service
 
     chosen: ProposedSpec | None = None
@@ -400,7 +424,31 @@ async def _resolve_one_need(
             continue
         if llm_client_factory is not None:
             clone_path = grounding_service.path_for(row.id)
-            client = llm_client_factory(clone_path if clone_path.exists() else None)
+
+            def _listener(
+                call: ToolCall,
+                _need_id: str = need.id,
+                _connector_id: str = row.id,
+            ) -> None:
+                _append_resolve_event(
+                    department_id,
+                    {
+                        "type": "tool_call",
+                        "need_id": _need_id,
+                        "connector_id": _connector_id,
+                        "name": call.name,
+                        "arguments": dict(call.arguments),
+                    },
+                )
+
+            try:
+                client = llm_client_factory(
+                    clone_path if clone_path.exists() else None,
+                    tool_call_listener=_listener,
+                )
+            except TypeError:
+                # Older single-arg factories (used in tests) — drop listener.
+                client = llm_client_factory(clone_path if clone_path.exists() else None)
         else:
             assert llm_client is not None
             client = llm_client
@@ -455,7 +503,7 @@ async def propose_spec_for_need(
     department_id: str,
     need_id: str,
     llm_client: LlmClient | None = None,
-    llm_client_factory: Callable[[Path | None], LlmClient] | None = None,
+    llm_client_factory: Callable[..., LlmClient] | None = None,
 ) -> ProposedSpec:
     """Re-resolve a single (department, need) pair, leaving the rest of the
     cached dept proposals untouched."""
@@ -466,6 +514,8 @@ async def propose_spec_for_need(
     need = next((n for n in needs if n.id == need_id), None)
     if need is None:
         raise KeyError(f"no need {need_id!r} declared for {department_id!r}")
+
+    _reset_resolve_events(department_id)
 
     required, optional = _DEPT_CATEGORIES.get(department_id, (set(), set()))
     in_scope_categories = required | optional
@@ -498,7 +548,7 @@ async def propose_specs_for_department(
     *,
     department_id: str,
     llm_client: LlmClient | None = None,
-    llm_client_factory: Callable[[Path | None], LlmClient] | None = None,
+    llm_client_factory: Callable[..., LlmClient] | None = None,
 ) -> list[ProposedSpec]:
     """Per-department resolve.
 
@@ -522,6 +572,8 @@ async def propose_specs_for_department(
     if not needs:
         clear_dept_proposed_specs(department_id)
         return []
+
+    _reset_resolve_events(department_id)
 
     required, optional = _DEPT_CATEGORIES.get(department_id, (set(), set()))
     in_scope_categories = required | optional

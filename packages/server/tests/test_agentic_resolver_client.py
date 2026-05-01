@@ -146,6 +146,42 @@ async def test_tool_error_returned_to_llm_as_payload(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_tool_call_listener_fires_before_dispatch(tmp_path: Path) -> None:
+    """The agentic loop must give callers a hook to observe tool calls so
+    the wizard can stream a live tool-call log to the user."""
+    (tmp_path / "tools.py").write_text("MARKER\n")
+    turn1 = LLMResponse(
+        text="",
+        finish_reason="tool_use",
+        input_tokens=0,
+        output_tokens=0,
+        tool_calls=[
+            ToolCall(
+                id="call_a",
+                name="read_file",
+                arguments={"path": "tools.py"},
+            ),
+        ],
+    )
+    turn2 = _final("{}")
+    provider = FakeProvider([turn1, turn2])
+
+    seen: list[tuple[str, dict]] = []
+
+    def _listener(call: ToolCall) -> None:
+        seen.append((call.name, dict(call.arguments)))
+
+    client = AgenticResolverClient(
+        provider=provider,
+        connector_root=tmp_path,
+        tool_call_listener=_listener,
+    )
+    await client.generate_json(prompt="resolve x")
+
+    assert seen == [("read_file", {"path": "tools.py"})]
+
+
+@pytest.mark.asyncio
 async def test_dispatches_read_file_then_returns_final_json(tmp_path: Path) -> None:
     (tmp_path / "tools").mkdir()
     (tmp_path / "tools" / "macro.py").write_text(

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -51,10 +52,12 @@ class AgenticResolverClient:
         provider: LLMProvider,
         connector_root: Path | None,
         max_turns: int = 10,
+        tool_call_listener: Callable[[ToolCall], None] | None = None,
     ) -> None:
         self._provider = provider
         self._connector_root = connector_root
         self._max_turns = max_turns
+        self._tool_call_listener = tool_call_listener
 
     async def generate_json(self, *, prompt: str) -> dict[str, Any]:
         conversation: list[Message] = [Message(role="user", content=prompt)]
@@ -105,6 +108,12 @@ class AgenticResolverClient:
                 )
             )
             for call in response.tool_calls:
+                if self._tool_call_listener is not None:
+                    try:
+                        self._tool_call_listener(call)
+                    except Exception:
+                        # Listeners are observability — never break the loop.
+                        pass
                 payload = self._dispatch(call)
                 conversation.append(
                     Message(

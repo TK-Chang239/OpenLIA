@@ -473,6 +473,71 @@ async def test_unsatisfiable_when_all_connectors_fail(
 
 
 @pytest.mark.asyncio
+async def test_resolve_logs_tool_call_events_when_factory_used(
+    engine: Engine, db_session: DBSession
+) -> None:
+    """Per-resolve event log captures tool calls so the wizard can stream a
+    live tool-call log to the user."""
+    conn = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="q",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                ),
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+
+    from openlia.llm.types import ToolCall
+
+    class _ToolFiringLlm:
+        def __init__(self) -> None:
+            self.listener: object = None
+
+        async def generate_json(self, *, prompt: str) -> dict[str, Any]:
+            assert self.listener is not None
+            self.listener(
+                ToolCall(id="c1", name="read_file", arguments={"path": "tools.py"})
+            )
+            return {
+                "tool_name": "get_quote",
+                "param_bindings": {
+                    "ticker": {"to_arg": "symbol", "transform": None}
+                },
+                "constants": {},
+            }
+
+    def factory(connector_root, *, tool_call_listener=None):
+        client = _ToolFiringLlm()
+        client.listener = tool_call_listener
+        return client
+
+    await runner_specs_service.propose_specs_for_department(
+        db_session,
+        department_id="macro_research",
+        llm_client_factory=factory,
+    )
+
+    events = runner_specs_service.get_resolve_events("macro_research")
+    assert len(events) == 1
+    e = events[0]
+    assert e["type"] == "tool_call"
+    assert e["name"] == "read_file"
+    assert e["arguments"] == {"path": "tools.py"}
+    assert e["need_id"] == "quote"
+    assert e["connector_id"] == conn.id
+
+
+@pytest.mark.asyncio
 async def test_propose_spec_for_need_re_resolves_only_that_row(
     engine: Engine, db_session: DBSession
 ) -> None:
