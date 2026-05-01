@@ -146,6 +146,81 @@ def test_resolve_returns_proposal_with_connector_id(
     assert body[0]["unsatisfiable"] is False
 
 
+def test_approve_dept_spec_persists_chosen_connector(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    conn = _seed_connector(db_session)
+    runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
+        runner_specs_service.ProposedSpec(
+            department_id="macro_research",
+            need_id="real_time_quote",
+            proposed_spec={
+                "need_id": "real_time_quote",
+                "access_mode": "cli_mcp",
+                "tool_name": "get_quote",
+                "module": None,
+                "instance_factory": None,
+                "method": None,
+                "param_bindings": {},
+                "constants": {},
+                "shape": "dict",
+            },
+            canary_value={"price": 1.0},
+            canary_ok=True,
+            shape_match=True,
+            error=None,
+            connector_id=conn.id,
+            unsatisfiable=False,
+        )
+    ]
+    client = _client(db_session_factory)
+    resp = client.post(
+        "/api/departments/macro_research/proposed-specs/approve",
+        json={"need_id": "real_time_quote"},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["department_id"] == "macro_research"
+    assert body["need_id"] == "real_time_quote"
+    assert body["connector_id"] == conn.id
+    assert body["access_mode"] == "cli_mcp"
+
+
+def test_approve_dept_spec_404_for_unknown_need(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    client = _client(db_session_factory)
+    resp = client.post(
+        "/api/departments/macro_research/proposed-specs/approve",
+        json={"need_id": "ghost"},
+    )
+    assert resp.status_code == 404
+
+
+def test_approve_dept_spec_400_for_unsatisfiable(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
+        runner_specs_service.ProposedSpec(
+            department_id="macro_research",
+            need_id="exotic",
+            proposed_spec={},
+            canary_value=None,
+            canary_ok=False,
+            shape_match=False,
+            error="no connector covers this",
+            connector_id=None,
+            unsatisfiable=True,
+        )
+    ]
+    client = _client(db_session_factory)
+    resp = client.post(
+        "/api/departments/macro_research/proposed-specs/approve",
+        json={"need_id": "exotic"},
+    )
+    assert resp.status_code == 400
+
+
 def test_get_after_resolve_returns_cached(
     engine: Engine, db_session_factory, db_session: DBSession
 ) -> None:
