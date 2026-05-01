@@ -9,6 +9,13 @@ export interface NavItemProps {
   path: string;
   collapsed: boolean;
   hasUnread: boolean;
+  /**
+   * When set, the item is rendered muted (lower opacity) and a tooltip
+   * with this reason is attached. The link itself remains active so the
+   * user can still navigate to the page (which surfaces a banner with the
+   * same reason and a CTA back to Settings).
+   */
+  disabledReason?: string | null;
 }
 
 const TOOLTIP_DELAY_MS = 300;
@@ -19,18 +26,24 @@ function LinkBody({
   path,
   collapsed,
   hasUnread,
+  disabledReason,
 }: NavItemProps): JSX.Element {
+  const isDisabled = !!disabledReason;
   return (
     <NavLink
       to={path}
       end={path === "/"}
       aria-label={collapsed ? label : undefined}
+      aria-disabled={isDisabled || undefined}
+      data-disabled={isDisabled || undefined}
+      title={isDisabled ? (disabledReason ?? undefined) : undefined}
       className={({ isActive }) =>
         [
           "relative flex items-center gap-[10px] rounded-md w-full",
           "transition-colors duration-normal ease-out",
           collapsed ? "justify-center px-0 py-[9px]" : "px-[10px] py-[9px]",
           isActive ? "" : "",
+          isDisabled ? "opacity-50" : "",
         ]
           .filter(Boolean)
           .join(" ")

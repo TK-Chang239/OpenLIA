@@ -1,23 +1,22 @@
-"""Public surface for the connector subsystem."""
+"""Public surface for the connector subsystem (v2).
+
+Re-exports the runtime entry points consumers need.
+"""
 
 from __future__ import annotations
 
-from openlia.connectors.types import (
-    Category,
-    ConnectorSource,
-    ConnectorStatus,
-    MCPLaunchSpec,
-    ScopedBy,
-    ScopedTool,
-    ToolDefinition,
+from openlia.connectors.dispatch import (
+    PREFIX_SEP,
+    Dispatcher,
+    DispatchError,
+    NeedNotResolved,
+    PreparedConnector,
 )
 
 __all__ = [
-    "Category",
-    "ConnectorSource",
-    "ConnectorStatus",
-    "MCPLaunchSpec",
-    "ScopedBy",
-    "ScopedTool",
-    "ToolDefinition",
+    "PREFIX_SEP",
+    "DispatchError",
+    "Dispatcher",
+    "NeedNotResolved",
+    "PreparedConnector",
 ]

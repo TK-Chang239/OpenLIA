@@ -1,3 +1,4 @@
+from openlia.connectors.types import Category
 from openlia.departments.equity_research import (
     EquityResearchDepartment,
     EquityResearchMode,
@@ -16,23 +17,19 @@ def test_er_exposes_three_modes():
     assert modes == {"stock_initiation", "stock_update", "sector_research"}
 
 
-def test_er_basic_data_requirements():
-    reqs = EquityResearchDepartment().data_requirement_types
-    assert "stock_quote" in reqs
-    assert "company_profile" in reqs
-    assert "financial_statements" in reqs
+def test_er_required_categories():
+    # Spec §10.1.
+    assert EquityResearchDepartment.required_categories == (Category.FINANCIAL,)
 
 
-def test_er_optional_data_requirements():
-    soft = EquityResearchDepartment().optional_requirement_types
-    for name in (
-        "company_news",
-        "historical_prices",
-        "analyst_ratings",
-        "insider_transactions",
-        "earnings_data",
-    ):
-        assert name in soft
+def test_er_optional_categories():
+    soft = set(EquityResearchDepartment.optional_categories)
+    assert {Category.NEWS, Category.SOCIAL, Category.WEB_SEARCH}.issubset(soft)
+
+
+def test_er_does_not_require_runner():
+    assert EquityResearchDepartment.requires_runner is False
+    assert EquityResearchDepartment.disable_runtime_routing is False
 
 
 def test_er_has_no_extra_tools_by_default():

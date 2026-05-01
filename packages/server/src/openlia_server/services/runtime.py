@@ -4,15 +4,19 @@ Tests stub this entire factory — the route accepts `chat_runner_factory`
 as a parameter so the builder below is only exercised by the running
 application. Plan 13 will extend the builder with real tool wiring; for
 this blocker the Secretary tool dispatcher returns no tools.
+
+Phase 9.3 adds `run_department(...)` — a single dispatch entry that
+picks chat vs deterministic by inspecting the dept's `requires_runner`
+plus the caller's mode. Scheduled chat-flow paths (PT, MB cron jobs)
+inject a system prompt and run through the chat builder.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
-from openlia.data.adapters import ADAPTERS
-from openlia.data.types import ProviderCategory
+from openlia.departments import get_department
 from openlia.llm.adapters import build_adapter
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.batch import BatchRunner
@@ -20,11 +24,12 @@ from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchAdapter, WebSearchResolution
+from openlia.llm.runtime.web_search import WebSearchResolution
 from sqlalchemy.orm import Session as DBSession
 
-from openlia_server.services import data_providers as dp_svc
 from openlia_server.services.llm_registry import SQLModelRegistry
+
+RuntimeMode = Literal["chat", "deterministic", "scheduled_chat"]
 
 
 class _EmptyDataDispatcher:
@@ -45,34 +50,8 @@ class _EmptyDataDispatcher:
 
 
 def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
-    """Pick the highest-priority enabled SEARCH provider and wrap it as a
-    WebSearchResolution. Returns an unavailable resolution if none configured.
-
-    Priority is read from `extra_config.default_priority` (lower wins, default 100),
-    matching the wizard convention. When no SEARCH provider is configured or the
-    chosen one fails to instantiate, returns an unavailable resolution so the
-    runtime omits the `web_search` tool.
-    """
-    rows = [
-        r
-        for r in dp_svc.list_providers_by_category(db, category=ProviderCategory.SEARCH)
-        if r.is_enabled
-    ]
-    if not rows:
-        return WebSearchResolution(available=False, variant=None, adapter=None)
-    rows.sort(key=lambda r: int((r.extra_config or {}).get("default_priority", 100)))
-    for row in rows:
-        adapter_cls = ADAPTERS.get(row.kind)
-        if adapter_cls is None:
-            continue
-        try:
-            entry = dp_svc.load_provider_entry(db, row.id)
-            adapter = adapter_cls(entry)
-        except Exception:
-            continue
-        if not isinstance(adapter, WebSearchAdapter):
-            continue
-        return WebSearchResolution(available=True, variant="configured", adapter=adapter)
+    # Stub during connector-v2 rebuild; Phase 9 rewires search through the
+    # connector dispatcher.
     return WebSearchResolution(available=False, variant=None, adapter=None)
 
 
@@ -266,3 +245,104 @@ class RefreshingBatchRunner:
 
 def build_batch_runner(db_session_factory: Callable[[], DBSession]) -> RefreshingBatchRunner:
     return RefreshingBatchRunner(db_session_factory)
+
+
+# ---- Phase 9.3: single dispatch entry ----
+
+
+class UnknownDepartmentError(KeyError):
+    """Raised when `run_department` cannot resolve `department_id`."""
+
+
+class RuntimeModeMismatchError(RuntimeError):
+    """Caller asked for `deterministic` against a chat-only dept (or vice versa)."""
+
+
+def select_runtime_mode(*, department_id: str, requested: RuntimeMode | None) -> RuntimeMode:
+    """Pick the runtime mode for `department_id`.
+
+    Rules:
+
+      - `requires_runner=True` depts (Macro Research, Retail Sentiment)
+        default to deterministic.
+      - Chat-only depts (Secretary, Equity Research, Earnings Update,
+        Panic Thermometer, Morning Briefing) default to `chat`.
+      - Callers may force `scheduled_chat` (PT/MB cron) — that mode is
+        always allowed for chat-only depts; rejected for runner depts.
+
+    Raises `UnknownDepartmentError` if the dept is not registered;
+    `RuntimeModeMismatchError` if the requested mode contradicts the
+    dept's runner requirement.
+    """
+    dept = get_department(department_id)
+    if dept is None:
+        raise UnknownDepartmentError(f"unknown department: {department_id!r}")
+
+    requires_runner = bool(getattr(dept, "requires_runner", False))
+
+    if requested is None:
+        return "deterministic" if requires_runner else "chat"
+
+    if requested == "deterministic" and not requires_runner:
+        raise RuntimeModeMismatchError(
+            f"department {department_id!r} is chat-only; cannot run deterministic"
+        )
+    if requested in ("chat", "scheduled_chat") and requires_runner:
+        raise RuntimeModeMismatchError(
+            f"department {department_id!r} is a runner; cannot run as chat"
+        )
+    return requested
+
+
+def run_department(
+    *,
+    department_id: str,
+    mode: RuntimeMode | None = None,
+    request: Any,
+    db_session_factory: Callable[[], DBSession],
+) -> Any:
+    """Single dispatch entry — selects chat vs deterministic.
+
+    Returns whatever the underlying runner returns:
+
+      - `mode == "chat"` or `"scheduled_chat"`: returns an
+        `AsyncIterator[SseEvent]` from `RefreshingChatRunner.run(...)`.
+        For `scheduled_chat`, `request` must include a `system_prompt`
+        attribute / key the orchestration code uses to seed the
+        conversation.
+      - `mode == "deterministic"`: returns whatever the dept's
+        deterministic runner returns. The current MR/RS runners are
+        invoked through their existing service entry points; this
+        function only resolves the mode and surfaces the chosen runner
+        builder so callers can wire it explicitly.
+
+    The bulk of the runner construction still lives in the builders
+    above (`build_chat_runner`, etc.); this entry point just picks
+    which one to delegate to and propagates the request payload.
+    """
+    resolved_mode = select_runtime_mode(department_id=department_id, requested=mode)
+
+    if resolved_mode in ("chat", "scheduled_chat"):
+        runner = build_chat_runner(db_session_factory=db_session_factory)
+        # Scheduled chat path: callers (PT, MB cron jobs) thread a
+        # `system_prompt` and a single user-role seed message into the
+        # request. The chat runner consumes the same `messages` shape
+        # as the live route, so no special-casing is needed beyond
+        # the mode selection itself.
+        return runner.run(
+            department_id=department_id,
+            user_id=getattr(request, "user_id", None),
+            messages=getattr(request, "messages", []),
+            attachments=getattr(request, "attachments", None),
+            cancel_token=getattr(request, "cancel_token", None),
+        )
+
+    # Deterministic mode — surface the dispatcher-aware builder. The
+    # MR/RS scheduler executors call their own service entry points
+    # (mr_runner / rs_runner), so this branch returns the request back
+    # to the caller along with the resolved mode for transparency.
+    # Callers should construct the runner themselves; this entry point
+    # exists primarily to validate mode selection and to give the
+    # scheduler a single place to ask "should I run chat or
+    # deterministic?" before dispatching.
+    return {"mode": resolved_mode, "request": request, "department_id": department_id}

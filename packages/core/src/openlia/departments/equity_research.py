@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
+from openlia.connectors.types import Category
 from openlia.departments.base import Tier
 
 EquityResearchMode = Literal["stock_initiation", "stock_update", "sector_research"]
@@ -14,18 +15,19 @@ class EquityResearchDepartment:
     display_name: str = "Equity Research"
     prompt_name: str = "equity_research"
     tier: Tier = "thinking"
-    data_requirement_types: tuple[str, ...] = (
-        "stock_quote",
-        "company_profile",
-        "financial_statements",
+
+    # Connector dependencies (spec §10.1).
+    required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
+    optional_categories: ClassVar[tuple[Category, ...]] = (
+        Category.NEWS,
+        Category.SOCIAL,
+        Category.WEB_SEARCH,
     )
-    optional_requirement_types: tuple[str, ...] = (
-        "company_news",
-        "historical_prices",
-        "analyst_ratings",
-        "insider_transactions",
-        "earnings_data",
-    )
+
+    # Runtime behavior (spec §5.2).
+    requires_runner: ClassVar[bool] = False
+    disable_runtime_routing: ClassVar[bool] = False
+
     extra_tools: tuple[dict[str, Any], ...] = ()
     valid_modes: tuple[EquityResearchMode, ...] = (
         "stock_initiation",

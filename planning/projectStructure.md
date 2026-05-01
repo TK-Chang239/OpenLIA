@@ -35,10 +35,18 @@ openlia/
 │   │   │       ├── departments/                # All department agents
 │   │   │       │   ├── __init__.py
 │   │   │       │   ├── base.py                 # Base department class + DEFAULT_TIER
+│   │   │       │   ├── health.py               # Pure dept-health derivation (active|disabled + reason)
+│   │   │       │   ├── loader.py               # YAML loader for `<dept>.needs.yaml`
 │   │   │       │   ├── secretary.py
+│   │   │       │   ├── secretary.routing_context.md       # Runtime-router prompt context (spec §8)
 │   │   │       │   ├── equity_research.py
+│   │   │       │   ├── equity_research.routing_context.md
 │   │   │       │   ├── earnings_update.py
+│   │   │       │   ├── earnings_update.routing_context.md
 │   │   │       │   ├── morning_briefing.py
+│   │   │       │   ├── morning_briefing.routing_context.md
+│   │   │       │   ├── macro_research.needs.yaml          # MR deterministic-runner needs (spec §5.4)
+│   │   │       │   ├── retail_sentiment.needs.yaml        # RS deterministic-runner needs
 │   │   │       │   │
 │   │   │       │   ├── macro_research/         # MR is a sub-package (5 dashboards + LLM assessments)
 │   │   │       │   │   ├── __init__.py         # MacroResearchDepartment + get_current_snapshot() public API
@@ -84,7 +92,9 @@ openlia/
 │   │   │       │       ├── report.py
 │   │   │       │       ├── batch.py
 │   │   │       │       ├── prompts.py          # YAML loader + Jinja2 renderer
-│   │   │       │       ├── tools.py            # ToolDispatcher (requirement tools, find_more_data, web_search)
+│   │   │       │       ├── router.py           # Runtime router — picks per-conversation tool subset (spec §8)
+│   │   │       │       ├── escalation.py       # `request_additional_tools` mid-conversation re-route (spec §8.5)
+│   │   │       │       ├── tools.py            # ToolDispatcher (requirement tools, web_search)
 │   │   │       │       ├── web_search.py       # Native-or-configured web search adapter
 │   │   │       │       ├── events.py           # SSE event dataclasses (chat.*, report.*)
 │   │   │       │       ├── messages.py         # ChatMessage, ReportRequest, BatchItem
@@ -102,51 +112,21 @@ openlia/
 │   │   │       │   ├── exceptions.py
 │   │   │       │   └── types.py                # Pydantic models: Rule, RuleSet, PanelResult, FormulaResult
 │   │   │       │
-│   │   │       ├── data/                       # Data source adapters (see data-provider-design.md)
+│   │   │       ├── connectors/                 # Connector subsystem v2 (see specsv2/2026-04-27-connector-dataflow-design.md)
 │   │   │       │   ├── __init__.py
-│   │   │       │   ├── catalog/                # Provider catalogs (financial, news, social_media)
+│   │   │       │   ├── types.py                # Category, ConnectorSource, LaunchSpec, RunnerNeed, CallableSpec
+│   │   │       │   ├── transports/             # MCP + python_lib transports (uniform CallableTransport interface)
 │   │   │       │   │   ├── __init__.py
-│   │   │       │   │   ├── loader.py
-│   │   │       │   │   ├── installer.py
-│   │   │       │   │   ├── types.py
-│   │   │       │   │   ├── discovery.py
-│   │   │       │   │   └── bundled/            # Shipped catalog templates (placeholders)
-│   │   │       │   │       ├── financial/
-│   │   │       │   │       │   ├── fmp.yaml
-│   │   │       │   │       │   ├── eodhd.yaml
-│   │   │       │   │       │   ├── finnhub.yaml
-│   │   │       │   │       │   └── yfinance.yaml
-│   │   │       │   │       ├── news/
-│   │   │       │   │       │   ├── newsapi_ai.yaml
-│   │   │       │   │       │   ├── mediastack.yaml
-│   │   │       │   │       │   └── newsapi_org.yaml
-│   │   │       │   │       └── social_media/
-│   │   │       │   │           ├── x.yaml
-│   │   │       │   │           └── reddit.yaml
-│   │   │       │   ├── manifest/               # Per-department data requirement manifests
+│   │   │       │   │   ├── base.py             # CallableTransport protocol
+│   │   │       │   │   ├── cli_mcp.py          # Local stdio MCP servers (uvx, npx)
+│   │   │       │   │   ├── remote_mcp.py       # SSE / streamable-HTTP remote MCP
+│   │   │       │   │   └── python_lib.py       # In-process callable invocation
+│   │   │       │   ├── adapter/                # Wizard-time LLM adapter (Need -> CallableSpec)
 │   │   │       │   │   ├── __init__.py
-│   │   │       │   │   ├── loader.py
-│   │   │       │   │   ├── types.py
-│   │   │       │   │   ├── checker.py
-│   │   │       │   │   ├── audit.py
-│   │   │       │   │   └── requirements.yaml
-│   │   │       │   ├── review/                 # AI-driven requirement-to-endpoint mapping
-│   │   │       │   │   ├── __init__.py
-│   │   │       │   │   ├── service.py
 │   │   │       │   │   ├── prompts.py
-│   │   │       │   │   └── validator.py
-│   │   │       │   ├── dispatch/               # Runtime tool routing (HTTP / MCP)
-│   │   │       │   │   ├── __init__.py
-│   │   │       │   │   ├── router.py
-│   │   │       │   │   ├── http_client.py
-│   │   │       │   │   ├── mcp_client.py
-│   │   │       │   │   ├── tool_call.py
-│   │   │       │   │   └── expansion.py        # find_more_data meta-tool
-│   │   │       │   ├── python_providers/
-│   │   │       │   │   └── yfinance_impl.py
-│   │   │       │   ├── sentiment/
-│   │   │       │   │   └── checker.py          # Evaluate Retail Sentiment availability
-│   │   │       │   └── errors.py
+│   │   │       │   │   ├── canary.py           # Canary execution + shape-match check
+│   │   │       │   │   └── introspect.py       # python_lib module introspection
+│   │   │       │   └── catalog/                # Day-1 provider templates (deferred — see plan §13.5)
 │   │   │       │
 │   │   │       ├── prompts/                    # Department prompt templates (YAML, Jinja2)
 │   │   │       │   ├── secretary.yaml
@@ -191,8 +171,8 @@ openlia/
 │   │   └── tests/
 │   │       ├── __init__.py
 │   │       ├── test_departments/
-│   │       ├── test_llm/
-│   │       ├── test_data/
+│   │       ├── test_llm/                       # Includes test_runtime/ for router + escalation
+│   │       ├── test_connectors/                # Transports, adapter, canary, introspect, types
 │   │       ├── test_formula/                   # Engine tests + streak fixtures
 │   │       └── test_reports/
 │   │
@@ -215,6 +195,9 @@ openlia/
 │       │       │   ├── auth.py             # login, logout, password change, password reset request/redeem
 │       │       │   ├── admin.py            # invites, user CRUD, lockout settings, audit log views
 │       │       │   ├── settings.py         # user/admin settings + setup wizard API
+│       │       │   ├── connectors.py       # /api/connectors CRUD + revalidate (connector v2)
+│       │       │   ├── runner_specs.py     # /api/connectors/{id}/proposed-specs/{resolve,approve}
+│       │       │   ├── dept_health.py      # GET /api/dept-health + 409 gate helper
 │       │       │   ├── departments.py      # Department chat endpoints (SSE)
 │       │       │   ├── reports.py          # GET /reports/{id}, POST /reports/{id}/export/pdf
 │       │       │   ├── repository.py       # Save/list/delete saved reports
@@ -245,28 +228,26 @@ openlia/
 │       │       │   ├── executors.py        # Job executors: mb_briefing, eu_scan, mr_assessment, system_maintenance
 │       │       │   └── recovery.py         # Crash recovery + missed-job catch-up
 │       │       │
-│       │       ├── ai_review/          # AI review runner + prompt builder for wizard Step 6 (Plan 10)
-│       │       │   ├── __init__.py
-│       │       │   ├── runner.py           # async run_review — calls Quick-tier LLM + parses result
-│       │       │   ├── prompt.py           # build_review_prompt(departments, providers) -> str
-│       │       │   ├── schema.py           # ReviewResult, DepartmentReadiness, ReadinessState
-│       │       │   └── store.py            # in-memory ReviewStore keyed by review_id
-│       │       │
 │       │       └── services/           # Business logic between routes and core
 │       │           ├── __init__.py
-│       │           ├── wizard.py           # WizardService — status, token, mode, identity, finish (Plan 10)
-│       │           ├── auth/               # Package: passwords, tokens, sessions, registration, login, password_reset, events, signup_policy
-│       │           ├── chat.py             # Chat history persistence + retrieval
+│       │           ├── wizard.py                # WizardService — status, token, mode, identity, finish (Plan 10)
+│       │           ├── auth/                    # Package: passwords, tokens, sessions, registration, login, password_reset, events, signup_policy
+│       │           ├── connectors_service.py    # Connector CRUD + validation (calls into core/connectors)
+│       │           ├── runner_specs_service.py  # Wizard-time adapter resolve + approve (RunnerCallableSpec persistence)
+│       │           ├── dept_health.py           # Cached DepartmentHealth map, mutation-driven invalidation
+│       │           ├── dispatcher_factory.py    # Build CallableTransport per connector launch mode
+│       │           ├── chat.py                  # Chat history persistence + retrieval
 │       │           ├── portfolio.py
-│       │           ├── repository.py       # Saved-report repository service
-│       │           └── report_export.py    # Playwright PDF generation
+│       │           ├── repository.py            # Saved-report repository service
+│       │           └── report_export.py         # Playwright PDF generation
 │       │
 │       └── tests/
 │           ├── __init__.py
 │           ├── test_routes/
 │           ├── test_middleware/
 │           ├── test_services/
-│           └── test_scheduler/
+│           ├── test_scheduler/
+│           └── e2e/                        # End-to-end smoke matrix (wizard, runner activation, 409 gate, atomic disable, escalation)
 │
 │
 │   ============================================================
@@ -387,13 +368,16 @@ openlia/
 │   │   │   ├── background-task-scheduling-design.md
 │   │   │   ├── llm-provider-design.md
 │   │   │   ├── llm-runtime-design.md
-│   │   │   ├── data-provider-design.md
 │   │   │   ├── formula-engine-design.md
 │   │   │   ├── report-rendering-pipeline-design.md
 │   │   │   ├── macro-research-dalio-dashboards-design.md
 │   │   │   └── retail-sentiment-dashboard-design.md
 │   │   │
 │   │   └── style_extraction_procedure.md   # Procedure + future-feature design for style extraction
+│   │
+│   │   The connector subsystem's authoritative design lives outside `planning/specs/`
+│   │   in `docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md`. The
+│   │   legacy `connector-dataflow-design.md` was retired in Phase 1 of the v2 reshape.
 │   │
 │   └── logs/                           # Progress logs (one per commit, optional)
 │
@@ -414,23 +398,11 @@ Created on first run by the server / wizard (not committed; lives outside the re
 
 ```
 ~/.openlia/
-├── openlia.db                  # SQLite database (29+ tables; see database-design.md)
-├── secret.key                  # Auto-generated AES-256 key for API-key encryption (only when OPENLIA_SECRET_KEY is unset)
-├── providers/                  # Active provider catalogs (copies of bundled templates, edited by admin)
-│   ├── financial/
-│   ├── news/
-│   └── social_media/
-├── mappings/                   # AI-generated requirement-to-endpoint mappings (per department)
-│   ├── secretary.yaml
-│   ├── equity_research.yaml
-│   ├── earnings_update.yaml
-│   ├── morning_briefing.yaml
-│   ├── macro_research.yaml
-│   ├── retail_sentiment.yaml
-│   └── panic_thermometer.yaml
-└── audit/
-    └── expansions.jsonl        # Runtime expansion log for find_more_data tool calls
+├── openlia.db                  # SQLite database (see database-design.md)
+└── secret.key                  # Auto-generated AES-256 key for API-key encryption (only when OPENLIA_SECRET_KEY is unset)
 ```
+
+Connector-related artifacts (provider catalogs, dept needs, routing-context prompts, runtime callable specs) ship inside `packages/core/` or live in DB tables (`connectors`, `runner_callable_specs`); they no longer require an on-disk overlay under `~/.openlia/`.
 
 
 ## Database tables (catalog)
@@ -441,12 +413,14 @@ Defined in `database-design.md`. Grouped by concern:
 |---|---|
 | Identity & auth | `users`, `sessions`, `signup_invites`, `signup_policy`, `password_reset_requests`, `auth_events` |
 | LLM config | `llm_providers`, `llm_models`, `user_llm_preferences` |
-| Data providers | `data_providers`, `data_provider_requirement_mapping`, `web_search_providers` |
+| Connectors v2 | `connectors`, `runner_callable_specs` |
 | Chat & reports | `chat_sessions`, `chat_messages`, `chat_attachments`, `reports`, `report_versions` |
 | Portfolio | `portfolio_holdings`, `watchlists`, `watchlist_items` |
 | Setup & config | `wizard_state`, `config_store` |
 | Department state | `pt_user_configs`, `pt_presets`, `mr_dashboard_state`, `mr_assessment_cache`, `rs_user_config`, `rs_snapshots`, `fe_saved_formulas` |
 | Scheduler | `mb_schedules`, `eu_schedules`, `job_runs`, `user_notifications` |
+
+The legacy `data_providers` and `data_provider_requirement_mapping` tables were dropped in connector-redesign-v2; the new `connectors` row carries the multi-mode `LaunchSpec` JSON and `runner_callable_specs` records the resolved `(department_id, need_id) -> CallableSpec` mapping.
 
 Lockout columns (`failed_login_attempts`, `locked_until`) live on `users`. The lockout feature is toggleable via `config_store` key `auth.lockout.enabled`.
 

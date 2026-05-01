@@ -31,7 +31,7 @@ class LLMProvider(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
-    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     env_var_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     extra_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
@@ -104,60 +104,6 @@ class UserLLMPreference(Base):
     )
 
 
-class DataProvider(Base, TimestampMixin):
-    __tablename__ = "data_providers"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(32), nullable=False)
-    label: Mapped[str] = mapped_column(String(128), nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="financial", server_default="financial"
-    )
-    mode: Mapped[str] = mapped_column(
-        String(16), nullable=False, default="api_key", server_default="api_key"
-    )
-    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
-    env_var_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    base_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    mcp_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    mcp_auth_header: Mapped[str | None] = mapped_column(Text, nullable=True)
-    extra_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_by_user_id: Mapped[str | None] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
-
-    __table_args__ = (
-        Index("ix_data_providers_kind", "kind"),
-        Index("ix_data_providers_is_enabled", "is_enabled"),
-        Index("ix_data_providers_category", "category"),
-        CheckConstraint(
-            "category IN ('financial', 'news', 'social_media', 'search')",
-            name="ck_data_providers_category",
-        ),
-        CheckConstraint(
-            "mode IN ('api_key', 'mcp')",
-            name="ck_data_providers_mode",
-        ),
-    )
-
-
-class DataProviderRequirementMapping(Base):
-    __tablename__ = "data_provider_requirement_mapping"
-
-    requirement_type: Mapped[str] = mapped_column(String(64), primary_key=True)
-    provider_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("data_providers.id", ondelete="CASCADE"), primary_key=True
-    )
-    priority: Mapped[int] = mapped_column(Integer, nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        UTCDateTime(),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
-
-
 class UserPrefs(Base):
     __tablename__ = "user_prefs"
     __table_args__ = (
@@ -199,7 +145,7 @@ class WebSearchProvider(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     label: Mapped[str] = mapped_column(String(128), nullable=False)
-    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     env_var_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)

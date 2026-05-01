@@ -1,3 +1,4 @@
+from openlia.connectors.types import Category
 from openlia.departments.retail_sentiment import RetailSentimentDepartment
 
 
@@ -12,21 +13,21 @@ def test_rs_tier_is_quick():
     assert RetailSentimentDepartment().tier == "quick"
 
 
-def test_rs_basic_data_requirements():
-    reqs = RetailSentimentDepartment().data_requirement_types
-    for name in ("social_sentiment", "company_news", "stock_quote"):
-        assert name in reqs
+def test_rs_required_categories():
+    # Spec §10.1, §9.5: RS pulls social posts via the financial connectors'
+    # sentiment endpoints; required category is `financial`, not `social`.
+    assert RetailSentimentDepartment.required_categories == (Category.FINANCIAL,)
 
 
-def test_rs_optional_data_requirements():
-    soft = RetailSentimentDepartment().optional_requirement_types
-    for name in (
-        "historical_prices",
-        "options_data",
-        "short_interest",
-        "institutional_holdings",
-    ):
-        assert name in soft
+def test_rs_optional_categories():
+    soft = set(RetailSentimentDepartment.optional_categories)
+    assert {Category.NEWS, Category.SOCIAL}.issubset(soft)
+
+
+def test_rs_requires_runner():
+    # Spec §10.1.
+    assert RetailSentimentDepartment.requires_runner is True
+    assert RetailSentimentDepartment.disable_runtime_routing is False
 
 
 def test_rs_is_dashboard_department():

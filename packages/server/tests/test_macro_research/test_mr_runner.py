@@ -37,8 +37,9 @@ def runner() -> MRRunner:
     )
 
 
-def test_run_returns_dashboard_result(runner: MRRunner) -> None:
-    result = runner.run(
+@pytest.mark.asyncio
+async def test_run_returns_dashboard_result(runner: MRRunner) -> None:
+    result = await runner.run(
         user_id="u-1",
         dashboard_slug="debt_cycle",
         portfolio=None,
@@ -50,9 +51,10 @@ def test_run_returns_dashboard_result(runner: MRRunner) -> None:
     assert t4.data["assessment"] == "Late plateau risk"
 
 
-def test_run_unknown_slug_raises(runner: MRRunner) -> None:
+@pytest.mark.asyncio
+async def test_run_unknown_slug_raises(runner: MRRunner) -> None:
     with pytest.raises(KeyError):
-        runner.run(
+        await runner.run(
             user_id="u-1",
             dashboard_slug="not_real",
             portfolio=None,
@@ -60,7 +62,8 @@ def test_run_unknown_slug_raises(runner: MRRunner) -> None:
         )
 
 
-def test_run_propagates_dashboard_service_errors() -> None:
+@pytest.mark.asyncio
+async def test_run_propagates_dashboard_service_errors() -> None:
     """NEW-19-07: programming errors in dashboard_service must escape, not
     be swallowed. Only IntegrityError (racy unique-constraint hit) is
     silently retried.
@@ -77,7 +80,7 @@ def test_run_propagates_dashboard_service_errors() -> None:
         session_factory=MagicMock,
     )
     with pytest.raises(RuntimeError, match="boom"):
-        runner.run(
+        await runner.run(
             user_id="u-1",
             dashboard_slug="debt_cycle",
             portfolio=None,

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
+from openlia.connectors.types import Category
 from openlia.macro_research.dashboards import DASHBOARDS
 from openlia.macro_research.schemas import MRSnapshot
 
@@ -24,12 +25,15 @@ class MacroResearchDepartment:
     display_name: str = "Macro Research"
     is_dashboard: bool = True
     has_chat: bool = False
-    data_requirement_types: tuple[str, ...] = (
-        "macro_indicator",
-        "stock_quote",
-        "company_news",
-    )
-    optional_requirement_types: tuple[str, ...] = ()
+
+    # Connector dependencies (spec §10.1).
+    required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
+    optional_categories: ClassVar[tuple[Category, ...]] = (Category.NEWS,)
+
+    # Runtime behavior (spec §5.2).
+    requires_runner: ClassVar[bool] = True
+    disable_runtime_routing: ClassVar[bool] = False
+
     valid_modes: tuple[str, ...] = ()
     extra_tools: tuple[str, ...] = ()
 

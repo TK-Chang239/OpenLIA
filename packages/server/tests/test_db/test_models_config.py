@@ -24,7 +24,7 @@ def test_llm_providers_columns(create_tables) -> None:
         "id",
         "kind",
         "label",
-        "api_key_encrypted",
+        "api_key",
         "env_var_name",
         "base_url",
         "extra_config",
@@ -72,13 +72,6 @@ def test_user_llm_preferences_composite_pk(create_tables) -> None:
 
     pk_cols = {c.name for c in UserLLMPreference.__table__.primary_key}
     assert pk_cols == {"user_id", "tier"}
-
-
-def test_data_provider_requirement_mapping_composite_pk(create_tables) -> None:
-    from openlia_server.db.models.config import DataProviderRequirementMapping
-
-    pk_cols = {c.name for c in DataProviderRequirementMapping.__table__.primary_key}
-    assert pk_cols == {"requirement_type", "provider_id"}
 
 
 def test_web_search_providers_priority_default(create_tables, db_session: Session) -> None:

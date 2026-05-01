@@ -31,6 +31,7 @@ from openlia_server.scheduler.recovery import (
 from openlia_server.scheduler.registry import (
     MAINTENANCE_JOB_KEY,
     JobType,
+    department_for_job_type,
     job_key,
 )
 from openlia_server.scheduler.settings import SchedulerSettings
@@ -56,6 +57,10 @@ class SchedulerService:
     settings: SchedulerSettings
     executors: dict[JobType, BaseExecutor] = field(default_factory=dict)
     clock: Callable[[], datetime] = field(default_factory=lambda: lambda: datetime.now(UTC))
+    # Phase 10: when the dept_health cache reports a dept disabled, _run_job
+    # logs and skips. The provider returns the cache map (or None to disable
+    # the check entirely so tests without a health cache keep running jobs).
+    dept_health_provider: Callable[[], dict | None] | None = None
 
     is_running: bool = field(init=False, default=False)
     _active_tokens: dict[str, CancellationToken] = field(init=False, default_factory=dict)
@@ -243,6 +248,27 @@ class SchedulerService:
         if key in self._active_tokens:
             log.info("skipping %s: previous run still active", key)
             return
+
+        # Phase 10: dept-health pre-flight. Skip jobs whose dept is disabled.
+        if job_type is not JobType.SYSTEM_MAINTENANCE and self.dept_health_provider is not None:
+            try:
+                cache = self.dept_health_provider() or {}
+            except Exception:
+                cache = {}
+            try:
+                dept_id = department_for_job_type(job_type)
+            except KeyError:
+                dept_id = None
+            if dept_id is not None:
+                health = cache.get(dept_id)
+                if health is not None and getattr(health, "status", None) == "disabled":
+                    log.info(
+                        "skipping %s: dept %r disabled (%s)",
+                        key,
+                        dept_id,
+                        getattr(health, "reason", None),
+                    )
+                    return
 
         executor = self.executors.get(job_type)
         if executor is None:
