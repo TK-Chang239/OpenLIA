@@ -424,6 +424,52 @@ def test_introspect_python_lib_class_not_found(client):
     assert "NoSuchClass" in body["detail"]
 
 
+def test_create_connector_with_grounding_url_triggers_clone(client, monkeypatch, tmp_path):
+    _patch_validation_ok(monkeypatch)
+    src = tmp_path / "src"
+    import subprocess as _sp
+
+    src.mkdir()
+    env_args = [
+        "-c", "user.email=t@e.com", "-c", "user.name=T", "-c", "init.defaultBranch=main",
+    ]
+    _sp.run(["git", *env_args, "init", "-b", "main", str(src)], check=True, capture_output=True)
+    (src / "README.md").write_text("hi\n")
+    _sp.run(["git", "-C", str(src), *env_args, "add", "."], check=True, capture_output=True)
+    _sp.run(
+        ["git", "-C", str(src), *env_args, "commit", "-m", "init"],
+        check=True, capture_output=True,
+    )
+
+    from openlia_server.services import grounding_service
+
+    monkeypatch.setattr(
+        grounding_service, "_clones_root", lambda: tmp_path / "clones"
+    )
+
+    resp = client.post(
+        "/api/connectors",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "x",
+            "display_name": "X",
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["x"], "env_keys": []}]
+            },
+            "source_repo_url": f"file://{src}",
+            "source_repo_revision": "main",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    cid = resp.json()["id"]
+
+    detail = client.get(f"/api/connectors/{cid}").json()
+    assert detail["grounding_status"] == "ready"
+    assert detail["cached_repo_commit_sha"]
+    assert (tmp_path / "clones" / cid / "README.md").read_text() == "hi\n"
+
+
 def test_create_connector_persists_grounding_fields(client, monkeypatch):
     _patch_validation_ok(monkeypatch)
     resp = client.post(
@@ -449,7 +495,9 @@ def test_create_connector_persists_grounding_fields(client, monkeypatch):
     assert detail["source_repo_url"] == "https://github.com/eodhistoricaldata/eodhd-mcp-server"
     assert detail["source_repo_revision"] == "main"
     assert detail["openapi_url"] == "https://eodhd.com/openapi.json"
-    assert detail["grounding_status"] == "none"
+    # Clone trigger fires; outcome depends on whether the test env has
+    # network reachability — the URL fields persist either way.
+    assert detail["grounding_status"] in {"failed", "ready", "none"}
 
 
 def test_update_connector_404_for_unknown(client):

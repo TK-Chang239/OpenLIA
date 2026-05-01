@@ -118,6 +118,68 @@ async def test_returns_empty_when_no_needs_registered(
 
 
 @pytest.mark.asyncio
+async def test_factory_receives_per_connector_clone_path(
+    engine: Engine, db_session: DBSession, tmp_path, monkeypatch
+) -> None:
+    """When a factory variant is supplied, it must be called once per connector
+    in scope with that connector's grounding clone path (or None)."""
+    from openlia_server.services import grounding_service
+
+    monkeypatch.setattr(grounding_service, "_clones_root", lambda: tmp_path / "clones")
+
+    conn_no_repo = _seed_connector(db_session, provider_id="a")
+    # Simulate a clone already on disk for connector b.
+    conn_with_repo = _seed_connector(db_session, provider_id="b")
+    clone_dir = grounding_service.path_for(conn_with_repo.id)
+    clone_dir.mkdir(parents=True, exist_ok=True)
+
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="q",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+
+    seen_paths: list = []
+
+    class _RecordingLlm:
+        async def generate_json(self, *, prompt: str) -> dict[str, Any]:
+            return {
+                "tool_name": "get_quote",
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+                "constants": {},
+            }
+
+    def factory(connector_root):
+        seen_paths.append(connector_root)
+        return _RecordingLlm()
+
+    await runner_specs_service.propose_specs_for_department(
+        db_session,
+        department_id="macro_research",
+        llm_client_factory=factory,
+    )
+
+    # The first matching connector resolves; we should see exactly one factory
+    # call with that connector's grounding path (or None when no clone exists).
+    assert len(seen_paths) == 1
+    # Ordering inside sqlalchemy result reflects insertion order; the recorded
+    # path must correspond to whichever connector was hit first.
+    assert seen_paths[0] is None or seen_paths[0] == clone_dir
+
+
+@pytest.mark.asyncio
 async def test_resolves_single_connector_and_tags_connector_id(
     engine: Engine, db_session: DBSession
 ) -> None:

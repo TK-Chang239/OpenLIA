@@ -23,6 +23,7 @@ import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 from openlia.connectors.adapter import (
@@ -385,7 +386,8 @@ async def propose_specs_for_department(
     session: Session,
     *,
     department_id: str,
-    llm_client: LlmClient,
+    llm_client: LlmClient | None = None,
+    llm_client_factory: Callable[[Path | None], LlmClient] | None = None,
 ) -> list[ProposedSpec]:
     """Per-department resolve.
 
@@ -395,7 +397,16 @@ async def propose_specs_for_department(
     spec that resolves. If no connector produces a valid spec the proposal
     is marked `unsatisfiable=True`. Results are cached in
     `_DEPT_PROPOSALS[department_id]`.
+
+    Either `llm_client` (legacy: one client for all calls) or
+    `llm_client_factory` (preferred: invoked per-connector with that
+    connector's grounding clone path, or None) must be supplied. The
+    factory variant is what the production agentic resolver uses so the
+    LLM gets filesystem tools scoped to the right repo.
     """
+    if llm_client is None and llm_client_factory is None:
+        raise TypeError("propose_specs_for_department requires llm_client or llm_client_factory")
+
     needs = _DEPT_NEEDS.get(department_id) or []
     if not needs:
         clear_dept_proposed_specs(department_id)
@@ -413,6 +424,9 @@ async def propose_specs_for_department(
     )
     in_scope = [r for r in rows if Category(r.category) in in_scope_categories]
 
+    # Avoid circular import on module load by importing here.
+    from openlia_server.services import grounding_service
+
     proposals: list[ProposedSpec] = []
     for need in needs:
         chosen: ProposedSpec | None = None
@@ -421,13 +435,19 @@ async def propose_specs_for_department(
             access_mode, inventory, instance_factory = _select_access_mode_and_inventory(row)
             if access_mode is None:
                 continue
+            if llm_client_factory is not None:
+                clone_path = grounding_service.path_for(row.id)
+                client = llm_client_factory(clone_path if clone_path.exists() else None)
+            else:
+                assert llm_client is not None
+                client = llm_client
             try:
                 spec = await resolve_callable_spec(
                     need=need,
                     connector_inventory=inventory,
                     access_mode=access_mode,  # type: ignore[arg-type]
                     instance_factory=instance_factory,
-                    llm_client=llm_client,
+                    llm_client=client,
                 )
             except ResolverError as exc:
                 last_error = str(exc)
