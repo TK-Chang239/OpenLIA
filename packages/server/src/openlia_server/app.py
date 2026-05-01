@@ -69,13 +69,13 @@ from openlia_server.routes.departments.retail_sentiment import (
     build_retail_sentiment_router,
 )
 from openlia_server.routes.departments.secretary import build_secretary_router
+from openlia_server.routes.dept_health import build_dept_health_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.portfolio import build_portfolio_router
 from openlia_server.routes.reports import build_reports_router
 from openlia_server.routes.settings import (
-    build_data_providers_router,
     build_llm_providers_admin_router,
 )
 from openlia_server.routes.setup import build_setup_router
@@ -278,6 +278,20 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        # Phase 10: populate dept-health cache. Every dept-route handler
+        # and every scheduled-job pre-flight reads from app.state.dept_health.
+        from openlia_server.services.dept_health import compute_all as _compute_all_health
+
+        _sf = db_session_factory or _default_session_factory
+        _health_session = _sf()
+        try:
+            app.state.dept_health = _compute_all_health(_health_session)
+        except Exception:
+            log.exception("startup dept_health computation failed; defaulting to empty map")
+            app.state.dept_health = {}
+        finally:
+            _health_session.close()
+
         scheduler_settings = SchedulerSettings.from_env()
         scheduler_svc: SchedulerService | None = None
 
@@ -336,6 +350,10 @@ def _make_lifespan(
                     report_store=report_store_impl,
                     mr_cache_store=mr_cache_store_lifespan,
                 )
+                # Phase 10: scheduler skip-on-disabled. Reads the live cache
+                # off app.state at fire time so invalidation-driven recomputes
+                # are picked up without a scheduler restart.
+                scheduler_svc.dept_health_provider = lambda: getattr(app.state, "dept_health", None)
                 await scheduler_svc.start()
 
                 # Bind the scheduler-aware MRScheduleService onto app.state
@@ -422,8 +440,70 @@ def create_app(
         app.include_router(build_auth_router(db_session_factory=factory))
         app.include_router(build_admin_router(db_session_factory=factory))
 
-    app.include_router(build_data_providers_router(db_session_factory=factory))
-    app.include_router(build_connectors_router(db_session_factory=factory))
+    app.include_router(build_connectors_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_dept_health_router(db_session_factory=factory))
+
+    # Phase 10: dept-health cache. Populated lazily on first read in tests
+    # (see dept_health.compute_all) and refreshed at startup in the lifespan
+    # below so the GET /api/dept-health endpoint always returns fresh state.
+    # Type: dict[str, openlia.departments.health.DepartmentHealth].
+    app.state.dept_health = {}
+
+    # Wire connector + runner-spec mutation hooks so the health cache stays
+    # in sync without route handlers needing to know about it.
+    from openlia_server.services import (
+        connectors_service as _connectors_service,
+    )
+    from openlia_server.services import (
+        dept_health as _dept_health_svc,
+    )
+    from openlia_server.services import (
+        runner_specs_service as _runner_specs_service,
+    )
+
+    def _recompute_dept_health(session: DBSession) -> None:
+        app.state.dept_health = _dept_health_svc.compute_all(session)
+
+    _connectors_service.set_dept_health_hook(_recompute_dept_health)
+    _runner_specs_service.set_dept_health_hook(_recompute_dept_health)
+
+    # Hydrate the wizard-time adapter's per-department needs/categories
+    # registry from the live `openlia.departments` module. Without this,
+    # `propose_specs` iterates empty maps and every runner-bearing dept
+    # stays permanently disabled with every need unresolved.
+    _runner_specs_service.hydrate_dept_registries()
+
+    # Mount the wizard-time runner specs router. Production wiring of a
+    # real Quick-tier LLM client lives in the wizard adapter integration
+    # work (Phase 9 follow-up); the placeholder below raises loudly when
+    # the resolver runs without a configured provider so misconfiguration
+    # surfaces as a proposal-level error instead of silently dropping
+    # drafts.
+    from openlia_server.routes.runner_specs import (
+        build_dept_proposed_specs_router,
+        build_runner_specs_list_router,
+        build_runner_specs_router,
+    )
+    from openlia_server.services.adapter_llm_client import (
+        make_adapter_llm_client_factory,
+        make_agentic_resolver_factory,
+    )
+
+    _adapter_factory = make_adapter_llm_client_factory(factory)
+    _agentic_factory = make_agentic_resolver_factory(factory)
+    app.include_router(
+        build_runner_specs_router(
+            db_session_factory=factory,
+            llm_client_factory=_adapter_factory,
+        )
+    )
+    app.include_router(
+        build_dept_proposed_specs_router(
+            db_session_factory=factory,
+            agentic_factory=_agentic_factory,
+        )
+    )
+    app.include_router(build_runner_specs_list_router(db_session_factory=factory))
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))

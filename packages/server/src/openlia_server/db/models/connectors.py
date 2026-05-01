@@ -1,7 +1,7 @@
 """SQLAlchemy models for the connector redesign.
 
-See docs/superpowers/specs/2026-04-26-connector-redesign-design.md §4.
-Owned by the connector-redesign plan. Registered for metadata via
+See docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md §3.
+Owned by the connector-redesign-v2 plan. Registered for metadata via
 db.models.register_all (side-effect import).
 """
 
@@ -18,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,18 +30,37 @@ class Connector(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     provider_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(
+        String(128), nullable=False, server_default=text("('')")
+    )
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     category: Mapped[str] = mapped_column(String(16), nullable=False)
     launch: Mapped[dict] = mapped_column(JSON, nullable=False)
-    credentials_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    secrets: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
     cached_tools: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    cached_python_callables: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    source_repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_repo_revision: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    grounding_paths: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    openapi_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    cached_repo_commit_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    cached_openapi: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    grounding_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="none", server_default="none"
+    )
+    grounding_fetched_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="pending", server_default="pending"
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_validated_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    validated_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime(), nullable=True, onupdate=func.now()
     )
 
     __table_args__ = (
@@ -48,7 +68,7 @@ class Connector(Base):
         Index("ix_connectors_category", "category"),
         Index("ix_connectors_status", "status"),
         CheckConstraint(
-            "source IN ('built_in', 'remote_mcp', 'cli_mcp')",
+            "source IN ('built_in', 'remote_mcp', 'cli_mcp', 'python_lib', 'skill')",
             name="source",
         ),
         CheckConstraint(
@@ -59,36 +79,48 @@ class Connector(Base):
             "status IN ('pending', 'validated', 'failed')",
             name="status",
         ),
+        CheckConstraint(
+            "grounding_status IN ('none', 'pending', 'ready', 'failed')",
+            name="grounding_status",
+        ),
     )
 
 
-class ToolAllowlist(Base):
-    __tablename__ = "tool_allowlists"
+class RunnerCallableSpec(Base):
+    """Per-department, per-need callable resolution (§3.5).
+
+    The wizard-time adapter LLM populates these rows when a department's
+    needs.yaml is resolved against a connector. The deterministic runtime
+    runner reads them at execution time.
+    """
+
+    __tablename__ = "runner_callable_specs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     department_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    need_id: Mapped[str] = mapped_column(String(64), nullable=False)
     connector_id: Mapped[str] = mapped_column(
         String(36),
         ForeignKey("connectors.id", ondelete="CASCADE"),
         nullable=False,
     )
-    tool_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    scoped_at: Mapped[datetime] = mapped_column(
+    access_mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    spec: Mapped[dict] = mapped_column(JSON, nullable=False)
+    canary_value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    canary_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
-    scoped_by: Mapped[str] = mapped_column(String(16), nullable=False)
+    updated_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime(), nullable=True, onupdate=func.now()
+    )
 
     __table_args__ = (
-        UniqueConstraint(
-            "department_id",
-            "connector_id",
-            "tool_name",
-            name="uq_tool_allowlists_dep_conn_tool",
-        ),
-        Index("ix_tool_allowlists_department_id", "department_id"),
-        Index("ix_tool_allowlists_connector_id", "connector_id"),
+        UniqueConstraint("department_id", "need_id", name="uq_dept_need"),
+        Index("ix_rcs_department_id", "department_id"),
+        Index("ix_rcs_connector_id", "connector_id"),
         CheckConstraint(
-            "scoped_by IN ('built_in_map', 'llm_adapter')",
-            name="scoped_by",
+            "access_mode IN ('cli_mcp', 'remote_mcp', 'python_lib')",
+            name="access_mode",
         ),
     )

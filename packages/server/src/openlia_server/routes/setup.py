@@ -11,17 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from openlia_server.ai_review import store as review_store_mod
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.middleware.wizard_gate import build_wizard_gate
 from openlia_server.services import wizard as wizard_svc
-
-
-def _dept_reqs() -> dict[str, list[str]]:
-    """Read department requirements from the registry (no duplicate dict)."""
-    from openlia.departments import get_department_data_requirements
-
-    return get_department_data_requirements()
 
 
 def _set_wizard_cookie(response: Response, token: str) -> None:
@@ -94,41 +86,6 @@ class ModelsTestIn(BaseModel):
     api_key: str | None = None
     base_url: str | None = None
     env_var_name: str | None = None
-
-
-class _ProviderEntryIn(BaseModel):
-    """Wizard input for adding a data provider.
-
-    Two modes are accepted:
-      - `builtin`: kind must be one of OpenLIA's shipped adapters (eodhd, fmp,
-        finnhub, yfinance, newsapi_ai, newsapi_org, mediastack, brave, tavily,
-        serper, reddit, x). The user supplies an `api_key`.
-      - `mcp`: any other provider. The user MUST supply `mcp_url`; OpenLIA
-        speaks to the provider via MCP `list_tools()` instead of a hand-written
-        adapter. `provider` is the human-readable kind label (e.g. "polygon").
-
-    The legacy `openapi` mode has been removed — non-built-in providers must
-    expose an MCP server.
-    """
-
-    mode: str = Field(pattern="^(builtin|mcp)$")
-    provider: str | None = None
-    api_key: str | None = None
-    base_url: str | None = None
-    mcp_url: str | None = None
-    mcp_auth_header: str | None = None
-    oauth_client_id: str | None = None
-    oauth_client_secret: str | None = None
-
-
-class ProviderAddIn(BaseModel):
-    category: str = Field(pattern="^(financial|news|social|social_media|web_search|search)$")
-    entry: _ProviderEntryIn
-
-
-class ProviderPatchIn(BaseModel):
-    priority: int | None = None
-    api_key: str | None = None
 
 
 class RequiredTiersOut(BaseModel):
@@ -280,46 +237,6 @@ def build_setup_router(
         return {"ok": True}
 
     @router.post(
-        "/review/run",
-        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
-    )
-    async def post_review_run(
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, str]:
-        from openlia_server.services.wizard_review import schedule_review
-
-        store = review_store_mod.DEFAULT_STORE
-        departments = list(_dept_reqs().items())
-        review_id = schedule_review(
-            db=db,
-            db_session_factory=db_session_factory,
-            background_tasks=background_tasks,
-            store=store,
-            departments=departments,
-        )
-        return {"review_id": review_id}
-
-    @router.get("/review/{review_id}")
-    def get_review(
-        review_id: str,
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, object]:
-        entry = review_store_mod.DEFAULT_STORE.get(review_id)
-        if entry is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "review_not_found", "message": "Unknown review id."},
-            )
-        # Contract: {state, progress, result, error}.
-        return {
-            "state": entry.get("state"),
-            "progress": entry.get("progress", 0),
-            "result": entry.get("result"),
-            "error": entry.get("error"),
-        }
-
-    @router.post(
         "/models",
         dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
@@ -338,6 +255,29 @@ def build_setup_router(
                 detail={"code": "unknown_llm_kind", "message": str(exc)},
             ) from exc
         wizard_svc.advance_step(db, "models", "shared")
+        return {"ok": True}
+
+    @router.post(
+        "/providers",
+        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
+    )
+    def post_providers(
+        db: Session = Depends(session_dep),
+        _: None = Depends(require_wizard_session),
+    ) -> dict[str, bool]:
+        from openlia_server.services import connectors_service
+
+        rows = connectors_service.list_connectors(db)
+        if not any(r.status == "validated" for r in rows):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "no_validated_connector",
+                    "message": ("Add at least one connector and click Validate before continuing."),
+                },
+            )
+        wizard_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
+        wizard_svc.advance_step(db, "providers", wizard_mode)
         return {"ok": True}
 
     @router.post(
@@ -365,125 +305,6 @@ def build_setup_router(
             "latency_ms": out.get("latency_ms"),
             "error": out.get("error_msg") or out.get("error_class"),
         }
-
-    @router.get("/providers")
-    def get_providers(
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, Any]:
-        # Async helper but we can call it synchronously since list_providers
-        # itself is sync; wrap minimally.
-        # Simple sync inline build — avoid running an event loop just for this.
-        from openlia_server.services.data_providers import list_providers as list_dp
-
-        # The wizard UI buckets are "social" and "web_search"; the DB stores
-        # the underlying ProviderCategory values "social_media" and "search".
-        # Map back so each row lands in the right tab.
-        ui_category = {"social_media": "social", "search": "web_search"}
-
-        out: list[dict[str, Any]] = []
-        for r in list_dp(db):
-            cfg = r.extra_config or {}
-            wstatus = cfg.get("wizard_status") or "pending"
-            out.append(
-                {
-                    "id": r.id,
-                    "category": ui_category.get(r.category, r.category),
-                    "mode": r.mode,
-                    "provider": r.kind,
-                    "priority": int(cfg.get("default_priority", 100)),
-                    "status": wstatus,
-                }
-            )
-        return {"providers": out}
-
-    @router.post(
-        "/providers",
-        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
-    )
-    async def post_provider(
-        payload: ProviderAddIn,
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, Any]:
-        from openlia_server.services import wizard_providers as wp_svc
-
-        result = await wp_svc.add_provider(db, category=payload.category, entry=payload.entry)
-        if not result.get("ok") and result.get("entry_id") is None:
-            # Validation/unknown-kind failure — return 400.
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "invalid_provider", "message": result.get("error", "")},
-            )
-        # Auto-advance once we have at least one green financial AND one green news.
-        if wp_svc.has_green_pair(db):
-            current_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
-            wizard_svc.advance_step(db, "providers", current_mode)
-        return result
-
-    @router.patch(
-        "/providers/{provider_id}",
-        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
-    )
-    def patch_provider(
-        provider_id: str,
-        payload: ProviderPatchIn,
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, bool]:
-        from openlia_server.services import wizard_providers as wp_svc
-
-        wp_svc.patch_provider(db, provider_id, priority=payload.priority, api_key=payload.api_key)
-        return {"ok": True}
-
-    @router.delete(
-        "/providers/{provider_id}",
-        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
-    )
-    def delete_provider(
-        provider_id: str,
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, bool]:
-        from openlia_server.services import wizard_providers as wp_svc
-
-        wp_svc.delete_provider(db, provider_id)
-        return {"ok": True}
-
-    @router.post(
-        "/providers/{provider_id}/test",
-        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
-    )
-    async def post_provider_test(
-        provider_id: str,
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, Any]:
-        from openlia_server.services import wizard_providers as wp_svc
-
-        return await wp_svc.retest_provider(db, provider_id)
-
-    @router.post(
-        "/providers/confirm",
-        dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
-    )
-    def post_providers_confirm(
-        db: Session = Depends(session_dep),
-        _: None = Depends(require_wizard_session),
-    ) -> dict[str, bool]:
-        from openlia_server.services import wizard_providers as wp_svc
-
-        if not wp_svc.has_green_pair(db):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail={
-                    "code": "providers_incomplete",
-                    "message": "At least one OK financial and one OK news provider required.",
-                },
-            )
-        current_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
-        wizard_svc.advance_step(db, "providers", current_mode)
-        return {"ok": True}
 
     @router.post(
         "/finish",

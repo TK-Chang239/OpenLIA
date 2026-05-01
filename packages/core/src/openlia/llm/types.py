@@ -33,6 +33,15 @@ class Capabilities:
 class Message:
     role: str
     content: str
+    # Set on role="tool" messages to pair the result with the originating
+    # tool call. Adapters need this so the upstream protocol (OpenAI-style
+    # chat completions, Anthropic Claude tool_use, etc.) can match the
+    # response back to the assistant turn that requested it.
+    tool_call_id: str | None = None
+    # Set on role="assistant" messages that carry tool calls. Required for
+    # multi-turn tool-use loops: the assistant message that emitted tool
+    # calls must be replayed back to the model alongside the tool results.
+    tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

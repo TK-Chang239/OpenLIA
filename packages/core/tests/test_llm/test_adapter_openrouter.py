@@ -70,6 +70,36 @@ async def test_generate_includes_bearer_token() -> None:
     assert captured["headers"]["authorization"] == "Bearer or-test"
 
 
+async def test_generate_wraps_ssl_error_as_transient_transport_error() -> None:
+    """Mid-stream TLS faults (e.g. SSLV3_ALERT_BAD_RECORD_MAC from a corrupted
+    keepalive connection) escape httpx as raw ssl.SSLError. The adapter must
+    convert those to TransportError so with_retries treats them as transient
+    and a single network blip doesn't abort a long agentic resolve."""
+    import ssl
+
+    from openlia.llm.exceptions import TransportError
+
+    adapter = _adapter()
+
+    def _raise_ssl(_request):
+        raise ssl.SSLError("SSLV3_ALERT_BAD_RECORD_MAC")
+
+    with respx.mock() as mock:
+        mock.post("https://openrouter.ai/api/v1/chat/completions").mock(side_effect=_raise_ssl)
+        try:
+            await adapter.generate(
+                LLMRequest(
+                    messages=[Message(role="user", content="hi")],
+                    max_tokens=8,
+                    temperature=0.0,
+                )
+            )
+        except TransportError:
+            pass
+        else:
+            raise AssertionError("expected TransportError after retry exhaustion")
+
+
 async def test_test_connection_ok() -> None:
     adapter = _adapter()
     with respx.mock() as mock:

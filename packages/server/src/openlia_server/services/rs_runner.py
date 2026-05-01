@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from openlia.llm.runtime.deterministic import fetch_rs_social_posts
 from openlia.retail_sentiment.metrics import compute_snapshot
 from openlia.retail_sentiment.schemas import (
     BatchClassifyResult,
@@ -98,9 +99,11 @@ class RsRunner:
         snapshot_service: RsSnapshotService | None = None,
         classification_log_service: RsClassificationLogService | None = None,
         narrative_synthesizer: NarrativeSynthesizer | None = None,
+        dispatcher: Any | None = None,
     ) -> None:
         self._factory = session_factory
         self._data = data_provider
+        self._dispatcher = dispatcher
         self._classifier = classifier or NeutralClassifier()
         self._snapshots = snapshot_service or RsSnapshotService(session_factory=session_factory)
         self._classification_log = classification_log_service or RsClassificationLogService(
@@ -109,6 +112,9 @@ class RsRunner:
         self._narrative_synthesizer = narrative_synthesizer
 
     def _fetch_posts(self, ticker: str) -> list[RawSocialPost]:
+        # v2 path: pull `social_posts` need via dispatcher (spec §9.5).
+        if self._dispatcher is not None:
+            return self._fetch_posts_via_dispatcher(ticker)
         if self._data is None:
             return []
         posts: list[RawSocialPost] = []
@@ -121,6 +127,28 @@ class RsRunner:
                 continue
             posts.extend(_coerce_posts(raw, ticker=ticker, source=requirement))
         return posts
+
+    def _fetch_posts_via_dispatcher(self, ticker: str) -> list[RawSocialPost]:
+        """Resolve `social_posts(ticker)` through the v2 dispatcher.
+
+        RsRunner.run_ticker stays sync to keep its persistence path simple;
+        we wrap the async dispatcher fetch with `asyncio.run`. The runner
+        is invoked from the scheduler executor in a worker context, so
+        nesting an event loop here is safe (no surrounding loop).
+        """
+
+        async def _go() -> Any:
+            assert self._dispatcher is not None
+            async with self._dispatcher.in_department("retail_sentiment"):
+                return await fetch_rs_social_posts(dispatcher=self._dispatcher, ticker=ticker)
+
+        try:
+            raw = asyncio.run(_go())
+        except Exception:
+            raw = None
+        if not raw:
+            return []
+        return _coerce_posts(raw, ticker=ticker, source="social_posts")
 
     def _fetch_optional(self, ticker: str) -> dict[str, Any]:
         if self._data is None:

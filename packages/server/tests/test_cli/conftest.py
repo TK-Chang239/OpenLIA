@@ -3,7 +3,6 @@ local imports under --import-mode=importlib (no tests.* package)."""
 
 from __future__ import annotations
 
-import base64
 import sys
 from pathlib import Path
 
@@ -20,17 +19,6 @@ def cli_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     home.mkdir()
     monkeypatch.setenv("OPENLIA_HOME", str(home))
     return home
-
-
-@pytest.fixture
-def cli_secret_key(monkeypatch: pytest.MonkeyPatch) -> bytes:
-    raw = b"\x11" * 32
-    monkeypatch.setenv("OPENLIA_SECRET_KEY", base64.b64encode(raw).decode())
-    from openlia_server.db import crypto
-
-    crypto._reset_cached_key()
-    yield raw
-    crypto._reset_cached_key()
 
 
 @pytest.fixture

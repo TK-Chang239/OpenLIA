@@ -1,3 +1,4 @@
+from openlia.connectors.types import Category
 from openlia.departments.earnings_update import EarningsUpdateDepartment
 
 
@@ -12,21 +13,18 @@ def test_eu_single_mode():
     assert set(EarningsUpdateDepartment().valid_modes) == {"earnings_analysis"}
 
 
-def test_eu_basic_data_requirements():
-    reqs = EarningsUpdateDepartment().data_requirement_types
-    for name in ("earnings_data", "financial_statements", "stock_quote"):
-        assert name in reqs
+def test_eu_required_categories():
+    # Spec §10.1.
+    assert EarningsUpdateDepartment.required_categories == (Category.FINANCIAL,)
 
 
-def test_eu_optional_data_requirements():
-    soft = EarningsUpdateDepartment().optional_requirement_types
-    for name in (
-        "earnings_transcripts",
-        "company_news",
-        "historical_prices",
-        "analyst_ratings",
-    ):
-        assert name in soft
+def test_eu_optional_categories():
+    assert Category.NEWS in EarningsUpdateDepartment.optional_categories
+
+
+def test_eu_does_not_require_runner():
+    assert EarningsUpdateDepartment.requires_runner is False
+    assert EarningsUpdateDepartment.disable_runtime_routing is False
 
 
 def test_eu_has_no_extra_tools():

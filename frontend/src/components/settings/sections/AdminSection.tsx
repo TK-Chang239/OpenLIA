@@ -5,7 +5,8 @@ const TABS = [
   { to: 'users', label: 'Users' },
   { to: 'reset-requests', label: 'Reset requests' },
   { to: 'models', label: 'Models' },
-  { to: 'data-providers', label: 'Data providers' },
+  { to: 'connectors', label: 'Connectors' },
+  { to: 'runner-specs', label: 'Runner specs' },
 ];
 
 function AdminTab({ to, label }: { to: string; label: string }): JSX.Element {

@@ -1,100 +1,348 @@
-"""Connector orchestration: create + validate, list, delete, retest.
+"""Connector orchestration: create + validate, list, delete, retest (v2).
 
-Pure orchestration over the new openlia.connectors core + the Connector ORM.
-No FastAPI imports here; routes call into this module.
+Pure orchestration over the v2 connector core (LaunchSpec, transports) +
+the Connector ORM. No FastAPI imports here; routes call into this module.
+
+Validation flow (per spec §5):
+  1. Persist the connector row in PENDING.
+  2. For each declared mode in `launch.modes`, build a transport and call
+     `list_tools()`. The first mode whose `list_tools()` succeeds populates
+     `cached_tools`; on python_lib we additionally introspect the module
+     and populate `cached_python_callables`.
+  3. Mark VALIDATED on success, FAILED on the first persistent error.
+
+Department-health invalidation (Phase 10): every mutation that can
+flip a dept from active to disabled or back invokes
+`dept_health.recompute(...)` so route handlers reading
+`app.state.dept_health` see consistent values.
 """
 
 from __future__ import annotations
 
+import logging
+import sys
+import traceback
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from openlia.connectors.builtins import get_builtin
-from openlia.connectors.mcp_transport import default_session_factory
-from openlia.connectors.scope import (
-    DepartmentRequirements,
-    ScopeLLMClient,
-    scope_connector,
-)
+from openlia.connectors.adapter.introspect import introspect_python_lib
+from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
     Category,
     ConnectorSource,
     ConnectorStatus,
-    MCPLaunchSpec,
-    ScopedBy,
-    ToolDefinition,
-)
-from openlia.connectors.validate import (
-    ValidationFailure,
-    ValidationOk,
-    validate_connector,
+    LaunchSpec,
 )
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.connectors import Connector, ToolAllowlist
+from openlia_server.db.models.connectors import Connector
+from openlia_server.services.dispatcher_factory import _build_transport, _select_mode
+
+log = logging.getLogger(__name__)
 
 
-def _resolve_launch_for_validation(spec: MCPLaunchSpec) -> tuple[MCPLaunchSpec, str | None]:
-    """BUILT_IN spec -> CLI launch resolved from the template, plus its canary tool."""
+# Optional invalidation hook installed by the FastAPI app at startup. The
+# server wires this to `dept_health.recompute(session)` so every mutation
+# that can change validated-connector inventory keeps the cached health
+# map in sync. The default is a no-op so unit tests that exercise this
+# module in isolation don't need to install a callback.
+_invalidation_hook: Callable[[Session], None] | None = None
 
-    if spec.kind is ConnectorSource.BUILT_IN:
-        tpl = get_builtin(spec.template_id or "")
-        return (
-            MCPLaunchSpec.cli(argv=list(tpl.cli_argv), env={tpl.api_key_env_var: ""}),
-            tpl.canary_tool,
-        )
-    return spec, None
+
+def set_dept_health_hook(hook: Callable[[Session], None] | None) -> None:
+    """Install the dept-health recompute callback. Called by app startup."""
+    global _invalidation_hook
+    _invalidation_hook = hook
+
+
+def _trigger_grounding_clone(session: Session, connector_id: str, *, force: bool = False) -> None:
+    """Best-effort: clone the connector's grounding repo on save.
+
+    Failures land on the row as `grounding_status='failed'` (the service
+    handles that), so we never raise out of the connector save path.
+    """
+    try:
+        from openlia_server.services import grounding_service
+
+        if force:
+            grounding_service.resync_clone(session, connector_id=connector_id)
+        else:
+            grounding_service.ensure_clone(session, connector_id=connector_id)
+    except Exception:
+        log.exception("grounding clone trigger failed for connector %s", connector_id)
+
+
+def _invalidate(session: Session) -> None:
+    if _invalidation_hook is None:
+        return
+    try:
+        _invalidation_hook(session)
+    except Exception:
+        # Health derivation failures must not mask the underlying mutation.
+        log.exception("dept_health recompute failed during connector mutation")
+
+
+@dataclass(frozen=True)
+class ValidationOk:
+    tools: list[dict[str, Any]]
+    python_callables: list[dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class ValidationFailure:
+    error: str
+
+
+ValidationResult = ValidationOk | ValidationFailure
+
+
+def _format_list_tools_error(mode: dict[str, Any], exc: Exception) -> str:
+    """Build an actionable error string for `list_tools()` failures.
+
+    For python_lib mode we want the user to see (a) which Python interpreter
+    we tried to import from, (b) the pip package + version they should
+    install, and (c) the original exception with traceback. The wizard UI
+    truncates long messages and reveals the rest behind a "Show details"
+    toggle, so multi-line is fine and desirable here.
+    """
+    base = f"list_tools failed: {exc}"
+    if mode.get("kind") != "python_lib":
+        return base
+    if not isinstance(exc, ModuleNotFoundError):
+        return base
+
+    pip_name = mode.get("pip_name") or mode.get("import_module") or ""
+    pip_version = mode.get("pip_version") or ""
+    install_target = f"{pip_name}{pip_version}" if pip_name else "<package>"
+    import_module = mode.get("import_module", "")
+    tb = traceback.format_exception_only(type(exc), exc)
+    tb_text = "".join(tb).strip()
+
+    lines = [
+        base,
+        "",
+        f"The python_lib transport could not import '{import_module}'.",
+        f"It is not installed in this server's Python environment ({sys.executable}).",
+        "",
+        "To fix:",
+        "  1. Activate the server's Python environment.",
+        f"  2. Run:  pip install {install_target}",
+        "  3. Restart the server, then click Validate again.",
+        "",
+        f"Original error: {tb_text}",
+    ]
+    return "\n".join(lines)
+
+
+async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> ValidationResult:
+    """Pick the highest-priority mode and exercise it via `list_tools()`.
+
+    For python_lib we also introspect the module to populate
+    `cached_python_callables` so the wizard adapter has a callable
+    inventory to bind against.
+    """
+    selected_mode = _select_mode(launch)
+    if selected_mode is None:
+        return ValidationFailure(error="launch spec has no recognised modes")
+
+    transport: CallableTransport = _build_transport(
+        connector_id="<validating>",
+        mode=selected_mode,
+        secrets=secrets,
+    )
+    try:
+        try:
+            raw_tools = await transport.list_tools()
+        except Exception as exc:
+            return ValidationFailure(
+                error=_format_list_tools_error(selected_mode, exc),
+            )
+
+        tools: list[dict[str, Any]] = []
+        for entry in raw_tools or []:
+            if isinstance(entry, dict):
+                tools.append(
+                    {
+                        "name": entry.get("name", ""),
+                        "description": entry.get("description", ""),
+                        "input_schema": entry.get("input_schema", {}),
+                    }
+                )
+            else:
+                tools.append(
+                    {
+                        "name": getattr(entry, "name", ""),
+                        "description": getattr(entry, "description", ""),
+                        "input_schema": getattr(entry, "input_schema", {}),
+                    }
+                )
+
+        python_callables: list[dict[str, Any]] = []
+        if selected_mode.get("kind") == "python_lib":
+            module_name = selected_mode.get("import_module", "")
+            try:
+                defs = introspect_python_lib(module_name)
+            except Exception as exc:
+                return ValidationFailure(error=f"introspect_python_lib failed: {exc}")
+            python_callables = [
+                {"qualname": d.qualname, "signature": d.signature, "doc": d.doc} for d in defs
+            ]
+
+        return ValidationOk(tools=tools, python_callables=python_callables)
+    finally:
+        try:
+            await transport.aclose()
+        except Exception:
+            pass
+
+
+def _launch_to_dict(launch: LaunchSpec | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(launch, dict):
+        return launch
+    modes_out: list[dict[str, Any]] = []
+    for mode in launch.modes:
+        if mode.kind == "cli_mcp":
+            modes_out.append(
+                {
+                    "kind": "cli_mcp",
+                    "argv": list(mode.argv),
+                    "env_keys": list(mode.env_keys),
+                }
+            )
+        elif mode.kind == "remote_mcp":
+            modes_out.append(
+                {
+                    "kind": "remote_mcp",
+                    "url": mode.url,
+                    "headers": dict(mode.headers),
+                }
+            )
+        elif mode.kind == "python_lib":
+            modes_out.append(
+                {
+                    "kind": "python_lib",
+                    "pip_name": mode.pip_name,
+                    "pip_version": mode.pip_version,
+                    "import_module": mode.import_module,
+                    "instance_factory": {
+                        "cls": mode.instance_factory.cls,
+                        "args": dict(mode.instance_factory.args),
+                    },
+                }
+            )
+    return {"modes": modes_out}
 
 
 async def create_connector(
     session: Session,
     *,
     provider_id: str,
+    display_name: str,
     source: ConnectorSource,
     category: Category,
-    launch: MCPLaunchSpec,
-    credentials_ref: str | None,
+    launch: LaunchSpec | dict[str, Any],
+    secrets: dict[str, str] | None = None,
+    source_repo_url: str | None = None,
+    source_repo_revision: str | None = None,
+    grounding_paths: list[str] | None = None,
+    openapi_url: str | None = None,
 ) -> Connector:
     cid = str(uuid.uuid4())
+    launch_json = _launch_to_dict(launch)
     row = Connector(
         id=cid,
         provider_id=provider_id,
+        display_name=display_name,
         source=source.value,
         category=category.value,
-        launch=launch.to_json(),
-        credentials_ref=credentials_ref,
+        launch=launch_json,
+        secrets=secrets or {},
         status=ConnectorStatus.PENDING.value,
+        source_repo_url=source_repo_url,
+        source_repo_revision=source_repo_revision,
+        grounding_paths=grounding_paths,
+        openapi_url=openapi_url,
     )
     session.add(row)
     session.flush()
 
-    resolved_spec, canary = _resolve_launch_for_validation(launch)
-    result = await validate_connector(
-        spec=resolved_spec,
-        canary_tool=canary,
-        session_factory=default_session_factory,
-    )
+    result = await _validate_launch(launch_json, secrets or {})
     if isinstance(result, ValidationOk):
         row.status = ConnectorStatus.VALIDATED.value
-        row.cached_tools = [
-            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-            for t in result.tools
-        ]
-        row.last_validated_at = datetime.now(UTC)
+        row.cached_tools = result.tools
+        row.cached_python_callables = result.python_callables
+        row.validated_at = datetime.now(UTC)
         row.last_error = None
     else:
-        assert isinstance(result, ValidationFailure)
         row.status = ConnectorStatus.FAILED.value
         row.last_error = result.error
 
     session.commit()
     session.refresh(row)
+    if row.source_repo_url:
+        _trigger_grounding_clone(session, row.id)
+    _invalidate(session)
     return row
 
 
 def list_connectors(session: Session) -> list[Connector]:
     return list(session.query(Connector).order_by(Connector.created_at).all())
+
+
+def get_connector(session: Session, connector_id: str) -> Connector | None:
+    return session.get(Connector, connector_id)
+
+
+async def update_connector(
+    session: Session,
+    connector_id: str,
+    *,
+    provider_id: str,
+    display_name: str,
+    source: ConnectorSource,
+    category: Category,
+    launch: LaunchSpec | dict[str, Any],
+    secrets: dict[str, str] | None,
+    source_repo_url: str | None = None,
+    source_repo_revision: str | None = None,
+    grounding_paths: list[str] | None = None,
+    openapi_url: str | None = None,
+) -> Connector | None:
+    row = session.get(Connector, connector_id)
+    if row is None:
+        return None
+    launch_json = _launch_to_dict(launch)
+    row.provider_id = provider_id
+    row.display_name = display_name
+    row.source = source.value
+    row.category = category.value
+    row.launch = launch_json
+    row.source_repo_url = source_repo_url
+    row.source_repo_revision = source_repo_revision
+    row.grounding_paths = grounding_paths
+    row.openapi_url = openapi_url
+    if secrets is not None:
+        row.secrets = secrets
+    effective_secrets = row.secrets or {}
+    result = await _validate_launch(launch_json, effective_secrets)
+    if isinstance(result, ValidationOk):
+        row.status = ConnectorStatus.VALIDATED.value
+        row.cached_tools = result.tools
+        row.cached_python_callables = result.python_callables
+        row.validated_at = datetime.now(UTC)
+        row.last_error = None
+    else:
+        row.status = ConnectorStatus.FAILED.value
+        row.last_error = result.error
+    session.commit()
+    session.refresh(row)
+    if row.source_repo_url:
+        _trigger_grounding_clone(session, row.id, force=True)
+    _invalidate(session)
+    return row
 
 
 def delete_connector(session: Session, connector_id: str) -> None:
@@ -103,157 +351,24 @@ def delete_connector(session: Session, connector_id: str) -> None:
         return
     session.delete(row)
     session.commit()
+    _invalidate(session)
 
 
 async def revalidate_connector(session: Session, connector_id: str) -> Connector | None:
     row = session.get(Connector, connector_id)
     if row is None:
         return None
-    spec = MCPLaunchSpec.from_json(row.launch)
-    resolved_spec, canary = _resolve_launch_for_validation(spec)
-    result = await validate_connector(
-        spec=resolved_spec,
-        canary_tool=canary,
-        session_factory=default_session_factory,
-    )
+    result = await _validate_launch(row.launch or {}, row.secrets or {})
     if isinstance(result, ValidationOk):
         row.status = ConnectorStatus.VALIDATED.value
-        row.cached_tools = [
-            {"name": t.name, "description": t.description, "input_schema": t.input_schema}
-            for t in result.tools
-        ]
-        row.last_validated_at = datetime.now(UTC)
+        row.cached_tools = result.tools
+        row.cached_python_callables = result.python_callables
+        row.validated_at = datetime.now(UTC)
         row.last_error = None
     else:
-        assert isinstance(result, ValidationFailure)
         row.status = ConnectorStatus.FAILED.value
         row.last_error = result.error
     session.commit()
     session.refresh(row)
+    _invalidate(session)
     return row
-
-
-async def scope_connectors(
-    session: Session,
-    *,
-    connector_ids: list[str] | None,
-    llm: ScopeLLMClient,
-    requirements: dict[str, DepartmentRequirements],
-) -> dict[str, int]:
-    """Scope each VALIDATED connector to departments.
-
-    BUILT_IN copies the shipped allowlist; user MCP/CLI calls the LLM.
-    Returns a dict of connector_id -> rows_written.
-    """
-
-    rows = list_connectors(session)
-    if connector_ids is not None:
-        wanted = set(connector_ids)
-        rows = [r for r in rows if r.id in wanted]
-    rows = [r for r in rows if r.status == ConnectorStatus.VALIDATED.value]
-
-    counts: dict[str, int] = {}
-    for row in rows:
-        # Wipe any previous allowlist for this connector first.
-        session.query(ToolAllowlist).filter_by(connector_id=row.id).delete()
-
-        if row.source == ConnectorSource.BUILT_IN.value:
-            spec = MCPLaunchSpec.from_json(row.launch)
-            tpl = get_builtin(spec.template_id or "")
-            for a in tpl.shipped_allowlist:
-                session.add(
-                    ToolAllowlist(
-                        id=str(uuid.uuid4()),
-                        department_id=a.department_id,
-                        connector_id=row.id,
-                        tool_name=a.tool_name,
-                        scoped_by=ScopedBy.BUILT_IN_MAP.value,
-                    )
-                )
-            counts[row.id] = len(tpl.shipped_allowlist)
-        else:
-            tools = [
-                ToolDefinition(
-                    name=t["name"],
-                    description=t.get("description", ""),
-                    input_schema=t.get("input_schema", {}),
-                )
-                for t in (row.cached_tools or [])
-            ]
-            scoped = await scope_connector(
-                connector_id=row.id,
-                provider_id=row.provider_id,
-                category=Category(row.category),
-                tools=tools,
-                requirements=requirements,
-                llm=llm,
-            )
-            for s in scoped:
-                session.add(
-                    ToolAllowlist(
-                        id=str(uuid.uuid4()),
-                        department_id=s.department_id,
-                        connector_id=row.id,
-                        tool_name=s.tool_name,
-                        scoped_by=ScopedBy.LLM_ADAPTER.value,
-                    )
-                )
-            counts[row.id] = len(scoped)
-    session.commit()
-    return counts
-
-
-def compute_readiness(session: Session) -> list[dict[str, Any]]:
-    """Compute per-department readiness from VALIDATED connectors + their allowlist rows.
-
-    See spec §5 Phase 4b. Per-(department, category) status:
-      required + >=1 row -> "ok"
-      required + 0 rows  -> "missing"
-      optional + >=1 row -> "enhanced"
-      optional + 0 rows  -> "basic"
-    department.ready iff every required category is "ok".
-    """
-
-    from openlia.departments import get_all_requirements
-
-    reqs = get_all_requirements()
-    conns = {
-        r.id: r
-        for r in session.query(Connector)
-        .filter(Connector.status == ConnectorStatus.VALIDATED.value)
-        .all()
-    }
-    rows = session.query(ToolAllowlist).all()
-
-    out: list[dict[str, Any]] = []
-    for dep_id, dep_req in reqs.items():
-        cats: list[dict[str, Any]] = []
-        ready = True
-        for cat_value, body in dep_req.per_category.items():
-            relevant = [
-                r
-                for r in rows
-                if r.department_id == dep_id
-                and r.connector_id in conns
-                and conns[r.connector_id].category == cat_value
-            ]
-            providers = sorted({conns[r.connector_id].provider_id for r in relevant})
-            tool_count = len(relevant)
-            required = bool(body["required"])
-            if required:
-                cat_status = "ok" if tool_count > 0 else "missing"
-                if tool_count == 0:
-                    ready = False
-            else:
-                cat_status = "enhanced" if tool_count > 0 else "basic"
-            cats.append(
-                {
-                    "category": cat_value,
-                    "required": required,
-                    "status": cat_status,
-                    "tool_count": tool_count,
-                    "providers": providers,
-                }
-            )
-        out.append({"department_id": dep_id, "ready": ready, "categories": cats})
-    return out

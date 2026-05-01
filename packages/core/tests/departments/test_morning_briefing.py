@@ -1,3 +1,4 @@
+from openlia.connectors.types import Category
 from openlia.departments.morning_briefing import MorningBriefingDepartment
 
 
@@ -12,20 +13,21 @@ def test_mb_single_mode():
     assert set(MorningBriefingDepartment().valid_modes) == {"morning_briefing"}
 
 
-def test_mb_basic_data_requirements():
-    reqs = MorningBriefingDepartment().data_requirement_types
-    for name in ("company_news", "economic_events"):
-        assert name in reqs
+def test_mb_required_categories():
+    # Spec §10.1: MB needs both financial and news.
+    assert set(MorningBriefingDepartment.required_categories) == {
+        Category.FINANCIAL,
+        Category.NEWS,
+    }
 
 
-def test_mb_optional_data_requirements():
-    soft = MorningBriefingDepartment().optional_requirement_types
-    for name in (
-        "stock_quote",
-        "historical_prices",
-        "macro_indicator",
-    ):
-        assert name in soft
+def test_mb_optional_categories():
+    assert Category.WEB_SEARCH in MorningBriefingDepartment.optional_categories
+
+
+def test_mb_does_not_require_runner():
+    assert MorningBriefingDepartment.requires_runner is False
+    assert MorningBriefingDepartment.disable_runtime_routing is False
 
 
 def test_mb_has_no_extra_tools():

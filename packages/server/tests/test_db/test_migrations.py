@@ -22,8 +22,6 @@ EXPECTED_TABLES = {
     "llm_providers",
     "llm_models",
     "user_llm_preferences",
-    "data_providers",
-    "data_provider_requirement_mapping",
     "web_search_providers",
     # Content (8)
     "chat_sessions",
@@ -68,7 +66,7 @@ EXPECTED_TABLES = {
     "pt_trigger_events",
     # --- Connector redesign (replaces data_providers + data_provider_requirement_mapping) ---
     "connectors",
-    "tool_allowlists",
+    "runner_callable_specs",
 }
 
 

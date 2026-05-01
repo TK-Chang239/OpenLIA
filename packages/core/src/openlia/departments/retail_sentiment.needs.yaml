@@ -1,0 +1,36 @@
+# Retail Sentiment deterministic-runner needs (spec §5.4, §9.5).
+#
+# RS pulls its primary input — `social_posts` — through the financial
+# connectors' sentiment endpoints (EODHD, FMP). The wizard adapter
+# resolves this need to e.g. `eodhd.APIClient.sentiment_data(s=ticker)`
+# at configuration time; the dispatcher binds `ticker` at runtime.
+# This is why the dept's required category is `financial`, not `social`.
+
+department: retail_sentiment
+needs:
+  - id: social_posts
+    description: |
+      Recent social-media posts and news headlines mentioning a single
+      ticker, fetched from a financial connector's sentiment endpoint
+      (e.g. eodhd.APIClient.sentiment_data, FMP's social-sentiment).
+      Each item carries an id, ticker, source, raw text, optional
+      engagement counters, and a created-at timestamp. Feeds the RS
+      batch classifier and the 12-metric snapshot.
+    parameters:
+      - name: ticker
+        description: "Ticker symbol the posts must mention, e.g. 'AAPL'."
+        type: str
+        required: true
+      - name: since_iso
+        description: |
+          ISO-8601 timestamp; only posts created at or after this
+          instant are returned. Defaults to 24 hours before the
+          current time when omitted.
+        type: str
+        required: false
+      - name: limit
+        description: "Maximum number of posts to return per call."
+        type: int
+        required: false
+        default: 200
+    shape: list[dict]

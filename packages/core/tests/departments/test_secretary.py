@@ -1,3 +1,4 @@
+from openlia.connectors.types import Category
 from openlia.departments.secretary import SecretaryDepartment
 
 
@@ -12,17 +13,18 @@ def test_secretary_uses_everyday_tier():
     assert SecretaryDepartment().tier == "everyday"
 
 
-def test_secretary_declares_basic_data_requirements():
-    reqs = SecretaryDepartment().data_requirement_types
-    assert "stock_quote" in reqs
-    assert "company_profile" in reqs
+def test_secretary_has_no_required_categories():
+    # Spec §10.1: Secretary is zero-config; it never disables.
+    assert SecretaryDepartment.required_categories == ()
 
 
-def test_secretary_advanced_requirements_are_soft():
-    soft = SecretaryDepartment().optional_requirement_types
-    assert "company_news" in soft
-    assert "historical_prices" in soft
-    assert "economic_events" in soft
+def test_secretary_optional_categories_include_web_search():
+    assert Category.WEB_SEARCH in SecretaryDepartment.optional_categories
+
+
+def test_secretary_does_not_require_runner():
+    assert SecretaryDepartment.requires_runner is False
+    assert SecretaryDepartment.disable_runtime_routing is False
 
 
 def test_secretary_exposes_suggest_redirect_tool():

@@ -31,25 +31,6 @@ export interface ModelsPayload {
   quick: TierEntry[];
 }
 
-export interface ProviderEntry {
-  mode: "builtin" | "mcp";
-  provider?: string;
-  api_key?: string;
-  mcp_url?: string;
-  mcp_auth_header?: string;
-  oauth_client_id?: string;
-  oauth_client_secret?: string;
-}
-
-export interface ProviderRow {
-  id: string;
-  category: string;
-  mode: string;
-  provider: string | null;
-  priority: number;
-  status: string;
-}
-
 export interface ReviewPoll {
   state: "running" | "complete" | "failed";
   progress: number;
@@ -91,23 +72,8 @@ export const testModel = (payload: {
 export const saveModels = (payload: ModelsPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/models", { method: "POST", json: payload });
 
-export const listProviders = () =>
-  fetchJson<{ providers: ProviderRow[] }>("/api/setup/providers");
-
-export const addProvider = (payload: { category: string; entry: ProviderEntry }) =>
-  fetchJson<{ ok: boolean; entry_id: string | null; error?: string | null }>(
-    "/api/setup/providers",
-    { method: "POST", json: payload },
-  );
-
-export const patchProvider = (id: string, patch: { priority?: number; api_key?: string }) =>
-  fetchJson<{ ok: boolean }>(`/api/setup/providers/${id}`, { method: "PATCH", json: patch });
-
-export const deleteProvider = (id: string) =>
-  fetchJson<{ ok: boolean }>(`/api/setup/providers/${id}`, { method: "DELETE" });
-
-export const retestProvider = (id: string) =>
-  fetchJson<TestResult>(`/api/setup/providers/${id}/test`, { method: "POST" });
+export const saveProviders = () =>
+  fetchJson<{ ok: boolean }>("/api/setup/providers", { method: "POST" });
 
 export const setAccessControl = (payload: AccessControlPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/access_control", { method: "POST", json: payload });
@@ -119,9 +85,6 @@ export const pollReview = (id: string) => fetchJson<ReviewPoll>(`/api/setup/revi
 
 export const finish = () =>
   fetchJson<{ redirect: string; mode: Mode }>("/api/setup/finish", { method: "POST" });
-
-export const confirmProviders = () =>
-  fetchJson<{ ok: boolean }>("/api/setup/providers/confirm", { method: "POST" });
 
 export const getRequiredTiers = () =>
   fetchJson<{ required_tiers: string[]; enabled_departments: string[] }>(

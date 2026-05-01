@@ -223,35 +223,6 @@ def test_access_control_rejects_personal_mode(wizard_personal_client: TestClient
 
 
 # ---------------------------------------------------------------------------
-# Task 14: /setup/review/* routes
-# ---------------------------------------------------------------------------
-
-
-def test_review_run_kicks_off_task_and_poll_returns_state(
-    wizard_personal_client: TestClient, monkeypatch
-) -> None:
-    from openlia_server.ai_review import store as store_mod
-
-    fresh_store = store_mod.ReviewStore()
-    monkeypatch.setattr(store_mod, "DEFAULT_STORE", fresh_store)
-
-    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
-    resp = wizard_personal_client.post("/setup/review/run")
-    assert resp.status_code == 200
-    review_id = resp.json()["review_id"]
-
-    poll = wizard_personal_client.get(f"/setup/review/{review_id}")
-    assert poll.status_code == 200
-    assert poll.json()["state"] in ("running", "complete", "failed")
-
-
-def test_review_poll_unknown_id_returns_404(wizard_personal_client: TestClient) -> None:
-    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
-    resp = wizard_personal_client.get("/setup/review/nope")
-    assert resp.status_code == 404
-
-
-# ---------------------------------------------------------------------------
 # Task 15: POST /setup/finish
 # ---------------------------------------------------------------------------
 
@@ -361,6 +332,56 @@ def test_post_models_409_without_session_token(wizard_personal_client: TestClien
     assert resp.status_code == 409
 
 
+def _seed_connector(db_session, *, status: str) -> None:
+    import uuid
+
+    from openlia_server.db.models.connectors import Connector
+
+    db_session.add(
+        Connector(
+            id=str(uuid.uuid4()),
+            provider_id="eodhd",
+            display_name="EODHD",
+            source="cli_mcp",
+            category="financial",
+            launch={"modes": [{"kind": "cli_mcp", "argv": ["echo", "hi"], "env_keys": []}]},
+            secrets={},
+            status=status,
+        )
+    )
+    db_session.commit()
+
+
+def test_post_providers_advances_when_a_connector_is_validated(
+    wizard_personal_client: TestClient, db_session
+) -> None:
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    _seed_connector(db_session, status="validated")
+    resp = wizard_personal_client.post("/setup/providers")
+    assert resp.status_code == 200, resp.text
+    status_body = wizard_personal_client.get("/setup/status").json()
+    assert "providers" in status_body["completed_steps"]
+    assert status_body["current_step"] == "review"
+
+
+def test_post_providers_422_when_no_validated_connector(
+    wizard_personal_client: TestClient, db_session
+) -> None:
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    _seed_connector(db_session, status="pending")
+    resp = wizard_personal_client.post("/setup/providers")
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert detail["code"] == "no_validated_connector"
+
+
+def test_post_providers_409_without_session_token(
+    wizard_personal_client: TestClient,
+) -> None:
+    resp = wizard_personal_client.post("/setup/providers")
+    assert resp.status_code == 409
+
+
 def test_post_models_test_success(wizard_personal_client: TestClient, monkeypatch) -> None:
     from openlia_server.routes import settings as settings_routes
 
@@ -458,280 +479,6 @@ def test_post_models_loopback_required(db_session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Task 10 (Phase 10): /setup/providers + required_tiers
-# ---------------------------------------------------------------------------
-
-
-def _seed_session(client: TestClient) -> None:
-    client.post("/setup/mode", json={"mode": "personal"})
-
-
-def test_get_providers_empty(wizard_personal_client: TestClient) -> None:
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.get("/setup/providers")
-    assert resp.status_code == 200
-    assert resp.json() == {"providers": []}
-
-
-def test_post_provider_persists_with_status(wizard_personal_client: TestClient, db_session) -> None:
-    from openlia_server.db.models.config import DataProvider
-
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["entry_id"]
-    db_session.expire_all()
-    rows = db_session.query(DataProvider).all()
-    assert len(rows) == 1
-    assert rows[0].kind == "fmp"
-    assert (rows[0].extra_config or {}).get("wizard_status") in ("ok", "error")
-
-
-def test_post_provider_builtin_mode_rejects_non_built_in_kind(
-    wizard_personal_client: TestClient,
-) -> None:
-    """Built-in mode is gated to OpenLIA's shipped adapters. An unknown kind
-    must surface a clear 'use MCP mode' error instead of being persisted."""
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "polygon",
-                "api_key": "x",
-            },
-        },
-    )
-    assert resp.status_code == 400, resp.text
-    detail = resp.json()["detail"]
-    assert detail["code"] == "invalid_provider"
-    assert "MCP" in detail["message"]
-
-
-def test_post_provider_mcp_mode_requires_mcp_url(wizard_personal_client: TestClient) -> None:
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "mcp",
-                "provider": "polygon",
-            },
-        },
-    )
-    assert resp.status_code == 400, resp.text
-    assert "mcp_url" in resp.json()["detail"]["message"]
-
-
-def test_post_provider_mcp_mode_accepts_unknown_kind_with_url(
-    wizard_personal_client: TestClient, db_session, monkeypatch
-) -> None:
-    """Non-built-in providers ship through MCP mode: arbitrary kind name plus a
-    valid MCP URL is the only accepted shape."""
-    from openlia_server.db.models.config import DataProvider
-    from openlia_server.services import wizard_providers
-
-    async def _ok(_row):
-        return True, None
-
-    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "mcp",
-                "provider": "polygon",
-                "mcp_url": "https://example.com/mcp",
-            },
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    db_session.expire_all()
-    rows = db_session.query(DataProvider).filter_by(kind="polygon").all()
-    assert len(rows) == 1
-    assert rows[0].mode == "mcp"
-    assert rows[0].mcp_url == "https://example.com/mcp"
-
-
-def test_post_provider_openapi_mode_rejected(wizard_personal_client: TestClient) -> None:
-    """The legacy `openapi` mode is gone; pydantic should 422 on the input."""
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "openapi",
-                "openapi_spec_url": "https://example.com/openapi.json",
-                "api_key": "x",
-            },
-        },
-    )
-    assert resp.status_code == 422
-
-
-def test_providers_confirm_requires_pair(wizard_personal_client: TestClient) -> None:
-    _seed_session(wizard_personal_client)
-    resp = wizard_personal_client.post("/setup/providers/confirm")
-    assert resp.status_code == 422
-    assert resp.json()["detail"]["code"] == "providers_incomplete"
-
-
-def test_providers_confirm_advances_after_pair(
-    wizard_personal_client: TestClient, monkeypatch
-) -> None:
-    _seed_session(wizard_personal_client)
-    # Force the per-provider health check to succeed without hitting the
-    # network — fmp/newsapi_org are real adapters now and example.test is
-    # not reachable in CI.
-    from openlia_server.services import wizard_providers
-
-    async def _ok(_row):
-        return True, None
-
-    monkeypatch.setattr(wizard_providers, "_run_health_check", _ok)
-    wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "news",
-            "entry": {
-                "mode": "builtin",
-                "provider": "newsapi_org",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    # Now advance via the dedicated confirm endpoint.
-    resp = wizard_personal_client.post("/setup/providers/confirm")
-    assert resp.status_code == 200
-    status = wizard_personal_client.get("/setup/status").json()
-    assert "providers" in status["completed_steps"]
-
-
-def test_provider_delete_removes_row(wizard_personal_client: TestClient, db_session) -> None:
-    from openlia_server.db.models.config import DataProvider
-
-    _seed_session(wizard_personal_client)
-    add = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    pid = add.json()["entry_id"]
-    resp = wizard_personal_client.delete(f"/setup/providers/{pid}")
-    assert resp.status_code == 200
-    db_session.expire_all()
-    assert db_session.query(DataProvider).count() == 0
-
-
-def test_provider_patch_priority(wizard_personal_client: TestClient, db_session) -> None:
-    from openlia_server.db.models.config import DataProvider
-
-    _seed_session(wizard_personal_client)
-    add = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    pid = add.json()["entry_id"]
-    resp = wizard_personal_client.patch(f"/setup/providers/{pid}", json={"priority": 5})
-    assert resp.status_code == 200
-    db_session.expire_all()
-    row = db_session.query(DataProvider).filter_by(id=pid).one()
-    assert (row.extra_config or {}).get("default_priority") == 5
-
-
-def test_provider_test_endpoint(wizard_personal_client: TestClient) -> None:
-    _seed_session(wizard_personal_client)
-    add = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {
-                "mode": "builtin",
-                "provider": "fmp",
-                "api_key": "x",
-                "base_url": "https://example.test",
-            },
-        },
-    )
-    pid = add.json()["entry_id"]
-    resp = wizard_personal_client.post(f"/setup/providers/{pid}/test")
-    assert resp.status_code == 200
-    assert resp.json()["ok"] in (True, False)
-
-
-def test_post_provider_410_after_completion(wizard_personal_client: TestClient, db_session) -> None:
-    from openlia_server.db.models.infrastructure import ConfigStore
-
-    db_session.add(ConfigStore(key="wizard.completed", value="true"))
-    db_session.commit()
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {"mode": "builtin", "provider": "fmp"},
-        },
-    )
-    assert resp.status_code == 410
-
-
-def test_post_provider_409_without_session_token(wizard_personal_client: TestClient) -> None:
-    resp = wizard_personal_client.post(
-        "/setup/providers",
-        json={
-            "category": "financial",
-            "entry": {"mode": "builtin", "provider": "fmp"},
-        },
-    )
-    assert resp.status_code == 409
-
-
-# ---------------------------------------------------------------------------
 # NEW-10-02: GET /setup/required_tiers
 # ---------------------------------------------------------------------------
 
@@ -746,23 +493,3 @@ def test_required_tiers_reads_from_registry(wizard_personal_client: TestClient) 
     assert "thinking" in body["required_tiers"]
 
 
-# ---------------------------------------------------------------------------
-# NEW-10-04: review poll shape
-# ---------------------------------------------------------------------------
-
-
-def test_review_poll_returns_canonical_shape(wizard_personal_client: TestClient) -> None:
-    from openlia_server.ai_review import store as store_mod
-
-    fresh = store_mod.ReviewStore()
-    rid = fresh.create()
-    fresh.update(rid, state="complete", progress=100, result={"summary": "ok"})
-
-    # Inject the entry into the default store so the route can read it.
-    store_mod.DEFAULT_STORE._entries[rid] = fresh._entries[rid]  # type: ignore[attr-defined]
-
-    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
-    resp = wizard_personal_client.get(f"/setup/review/{rid}")
-    assert resp.status_code == 200
-    body = resp.json()
-    assert set(body.keys()) == {"state", "progress", "result", "error"}

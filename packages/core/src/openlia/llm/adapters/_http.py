@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import ssl
 
 import httpx
 
@@ -14,6 +15,18 @@ from openlia.llm.exceptions import (
     TransportError,
 )
 
+# Errors that escape httpx as raw OSError-family / SSL faults. These come up
+# under sustained load (multi-turn agentic loops) when a pooled keepalive
+# connection's TLS state goes bad mid-flight. Treating them as transient lets
+# `with_retries` retry on a fresh connection.
+TRANSIENT_NETWORK_ERRORS: tuple[type[BaseException], ...] = (
+    httpx.HTTPError,
+    ssl.SSLError,
+    ConnectionError,
+    TimeoutError,
+    OSError,  # last-resort umbrella; httpx wraps most of these already
+)
+
 _CONTEXT_LENGTH_RE = re.compile(r"(?:context|maximum).*?(\d{3,7})\s*tokens?", re.IGNORECASE)
 
 
@@ -23,10 +36,15 @@ def make_client(
     timeout: float = 30.0,
     headers: dict[str, str] | None = None,
 ) -> httpx.AsyncClient:
+    # httpx-level transport retries handle low-level TLS / connect resets that
+    # fire before any HTTP response arrives. with_retries handles the
+    # application-level retries on top.
+    transport = httpx.AsyncHTTPTransport(retries=2)
     return httpx.AsyncClient(
         base_url=base_url,
         timeout=timeout,
         headers=headers or {},
+        transport=transport,
     )
 
 
@@ -72,5 +90,5 @@ def status_to_exception(
     raise TransportError(f"unexpected status {status_code}: {body_text[:200]}")
 
 
-def wrap_httpx_error(exc: httpx.HTTPError) -> TransportError:
+def wrap_httpx_error(exc: BaseException) -> TransportError:
     return TransportError(f"{type(exc).__name__}: {exc!s}")

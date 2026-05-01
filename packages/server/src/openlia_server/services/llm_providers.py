@@ -1,13 +1,12 @@
-"""Service layer for LLM provider and model CRUD, API-key crypto, and config overrides.
+"""Service layer for LLM provider and model CRUD, API-key storage, and config overrides.
 
 Bridges the database models in `openlia_server.db.models.config` and
 `openlia_server.db.models.infrastructure` with call sites (routes, setup wizard).
 
-Encryption: `api_key` (when provided) is AES-256-GCM encrypted via
-`openlia_server.db.crypto.encrypt_for_row` with the provider row's `id` as AAD.
-On read, `decrypt_for_row` is called with the same AAD. Providers may also
+API keys are stored as plaintext in the `api_key` column under the
+admin-hosted single-tenant threat model (spec §3.2). Providers may also
 reference an environment variable via `env_var_name` (takes precedence over the
-encrypted column in `get_provider_api_key`).
+stored value in `get_provider_api_key`).
 """
 
 from __future__ import annotations
@@ -16,11 +15,9 @@ import os
 import uuid
 from dataclasses import dataclass
 
-from openlia.llm.exceptions import AuthError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from openlia_server.db.crypto import DecryptError, decrypt_for_row, encrypt_for_row
 from openlia_server.db.models.config import LLMModel, LLMProvider, UserLLMPreference
 from openlia_server.db.models.infrastructure import ConfigStore
 
@@ -98,9 +95,7 @@ def create_provider(
         id=new_id,
         kind=kind,
         label=label,
-        api_key_encrypted=(
-            encrypt_for_row(row_id=new_id, plaintext=api_key) if api_key is not None else None
-        ),
+        api_key=api_key,
         env_var_name=env_var_name,
         base_url=base_url,
         extra_config=extra_config or None,
@@ -138,9 +133,7 @@ def update_provider(
     if not isinstance(label, _Unchanged) and label is not None:
         row.label = label
     if not isinstance(api_key, _Unchanged):
-        row.api_key_encrypted = (
-            encrypt_for_row(row_id=provider_id, plaintext=api_key) if api_key is not None else None
-        )
+        row.api_key = api_key
     if not isinstance(env_var_name, _Unchanged):
         row.env_var_name = env_var_name
     if not isinstance(base_url, _Unchanged):
@@ -168,19 +161,14 @@ def get_provider_api_key(session: Session, provider_id: str) -> str | None:
 
     Preference order:
     1. Environment variable named by ``env_var_name`` (if set and present in env).
-    2. Decrypted value from ``api_key_encrypted`` column.
+    2. Plaintext value from ``api_key`` column.
     """
     row = get_provider(session, provider_id)
     if row.env_var_name:
         env_val = os.environ.get(row.env_var_name)
         if env_val is not None:
             return env_val
-    if row.api_key_encrypted:
-        try:
-            return decrypt_for_row(row_id=row.id, token=row.api_key_encrypted)
-        except DecryptError as exc:
-            raise AuthError("API key unreadable; ask admin to re-save") from exc
-    return None
+    return row.api_key
 
 
 # ---------------------------------------------------------------------------

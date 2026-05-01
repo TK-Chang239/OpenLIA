@@ -3,9 +3,8 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 
-import httpx
-
 from openlia.llm.adapters._http import (
+    TRANSIENT_NETWORK_ERRORS,
     make_client,
     status_to_exception,
     wrap_httpx_error,
@@ -69,7 +68,7 @@ class OllamaAdapter(LLMProvider):
             async with make_client(base_url=base) as client:
                 try:
                     resp = await client.post("/api/chat", json=payload)
-                except httpx.HTTPError as exc:
+                except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
                 if resp.status_code != 200:
                     status_to_exception(

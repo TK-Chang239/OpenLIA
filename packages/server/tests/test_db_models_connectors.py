@@ -1,4 +1,4 @@
-"""Verify Connector and ToolAllowlist ORM models load and round-trip."""
+"""Verify Connector ORM model loads and round-trips."""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import pytest
 from openlia_server.db.base import Base
 from openlia_server.db.models import register_all  # noqa: F401  - side-effect register
 from sqlalchemy import create_engine
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 
@@ -39,13 +38,14 @@ def test_connector_round_trip(engine):
             Connector(
                 id=cid,
                 provider_id="eodhd",
+                display_name="EODHD",
                 source="built_in",
                 category="financial",
                 launch={"kind": "built_in", "template_id": "eodhd"},
-                credentials_ref="secret://eodhd/key",
+                secrets={"EODHD_API_KEY": "k"},
                 cached_tools=[{"name": "get_quote", "description": "...", "input_schema": {}}],
                 status="validated",
-                last_validated_at=datetime.now(UTC),
+                validated_at=datetime.now(UTC),
             )
         )
         s.commit()
@@ -53,75 +53,3 @@ def test_connector_round_trip(engine):
         assert out.id == cid
         assert out.provider_id == "eodhd"
         assert out.cached_tools[0]["name"] == "get_quote"
-
-
-def test_tool_allowlist_unique_constraint(engine):
-    from openlia_server.db.models.connectors import Connector, ToolAllowlist
-
-    cid = str(uuid.uuid4())
-    with Session(engine) as s:
-        s.add(
-            Connector(
-                id=cid,
-                provider_id="eodhd",
-                source="built_in",
-                category="financial",
-                launch={"kind": "built_in", "template_id": "eodhd"},
-                status="validated",
-            )
-        )
-        s.add(
-            ToolAllowlist(
-                id=str(uuid.uuid4()),
-                department_id="equity_research",
-                connector_id=cid,
-                tool_name="get_quote",
-                scoped_by="built_in_map",
-            )
-        )
-        s.commit()
-
-        s.add(
-            ToolAllowlist(
-                id=str(uuid.uuid4()),
-                department_id="equity_research",
-                connector_id=cid,
-                tool_name="get_quote",
-                scoped_by="built_in_map",
-            )
-        )
-        with pytest.raises(IntegrityError):
-            s.commit()
-
-
-def test_tool_allowlist_cascade_delete(engine):
-    from openlia_server.db.models.connectors import Connector, ToolAllowlist
-
-    cid = str(uuid.uuid4())
-    with Session(engine) as s:
-        s.add(
-            Connector(
-                id=cid,
-                provider_id="eodhd",
-                source="built_in",
-                category="financial",
-                launch={"kind": "built_in", "template_id": "eodhd"},
-                status="validated",
-            )
-        )
-        s.add(
-            ToolAllowlist(
-                id=str(uuid.uuid4()),
-                department_id="equity_research",
-                connector_id=cid,
-                tool_name="get_quote",
-                scoped_by="built_in_map",
-            )
-        )
-        s.commit()
-
-        # Delete via ORM so cascade fires (raw table.delete() bypasses ORM cascade).
-        s.delete(s.get(Connector, cid))
-        s.commit()
-
-        assert s.query(ToolAllowlist).count() == 0

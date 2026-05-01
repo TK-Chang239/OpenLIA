@@ -4,9 +4,8 @@ import json
 import time
 from collections.abc import AsyncIterator
 
-import httpx
-
 from openlia.llm.adapters._http import (
+    TRANSIENT_NETWORK_ERRORS,
     make_client,
     status_to_exception,
     wrap_httpx_error,
@@ -32,6 +31,34 @@ def _to_messages(req: LLMRequest) -> list[dict]:
     if req.system:
         out.append({"role": "system", "content": req.system})
     for m in req.messages:
+        if m.role == "tool":
+            out.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": m.tool_call_id or "",
+                    "content": m.content,
+                }
+            )
+            continue
+        if m.role == "assistant" and m.tool_calls:
+            out.append(
+                {
+                    "role": "assistant",
+                    "content": m.content or None,
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": json.dumps(tc.arguments),
+                            },
+                        }
+                        for tc in m.tool_calls
+                    ],
+                }
+            )
+            continue
         out.append({"role": m.role, "content": m.content})
     return out
 
@@ -76,7 +103,7 @@ class OpenRouterAdapter(LLMProvider):
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
                 try:
                     resp = await client.post("/v1/chat/completions", json=payload)
-                except httpx.HTTPError as exc:
+                except TRANSIENT_NETWORK_ERRORS as exc:
                     raise wrap_httpx_error(exc) from exc
                 if resp.status_code != 200:
                     status_to_exception(

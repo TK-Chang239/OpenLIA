@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session as DBSession
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.routes.dept_health import gate_dept_or_409
 from openlia_server.services import rs_schedules as rs_schedules_svc
 from openlia_server.services.rs_config import RsConfigService
 from openlia_server.services.rs_runner import RsRunner
@@ -168,9 +169,11 @@ def build_retail_sentiment_router(
     @router.post("/run")
     def post_run(
         payload: _RunDTO,
+        request: Request,
         user: User = require_auth,
         runner: RsRunner = Depends(_runner_dep),
     ) -> dict[str, Any]:
+        gate_dept_or_409(request, "retail_sentiment")
         if not payload.tickers:
             raise HTTPException(400, "tickers required")
         results = runner.run_many(payload.tickers)
