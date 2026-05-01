@@ -482,6 +482,7 @@ def create_app(
     # surfaces as a proposal-level error instead of silently dropping
     # drafts.
     from openlia_server.routes.runner_specs import (
+        build_dept_proposed_specs_router,
         build_runner_specs_list_router,
         build_runner_specs_router,
     )
@@ -489,10 +490,17 @@ def create_app(
         make_adapter_llm_client_factory,
     )
 
+    _adapter_factory = make_adapter_llm_client_factory(factory)
     app.include_router(
         build_runner_specs_router(
             db_session_factory=factory,
-            llm_client_factory=make_adapter_llm_client_factory(factory),
+            llm_client_factory=_adapter_factory,
+        )
+    )
+    app.include_router(
+        build_dept_proposed_specs_router(
+            db_session_factory=factory,
+            llm_client_factory=_adapter_factory,
         )
     )
     app.include_router(build_runner_specs_list_router(db_session_factory=factory))

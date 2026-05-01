@@ -41,6 +41,15 @@ class Connector(Base):
     )
     cached_tools: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
     cached_python_callables: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    source_repo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_repo_revision: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    openapi_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    cached_repo_commit_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    cached_openapi: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    grounding_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="none", server_default="none"
+    )
+    grounding_fetched_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     status: Mapped[str] = mapped_column(
         String(16), nullable=False, default="pending", server_default="pending"
     )
@@ -68,6 +77,10 @@ class Connector(Base):
         CheckConstraint(
             "status IN ('pending', 'validated', 'failed')",
             name="status",
+        ),
+        CheckConstraint(
+            "grounding_status IN ('none', 'pending', 'ready', 'failed')",
+            name="grounding_status",
         ),
     )
 

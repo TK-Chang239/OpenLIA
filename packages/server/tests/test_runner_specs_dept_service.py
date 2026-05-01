@@ -1,0 +1,451 @@
+"""Per-department resolve service (Phase B step 1).
+
+`propose_specs_for_department` takes a department_id and aggregates the
+inventory across every validated connector whose category overlaps the
+department's required ∪ optional categories. Per (department, need) it
+picks the best resolved spec across connectors, tagging each proposal
+with the chosen `connector_id`. Unsatisfied needs are surfaced as
+`unsatisfiable=True` rather than dropped.
+"""
+
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterator
+from typing import Any
+
+import pytest
+from openlia.connectors.types import (
+    Category,
+    ConnectorStatus,
+    NeedParameter,
+    RunnerNeed,
+)
+from openlia_server.db.models.connectors import Connector
+from openlia_server.services import runner_specs_service
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session as DBSession
+
+
+class _StubLlm:
+    """Returns a scripted payload per (need_id, connector_id) call.
+
+    The resolver embeds the need_id in the prompt, but doesn't reveal a
+    connector_id; we route by counting calls instead.
+    """
+
+    def __init__(self, by_need: dict[str, dict[str, Any]] | None = None) -> None:
+        self._by_need = by_need or {}
+        self.calls: list[str] = []
+
+    async def generate_json(self, *, prompt: str) -> dict[str, Any]:
+        self.calls.append(prompt)
+        for need_id, payload in self._by_need.items():
+            if f"id: {need_id}\n" in prompt:
+                return payload
+        return {}
+
+
+@pytest.fixture(autouse=True)
+def _reset_state() -> Iterator[None]:
+    runner_specs_service.set_dept_needs_for_testing({})
+    runner_specs_service.set_dept_categories_for_testing({})
+    runner_specs_service._PROPOSALS.clear()
+    runner_specs_service._DEPT_PROPOSALS.clear()
+    yield
+    runner_specs_service.set_dept_needs_for_testing({})
+    runner_specs_service.set_dept_categories_for_testing({})
+    runner_specs_service._PROPOSALS.clear()
+    runner_specs_service._DEPT_PROPOSALS.clear()
+
+
+def _seed_connector(
+    session: DBSession,
+    *,
+    cid: str | None = None,
+    provider_id: str = "eodhd",
+    category: str = "financial",
+    cached_tools: list[dict] | None = None,
+) -> Connector:
+    row = Connector(
+        id=cid or str(uuid.uuid4()),
+        provider_id=provider_id,
+        display_name=provider_id.upper(),
+        source="cli_mcp",
+        category=category,
+        launch={
+            "modes": [
+                {
+                    "kind": "cli_mcp",
+                    "argv": [f"{provider_id}-mcp"],
+                    "env_keys": [f"{provider_id.upper()}_API_KEY"],
+                }
+            ]
+        },
+        secrets={},
+        cached_tools=cached_tools
+        or [
+            {
+                "name": "get_quote",
+                "description": "Quote tool",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                },
+            }
+        ],
+        status=ConnectorStatus.VALIDATED.value,
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+@pytest.mark.asyncio
+async def test_returns_empty_when_no_needs_registered(
+    engine: Engine, db_session: DBSession
+) -> None:
+    _seed_connector(db_session)
+    llm = _StubLlm()
+
+    proposals = await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="ghost_dept", llm_client=llm
+    )
+
+    assert proposals == []
+    assert llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_resolves_single_connector_and_tags_connector_id(
+    engine: Engine, db_session: DBSession
+) -> None:
+    conn = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="real_time_quote",
+                    description="latest trade",
+                    parameters=[
+                        NeedParameter(
+                            name="ticker",
+                            description="ticker",
+                            type="str",
+                            required=True,
+                        )
+                    ],
+                    shape="dict",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    llm = _StubLlm(
+        by_need={
+            "real_time_quote": {
+                "tool_name": "get_quote",
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": "upper"}},
+                "constants": {},
+            }
+        }
+    )
+
+    proposals = await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="macro_research", llm_client=llm
+    )
+
+    assert len(proposals) == 1
+    p = proposals[0]
+    assert p.department_id == "macro_research"
+    assert p.need_id == "real_time_quote"
+    assert p.connector_id == conn.id
+    assert p.unsatisfiable is False
+    assert p.proposed_spec["tool_name"] == "get_quote"
+
+
+@pytest.mark.asyncio
+async def test_skips_connectors_whose_category_does_not_overlap(
+    engine: Engine, db_session: DBSession
+) -> None:
+    # Financial connector — but dept wants only news/social.
+    _seed_connector(db_session, category="financial")
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "retail_sentiment": [
+                RunnerNeed(
+                    id="reddit_posts",
+                    description="posts",
+                    parameters=[],
+                    shape="list",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"retail_sentiment": ({Category.SOCIAL}, set())}
+    )
+    llm = _StubLlm()
+
+    proposals = await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="retail_sentiment", llm_client=llm
+    )
+
+    # No overlapping connector -> single unsatisfiable proposal, no LLM call.
+    assert len(proposals) == 1
+    assert proposals[0].unsatisfiable is True
+    assert proposals[0].connector_id is None
+    assert llm.calls == []
+
+
+@pytest.mark.asyncio
+async def test_picks_first_connector_that_resolves(
+    engine: Engine, db_session: DBSession
+) -> None:
+    """Two financial connectors both match the dept. The first to produce a
+    resolvable spec is picked. If the first errors out, fall through to the next."""
+    conn_a = _seed_connector(
+        db_session,
+        provider_id="connector_a",
+        cached_tools=[
+            {
+                "name": "tool_a",
+                "description": "A",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"sym": {"type": "string"}},
+                },
+            }
+        ],
+    )
+    conn_b = _seed_connector(
+        db_session,
+        provider_id="connector_b",
+        cached_tools=[
+            {
+                "name": "tool_b",
+                "description": "B",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                },
+            }
+        ],
+    )
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="quote",
+                    parameters=[
+                        NeedParameter(
+                            name="ticker",
+                            description="t",
+                            type="str",
+                            required=True,
+                        )
+                    ],
+                    shape="dict",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+
+    # Per-call payloads keyed by call index. First connector picks `tool_a` (valid),
+    # so we should never reach the second connector.
+    class _OrderedLlm:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate_json(self, *, prompt: str) -> dict[str, Any]:
+            self.calls += 1
+            if self.calls == 1:
+                return {
+                    "tool_name": "tool_a",
+                    "param_bindings": {"ticker": {"to_arg": "sym", "transform": None}},
+                    "constants": {},
+                }
+            return {
+                "tool_name": "tool_b",
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+                "constants": {},
+            }
+
+    llm = _OrderedLlm()
+    proposals = await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="macro_research", llm_client=llm
+    )
+
+    assert len(proposals) == 1
+    p = proposals[0]
+    assert p.connector_id == conn_a.id
+    assert p.proposed_spec["tool_name"] == "tool_a"
+    # Second connector untouched when first succeeds.
+    assert llm.calls == 1
+    _ = conn_b
+
+
+@pytest.mark.asyncio
+async def test_falls_through_to_next_connector_on_resolver_error(
+    engine: Engine, db_session: DBSession
+) -> None:
+    conn_a = _seed_connector(
+        db_session,
+        provider_id="connector_a",
+        cached_tools=[
+            {
+                "name": "tool_a",
+                "description": "A",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"sym": {"type": "string"}},
+                },
+            }
+        ],
+    )
+    conn_b = _seed_connector(
+        db_session,
+        provider_id="connector_b",
+        cached_tools=[
+            {
+                "name": "tool_b",
+                "description": "B",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                },
+            }
+        ],
+    )
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="quote",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+
+    class _OrderedLlm:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def generate_json(self, *, prompt: str) -> dict[str, Any]:
+            self.calls += 1
+            if self.calls == 1:
+                # Picks a tool that doesn't exist in connector A's inventory ->
+                # ResolverError, service should try connector B.
+                return {
+                    "tool_name": "nonexistent",
+                    "param_bindings": {},
+                    "constants": {},
+                }
+            return {
+                "tool_name": "tool_b",
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+                "constants": {},
+            }
+
+    llm = _OrderedLlm()
+    proposals = await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="macro_research", llm_client=llm
+    )
+
+    assert len(proposals) == 1
+    assert proposals[0].connector_id == conn_b.id
+    assert proposals[0].proposed_spec["tool_name"] == "tool_b"
+    assert llm.calls == 2
+    _ = conn_a
+
+
+@pytest.mark.asyncio
+async def test_unsatisfiable_when_all_connectors_fail(
+    engine: Engine, db_session: DBSession
+) -> None:
+    _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="exotic",
+                    description="not in inventory",
+                    parameters=[],
+                    shape="list",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    # LLM picks a tool name nothing in inventory has.
+    llm = _StubLlm(
+        by_need={"exotic": {"tool_name": "wat", "param_bindings": {}, "constants": {}}}
+    )
+
+    proposals = await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="macro_research", llm_client=llm
+    )
+
+    assert len(proposals) == 1
+    p = proposals[0]
+    assert p.unsatisfiable is True
+    assert p.connector_id is None
+    assert p.error is not None
+
+
+@pytest.mark.asyncio
+async def test_caches_proposals_per_department(
+    engine: Engine, db_session: DBSession
+) -> None:
+    conn = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="real_time_quote",
+                    description="t",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    llm = _StubLlm(
+        by_need={
+            "real_time_quote": {
+                "tool_name": "get_quote",
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+                "constants": {},
+            }
+        }
+    )
+
+    await runner_specs_service.propose_specs_for_department(
+        db_session, department_id="macro_research", llm_client=llm
+    )
+    cached = runner_specs_service.get_dept_proposed_specs("macro_research")
+
+    assert len(cached) == 1
+    assert cached[0].connector_id == conn.id
