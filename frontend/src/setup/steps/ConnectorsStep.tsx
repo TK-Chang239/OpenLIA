@@ -83,6 +83,7 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
         secretKeys: detail.secret_keys,
         sourceRepoUrl: detail.source_repo_url ?? null,
         sourceRepoRevision: detail.source_repo_revision ?? null,
+        groundingPaths: detail.grounding_paths ?? null,
         openapiUrl: detail.openapi_url ?? null,
       });
       setAdding(false);

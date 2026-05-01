@@ -42,6 +42,18 @@ class ResolverError(RuntimeError):
     """Raised when the LLM proposal fails the validation gate."""
 
 
+class UnsatisfiableNeed(ResolverError):
+    """Raised when the LLM declares no covering tool/slug exists.
+
+    Carries the model's stated `reason` so callers can surface it in the UI
+    instead of swallowing it inside an opaque error string.
+    """
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"unsatisfiable: {reason}")
+        self.reason = reason
+
+
 @runtime_checkable
 class LlmClient(Protocol):
     """Minimal contract for the wizard-time adapter LLM call.
@@ -245,7 +257,7 @@ async def resolve_callable_spec(
         raise ResolverError("LLM response was not a JSON object")
     if raw.get("unsatisfiable") is True:
         reason = raw.get("reason") or "no covering tool/slug found"
-        raise ResolverError(f"unsatisfiable: {reason}")
+        raise UnsatisfiableNeed(reason)
 
     tool_name = raw.get("tool_name")
     method = raw.get("method")
@@ -324,5 +336,6 @@ async def resolve_callable_spec(
 __all__ = [
     "LlmClient",
     "ResolverError",
+    "UnsatisfiableNeed",
     "resolve_callable_spec",
 ]

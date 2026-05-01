@@ -54,6 +54,7 @@ class ConnectorCreate(BaseModel):
     secrets: dict[str, str] | None = None
     source_repo_url: str | None = None
     source_repo_revision: str | None = None
+    grounding_paths: list[str] | None = None
     openapi_url: str | None = None
 
 
@@ -188,6 +189,7 @@ class ConnectorDetail(ConnectorOut):
     secret_keys: list[str]
     source_repo_url: str | None = None
     source_repo_revision: str | None = None
+    grounding_paths: list[str] | None = None
     openapi_url: str | None = None
     grounding_status: str = "none"
     cached_repo_commit_sha: str | None = None
@@ -215,6 +217,7 @@ def _to_detail(row: Any) -> ConnectorDetail:
         secret_keys=sorted((row.secrets or {}).keys()),
         source_repo_url=row.source_repo_url,
         source_repo_revision=row.source_repo_revision,
+        grounding_paths=row.grounding_paths,
         openapi_url=row.openapi_url,
         grounding_status=row.grounding_status or "none",
         cached_repo_commit_sha=row.cached_repo_commit_sha,
@@ -326,6 +329,7 @@ def build_connectors_router(
             secrets=body.secrets,
             source_repo_url=body.source_repo_url,
             source_repo_revision=body.source_repo_revision,
+            grounding_paths=body.grounding_paths,
             openapi_url=body.openapi_url,
         )
         return _to_out(row)
@@ -359,6 +363,7 @@ def build_connectors_router(
             secrets=body.secrets,
             source_repo_url=body.source_repo_url,
             source_repo_revision=body.source_repo_revision,
+            grounding_paths=body.grounding_paths,
             openapi_url=body.openapi_url,
         )
         if row is None:

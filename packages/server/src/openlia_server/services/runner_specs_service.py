@@ -153,6 +153,7 @@ class ProposedSpec:
     error: str | None
     connector_id: str | None = None
     unsatisfiable: bool = False
+    reason: str | None = None
 
 
 _PROPOSALS: dict[str, list[ProposedSpec]] = {}
@@ -434,12 +435,14 @@ async def _resolve_one_need(
     collect every connector's spec so the wizard can show alternatives. If
     no connector resolves, returns a single `unsatisfiable=True` placeholder.
     """
+    from openlia.connectors.adapter import UnsatisfiableNeed
     from openlia.llm.types import ToolCall
 
     from openlia_server.services import grounding_service
 
     candidates: list[ProposedSpec] = []
     last_error: str | None = None
+    per_connector_reasons: list[tuple[str, str]] = []
     for row in in_scope:
         access_mode, inventory, instance_factory = _select_access_mode_and_inventory(row)
         if access_mode is None:
@@ -467,9 +470,10 @@ async def _resolve_one_need(
                 client = llm_client_factory(
                     clone_path if clone_path.exists() else None,
                     tool_call_listener=_listener,
+                    grounding_paths=row.grounding_paths,
                 )
             except TypeError:
-                # Older single-arg factories (used in tests) — drop listener.
+                # Older factories (used in tests) — drop optional kwargs.
                 client = llm_client_factory(clone_path if clone_path.exists() else None)
         else:
             assert llm_client is not None
@@ -482,8 +486,13 @@ async def _resolve_one_need(
                 instance_factory=instance_factory,
                 llm_client=client,
             )
+        except UnsatisfiableNeed as exc:
+            last_error = str(exc)
+            per_connector_reasons.append((row.id, exc.reason))
+            continue
         except (ResolverError, AgenticResolverError) as exc:
             last_error = str(exc)
+            per_connector_reasons.append((row.id, str(exc)))
             continue
         prepared = _prepare_connector(row)
         try:
@@ -513,6 +522,10 @@ async def _resolve_one_need(
 
     if candidates:
         return candidates
+    aggregated_reason = (
+        "; ".join(f"{cid[:8]}: {r}" for cid, r in per_connector_reasons)
+        or None
+    )
     return [
         ProposedSpec(
             department_id=department_id,
@@ -524,6 +537,7 @@ async def _resolve_one_need(
             error=last_error,
             connector_id=None,
             unsatisfiable=True,
+            reason=aggregated_reason,
         )
     ]
 

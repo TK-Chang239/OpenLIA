@@ -247,6 +247,7 @@ async def create_connector(
     secrets: dict[str, str] | None = None,
     source_repo_url: str | None = None,
     source_repo_revision: str | None = None,
+    grounding_paths: list[str] | None = None,
     openapi_url: str | None = None,
 ) -> Connector:
     cid = str(uuid.uuid4())
@@ -262,6 +263,7 @@ async def create_connector(
         status=ConnectorStatus.PENDING.value,
         source_repo_url=source_repo_url,
         source_repo_revision=source_repo_revision,
+        grounding_paths=grounding_paths,
         openapi_url=openapi_url,
     )
     session.add(row)
@@ -306,6 +308,7 @@ async def update_connector(
     secrets: dict[str, str] | None,
     source_repo_url: str | None = None,
     source_repo_revision: str | None = None,
+    grounding_paths: list[str] | None = None,
     openapi_url: str | None = None,
 ) -> Connector | None:
     row = session.get(Connector, connector_id)
@@ -319,6 +322,7 @@ async def update_connector(
     row.launch = launch_json
     row.source_repo_url = source_repo_url
     row.source_repo_revision = source_repo_revision
+    row.grounding_paths = grounding_paths
     row.openapi_url = openapi_url
     if secrets is not None:
         row.secrets = secrets

@@ -190,6 +190,7 @@ def make_agentic_resolver_factory(
         connector_root: Path | None,
         *,
         tool_call_listener: Callable[[ToolCall], None] | None = None,
+        grounding_paths: list[str] | None = None,
     ) -> LlmClient:
         db = db_session_factory()
         try:
@@ -200,6 +201,7 @@ def make_agentic_resolver_factory(
             provider=provider,
             connector_root=connector_root,
             tool_call_listener=tool_call_listener,
+            grounding_paths=grounding_paths,
         )
 
     return _factory

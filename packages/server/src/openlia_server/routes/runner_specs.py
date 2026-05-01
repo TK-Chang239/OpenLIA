@@ -57,6 +57,7 @@ class ProposedSpecOut(BaseModel):
     error: str | None
     connector_id: str | None = None
     unsatisfiable: bool = False
+    reason: str | None = None
 
 
 class ApprovalOut(BaseModel):
