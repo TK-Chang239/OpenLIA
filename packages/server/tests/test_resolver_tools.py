@@ -14,6 +14,7 @@ from openlia_server.services.resolver_tools import (
     ResolverToolError,
     list_directory,
     read_file,
+    search_files,
 )
 
 
@@ -67,6 +68,43 @@ def test_read_file_rejects_directory(tmp_path: Path) -> None:
 
     with pytest.raises(ResolverToolError):
         read_file(tmp_path, "tools")
+
+
+def test_search_files_finds_pattern_with_line_numbers(tmp_path: Path) -> None:
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "macro.py").write_text(
+        "import x\n"
+        "ALLOWED_INDICATORS = {\n"
+        "    'gdp_current_usd',\n"
+        "    'debt_percent_gdp',\n"
+        "}\n"
+    )
+    (tmp_path / "tools" / "news.py").write_text("# unrelated\n")
+
+    matches = search_files(tmp_path, pattern=r"ALLOWED_INDICATORS")
+
+    assert len(matches) == 1
+    hit = matches[0]
+    assert hit["path"] == "tools/macro.py"
+    assert hit["line_number"] == 2
+    assert "ALLOWED_INDICATORS" in hit["line"]
+
+
+def test_search_files_respects_glob_filter(tmp_path: Path) -> None:
+    (tmp_path / "tools").mkdir()
+    (tmp_path / "tools" / "macro.py").write_text("MARKER\n")
+    (tmp_path / "tools" / "macro.txt").write_text("MARKER\n")
+
+    matches = search_files(tmp_path, pattern="MARKER", glob="**/*.py")
+
+    assert [m["path"] for m in matches] == ["tools/macro.py"]
+
+
+def test_search_files_rejects_invalid_regex(tmp_path: Path) -> None:
+    (tmp_path / "x.py").write_text("ok\n")
+
+    with pytest.raises(ResolverToolError):
+        search_files(tmp_path, pattern="[unclosed")
 
 
 def test_read_file_truncates_at_max_bytes(tmp_path: Path) -> None:
