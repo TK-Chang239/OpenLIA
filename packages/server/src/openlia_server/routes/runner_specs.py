@@ -152,7 +152,8 @@ def build_runner_specs_router(
 def build_dept_proposed_specs_router(
     *,
     db_session_factory: Callable[[], DBSession],
-    llm_client_factory: Callable[[], LlmClient],
+    llm_client_factory: Callable[[], LlmClient] | None = None,
+    agentic_factory: Callable[[Any], LlmClient] | None = None,
 ) -> APIRouter:
     """Per-department resolve endpoints (Phase B step 3).
 
@@ -209,7 +210,20 @@ def build_dept_proposed_specs_router(
         db: DBSession = Depends(session_dep),
     ) -> list[ProposedSpecOut]:
         try:
-            llm_client = llm_client_factory()
+            if agentic_factory is not None:
+                proposals = await runner_specs_service.propose_specs_for_department(
+                    db,
+                    department_id=department_id,
+                    llm_client_factory=agentic_factory,
+                )
+            else:
+                assert llm_client_factory is not None
+                llm_client = llm_client_factory()
+                proposals = await runner_specs_service.propose_specs_for_department(
+                    db,
+                    department_id=department_id,
+                    llm_client=llm_client,
+                )
         except AdapterLlmNotConfigured as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -218,11 +232,6 @@ def build_dept_proposed_specs_router(
                     "message": str(exc),
                 },
             ) from exc
-        proposals = await runner_specs_service.propose_specs_for_department(
-            db,
-            department_id=department_id,
-            llm_client=llm_client,
-        )
         return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
 
     return router

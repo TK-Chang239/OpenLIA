@@ -488,9 +488,11 @@ def create_app(
     )
     from openlia_server.services.adapter_llm_client import (
         make_adapter_llm_client_factory,
+        make_agentic_resolver_factory,
     )
 
     _adapter_factory = make_adapter_llm_client_factory(factory)
+    _agentic_factory = make_agentic_resolver_factory(factory)
     app.include_router(
         build_runner_specs_router(
             db_session_factory=factory,
@@ -500,7 +502,7 @@ def create_app(
     app.include_router(
         build_dept_proposed_specs_router(
             db_session_factory=factory,
-            llm_client_factory=_adapter_factory,
+            agentic_factory=_agentic_factory,
         )
     )
     app.include_router(build_runner_specs_list_router(db_session_factory=factory))

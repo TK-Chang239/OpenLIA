@@ -58,6 +58,25 @@ def set_dept_health_hook(hook: Callable[[Session], None] | None) -> None:
     _invalidation_hook = hook
 
 
+def _trigger_grounding_clone(
+    session: Session, connector_id: str, *, force: bool = False
+) -> None:
+    """Best-effort: clone the connector's grounding repo on save.
+
+    Failures land on the row as `grounding_status='failed'` (the service
+    handles that), so we never raise out of the connector save path.
+    """
+    try:
+        from openlia_server.services import grounding_service
+
+        if force:
+            grounding_service.resync_clone(session, connector_id=connector_id)
+        else:
+            grounding_service.ensure_clone(session, connector_id=connector_id)
+    except Exception:
+        log.exception("grounding clone trigger failed for connector %s", connector_id)
+
+
 def _invalidate(session: Session) -> None:
     if _invalidation_hook is None:
         return
@@ -263,6 +282,8 @@ async def create_connector(
 
     session.commit()
     session.refresh(row)
+    if row.source_repo_url:
+        _trigger_grounding_clone(session, row.id)
     _invalidate(session)
     return row
 
@@ -316,6 +337,8 @@ async def update_connector(
         row.last_error = result.error
     session.commit()
     session.refresh(row)
+    if row.source_repo_url:
+        _trigger_grounding_clone(session, row.id, force=True)
     _invalidate(session)
     return row
 

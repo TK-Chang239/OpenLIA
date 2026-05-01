@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from openlia.connectors.adapter import LlmClient, ResolverError
@@ -131,8 +132,75 @@ def make_adapter_llm_client_factory(
     return _factory
 
 
+# Agentic resolver: prefer the thinking tier so the LLM has the headroom
+# to navigate large repos via filesystem tools (per the grounding plan).
+_AGENTIC_TIERS: tuple[ModelTier, ...] = (
+    ModelTier.THINKING,
+    ModelTier.EVERYDAY,
+    ModelTier.QUICK,
+)
+
+
+def _resolve_provider(
+    db: DBSession, tiers: tuple[ModelTier, ...]
+) -> LLMProvider:
+    registry = SQLModelRegistry(db)
+    last_error: TierNotConfiguredError | None = None
+    for tier in tiers:
+        try:
+            resolved = resolve(
+                department_id=_ADAPTER_DEPARTMENT_ID,
+                registry=registry,
+                user_id=None,
+                tier_override=tier,
+            )
+        except TierNotConfiguredError as exc:
+            last_error = exc
+            continue
+        return build_adapter(
+            kind=resolved.provider_kind,
+            credentials=resolved.credentials,
+            model=resolved.model_ref,
+            capabilities=resolved.capabilities,
+        )
+    raise AdapterLlmNotConfigured(
+        "No LLM model is configured. Add a provider and model in "
+        "Settings → Models before running connector resolve."
+    ) from last_error
+
+
+def make_agentic_resolver_factory(
+    db_session_factory: Callable[[], DBSession],
+) -> Callable[[Path | None], LlmClient]:
+    """Build the per-connector factory the dept resolve route hands the service.
+
+    Each invocation opens a fresh DB session (so newly-configured models
+    take effect immediately), resolves a thinking-tier `LLMProvider`, and
+    wraps it in an `AgenticResolverClient` scoped to the connector's
+    grounding clone path. With `connector_root=None` the agentic loop
+    degrades to a single-shot JSON call.
+    """
+    from openlia_server.services.agentic_resolver_client import (
+        AgenticResolverClient,
+    )
+
+    def _factory(connector_root: Path | None) -> LlmClient:
+        db = db_session_factory()
+        try:
+            provider = _resolve_provider(db, _AGENTIC_TIERS)
+        finally:
+            db.close()
+        return AgenticResolverClient(
+            provider=provider,
+            connector_root=connector_root,
+        )
+
+    return _factory
+
+
 __all__ = [
     "AdapterLlmJsonClient",
     "AdapterLlmNotConfigured",
     "make_adapter_llm_client_factory",
+    "make_agentic_resolver_factory",
 ]
