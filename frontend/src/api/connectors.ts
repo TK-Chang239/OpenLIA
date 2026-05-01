@@ -168,6 +168,19 @@ export const resolveDeptProposedSpecs = (departmentId: string) =>
     { method: "POST" },
   );
 
+export interface ResolveEvent {
+  type: "tool_call";
+  need_id: string;
+  connector_id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export const listDeptResolveEvents = (departmentId: string) =>
+  fetchJson<ResolveEvent[]>(
+    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/events`,
+  );
+
 export const resolveDeptNeed = (departmentId: string, needId: string) =>
   fetchJson<ProposedSpec>(
     `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/${encodeURIComponent(needId)}/resolve`,

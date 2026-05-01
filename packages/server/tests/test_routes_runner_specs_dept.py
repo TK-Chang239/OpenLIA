@@ -221,6 +221,26 @@ def test_approve_dept_spec_400_for_unsatisfiable(
     assert resp.status_code == 400
 
 
+def test_events_endpoint_returns_per_dept_resolve_log(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    runner_specs_service._RESOLVE_EVENTS["macro_research"] = [
+        {
+            "type": "tool_call",
+            "need_id": "quote",
+            "connector_id": "c1",
+            "name": "read_file",
+            "arguments": {"path": "tools.py"},
+        }
+    ]
+    client = _client(db_session_factory)
+    resp = client.get("/api/departments/macro_research/proposed-specs/events")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 1
+    assert body[0]["name"] == "read_file"
+
+
 def test_re_resolve_single_need_endpoint(
     engine: Engine, db_session_factory, db_session: DBSession
 ) -> None:

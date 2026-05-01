@@ -59,24 +59,30 @@ describe("DeptResolvePanel", () => {
   });
 
   it("clicking Resolve posts to the resolve endpoint and shows results", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResp([])); // initial GET
-    fetchMock.mockResolvedValueOnce(
-      jsonResp([
-        {
-          department_id: "macro_research",
-          need_id: "geopolitical_news",
-          proposed_spec: { tool_name: "get_news" },
-          canary_value: null,
-          canary_ok: false,
-          shape_match: false,
-          error: null,
-          connector_id: "c2",
-          unsatisfiable: false,
-        },
-      ]),
-    );
-    // Subsequent listConnectors call for snapshot.
-    fetchMock.mockResolvedValue(connectorListResp(["c2"]));
+    fetchMock.mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.endsWith("/proposed-specs")) return Promise.resolve(jsonResp([]));
+      if (u.endsWith("/proposed-specs/resolve")) {
+        return Promise.resolve(
+          jsonResp([
+            {
+              department_id: "macro_research",
+              need_id: "geopolitical_news",
+              proposed_spec: { tool_name: "get_news" },
+              canary_value: null,
+              canary_ok: false,
+              shape_match: false,
+              error: null,
+              connector_id: "c2",
+              unsatisfiable: false,
+            },
+          ]),
+        );
+      }
+      if (u.endsWith("/proposed-specs/events")) return Promise.resolve(jsonResp([]));
+      if (u === "/api/connectors") return Promise.resolve(connectorListResp(["c2"]));
+      throw new Error(`unmocked fetch: ${u}`);
+    });
 
     render(
       <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
@@ -152,6 +158,56 @@ describe("DeptResolvePanel", () => {
       expect(init.method).toBe("POST");
       expect(init.body).toBe(JSON.stringify({ need_id: "real_time_quote" }));
     });
+  });
+
+  it("renders streamed tool-call events while resolving", async () => {
+    // Initial GET (cached proposals) — none yet.
+    fetchMock.mockResolvedValueOnce(jsonResp([]));
+    // The Resolve POST takes time; resolve(...) fires the resolve, but the
+    // panel polls events meanwhile.
+    let resolveResolve: ((v: Response) => void) | null = null;
+    const resolvePending = new Promise<Response>((res) => {
+      resolveResolve = res;
+    });
+    fetchMock.mockImplementationOnce((url: string) => {
+      // POST .../resolve
+      expect(String(url)).toContain("/proposed-specs/resolve");
+      return resolvePending;
+    });
+    // Subsequent calls: events poll, then listConnectors after resolve.
+    fetchMock.mockResolvedValue(
+      jsonResp([
+        {
+          type: "tool_call",
+          need_id: "quote",
+          connector_id: "c1",
+          name: "read_file",
+          arguments: { path: "app/tools/get_macro_indicator.py" },
+        },
+      ]),
+    );
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /resolve macro research/i }),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /resolve macro research/i }),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/get_macro_indicator\.py/),
+      ).toBeInTheDocument(),
+    );
+
+    // Let the resolve POST finish so React effects unwind cleanly.
+    resolveResolve!(jsonResp([]));
   });
 
   it("clicking per-need Re-resolve calls the per-need endpoint", async () => {

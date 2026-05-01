@@ -171,20 +171,28 @@ def _resolve_provider(
 
 def make_agentic_resolver_factory(
     db_session_factory: Callable[[], DBSession],
-) -> Callable[[Path | None], LlmClient]:
+) -> Callable[..., LlmClient]:
     """Build the per-connector factory the dept resolve route hands the service.
 
     Each invocation opens a fresh DB session (so newly-configured models
     take effect immediately), resolves a thinking-tier `LLMProvider`, and
     wraps it in an `AgenticResolverClient` scoped to the connector's
     grounding clone path. With `connector_root=None` the agentic loop
-    degrades to a single-shot JSON call.
+    degrades to a single-shot JSON call. An optional `tool_call_listener`
+    is forwarded to the client so the wizard can stream a live tool-call
+    log to the user.
     """
+    from openlia.llm.types import ToolCall
+
     from openlia_server.services.agentic_resolver_client import (
         AgenticResolverClient,
     )
 
-    def _factory(connector_root: Path | None) -> LlmClient:
+    def _factory(
+        connector_root: Path | None,
+        *,
+        tool_call_listener: Callable[[ToolCall], None] | None = None,
+    ) -> LlmClient:
         db = db_session_factory()
         try:
             provider = _resolve_provider(db, _AGENTIC_TIERS)
@@ -193,6 +201,7 @@ def make_agentic_resolver_factory(
         return AgenticResolverClient(
             provider=provider,
             connector_root=connector_root,
+            tool_call_listener=tool_call_listener,
         )
 
     return _factory

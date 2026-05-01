@@ -3,9 +3,11 @@ import {
   approveDeptSpec,
   listConnectors,
   listDeptProposedSpecs,
+  listDeptResolveEvents,
   resolveDeptNeed,
   resolveDeptProposedSpecs,
   type ProposedSpec,
+  type ResolveEvent,
 } from "../../api/connectors";
 import { refreshDeptHealth } from "../../store/dept-health";
 
@@ -59,6 +61,7 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState<boolean>(false);
+  const [events, setEvents] = useState<ResolveEvent[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +99,15 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
   const onResolve = async () => {
     setLoading(true);
     setError(null);
+    setEvents([]);
+    let pollHandle: ReturnType<typeof setInterval> | null = null;
+    pollHandle = setInterval(() => {
+      listDeptResolveEvents(departmentId)
+        .then((rows) => setEvents(rows))
+        .catch(() => {
+          /* polling is best-effort */
+        });
+    }, 600);
     try {
       const rows = await resolveDeptProposedSpecs(departmentId);
       setProposals(rows);
@@ -112,6 +124,14 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Resolve failed.");
     } finally {
+      if (pollHandle !== null) clearInterval(pollHandle);
+      // One last fetch so the final tool call lands even if polling missed it.
+      try {
+        const final = await listDeptResolveEvents(departmentId);
+        setEvents(final);
+      } catch {
+        /* ignore */
+      }
       setLoading(false);
     }
   };
@@ -159,6 +179,27 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
         <p role="alert" className="text-xs text-feedback-error">
           {error}
         </p>
+      ) : null}
+
+      {events.length > 0 ? (
+        <details
+          className="rounded-md border border-border-subtle bg-bg-base p-2 text-xs"
+          open={loading}
+        >
+          <summary className="cursor-pointer text-text-secondary">
+            Tool calls ({events.length})
+          </summary>
+          <ul className="mt-1 space-y-0.5 font-mono text-text-secondary">
+            {events.slice(-20).map((e, idx) => (
+              <li key={idx}>
+                {e.name}({(JSON.stringify(e.arguments ?? {}) ?? "{}").slice(0, 100)})
+                {e.need_id ? (
+                  <span className="ml-1 text-text-tertiary">→ {e.need_id}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
 
       {stale ? (

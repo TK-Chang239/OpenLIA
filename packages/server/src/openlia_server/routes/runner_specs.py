@@ -166,6 +166,19 @@ def build_dept_proposed_specs_router(
     session_dep = make_session_dependency(db_session_factory)
 
     @router.get(
+        "/{department_id}/proposed-specs/events",
+        response_model=list[dict[str, Any]],
+    )
+    def list_resolve_events(department_id: str) -> list[dict[str, Any]]:
+        """Live tool-call log for an in-flight (or just-completed) resolve.
+
+        The frontend polls this while the spinner is up so the user can
+        watch which files the agentic LLM is reading instead of staring
+        at a generic loading state.
+        """
+        return runner_specs_service.get_resolve_events(department_id)
+
+    @router.get(
         "/{department_id}/proposed-specs",
         response_model=list[ProposedSpecOut],
     )

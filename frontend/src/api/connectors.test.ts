@@ -110,6 +110,17 @@ describe("api/connectors", () => {
     );
   });
 
+  it("listDeptResolveEvents GETs per-dept event log", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse([]));
+    await connectors.listDeptResolveEvents("macro_research");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/macro_research/proposed-specs/events",
+      expect.anything(),
+    );
+  });
+
   it("resolveDeptNeed POSTs to per-need resolve endpoint", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")
