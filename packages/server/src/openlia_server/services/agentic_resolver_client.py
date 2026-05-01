@@ -70,9 +70,21 @@ class AgenticResolverClient:
                     messages=conversation,
                     system=(
                         "Return ONLY a JSON object as your final answer. "
-                        "Use the filesystem tools to read provider source "
-                        "before deciding constants whenever the inventory "
-                        "doesn't expose enum slugs directly."
+                        "When the inventory doesn't expose enum slugs "
+                        "directly, use the filesystem tools to read the "
+                        "provider's source before choosing constants.\n\n"
+                        "STRICT RULE for constant values: every string "
+                        "constant must be copied VERBATIM from a literal "
+                        "you saw in the source code (e.g. an item in a "
+                        "set/list/dict the server uses to validate input). "
+                        "Do not paraphrase, rename, qualify, or merge "
+                        "terms from documentation. If a slug appears only "
+                        "in prose, comments, or a docstring -- not in a "
+                        "validator collection -- it is NOT acceptable.\n\n"
+                        "If after using the tools you cannot identify a "
+                        "verbatim slug that satisfies the need, return "
+                        "{\"unsatisfiable\": true, \"reason\": \"<short "
+                        "explanation>\"} instead of guessing."
                     ),
                     tools=tools,
                     response_format=response_format,

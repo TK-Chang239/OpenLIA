@@ -60,6 +60,25 @@ def _final(text: str, *, tool_calls: list[ToolCall] | None = None) -> LLMRespons
 
 
 @pytest.mark.asyncio
+async def test_system_prompt_demands_verbatim_constants_when_tools_bound(
+    tmp_path: Path,
+) -> None:
+    """When tools are bound, the system prompt must instruct the model to copy
+    enum slugs verbatim from source rather than synthesize plausible variants.
+    Without this, a grounded LLM can still emit doc-friendly names that fail
+    the connector's runtime validator (`government_debt_percent_gdp` instead
+    of the real `debt_percent_gdp`)."""
+    provider = FakeProvider([_final("{}")])
+    client = AgenticResolverClient(provider=provider, connector_root=tmp_path)
+
+    await client.generate_json(prompt="resolve x")
+
+    system = provider.requests[0].system or ""
+    assert "verbatim" in system.lower()
+    assert "unsatisfiable" in system.lower()
+
+
+@pytest.mark.asyncio
 async def test_returns_parsed_json_when_no_tool_calls(tmp_path: Path) -> None:
     provider = FakeProvider([_final('{"need_id": "debt_gdp", "tool_name": "x"}')])
     client = AgenticResolverClient(provider=provider, connector_root=None)
