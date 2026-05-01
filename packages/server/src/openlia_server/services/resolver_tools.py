@@ -25,8 +25,11 @@ def _resolve_under_root(connector_root: Path, path: str) -> Path:
     """
     if Path(path).is_absolute():
         raise ResolverToolError(f"absolute path not allowed: {path!r}")
-    root_resolved = connector_root.resolve(strict=True)
-    candidate = (connector_root / path).resolve(strict=True)
+    try:
+        root_resolved = connector_root.resolve(strict=True)
+        candidate = (connector_root / path).resolve(strict=True)
+    except (FileNotFoundError, OSError) as exc:
+        raise ResolverToolError(f"path not found: {path!r}") from exc
     try:
         candidate.relative_to(root_resolved)
     except ValueError as exc:
