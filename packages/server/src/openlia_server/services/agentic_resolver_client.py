@@ -59,14 +59,23 @@ class AgenticResolverClient:
     async def generate_json(self, *, prompt: str) -> dict[str, Any]:
         conversation: list[Message] = [Message(role="user", content=prompt)]
         tools = self._tool_schemas() if self._connector_root is not None else None
+        # `response_format=json_object` is incompatible with tool_use on most
+        # providers (OpenAI/OpenRouter reject the second turn). Only bind it
+        # when we're running single-shot.
+        response_format = ResponseFormat(kind="json_object") if tools is None else None
 
         for _ in range(self._max_turns):
             response = await self._provider.generate(
                 LLMRequest(
                     messages=conversation,
-                    system="Return ONLY a JSON object. No prose, no fences.",
+                    system=(
+                        "Return ONLY a JSON object as your final answer. "
+                        "Use the filesystem tools to read provider source "
+                        "before deciding constants whenever the inventory "
+                        "doesn't expose enum slugs directly."
+                    ),
                     tools=tools,
-                    response_format=ResponseFormat(kind="json_object"),
+                    response_format=response_format,
                     max_tokens=2048,
                     temperature=0.0,
                 )
@@ -74,12 +83,22 @@ class AgenticResolverClient:
             if not response.tool_calls:
                 return self._parse_final(response.text)
 
+            # Replay the assistant turn that emitted the tool calls so the
+            # next request preserves the protocol-required pairing.
+            conversation.append(
+                Message(
+                    role="assistant",
+                    content=response.text or "",
+                    tool_calls=tuple(response.tool_calls),
+                )
+            )
             for call in response.tool_calls:
                 payload = self._dispatch(call)
                 conversation.append(
                     Message(
                         role="tool",
-                        content=json.dumps({"call_id": call.id, "result": payload}),
+                        content=json.dumps(payload),
+                        tool_call_id=call.id,
                     )
                 )
 
