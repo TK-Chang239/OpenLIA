@@ -58,9 +58,7 @@ def set_dept_health_hook(hook: Callable[[Session], None] | None) -> None:
     _invalidation_hook = hook
 
 
-def _trigger_grounding_clone(
-    session: Session, connector_id: str, *, force: bool = False
-) -> None:
+def _trigger_grounding_clone(session: Session, connector_id: str, *, force: bool = False) -> None:
     """Best-effort: clone the connector's grounding repo on save.
 
     Failures land on the row as `grounding_status='failed'` (the service
@@ -130,9 +128,9 @@ def _format_list_tools_error(mode: dict[str, Any], exc: Exception) -> str:
         f"It is not installed in this server's Python environment ({sys.executable}).",
         "",
         "To fix:",
-        f"  1. Activate the server's Python environment.",
+        "  1. Activate the server's Python environment.",
         f"  2. Run:  pip install {install_target}",
-        f"  3. Restart the server, then click Validate again.",
+        "  3. Restart the server, then click Validate again.",
         "",
         f"Original error: {tb_text}",
     ]

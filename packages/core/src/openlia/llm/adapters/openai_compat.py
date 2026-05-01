@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 import httpx
 
 from openlia.llm.adapters._http import (
+    TRANSIENT_NETWORK_ERRORS,
     make_client,
     status_to_exception,
     wrap_httpx_error,

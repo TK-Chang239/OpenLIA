@@ -1,13 +1,9 @@
-"""Tests for the wizard-time proposed-specs endpoints + service.
+"""Tests for the per-connector wizard-time proposed-specs endpoints + service.
 
-Phase 6 Task 6.4. Covers:
-- empty-list response when Phase 8 dept-needs lookups are empty (default).
-- proposal generation when dept needs are seeded via the test helper.
+Covers:
+- empty-list response when no dept needs are registered.
+- proposal generation when dept needs/categories are seeded via the test helper.
 - approval persists a `runner_callable_specs` row and returns its id.
-
-The existing `test_routes_connectors.py` references pre-Phase-2 modules
-(MCPLaunchSpec, validate_connector) and is currently uncollectable; that
-breakage is expected and out of scope for Phase 6.
 """
 
 from __future__ import annotations
@@ -132,7 +128,7 @@ def _seed_connector(
 def test_proposed_specs_empty_when_no_dept_needs(
     engine: Engine, db_session_factory, db_session: DBSession
 ) -> None:
-    """Default state: Phase 8 stubs return [] -> resolve produces no proposals."""
+    """Default state: no dept needs registered -> resolve produces no proposals."""
     conn = _seed_connector(db_session)
     client = _client(db_session_factory)
 

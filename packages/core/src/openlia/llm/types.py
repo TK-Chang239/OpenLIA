@@ -41,7 +41,7 @@ class Message:
     # Set on role="assistant" messages that carry tool calls. Required for
     # multi-turn tool-use loops: the assistant message that emitted tool
     # calls must be replayed back to the model alongside the tool results.
-    tool_calls: tuple["ToolCall", ...] = field(default_factory=tuple)
+    tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
