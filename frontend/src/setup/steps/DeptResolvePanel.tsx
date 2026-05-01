@@ -385,6 +385,11 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
                       {c.error ? (
                         <p className="mt-0.5 text-feedback-error">{c.error}</p>
                       ) : null}
+                      {c.reason ? (
+                        <p className="mt-0.5 italic text-text-tertiary">
+                          {c.reason}
+                        </p>
+                      ) : null}
                       {!c.unsatisfiable && c.connector_id && !isApproved ? (
                         <div className="mt-1 flex items-center gap-2">
                           <button

@@ -53,11 +53,13 @@ class AgenticResolverClient:
         connector_root: Path | None,
         max_turns: int = 10,
         tool_call_listener: Callable[[ToolCall], None] | None = None,
+        grounding_paths: list[str] | None = None,
     ) -> None:
         self._provider = provider
         self._connector_root = connector_root
         self._max_turns = max_turns
         self._tool_call_listener = tool_call_listener
+        self._grounding_paths = grounding_paths or None
 
     async def generate_json(self, *, prompt: str) -> dict[str, Any]:
         conversation: list[Message] = [Message(role="user", content=prompt)]
@@ -231,14 +233,23 @@ class AgenticResolverClient:
             return {"error": "no grounding repo configured for this connector"}
         try:
             if call.name == "list_directory":
-                return list_directory(self._connector_root, call.arguments["path"])
+                return list_directory(
+                    self._connector_root,
+                    call.arguments["path"],
+                    grounding_paths=self._grounding_paths,
+                )
             if call.name == "read_file":
-                return read_file(self._connector_root, call.arguments["path"])
+                return read_file(
+                    self._connector_root,
+                    call.arguments["path"],
+                    grounding_paths=self._grounding_paths,
+                )
             if call.name == "search_files":
                 return search_files(
                     self._connector_root,
                     pattern=call.arguments["pattern"],
                     glob=call.arguments.get("glob", "**/*"),
+                    grounding_paths=self._grounding_paths,
                 )
             return {"error": f"unknown tool: {call.name!r}"}
         except ResolverToolError as exc:

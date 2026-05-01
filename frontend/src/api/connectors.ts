@@ -41,6 +41,7 @@ export interface ConnectorDetail extends ConnectorRow {
   secret_keys: string[];
   source_repo_url?: string | null;
   source_repo_revision?: string | null;
+  grounding_paths?: string[] | null;
   openapi_url?: string | null;
   grounding_status?: GroundingStatus;
   cached_repo_commit_sha?: string | null;
@@ -55,6 +56,7 @@ export interface CreateConnectorInput {
   secrets?: Record<string, string>;
   source_repo_url?: string | null;
   source_repo_revision?: string | null;
+  grounding_paths?: string[] | null;
   openapi_url?: string | null;
 }
 
@@ -68,6 +70,7 @@ export interface ProposedSpec {
   error: string | null;
   connector_id?: string | null;
   unsatisfiable?: boolean;
+  reason?: string | null;
 }
 
 export interface ApprovalOut {

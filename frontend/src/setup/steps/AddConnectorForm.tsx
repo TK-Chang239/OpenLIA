@@ -28,6 +28,7 @@ export interface EditingConnector {
   secretKeys: string[];
   sourceRepoUrl?: string | null;
   sourceRepoRevision?: string | null;
+  groundingPaths?: string[] | null;
   openapiUrl?: string | null;
 }
 
@@ -151,6 +152,9 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
   );
   const [openapiUrl, setOpenapiUrl] = useState<string>(
     editing?.openapiUrl ?? "",
+  );
+  const [groundingPathsRaw, setGroundingPathsRaw] = useState<string>(
+    (editing?.groundingPaths ?? []).join("\n"),
   );
 
   const [submitting, setSubmitting] = useState(false);
@@ -381,6 +385,13 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
           : {}),
         source_repo_url: sourceRepoUrl.trim() || null,
         source_repo_revision: sourceRepoRevision.trim() || null,
+        grounding_paths: (() => {
+          const parts = groundingPathsRaw
+            .split(/[\n,]/)
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          return parts.length > 0 ? parts : null;
+        })(),
         openapi_url: openapiUrl.trim() || null,
       };
       const row = isEditing
@@ -852,6 +863,21 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
             placeholder="https://example.com/openapi.json"
             className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm"
           />
+        </label>
+        <label className="block text-xs text-text-secondary">
+          Grounding paths (optional)
+          <textarea
+            value={groundingPathsRaw}
+            onChange={(e) => setGroundingPathsRaw(e.target.value)}
+            placeholder={"docs\nschemas\nREADME.md"}
+            rows={3}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 font-mono text-xs"
+          />
+          <span className="mt-1 block text-[11px] text-text-tertiary">
+            One path per line. Restricts the resolver's filesystem tools to
+            these files / dirs inside the cloned repo. Leave empty to expose
+            the whole clone.
+          </span>
         </label>
       </fieldset>
 

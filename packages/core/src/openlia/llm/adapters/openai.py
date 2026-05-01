@@ -37,7 +37,22 @@ def _to_openai_messages(req: LLMRequest) -> list[dict]:
     if req.system:
         out.append({"role": "system", "content": req.system})
     for m in req.messages:
-        out.append({"role": m.role, "content": m.content})
+        msg: dict = {"role": m.role, "content": m.content}
+        if m.role == "assistant" and m.tool_calls:
+            msg["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.name,
+                        "arguments": json.dumps(tc.arguments),
+                    },
+                }
+                for tc in m.tool_calls
+            ]
+        if m.role == "tool" and m.tool_call_id is not None:
+            msg["tool_call_id"] = m.tool_call_id
+        out.append(msg)
     return out
 
 
@@ -115,6 +130,8 @@ class OpenAIAdapter(LLMProvider):
                 "type": "json_schema",
                 "json_schema": request.response_format.json_schema,
             }
+        elif request.response_format and request.response_format.kind == "json_object":
+            payload["response_format"] = {"type": "json_object"}
 
         async def _post() -> dict:
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
