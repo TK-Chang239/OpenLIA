@@ -51,6 +51,17 @@ class NeedNotResolved(DispatchError):
     pass
 
 
+def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any:
+    """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged."""
+    for key in path:
+        if not isinstance(value, dict) or key not in value:
+            raise DispatchError(
+                f"result_path {path!r} missing key {key!r} for need {need_id!r}"
+            )
+        value = value[key]
+    return value
+
+
 @dataclass(frozen=True)
 class PreparedConnector:
     connector_id: str
@@ -206,15 +217,16 @@ class Dispatcher:
             tool_name = spec.tool_name
             if tool_name is None:
                 raise DispatchError(f"spec for need {spec.need_id!r} missing tool_name")
-            return await conn.transport.call_tool(tool_name, bound)
-
-        if spec.access_mode == "python_lib":
+            raw = await conn.transport.call_tool(tool_name, bound)
+        elif spec.access_mode == "python_lib":
             method = spec.method
             if method is None:
                 raise DispatchError(f"spec for need {spec.need_id!r} missing method")
             # The PythonLibTransport (Phase 5) handles instance instantiation
             # and method dispatch internally; we just hand it the method name
             # and bound kwargs.
-            return await conn.transport.call_tool(method, bound)
+            raw = await conn.transport.call_tool(method, bound)
+        else:
+            raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
 
-        raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
+        return _walk_result_path(raw, spec.result_path, need_id=spec.need_id)
