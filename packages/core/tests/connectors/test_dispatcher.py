@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from openlia.connectors.dispatch import (
     Dispatcher,
@@ -228,3 +230,110 @@ def test_callable_specs_for_filters_by_department():
     )
     out = d.callable_specs_for("macro_research")
     assert {s.need_id for s in out} == {"a", "b"}
+
+
+# ----- result_path -----
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_walks_result_path() -> None:
+    """When result_path is set, dispatcher reduces tool result to the nested value."""
+
+    class _FakeTransport:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            return {"data": {"usd_share_pct": 58.4, "as_of": "2026-Q1"}}
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="firecrawl",
+        category=Category.WEB_SEARCH,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FakeTransport(),  # type: ignore[arg-type]
+        tools={
+            "firecrawl_extract": ToolDefinition(
+                name="firecrawl_extract", description="", input_schema={}
+            )
+        },
+    )
+    spec = CallableSpec(
+        need_id="usd_fx_reserve_share",
+        access_mode="remote_mcp",
+        tool_name="firecrawl_extract",
+        constants={"urls": ["https://example"]},
+        result_path=("data", "usd_share_pct"),
+        shape="float",
+    )
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    result = await dispatcher._invoke_spec(conn, spec, runtime_args={})
+    assert result == 58.4
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_empty_result_path_returns_raw() -> None:
+    """When result_path is empty, dispatcher returns the tool result unchanged."""
+
+    class _FakeTransport:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            return {"value": 42}
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="p",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FakeTransport(),  # type: ignore[arg-type]
+        tools={"t": ToolDefinition(name="t", description="", input_schema={})},
+    )
+    spec = CallableSpec(need_id="n", access_mode="remote_mcp", tool_name="t")
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    result = await dispatcher._invoke_spec(conn, spec, runtime_args={})
+    assert result == {"value": 42}
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_result_path_missing_key_raises() -> None:
+    """If a key in result_path is absent from the tool result, dispatcher raises DispatchError."""
+
+    class _FakeTransport:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            return {"data": {}}  # missing usd_share_pct
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="firecrawl",
+        category=Category.WEB_SEARCH,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FakeTransport(),  # type: ignore[arg-type]
+        tools={
+            "firecrawl_extract": ToolDefinition(
+                name="firecrawl_extract", description="", input_schema={}
+            )
+        },
+    )
+    spec = CallableSpec(
+        need_id="usd_fx_reserve_share",
+        access_mode="remote_mcp",
+        tool_name="firecrawl_extract",
+        result_path=("data", "usd_share_pct"),
+    )
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    with pytest.raises(DispatchError, match="result_path"):
+        await dispatcher._invoke_spec(conn, spec, runtime_args={})
