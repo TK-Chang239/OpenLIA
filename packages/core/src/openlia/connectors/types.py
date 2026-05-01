@@ -138,6 +138,7 @@ class CallableSpec:
     param_bindings: dict[str, ParamBinding] = field(default_factory=dict)
     constants: dict[str, Any] = field(default_factory=dict)
     shape: str = "any"
+    result_path: tuple[str, ...] = ()
 
 
 TRANSFORMS: dict[str, Callable[[Any], Any]] = {
