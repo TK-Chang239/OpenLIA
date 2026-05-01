@@ -620,6 +620,130 @@ async def test_propose_spec_for_need_re_resolves_only_that_row(
 
 
 @pytest.mark.asyncio
+async def test_propose_spec_for_need_excludes_blocked_connectors(
+    engine: Engine, db_session: DBSession
+) -> None:
+    """exclude_connector_ids forces the resolver to skip the specified
+    connectors. Used by the 'Try a different connector' button when the
+    auto-pick was wrong."""
+    conn_a = _seed_connector(
+        db_session,
+        provider_id="connector_a",
+        cached_tools=[
+            {
+                "name": "tool_a",
+                "description": "A",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"sym": {"type": "string"}},
+                },
+            }
+        ],
+    )
+    conn_b = _seed_connector(
+        db_session,
+        provider_id="connector_b",
+        cached_tools=[
+            {
+                "name": "tool_b",
+                "description": "B",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"symbol": {"type": "string"}},
+                },
+            }
+        ],
+    )
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="quote",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                ),
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+
+    # Seed the cache as if conn_a was previously the chosen one.
+    runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
+        runner_specs_service.ProposedSpec(
+            department_id="macro_research",
+            need_id="quote",
+            proposed_spec={"tool_name": "tool_a"},
+            canary_value=None,
+            canary_ok=False,
+            shape_match=False,
+            error=None,
+            connector_id=conn_a.id,
+            unsatisfiable=False,
+        )
+    ]
+    llm = _StubLlm(
+        by_need={
+            "quote": {
+                "tool_name": "tool_b",
+                "param_bindings": {
+                    "ticker": {"to_arg": "symbol", "transform": None}
+                },
+                "constants": {},
+            }
+        }
+    )
+
+    updated = await runner_specs_service.propose_spec_for_need(
+        db_session,
+        department_id="macro_research",
+        need_id="quote",
+        llm_client=llm,
+        exclude_connector_ids={conn_a.id},
+    )
+
+    assert updated.connector_id == conn_b.id
+    assert updated.proposed_spec["tool_name"] == "tool_b"
+
+
+@pytest.mark.asyncio
+async def test_propose_spec_for_need_unsatisfiable_when_all_excluded(
+    engine: Engine, db_session: DBSession
+) -> None:
+    conn = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="q",
+                    parameters=[],
+                    shape="dict",
+                )
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    llm = _StubLlm(by_need={})
+
+    updated = await runner_specs_service.propose_spec_for_need(
+        db_session,
+        department_id="macro_research",
+        need_id="quote",
+        llm_client=llm,
+        exclude_connector_ids={conn.id},
+    )
+    assert updated.unsatisfiable is True
+    assert updated.connector_id is None
+
+
+@pytest.mark.asyncio
 async def test_propose_spec_for_need_returns_unsatisfiable_when_all_fail(
     engine: Engine, db_session: DBSession
 ) -> None:

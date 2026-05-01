@@ -281,6 +281,48 @@ def test_re_resolve_single_need_endpoint(
     assert body["proposed_spec"]["tool_name"] == "get_quote"
 
 
+def test_re_resolve_single_need_excludes_when_body_provided(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    """POST .../resolve with {exclude_connector_ids: [...]} forces the
+    resolver to skip those connectors."""
+    conn_a = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="quote",
+                    description="quote",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                ),
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    client = _client(
+        db_session_factory,
+        llm_payload={
+            "tool_name": "get_quote",
+            "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+            "constants": {},
+        },
+    )
+    resp = client.post(
+        "/api/departments/macro_research/proposed-specs/quote/resolve",
+        json={"exclude_connector_ids": [conn_a.id]},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    # Only one connector and it's excluded, so the result is unsatisfiable.
+    assert body["unsatisfiable"] is True
+    assert body["connector_id"] is None
+
+
 def test_re_resolve_single_need_404_when_unknown(
     engine: Engine, db_session_factory, db_session: DBSession
 ) -> None:

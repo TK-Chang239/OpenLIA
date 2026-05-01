@@ -181,10 +181,20 @@ export const listDeptResolveEvents = (departmentId: string) =>
     `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/events`,
   );
 
-export const resolveDeptNeed = (departmentId: string, needId: string) =>
+export const resolveDeptNeed = (
+  departmentId: string,
+  needId: string,
+  options?: { excludeConnectorIds?: string[] },
+) =>
   fetchJson<ProposedSpec>(
     `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/${encodeURIComponent(needId)}/resolve`,
-    { method: "POST" },
+    {
+      method: "POST",
+      json:
+        options?.excludeConnectorIds && options.excludeConnectorIds.length > 0
+          ? { exclude_connector_ids: options.excludeConnectorIds }
+          : { exclude_connector_ids: [] },
+    },
   );
 
 export const approveDeptSpec = (departmentId: string, needId: string) =>
