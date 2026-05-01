@@ -136,9 +136,12 @@ class ProposedSpec:
     canary_ok: bool
     shape_match: bool
     error: str | None
+    connector_id: str | None = None
+    unsatisfiable: bool = False
 
 
 _PROPOSALS: dict[str, list[ProposedSpec]] = {}
+_DEPT_PROPOSALS: dict[str, list[ProposedSpec]] = {}
 
 
 def get_proposed_specs(connector_id: str) -> list[ProposedSpec]:
@@ -147,6 +150,14 @@ def get_proposed_specs(connector_id: str) -> list[ProposedSpec]:
 
 def clear_proposed_specs(connector_id: str) -> None:
     _PROPOSALS.pop(connector_id, None)
+
+
+def get_dept_proposed_specs(department_id: str) -> list[ProposedSpec]:
+    return list(_DEPT_PROPOSALS.get(department_id, []))
+
+
+def clear_dept_proposed_specs(department_id: str) -> None:
+    _DEPT_PROPOSALS.pop(department_id, None)
 
 
 def list_runner_specs(
@@ -367,6 +378,97 @@ async def propose_specs(
             )
 
     _PROPOSALS[connector_id] = proposals
+    return list(proposals)
+
+
+async def propose_specs_for_department(
+    session: Session,
+    *,
+    department_id: str,
+    llm_client: LlmClient,
+) -> list[ProposedSpec]:
+    """Per-department resolve.
+
+    Iterates every validated connector whose category overlaps the
+    department's required ∪ optional categories. For each (department,
+    need), tries each in-scope connector in turn and keeps the first
+    spec that resolves. If no connector produces a valid spec the proposal
+    is marked `unsatisfiable=True`. Results are cached in
+    `_DEPT_PROPOSALS[department_id]`.
+    """
+    needs = _DEPT_NEEDS.get(department_id) or []
+    if not needs:
+        clear_dept_proposed_specs(department_id)
+        return []
+
+    required, optional = _DEPT_CATEGORIES.get(department_id, (set(), set()))
+    in_scope_categories = required | optional
+
+    rows = list(
+        session.execute(
+            select(Connector).where(Connector.status == ConnectorStatus.VALIDATED.value)
+        )
+        .scalars()
+        .all()
+    )
+    in_scope = [r for r in rows if Category(r.category) in in_scope_categories]
+
+    proposals: list[ProposedSpec] = []
+    for need in needs:
+        chosen: ProposedSpec | None = None
+        last_error: str | None = None
+        for row in in_scope:
+            access_mode, inventory, instance_factory = _select_access_mode_and_inventory(row)
+            if access_mode is None:
+                continue
+            try:
+                spec = await resolve_callable_spec(
+                    need=need,
+                    connector_inventory=inventory,
+                    access_mode=access_mode,  # type: ignore[arg-type]
+                    instance_factory=instance_factory,
+                    llm_client=llm_client,
+                )
+            except ResolverError as exc:
+                last_error = str(exc)
+                continue
+            prepared = _prepare_connector(row)
+            canary: CanaryResult = await run_canary(
+                spec=spec,
+                transport=prepared.transport,
+                sample_args=_sample_args_for(need),
+            )
+            chosen = ProposedSpec(
+                department_id=department_id,
+                need_id=need.id,
+                proposed_spec=_spec_to_dict(spec),
+                canary_value=canary.value,
+                canary_ok=canary.ok,
+                shape_match=canary.shape_match,
+                error=canary.error,
+                connector_id=row.id,
+                unsatisfiable=False,
+            )
+            break
+
+        if chosen is None:
+            proposals.append(
+                ProposedSpec(
+                    department_id=department_id,
+                    need_id=need.id,
+                    proposed_spec={},
+                    canary_value=None,
+                    canary_ok=False,
+                    shape_match=False,
+                    error=last_error,
+                    connector_id=None,
+                    unsatisfiable=True,
+                )
+            )
+        else:
+            proposals.append(chosen)
+
+    _DEPT_PROPOSALS[department_id] = proposals
     return list(proposals)
 
 

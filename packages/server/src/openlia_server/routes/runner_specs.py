@@ -41,6 +41,8 @@ class ProposedSpecOut(BaseModel):
     canary_ok: bool
     shape_match: bool
     error: str | None
+    connector_id: str | None = None
+    unsatisfiable: bool = False
 
 
 class ApprovalOut(BaseModel):
@@ -139,6 +141,57 @@ def build_runner_specs_router(
             connector_id=row.connector_id,
             access_mode=row.access_mode,
         )
+
+    return router
+
+
+def build_dept_proposed_specs_router(
+    *,
+    db_session_factory: Callable[[], DBSession],
+    llm_client_factory: Callable[[], LlmClient],
+) -> APIRouter:
+    """Per-department resolve endpoints (Phase B step 3).
+
+    Aggregates inventory across every validated connector whose category
+    overlaps the department's required ∪ optional categories and runs the
+    resolver per (department, need). Cached results live in
+    `runner_specs_service._DEPT_PROPOSALS`.
+    """
+    router = APIRouter(prefix="/departments", tags=["departments-specs"])
+    session_dep = make_session_dependency(db_session_factory)
+
+    @router.get(
+        "/{department_id}/proposed-specs",
+        response_model=list[ProposedSpecOut],
+    )
+    def list_dept_proposed_specs(department_id: str) -> list[ProposedSpecOut]:
+        proposals = runner_specs_service.get_dept_proposed_specs(department_id)
+        return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
+
+    @router.post(
+        "/{department_id}/proposed-specs/resolve",
+        response_model=list[ProposedSpecOut],
+    )
+    async def resolve_dept_proposed_specs(
+        department_id: str,
+        db: DBSession = Depends(session_dep),
+    ) -> list[ProposedSpecOut]:
+        try:
+            llm_client = llm_client_factory()
+        except AdapterLlmNotConfigured as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "adapter_llm_not_configured",
+                    "message": str(exc),
+                },
+            ) from exc
+        proposals = await runner_specs_service.propose_specs_for_department(
+            db,
+            department_id=department_id,
+            llm_client=llm_client,
+        )
+        return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
 
     return router
 
