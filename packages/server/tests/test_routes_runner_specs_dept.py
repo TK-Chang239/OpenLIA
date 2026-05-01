@@ -276,9 +276,11 @@ def test_re_resolve_single_need_endpoint(
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["need_id"] == "real_time_quote"
-    assert body["connector_id"] == conn.id
-    assert body["proposed_spec"]["tool_name"] == "get_quote"
+    assert isinstance(body, list)
+    assert len(body) == 1
+    assert body[0]["need_id"] == "real_time_quote"
+    assert body[0]["connector_id"] == conn.id
+    assert body[0]["proposed_spec"]["tool_name"] == "get_quote"
 
 
 def test_re_resolve_single_need_excludes_when_body_provided(
@@ -318,9 +320,12 @@ def test_re_resolve_single_need_excludes_when_body_provided(
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    # Only one connector and it's excluded, so the result is unsatisfiable.
-    assert body["unsatisfiable"] is True
-    assert body["connector_id"] is None
+    # Only one connector and it's excluded, so the single returned candidate
+    # is the unsatisfiable placeholder.
+    assert isinstance(body, list)
+    assert len(body) == 1
+    assert body[0]["unsatisfiable"] is True
+    assert body[0]["connector_id"] is None
 
 
 def test_re_resolve_single_need_404_when_unknown(

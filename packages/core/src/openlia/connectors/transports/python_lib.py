@@ -58,7 +58,12 @@ class PythonLibTransport:
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         inst = self._resolve_instance()
-        method = getattr(inst, name)
+        # The adapter LLM is shown method qualnames like "APIClient.get_macro"
+        # (because that's how `introspect_python_lib` lists them) but the
+        # transport binds against the instance, where only the bare method
+        # name is an attribute. Strip the class prefix so either form works.
+        attr = name.rsplit(".", 1)[-1]
+        method = getattr(inst, attr)
         result = method(**arguments)
         if inspect.isawaitable(result):
             result = await result

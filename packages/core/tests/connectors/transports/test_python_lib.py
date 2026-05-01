@@ -103,6 +103,16 @@ async def test_list_tools_returns_public_methods_only() -> None:
 
 
 @pytest.mark.asyncio
+async def test_call_tool_accepts_qualified_method_name() -> None:
+    """The adapter LLM lists methods as 'Class.method' (qualname). The
+    transport binds against the instance, where only the bare attribute
+    exists, so the class prefix must be stripped before getattr."""
+    t = _make_transport()
+    result = await t.call_tool("Client.quote", {"symbol": "AAPL"})
+    assert result == {"symbol": "AAPL", "key": "k-123", "region": "eu"}
+
+
+@pytest.mark.asyncio
 async def test_aclose_clears_cached_instance() -> None:
     t = _make_transport()
     await t.call_tool("quote", {"symbol": "AAPL"})

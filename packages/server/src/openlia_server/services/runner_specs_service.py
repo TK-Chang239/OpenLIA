@@ -27,11 +27,23 @@ loop while a dept resolve is in flight; the frontend polls
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
+
+
+def _jsonify(value: Any) -> Any:
+    """Coerce a canary value to a JSON-safe shape before persisting.
+
+    MCP transports return SDK objects (e.g. `CallToolResult`) that are not
+    JSON serializable. Round-trip through `json.dumps(default=str)` so any
+    non-serializable leaf becomes its `str()` representation, while plain
+    dict/list/scalar payloads are unchanged.
+    """
+    return json.loads(json.dumps(value, default=str))
 
 from openlia.connectors.adapter import (
     CanaryResult,
@@ -54,6 +66,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
+from openlia_server.services.agentic_resolver_client import AgenticResolverError
 from openlia_server.services.dispatcher_factory import _prepare_connector
 
 log = logging.getLogger(__name__)
@@ -369,7 +382,7 @@ async def propose_specs(
                     instance_factory=instance_factory,
                     llm_client=llm_client,
                 )
-            except ResolverError as exc:
+            except (ResolverError, AgenticResolverError) as exc:
                 proposals.append(
                     ProposedSpec(
                         department_id=dept_id,
@@ -400,6 +413,10 @@ async def propose_specs(
             )
 
     _PROPOSALS[connector_id] = proposals
+    try:
+        await transport.aclose()
+    except Exception:
+        pass
     return list(proposals)
 
 
@@ -410,12 +427,18 @@ async def _resolve_one_need(
     in_scope: list[Connector],
     llm_client: LlmClient | None,
     llm_client_factory: Callable[..., LlmClient] | None,
-) -> ProposedSpec:
+) -> list[ProposedSpec]:
+    """Try every in-scope connector and return one candidate per success.
+
+    Earlier behavior stopped at the first connector that resolved. Now we
+    collect every connector's spec so the wizard can show alternatives. If
+    no connector resolves, returns a single `unsatisfiable=True` placeholder.
+    """
     from openlia.llm.types import ToolCall
 
     from openlia_server.services import grounding_service
 
-    chosen: ProposedSpec | None = None
+    candidates: list[ProposedSpec] = []
     last_error: str | None = None
     for row in in_scope:
         access_mode, inventory, instance_factory = _select_access_mode_and_inventory(row)
@@ -459,41 +482,50 @@ async def _resolve_one_need(
                 instance_factory=instance_factory,
                 llm_client=client,
             )
-        except ResolverError as exc:
+        except (ResolverError, AgenticResolverError) as exc:
             last_error = str(exc)
             continue
         prepared = _prepare_connector(row)
-        canary: CanaryResult = await run_canary(
-            spec=spec,
-            transport=prepared.transport,
-            sample_args=_sample_args_for(need),
+        try:
+            canary: CanaryResult = await run_canary(
+                spec=spec,
+                transport=prepared.transport,
+                sample_args=_sample_args_for(need),
+            )
+        finally:
+            try:
+                await prepared.transport.aclose()
+            except Exception:
+                pass
+        candidates.append(
+            ProposedSpec(
+                department_id=department_id,
+                need_id=need.id,
+                proposed_spec=_spec_to_dict(spec),
+                canary_value=canary.value,
+                canary_ok=canary.ok,
+                shape_match=canary.shape_match,
+                error=canary.error,
+                connector_id=row.id,
+                unsatisfiable=False,
+            )
         )
-        chosen = ProposedSpec(
+
+    if candidates:
+        return candidates
+    return [
+        ProposedSpec(
             department_id=department_id,
             need_id=need.id,
-            proposed_spec=_spec_to_dict(spec),
-            canary_value=canary.value,
-            canary_ok=canary.ok,
-            shape_match=canary.shape_match,
-            error=canary.error,
-            connector_id=row.id,
-            unsatisfiable=False,
+            proposed_spec={},
+            canary_value=None,
+            canary_ok=False,
+            shape_match=False,
+            error=last_error,
+            connector_id=None,
+            unsatisfiable=True,
         )
-        break
-
-    if chosen is not None:
-        return chosen
-    return ProposedSpec(
-        department_id=department_id,
-        need_id=need.id,
-        proposed_spec={},
-        canary_value=None,
-        canary_ok=False,
-        shape_match=False,
-        error=last_error,
-        connector_id=None,
-        unsatisfiable=True,
-    )
+    ]
 
 
 async def propose_spec_for_need(
@@ -504,9 +536,10 @@ async def propose_spec_for_need(
     llm_client: LlmClient | None = None,
     llm_client_factory: Callable[..., LlmClient] | None = None,
     exclude_connector_ids: set[str] | None = None,
-) -> ProposedSpec:
+) -> list[ProposedSpec]:
     """Re-resolve a single (department, need) pair, leaving the rest of the
-    cached dept proposals untouched.
+    cached dept proposals untouched. Returns every candidate produced by
+    in-scope connectors (one per connector that resolved).
 
     `exclude_connector_ids` skips the listed connectors during the in-scope
     sweep — used by the "Try a different connector" button when the auto
@@ -545,7 +578,7 @@ async def propose_spec_for_need(
 
     cached = list(_DEPT_PROPOSALS.get(department_id, []))
     cached = [p for p in cached if p.need_id != need_id]
-    cached.append(updated)
+    cached.extend(updated)
     _DEPT_PROPOSALS[department_id] = cached
     return updated
 
@@ -596,7 +629,7 @@ async def propose_specs_for_department(
 
     proposals: list[ProposedSpec] = []
     for need in needs:
-        proposals.append(
+        proposals.extend(
             await _resolve_one_need(
                 department_id=department_id,
                 need=need,
@@ -614,16 +647,28 @@ def approve_dept_spec(
     *,
     department_id: str,
     need_id: str,
+    connector_id: str | None = None,
 ) -> RunnerCallableSpec:
     """Persist a dept-level proposal to `runner_callable_specs`.
 
-    The chosen connector lives on the proposal itself (set during the
-    cross-connector resolve), so the caller no longer passes it.
+    When the resolver produced multiple candidates for a need, `connector_id`
+    selects which one to persist. If omitted and there's only one candidate,
+    that candidate is used; if there are multiple and none is specified, the
+    first is taken (matches the auto-pick semantics of "Approve all").
     """
     proposals = _DEPT_PROPOSALS.get(department_id, [])
-    match = next((p for p in proposals if p.need_id == need_id), None)
-    if match is None:
+    matches = [p for p in proposals if p.need_id == need_id]
+    if not matches:
         raise KeyError(f"no proposed spec for ({department_id!r}, {need_id!r})")
+    if connector_id is not None:
+        match = next((p for p in matches if p.connector_id == connector_id), None)
+        if match is None:
+            raise KeyError(
+                f"no candidate for ({department_id!r}, {need_id!r}) on connector "
+                f"{connector_id!r}"
+            )
+    else:
+        match = matches[0]
     if match.unsatisfiable or not match.proposed_spec or match.connector_id is None:
         raise ValueError(
             f"proposal for ({department_id!r}, {need_id!r}) is unsatisfiable: "
@@ -639,7 +684,9 @@ def approve_dept_spec(
     ).scalar_one_or_none()
 
     canary_payload = (
-        {"value": match.canary_value, "shape_match": match.shape_match} if match.canary_ok else None
+        {"value": _jsonify(match.canary_value), "shape_match": match.shape_match}
+        if match.canary_ok
+        else None
     )
 
     if existing is None:
@@ -700,7 +747,9 @@ def approve_spec(
     ).scalar_one_or_none()
 
     canary_payload = (
-        {"value": match.canary_value, "shape_match": match.shape_match} if match.canary_ok else None
+        {"value": _jsonify(match.canary_value), "shape_match": match.shape_match}
+        if match.canary_ok
+        else None
     )
 
     if existing is None:

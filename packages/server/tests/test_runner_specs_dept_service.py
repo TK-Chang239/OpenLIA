@@ -171,12 +171,13 @@ async def test_factory_receives_per_connector_clone_path(
         llm_client_factory=factory,
     )
 
-    # The first matching connector resolves; we should see exactly one factory
-    # call with that connector's grounding path (or None when no clone exists).
-    assert len(seen_paths) == 1
-    # Ordering inside sqlalchemy result reflects insertion order; the recorded
-    # path must correspond to whichever connector was hit first.
-    assert seen_paths[0] is None or seen_paths[0] == clone_dir
+    # Each in-scope connector contributes a candidate, so the factory is
+    # invoked once per connector with that connector's grounding path
+    # (or None when no clone exists). Ordering follows insertion order.
+    assert len(seen_paths) == 2
+    assert seen_paths[0] is None
+    assert seen_paths[1] == clone_dir
+    _ = conn_no_repo
 
 
 @pytest.mark.asyncio
@@ -267,8 +268,9 @@ async def test_skips_connectors_whose_category_does_not_overlap(
 async def test_picks_first_connector_that_resolves(
     engine: Engine, db_session: DBSession
 ) -> None:
-    """Two financial connectors both match the dept. The first to produce a
-    resolvable spec is picked. If the first errors out, fall through to the next."""
+    """Two financial connectors both match the dept. Each that produces a
+    valid spec contributes one candidate to the dept's proposal list, so the
+    review page can show alternatives."""
     conn_a = _seed_connector(
         db_session,
         provider_id="connector_a",
@@ -320,8 +322,6 @@ async def test_picks_first_connector_that_resolves(
         {"macro_research": ({Category.FINANCIAL}, set())}
     )
 
-    # Per-call payloads keyed by call index. First connector picks `tool_a` (valid),
-    # so we should never reach the second connector.
     class _OrderedLlm:
         def __init__(self) -> None:
             self.calls = 0
@@ -345,13 +345,12 @@ async def test_picks_first_connector_that_resolves(
         db_session, department_id="macro_research", llm_client=llm
     )
 
-    assert len(proposals) == 1
-    p = proposals[0]
-    assert p.connector_id == conn_a.id
-    assert p.proposed_spec["tool_name"] == "tool_a"
-    # Second connector untouched when first succeeds.
-    assert llm.calls == 1
-    _ = conn_b
+    assert len(proposals) == 2
+    by_connector = {p.connector_id: p for p in proposals}
+    assert by_connector[conn_a.id].proposed_spec["tool_name"] == "tool_a"
+    assert by_connector[conn_b.id].proposed_spec["tool_name"] == "tool_b"
+    # Both connectors are tried so each contributes a candidate.
+    assert llm.calls == 2
 
 
 @pytest.mark.asyncio
@@ -610,13 +609,16 @@ async def test_propose_spec_for_need_re_resolves_only_that_row(
         llm_client=llm,
     )
 
-    assert updated.need_id == "real_time_quote"
-    assert updated.proposed_spec["tool_name"] == "get_quote"
+    assert len(updated) == 1
+    assert updated[0].need_id == "real_time_quote"
+    assert updated[0].proposed_spec["tool_name"] == "get_quote"
     cached = runner_specs_service.get_dept_proposed_specs("macro_research")
-    by_need = {p.need_id: p for p in cached}
-    assert by_need["real_time_quote"].proposed_spec["tool_name"] == "get_quote"
+    cached_by_need: dict[str, list[runner_specs_service.ProposedSpec]] = {}
+    for p in cached:
+        cached_by_need.setdefault(p.need_id, []).append(p)
+    assert cached_by_need["real_time_quote"][0].proposed_spec["tool_name"] == "get_quote"
     # Untouched.
-    assert by_need["other_need"] is existing_other
+    assert cached_by_need["other_need"][0] is existing_other
 
 
 @pytest.mark.asyncio
@@ -706,8 +708,9 @@ async def test_propose_spec_for_need_excludes_blocked_connectors(
         exclude_connector_ids={conn_a.id},
     )
 
-    assert updated.connector_id == conn_b.id
-    assert updated.proposed_spec["tool_name"] == "tool_b"
+    assert len(updated) == 1
+    assert updated[0].connector_id == conn_b.id
+    assert updated[0].proposed_spec["tool_name"] == "tool_b"
 
 
 @pytest.mark.asyncio
@@ -739,8 +742,9 @@ async def test_propose_spec_for_need_unsatisfiable_when_all_excluded(
         llm_client=llm,
         exclude_connector_ids={conn.id},
     )
-    assert updated.unsatisfiable is True
-    assert updated.connector_id is None
+    assert len(updated) == 1
+    assert updated[0].unsatisfiable is True
+    assert updated[0].connector_id is None
 
 
 @pytest.mark.asyncio
@@ -768,7 +772,8 @@ async def test_propose_spec_for_need_returns_unsatisfiable_when_all_fail(
         need_id="exotic",
         llm_client=llm,
     )
-    assert updated.unsatisfiable is True
+    assert len(updated) == 1
+    assert updated[0].unsatisfiable is True
 
 
 @pytest.mark.asyncio
