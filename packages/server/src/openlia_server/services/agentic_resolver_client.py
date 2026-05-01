@@ -76,18 +76,38 @@ class AgenticResolverClient:
                         "When the inventory doesn't expose enum slugs "
                         "directly, use the filesystem tools to read the "
                         "provider's source before choosing constants.\n\n"
-                        "STRICT RULE for constant values: every string "
-                        "constant must be copied VERBATIM from a literal "
-                        "you saw in the source code (e.g. an item in a "
-                        "set/list/dict the server uses to validate input). "
-                        "Do not paraphrase, rename, qualify, or merge "
-                        "terms from documentation. If a slug appears only "
-                        "in prose, comments, or a docstring -- not in a "
-                        "validator collection -- it is NOT acceptable.\n\n"
-                        "If after using the tools you cannot identify a "
-                        "verbatim slug that satisfies the need, return "
+                        "STRICT RULE 1 (verbatim): every string constant "
+                        "must be copied VERBATIM from a literal you saw in "
+                        "the source code (e.g. an item in a set/list/dict "
+                        "the server uses to validate input). Do not "
+                        "paraphrase, rename, qualify, or merge terms from "
+                        "documentation. If a slug appears only in prose, "
+                        "comments, or a docstring -- not in a validator "
+                        "collection -- it is NOT acceptable.\n\n"
+                        "STRICT RULE 2 (semantic match): the slug must "
+                        "mean the SAME METRIC as the need, not just be "
+                        "thematically related. 'Same theme' is NOT a "
+                        "match. Examples that are NOT matches:\n"
+                        "  - need 'PMI' vs slug 'gdp_current_usd' (both "
+                        "macro indicators, but PMI != GDP)\n"
+                        "  - need 'core CPI' vs slug 'consumer_price_"
+                        "index' (CPI is not core CPI)\n"
+                        "  - need 'central bank gold purchases' vs slug "
+                        "'gdp_current_usd' (different metric entirely)\n"
+                        "Before choosing a slug, state in your reasoning: "
+                        "(a) the metric the need is asking for in plain "
+                        "language, (b) the candidate slug, (c) why they "
+                        "denote the same metric (not just the same "
+                        "topic). If you cannot make that case honestly, "
+                        "the need is unsatisfiable.\n\n"
+                        "STRICT RULE 3 (default to unsatisfiable): when "
+                        "the validator collection contains nothing whose "
+                        "meaning is the requested metric, return "
                         '{"unsatisfiable": true, "reason": "<short '
-                        'explanation>"} instead of guessing.'
+                        'explanation naming the missing metric>"} '
+                        "instead of picking the closest-themed slug. A "
+                        "real provider gap is normal and expected; "
+                        "guessing is worse than admitting it."
                     ),
                     tools=tools,
                     response_format=response_format,
@@ -128,11 +148,20 @@ class AgenticResolverClient:
         )
 
     def _parse_final(self, text: str) -> dict[str, Any]:
-        cleaned = _strip_fence(text or "")
+        cleaned = _strip_fence(text or "").strip()
+        if not cleaned:
+            raise AgenticResolverError("adapter LLM returned empty output")
         try:
             parsed = json.loads(cleaned)
-        except json.JSONDecodeError as exc:
-            raise AgenticResolverError(f"adapter LLM returned non-JSON: {exc}") from exc
+        except json.JSONDecodeError:
+            # Tolerate trailing prose / multiple JSON values: take the first
+            # JSON object via raw_decode.
+            try:
+                parsed, _ = json.JSONDecoder().raw_decode(cleaned)
+            except json.JSONDecodeError as exc2:
+                raise AgenticResolverError(
+                    f"adapter LLM returned non-JSON: {exc2}"
+                ) from exc2
         if not isinstance(parsed, dict):
             raise AgenticResolverError("adapter LLM returned a non-object JSON value")
         return parsed

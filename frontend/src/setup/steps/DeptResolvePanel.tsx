@@ -56,12 +56,46 @@ function calleeLabel(spec: Record<string, unknown>): string {
   return "(unresolved)";
 }
 
+function constantsSummary(spec: Record<string, unknown>): string {
+  const constants = spec["constants"];
+  if (!constants || typeof constants !== "object") return "";
+  const entries = Object.entries(constants as Record<string, unknown>);
+  if (entries.length === 0) return "";
+  return entries
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(", ");
+}
+
+function approvalKey(needId: string, connectorId: string | null): string {
+  return `${needId}::${connectorId ?? ""}`;
+}
+
+function groupByNeed(
+  proposals: ProposedSpec[],
+): { needId: string; candidates: ProposedSpec[] }[] {
+  const order: string[] = [];
+  const buckets = new Map<string, ProposedSpec[]>();
+  for (const p of proposals) {
+    if (!buckets.has(p.need_id)) {
+      buckets.set(p.need_id, []);
+      order.push(p.need_id);
+    }
+    buckets.get(p.need_id)!.push(p);
+  }
+  return order.map((needId) => ({
+    needId,
+    candidates: buckets.get(needId)!,
+  }));
+}
+
 export function DeptResolvePanel({ departmentId, label }: Props) {
   const [proposals, setProposals] = useState<ProposedSpec[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState<boolean>(false);
   const [events, setEvents] = useState<ResolveEvent[]>([]);
+  const [approving, setApproving] = useState<Set<string>>(() => new Set());
+  const [approved, setApproved] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +134,7 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     setLoading(true);
     setError(null);
     setEvents([]);
+    setApproved(new Set());
     let pollHandle: ReturnType<typeof setInterval> | null = null;
     pollHandle = setInterval(() => {
       listDeptResolveEvents(departmentId)
@@ -125,7 +160,6 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
       setError(err instanceof Error ? err.message : "Resolve failed.");
     } finally {
       if (pollHandle !== null) clearInterval(pollHandle);
-      // One last fetch so the final tool call lands even if polling missed it.
       try {
         const final = await listDeptResolveEvents(departmentId);
         setEvents(final);
@@ -136,14 +170,57 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     }
   };
 
-  const onApprove = async (needId: string) => {
-    setError(null);
+  const approveOne = async (
+    needId: string,
+    connectorId: string,
+  ): Promise<boolean> => {
+    const key = approvalKey(needId, connectorId);
+    if (approving.has(key) || approved.has(needId)) return false;
+    setApproving((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
     try {
-      await approveDeptSpec(departmentId, needId);
-      await refreshDeptHealth();
+      await approveDeptSpec(departmentId, needId, connectorId);
+      setApproved((prev) => {
+        const next = new Set(prev);
+        next.add(needId);
+        return next;
+      });
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Approval failed.");
+      return false;
+    } finally {
+      setApproving((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
+  };
+
+  const onApprove = async (needId: string, connectorId: string) => {
+    setError(null);
+    const ok = await approveOne(needId, connectorId);
+    if (ok) await refreshDeptHealth();
+  };
+
+  const onApproveAll = async () => {
+    setError(null);
+    const groups = groupByNeed(proposals);
+    let any = false;
+    for (const { needId, candidates } of groups) {
+      if (approved.has(needId)) continue;
+      const pick = candidates.find(
+        (c) => !c.unsatisfiable && c.connector_id !== null,
+      );
+      if (!pick || !pick.connector_id) continue;
+      const ok = await approveOne(needId, pick.connector_id);
+      if (ok) any = true;
+    }
+    if (any) await refreshDeptHealth();
   };
 
   const onResolveNeed = async (
@@ -153,13 +230,29 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     setError(null);
     try {
       const updated = await resolveDeptNeed(departmentId, needId, options);
-      setProposals((prev) =>
-        prev.map((p) => (p.need_id === needId ? updated : p)),
-      );
+      setProposals((prev) => [
+        ...prev.filter((p) => p.need_id !== needId),
+        ...updated,
+      ]);
+      setApproved((prev) => {
+        if (!prev.has(needId)) return prev;
+        const next = new Set(prev);
+        next.delete(needId);
+        return next;
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Re-resolve failed.");
     }
   };
+
+  const groups = groupByNeed(proposals);
+  const approvableCount = groups.reduce((acc, g) => {
+    if (approved.has(g.needId)) return acc;
+    const pick = g.candidates.find(
+      (c) => !c.unsatisfiable && c.connector_id !== null,
+    );
+    return pick ? acc + 1 : acc;
+  }, 0);
 
   return (
     <section
@@ -168,14 +261,29 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     >
       <header className="flex items-center justify-between gap-3">
         <h3 className="text-sm font-medium text-text-primary">{label}</h3>
-        <button
-          type="button"
-          onClick={onResolve}
-          disabled={loading}
-          className="rounded-md bg-accent-primary px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-        >
-          {loading ? "Resolving..." : `Resolve ${label}`}
-        </button>
+        <div className="flex items-center gap-2">
+          {approvableCount > 0 ? (
+            <button
+              type="button"
+              onClick={onApproveAll}
+              className="rounded-md border border-border-subtle px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-hover"
+            >
+              Approve all ({approvableCount})
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onResolve}
+            disabled={loading}
+            className="rounded-md bg-accent-primary px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+          >
+            {loading
+              ? "Resolving..."
+              : proposals.length > 0
+                ? `Re-resolve ${label}`
+                : `Resolve ${label}`}
+          </button>
+        </div>
       </header>
 
       {error ? (
@@ -214,68 +322,99 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
         </p>
       ) : null}
 
-      {proposals.length === 0 && !loading ? (
+      {groups.length === 0 && !loading ? (
         <p className="text-xs text-text-secondary">
           No proposals yet. Click Resolve to generate them.
         </p>
       ) : null}
 
       <ul className="space-y-2">
-        {proposals.map((p) => (
-          <li
-            key={`${p.department_id}:${p.need_id}`}
-            data-testid={`dept-need-row-${p.department_id}-${p.need_id}`}
-            className="rounded-md border border-border-subtle bg-bg-base p-2 text-xs"
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="font-mono text-text-primary">{p.need_id}</span>
-              {p.unsatisfiable ? (
-                <span className="text-feedback-error">
-                  No connector provides this data
-                </span>
-              ) : (
-                <span className="font-mono text-text-secondary">
-                  {calleeLabel(p.proposed_spec)}
-                  {p.connector_id ? ` @ ${p.connector_id.slice(0, 8)}` : ""}
-                </span>
-              )}
-            </div>
-            {p.error ? (
-              <p className="mt-1 text-feedback-error">{p.error}</p>
-            ) : null}
-            <div className="mt-1 flex gap-2">
-              {!p.unsatisfiable && p.connector_id ? (
+        {groups.map(({ needId, candidates }) => {
+          const isApproved = approved.has(needId);
+          const usableCandidates = candidates.filter(
+            (c) => !c.unsatisfiable && c.connector_id !== null,
+          );
+          const allUnsat = usableCandidates.length === 0;
+          return (
+            <li
+              key={`${departmentId}:${needId}`}
+              data-testid={`dept-need-row-${departmentId}-${needId}`}
+              className="rounded-md border border-border-subtle bg-bg-base p-2 text-xs"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-mono text-text-primary">{needId}</span>
+                {allUnsat ? (
+                  <span className="text-feedback-error">
+                    No connector provides this data
+                  </span>
+                ) : isApproved ? (
+                  <span className="text-xs font-medium text-feedback-success">
+                    Approved
+                  </span>
+                ) : usableCandidates.length > 1 ? (
+                  <span className="text-text-tertiary">
+                    {usableCandidates.length} candidates
+                  </span>
+                ) : null}
+              </div>
+              <ul className="mt-1 space-y-1">
+                {candidates.map((c, idx) => {
+                  const key = approvalKey(needId, c.connector_id ?? null);
+                  const callee = calleeLabel(c.proposed_spec);
+                  const consts = constantsSummary(c.proposed_spec);
+                  const cidShort = c.connector_id
+                    ? c.connector_id.slice(0, 8)
+                    : "";
+                  return (
+                    <li
+                      key={`${needId}:${c.connector_id ?? "unsat"}:${idx}`}
+                      className="rounded-md border border-border-subtle/60 bg-bg-elevated/40 p-1.5"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-mono text-text-secondary">
+                          {c.unsatisfiable
+                            ? "(no candidate)"
+                            : `${callee}${cidShort ? ` @ ${cidShort}` : ""}`}
+                        </span>
+                      </div>
+                      {consts ? (
+                        <p className="mt-0.5 font-mono text-text-tertiary">
+                          {consts}
+                        </p>
+                      ) : null}
+                      {c.error ? (
+                        <p className="mt-0.5 text-feedback-error">{c.error}</p>
+                      ) : null}
+                      {!c.unsatisfiable && c.connector_id && !isApproved ? (
+                        <div className="mt-1 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onApprove(needId, c.connector_id as string)
+                            }
+                            disabled={approving.has(key)}
+                            className="rounded-md bg-accent-primary px-2 py-0.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+                          >
+                            {approving.has(key) ? "Approving..." : "Approve"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="mt-1 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => onApprove(p.need_id)}
-                  className="rounded-md bg-accent-primary px-2 py-0.5 text-xs font-medium text-white hover:bg-accent-hover"
-                >
-                  Approve
-                </button>
-              ) : null}
-              <button
-                type="button"
-                onClick={() => onResolveNeed(p.need_id)}
-                className="rounded-md border border-border-subtle px-2 py-0.5 text-xs text-text-primary hover:bg-surface-hover"
-              >
-                Re-resolve
-              </button>
-              {!p.unsatisfiable && p.connector_id ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    onResolveNeed(p.need_id, {
-                      excludeConnectorIds: [p.connector_id as string],
-                    })
-                  }
+                  onClick={() => onResolveNeed(needId)}
                   className="rounded-md border border-border-subtle px-2 py-0.5 text-xs text-text-primary hover:bg-surface-hover"
                 >
-                  Try a different connector
+                  Re-resolve
                 </button>
-              ) : null}
-            </div>
-          </li>
-        ))}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

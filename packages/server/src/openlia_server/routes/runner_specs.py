@@ -40,6 +40,7 @@ class ApprovalIn(BaseModel):
 
 class DeptApprovalIn(BaseModel):
     need_id: str
+    connector_id: str | None = None
 
 
 class DeptResolveNeedIn(BaseModel):
@@ -213,6 +214,7 @@ def build_dept_proposed_specs_router(
                 db,
                 department_id=department_id,
                 need_id=body.need_id,
+                connector_id=body.connector_id,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -228,18 +230,18 @@ def build_dept_proposed_specs_router(
 
     @router.post(
         "/{department_id}/proposed-specs/{need_id}/resolve",
-        response_model=ProposedSpecOut,
+        response_model=list[ProposedSpecOut],
     )
     async def resolve_single_need(
         department_id: str,
         need_id: str,
         body: DeptResolveNeedIn | None = None,
         db: DBSession = Depends(session_dep),
-    ) -> ProposedSpecOut:
+    ) -> list[ProposedSpecOut]:
         excluded = set(body.exclude_connector_ids) if body else set()
         try:
             if agentic_factory is not None:
-                proposal = await runner_specs_service.propose_spec_for_need(
+                proposals = await runner_specs_service.propose_spec_for_need(
                     db,
                     department_id=department_id,
                     need_id=need_id,
@@ -249,7 +251,7 @@ def build_dept_proposed_specs_router(
             else:
                 assert llm_client_factory is not None
                 llm_client = llm_client_factory()
-                proposal = await runner_specs_service.propose_spec_for_need(
+                proposals = await runner_specs_service.propose_spec_for_need(
                     db,
                     department_id=department_id,
                     need_id=need_id,
@@ -266,7 +268,7 @@ def build_dept_proposed_specs_router(
                     "message": str(exc),
                 },
             ) from exc
-        return ProposedSpecOut(**runner_specs_service.proposal_to_dict(proposal))
+        return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
 
     @router.post(
         "/{department_id}/proposed-specs/resolve",

@@ -156,7 +156,9 @@ describe("DeptResolvePanel", () => {
       expect(approveCall).toBeTruthy();
       const init = approveCall![1] as RequestInit;
       expect(init.method).toBe("POST");
-      expect(init.body).toBe(JSON.stringify({ need_id: "real_time_quote" }));
+      expect(init.body).toBe(
+        JSON.stringify({ need_id: "real_time_quote", connector_id: "c1" }),
+      );
     });
   });
 
@@ -227,17 +229,19 @@ describe("DeptResolvePanel", () => {
       ]),
     );
     fetchMock.mockResolvedValueOnce(
-      jsonResp({
-        department_id: "macro_research",
-        need_id: "real_time_quote",
-        proposed_spec: { tool_name: "fresh_tool" },
-        canary_value: null,
-        canary_ok: false,
-        shape_match: false,
-        error: null,
-        connector_id: "c1",
-        unsatisfiable: false,
-      }),
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: { tool_name: "fresh_tool" },
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        },
+      ]),
     );
 
     render(
@@ -246,10 +250,10 @@ describe("DeptResolvePanel", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /re-resolve/i }),
+        screen.getByRole("button", { name: "Re-resolve" }),
       ).toBeInTheDocument(),
     );
-    await userEvent.click(screen.getByRole("button", { name: /re-resolve/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Re-resolve" }));
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenLastCalledWith(
@@ -262,13 +266,16 @@ describe("DeptResolvePanel", () => {
     );
   });
 
-  it("Try-different-connector button posts exclude_connector_ids", async () => {
+  it("renders all candidates for a need with their constants", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResp([
         {
           department_id: "macro_research",
-          need_id: "real_time_quote",
-          proposed_spec: { tool_name: "tool_a" },
+          need_id: "debt_gdp",
+          proposed_spec: {
+            tool_name: "get_macro_indicator",
+            constants: { indicator: "debt_percent_gdp" },
+          },
           canary_value: null,
           canary_ok: false,
           shape_match: false,
@@ -276,21 +283,94 @@ describe("DeptResolvePanel", () => {
           connector_id: "c1",
           unsatisfiable: false,
         },
+        {
+          department_id: "macro_research",
+          need_id: "debt_gdp",
+          proposed_spec: {
+            method: "APIClient.get_macro_indicators_data",
+            constants: { country: "US" },
+          },
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: "c2",
+          unsatisfiable: false,
+        },
       ]),
     );
-    fetchMock.mockResolvedValueOnce(
-      jsonResp({
-        department_id: "macro_research",
-        need_id: "real_time_quote",
-        proposed_spec: { tool_name: "tool_b" },
-        canary_value: null,
-        canary_ok: false,
-        shape_match: false,
-        error: null,
-        connector_id: "c2",
-        unsatisfiable: false,
-      }),
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
     );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/get_macro_indicator/).length).toBeGreaterThan(0);
+    });
+    expect(
+      screen.getAllByText("indicator=debt_percent_gdp").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/APIClient/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("country=US").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/2 candidates/i).length).toBeGreaterThan(0);
+  });
+
+  it("Approve all approves the first usable candidate of every unapproved need", async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u === "/api/departments/macro_research/proposed-specs") {
+        return Promise.resolve(
+          jsonResp([
+            {
+              department_id: "macro_research",
+              need_id: "n1",
+              proposed_spec: { tool_name: "t1" },
+              canary_value: null,
+              canary_ok: true,
+              shape_match: true,
+              error: null,
+              connector_id: "c1",
+              unsatisfiable: false,
+            },
+            {
+              department_id: "macro_research",
+              need_id: "n1",
+              proposed_spec: { tool_name: "t1b" },
+              canary_value: null,
+              canary_ok: false,
+              shape_match: false,
+              error: null,
+              connector_id: "c2",
+              unsatisfiable: false,
+            },
+            {
+              department_id: "macro_research",
+              need_id: "n2",
+              proposed_spec: { tool_name: "t2" },
+              canary_value: null,
+              canary_ok: true,
+              shape_match: true,
+              error: null,
+              connector_id: "c3",
+              unsatisfiable: false,
+            },
+          ]),
+        );
+      }
+      if (u.endsWith("/proposed-specs/approve") && init?.method === "POST") {
+        return Promise.resolve(
+          jsonResp({
+            id: "x",
+            department_id: "macro_research",
+            need_id: "n",
+            connector_id: "c",
+            access_mode: "cli_mcp",
+          }),
+        );
+      }
+      if (u === "/api/dept-health") return Promise.resolve(jsonResp([]));
+      return Promise.resolve(jsonResp([]));
+    });
 
     render(
       <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
@@ -298,24 +378,26 @@ describe("DeptResolvePanel", () => {
 
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /try a different connector/i }),
+        screen.getByRole("button", { name: /approve all \(2\)/i }),
       ).toBeInTheDocument(),
     );
     await userEvent.click(
-      screen.getByRole("button", { name: /try a different connector/i }),
+      screen.getByRole("button", { name: /approve all \(2\)/i }),
     );
 
     await waitFor(() => {
-      const call = fetchMock.mock.calls.find(
+      const approveCalls = fetchMock.mock.calls.filter(
         (c) =>
-          c[0] ===
-          "/api/departments/macro_research/proposed-specs/real_time_quote/resolve",
+          c[0] === "/api/departments/macro_research/proposed-specs/approve",
       );
-      expect(call).toBeTruthy();
-      const init = call![1] as RequestInit;
-      expect(init.body).toBe(
-        JSON.stringify({ exclude_connector_ids: ["c1"] }),
-      );
+      expect(approveCalls.length).toBe(2);
+      const bodies = approveCalls
+        .map((c) => (c[1] as RequestInit).body as string)
+        .map((b) => JSON.parse(b));
+      expect(bodies).toEqual([
+        { need_id: "n1", connector_id: "c1" },
+        { need_id: "n2", connector_id: "c3" },
+      ]);
     });
   });
 
