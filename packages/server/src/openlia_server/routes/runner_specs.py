@@ -25,12 +25,53 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from openlia.connectors.adapter import LlmClient
+from openlia.llm.exceptions import (
+    AuthError,
+    LLMProviderError,
+    ProviderOutageError,
+    RateLimitError,
+    TransportError,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.services import runner_specs_service
 from openlia_server.services.adapter_llm_client import AdapterLlmNotConfigured
+
+
+def _llm_error_to_http(exc: LLMProviderError) -> HTTPException:
+    """Map provider-layer LLM errors to actionable HTTP responses.
+
+    Without this, transient rate-limits and TLS faults during resolve bubble
+    up as opaque 500s. The frontend wizard relies on the structured `code`
+    field to render the right "retry / fix your key / contact admin" hint.
+    """
+    if isinstance(exc, RateLimitError):
+        headers = (
+            {"Retry-After": str(exc.retry_after_seconds)}
+            if exc.retry_after_seconds is not None
+            else None
+        )
+        return HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"code": "llm_rate_limited", "message": str(exc)},
+            headers=headers,
+        )
+    if isinstance(exc, AuthError):
+        return HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "llm_auth_failed", "message": str(exc)},
+        )
+    if isinstance(exc, (TransportError, ProviderOutageError)):
+        return HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": "llm_upstream_unavailable", "message": str(exc)},
+        )
+    return HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail={"code": "llm_provider_error", "message": str(exc)},
+    )
 
 
 class ApprovalIn(BaseModel):
@@ -121,11 +162,14 @@ def build_runner_specs_router(
                     "message": str(exc),
                 },
             ) from exc
-        proposals = await runner_specs_service.propose_specs(
-            db,
-            connector_id=connector_id,
-            llm_client=llm_client,
-        )
+        try:
+            proposals = await runner_specs_service.propose_specs(
+                db,
+                connector_id=connector_id,
+                llm_client=llm_client,
+            )
+        except LLMProviderError as exc:
+            raise _llm_error_to_http(exc) from exc
         return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
 
     @router.post(
@@ -261,6 +305,8 @@ def build_dept_proposed_specs_router(
                 )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except LLMProviderError as exc:
+            raise _llm_error_to_http(exc) from exc
         except AdapterLlmNotConfigured as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -294,6 +340,8 @@ def build_dept_proposed_specs_router(
                     department_id=department_id,
                     llm_client=llm_client,
                 )
+        except LLMProviderError as exc:
+            raise _llm_error_to_http(exc) from exc
         except AdapterLlmNotConfigured as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
