@@ -3,6 +3,7 @@ import {
   approveDeptSpec,
   listConnectors,
   listDeptProposedSpecs,
+  resolveDeptNeed,
   resolveDeptProposedSpecs,
   type ProposedSpec,
 } from "../../api/connectors";
@@ -125,6 +126,18 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     }
   };
 
+  const onResolveNeed = async (needId: string) => {
+    setError(null);
+    try {
+      const updated = await resolveDeptNeed(departmentId, needId);
+      setProposals((prev) =>
+        prev.map((p) => (p.need_id === needId ? updated : p)),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Re-resolve failed.");
+    }
+  };
+
   return (
     <section
       data-testid={`dept-resolve-panel-${departmentId}`}
@@ -186,8 +199,8 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
             {p.error ? (
               <p className="mt-1 text-feedback-error">{p.error}</p>
             ) : null}
-            {!p.unsatisfiable && p.connector_id ? (
-              <div className="mt-1 flex gap-2">
+            <div className="mt-1 flex gap-2">
+              {!p.unsatisfiable && p.connector_id ? (
                 <button
                   type="button"
                   onClick={() => onApprove(p.need_id)}
@@ -195,8 +208,15 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
                 >
                   Approve
                 </button>
-              </div>
-            ) : null}
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onResolveNeed(p.need_id)}
+                className="rounded-md border border-border-subtle px-2 py-0.5 text-xs text-text-primary hover:bg-surface-hover"
+              >
+                Re-resolve
+              </button>
+            </div>
           </li>
         ))}
       </ul>

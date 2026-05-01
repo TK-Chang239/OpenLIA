@@ -382,6 +382,117 @@ async def propose_specs(
     return list(proposals)
 
 
+async def _resolve_one_need(
+    *,
+    department_id: str,
+    need: RunnerNeed,
+    in_scope: list[Connector],
+    llm_client: LlmClient | None,
+    llm_client_factory: Callable[[Path | None], LlmClient] | None,
+) -> ProposedSpec:
+    from openlia_server.services import grounding_service
+
+    chosen: ProposedSpec | None = None
+    last_error: str | None = None
+    for row in in_scope:
+        access_mode, inventory, instance_factory = _select_access_mode_and_inventory(row)
+        if access_mode is None:
+            continue
+        if llm_client_factory is not None:
+            clone_path = grounding_service.path_for(row.id)
+            client = llm_client_factory(clone_path if clone_path.exists() else None)
+        else:
+            assert llm_client is not None
+            client = llm_client
+        try:
+            spec = await resolve_callable_spec(
+                need=need,
+                connector_inventory=inventory,
+                access_mode=access_mode,  # type: ignore[arg-type]
+                instance_factory=instance_factory,
+                llm_client=client,
+            )
+        except ResolverError as exc:
+            last_error = str(exc)
+            continue
+        prepared = _prepare_connector(row)
+        canary: CanaryResult = await run_canary(
+            spec=spec,
+            transport=prepared.transport,
+            sample_args=_sample_args_for(need),
+        )
+        chosen = ProposedSpec(
+            department_id=department_id,
+            need_id=need.id,
+            proposed_spec=_spec_to_dict(spec),
+            canary_value=canary.value,
+            canary_ok=canary.ok,
+            shape_match=canary.shape_match,
+            error=canary.error,
+            connector_id=row.id,
+            unsatisfiable=False,
+        )
+        break
+
+    if chosen is not None:
+        return chosen
+    return ProposedSpec(
+        department_id=department_id,
+        need_id=need.id,
+        proposed_spec={},
+        canary_value=None,
+        canary_ok=False,
+        shape_match=False,
+        error=last_error,
+        connector_id=None,
+        unsatisfiable=True,
+    )
+
+
+async def propose_spec_for_need(
+    session: Session,
+    *,
+    department_id: str,
+    need_id: str,
+    llm_client: LlmClient | None = None,
+    llm_client_factory: Callable[[Path | None], LlmClient] | None = None,
+) -> ProposedSpec:
+    """Re-resolve a single (department, need) pair, leaving the rest of the
+    cached dept proposals untouched."""
+    if llm_client is None and llm_client_factory is None:
+        raise TypeError("propose_spec_for_need requires llm_client or llm_client_factory")
+
+    needs = _DEPT_NEEDS.get(department_id) or []
+    need = next((n for n in needs if n.id == need_id), None)
+    if need is None:
+        raise KeyError(f"no need {need_id!r} declared for {department_id!r}")
+
+    required, optional = _DEPT_CATEGORIES.get(department_id, (set(), set()))
+    in_scope_categories = required | optional
+    rows = list(
+        session.execute(
+            select(Connector).where(Connector.status == ConnectorStatus.VALIDATED.value)
+        )
+        .scalars()
+        .all()
+    )
+    in_scope = [r for r in rows if Category(r.category) in in_scope_categories]
+
+    updated = await _resolve_one_need(
+        department_id=department_id,
+        need=need,
+        in_scope=in_scope,
+        llm_client=llm_client,
+        llm_client_factory=llm_client_factory,
+    )
+
+    cached = list(_DEPT_PROPOSALS.get(department_id, []))
+    cached = [p for p in cached if p.need_id != need_id]
+    cached.append(updated)
+    _DEPT_PROPOSALS[department_id] = cached
+    return updated
+
+
 async def propose_specs_for_department(
     session: Session,
     *,
@@ -424,70 +535,17 @@ async def propose_specs_for_department(
     )
     in_scope = [r for r in rows if Category(r.category) in in_scope_categories]
 
-    # Avoid circular import on module load by importing here.
-    from openlia_server.services import grounding_service
-
     proposals: list[ProposedSpec] = []
     for need in needs:
-        chosen: ProposedSpec | None = None
-        last_error: str | None = None
-        for row in in_scope:
-            access_mode, inventory, instance_factory = _select_access_mode_and_inventory(row)
-            if access_mode is None:
-                continue
-            if llm_client_factory is not None:
-                clone_path = grounding_service.path_for(row.id)
-                client = llm_client_factory(clone_path if clone_path.exists() else None)
-            else:
-                assert llm_client is not None
-                client = llm_client
-            try:
-                spec = await resolve_callable_spec(
-                    need=need,
-                    connector_inventory=inventory,
-                    access_mode=access_mode,  # type: ignore[arg-type]
-                    instance_factory=instance_factory,
-                    llm_client=client,
-                )
-            except ResolverError as exc:
-                last_error = str(exc)
-                continue
-            prepared = _prepare_connector(row)
-            canary: CanaryResult = await run_canary(
-                spec=spec,
-                transport=prepared.transport,
-                sample_args=_sample_args_for(need),
-            )
-            chosen = ProposedSpec(
+        proposals.append(
+            await _resolve_one_need(
                 department_id=department_id,
-                need_id=need.id,
-                proposed_spec=_spec_to_dict(spec),
-                canary_value=canary.value,
-                canary_ok=canary.ok,
-                shape_match=canary.shape_match,
-                error=canary.error,
-                connector_id=row.id,
-                unsatisfiable=False,
+                need=need,
+                in_scope=in_scope,
+                llm_client=llm_client,
+                llm_client_factory=llm_client_factory,
             )
-            break
-
-        if chosen is None:
-            proposals.append(
-                ProposedSpec(
-                    department_id=department_id,
-                    need_id=need.id,
-                    proposed_spec={},
-                    canary_value=None,
-                    canary_ok=False,
-                    shape_match=False,
-                    error=last_error,
-                    connector_id=None,
-                    unsatisfiable=True,
-                )
-            )
-        else:
-            proposals.append(chosen)
-
+        )
     _DEPT_PROPOSALS[department_id] = proposals
     return list(proposals)
 
