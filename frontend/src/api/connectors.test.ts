@@ -110,6 +110,29 @@ describe("api/connectors", () => {
     );
   });
 
+  it("resolveDeptNeed POSTs to per-need resolve endpoint", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonResponse({
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: {},
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        }),
+      );
+    await connectors.resolveDeptNeed("macro_research", "real_time_quote");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/macro_research/proposed-specs/real_time_quote/resolve",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("approveDeptSpec POSTs need_id to dept endpoint", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")

@@ -154,6 +154,58 @@ describe("DeptResolvePanel", () => {
     });
   });
 
+  it("clicking per-need Re-resolve calls the per-need endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: { tool_name: "old_tool" },
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        },
+      ]),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResp({
+        department_id: "macro_research",
+        need_id: "real_time_quote",
+        proposed_spec: { tool_name: "fresh_tool" },
+        canary_value: null,
+        canary_ok: false,
+        shape_match: false,
+        error: null,
+        connector_id: "c1",
+        unsatisfiable: false,
+      }),
+    );
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /re-resolve/i }),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /re-resolve/i }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenLastCalledWith(
+        "/api/departments/macro_research/proposed-specs/real_time_quote/resolve",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/fresh_tool/)).toBeInTheDocument(),
+    );
+  });
+
   it("does not show Approve for unsatisfiable proposals", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResp([

@@ -202,6 +202,44 @@ def build_dept_proposed_specs_router(
         )
 
     @router.post(
+        "/{department_id}/proposed-specs/{need_id}/resolve",
+        response_model=ProposedSpecOut,
+    )
+    async def resolve_single_need(
+        department_id: str,
+        need_id: str,
+        db: DBSession = Depends(session_dep),
+    ) -> ProposedSpecOut:
+        try:
+            if agentic_factory is not None:
+                proposal = await runner_specs_service.propose_spec_for_need(
+                    db,
+                    department_id=department_id,
+                    need_id=need_id,
+                    llm_client_factory=agentic_factory,
+                )
+            else:
+                assert llm_client_factory is not None
+                llm_client = llm_client_factory()
+                proposal = await runner_specs_service.propose_spec_for_need(
+                    db,
+                    department_id=department_id,
+                    need_id=need_id,
+                    llm_client=llm_client,
+                )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except AdapterLlmNotConfigured as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "adapter_llm_not_configured",
+                    "message": str(exc),
+                },
+            ) from exc
+        return ProposedSpecOut(**runner_specs_service.proposal_to_dict(proposal))
+
+    @router.post(
         "/{department_id}/proposed-specs/resolve",
         response_model=list[ProposedSpecOut],
     )

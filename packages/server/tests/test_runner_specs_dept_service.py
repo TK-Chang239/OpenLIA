@@ -472,6 +472,138 @@ async def test_unsatisfiable_when_all_connectors_fail(
     assert p.error is not None
 
 
+@pytest.mark.asyncio
+async def test_propose_spec_for_need_re_resolves_only_that_row(
+    engine: Engine, db_session: DBSession
+) -> None:
+    """propose_spec_for_need re-resolves a single (dept, need) pair without
+    touching the other cached proposals for the department."""
+    conn = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="real_time_quote",
+                    description="quote",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                ),
+                RunnerNeed(
+                    id="other_need",
+                    description="other",
+                    parameters=[],
+                    shape="list",
+                ),
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    # Pre-seed two proposals so we can verify only the targeted one mutates.
+    existing_other = runner_specs_service.ProposedSpec(
+        department_id="macro_research",
+        need_id="other_need",
+        proposed_spec={"tool_name": "stable", "param_bindings": {}, "constants": {}},
+        canary_value=None,
+        canary_ok=False,
+        shape_match=False,
+        error=None,
+        connector_id=conn.id,
+        unsatisfiable=False,
+    )
+    runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
+        runner_specs_service.ProposedSpec(
+            department_id="macro_research",
+            need_id="real_time_quote",
+            proposed_spec={"tool_name": "old", "param_bindings": {}, "constants": {}},
+            canary_value=None,
+            canary_ok=False,
+            shape_match=False,
+            error=None,
+            connector_id=conn.id,
+            unsatisfiable=False,
+        ),
+        existing_other,
+    ]
+    llm = _StubLlm(
+        by_need={
+            "real_time_quote": {
+                "tool_name": "get_quote",
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+                "constants": {},
+            }
+        }
+    )
+
+    updated = await runner_specs_service.propose_spec_for_need(
+        db_session,
+        department_id="macro_research",
+        need_id="real_time_quote",
+        llm_client=llm,
+    )
+
+    assert updated.need_id == "real_time_quote"
+    assert updated.proposed_spec["tool_name"] == "get_quote"
+    cached = runner_specs_service.get_dept_proposed_specs("macro_research")
+    by_need = {p.need_id: p for p in cached}
+    assert by_need["real_time_quote"].proposed_spec["tool_name"] == "get_quote"
+    # Untouched.
+    assert by_need["other_need"] is existing_other
+
+
+@pytest.mark.asyncio
+async def test_propose_spec_for_need_returns_unsatisfiable_when_all_fail(
+    engine: Engine, db_session: DBSession
+) -> None:
+    _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(id="exotic", description="x", parameters=[], shape="list"),
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    llm = _StubLlm(
+        by_need={"exotic": {"tool_name": "wat", "param_bindings": {}, "constants": {}}}
+    )
+
+    updated = await runner_specs_service.propose_spec_for_need(
+        db_session,
+        department_id="macro_research",
+        need_id="exotic",
+        llm_client=llm,
+    )
+    assert updated.unsatisfiable is True
+
+
+@pytest.mark.asyncio
+async def test_propose_spec_for_need_404_for_unknown_need(
+    engine: Engine, db_session: DBSession
+) -> None:
+    runner_specs_service.set_dept_needs_for_testing({"macro_research": []})
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": (set(), set())}
+    )
+
+    class _Llm:
+        async def generate_json(self, *, prompt: str) -> dict:
+            return {}
+
+    with pytest.raises(KeyError):
+        await runner_specs_service.propose_spec_for_need(
+            db_session,
+            department_id="macro_research",
+            need_id="ghost",
+            llm_client=_Llm(),
+        )
+
+
 def test_approve_dept_spec_persists_with_connector_from_proposal(
     engine: Engine, db_session: DBSession
 ) -> None:

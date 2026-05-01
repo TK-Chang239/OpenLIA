@@ -221,6 +221,60 @@ def test_approve_dept_spec_400_for_unsatisfiable(
     assert resp.status_code == 400
 
 
+def test_re_resolve_single_need_endpoint(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    conn = _seed_connector(db_session)
+    runner_specs_service.set_dept_needs_for_testing(
+        {
+            "macro_research": [
+                RunnerNeed(
+                    id="real_time_quote",
+                    description="quote",
+                    parameters=[
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
+                    ],
+                    shape="dict",
+                ),
+            ]
+        }
+    )
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": ({Category.FINANCIAL}, set())}
+    )
+    client = _client(
+        db_session_factory,
+        llm_payload={
+            "tool_name": "get_quote",
+            "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
+            "constants": {},
+        },
+    )
+
+    resp = client.post(
+        "/api/departments/macro_research/proposed-specs/real_time_quote/resolve"
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["need_id"] == "real_time_quote"
+    assert body["connector_id"] == conn.id
+    assert body["proposed_spec"]["tool_name"] == "get_quote"
+
+
+def test_re_resolve_single_need_404_when_unknown(
+    engine: Engine, db_session_factory, db_session: DBSession
+) -> None:
+    runner_specs_service.set_dept_needs_for_testing({"macro_research": []})
+    runner_specs_service.set_dept_categories_for_testing(
+        {"macro_research": (set(), set())}
+    )
+    client = _client(db_session_factory)
+    resp = client.post(
+        "/api/departments/macro_research/proposed-specs/ghost/resolve"
+    )
+    assert resp.status_code == 404
+
+
 def test_get_after_resolve_returns_cached(
     engine: Engine, db_session_factory, db_session: DBSession
 ) -> None:
