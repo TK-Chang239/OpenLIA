@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from openlia.connectors.types import Category
+from openlia.connectors.types import CallableSpec, Category
 
 
 @dataclass(frozen=True)
@@ -51,3 +51,4 @@ class BuiltInTemplate:
     api_key_env_var: str
     available_modes: tuple[ModeRecipe, ...]
     canary_tool: str | None
+    runner_specs: tuple[CallableSpec, ...] = ()
