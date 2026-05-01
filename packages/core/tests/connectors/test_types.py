@@ -176,3 +176,18 @@ def test_transforms_callable() -> None:
     assert TRANSFORMS["upper"]("aapl") == "AAPL"
     assert TRANSFORMS["lower"]("AAPL") == "aapl"
     assert TRANSFORMS["iso_to_eodhd"]("AAPL") == "AAPL.NYSE"
+
+
+def test_callable_spec_result_path_default_is_empty_tuple() -> None:
+    spec = CallableSpec(need_id="x", access_mode="cli_mcp", tool_name="t")
+    assert spec.result_path == ()
+
+
+def test_callable_spec_result_path_accepts_tuple() -> None:
+    spec = CallableSpec(
+        need_id="x",
+        access_mode="remote_mcp",
+        tool_name="firecrawl_extract",
+        result_path=("data", "usd_share_pct"),
+    )
+    assert spec.result_path == ("data", "usd_share_pct")
