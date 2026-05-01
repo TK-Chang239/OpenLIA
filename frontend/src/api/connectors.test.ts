@@ -121,6 +121,31 @@ describe("api/connectors", () => {
     );
   });
 
+  it("resolveDeptNeed forwards exclude_connector_ids when provided", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonResponse({
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: {},
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: null,
+          unsatisfiable: true,
+        }),
+      );
+    await connectors.resolveDeptNeed("macro_research", "real_time_quote", {
+      excludeConnectorIds: ["c1", "c2"],
+    });
+    const init = spy.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBe(
+      JSON.stringify({ exclude_connector_ids: ["c1", "c2"] }),
+    );
+  });
+
   it("resolveDeptNeed POSTs to per-need resolve endpoint", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")

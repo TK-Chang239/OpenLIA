@@ -504,9 +504,15 @@ async def propose_spec_for_need(
     need_id: str,
     llm_client: LlmClient | None = None,
     llm_client_factory: Callable[..., LlmClient] | None = None,
+    exclude_connector_ids: set[str] | None = None,
 ) -> ProposedSpec:
     """Re-resolve a single (department, need) pair, leaving the rest of the
-    cached dept proposals untouched."""
+    cached dept proposals untouched.
+
+    `exclude_connector_ids` skips the listed connectors during the in-scope
+    sweep — used by the "Try a different connector" button when the auto
+    pick was wrong.
+    """
     if llm_client is None and llm_client_factory is None:
         raise TypeError("propose_spec_for_need requires llm_client or llm_client_factory")
 
@@ -527,6 +533,8 @@ async def propose_spec_for_need(
         .all()
     )
     in_scope = [r for r in rows if Category(r.category) in in_scope_categories]
+    if exclude_connector_ids:
+        in_scope = [r for r in in_scope if r.id not in exclude_connector_ids]
 
     updated = await _resolve_one_need(
         department_id=department_id,

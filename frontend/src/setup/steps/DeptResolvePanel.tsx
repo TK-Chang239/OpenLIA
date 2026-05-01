@@ -146,10 +146,13 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     }
   };
 
-  const onResolveNeed = async (needId: string) => {
+  const onResolveNeed = async (
+    needId: string,
+    options?: { excludeConnectorIds?: string[] },
+  ) => {
     setError(null);
     try {
-      const updated = await resolveDeptNeed(departmentId, needId);
+      const updated = await resolveDeptNeed(departmentId, needId, options);
       setProposals((prev) =>
         prev.map((p) => (p.need_id === needId ? updated : p)),
       );
@@ -257,6 +260,19 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
               >
                 Re-resolve
               </button>
+              {!p.unsatisfiable && p.connector_id ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onResolveNeed(p.need_id, {
+                      excludeConnectorIds: [p.connector_id as string],
+                    })
+                  }
+                  className="rounded-md border border-border-subtle px-2 py-0.5 text-xs text-text-primary hover:bg-surface-hover"
+                >
+                  Try a different connector
+                </button>
+              ) : null}
             </div>
           </li>
         ))}

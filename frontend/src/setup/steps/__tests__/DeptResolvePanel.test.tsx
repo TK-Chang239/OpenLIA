@@ -262,6 +262,63 @@ describe("DeptResolvePanel", () => {
     );
   });
 
+  it("Try-different-connector button posts exclude_connector_ids", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: { tool_name: "tool_a" },
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        },
+      ]),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResp({
+        department_id: "macro_research",
+        need_id: "real_time_quote",
+        proposed_spec: { tool_name: "tool_b" },
+        canary_value: null,
+        canary_ok: false,
+        shape_match: false,
+        error: null,
+        connector_id: "c2",
+        unsatisfiable: false,
+      }),
+    );
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /try a different connector/i }),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: /try a different connector/i }),
+    );
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        (c) =>
+          c[0] ===
+          "/api/departments/macro_research/proposed-specs/real_time_quote/resolve",
+      );
+      expect(call).toBeTruthy();
+      const init = call![1] as RequestInit;
+      expect(init.body).toBe(
+        JSON.stringify({ exclude_connector_ids: ["c1"] }),
+      );
+    });
+  });
+
   it("does not show Approve for unsatisfiable proposals", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResp([

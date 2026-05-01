@@ -37,6 +37,10 @@ class DeptApprovalIn(BaseModel):
     need_id: str
 
 
+class DeptResolveNeedIn(BaseModel):
+    exclude_connector_ids: list[str] = []
+
+
 class ProposedSpecOut(BaseModel):
     department_id: str
     need_id: str
@@ -221,8 +225,10 @@ def build_dept_proposed_specs_router(
     async def resolve_single_need(
         department_id: str,
         need_id: str,
+        body: DeptResolveNeedIn | None = None,
         db: DBSession = Depends(session_dep),
     ) -> ProposedSpecOut:
+        excluded = set(body.exclude_connector_ids) if body else set()
         try:
             if agentic_factory is not None:
                 proposal = await runner_specs_service.propose_spec_for_need(
@@ -230,6 +236,7 @@ def build_dept_proposed_specs_router(
                     department_id=department_id,
                     need_id=need_id,
                     llm_client_factory=agentic_factory,
+                    exclude_connector_ids=excluded,
                 )
             else:
                 assert llm_client_factory is not None
@@ -239,6 +246,7 @@ def build_dept_proposed_specs_router(
                     department_id=department_id,
                     need_id=need_id,
                     llm_client=llm_client,
+                    exclude_connector_ids=excluded,
                 )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
