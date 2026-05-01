@@ -424,6 +424,34 @@ def test_introspect_python_lib_class_not_found(client):
     assert "NoSuchClass" in body["detail"]
 
 
+def test_create_connector_persists_grounding_fields(client, monkeypatch):
+    _patch_validation_ok(monkeypatch)
+    resp = client.post(
+        "/api/connectors",
+        json={
+            "source": "cli_mcp",
+            "category": "financial",
+            "provider_id": "eodhd",
+            "display_name": "EODHD",
+            "launch": {
+                "modes": [{"kind": "cli_mcp", "argv": ["uvx", "eodhd-mcp"], "env_keys": []}]
+            },
+            "secrets": {"EODHD_API_KEY": "k"},
+            "source_repo_url": "https://github.com/eodhistoricaldata/eodhd-mcp-server",
+            "source_repo_revision": "main",
+            "openapi_url": "https://eodhd.com/openapi.json",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    cid = resp.json()["id"]
+
+    detail = client.get(f"/api/connectors/{cid}").json()
+    assert detail["source_repo_url"] == "https://github.com/eodhistoricaldata/eodhd-mcp-server"
+    assert detail["source_repo_revision"] == "main"
+    assert detail["openapi_url"] == "https://eodhd.com/openapi.json"
+    assert detail["grounding_status"] == "none"
+
+
 def test_update_connector_404_for_unknown(client):
     resp = client.put(
         "/api/connectors/no-such-id",

@@ -228,6 +228,9 @@ async def create_connector(
     category: Category,
     launch: LaunchSpec | dict[str, Any],
     secrets: dict[str, str] | None = None,
+    source_repo_url: str | None = None,
+    source_repo_revision: str | None = None,
+    openapi_url: str | None = None,
 ) -> Connector:
     cid = str(uuid.uuid4())
     launch_json = _launch_to_dict(launch)
@@ -240,6 +243,9 @@ async def create_connector(
         launch=launch_json,
         secrets=secrets or {},
         status=ConnectorStatus.PENDING.value,
+        source_repo_url=source_repo_url,
+        source_repo_revision=source_repo_revision,
+        openapi_url=openapi_url,
     )
     session.add(row)
     session.flush()
@@ -279,6 +285,9 @@ async def update_connector(
     category: Category,
     launch: LaunchSpec | dict[str, Any],
     secrets: dict[str, str] | None,
+    source_repo_url: str | None = None,
+    source_repo_revision: str | None = None,
+    openapi_url: str | None = None,
 ) -> Connector | None:
     row = session.get(Connector, connector_id)
     if row is None:
@@ -289,6 +298,9 @@ async def update_connector(
     row.source = source.value
     row.category = category.value
     row.launch = launch_json
+    row.source_repo_url = source_repo_url
+    row.source_repo_revision = source_repo_revision
+    row.openapi_url = openapi_url
     if secrets is not None:
         row.secrets = secrets
     effective_secrets = row.secrets or {}

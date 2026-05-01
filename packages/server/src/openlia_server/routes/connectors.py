@@ -52,6 +52,9 @@ class ConnectorCreate(BaseModel):
     category: str = Field(pattern="^(financial|news|social|web_search)$")
     launch: LaunchIn
     secrets: dict[str, str] | None = None
+    source_repo_url: str | None = None
+    source_repo_revision: str | None = None
+    openapi_url: str | None = None
 
 
 class ConnectorUpdate(ConnectorCreate):
@@ -183,6 +186,11 @@ class ConnectorOut(BaseModel):
 class ConnectorDetail(ConnectorOut):
     launch: dict[str, Any]
     secret_keys: list[str]
+    source_repo_url: str | None = None
+    source_repo_revision: str | None = None
+    openapi_url: str | None = None
+    grounding_status: str = "none"
+    cached_repo_commit_sha: str | None = None
 
 
 def _to_out(row: Any) -> ConnectorOut:
@@ -205,6 +213,11 @@ def _to_detail(row: Any) -> ConnectorDetail:
         **base.model_dump(),
         launch=row.launch or {"modes": []},
         secret_keys=sorted((row.secrets or {}).keys()),
+        source_repo_url=row.source_repo_url,
+        source_repo_revision=row.source_repo_revision,
+        openapi_url=row.openapi_url,
+        grounding_status=row.grounding_status or "none",
+        cached_repo_commit_sha=row.cached_repo_commit_sha,
     )
 
 
@@ -314,6 +327,9 @@ def build_connectors_router(
             category=Category(body.category),
             launch=launch_dict,
             secrets=body.secrets,
+            source_repo_url=body.source_repo_url,
+            source_repo_revision=body.source_repo_revision,
+            openapi_url=body.openapi_url,
         )
         return _to_out(row)
 
@@ -344,6 +360,9 @@ def build_connectors_router(
             category=Category(body.category),
             launch=launch_dict,
             secrets=body.secrets,
+            source_repo_url=body.source_repo_url,
+            source_repo_revision=body.source_repo_revision,
+            openapi_url=body.openapi_url,
         )
         if row is None:
             raise HTTPException(status_code=404, detail="connector not found")
