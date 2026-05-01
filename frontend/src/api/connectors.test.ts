@@ -88,6 +88,47 @@ describe("api/connectors", () => {
     );
   });
 
+  it("listDeptProposedSpecs GETs /api/departments/<id>/proposed-specs", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse([]));
+    await connectors.listDeptProposedSpecs("macro_research");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/macro_research/proposed-specs",
+      expect.anything(),
+    );
+  });
+
+  it("resolveDeptProposedSpecs POSTs /api/departments/<id>/proposed-specs/resolve", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse([]));
+    await connectors.resolveDeptProposedSpecs("macro_research");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/macro_research/proposed-specs/resolve",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("createConnector forwards grounding URLs in body", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(jsonResponse({ id: "c1" }));
+    const input: connectors.CreateConnectorInput = {
+      provider_id: "eodhd",
+      display_name: "EODHD",
+      source: "remote_mcp",
+      category: "financial",
+      launch: { modes: [{ kind: "remote_mcp", url: "https://x" }] },
+      source_repo_url: "https://github.com/x/y",
+      source_repo_revision: "main",
+      openapi_url: "https://x/openapi.json",
+    };
+    await connectors.createConnector(input);
+    const init = spy.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBe(JSON.stringify(input));
+  });
+
   it("approveSpec POSTs department_id+need_id", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")

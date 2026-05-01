@@ -26,6 +26,9 @@ export interface EditingConnector {
   category: Category;
   launch: LaunchIn;
   secretKeys: string[];
+  sourceRepoUrl?: string | null;
+  sourceRepoRevision?: string | null;
+  openapiUrl?: string | null;
 }
 
 const SOURCES: { value: Source; label: string }[] = [
@@ -138,6 +141,17 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
     if (keys.length === 0) return [{ key: "", value: "" }];
     return keys.map((k) => ({ key: k, value: "" }));
   });
+
+  // grounding URLs (improve adapter accuracy)
+  const [sourceRepoUrl, setSourceRepoUrl] = useState<string>(
+    editing?.sourceRepoUrl ?? "",
+  );
+  const [sourceRepoRevision, setSourceRepoRevision] = useState<string>(
+    editing?.sourceRepoRevision ?? "",
+  );
+  const [openapiUrl, setOpenapiUrl] = useState<string>(
+    editing?.openapiUrl ?? "",
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -365,6 +379,9 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
               ),
             }
           : {}),
+        source_repo_url: sourceRepoUrl.trim() || null,
+        source_repo_revision: sourceRepoRevision.trim() || null,
+        openapi_url: openapiUrl.trim() || null,
       };
       const row = isEditing
         ? await updateConnector(editing!.id, payload)
@@ -796,6 +813,46 @@ export function AddConnectorForm({ onCancel, onCreated, editing }: Props) {
         >
           + Add secret
         </button>
+      </fieldset>
+
+      <fieldset className="space-y-2 rounded-md border border-border-subtle p-2">
+        <legend className="px-1 text-xs font-medium text-text-secondary">
+          Improve adapter accuracy (optional)
+        </legend>
+        <p className="text-xs text-text-secondary">
+          Provide a GitHub repo or OpenAPI URL so the adapter can read
+          provider-specific enums and parameter taxonomies.
+        </p>
+        <label className="block text-xs text-text-secondary">
+          GitHub repository URL
+          <input
+            type="url"
+            value={sourceRepoUrl}
+            onChange={(e) => setSourceRepoUrl(e.target.value)}
+            placeholder="https://github.com/owner/repo"
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="block text-xs text-text-secondary">
+          Branch / tag / revision
+          <input
+            type="text"
+            value={sourceRepoRevision}
+            onChange={(e) => setSourceRepoRevision(e.target.value)}
+            placeholder="main"
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm"
+          />
+        </label>
+        <label className="block text-xs text-text-secondary">
+          OpenAPI / Swagger URL
+          <input
+            type="url"
+            value={openapiUrl}
+            onChange={(e) => setOpenapiUrl(e.target.value)}
+            placeholder="https://example.com/openapi.json"
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-2 py-1 text-sm"
+          />
+        </label>
       </fieldset>
 
       {error ? (
