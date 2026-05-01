@@ -271,6 +271,31 @@ async def test_wrong_arg_binding_python_lib_raises() -> None:
 
 
 @pytest.mark.asyncio
+async def test_explicit_unsatisfiable_response_raises_resolver_error() -> None:
+    """When the LLM returns {'unsatisfiable': true, 'reason': '...'} the
+    resolver must surface that as a ResolverError carrying the reason,
+    rather than the generic 'requires a non-empty tool_name' error."""
+    inventory = [
+        ToolDefinition(
+            name="get_quote",
+            description="Quote tool",
+            input_schema={"type": "object", "properties": {"symbol": {"type": "string"}}},
+        )
+    ]
+    llm = _StubLlm(
+        {"unsatisfiable": True, "reason": "no slug for cb_gold_purchases in source"}
+    )
+    with pytest.raises(ResolverError, match="cb_gold_purchases"):
+        await resolve_callable_spec(
+            need=_need(),
+            connector_inventory=inventory,
+            access_mode="cli_mcp",
+            instance_factory=None,
+            llm_client=llm,
+        )
+
+
+@pytest.mark.asyncio
 async def test_non_serializable_constant_raises() -> None:
     inventory = [
         ToolDefinition(

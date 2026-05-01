@@ -243,6 +243,9 @@ async def resolve_callable_spec(
         raw = await raw  # type: ignore[assignment]
     if not isinstance(raw, dict):
         raise ResolverError("LLM response was not a JSON object")
+    if raw.get("unsatisfiable") is True:
+        reason = raw.get("reason") or "no covering tool/slug found"
+        raise ResolverError(f"unsatisfiable: {reason}")
 
     tool_name = raw.get("tool_name")
     method = raw.get("method")
