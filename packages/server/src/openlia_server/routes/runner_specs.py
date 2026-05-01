@@ -1,16 +1,21 @@
 """Routes for the wizard-time adapter proposed-specs flow.
 
 Spec: docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md §7.
+Plan: docs/superpowers/plans/2026-04-30-adapter-resolver-grounding.md.
 
-Endpoints (mounted under `/api/connectors`):
-
+Per-connector endpoints (legacy, mounted under `/api/connectors`):
 - `GET    /{connector_id}/proposed-specs`         — list cached drafts.
 - `POST   /{connector_id}/proposed-specs/resolve` — re-run resolver + canary.
 - `POST   /{connector_id}/proposed-specs/approve` — persist a draft.
 
-NOTE (Phase 6): The proposal generator is gated on Phase 8 dept artifacts;
-until those land the resolve endpoint returns an empty list. The caller
-must inject an `LlmClient` (Phase 9 wires the real provider).
+Per-department endpoints (current, mounted under `/api/departments`):
+- `GET    /{department_id}/proposed-specs`                — list cached drafts.
+- `GET    /{department_id}/proposed-specs/events`         — live tool-call log.
+- `POST   /{department_id}/proposed-specs/resolve`        — resolve all needs.
+- `POST   /{department_id}/proposed-specs/{need_id}/resolve` — re-resolve one
+   need, optionally with `{exclude_connector_ids: [...]}`.
+- `POST   /{department_id}/proposed-specs/approve`        — persist a draft
+   using the connector_id chosen during resolve.
 """
 
 from __future__ import annotations
@@ -79,11 +84,11 @@ def build_runner_specs_router(
     db_session_factory: Callable[[], DBSession],
     llm_client_factory: Callable[[], LlmClient],
 ) -> APIRouter:
-    """Assemble the proposed-specs router.
+    """Assemble the per-connector proposed-specs router.
 
     `llm_client_factory` is invoked per resolve call so callers can inject a
-    fresh LLM client (e.g. with request-scoped headers) — Phase 9 wires a
-    real OpenRouter quick-tier client; Phase 6 tests pass in a stub.
+    fresh LLM client (e.g. with request-scoped headers); production wires
+    `make_adapter_llm_client_factory`, tests pass in a stub.
     """
     router = APIRouter(prefix="/connectors", tags=["connectors-specs"])
     session_dep = make_session_dependency(db_session_factory)
@@ -159,12 +164,15 @@ def build_dept_proposed_specs_router(
     llm_client_factory: Callable[[], LlmClient] | None = None,
     agentic_factory: Callable[[Any], LlmClient] | None = None,
 ) -> APIRouter:
-    """Per-department resolve endpoints (Phase B step 3).
+    """Per-department resolve endpoints.
 
     Aggregates inventory across every validated connector whose category
-    overlaps the department's required ∪ optional categories and runs the
+    overlaps the department's required-or-optional categories and runs the
     resolver per (department, need). Cached results live in
-    `runner_specs_service._DEPT_PROPOSALS`.
+    `runner_specs_service._DEPT_PROPOSALS`; live tool-call events live in
+    `runner_specs_service._RESOLVE_EVENTS`. Production wires `agentic_factory`
+    (multi-turn tool-use against the connector's grounding clone); the
+    legacy `llm_client_factory` mode is retained for tests.
     """
     router = APIRouter(prefix="/departments", tags=["departments-specs"])
     session_dep = make_session_dependency(db_session_factory)
@@ -296,9 +304,7 @@ def build_dept_proposed_specs_router(
     return router
 
 
-def build_runner_specs_list_router(
-    *, db_session_factory: Callable[[], DBSession]
-) -> APIRouter:
+def build_runner_specs_list_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
     """Mounts `GET /api/runner-specs?department_id=...` for the admin panel."""
     router = APIRouter(prefix="/runner-specs", tags=["runner-specs"])
     session_dep = make_session_dependency(db_session_factory)

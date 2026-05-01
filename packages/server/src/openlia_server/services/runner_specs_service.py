@@ -1,20 +1,28 @@
 """Wizard-time spec proposal + approval service.
 
 Spec: docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md §7.
+Plan: docs/superpowers/plans/2026-04-30-adapter-resolver-grounding.md.
 
-After a connector is validated, this service iterates the runner-bearing
-departments whose required/optional categories overlap the connector, calls
-the wizard-time adapter LLM to propose a `CallableSpec` per `(dept, need)`,
-runs a canary, and stashes the drafts in an in-memory cache. The wizard
-surfaces the cache via `GET /api/connectors/{id}/proposed-specs` and admins
-approve a draft via `POST /api/connectors/{id}/proposed-specs/approve`,
-which persists the spec into `runner_callable_specs`.
+Two coexisting flows:
 
-NOTE (Phase 6 stub): Phase 8 authors `<dept>.needs.yaml` files and adds the
-`requires_runner` flag + `required_categories` / `optional_categories` to
-each Department class. Until then, the dept-needs / dept-categories lookups
-return empty values, so `propose_specs` produces an empty list. The route
-still works end-to-end so frontend work in Phase 11 can stub against it.
+1. **Per-department resolve (current).** `propose_specs_for_department`
+   aggregates the inventory across every validated connector whose category
+   overlaps the department's required-or-optional categories, hands each one
+   to the agentic resolver client, and emits one proposal per (dept, need)
+   tagged with the chosen `connector_id` (or `unsatisfiable=True`).
+   `propose_spec_for_need` re-resolves a single row in place, optionally
+   excluding connectors the user has rejected. Approvals persist via
+   `approve_dept_spec`.
+
+2. **Per-connector resolve (legacy).** `propose_specs(connector_id=...)`
+   plus `approve_spec` remain wired for the older inline review on the
+   Connectors step and the admin Re-resolve button. Both write to
+   `runner_callable_specs` via the same `(department_id, need_id)`
+   uniqueness contract, so either flow can be used to land a row.
+
+A live tool-call event log (`_RESOLVE_EVENTS`) is populated by the agentic
+loop while a dept resolve is in flight; the frontend polls
+`GET /api/departments/{id}/proposed-specs/events` for the streaming UX.
 """
 
 from __future__ import annotations
@@ -23,7 +31,6 @@ import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from pathlib import Path
 from typing import Any
 
 from openlia.connectors.adapter import (
@@ -73,22 +80,16 @@ def _invalidate(session: Session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 8 will replace these stubs with real lookups.
+# Department registries (hydrated at app startup from <dept>.needs.yaml +
+# Department class attributes; see hydrate_dept_registries below).
 # ---------------------------------------------------------------------------
 
-# `dept_id -> [RunnerNeed, ...]`. Phase 8 hydrates this from each department's
-# `<dept>.needs.yaml` file; for now the empty default keeps the wizard flow
-# working end-to-end with no proposals.
 _DEPT_NEEDS: dict[str, list[RunnerNeed]] = {}
-
-# `dept_id -> (required_categories, optional_categories)`. Phase 8 sources
-# these from `Department.requires_runner / required_categories / optional_categories`
-# class attributes.
 _DEPT_CATEGORIES: dict[str, tuple[set[Category], set[Category]]] = {}
 
 
 def set_dept_needs_for_testing(needs: dict[str, list[RunnerNeed]]) -> None:
-    """Test-only helper. Phase 8 replaces with a real loader."""
+    """Test-only helper to seed `_DEPT_NEEDS` without hitting the registry."""
     _DEPT_NEEDS.clear()
     _DEPT_NEEDS.update(needs)
 
@@ -96,7 +97,7 @@ def set_dept_needs_for_testing(needs: dict[str, list[RunnerNeed]]) -> None:
 def set_dept_categories_for_testing(
     categories: dict[str, tuple[set[Category], set[Category]]],
 ) -> None:
-    """Test-only helper. Phase 8 replaces with a real loader."""
+    """Test-only helper to seed `_DEPT_CATEGORIES` without hitting the registry."""
     _DEPT_CATEGORIES.clear()
     _DEPT_CATEGORIES.update(categories)
 
@@ -104,9 +105,9 @@ def set_dept_categories_for_testing(
 def hydrate_dept_registries() -> None:
     """Populate `_DEPT_NEEDS` / `_DEPT_CATEGORIES` from the live registry.
 
-    Without this, `propose_specs` iterates over empty maps and never
-    produces drafts, so every runner-bearing dept stays disabled with
-    every need unresolved. Called once at app startup.
+    Without this, the resolve services iterate over empty maps and never
+    produce drafts, so every runner-bearing dept stays disabled with every
+    need unresolved. Called once at app startup.
     """
     from openlia.departments import _REGISTRY
     from openlia.departments.loader import load_needs
@@ -355,8 +356,6 @@ async def propose_specs(
     category = Category(row.category)
 
     proposals: list[ProposedSpec] = []
-    # Phase 8 populates _DEPT_NEEDS / _DEPT_CATEGORIES; until then this loop
-    # is a no-op for shipped builds.
     for dept_id, needs in _DEPT_NEEDS.items():
         required, optional = _DEPT_CATEGORIES.get(dept_id, (set(), set()))
         if category not in required and category not in optional:
@@ -561,7 +560,7 @@ async def propose_specs_for_department(
     """Per-department resolve.
 
     Iterates every validated connector whose category overlaps the
-    department's required ∪ optional categories. For each (department,
+    department's required-or-optional categories. For each (department,
     need), tries each in-scope connector in turn and keeps the first
     spec that resolves. If no connector produces a valid spec the proposal
     is marked `unsatisfiable=True`. Results are cached in
@@ -640,9 +639,7 @@ def approve_dept_spec(
     ).scalar_one_or_none()
 
     canary_payload = (
-        {"value": match.canary_value, "shape_match": match.shape_match}
-        if match.canary_ok
-        else None
+        {"value": match.canary_value, "shape_match": match.shape_match} if match.canary_ok else None
     )
 
     if existing is None:

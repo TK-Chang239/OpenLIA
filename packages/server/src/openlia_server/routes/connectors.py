@@ -234,9 +234,7 @@ def build_connectors_router(
     company mode, every /api/connectors/* route requires a valid session
     cookie tied to a user with `is_admin = true`.
     """
-    require_admin = build_require_active_admin(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode=mode)
     router = APIRouter(
         prefix="/connectors",
         tags=["connectors"],
@@ -276,8 +274,7 @@ def build_connectors_router(
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Invalid pip name. Use a plain package name "
-                    "(letters, digits, '.', '_', '-')."
+                    "Invalid pip name. Use a plain package name (letters, digits, '.', '_', '-')."
                 ),
             )
         if body.pip_version and not _PIP_VERSION_RE.match(body.pip_version):

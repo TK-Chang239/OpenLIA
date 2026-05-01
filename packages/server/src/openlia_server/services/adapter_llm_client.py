@@ -141,9 +141,7 @@ _AGENTIC_TIERS: tuple[ModelTier, ...] = (
 )
 
 
-def _resolve_provider(
-    db: DBSession, tiers: tuple[ModelTier, ...]
-) -> LLMProvider:
+def _resolve_provider(db: DBSession, tiers: tuple[ModelTier, ...]) -> LLMProvider:
     registry = SQLModelRegistry(db)
     last_error: TierNotConfiguredError | None = None
     for tier in tiers:

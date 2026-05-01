@@ -273,10 +273,7 @@ def build_setup_router(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={
                     "code": "no_validated_connector",
-                    "message": (
-                        "Add at least one connector and click Validate before "
-                        "continuing."
-                    ),
+                    "message": ("Add at least one connector and click Validate before continuing."),
                 },
             )
         wizard_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode

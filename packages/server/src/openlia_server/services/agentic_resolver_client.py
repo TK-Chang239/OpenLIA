@@ -86,8 +86,8 @@ class AgenticResolverClient:
                         "validator collection -- it is NOT acceptable.\n\n"
                         "If after using the tools you cannot identify a "
                         "verbatim slug that satisfies the need, return "
-                        "{\"unsatisfiable\": true, \"reason\": \"<short "
-                        "explanation>\"} instead of guessing."
+                        '{"unsatisfiable": true, "reason": "<short '
+                        'explanation>"} instead of guessing.'
                     ),
                     tools=tools,
                     response_format=response_format,
