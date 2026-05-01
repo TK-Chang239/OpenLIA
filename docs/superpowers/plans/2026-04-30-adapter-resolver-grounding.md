@@ -2,7 +2,17 @@
 
 **Date:** 2026-04-30
 **Branch:** `refactor/connector-redesign-v2`
-**Status:** In progress (Phase A step 1 partially complete — `bc4a669`)
+**Status:** Feature-complete on branch (`67dbf83`). All four phases shipped; live verification confirmed verbatim slug emission against the EODHD MCP grounding repo (`debt_gdp → debt_percent_gdp`, `cpi_yoy → inflation_consumer_prices_annual`).
+
+**Shipped commits in order:**
+- `bc4a669`, `8c2153b`, `e4a8aa5`, `b870b2b` — Phase A: resolver tools, grounding clone service, agentic LLM client.
+- `71cc956`, `b4b1bd8` — Phase B: per-department resolver service, dept routes, grounding migration, connector grounding fields.
+- `fb46fbd`, `232d00f` — Phase C foundation: grounding URL panel, per-dept Review panels, dept-level approve, change-detection hint.
+- `d4eebe0` — grounding clone on save + agentic factory wired into dept resolve.
+- `5d761ac`, `2b34080` — verified end-to-end and fixed two real bugs (tool round-trip pairing, verbatim slug discipline).
+- `5bedae7` — connection pool hardened against TLS faults under sustained load.
+- `a16fcc1`, `99b8898`, `f6aaa0d` — Phase C continuation: per-need re-resolve, live tool-call log, try-a-different-connector.
+- `67dbf83` — sweep cleanup; surfaced and fixed missing `TRANSIENT_NETWORK_ERRORS` import in 5 adapters.
 
 ## Problem we're solving
 
@@ -116,19 +126,32 @@ Equity Research, Earnings Update, Morning Briefing, Secretary, Panic Thermometer
 
 ## Implementation order
 
-**Phase A — backend foundations (TDD-driven)**
-1. Resolver tools (`list_directory`, `read_file`, `search_files`) — sandboxed filesystem ops. **(In progress: `list_directory` + `read_file` shipped in `bc4a669`. `search_files` next.)**
+**Phase A — backend foundations (TDD-driven)** ✅
+1. Resolver tools (`list_directory`, `read_file`, `search_files`) — sandboxed filesystem ops.
 2. Repo cloning service — shallow clones, SSRF guards, size caps.
 3. Agentic resolver client — tool-use loop wrapping `LLMProvider.generate`, turn budget, response schema validation.
 
-**Phase B — orchestration layer**
-4. Per-department resolver service — refactor `propose_specs` to accept `department_id`, build cross-connector inventory.
+**Phase B — orchestration layer** ✅
+4. Per-department resolver service — `propose_specs_for_department` builds cross-connector inventory; `propose_spec_for_need` re-resolves a single row with optional `exclude_connector_ids`.
 5. Alembic migration — `source_repo_url`, `source_repo_revision`, `openapi_url`, `cached_repo_commit_sha`, `cached_openapi`, `grounding_status`, `grounding_fetched_at` on `connectors`.
-6. API endpoints — `POST /departments/{id}/proposed-specs/resolve`, `GET /departments/{id}/proposed-specs`. Connector add/edit endpoints accept the grounding fields.
+6. API endpoints — `POST/GET /departments/{id}/proposed-specs[…]`. Connector add/edit endpoints accept the grounding fields.
+7. Grounding clone on save (`grounding_service.ensure_clone` / `resync_clone`) + agentic factory wired into the dept resolve route.
 
-**Phase C — frontend integration**
-7. Connector card grounding panel.
-8. Review page redesign with per-dept resolve buttons, loading states, unsatisfiable cards, change-detection hint on back-nav.
+**Phase C — frontend integration** ✅
+8. Connector card grounding panel (GitHub URL, revision, OpenAPI URL).
+9. Review page with per-dept resolve panels, per-need Approve / Re-resolve / Try-a-different-connector, unsatisfiable warnings, change-detection hint via sessionStorage snapshot.
+10. Live tool-call log streamed via 600ms polling against `GET /departments/{id}/proposed-specs/events`.
 
-**Phase D — verification**
-9. Integration test: full resolve flow against the EODHD MCP connector with grounding URL, comparing constant accuracy against the current baseline.
+**Phase D — verification** ✅
+11. Live integration: ran `scripts/verify_grounding_resolve.py` against the live EODHD MCP grounding repo + OpenRouter thinking-tier, captured 3 real tool calls (`search_files`, `read_file × 2`), and confirmed verbatim slug emission. Two latent bugs surfaced and fixed during verification (tool-call pairing in OpenRouter adapter; system prompt verbatim discipline).
+
+## Real bugs the verification surfaced
+- `Message` had no `tool_call_id` / `tool_calls` fields — the second turn of every tool-use loop lost protocol pairing on OpenAI/OpenRouter.
+- 5 LLM adapters (anthropic, gemini, ollama, openai, openai_compat) referenced `TRANSIENT_NETWORK_ERRORS` without importing it — would have crashed under any transient network failure.
+- `SSLV3_ALERT_BAD_RECORD_MAC` was escaping httpx as raw `ssl.SSLError`, slipping past `except httpx.HTTPError` in every adapter — single network blip aborted the whole resolve. Hardened with `httpx.AsyncHTTPTransport(retries=2)` and a broader `TRANSIENT_NETWORK_ERRORS` tuple.
+
+## Out of scope (deferred)
+- "Supported connectors" registry (pre-fills grounding URLs for known providers).
+- SSE-based event streaming (current polling at 600ms is sufficient).
+- `cached_openapi` is wired into the schema but not yet fetched/parsed on save.
+- The agentic factory still treats canary failures separately from spec failures; per-MCP CallToolResult unwrapping for `shape_match` accuracy is still an open item.
