@@ -21,6 +21,10 @@ function jsonResp(body: unknown, status = 200): Response {
   });
 }
 
+function connectorListResp(ids: string[]): Response {
+  return jsonResp(ids.map((id) => ({ id })));
+}
+
 describe("DeptResolvePanel", () => {
   it("loads cached proposals on mount", async () => {
     fetchMock.mockResolvedValueOnce(
@@ -71,6 +75,8 @@ describe("DeptResolvePanel", () => {
         },
       ]),
     );
+    // Subsequent listConnectors call for snapshot.
+    fetchMock.mockResolvedValue(connectorListResp(["c2"]));
 
     render(
       <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
@@ -89,10 +95,162 @@ describe("DeptResolvePanel", () => {
     await waitFor(() => {
       expect(screen.getByText(/geopolitical_news/)).toBeInTheDocument();
     });
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      "/api/departments/macro_research/proposed-specs/resolve",
-      expect.objectContaining({ method: "POST" }),
+    const resolveCall = fetchMock.mock.calls.find(
+      (c) =>
+        c[0] === "/api/departments/macro_research/proposed-specs/resolve",
     );
+    expect(resolveCall).toBeTruthy();
+    expect((resolveCall![1] as RequestInit).method).toBe("POST");
+  });
+
+  it("clicking Approve posts need_id to the dept approve endpoint", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: { tool_name: "get_quote" },
+          canary_value: { price: 1 },
+          canary_ok: true,
+          shape_match: true,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        },
+      ]),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResp({
+        id: "rcs1",
+        department_id: "macro_research",
+        need_id: "real_time_quote",
+        connector_id: "c1",
+        access_mode: "cli_mcp",
+      }),
+    );
+    // dept-health refresh after approve
+    fetchMock.mockResolvedValue(jsonResp([]));
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /^approve$/i }),
+      ).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /^approve$/i }));
+
+    await waitFor(() => {
+      const approveCall = fetchMock.mock.calls.find(
+        (c) =>
+          c[0] === "/api/departments/macro_research/proposed-specs/approve",
+      );
+      expect(approveCall).toBeTruthy();
+      const init = approveCall![1] as RequestInit;
+      expect(init.method).toBe("POST");
+      expect(init.body).toBe(JSON.stringify({ need_id: "real_time_quote" }));
+    });
+  });
+
+  it("does not show Approve for unsatisfiable proposals", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "exotic",
+          proposed_spec: {},
+          canary_value: null,
+          canary_ok: false,
+          shape_match: false,
+          error: null,
+          connector_id: null,
+          unsatisfiable: true,
+        },
+      ]),
+    );
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/exotic/)).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByRole("button", { name: /^approve$/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces a change-detection hint when connectors changed since last resolve", async () => {
+    sessionStorage.setItem(
+      "openlia.dept-resolve-snapshot:macro_research",
+      JSON.stringify(["c1", "c2"]),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: { tool_name: "get_quote" },
+          canary_value: { price: 1 },
+          canary_ok: true,
+          shape_match: true,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        },
+      ]),
+    );
+    // listConnectors returns a different set (added c3).
+    fetchMock.mockResolvedValueOnce(connectorListResp(["c1", "c2", "c3"]));
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/connectors changed since last resolve/i),
+      ).toBeInTheDocument();
+    });
+    sessionStorage.clear();
+  });
+
+  it("does not show hint when proposals match current connectors", async () => {
+    sessionStorage.setItem(
+      "openlia.dept-resolve-snapshot:macro_research",
+      JSON.stringify(["c1"]),
+    );
+    fetchMock.mockResolvedValueOnce(
+      jsonResp([
+        {
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          proposed_spec: { tool_name: "get_quote" },
+          canary_value: { price: 1 },
+          canary_ok: true,
+          shape_match: true,
+          error: null,
+          connector_id: "c1",
+          unsatisfiable: false,
+        },
+      ]),
+    );
+    fetchMock.mockResolvedValueOnce(connectorListResp(["c1"]));
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/real_time_quote/)).toBeInTheDocument(),
+    );
+    expect(
+      screen.queryByText(/connectors changed since last resolve/i),
+    ).not.toBeInTheDocument();
+    sessionStorage.clear();
   });
 
   it("renders unsatisfiable proposals as a clear warning", async () => {

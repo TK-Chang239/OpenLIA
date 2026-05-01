@@ -167,3 +167,12 @@ export const resolveDeptProposedSpecs = (departmentId: string) =>
     `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/resolve`,
     { method: "POST" },
   );
+
+export const approveDeptSpec = (departmentId: string, needId: string) =>
+  fetchJson<ApprovalOut>(
+    `/api/departments/${encodeURIComponent(departmentId)}/proposed-specs/approve`,
+    {
+      method: "POST",
+      json: { need_id: needId },
+    },
+  );

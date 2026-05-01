@@ -33,6 +33,10 @@ class ApprovalIn(BaseModel):
     need_id: str
 
 
+class DeptApprovalIn(BaseModel):
+    need_id: str
+
+
 class ProposedSpecOut(BaseModel):
     department_id: str
     need_id: str
@@ -167,6 +171,34 @@ def build_dept_proposed_specs_router(
     def list_dept_proposed_specs(department_id: str) -> list[ProposedSpecOut]:
         proposals = runner_specs_service.get_dept_proposed_specs(department_id)
         return [ProposedSpecOut(**runner_specs_service.proposal_to_dict(p)) for p in proposals]
+
+    @router.post(
+        "/{department_id}/proposed-specs/approve",
+        response_model=ApprovalOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def approve_dept(
+        department_id: str,
+        body: DeptApprovalIn,
+        db: DBSession = Depends(session_dep),
+    ) -> ApprovalOut:
+        try:
+            row = runner_specs_service.approve_dept_spec(
+                db,
+                department_id=department_id,
+                need_id=body.need_id,
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return ApprovalOut(
+            id=row.id,
+            department_id=row.department_id,
+            need_id=row.need_id,
+            connector_id=row.connector_id,
+            access_mode=row.access_mode,
+        )
 
     @router.post(
         "/{department_id}/proposed-specs/resolve",

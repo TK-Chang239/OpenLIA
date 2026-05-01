@@ -110,6 +110,27 @@ describe("api/connectors", () => {
     );
   });
 
+  it("approveDeptSpec POSTs need_id to dept endpoint", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        jsonResponse({
+          id: "rcs2",
+          department_id: "macro_research",
+          need_id: "real_time_quote",
+          connector_id: "c1",
+          access_mode: "cli_mcp",
+        }),
+      );
+    await connectors.approveDeptSpec("macro_research", "real_time_quote");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/departments/macro_research/proposed-specs/approve",
+      expect.objectContaining({ method: "POST" }),
+    );
+    const init = spy.mock.calls[0][1] as RequestInit;
+    expect(init.body).toBe(JSON.stringify({ need_id: "real_time_quote" }));
+  });
+
   it("createConnector forwards grounding URLs in body", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")

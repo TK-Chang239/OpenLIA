@@ -472,6 +472,65 @@ async def propose_specs_for_department(
     return list(proposals)
 
 
+def approve_dept_spec(
+    session: Session,
+    *,
+    department_id: str,
+    need_id: str,
+) -> RunnerCallableSpec:
+    """Persist a dept-level proposal to `runner_callable_specs`.
+
+    The chosen connector lives on the proposal itself (set during the
+    cross-connector resolve), so the caller no longer passes it.
+    """
+    proposals = _DEPT_PROPOSALS.get(department_id, [])
+    match = next((p for p in proposals if p.need_id == need_id), None)
+    if match is None:
+        raise KeyError(f"no proposed spec for ({department_id!r}, {need_id!r})")
+    if match.unsatisfiable or not match.proposed_spec or match.connector_id is None:
+        raise ValueError(
+            f"proposal for ({department_id!r}, {need_id!r}) is unsatisfiable: "
+            f"{match.error or 'no covering connector'}"
+        )
+
+    spec = _dict_to_spec(match.proposed_spec)
+    existing = session.execute(
+        select(RunnerCallableSpec).where(
+            RunnerCallableSpec.department_id == department_id,
+            RunnerCallableSpec.need_id == need_id,
+        )
+    ).scalar_one_or_none()
+
+    canary_payload = (
+        {"value": match.canary_value, "shape_match": match.shape_match}
+        if match.canary_ok
+        else None
+    )
+
+    if existing is None:
+        row = RunnerCallableSpec(
+            id=str(uuid.uuid4()),
+            department_id=department_id,
+            need_id=need_id,
+            connector_id=match.connector_id,
+            access_mode=spec.access_mode,
+            spec=match.proposed_spec,
+            canary_value=canary_payload,
+        )
+        session.add(row)
+    else:
+        existing.connector_id = match.connector_id
+        existing.access_mode = spec.access_mode
+        existing.spec = match.proposed_spec
+        existing.canary_value = canary_payload
+        row = existing
+
+    session.commit()
+    session.refresh(row)
+    _invalidate(session)
+    return row
+
+
 def approve_spec(
     session: Session,
     *,

@@ -410,6 +410,76 @@ async def test_unsatisfiable_when_all_connectors_fail(
     assert p.error is not None
 
 
+def test_approve_dept_spec_persists_with_connector_from_proposal(
+    engine: Engine, db_session: DBSession
+) -> None:
+    """approve_dept_spec keys off (department_id, need_id) and uses the
+    connector chosen during dept-level resolve — caller doesn't pass it."""
+    conn = _seed_connector(db_session)
+    runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
+        runner_specs_service.ProposedSpec(
+            department_id="macro_research",
+            need_id="real_time_quote",
+            proposed_spec={
+                "need_id": "real_time_quote",
+                "access_mode": "cli_mcp",
+                "tool_name": "get_quote",
+                "module": None,
+                "instance_factory": None,
+                "method": None,
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": "upper"}},
+                "constants": {},
+                "shape": "dict",
+            },
+            canary_value={"price": 1.0},
+            canary_ok=True,
+            shape_match=True,
+            error=None,
+            connector_id=conn.id,
+            unsatisfiable=False,
+        )
+    ]
+
+    row = runner_specs_service.approve_dept_spec(
+        db_session, department_id="macro_research", need_id="real_time_quote"
+    )
+
+    assert row.connector_id == conn.id
+    assert row.access_mode == "cli_mcp"
+    assert row.spec["tool_name"] == "get_quote"
+
+
+def test_approve_dept_spec_404_when_no_proposal(
+    engine: Engine, db_session: DBSession
+) -> None:
+    with pytest.raises(KeyError):
+        runner_specs_service.approve_dept_spec(
+            db_session, department_id="macro_research", need_id="ghost"
+        )
+
+
+def test_approve_dept_spec_rejects_unsatisfiable(
+    engine: Engine, db_session: DBSession
+) -> None:
+    runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
+        runner_specs_service.ProposedSpec(
+            department_id="macro_research",
+            need_id="exotic",
+            proposed_spec={},
+            canary_value=None,
+            canary_ok=False,
+            shape_match=False,
+            error="not in inventory",
+            connector_id=None,
+            unsatisfiable=True,
+        )
+    ]
+    with pytest.raises(ValueError):
+        runner_specs_service.approve_dept_spec(
+            db_session, department_id="macro_research", need_id="exotic"
+        )
+
+
 @pytest.mark.asyncio
 async def test_caches_proposals_per_department(
     engine: Engine, db_session: DBSession
