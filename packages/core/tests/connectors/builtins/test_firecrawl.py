@@ -44,10 +44,11 @@ def test_firecrawl_remote_mcp_uses_v2_mcp_path_with_substitution_placeholder() -
 
 
 def test_firecrawl_runner_specs_cover_world_order_and_interest_revenue_needs() -> None:
-    """Firecrawl handles the four needs no upstream financial API exposes:
-    three world-order needs (USD reserve share, central-bank gold purchases,
-    foreign Treasury holdings) plus interest_revenue (federal interest
-    expense as % of revenue).
+    """Firecrawl handles five needs upstream financial APIs don't expose:
+    three world-order series (USD reserve share, central-bank gold
+    purchases, foreign Treasury holdings), interest_revenue (federal
+    interest expense as % of revenue), and geopolitical_news as a
+    headline fallback when NewsAPI.ai isn't installed.
     """
     need_ids = {spec.need_id for spec in FIRECRAWL_TEMPLATE.runner_specs}
     assert need_ids == {
@@ -55,7 +56,25 @@ def test_firecrawl_runner_specs_cover_world_order_and_interest_revenue_needs() -
         "cb_gold_purchases",
         "foreign_treasury_holdings",
         "interest_revenue",
+        "geopolitical_news",
     }
+
+
+def test_firecrawl_geopolitical_news_targets_wikipedia_current_events() -> None:
+    """Headline fallback scrapes Wikipedia's Current Events portal —
+    free, structured by date, scrape-friendly. Schema's required key
+    (`headlines`) matches the second result_path segment so the same
+    invariant the world-order specs satisfy holds here too.
+    """
+    spec = next(s for s in FIRECRAWL_TEMPLATE.runner_specs if s.need_id == "geopolitical_news")
+    assert spec.access_mode == "python_lib"
+    assert spec.method == "Firecrawl.scrape"
+    assert spec.shape == "list[dict]"
+    assert spec.constants["url"] == ("https://en.wikipedia.org/wiki/Portal:Current_events")
+    assert spec.result_path == ("json", "headlines")
+    schema = spec.constants["formats"][0]["schema"]
+    assert "headlines" in schema["properties"]
+    assert schema["properties"]["headlines"]["type"] == "array"
 
 
 def test_firecrawl_runner_specs_use_python_lib_scrape() -> None:

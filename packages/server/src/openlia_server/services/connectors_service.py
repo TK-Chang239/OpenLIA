@@ -31,6 +31,7 @@ from typing import Any
 from openlia.connectors.adapter.introspect import introspect_python_lib
 from openlia.connectors.builtins._registry import get_template
 from openlia.connectors.builtins.types import (
+    BuiltInTemplate,
     CliMcpRecipe,
     PythonLibRecipe,
     RemoteMcpRecipe,
@@ -432,37 +433,83 @@ async def install_builtin(
             session.refresh(connector)
 
     if connector.status == ConnectorStatus.VALIDATED.value and template.runner_specs:
-        # Day-1 templates can be alternative providers (EODHD vs FMP both
-        # claim macro_research/stock_quote). The (dept, need) UNIQUE
-        # constraint forbids two rows for the same key, so we transfer
-        # ownership: delete any existing row for each (dept, need) this
-        # template covers, then insert the new spec. The previous
-        # connector row remains live for chat-toolbox use.
-        for spec in template.runner_specs:
-            dept_id = _NEED_DEPARTMENT_MAP.get(spec.need_id)
-            if dept_id is None:
-                log.warning(
-                    "install_builtin: no department mapping for need %r; skipping",
-                    spec.need_id,
-                )
-                continue
-            session.query(RunnerCallableSpec).filter(
-                RunnerCallableSpec.department_id == dept_id,
-                RunnerCallableSpec.need_id == spec.need_id,
-            ).delete(synchronize_session=False)
-            row = RunnerCallableSpec(
-                id=str(uuid.uuid4()),
-                department_id=dept_id,
-                need_id=spec.need_id,
-                connector_id=connector.id,
-                access_mode=spec.access_mode,
-                spec=asdict(spec),
-            )
-            session.add(row)
-        session.commit()
+        _upsert_runner_specs_from_template(session, connector.id, template)
         _invalidate(session)
 
     return connector
+
+
+def _upsert_runner_specs_from_template(
+    session: Session,
+    connector_id: str,
+    template: BuiltInTemplate,
+) -> int:
+    """Insert / replace RunnerCallableSpec rows for `connector_id` from
+    `template.runner_specs`. Returns the number of specs upserted.
+
+    Day-1 templates can be alternative providers (EODHD vs FMP both
+    claim macro_research/stock_quote). The (dept, need) UNIQUE
+    constraint forbids two rows for the same key, so we transfer
+    ownership: delete any existing row for each (dept, need) this
+    template covers, then insert the new spec. The previous owning
+    connector row remains live for chat-toolbox use.
+    """
+    inserted = 0
+    for spec in template.runner_specs:
+        dept_id = _NEED_DEPARTMENT_MAP.get(spec.need_id)
+        if dept_id is None:
+            log.warning(
+                "sync_template_specs: no department mapping for need %r; skipping",
+                spec.need_id,
+            )
+            continue
+        session.query(RunnerCallableSpec).filter(
+            RunnerCallableSpec.department_id == dept_id,
+            RunnerCallableSpec.need_id == spec.need_id,
+        ).delete(synchronize_session=False)
+        row = RunnerCallableSpec(
+            id=str(uuid.uuid4()),
+            department_id=dept_id,
+            need_id=spec.need_id,
+            connector_id=connector_id,
+            access_mode=spec.access_mode,
+            spec=asdict(spec),
+        )
+        session.add(row)
+        inserted += 1
+    session.commit()
+    return inserted
+
+
+def sync_template_specs(session: Session, connector_id: str) -> int:
+    """Re-sync runner_callable_specs for an already-installed built-in
+    connector against its template's current runner_specs definition.
+
+    Used when a template gains a new runner spec (or modifies an
+    existing one) after the user already installed the connector.
+    Without this, those specs only land on fresh installs.
+
+    Raises KeyError when `connector_id` is unknown, or the connector is
+    not a built-in, or its provider_id no longer matches any template
+    in the registry.
+    """
+    connector = session.get(Connector, connector_id)
+    if connector is None:
+        raise KeyError(f"unknown connector: {connector_id!r}")
+    if connector.source != ConnectorSource.BUILT_IN.value:
+        raise KeyError(
+            f"connector {connector_id!r} is not built-in (source={connector.source!r})",
+        )
+    template = get_template(connector.provider_id)
+    if template is None:
+        raise KeyError(
+            f"no built-in template registered for provider_id={connector.provider_id!r}",
+        )
+    if not template.runner_specs:
+        return 0
+    inserted = _upsert_runner_specs_from_template(session, connector.id, template)
+    _invalidate(session)
+    return inserted
 
 
 def list_connectors(session: Session) -> list[Connector]:

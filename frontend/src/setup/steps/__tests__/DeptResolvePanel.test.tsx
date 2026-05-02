@@ -2,16 +2,38 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DeptResolvePanel } from "../DeptResolvePanel";
+import { useDeptHealth } from "../../../store/dept-health";
+import type { DepartmentHealth } from "../../../api/dept-health";
 
 const fetchMock = vi.fn();
+
+const setHealth = (h: DepartmentHealth): void => {
+  useDeptHealth.setState({
+    healths: { [h.department_id]: h },
+    loaded: true,
+    loading: false,
+    error: null,
+  });
+};
+
+const clearHealth = (): void => {
+  useDeptHealth.setState({
+    healths: {},
+    loaded: false,
+    loading: false,
+    error: null,
+  });
+};
 
 beforeEach(() => {
   fetchMock.mockReset();
   vi.stubGlobal("fetch", fetchMock);
+  clearHealth();
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  clearHealth();
 });
 
 function jsonResp(body: unknown, status = 200): Response {
@@ -525,5 +547,44 @@ describe("DeptResolvePanel", () => {
       expect(screen.getByText(/pmi_index/)).toBeInTheDocument();
     });
     expect(screen.getByText(/no.*connector/i)).toBeInTheDocument();
+  });
+
+  it("renders nothing when the department is active", () => {
+    setHealth({
+      department_id: "macro_research",
+      status: "active",
+      reason: null,
+      missing_categories: [],
+      unresolved_needs: [],
+    });
+
+    const { container } = render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+    expect(container).toBeEmptyDOMElement();
+    expect(
+      screen.queryByTestId("dept-resolve-panel-macro_research"),
+    ).toBeNull();
+  });
+
+  it("shows the Resolve button when the department is disabled", async () => {
+    setHealth({
+      department_id: "macro_research",
+      status: "disabled",
+      reason: "Unresolved needs: cpi_yoy",
+      missing_categories: [],
+      unresolved_needs: ["cpi_yoy"],
+    });
+    fetchMock.mockResolvedValueOnce(jsonResp([]));
+
+    render(
+      <DeptResolvePanel departmentId="macro_research" label="Macro Research" />,
+    );
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    expect(
+      screen.getByRole("button", { name: /^Resolve Macro Research$/i }),
+    ).toBeInTheDocument();
   });
 });

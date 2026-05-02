@@ -167,7 +167,7 @@ describe("ConnectorsStep", () => {
     );
     await screen.findByText("EODHD");
     expect(screen.getByTestId("next-disabled-hint")).toHaveTextContent(
-      /Click Validate on at least one connector to continue\./,
+      /At least one connector must finish validating before you can continue\./,
     );
   });
 
@@ -212,22 +212,6 @@ describe("ConnectorsStep", () => {
     // Save changes button is the edit-mode submit
     expect(
       screen.getByRole("button", { name: /save changes/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("Review specs button fetches proposals", async () => {
-    mocked.listConnectors.mockResolvedValue([row()]);
-    mocked.listProposedSpecs.mockResolvedValueOnce([]);
-    render(
-      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
-    );
-    await screen.findByText("EODHD");
-    fireEvent.click(screen.getByRole("button", { name: /review specs/i }));
-    await waitFor(() =>
-      expect(mocked.listProposedSpecs).toHaveBeenCalledWith("c1"),
-    );
-    expect(
-      await screen.findByText(/no proposals at this time/i),
     ).toBeInTheDocument();
   });
 

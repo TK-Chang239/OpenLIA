@@ -78,9 +78,10 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
         .all()
     )
 
-    # Firecrawl covers four needs: three world-order series plus
-    # interest_revenue (which neither EODHD nor FMP exposes).
-    assert len(rows) == 4
+    # Firecrawl covers five needs: three world-order series, interest_revenue
+    # (which neither EODHD nor FMP exposes), and geopolitical_news as a
+    # headline-source fallback for users without NewsAPI.ai.
+    assert len(rows) == 5
 
     need_ids = {r.need_id for r in rows}
     assert need_ids == {
@@ -88,6 +89,7 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
         "cb_gold_purchases",
         "foreign_treasury_holdings",
         "interest_revenue",
+        "geopolitical_news",
     }
 
     for row in rows:
@@ -198,3 +200,103 @@ async def test_install_builtin_template_with_no_runner_specs_inserts_no_specs(
         .all()
     )
     assert len(rows) == 0
+
+
+# ---------------------------------------------------------------------------
+# sync_template_specs: re-sync runner specs against an existing built-in row
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_sync_template_specs_inserts_new_specs_added_to_template(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When a template gains a new runner spec after the user already
+    installed the connector, sync_template_specs must upsert the new
+    spec rows in place — without forcing the user to delete and reinstall.
+    """
+    from dataclasses import replace
+
+    from openlia.connectors.builtins.firecrawl import FIRECRAWL_TEMPLATE
+    from openlia.connectors.types import CallableSpec
+
+    _stub_validate_ok(monkeypatch)
+
+    connector = await install_builtin(db_session, template_id="firecrawl", api_key="fc-key")
+    initial = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.connector_id == connector.id)
+        .count()
+    )
+    assert initial == len(FIRECRAWL_TEMPLATE.runner_specs)
+
+    # Simulate a future template upgrade: prepend a brand-new spec for
+    # a need the original template did NOT cover, so we can prove the
+    # upserted set strictly grew.
+    new_spec = CallableSpec(
+        need_id="cpi_yoy",  # MR need; not currently in firecrawl runner_specs
+        access_mode="python_lib",
+        method="Firecrawl.scrape",
+        constants={"url": "https://example.invalid/"},
+        result_path=("json", "x"),
+        shape="float",
+    )
+    upgraded = replace(
+        FIRECRAWL_TEMPLATE,
+        runner_specs=(*FIRECRAWL_TEMPLATE.runner_specs, new_spec),
+    )
+    monkeypatch.setattr(
+        connectors_service, "get_template", lambda tid: upgraded if tid == "firecrawl" else None
+    )
+
+    inserted = connectors_service.sync_template_specs(db_session, connector.id)
+    assert inserted == len(upgraded.runner_specs)
+
+    rows = (
+        db_session.query(RunnerCallableSpec)
+        .filter(RunnerCallableSpec.connector_id == connector.id)
+        .all()
+    )
+    need_ids = {r.need_id for r in rows}
+    assert "cpi_yoy" in need_ids
+    assert len(rows) == len(upgraded.runner_specs)
+
+
+@pytest.mark.asyncio
+async def test_sync_template_specs_unknown_connector_raises(
+    db_session: Session,
+) -> None:
+    with pytest.raises(KeyError, match="unknown connector"):
+        connectors_service.sync_template_specs(db_session, "not-a-real-id")
+
+
+@pytest.mark.asyncio
+async def test_sync_template_specs_rejects_non_builtin_connector(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only built-in connectors map back to a template, so a custom
+    connector cannot be re-synced this way."""
+    from openlia.connectors.types import (
+        ConnectorSource,
+        ConnectorStatus,
+    )
+    from openlia_server.db.models.connectors import Connector
+
+    custom = Connector(
+        id="custom-1",
+        provider_id="my-custom-provider",
+        display_name="Custom",
+        source=ConnectorSource.REMOTE_MCP.value,
+        category="financial",
+        launch={"modes": [{"kind": "remote_mcp", "url": "https://x", "headers": {}}]},
+        secrets={},
+        cached_tools=[],
+        status=ConnectorStatus.VALIDATED.value,
+    )
+    db_session.add(custom)
+    db_session.commit()
+
+    with pytest.raises(KeyError, match="not built-in"):
+        connectors_service.sync_template_specs(db_session, "custom-1")

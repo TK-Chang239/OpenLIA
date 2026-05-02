@@ -426,4 +426,14 @@ def build_connectors_router(
             raise HTTPException(status_code=404, detail="connector not found")
         return _to_out(row)
 
+    @router.post("/{connector_id}/sync-template-specs")
+    def sync_template_specs(
+        connector_id: str, db: DBSession = Depends(session_dep)
+    ) -> dict[str, int]:
+        try:
+            inserted = connectors_service.sync_template_specs(db, connector_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"inserted": inserted}
+
     return router
