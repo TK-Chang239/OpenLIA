@@ -90,7 +90,7 @@ FIRECRAWL_TEMPLATE = BuiltInTemplate(
     available_modes=(
         RemoteMcpRecipe(
             kind="remote_mcp",
-            url="https://mcp.firecrawl.dev/{api_key}/mcp",
+            url="https://mcp.firecrawl.dev/{api_key}/v2/mcp",
             headers=(),
         ),
         CliMcpRecipe(
