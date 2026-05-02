@@ -337,3 +337,50 @@ async def test_invoke_spec_result_path_missing_key_raises() -> None:
     dispatcher = Dispatcher(connectors={"c1": conn})
     with pytest.raises(DispatchError, match="result_path"):
         await dispatcher._invoke_spec(conn, spec, runtime_args={})
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_walks_result_path_via_attributes() -> None:
+    """result_path falls back to attribute access for non-dict results.
+
+    Pydantic models / dataclasses returned by python_lib transports (e.g.
+    Firecrawl SDK's Document) need attribute traversal, not dict subscript.
+    """
+    from dataclasses import dataclass
+
+    @dataclass
+    class _Doc:
+        json: dict[str, float]
+
+    class _FakeTransport:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            return _Doc(json={"usd_share_pct": 58.4})
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="firecrawl",
+        category=Category.WEB_SEARCH,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FakeTransport(),  # type: ignore[arg-type]
+        callables={
+            "Firecrawl.scrape": CallableDefinition(
+                qualname="Firecrawl.scrape", signature="(url: str) -> Any", doc=""
+            )
+        },
+    )
+    spec = CallableSpec(
+        need_id="usd_fx_reserve_share",
+        access_mode="python_lib",
+        method="Firecrawl.scrape",
+        result_path=("json", "usd_share_pct"),
+        shape="float",
+    )
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    result = await dispatcher._invoke_spec(conn, spec, runtime_args={})
+    assert result == 58.4

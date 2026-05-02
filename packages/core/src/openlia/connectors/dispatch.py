@@ -52,11 +52,18 @@ class NeedNotResolved(DispatchError):
 
 
 def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any:
-    """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged."""
+    """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged.
+
+    Walks dict keys first, then falls back to attribute access so python_lib
+    transports returning Pydantic models / dataclasses traverse cleanly.
+    """
     for key in path:
-        if not isinstance(value, dict) or key not in value:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        elif hasattr(value, key):
+            value = getattr(value, key)
+        else:
             raise DispatchError(f"result_path {path!r} missing key {key!r} for need {need_id!r}")
-        value = value[key]
     return value
 
 

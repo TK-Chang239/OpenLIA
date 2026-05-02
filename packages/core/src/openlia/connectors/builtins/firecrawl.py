@@ -1,12 +1,16 @@
 """Firecrawl built-in connector template.
 
-Source: https://github.com/mendableai/firecrawl-mcp-server (npm: firecrawl-mcp)
+Sources:
+- https://github.com/firecrawl/firecrawl-mcp-server (npm: firecrawl-mcp)
+- https://docs.firecrawl.dev/sdks/python (PyPI: firecrawl-py)
 
 Covers three Macro Research World Order needs that require scraping
 official-statistics websites (IMF COFER, World Gold Council, US Treasury TIC).
-Each runner spec invokes Firecrawl's `firecrawl_extract` tool with a fixed
-URL and JSON schema, then uses `result_path` to reduce the structured
-response to a float.
+
+Runner specs use the Python SDK's `scrape` method with v2 JSON mode
+(`formats=[{"type": "json", "schema": {...}}]`). The deprecated `/extract`
+endpoint is avoided. MCP recipes remain available for chat-toolbox use
+(firecrawl_search / firecrawl_scrape exposed to chat departments).
 """
 
 from __future__ import annotations
@@ -14,71 +18,75 @@ from __future__ import annotations
 from openlia.connectors.builtins.types import (
     BuiltInTemplate,
     CliMcpRecipe,
+    PythonLibRecipe,
     RemoteMcpRecipe,
 )
 from openlia.connectors.types import CallableSpec, Category
 
-_USD_FX_RESERVE_SHARE = CallableSpec(
+
+def _scrape_spec(
+    *,
+    need_id: str,
+    url: str,
+    field_name: str,
+    field_description: str,
+) -> CallableSpec:
+    """Build a python_lib scrape spec extracting a single numeric field."""
+    return CallableSpec(
+        need_id=need_id,
+        access_mode="python_lib",
+        method="Firecrawl.scrape",
+        constants={
+            "url": url,
+            "formats": [
+                {
+                    "type": "json",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            field_name: {
+                                "type": "number",
+                                "description": field_description,
+                            }
+                        },
+                        "required": [field_name],
+                    },
+                }
+            ],
+        },
+        result_path=("json", field_name),
+        shape="float",
+    )
+
+
+_USD_FX_RESERVE_SHARE = _scrape_spec(
     need_id="usd_fx_reserve_share",
-    access_mode="remote_mcp",
-    tool_name="firecrawl_extract",
-    constants={
-        "urls": ["https://data.imf.org/regular.aspx?key=41175"],
-        "prompt": (
-            "Extract the most recent USD share of total allocated foreign exchange "
-            "reserves, expressed as a percentage (e.g. 58.4)."
-        ),
-        "schema": {
-            "type": "object",
-            "properties": {"usd_share_pct": {"type": "number"}},
-            "required": ["usd_share_pct"],
-        },
-    },
-    param_bindings={},
-    result_path=("data", "usd_share_pct"),
-    shape="float",
+    url="https://data.imf.org/regular.aspx?key=41175",
+    field_name="usd_share_pct",
+    field_description=(
+        "Most recent USD share of total allocated foreign exchange reserves, "
+        "as a percentage (e.g. 58.4)."
+    ),
 )
 
-_CB_GOLD_PURCHASES = CallableSpec(
+_CB_GOLD_PURCHASES = _scrape_spec(
     need_id="cb_gold_purchases",
-    access_mode="remote_mcp",
-    tool_name="firecrawl_extract",
-    constants={
-        "urls": ["https://www.gold.org/goldhub/research/gold-demand-trends"],
-        "prompt": ("Extract net central-bank gold purchases over the trailing year, in tonnes."),
-        "schema": {
-            "type": "object",
-            "properties": {"net_purchases_tonnes": {"type": "number"}},
-            "required": ["net_purchases_tonnes"],
-        },
-    },
-    param_bindings={},
-    result_path=("data", "net_purchases_tonnes"),
-    shape="float",
+    url="https://www.gold.org/goldhub/research/gold-demand-trends",
+    field_name="net_purchases_tonnes",
+    field_description="Net central-bank gold purchases over trailing year, in tonnes.",
 )
 
-_FOREIGN_TREASURY_HOLDINGS = CallableSpec(
+_FOREIGN_TREASURY_HOLDINGS = _scrape_spec(
     need_id="foreign_treasury_holdings",
-    access_mode="remote_mcp",
-    tool_name="firecrawl_extract",
-    constants={
-        "urls": [
-            "https://home.treasury.gov/data/treasury-international-capital-tic-system/"
-            "tic-forms-instructions/major-foreign-holders-treasury-securities"
-        ],
-        "prompt": (
-            "Extract the trailing 90-day change in total foreign holdings of US "
-            "Treasury securities, in USD billions (positive = accumulation, negative = sales)."
-        ),
-        "schema": {
-            "type": "object",
-            "properties": {"change_usd_billions": {"type": "number"}},
-            "required": ["change_usd_billions"],
-        },
-    },
-    param_bindings={},
-    result_path=("data", "change_usd_billions"),
-    shape="float",
+    url=(
+        "https://home.treasury.gov/data/treasury-international-capital-tic-system/"
+        "tic-forms-instructions/major-foreign-holders-treasury-securities"
+    ),
+    field_name="change_usd_billions",
+    field_description=(
+        "Trailing 90-day change in total foreign holdings of US Treasury "
+        "securities, in USD billions (positive = accumulation)."
+    ),
 )
 
 
@@ -88,6 +96,14 @@ FIRECRAWL_TEMPLATE = BuiltInTemplate(
     category=Category.WEB_SEARCH,
     api_key_env_var="FIRECRAWL_API_KEY",
     available_modes=(
+        PythonLibRecipe(
+            kind="python_lib",
+            pip_name="firecrawl-py",
+            pip_version=">=4.0.0,<5.0.0",
+            import_module="firecrawl",
+            instance_factory_cls="Firecrawl",
+            instance_factory_args=(("api_key", "$FIRECRAWL_API_KEY"),),
+        ),
         RemoteMcpRecipe(
             kind="remote_mcp",
             url="https://mcp.firecrawl.dev/{api_key}/v2/mcp",
@@ -99,7 +115,7 @@ FIRECRAWL_TEMPLATE = BuiltInTemplate(
             env_keys=("FIRECRAWL_API_KEY",),
         ),
     ),
-    canary_tool="firecrawl_extract",
+    canary_tool="scrape",
     runner_specs=(
         _USD_FX_RESERVE_SHARE,
         _CB_GOLD_PURCHASES,
