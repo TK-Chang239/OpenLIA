@@ -57,3 +57,6 @@ export const deleteSession = (id: string) =>
 
 export const listMessages = (sessionId: string) =>
   fetchJson<{ items: ChatMessage[] }>(`/api/chat/sessions/${sessionId}/messages`);
+
+export const getDefaultSessionForDepartment = (department: DepartmentSlug) =>
+  fetchJson<ChatSession>(`/api/chat/sessions/by-department/${department}`);
