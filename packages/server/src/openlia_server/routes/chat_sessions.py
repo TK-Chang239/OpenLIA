@@ -38,6 +38,10 @@ class SessionCreateIn(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
 
 
+class DepartmentIn(BaseModel):
+    department: str = Field(..., pattern=_DEPARTMENT_PATTERN)
+
+
 class SessionPatchIn(BaseModel):
     title: str | None = None
     pinned: bool | None = None
@@ -90,6 +94,21 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         user: User = require_auth,
     ) -> SessionOut:
         row = svc.create_session(db, user_id=user.id, department=body.department, title=body.title)
+        return SessionOut.model_validate(row, from_attributes=True)
+
+    @router.get("/by-department/{department}", response_model=SessionOut)
+    def get_or_create_by_department_ep(
+        department: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> SessionOut:
+        try:
+            DepartmentIn(department=department)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422, detail={"code": "invalid_department", "message": str(exc)}
+            ) from exc
+        row = svc.get_or_create_default_session(db, user_id=user.id, department=department)
         return SessionOut.model_validate(row, from_attributes=True)
 
     @router.patch("/{session_id}")

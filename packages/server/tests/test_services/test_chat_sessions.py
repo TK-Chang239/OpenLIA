@@ -173,3 +173,69 @@ def test_list_sessions_q_filter_lowercases(db_session):
     svc.create_session(db_session, user_id=u.id, department="secretary", title="Charlie")
     rows = svc.list_sessions(db_session, user_id=u.id, q="alpha")
     assert {r.title for r in rows} == {"Alpha Bravo"}
+
+
+def test_get_or_create_default_session_creates_when_none_exists(db_session):
+    u = _make_user(db_session, "default-new@example.com")
+    row = svc.get_or_create_default_session(db_session, user_id=u.id, department="secretary")
+    assert row.user_id == u.id
+    assert row.department == "secretary"
+    assert row.title == "New chat"
+    assert row.is_archived is False
+
+
+def test_get_or_create_default_session_reuses_existing(db_session):
+    u = _make_user(db_session, "default-reuse@example.com")
+    existing = svc.create_session(
+        db_session, user_id=u.id, department="secretary", title="Already there"
+    )
+    row = svc.get_or_create_default_session(db_session, user_id=u.id, department="secretary")
+    assert row.id == existing.id
+    assert row.title == "Already there"
+
+
+def test_get_or_create_default_session_picks_oldest_non_archived(db_session):
+    """Multiple sessions: pick the oldest unarchived one for stable identity."""
+    from datetime import UTC, datetime, timedelta
+
+    u = _make_user(db_session, "default-oldest@example.com")
+    older = svc.create_session(db_session, user_id=u.id, department="secretary", title="older")
+    newer = svc.create_session(db_session, user_id=u.id, department="secretary", title="newer")
+    # SQLite func.now() is second-resolution, so back-to-back inserts collide.
+    # Pin explicit timestamps so the "oldest" comparison is deterministic.
+    base = datetime.now(UTC)
+    older.created_at = base - timedelta(minutes=1)
+    newer.created_at = base
+    db_session.commit()
+
+    row = svc.get_or_create_default_session(db_session, user_id=u.id, department="secretary")
+    assert row.id == older.id
+
+
+def test_get_or_create_default_session_skips_archived(db_session):
+    u = _make_user(db_session, "default-arch@example.com")
+    archived = svc.create_session(
+        db_session, user_id=u.id, department="secretary", title="archived"
+    )
+    svc.archive_session(db_session, session_id=archived.id, user_id=u.id)
+    row = svc.get_or_create_default_session(db_session, user_id=u.id, department="secretary")
+    assert row.id != archived.id
+    assert row.is_archived is False
+
+
+def test_get_or_create_default_session_scopes_to_user(db_session):
+    a = _make_user(db_session, "default-a@example.com")
+    b = _make_user(db_session, "default-b@example.com")
+    a_row = svc.get_or_create_default_session(db_session, user_id=a.id, department="secretary")
+    b_row = svc.get_or_create_default_session(db_session, user_id=b.id, department="secretary")
+    assert a_row.id != b_row.id
+    assert a_row.user_id == a.id and b_row.user_id == b.id
+
+
+def test_get_or_create_default_session_scopes_to_department(db_session):
+    u = _make_user(db_session, "default-dept@example.com")
+    sec = svc.get_or_create_default_session(db_session, user_id=u.id, department="secretary")
+    mb = svc.get_or_create_default_session(db_session, user_id=u.id, department="morning_briefing")
+    assert sec.id != mb.id
+    assert sec.department == "secretary"
+    assert mb.department == "morning_briefing"

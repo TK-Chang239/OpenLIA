@@ -110,6 +110,39 @@ def test_q_filter_matches_title_substring(client, user_factory, login_as):
     assert titles == ["alpha bravo"]
 
 
+def test_get_or_create_by_department_creates_when_none(client, user_factory, login_as):
+    login_as(user_factory())
+    r = client.get("/chat/sessions/by-department/secretary")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id"]
+    assert body["department"] == "secretary"
+    assert body["title"] == "New chat"
+
+
+def test_get_or_create_by_department_is_idempotent(client, user_factory, login_as):
+    login_as(user_factory())
+    first = client.get("/chat/sessions/by-department/secretary").json()
+    second = client.get("/chat/sessions/by-department/secretary").json()
+    assert first["id"] == second["id"]
+
+
+def test_get_or_create_by_department_scopes_to_user(client, user_factory, login_as):
+    a = user_factory()
+    b = user_factory()
+    login_as(a)
+    a_id = client.get("/chat/sessions/by-department/secretary").json()["id"]
+    login_as(b)
+    b_id = client.get("/chat/sessions/by-department/secretary").json()["id"]
+    assert a_id != b_id
+
+
+def test_get_or_create_by_department_rejects_unknown_department(client, user_factory, login_as):
+    login_as(user_factory())
+    r = client.get("/chat/sessions/by-department/not_a_real_dept")
+    assert r.status_code == 422
+
+
 def test_create_session_accepts_all_seven_departments(client, user_factory, login_as):
     login_as(user_factory())
     for dep in (
