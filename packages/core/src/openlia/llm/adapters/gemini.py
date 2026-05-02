@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import AsyncIterator
 
@@ -121,8 +122,62 @@ class GeminiAdapter(LLMProvider):
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        raise NotImplementedError("GeminiAdapter.stream is implemented in Plan 5")
-        yield  # pragma: no cover
+        payload: dict = {
+            "contents": [
+                {"role": _role(m.role), "parts": [{"text": m.content}]} for m in request.messages
+            ],
+            "generationConfig": {
+                "maxOutputTokens": request.max_tokens,
+                "temperature": request.temperature,
+            },
+        }
+        if request.system:
+            payload["systemInstruction"] = {"parts": [{"text": request.system}]}
+        if request.stop:
+            payload["generationConfig"]["stopSequences"] = request.stop
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": t.parameters,
+                        }
+                        for t in request.tools
+                    ]
+                }
+            ]
+
+        path = f"/v1beta/models/{self.model}:streamGenerateContent"
+        params = {**self._query(), "alt": "sse"}
+
+        async with make_client(base_url=_BASE_URL) as client:
+            try:
+                async with client.stream("POST", path, params=params, json=payload) as resp:
+                    if resp.status_code != 200:
+                        body_bytes = await resp.aread()
+                        status_to_exception(
+                            status_code=resp.status_code,
+                            body_text=body_bytes.decode("utf-8", errors="replace"),
+                            headers=dict(resp.headers),
+                        )
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line[len("data:") :].strip()
+                        try:
+                            evt = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        candidate = (evt.get("candidates") or [{}])[0]
+                        parts = (candidate.get("content") or {}).get("parts") or []
+                        text = "".join(p.get("text", "") for p in parts if "text" in p)
+                        finish = candidate.get("finishReason")
+                        if text or finish:
+                            yield LLMChunk(delta=text, finish_reason=finish)
+            except TRANSIENT_NETWORK_ERRORS as exc:
+                raise wrap_httpx_error(exc) from exc
 
     async def test_connection(self, model: str) -> TestResult:
         probe = GeminiAdapter(

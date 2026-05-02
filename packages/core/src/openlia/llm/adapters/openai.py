@@ -170,8 +170,69 @@ class OpenAIAdapter(LLMProvider):
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        raise NotImplementedError("OpenAIAdapter.stream is implemented in Plan 5")
-        yield  # pragma: no cover
+        payload: dict = {
+            "model": self.model,
+            "messages": _to_openai_messages(request),
+            "stream": True,
+        }
+        if _is_reasoning_model(self.model):
+            payload["max_completion_tokens"] = request.max_tokens
+        else:
+            payload["max_tokens"] = request.max_tokens
+            payload["temperature"] = request.temperature
+        if request.stop:
+            payload["stop"] = request.stop
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+                for t in request.tools
+            ]
+        if request.response_format and request.response_format.kind == "json_schema":
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": request.response_format.json_schema,
+            }
+        elif request.response_format and request.response_format.kind == "json_object":
+            payload["response_format"] = {"type": "json_object"}
+
+        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+            try:
+                async with client.stream("POST", "/v1/chat/completions", json=payload) as resp:
+                    if resp.status_code != 200:
+                        body_bytes = await resp.aread()
+                        status_to_exception(
+                            status_code=resp.status_code,
+                            body_text=body_bytes.decode("utf-8", errors="replace"),
+                            headers=dict(resp.headers),
+                        )
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line[len("data:") :].strip()
+                        if data == "[DONE]":
+                            return
+                        try:
+                            payload_chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = payload_chunk.get("choices") or []
+                        if not choices:
+                            continue
+                        choice = choices[0]
+                        delta_obj = choice.get("delta") or {}
+                        delta_text = delta_obj.get("content") or ""
+                        finish = choice.get("finish_reason")
+                        if delta_text or finish:
+                            yield LLMChunk(delta=delta_text, finish_reason=finish)
+            except TRANSIENT_NETWORK_ERRORS as exc:
+                raise wrap_httpx_error(exc) from exc
 
     async def test_connection(self, model: str) -> TestResult:
         probe = OpenAIAdapter(

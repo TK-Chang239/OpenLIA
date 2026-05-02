@@ -111,3 +111,21 @@ async def test_generate_model_not_found() -> None:
         )
         with pytest.raises(ModelNotFoundError):
             await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+
+
+async def test_stream_yields_delta_chunks_with_finish_reason() -> None:
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}\n\n'
+        b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        b"data: [DONE]\n\n"
+    )
+    with respx.mock() as mock:
+        mock.post("https://deepseek.example.com/v1/chat/completions").respond(
+            200, content=sse_body, headers={"content-type": "text/event-stream"}
+        )
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert "".join(c.delta for c in chunks) == "hi"
+    assert chunks[-1].finish_reason == "stop"
