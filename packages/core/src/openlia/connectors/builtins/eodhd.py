@@ -34,35 +34,31 @@ _API_KEY_PLACEHOLDER = "$EODHD_API_KEY"
 _API_CLIENT = InstanceFactory(cls="ExtendedAPIClient", args={"api_key": _API_KEY_PLACEHOLDER})
 
 
-def _macro_spec(*, need_id: str, indicator_code: str) -> CallableSpec:
-    """Build a macro-indicator spec.
+def _reducer_spec(*, need_id: str, method_name: str) -> CallableSpec:
+    """Macro-indicator spec that targets one of ExtendedAPIClient's
+    reducer methods (debt_to_gdp / gdp_growth_yoy / cpi_yoy / …).
 
-    EODHD's `get_macro_indicators_data(country, indicator)` expects an
-    ISO 3166-1 alpha-3 country code (USA, DEU, FRA). The needs.yaml
-    declares the runtime parameter as alpha-2 (US, DE, FR), so we
-    transform on the way through.
+    The reducer translates iso-2 → iso-3 internally, calls EODHD's
+    macro-indicators endpoint, and returns the latest non-null Value
+    as a float. Country code stays iso-2 on the wire (matches needs.yaml).
     """
     return CallableSpec(
         need_id=need_id,
         access_mode="python_lib",
-        module="eodhd",
-        method="ExtendedAPIClient.get_macro_indicators_data",
+        module="openlia.data.eodhd_extended",
+        method=f"ExtendedAPIClient.{method_name}",
         instance_factory=_API_CLIENT,
-        param_bindings={
-            "country": ParamBinding(to_arg="country", transform="country_iso2_to_iso3"),
-        },
-        constants={"indicator": indicator_code},
+        param_bindings={"country": ParamBinding(to_arg="country")},
+        constants={},
         result_path=(),
         shape="float",
     )
 
 
-# Indicator codes verified against eodhd.com's macro-indicators-api docs.
-# Indicators absent from EODHD's catalog (interest_revenue, cpi_core_yoy, pmi)
-# are covered by FMP — see fmp.py.
-_DEBT_GDP = _macro_spec(need_id="debt_gdp", indicator_code="debt_percent_gdp")
-_GDP_YOY = _macro_spec(need_id="gdp_yoy", indicator_code="gdp_growth_annual")
-_CPI_YOY = _macro_spec(need_id="cpi_yoy", indicator_code="inflation_consumer_prices_annual")
+# Macro-indicator-catalog series, reduced to floats by ExtendedAPIClient.
+_DEBT_GDP = _reducer_spec(need_id="debt_gdp", method_name="debt_to_gdp")
+_GDP_YOY = _reducer_spec(need_id="gdp_yoy", method_name="gdp_growth_yoy")
+_CPI_YOY = _reducer_spec(need_id="cpi_yoy", method_name="cpi_yoy")
 
 # Derived series. Core CPI and ISM PMI aren't in EODHD's macro-indicators
 # catalog, but both surface in its economic-events feed. ExtendedAPIClient

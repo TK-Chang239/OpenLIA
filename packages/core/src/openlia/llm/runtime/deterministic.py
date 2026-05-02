@@ -60,7 +60,11 @@ def parse_mr_requirement(requirement: str) -> tuple[str, dict[str, Any]]:
         return requirement, {}
     prefix, _, suffix = requirement.partition(":")
     if prefix == "macro_indicator":
-        return suffix, {}
+        # needs.yaml declares `country` defaulting to "US" for every macro
+        # indicator. The dispatcher doesn't auto-merge yaml defaults, so we
+        # propagate it here. Per-country support (e.g. macro_indicator:de:cpi_yoy)
+        # is a future scope item.
+        return suffix, {"country": "US"}
     if prefix == "stock_quote":
         return "stock_quote", {"ticker": suffix}
     if prefix == "company_news":
