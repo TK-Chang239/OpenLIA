@@ -1,10 +1,13 @@
 """EODHD built-in connector template.
 
-Source: https://github.com/eodhd/python-package (pip: `eodhd`)
+Sources:
+- https://github.com/EodHistoricalData/EODHD-APIs-Python-Financial-Library
+- https://eodhd.com/financial-apis/macroeconomics-data-and-macro-indicators-api
 
-Covers Macro Research macro indicators (debt_gdp, interest_revenue, gdp_yoy,
-cpi_yoy, cpi_core_yoy, pmi), the stock_quote runner need, and the
-retail_sentiment social_posts need.
+Covers a subset of Macro Research macro indicators (the ones EODHD's
+catalog actually exposes), the stock_quote runner need, and the
+retail_sentiment social_posts need. FMP picks up the indicators EODHD
+doesn't carry (interest_revenue, cpi_core_yoy, pmi).
 """
 
 from __future__ import annotations
@@ -26,43 +29,57 @@ _API_CLIENT = InstanceFactory(cls="APIClient", args={"api_key": _API_KEY_PLACEHO
 
 
 def _macro_spec(*, need_id: str, indicator_code: str) -> CallableSpec:
+    """Build a macro-indicator spec.
+
+    EODHD's `get_macro_indicators_data(country, indicator)` expects an
+    ISO 3166-1 alpha-3 country code (USA, DEU, FRA). The needs.yaml
+    declares the runtime parameter as alpha-2 (US, DE, FR), so we
+    transform on the way through.
+    """
     return CallableSpec(
         need_id=need_id,
         access_mode="python_lib",
         module="eodhd",
         method="APIClient.get_macro_indicators_data",
         instance_factory=_API_CLIENT,
-        param_bindings={"country": ParamBinding(to_arg="country", transform="iso_to_eodhd")},
+        param_bindings={
+            "country": ParamBinding(to_arg="country", transform="country_iso2_to_iso3"),
+        },
         constants={"indicator": indicator_code},
         result_path=(),
         shape="float",
     )
 
 
-_DEBT_GDP = _macro_spec(need_id="debt_gdp", indicator_code="debt_to_gdp")
-_INTEREST_REVENUE = _macro_spec(need_id="interest_revenue", indicator_code="interest_to_revenue")
+# Indicator codes verified against eodhd.com's macro-indicators-api docs.
+# Indicators absent from EODHD's catalog (interest_revenue, cpi_core_yoy, pmi)
+# are covered by FMP — see fmp.py.
+_DEBT_GDP = _macro_spec(need_id="debt_gdp", indicator_code="debt_percent_gdp")
 _GDP_YOY = _macro_spec(need_id="gdp_yoy", indicator_code="gdp_growth_annual")
 _CPI_YOY = _macro_spec(need_id="cpi_yoy", indicator_code="inflation_consumer_prices_annual")
-_CPI_CORE_YOY = _macro_spec(need_id="cpi_core_yoy", indicator_code="inflation_core_annual")
-_PMI = _macro_spec(need_id="pmi", indicator_code="pmi_manufacturing")
 
+# APIClient.get_live_stock_prices(ticker, s=None). The first positional arg
+# is named "ticker" on the SDK, matching the runtime parameter from
+# macro_research.needs.yaml#stock_quote.
 _STOCK_QUOTE = CallableSpec(
     need_id="stock_quote",
     access_mode="python_lib",
     module="eodhd",
-    method="APIClient.real_time_quote",  # TODO(verify): confirm method name in eodhd SDK
+    method="APIClient.get_live_stock_prices",
     instance_factory=_API_CLIENT,
-    param_bindings={"ticker": ParamBinding(to_arg="symbol")},
+    param_bindings={"ticker": ParamBinding(to_arg="ticker")},
     constants={},
     result_path=(),
     shape="dict",
 )
 
+# APIClient.get_sentiment(s, from_date=None, to_date=None). Comma-separated
+# tickers (we pass one). The runtime param "ticker" maps to the SDK's "s".
 _SOCIAL_POSTS = CallableSpec(
     need_id="social_posts",
     access_mode="python_lib",
     module="eodhd",
-    method="APIClient.sentiment_data",  # TODO(verify): confirm method name in eodhd SDK
+    method="APIClient.get_sentiment",
     instance_factory=_API_CLIENT,
     param_bindings={"ticker": ParamBinding(to_arg="s")},
     constants={},
@@ -77,11 +94,6 @@ EODHD_TEMPLATE = BuiltInTemplate(
     category=Category.FINANCIAL,
     api_key_env_var="EODHD_API_KEY",
     available_modes=(
-        CliMcpRecipe(
-            kind="cli_mcp",
-            argv=("uvx", "eodhd-mcp"),
-            env_keys=("EODHD_API_KEY",),
-        ),
         PythonLibRecipe(
             kind="python_lib",
             pip_name="eodhd",
@@ -90,15 +102,17 @@ EODHD_TEMPLATE = BuiltInTemplate(
             instance_factory_cls="APIClient",
             instance_factory_args=(("api_key", _API_KEY_PLACEHOLDER),),
         ),
+        CliMcpRecipe(
+            kind="cli_mcp",
+            argv=("uvx", "eodhd-mcp"),
+            env_keys=("EODHD_API_KEY",),
+        ),
     ),
-    canary_tool="real_time_quote",
+    canary_tool="get_live_stock_prices",
     runner_specs=(
         _DEBT_GDP,
-        _INTEREST_REVENUE,
         _GDP_YOY,
         _CPI_YOY,
-        _CPI_CORE_YOY,
-        _PMI,
         _STOCK_QUOTE,
         _SOCIAL_POSTS,
     ),

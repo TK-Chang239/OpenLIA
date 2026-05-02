@@ -28,20 +28,19 @@ def test_eodhd_python_lib_recipe_uses_api_key_env_placeholder() -> None:
 
 
 def test_eodhd_runner_specs_cover_expected_needs() -> None:
+    """EODHD covers the macro indicators its catalog actually exposes.
+
+    `interest_revenue`, `cpi_core_yoy`, and `pmi` are NOT in EODHD's
+    macro-indicators catalog — those needs are covered by FMP only.
+    """
     need_ids = {spec.need_id for spec in EODHD_TEMPLATE.runner_specs}
-    expected = {
+    assert need_ids == {
         "debt_gdp",
-        "interest_revenue",
         "gdp_yoy",
         "cpi_yoy",
-        "cpi_core_yoy",
-        "pmi",
         "stock_quote",
         "social_posts",
     }
-    assert expected - need_ids == set() or len(expected & need_ids) >= 6, (
-        f"EODHD must cover most expected needs; missing: {expected - need_ids}"
-    )
 
 
 def test_eodhd_runner_specs_have_python_lib_or_mcp_access_mode() -> None:
