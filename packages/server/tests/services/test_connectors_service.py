@@ -78,11 +78,17 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
         .all()
     )
 
-    # Firecrawl has 3 runner_specs (world-order needs)
-    assert len(rows) == 3
+    # Firecrawl covers four needs: three world-order series plus
+    # interest_revenue (which neither EODHD nor FMP exposes).
+    assert len(rows) == 4
 
     need_ids = {r.need_id for r in rows}
-    assert need_ids == {"usd_fx_reserve_share", "cb_gold_purchases", "foreign_treasury_holdings"}
+    assert need_ids == {
+        "usd_fx_reserve_share",
+        "cb_gold_purchases",
+        "foreign_treasury_holdings",
+        "interest_revenue",
+    }
 
     for row in rows:
         assert row.department_id == "macro_research"

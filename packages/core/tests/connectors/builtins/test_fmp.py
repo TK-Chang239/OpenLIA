@@ -26,19 +26,16 @@ def test_fmp_remote_mcp_url_targets_official_endpoint() -> None:
     assert remote.url == "https://financialmodelingprep.com/mcp?apikey={api_key}"
 
 
-def test_fmp_runner_specs_cover_all_eight_needs() -> None:
-    """FMP picks up the macro indicators EODHD's catalog doesn't carry."""
+def test_fmp_runner_specs_cover_only_verified_needs() -> None:
+    """FMP only ships specs for live-verified tool names + indicator codes.
+
+    Live MCP probe (2026-05-01) confirmed: GDP, CPI valid;
+    coreCPI/debtToGDP/PMI/interestToRevenue rejected as 'Invalid name';
+    no social-sentiment endpoint exists. Specs that named invalid
+    indicators or non-existent tools have been dropped.
+    """
     need_ids = {spec.need_id for spec in FMP_TEMPLATE.runner_specs}
-    assert need_ids == {
-        "debt_gdp",
-        "interest_revenue",
-        "gdp_yoy",
-        "cpi_yoy",
-        "cpi_core_yoy",
-        "pmi",
-        "stock_quote",
-        "social_posts",
-    }
+    assert need_ids == {"gdp_yoy", "cpi_yoy", "stock_quote"}
 
 
 def test_fmp_runner_specs_use_remote_mcp_with_tool_names() -> None:
@@ -47,6 +44,8 @@ def test_fmp_runner_specs_use_remote_mcp_with_tool_names() -> None:
         assert spec.tool_name is not None
         assert spec.module is None
         assert spec.method is None
+        # FMP's MCP dispatches via an `endpoint` enum constant.
+        assert "endpoint" in spec.constants
 
 
 def test_fmp_canary_tool_is_quote() -> None:

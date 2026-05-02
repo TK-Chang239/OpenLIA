@@ -89,6 +89,20 @@ _FOREIGN_TREASURY_HOLDINGS = _scrape_spec(
     ),
 )
 
+# US federal interest expense as a percentage of federal revenue. EODHD's
+# macro-indicators catalog and FMP's economics endpoint both lack this
+# series, so we scrape Treasury's Fiscal Data summary page where the
+# ratio is published in plain text.
+_INTEREST_REVENUE = _scrape_spec(
+    need_id="interest_revenue",
+    url="https://fiscaldata.treasury.gov/americas-finance-guide/national-debt/",
+    field_name="interest_to_revenue_pct",
+    field_description=(
+        "Federal interest expense as a percentage of federal revenue, "
+        "expressed as a percentage (e.g. 16.5)."
+    ),
+)
+
 
 FIRECRAWL_TEMPLATE = BuiltInTemplate(
     template_id="firecrawl",
@@ -120,5 +134,6 @@ FIRECRAWL_TEMPLATE = BuiltInTemplate(
         _USD_FX_RESERVE_SHARE,
         _CB_GOLD_PURCHASES,
         _FOREIGN_TREASURY_HOLDINGS,
+        _INTEREST_REVENUE,
     ),
 )

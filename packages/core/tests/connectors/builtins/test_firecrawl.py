@@ -40,12 +40,18 @@ def test_firecrawl_remote_mcp_uses_v2_mcp_path() -> None:
     assert remote.url == "https://mcp.firecrawl.dev/{api_key}/v2/mcp"
 
 
-def test_firecrawl_runner_specs_cover_world_order_needs() -> None:
+def test_firecrawl_runner_specs_cover_world_order_and_interest_revenue_needs() -> None:
+    """Firecrawl handles the four needs no upstream financial API exposes:
+    three world-order needs (USD reserve share, central-bank gold purchases,
+    foreign Treasury holdings) plus interest_revenue (federal interest
+    expense as % of revenue).
+    """
     need_ids = {spec.need_id for spec in FIRECRAWL_TEMPLATE.runner_specs}
     assert need_ids == {
         "usd_fx_reserve_share",
         "cb_gold_purchases",
         "foreign_treasury_holdings",
+        "interest_revenue",
     }
 
 
