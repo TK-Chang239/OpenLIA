@@ -50,6 +50,42 @@ def test_build_transport_leaves_url_unchanged_when_no_placeholders() -> None:
     assert t._mode.url == "https://api.example.com/mcp"  # type: ignore[attr-defined]
 
 
+def test_hydrate_spec_round_trips_result_path() -> None:
+    """RunnerCallableSpec rows persist `result_path` as a JSON list (because
+    `dataclasses.asdict` flattens tuples). The hydrator must read it back
+    and convert to tuple, or else specs with non-empty result_path lose
+    their reduction step on every dispatcher build — runners get the raw
+    transport result instead of the schema-targeted field.
+    """
+    from dataclasses import dataclass
+
+    from openlia_server.services.dispatcher_factory import _hydrate_spec
+
+    @dataclass
+    class _StubRow:
+        department_id: str
+        need_id: str
+        access_mode: str
+        spec: dict
+
+    row = _StubRow(
+        department_id="macro_research",
+        need_id="usd_fx_reserve_share",
+        access_mode="python_lib",
+        spec={
+            "need_id": "usd_fx_reserve_share",
+            "access_mode": "python_lib",
+            "method": "Firecrawl.scrape",
+            "constants": {"url": "https://x", "formats": []},
+            "param_bindings": {},
+            "shape": "float",
+            "result_path": ["json", "usd_share_pct"],
+        },
+    )
+    hydrated = _hydrate_spec(row)
+    assert hydrated.result_path == ("json", "usd_share_pct")
+
+
 def test_build_transport_leaves_unknown_placeholder_unchanged() -> None:
     """If the secret isn't supplied, the placeholder stays literal — surfacing
     a clear failure rather than silently coercing to an empty string.
