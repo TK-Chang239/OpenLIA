@@ -2,7 +2,7 @@
 
 `propose_specs_for_department` takes a department_id and aggregates the
 inventory across every validated connector whose category overlaps the
-department's required ∪ optional categories. Per (department, need) it
+department's required + optional categories. Per (department, need) it
 picks the best resolved spec across connectors, tagging each proposal
 with the chosen `connector_id`. Unsatisfied needs are surfaced as
 `unsatisfiable=True` rather than dropped.
@@ -265,9 +265,7 @@ async def test_skips_connectors_whose_category_does_not_overlap(
 
 
 @pytest.mark.asyncio
-async def test_picks_first_connector_that_resolves(
-    engine: Engine, db_session: DBSession
-) -> None:
+async def test_picks_first_connector_that_resolves(engine: Engine, db_session: DBSession) -> None:
     """Two financial connectors both match the dept. Each that produces a
     valid spec contributes one candidate to the dept's proposal list, so the
     review page can show alternatives."""
@@ -456,9 +454,7 @@ async def test_unsatisfiable_when_all_connectors_fail(
         {"macro_research": ({Category.FINANCIAL}, set())}
     )
     # LLM picks a tool name nothing in inventory has.
-    llm = _StubLlm(
-        by_need={"exotic": {"tool_name": "wat", "param_bindings": {}, "constants": {}}}
-    )
+    llm = _StubLlm(by_need={"exotic": {"tool_name": "wat", "param_bindings": {}, "constants": {}}})
 
     proposals = await runner_specs_service.propose_specs_for_department(
         db_session, department_id="macro_research", llm_client=llm
@@ -504,14 +500,10 @@ async def test_resolve_logs_tool_call_events_when_factory_used(
 
         async def generate_json(self, *, prompt: str) -> dict[str, Any]:
             assert self.listener is not None
-            self.listener(
-                ToolCall(id="c1", name="read_file", arguments={"path": "tools.py"})
-            )
+            self.listener(ToolCall(id="c1", name="read_file", arguments={"path": "tools.py"}))
             return {
                 "tool_name": "get_quote",
-                "param_bindings": {
-                    "ticker": {"to_arg": "symbol", "transform": None}
-                },
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
                 "constants": {},
             }
 
@@ -692,9 +684,7 @@ async def test_propose_spec_for_need_excludes_blocked_connectors(
         by_need={
             "quote": {
                 "tool_name": "tool_b",
-                "param_bindings": {
-                    "ticker": {"to_arg": "symbol", "transform": None}
-                },
+                "param_bindings": {"ticker": {"to_arg": "symbol", "transform": None}},
                 "constants": {},
             }
         }
@@ -762,9 +752,7 @@ async def test_propose_spec_for_need_returns_unsatisfiable_when_all_fail(
     runner_specs_service.set_dept_categories_for_testing(
         {"macro_research": ({Category.FINANCIAL}, set())}
     )
-    llm = _StubLlm(
-        by_need={"exotic": {"tool_name": "wat", "param_bindings": {}, "constants": {}}}
-    )
+    llm = _StubLlm(by_need={"exotic": {"tool_name": "wat", "param_bindings": {}, "constants": {}}})
 
     updated = await runner_specs_service.propose_spec_for_need(
         db_session,
@@ -781,9 +769,7 @@ async def test_propose_spec_for_need_404_for_unknown_need(
     engine: Engine, db_session: DBSession
 ) -> None:
     runner_specs_service.set_dept_needs_for_testing({"macro_research": []})
-    runner_specs_service.set_dept_categories_for_testing(
-        {"macro_research": (set(), set())}
-    )
+    runner_specs_service.set_dept_categories_for_testing({"macro_research": (set(), set())})
 
     class _Llm:
         async def generate_json(self, *, prompt: str) -> dict:
@@ -837,18 +823,14 @@ def test_approve_dept_spec_persists_with_connector_from_proposal(
     assert row.spec["tool_name"] == "get_quote"
 
 
-def test_approve_dept_spec_404_when_no_proposal(
-    engine: Engine, db_session: DBSession
-) -> None:
+def test_approve_dept_spec_404_when_no_proposal(engine: Engine, db_session: DBSession) -> None:
     with pytest.raises(KeyError):
         runner_specs_service.approve_dept_spec(
             db_session, department_id="macro_research", need_id="ghost"
         )
 
 
-def test_approve_dept_spec_rejects_unsatisfiable(
-    engine: Engine, db_session: DBSession
-) -> None:
+def test_approve_dept_spec_rejects_unsatisfiable(engine: Engine, db_session: DBSession) -> None:
     runner_specs_service._DEPT_PROPOSALS["macro_research"] = [
         runner_specs_service.ProposedSpec(
             department_id="macro_research",
@@ -869,9 +851,7 @@ def test_approve_dept_spec_rejects_unsatisfiable(
 
 
 @pytest.mark.asyncio
-async def test_caches_proposals_per_department(
-    engine: Engine, db_session: DBSession
-) -> None:
+async def test_caches_proposals_per_department(engine: Engine, db_session: DBSession) -> None:
     conn = _seed_connector(db_session)
     runner_specs_service.set_dept_needs_for_testing(
         {

@@ -174,7 +174,7 @@ Notation: `$EODHD_API_KEY` is a placeholder that the connector subsystem substit
 
 ### 3.4 Built-in templates
 
-The connector subsystem ships a curated catalog of built-in templates — known providers with pre-wired launch shapes. A built-in entry declares:
+The connector subsystem ships a curated catalog of built-in templates — known providers with pre-wired launch shapes and pre-baked runner-need mappings. A built-in entry declares:
 
 ```python
 @dataclass(frozen=True)
@@ -185,9 +185,12 @@ class BuiltInTemplate:
     api_key_env_var: str                      # e.g. "EODHD_API_KEY"
     available_modes: tuple[ModeRecipe, ...]   # one per access mode this template ships
     canary_tool: str | None                   # for MCP validation
+    runner_specs: tuple[CallableSpec, ...]    # pre-baked need→callable map (default ())
 ```
 
-A `ModeRecipe` is a typed shape: an MCP-CLI recipe carries argv; a python_lib recipe carries pip_name + import_module + instance_factory. When the user picks a built-in, the wizard offers checkboxes for each available mode and the selected ones become entries in `Connector.launch`.
+A `ModeRecipe` is a typed shape: an MCP-CLI recipe carries argv; a python_lib recipe carries pip_name + import_module + instance_factory. When the user picks a built-in, all available modes are installed under one credential and the curated `runner_specs` are written directly to `runner_callable_specs`, bypassing the wizard-time adapter LLM (§7).
+
+Day-1 catalog (revised 2026-05-01, supersedes the earlier "locked empty" placeholder): six templates ship — EODHD, FMP, NewsAPI.ai, Mediastack, Firecrawl, X. The per-provider mode recipes, runner-need mappings, and the additive `result_path` field on `CallableSpec` are documented at `docs/superpowers/specs/2026-05-01-builtin-connectors-design.md`.
 
 ### 3.5 Persistence for runner callable specs
 

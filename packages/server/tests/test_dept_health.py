@@ -69,13 +69,51 @@ def test_serialize_shape():
         unresolved_needs=["q"],
     )
     blob = dept_health.serialize(h)
+    # Unknown dept id → registry-derived fields are empty lists.
     assert blob == {
         "department_id": "x",
         "status": "disabled",
         "reason": "Missing required categories: financial",
         "missing_categories": ["financial"],
         "unresolved_needs": ["q"],
+        "required_categories": [],
+        "required_any_of": [],
+        "unsatisfied_any_of": [],
     }
+
+
+def test_serialize_includes_registry_metadata_for_known_dept():
+    """For a real dept, serialize echoes the static registry metadata so
+    the wizard can show 'required vs. alternative' category badges."""
+    from openlia.departments.health import DepartmentHealth
+
+    h = DepartmentHealth(
+        department_id="morning_briefing",
+        status="disabled",
+        reason="...",
+        missing_categories=[],
+        unresolved_needs=[],
+        unsatisfied_any_of=[(Category.NEWS, Category.WEB_SEARCH)],
+    )
+    blob = dept_health.serialize(h)
+    assert blob["required_categories"] == ["financial"]
+    assert blob["required_any_of"] == [["news", "web_search"]]
+    assert blob["unsatisfied_any_of"] == [["news", "web_search"]]
+
+
+def test_serialize_macro_research_shows_web_search_required():
+    from openlia.departments.health import DepartmentHealth
+
+    h = DepartmentHealth(
+        department_id="macro_research",
+        status="active",
+        reason=None,
+        missing_categories=[],
+        unresolved_needs=[],
+    )
+    blob = dept_health.serialize(h)
+    assert "financial" in blob["required_categories"]
+    assert "web_search" in blob["required_categories"]
 
 
 @pytest.mark.asyncio

@@ -45,6 +45,11 @@ class LaunchIn(BaseModel):
     modes: list[ModeIn]
 
 
+class InstallBuiltinIn(BaseModel):
+    template_id: str = Field(min_length=1, max_length=64)
+    api_key: str = Field(min_length=1, max_length=512)
+
+
 class ConnectorCreate(BaseModel):
     provider_id: str = Field(min_length=1, max_length=64)
     display_name: str = Field(min_length=1, max_length=128)
@@ -171,6 +176,14 @@ def _introspect_init(import_module: str, cls_name: str) -> list[ParamSpec]:
             )
         )
     return params
+
+
+class BuiltinTemplateOut(BaseModel):
+    template_id: str
+    display_name: str
+    category: str
+    api_key_env_var: str
+    covered_need_ids: list[str]
 
 
 class ConnectorOut(BaseModel):
@@ -316,6 +329,23 @@ def build_connectors_router(
         importlib.invalidate_caches()
         return InstallPythonPackageOut(stdout=proc.stdout or proc.stderr)
 
+    @router.post(
+        "/install-builtin",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ConnectorOut,
+    )
+    async def install_builtin_route(
+        body: InstallBuiltinIn,
+        db: DBSession = Depends(session_dep),
+    ) -> ConnectorOut:
+        try:
+            connector = await connectors_service.install_builtin(
+                db, template_id=body.template_id, api_key=body.api_key
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _to_out(connector)
+
     @router.post("", status_code=status.HTTP_201_CREATED, response_model=ConnectorOut)
     async def create(body: ConnectorCreate, db: DBSession = Depends(session_dep)) -> ConnectorOut:
         launch_dict = body.launch.model_dump(exclude_none=True)
@@ -337,6 +367,21 @@ def build_connectors_router(
     @router.get("", response_model=list[ConnectorOut])
     def list_(db: DBSession = Depends(session_dep)) -> list[ConnectorOut]:
         return [_to_out(r) for r in connectors_service.list_connectors(db)]
+
+    @router.get("/builtins", response_model=list[BuiltinTemplateOut])
+    def get_builtin_templates() -> list[BuiltinTemplateOut]:
+        from openlia.connectors.builtins import list_templates
+
+        return [
+            BuiltinTemplateOut(
+                template_id=t.template_id,
+                display_name=t.display_name,
+                category=t.category.value,
+                api_key_env_var=t.api_key_env_var,
+                covered_need_ids=[s.need_id for s in t.runner_specs],
+            )
+            for t in list_templates()
+        ]
 
     @router.get("/{connector_id}", response_model=ConnectorDetail)
     def get(connector_id: str, db: DBSession = Depends(session_dep)) -> ConnectorDetail:
@@ -380,5 +425,15 @@ def build_connectors_router(
         if row is None:
             raise HTTPException(status_code=404, detail="connector not found")
         return _to_out(row)
+
+    @router.post("/{connector_id}/sync-template-specs")
+    def sync_template_specs(
+        connector_id: str, db: DBSession = Depends(session_dep)
+    ) -> dict[str, int]:
+        try:
+            inserted = connectors_service.sync_template_specs(db, connector_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {"inserted": inserted}
 
     return router

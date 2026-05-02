@@ -29,7 +29,9 @@ from typing import Any
 
 from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
+    ALLOWED_RESULT_REDUCERS,
     ALLOWED_TRANSFORMS,
+    RESULT_REDUCERS,
     TRANSFORMS,
     CallableDefinition,
     CallableSpec,
@@ -49,6 +51,22 @@ class DispatchError(RuntimeError):
 
 class NeedNotResolved(DispatchError):
     pass
+
+
+def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any:
+    """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged.
+
+    Walks dict keys first, then falls back to attribute access so python_lib
+    transports returning Pydantic models / dataclasses traverse cleanly.
+    """
+    for key in path:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        elif hasattr(value, key):
+            value = getattr(value, key)
+        else:
+            raise DispatchError(f"result_path {path!r} missing key {key!r} for need {need_id!r}")
+    return value
 
 
 @dataclass(frozen=True)
@@ -71,6 +89,14 @@ class Dispatcher:
     """Keyed by connector_id."""
     callable_specs: dict[tuple[str, str], CallableSpec] = field(default_factory=dict)
     """Keyed by (department_id, need_id)."""
+    spec_connector_ids: dict[tuple[str, str], str] = field(default_factory=dict)
+    """Authoritative connector ownership per spec, set by the server's
+    hydrator from RunnerCallableSpec.connector_id. When present,
+    `_connector_for_spec` uses it directly instead of scanning by
+    tool/method qualname — required when a spec's method name doesn't
+    appear in the connector's introspected callables registry (e.g.
+    Firecrawl SDK attaches methods per-instance, so class-walk
+    introspection misses them)."""
 
     # ----- chat candidate pool / tool routing (§8) -----
 
@@ -129,13 +155,17 @@ class Dispatcher:
     def _connector_for_spec(self, dept: str, need_id: str, spec: CallableSpec) -> PreparedConnector:
         """Locate the connector that owns this spec.
 
-        For MCP modes the connector is whichever one exposes `spec.tool_name`.
-        For `python_lib` mode the connector is whichever one's `cached_python_callables`
-        registers `spec.method` — but since the per-spec connector_id is recorded
-        in the DB row and propagated by the server's hydrator, we additionally
-        accept any connector whose category is compatible. To keep this layer
-        pure, we fall back to scanning by tool/method presence.
+        Prefers the persisted `spec_connector_ids` map (RunnerCallableSpec.connector_id
+        from the DB row). Falls back to scanning by `tool_name`/`method`
+        presence so older specs persisted before connector_id was tracked
+        keep working.
         """
+        cid = self.spec_connector_ids.get((dept, need_id))
+        if cid is not None:
+            conn = self.connectors.get(cid)
+            if conn is not None:
+                return conn
+
         access_mode = spec.access_mode
         if access_mode in {"cli_mcp", "remote_mcp"}:
             tool_name = spec.tool_name
@@ -179,14 +209,16 @@ class Dispatcher:
         bound: dict[str, Any] = {}
 
         # Apply param_bindings: rename caller's kwarg -> underlying arg, and
-        # apply named transform when present.
+        # apply named transform when present. Runtime args without a
+        # matching binding are dropped silently — the dispatcher's contract
+        # is that param_bindings + constants together fully describe the
+        # call's argument shape. (Earlier behavior passed unbound args
+        # through, but that breaks specs that share a need-id with a
+        # different shape — e.g. Firecrawl-scrape specs receiving a stray
+        # country=US from parse_mr_requirement.)
         for caller_name, value in runtime_args.items():
             binding = spec.param_bindings.get(caller_name)
             if binding is None:
-                # Not bound — pass through unchanged. The wizard adapter is
-                # expected to declare bindings for every need parameter, but
-                # runners may pass extra kwargs the underlying call accepts.
-                bound[caller_name] = value
                 continue
             if binding.transform is not None:
                 if binding.transform not in ALLOWED_TRANSFORMS:
@@ -206,15 +238,29 @@ class Dispatcher:
             tool_name = spec.tool_name
             if tool_name is None:
                 raise DispatchError(f"spec for need {spec.need_id!r} missing tool_name")
-            return await conn.transport.call_tool(tool_name, bound)
-
-        if spec.access_mode == "python_lib":
+            raw = await conn.transport.call_tool(tool_name, bound)
+        elif spec.access_mode == "python_lib":
             method = spec.method
             if method is None:
                 raise DispatchError(f"spec for need {spec.need_id!r} missing method")
             # The PythonLibTransport (Phase 5) handles instance instantiation
             # and method dispatch internally; we just hand it the method name
             # and bound kwargs.
-            return await conn.transport.call_tool(method, bound)
+            raw = await conn.transport.call_tool(method, bound)
+        else:
+            raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
 
-        raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
+        if spec.result_reducer is not None:
+            if spec.result_reducer not in ALLOWED_RESULT_REDUCERS:
+                raise DispatchError(
+                    f"unknown result_reducer {spec.result_reducer!r} "
+                    f"in spec for need {spec.need_id!r}",
+                )
+            try:
+                raw = RESULT_REDUCERS[spec.result_reducer](raw)
+            except (ValueError, TypeError, KeyError) as exc:
+                raise DispatchError(
+                    f"result_reducer {spec.result_reducer!r} failed for "
+                    f"need {spec.need_id!r}: {exc}",
+                ) from exc
+        return _walk_result_path(raw, spec.result_path, need_id=spec.need_id)

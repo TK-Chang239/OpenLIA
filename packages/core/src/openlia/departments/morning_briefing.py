@@ -17,11 +17,15 @@ class MorningBriefingDepartment:
     tier: Tier = "everyday"
 
     # Connector dependencies (spec §10.1).
-    required_categories: ClassVar[tuple[Category, ...]] = (
-        Category.FINANCIAL,
-        Category.NEWS,
+    # Headlines may come from a NEWS provider OR a WEB_SEARCH provider
+    # (the LLM can scrape news pages with Firecrawl), so the headline
+    # source is expressed as a required-any-of group rather than
+    # listing NEWS as a hard requirement.
+    required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
+    required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = (
+        (Category.NEWS, Category.WEB_SEARCH),
     )
-    optional_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
+    optional_categories: ClassVar[tuple[Category, ...]] = ()
 
     # Runtime behavior (spec §5.2).
     requires_runner: ClassVar[bool] = False

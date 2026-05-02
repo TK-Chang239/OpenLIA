@@ -22,6 +22,7 @@ vi.mock("../../../api/connectors", async () => {
     approveSpec: vi.fn(),
     getConnector: vi.fn(),
     updateConnector: vi.fn(),
+    listBuiltinTemplates: vi.fn(),
   };
 });
 
@@ -47,6 +48,7 @@ const mocked = connectorsApi as unknown as {
   approveSpec: ReturnType<typeof vi.fn>;
   getConnector: ReturnType<typeof vi.fn>;
   updateConnector: ReturnType<typeof vi.fn>;
+  listBuiltinTemplates: ReturnType<typeof vi.fn>;
 };
 
 function row(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
@@ -94,16 +96,14 @@ beforeEach(() => {
     secret_keys: [],
   });
   mocked.updateConnector.mockResolvedValue(row());
+  mocked.listBuiltinTemplates.mockResolvedValue([]);
 });
 
 describe("ConnectorsStep", () => {
-  it("renders empty-state copy when no built-ins or connectors", async () => {
+  it("renders empty-state copy when no connectors exist", async () => {
     render(
       <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
     );
-    expect(
-      await screen.findByText(/no built-in templates available/i),
-    ).toBeInTheDocument();
     expect(
       await screen.findByText(/no connectors yet/i),
     ).toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("ConnectorsStep", () => {
     );
     await screen.findByText("EODHD");
     expect(screen.getByTestId("next-disabled-hint")).toHaveTextContent(
-      /Click Validate on at least one connector to continue\./,
+      /At least one connector must finish validating before you can continue\./,
     );
   });
 
@@ -215,19 +215,38 @@ describe("ConnectorsStep", () => {
     ).toBeInTheDocument();
   });
 
-  it("Review specs button fetches proposals", async () => {
-    mocked.listConnectors.mockResolvedValue([row()]);
-    mocked.listProposedSpecs.mockResolvedValueOnce([]);
+  it("renders the catalog grid when 'Add from catalog' is clicked", async () => {
+    mocked.listBuiltinTemplates.mockResolvedValue([
+      {
+        template_id: "firecrawl",
+        display_name: "Firecrawl",
+        category: "web_search",
+        api_key_env_var: "FIRECRAWL_API_KEY",
+        covered_need_ids: [],
+      },
+    ]);
     render(
       <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
     );
-    await screen.findByText("EODHD");
-    fireEvent.click(screen.getByRole("button", { name: /review specs/i }));
-    await waitFor(() =>
-      expect(mocked.listProposedSpecs).toHaveBeenCalledWith("c1"),
+    fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
+    expect(await screen.findByText("Firecrawl")).toBeInTheDocument();
+  });
+
+  it("opens the install form when a catalog card is clicked", async () => {
+    mocked.listBuiltinTemplates.mockResolvedValue([
+      {
+        template_id: "firecrawl",
+        display_name: "Firecrawl",
+        category: "web_search",
+        api_key_env_var: "FIRECRAWL_API_KEY",
+        covered_need_ids: [],
+      },
+    ]);
+    render(
+      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
     );
-    expect(
-      await screen.findByText(/no proposals at this time/i),
-    ).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
+    fireEvent.click(await screen.findByText("Firecrawl"));
+    expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
   });
 });
