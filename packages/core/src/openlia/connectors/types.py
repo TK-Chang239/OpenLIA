@@ -131,7 +131,17 @@ class ParamBinding:
 
 @dataclass(frozen=True)
 class CallableSpec:
-    """Persisted resolution from a RunnerNeed to a concrete connector callable."""
+    """Persisted resolution from a RunnerNeed to a concrete connector callable.
+
+    ``result_path`` (optional dotted path) peels a wrapper off the transport
+    response before shape-specific post-processing — e.g. ``"data.posts"``
+    extracts the list from a ``{"data": {"posts": [...]}}`` response.
+
+    ``field_map`` (optional, ``list[dict]`` shape only) renames each item's
+    keys to the canonical set declared on the need's ``canonical_keys``.
+    Values may be dotted paths to extract nested fields per item.
+    A missing required canonical key at runtime raises ``FieldMapError``.
+    """
 
     need_id: str
     access_mode: Literal["cli_mcp", "remote_mcp", "python_lib"]
@@ -145,6 +155,8 @@ class CallableSpec:
     param_bindings: dict[str, ParamBinding] = field(default_factory=dict)
     constants: dict[str, Any] = field(default_factory=dict)
     shape: str = "any"
+    result_path: str | None = None
+    field_map: dict[str, str] | None = None
 
 
 TRANSFORMS: dict[str, Callable[[Any], Any]] = {

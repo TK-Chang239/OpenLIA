@@ -51,6 +51,17 @@ class NeedNotResolved(DispatchError):
     pass
 
 
+class FieldMapError(DispatchError):
+    """Raised when a CallableSpec.field_map fails to resolve at runtime.
+
+    Surfaced for: missing source key on an item, missing dotted-path
+    component, or attempting to walk a non-mapping. The smoke pipeline
+    classifies this as ``schema_miss`` and surfaces the offending key.
+    """
+
+    pass
+
+
 @dataclass(frozen=True)
 class PreparedConnector:
     connector_id: str
@@ -206,15 +217,73 @@ class Dispatcher:
             tool_name = spec.tool_name
             if tool_name is None:
                 raise DispatchError(f"spec for need {spec.need_id!r} missing tool_name")
-            return await conn.transport.call_tool(tool_name, bound)
-
-        if spec.access_mode == "python_lib":
+            raw = await conn.transport.call_tool(tool_name, bound)
+        elif spec.access_mode == "python_lib":
             method = spec.method
             if method is None:
                 raise DispatchError(f"spec for need {spec.need_id!r} missing method")
             # The PythonLibTransport (Phase 5) handles instance instantiation
             # and method dispatch internally; we just hand it the method name
             # and bound kwargs.
-            return await conn.transport.call_tool(method, bound)
+            raw = await conn.transport.call_tool(method, bound)
+        else:
+            raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
 
-        raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
+        return _post_process(spec, raw)
+
+
+def _walk_dotted(obj: Any, path: str) -> Any:
+    """Walk a dotted path on a (potentially nested) mapping.
+
+    Raises ``FieldMapError`` with the offending segment when the path
+    cannot be resolved.
+    """
+    cur: Any = obj
+    for segment in path.split("."):
+        if not isinstance(cur, dict) or segment not in cur:
+            raise FieldMapError(
+                f"dotted path {path!r} cannot be resolved: missing segment {segment!r}"
+            )
+        cur = cur[segment]
+    return cur
+
+
+def _post_process(spec: CallableSpec, raw: Any) -> Any:
+    """Apply ``result_path`` then ``field_map`` per spec §3 (Phase 3).
+
+    - ``result_path``: optional dotted-path peel to extract a nested value.
+    - ``field_map``: only honored for ``shape == "list[dict]"``; renames
+      keys per item. ``None`` or ``{}`` returns items unchanged.
+    """
+    value = raw
+    if spec.result_path:
+        value = _walk_dotted(value, spec.result_path)
+
+    if spec.shape != "list[dict]" or not spec.field_map:
+        return value
+
+    if not isinstance(value, list):
+        raise FieldMapError(
+            f"spec for need {spec.need_id!r} has shape 'list[dict]' but post-result_path "
+            f"value is not a list: got {type(value).__name__}"
+        )
+
+    out: list[dict[str, Any]] = []
+    for idx, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise FieldMapError(
+                f"spec for need {spec.need_id!r}: item at index {idx} is not a mapping"
+            )
+        renamed: dict[str, Any] = {}
+        for canonical_key, source_path in spec.field_map.items():
+            if "." in source_path:
+                renamed[canonical_key] = _walk_dotted(item, source_path)
+            else:
+                if source_path not in item:
+                    raise FieldMapError(
+                        f"spec for need {spec.need_id!r}: source key "
+                        f"{source_path!r} missing on item at index {idx}"
+                    )
+                renamed[canonical_key] = item[source_path]
+        out.append(renamed)
+    return out
