@@ -15,6 +15,11 @@ class Department(Protocol):
     tier: Tier
     required_categories: tuple[Category, ...]
     optional_categories: tuple[Category, ...]
+    # At-least-one-of disjunctive groups. Each inner tuple is satisfied
+    # when ANY of its members has a validated connector. Use this when
+    # two categories serve interchangeable roles (e.g., NEWS or
+    # WEB_SEARCH for headline retrieval).
+    required_any_of: tuple[tuple[Category, ...], ...]
     requires_runner: bool
     disable_runtime_routing: bool
     extra_tools: tuple[dict[str, Any], ...]
