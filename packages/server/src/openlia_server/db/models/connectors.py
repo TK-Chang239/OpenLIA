@@ -11,9 +11,11 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -108,6 +110,15 @@ class RunnerCallableSpec(Base):
     spec: Mapped[dict] = mapped_column(JSON, nullable=False)
     canary_value: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     canary_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    resolution_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default="catalog"
+    )
+    user_inputs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    llm_warning: Mapped[str | None] = mapped_column(Text, nullable=True)
+    manually_overridden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("0"), default=False
+    )
+    last_smoke_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
@@ -122,5 +133,81 @@ class RunnerCallableSpec(Base):
         CheckConstraint(
             "access_mode IN ('cli_mcp', 'remote_mcp', 'python_lib')",
             name="access_mode",
+        ),
+        CheckConstraint(
+            "resolution_mode IN ('catalog', 'manual_endpoint', 'websearch')",
+            name="resolution_mode",
+        ),
+    )
+
+
+class ResolverCallLog(Base):
+    """Audit row written for every resolver LLM attempt (§10.2).
+
+    Indexed by ``(spec_id, created_at DESC)`` for the admin panel's history view.
+    """
+
+    __tablename__ = "resolver_call_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    spec_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("runner_callable_specs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    department_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    need_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    request: Mapped[dict] = mapped_column(JSON, nullable=False)
+    response: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_class: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_resolver_call_log_spec_created",
+            "spec_id",
+            "created_at",
+        ),
+        CheckConstraint(
+            "status IN ('success', 'invalid_output', 'llm_error', 'timeout')",
+            name="resolver_call_log_status",
+        ),
+    )
+
+
+class SmokeCallLog(Base):
+    """Audit row for every smoke-call attempt at save time (§10.2)."""
+
+    __tablename__ = "smoke_call_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    spec_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("runner_callable_specs.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    args: Mapped[dict] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    error_class: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTCDateTime(), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_smoke_call_log_spec_created",
+            "spec_id",
+            "created_at",
+        ),
+        CheckConstraint(
+            "status IN ('success', 'auth', 'schema_miss', 'empty', 'bad_params', 'transient')",
+            name="smoke_call_log_status",
         ),
     )
