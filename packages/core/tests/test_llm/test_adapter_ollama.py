@@ -106,3 +106,21 @@ async def test_test_connection_outage_reported_as_transport() -> None:
         tr = await adapter.test_connection(model="llama3.1:8b")
     assert tr.ok is False
     assert tr.error_class == "ProviderOutageError"
+
+
+async def test_stream_yields_ndjson_chunks_and_terminal_done_reason() -> None:
+    adapter = _adapter()
+    ndjson_body = (
+        b'{"message":{"role":"assistant","content":"Hi"},"done":false}\n'
+        b'{"message":{"role":"assistant","content":" there"},"done":false}\n'
+        b'{"done":true,"done_reason":"stop"}\n'
+    )
+    with respx.mock() as mock:
+        mock.post("http://localhost:11434/api/chat").respond(
+            200, content=ndjson_body, headers={"content-type": "application/x-ndjson"}
+        )
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert "".join(c.delta for c in chunks) == "Hi there"
+    assert chunks[-1].finish_reason == "stop"

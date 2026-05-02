@@ -120,8 +120,19 @@ async def test_test_connection_returns_structured_failure_on_auth() -> None:
     assert tr.error_class == "AuthError"
 
 
-async def test_stream_raises_not_implemented() -> None:
+async def test_stream_yields_delta_chunks_with_finish_reason() -> None:
     adapter = _adapter()
-    with pytest.raises(NotImplementedError):
-        agen = adapter.stream(LLMRequest(messages=[Message(role="user", content="hi")]))
-        await agen.__anext__()
+    sse_body = (
+        b'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}\n\n'
+        b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n'
+        b"data: [DONE]\n\n"
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200, content=sse_body, headers={"content-type": "text/event-stream"}
+        )
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert "".join(c.delta for c in chunks) == "hello"
+    assert chunks[-1].finish_reason == "stop"

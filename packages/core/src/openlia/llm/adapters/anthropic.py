@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import AsyncIterator
 
@@ -122,8 +123,58 @@ class AnthropicAdapter(LLMProvider):
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        raise NotImplementedError("AnthropicAdapter.stream is implemented in Plan 5")
-        yield  # pragma: no cover
+        payload: dict = {
+            "model": self.model,
+            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "max_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "stream": True,
+        }
+        if request.system:
+            payload["system"] = request.system
+        if request.stop:
+            payload["stop_sequences"] = request.stop
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "name": t.name,
+                    "description": t.description,
+                    "input_schema": t.parameters,
+                }
+                for t in request.tools
+            ]
+
+        async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
+            try:
+                async with client.stream("POST", "/v1/messages", json=payload) as resp:
+                    if resp.status_code != 200:
+                        body_bytes = await resp.aread()
+                        status_to_exception(
+                            status_code=resp.status_code,
+                            body_text=body_bytes.decode("utf-8", errors="replace"),
+                            headers=dict(resp.headers),
+                        )
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line[len("data:") :].strip()
+                        try:
+                            evt = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        etype = evt.get("type")
+                        if etype == "content_block_delta":
+                            delta = evt.get("delta") or {}
+                            if delta.get("type") == "text_delta":
+                                text = delta.get("text") or ""
+                                if text:
+                                    yield LLMChunk(delta=text)
+                        elif etype == "message_delta":
+                            stop_reason = (evt.get("delta") or {}).get("stop_reason")
+                            if stop_reason:
+                                yield LLMChunk(delta="", finish_reason=stop_reason)
+            except TRANSIENT_NETWORK_ERRORS as exc:
+                raise wrap_httpx_error(exc) from exc
 
     async def test_connection(self, model: str) -> TestResult:
         probe = AnthropicAdapter(
