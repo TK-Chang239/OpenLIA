@@ -133,6 +133,12 @@ export const validateConnector = (id: string) =>
     { method: "POST" },
   );
 
+export const syncTemplateSpecs = (id: string) =>
+  fetchJson<{ inserted: number }>(
+    `/api/connectors/${encodeURIComponent(id)}/sync-template-specs`,
+    { method: "POST" },
+  );
+
 // Backward-compatible alias used by older callers.
 export const revalidateConnector = validateConnector;
 

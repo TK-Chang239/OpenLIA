@@ -122,6 +122,56 @@ _INTEREST_REVENUE = _scrape_spec(
 )
 
 
+# Geopolitical-news fallback for users who installed Firecrawl but not
+# NewsAPI.ai. Wikipedia's Current events portal aggregates dated
+# political / military / reserve-policy headlines worldwide and is
+# free + scrape-friendly. Replace-on-conflict semantics mean that if
+# the user later installs NewsAPI.ai, ownership transfers to the
+# dedicated news provider.
+_GEOPOLITICAL_NEWS = CallableSpec(
+    need_id="geopolitical_news",
+    access_mode="python_lib",
+    method="Firecrawl.scrape",
+    constants={
+        "url": "https://en.wikipedia.org/wiki/Portal:Current_events",
+        "formats": [
+            {
+                "type": "json",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "headlines": {
+                            "type": "array",
+                            "description": (
+                                "Recent geopolitical-conflict, sanctions, "
+                                "central-bank, and reserve-policy headlines "
+                                "from the past ~7 days. Up to 25 items, "
+                                "skipping sports / entertainment / weather."
+                            ),
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "title": {"type": "string"},
+                                    "date": {
+                                        "type": "string",
+                                        "description": "ISO date (YYYY-MM-DD).",
+                                    },
+                                    "summary": {"type": "string"},
+                                },
+                                "required": ["title"],
+                            },
+                        }
+                    },
+                    "required": ["headlines"],
+                },
+            }
+        ],
+    },
+    result_path=("json", "headlines"),
+    shape="list[dict]",
+)
+
+
 FIRECRAWL_TEMPLATE = BuiltInTemplate(
     template_id="firecrawl",
     display_name="Firecrawl",
@@ -153,5 +203,6 @@ FIRECRAWL_TEMPLATE = BuiltInTemplate(
         _CB_GOLD_PURCHASES,
         _FOREIGN_TREASURY_HOLDINGS,
         _INTEREST_REVENUE,
+        _GEOPOLITICAL_NEWS,
     ),
 )

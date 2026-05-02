@@ -10,12 +10,14 @@ import {
   deleteConnector,
   listConnectors,
   listBuiltinTemplates,
+  syncTemplateSpecs,
   validateConnector,
   type BuiltinTemplate,
   type ConnectorRow,
 } from "../../../api/connectors";
-import { refreshDeptHealth } from "../../../store/dept-health";
+import { refreshDeptHealth, useDeptHealth } from "../../../store/dept-health";
 import { CatalogGrid } from "../../connectors/CatalogGrid";
+import { CategoryRequirementsPanel } from "../../connectors/CategoryRequirementsPanel";
 import { InstallBuiltinForm } from "../../connectors/InstallBuiltinForm";
 
 interface KV {
@@ -42,10 +44,13 @@ export function ConnectorsAdminPanel(): JSX.Element {
   const [picking, setPicking] = useState(false);
   const [chosenTemplate, setChosenTemplate] = useState<BuiltinTemplate | null>(null);
 
+  const healths = useDeptHealth((s) => s.healths);
+
   const refresh = async () => {
     try {
       const r = await listConnectors();
       setRows(r);
+      await refreshDeptHealth();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load connectors.");
@@ -76,6 +81,18 @@ export function ConnectorsAdminPanel(): JSX.Element {
       await refreshDeptHealth();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Delete failed.");
+    }
+  };
+
+  const onSyncSpecs = async (row: ConnectorRow) => {
+    try {
+      const { inserted } = await syncTemplateSpecs(row.id);
+      await refresh();
+      await refreshDeptHealth();
+      setError(null);
+      alert(`Re-synced ${inserted} runner spec${inserted === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed.");
     }
   };
 
@@ -117,6 +134,8 @@ export function ConnectorsAdminPanel(): JSX.Element {
           {error}
         </p>
       ) : null}
+
+      <CategoryRequirementsPanel connectors={rows} healths={healths} />
 
       {rows.length === 0 ? (
         <p className="text-sm text-text-secondary">
@@ -175,6 +194,16 @@ export function ConnectorsAdminPanel(): JSX.Element {
                   >
                     Validate now
                   </button>
+                  {r.source === "built_in" ? (
+                    <button
+                      type="button"
+                      onClick={() => onSyncSpecs(r)}
+                      title="Re-sync runner specs from the built-in template (use after upgrading OpenLIA)."
+                      className="text-text-primary hover:underline"
+                    >
+                      Sync specs
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => onDelete(r)}
