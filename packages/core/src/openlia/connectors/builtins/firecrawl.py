@@ -74,11 +74,19 @@ _USD_FX_RESERVE_SHARE = _scrape_spec(
     ),
 )
 
+# World Gold Council publishes an annual "full-year" report each February
+# at /gold-demand-trends-full-year-{YYYY}. The base /gold-demand-trends
+# URL now serves an impersonation-scam warning page (no data), so we point
+# at the most recent full-year report. Maintenance: update the YYYY each
+# February once the prior-year report goes live.
 _CB_GOLD_PURCHASES = _scrape_spec(
     need_id="cb_gold_purchases",
-    url="https://www.gold.org/goldhub/research/gold-demand-trends",
+    url="https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-full-year-2024",
     field_name="net_purchases_tonnes",
-    field_description="Net central-bank gold purchases over trailing year, in tonnes.",
+    field_description=(
+        "Total net central bank gold purchases over the most recent annual "
+        "period, in metric tonnes. Recent years: ~1037 in 2023, ~1051 in 2024."
+    ),
 )
 
 # Treasury's Major Foreign Holders text file lists totals month-by-month.
