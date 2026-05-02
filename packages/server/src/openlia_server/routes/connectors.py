@@ -45,6 +45,11 @@ class LaunchIn(BaseModel):
     modes: list[ModeIn]
 
 
+class InstallBuiltinIn(BaseModel):
+    template_id: str = Field(min_length=1, max_length=64)
+    api_key: str = Field(min_length=1, max_length=512)
+
+
 class ConnectorCreate(BaseModel):
     provider_id: str = Field(min_length=1, max_length=64)
     display_name: str = Field(min_length=1, max_length=128)
@@ -315,6 +320,23 @@ def build_connectors_router(
             )
         importlib.invalidate_caches()
         return InstallPythonPackageOut(stdout=proc.stdout or proc.stderr)
+
+    @router.post(
+        "/install-builtin",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ConnectorOut,
+    )
+    async def install_builtin_route(
+        body: InstallBuiltinIn,
+        db: DBSession = Depends(session_dep),
+    ) -> ConnectorOut:
+        try:
+            connector = await connectors_service.install_builtin(
+                db, template_id=body.template_id, api_key=body.api_key
+            )
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return _to_out(connector)
 
     @router.post("", status_code=status.HTTP_201_CREATED, response_model=ConnectorOut)
     async def create(body: ConnectorCreate, db: DBSession = Depends(session_dep)) -> ConnectorOut:
