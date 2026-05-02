@@ -95,8 +95,7 @@ def test_firecrawl_runner_spec_urls_were_live_verified() -> None:
         "https://en.wikipedia.org/wiki/Reserve_currency"
     )
     assert by_need["cb_gold_purchases"].constants["url"] == (
-        "https://www.gold.org/goldhub/research/gold-demand-trends/"
-        "gold-demand-trends-full-year-2024"
+        "https://www.gold.org/goldhub/research/gold-demand-trends/gold-demand-trends-full-year-2024"
     )
     assert by_need["foreign_treasury_holdings"].constants["url"] == (
         "https://ticdata.treasury.gov/Publish/mfh.txt"

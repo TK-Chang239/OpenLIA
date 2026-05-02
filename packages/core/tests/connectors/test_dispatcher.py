@@ -232,6 +232,98 @@ def test_callable_specs_for_filters_by_department():
     assert {s.need_id for s in out} == {"a", "b"}
 
 
+# ----- result_reducer -----
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_applies_latest_value_by_date_reducer() -> None:
+    """FMP's economics-indicators tool returns list[{name, date, value}] —
+    not a single float. The `latest_value_by_date` reducer picks the most
+    recent record by `date` and returns its `value` as a float. Without
+    this, runners declared with `shape='float'` would receive the raw
+    list and fail downstream.
+    """
+
+    class _T:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            return [
+                {"name": "inflationRate", "date": "2026-03-01", "value": 2.31},
+                {"name": "inflationRate", "date": "2026-04-01", "value": 2.55},
+                {"name": "inflationRate", "date": "2026-02-01", "value": 2.20},
+            ]
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="fmp",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=_T(),  # type: ignore[arg-type]
+    )
+    spec = CallableSpec(
+        need_id="cpi_yoy",
+        access_mode="remote_mcp",
+        tool_name="economics",
+        constants={"endpoint": "economics-indicators", "name": "inflationRate"},
+        result_reducer="latest_value_by_date",
+        shape="float",
+    )
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    result = await dispatcher._invoke_spec(conn, spec, runtime_args={})
+    assert result == 2.55
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_applies_yoy_pct_quarterly_reducer() -> None:
+    """FMP's realGDP indicator returns quarterly *levels*, not YoY %.
+    The yoy_pct_quarterly reducer computes
+    (latest - 4-quarters-back) / 4-quarters-back * 100 from the series
+    so a runner expecting `shape='float'` gets the YoY % directly.
+    """
+
+    class _T:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            return [
+                {"date": "2026-01-01", "value": 24174.527},
+                {"date": "2025-10-01", "value": 24055.749},
+                {"date": "2025-07-01", "value": 24026.834},
+                {"date": "2025-04-01", "value": 23770.976},
+                {"date": "2025-01-01", "value": 23548.21},
+                {"date": "2024-10-01", "value": 23300.0},
+            ]
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="fmp",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=_T(),  # type: ignore[arg-type]
+    )
+    spec = CallableSpec(
+        need_id="gdp_yoy",
+        access_mode="remote_mcp",
+        tool_name="economics",
+        constants={"endpoint": "economics-indicators", "name": "realGDP"},
+        result_reducer="yoy_pct_quarterly",
+        shape="float",
+    )
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    result = await dispatcher._invoke_spec(conn, spec, runtime_args={})
+    # latest=24174.527, 4-back=23548.21 → (24174.527-23548.21)/23548.21*100 ≈ 2.66
+    assert result == pytest.approx(2.66, abs=0.01)
+
+
 # ----- runtime arg filtering -----
 
 

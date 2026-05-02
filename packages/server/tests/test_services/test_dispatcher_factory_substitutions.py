@@ -50,6 +50,42 @@ def test_build_transport_leaves_url_unchanged_when_no_placeholders() -> None:
     assert t._mode.url == "https://api.example.com/mcp"  # type: ignore[attr-defined]
 
 
+def test_hydrate_spec_round_trips_result_reducer() -> None:
+    """Specs persist `result_reducer` as a string in the spec JSON;
+    the hydrator must read it back so reducer-driven specs
+    (FMP cpi_yoy / gdp_yoy) keep applying the reduction after
+    every dispatcher rebuild.
+    """
+    from dataclasses import dataclass
+
+    from openlia_server.services.dispatcher_factory import _hydrate_spec
+
+    @dataclass
+    class _StubRow:
+        department_id: str
+        need_id: str
+        access_mode: str
+        spec: dict
+
+    row = _StubRow(
+        department_id="macro_research",
+        need_id="cpi_yoy",
+        access_mode="remote_mcp",
+        spec={
+            "need_id": "cpi_yoy",
+            "access_mode": "remote_mcp",
+            "tool_name": "economics",
+            "constants": {"endpoint": "economics-indicators", "name": "inflationRate"},
+            "param_bindings": {},
+            "shape": "float",
+            "result_path": [],
+            "result_reducer": "latest_value_by_date",
+        },
+    )
+    hydrated = _hydrate_spec(row)
+    assert hydrated.result_reducer == "latest_value_by_date"
+
+
 def test_hydrate_spec_round_trips_result_path() -> None:
     """RunnerCallableSpec rows persist `result_path` as a JSON list (because
     `dataclasses.asdict` flattens tuples). The hydrator must read it back
