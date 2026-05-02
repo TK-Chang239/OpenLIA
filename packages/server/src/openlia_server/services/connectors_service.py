@@ -24,21 +24,31 @@ import sys
 import traceback
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from openlia.connectors.adapter.introspect import introspect_python_lib
+from openlia.connectors.builtins._registry import get_template
+from openlia.connectors.builtins.types import (
+    CliMcpRecipe,
+    PythonLibRecipe,
+    RemoteMcpRecipe,
+)
 from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
     Category,
+    CliMcpMode,
     ConnectorSource,
     ConnectorStatus,
+    InstanceFactory,
     LaunchSpec,
+    PythonLibMode,
+    RemoteMcpMode,
 )
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.connectors import Connector
+from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
 from openlia_server.services.dispatcher_factory import _build_transport, _select_mode
 
 log = logging.getLogger(__name__)
@@ -286,6 +296,107 @@ async def create_connector(
         _trigger_grounding_clone(session, row.id)
     _invalidate(session)
     return row
+
+
+# Maps each declared runner need_id to its owning department_id.
+# Built from packages/core/src/openlia/departments/*.needs.yaml.
+_NEED_DEPARTMENT_MAP: dict[str, str] = {
+    # macro_research
+    "debt_gdp": "macro_research",
+    "interest_revenue": "macro_research",
+    "pmi": "macro_research",
+    "gdp_yoy": "macro_research",
+    "cpi_yoy": "macro_research",
+    "cpi_core_yoy": "macro_research",
+    "usd_fx_reserve_share": "macro_research",
+    "cb_gold_purchases": "macro_research",
+    "foreign_treasury_holdings": "macro_research",
+    "stock_quote": "macro_research",
+    "geopolitical_news": "macro_research",
+    # retail_sentiment
+    "social_posts": "retail_sentiment",
+}
+
+
+def _recipe_to_mode(
+    recipe: CliMcpRecipe | RemoteMcpRecipe | PythonLibRecipe,
+) -> CliMcpMode | RemoteMcpMode | PythonLibMode:
+    if isinstance(recipe, CliMcpRecipe):
+        return CliMcpMode(
+            kind="cli_mcp",
+            argv=list(recipe.argv),
+            env_keys=list(recipe.env_keys),
+        )
+    if isinstance(recipe, RemoteMcpRecipe):
+        return RemoteMcpMode(
+            kind="remote_mcp",
+            url=recipe.url,
+            headers=dict(recipe.headers),
+        )
+    # PythonLibRecipe
+    return PythonLibMode(
+        kind="python_lib",
+        pip_name=recipe.pip_name,
+        pip_version=recipe.pip_version,
+        import_module=recipe.import_module,
+        instance_factory=InstanceFactory(
+            cls=recipe.instance_factory_cls,
+            args=dict(recipe.instance_factory_args),
+        ),
+    )
+
+
+async def install_builtin(
+    session: Session,
+    *,
+    template_id: str,
+    api_key: str,
+) -> Connector:
+    """Install a built-in connector from the day-1 catalog without the wizard.
+
+    Raises KeyError when `template_id` is not in the catalog.
+    Calls `create_connector` (which handles validation + dept-health invalidation),
+    then inserts one RunnerCallableSpec row per template.runner_specs entry.
+    """
+    template = get_template(template_id)
+    if template is None:
+        raise KeyError(f"unknown built-in template: {template_id!r}")
+
+    modes = [_recipe_to_mode(r) for r in template.available_modes]
+    launch = LaunchSpec(modes=modes)
+
+    connector = await create_connector(
+        session,
+        provider_id=template.template_id,
+        display_name=template.display_name,
+        source=ConnectorSource.BUILT_IN,
+        category=template.category,
+        launch=launch,
+        secrets={template.api_key_env_var: api_key},
+    )
+
+    if connector.status == ConnectorStatus.VALIDATED.value and template.runner_specs:
+        for spec in template.runner_specs:
+            dept_id = _NEED_DEPARTMENT_MAP.get(spec.need_id)
+            if dept_id is None:
+                log.warning(
+                    "install_builtin: no department mapping for need %r; skipping",
+                    spec.need_id,
+                )
+                continue
+            row = RunnerCallableSpec(
+                id=str(uuid.uuid4()),
+                department_id=dept_id,
+                need_id=spec.need_id,
+                connector_id=connector.id,
+                access_mode=spec.access_mode,
+                spec=asdict(spec),
+            )
+            session.add(row)
+        session.commit()
+        _invalidate(session)
+
+    return connector
 
 
 def list_connectors(session: Session) -> list[Connector]:
