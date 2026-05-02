@@ -234,7 +234,7 @@ describe("api/connectors", () => {
 });
 
 describe("listBuiltinTemplates", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it("GETs /api/connectors/builtins and returns the list", async () => {
     const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
@@ -261,7 +261,7 @@ describe("listBuiltinTemplates", () => {
 });
 
 describe("installBuiltin", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => { vi.restoreAllMocks(); });
 
   it("POSTs to /api/connectors/install-builtin with the body", async () => {
     const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
