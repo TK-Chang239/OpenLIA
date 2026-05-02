@@ -14,6 +14,7 @@ vi.mock("../../../../api/connectors", async () => {
     listConnectors: vi.fn(),
     deleteConnector: vi.fn(),
     validateConnector: vi.fn(),
+    listBuiltinTemplates: vi.fn(),
   };
 });
 
@@ -21,6 +22,7 @@ const mocked = connectorsApi as unknown as {
   listConnectors: ReturnType<typeof vi.fn>;
   deleteConnector: ReturnType<typeof vi.fn>;
   validateConnector: ReturnType<typeof vi.fn>;
+  listBuiltinTemplates: ReturnType<typeof vi.fn>;
 };
 
 function row(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
@@ -42,6 +44,7 @@ beforeEach(() => {
   mocked.listConnectors.mockResolvedValue([row()]);
   mocked.deleteConnector.mockResolvedValue(undefined);
   mocked.validateConnector.mockResolvedValue(row());
+  mocked.listBuiltinTemplates.mockResolvedValue([]);
   vi.spyOn(deptHealthApi, "fetchDeptHealth").mockResolvedValue([]);
   vi.spyOn(window, "confirm").mockReturnValue(true);
 });
@@ -90,5 +93,36 @@ describe("ConnectorsAdminPanel", () => {
     expect(
       await screen.findByText(/no connectors configured/i),
     ).toBeInTheDocument();
+  });
+
+  it("renders the catalog grid when 'Add from catalog' is clicked", async () => {
+    mocked.listBuiltinTemplates.mockResolvedValue([
+      {
+        template_id: "firecrawl",
+        display_name: "Firecrawl",
+        category: "web_search",
+        api_key_env_var: "FIRECRAWL_API_KEY",
+        covered_need_ids: [],
+      },
+    ]);
+    render(<ConnectorsAdminPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
+    expect(await screen.findByText("Firecrawl")).toBeInTheDocument();
+  });
+
+  it("opens the install form when a catalog card is clicked", async () => {
+    mocked.listBuiltinTemplates.mockResolvedValue([
+      {
+        template_id: "firecrawl",
+        display_name: "Firecrawl",
+        category: "web_search",
+        api_key_env_var: "FIRECRAWL_API_KEY",
+        covered_need_ids: [],
+      },
+    ]);
+    render(<ConnectorsAdminPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
+    fireEvent.click(await screen.findByText("Firecrawl"));
+    expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
   });
 });

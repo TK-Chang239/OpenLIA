@@ -106,6 +106,29 @@ def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
     assert create.status_code == 201, create.text
     connector_id = create.json()["id"]
 
+    # Step 1b: seed a validated WEB_SEARCH connector so MR's category
+    # gate (which now requires both FINANCIAL and WEB_SEARCH) is met.
+    ws_create = client.post(
+        "/api/connectors",
+        json={
+            "source": "remote_mcp",
+            "category": "web_search",
+            "provider_id": "firecrawl",
+            "display_name": "Firecrawl",
+            "launch": {
+                "modes": [
+                    {
+                        "kind": "remote_mcp",
+                        "url": "https://example.invalid/mcp",
+                        "headers": {},
+                    }
+                ]
+            },
+            "secrets": {},
+        },
+    )
+    assert ws_create.status_code == 201, ws_create.text
+
     # Step 2: seed proposal + approve so MR activates.
     runner_specs_service._PROPOSALS[connector_id] = [  # type: ignore[attr-defined]
         runner_specs_service.ProposedSpec(

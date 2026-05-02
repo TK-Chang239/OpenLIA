@@ -9,7 +9,7 @@ import {
   type ProposedSpec,
   type ResolveEvent,
 } from "../../api/connectors";
-import { refreshDeptHealth } from "../../store/dept-health";
+import { refreshDeptHealth, useDeptHealth } from "../../store/dept-health";
 
 const SNAPSHOT_KEY_PREFIX = "openlia.dept-resolve-snapshot:";
 
@@ -254,28 +254,27 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
     return pick ? acc + 1 : acc;
   }, 0);
 
+  const deptHealth = useDeptHealth((s) => s.healths[departmentId]);
+  const isReady = deptHealth?.status === "active";
+
+  // Healthy departments don't need a resolve UI at all — every need
+  // already has a CallableSpec, so there's nothing to propose, approve,
+  // or re-resolve. Hide the whole section.
+  if (isReady) return null;
+
   return (
     <section
       data-testid={`dept-resolve-panel-${departmentId}`}
       className="space-y-2 rounded-md border border-border-subtle bg-bg-elevated p-3"
     >
-      <header className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-medium text-text-primary">{label}</h3>
-        <div className="flex items-center gap-2">
-          {approvableCount > 0 ? (
-            <button
-              type="button"
-              onClick={onApproveAll}
-              className="rounded-md border border-border-subtle px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-hover"
-            >
-              Approve all ({approvableCount})
-            </button>
-          ) : null}
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h3 className="text-sm font-medium text-text-primary">{label}</h3>
           <button
             type="button"
             onClick={onResolve}
             disabled={loading}
-            className="rounded-md bg-accent-primary px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
+            className="self-start rounded-md bg-accent-primary px-3 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {loading
               ? "Resolving..."
@@ -284,6 +283,15 @@ export function DeptResolvePanel({ departmentId, label }: Props) {
                 : `Resolve ${label}`}
           </button>
         </div>
+        {approvableCount > 0 ? (
+          <button
+            type="button"
+            onClick={onApproveAll}
+            className="rounded-md border border-border-subtle px-3 py-1 text-xs font-medium text-text-primary hover:bg-surface-hover"
+          >
+            Approve all ({approvableCount})
+          </button>
+        ) : null}
       </header>
 
       {error ? (

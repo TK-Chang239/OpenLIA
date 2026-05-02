@@ -117,6 +117,29 @@ def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
     assert resp.status_code == 201, resp.text
     connector_id = resp.json()["id"]
 
+    # Seed a validated WEB_SEARCH connector so MR's category gate is
+    # satisfied — MR now requires both FINANCIAL and WEB_SEARCH.
+    ws_resp = client.post(
+        "/api/connectors",
+        json={
+            "source": "remote_mcp",
+            "category": "web_search",
+            "provider_id": "firecrawl",
+            "display_name": "Firecrawl",
+            "launch": {
+                "modes": [
+                    {
+                        "kind": "remote_mcp",
+                        "url": "https://example.invalid/mcp",
+                        "headers": {},
+                    }
+                ]
+            },
+            "secrets": {},
+        },
+    )
+    assert ws_resp.status_code == 201, ws_resp.text
+
     # MR should still be disabled at this point — categories OK but
     # the need has no spec.
     health = {row["department_id"]: row for row in client.get("/api/dept-health").json()}

@@ -32,6 +32,13 @@ dependencies = [
     "jinja2>=3.1",
     "numpy>=1.26",
     "mcp>=1.0",
+    # Hard deps of openlia.data.* wrapper modules that ship with the day-1
+    # built-in connector catalog. Imported eagerly when any built-in's
+    # python_lib mode is validated.
+    "eodhd>=1.0.32",
+    "firecrawl-py>=4.0.0,<5.0.0",
+    "eventregistry>=9.0,<10.0",
+    "xdk>=0.9.0,<1.0.0",
 ]
 
 [project.urls]

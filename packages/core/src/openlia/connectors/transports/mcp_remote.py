@@ -9,10 +9,48 @@ uniform transport surface. The session is opened lazily on the first call.
 from __future__ import annotations
 
 import contextlib
+import json
 from collections.abc import Callable
 from typing import Any
 
 from openlia.connectors.types import RemoteMcpMode, ToolDefinition
+
+
+def _unwrap_call_result(result: Any) -> Any:
+    """Reduce an MCP `CallToolResult` to plain Python data.
+
+    MCP servers return tool payloads in one of two shapes:
+    1. `structured_content`: a parsed dict (modern path) — preferred.
+    2. `content`: a list of `TextContent` blocks whose `.text` is a
+       JSON-stringified payload (legacy / common path).
+
+    Plain dicts/lists from non-MCP tests pass through unchanged.
+
+    When `isError` is True, raise so callers (e.g. install-time canary
+    checks) treat upstream tool failures as errors instead of silently
+    accepting the error string as a "result".
+    """
+    if getattr(result, "isError", False):
+        content = getattr(result, "content", None)
+        message = ""
+        if content:
+            text = getattr(content[0], "text", None)
+            if isinstance(text, str):
+                message = text
+        raise RuntimeError(f"MCP tool error: {message}" if message else "MCP tool error")
+    structured = getattr(result, "structured_content", None)
+    if structured is not None:
+        return structured
+    content = getattr(result, "content", None)
+    if content:
+        first = content[0]
+        text = getattr(first, "text", None)
+        if isinstance(text, str):
+            try:
+                return json.loads(text)
+            except (ValueError, TypeError):
+                return text
+    return result
 
 
 class RemoteMcpTransport:
@@ -36,7 +74,7 @@ class RemoteMcpTransport:
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         sess = await self._ensure_open()
-        return await sess.call_tool(name, arguments)
+        return _unwrap_call_result(await sess.call_tool(name, arguments))
 
     async def list_tools(self) -> list[dict]:
         sess = await self._ensure_open()
