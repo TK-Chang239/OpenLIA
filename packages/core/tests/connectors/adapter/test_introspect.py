@@ -46,6 +46,54 @@ def test_introspect_captures_signature_and_doc() -> None:
     assert "quote payload" in quote.doc.lower()
 
 
+def test_introspect_with_cls_name_skips_inherited_methods_from_other_modules() -> None:
+    """When cls_name is provided, methods inherited from a class
+    defined in a different module are filtered out. This protects the
+    chat-toolbox surface: e.g. our XClient subclasses xdk.Client; the
+    parent's OAuth helpers (exchange_code, fetch_token, refresh_token)
+    must NOT appear in the wrapper's tool inventory.
+
+    The intent: the wrapper module is the trusted authority on what
+    methods are safe to expose. Anything inherited from a third-party
+    SDK is implementation detail.
+    """
+    import sys
+    import types
+
+    parent_mod = types.ModuleType("_parent_sdk_lib")
+
+    class ParentClient:
+        def oauth_secret(self) -> str:
+            return "danger"
+
+    ParentClient.__module__ = "_parent_sdk_lib"
+    ParentClient.oauth_secret.__module__ = "_parent_sdk_lib"
+    parent_mod.ParentClient = ParentClient
+    sys.modules["_parent_sdk_lib"] = parent_mod
+
+    wrapper_mod = types.ModuleType("_wrapper_sdk_lib")
+
+    class WrappedClient(ParentClient):
+        def safe_method(self) -> str:
+            return "ok"
+
+    WrappedClient.__module__ = "_wrapper_sdk_lib"
+    WrappedClient.safe_method.__module__ = "_wrapper_sdk_lib"
+    wrapper_mod.WrappedClient = WrappedClient
+    sys.modules["_wrapper_sdk_lib"] = wrapper_mod
+
+    try:
+        defs = introspect_python_lib("_wrapper_sdk_lib", cls_name="WrappedClient")
+        qns = _qualnames(defs)
+        assert "WrappedClient.safe_method" in qns
+        assert not any("oauth_secret" in qn for qn in qns), (
+            f"Inherited oauth_secret leaked into surface: {qns}"
+        )
+    finally:
+        sys.modules.pop("_parent_sdk_lib", None)
+        sys.modules.pop("_wrapper_sdk_lib", None)
+
+
 def test_introspect_filters_to_named_class_only() -> None:
     """When `cls_name` is provided, only that class's methods (and its
     MRO's, modulo `object`) are returned. Sibling classes — e.g. parent
