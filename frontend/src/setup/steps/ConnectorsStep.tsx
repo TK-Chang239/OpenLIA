@@ -7,16 +7,20 @@ import { PerNeedReviewCard } from "./PerNeedReviewCard";
 import {
   deleteConnector,
   getConnector,
+  listBuiltinTemplates,
   listConnectors,
   listProposedSpecs,
   reResolveSpecs,
   validateConnector,
+  type BuiltinTemplate,
   type ConnectorRow,
   type ProposedSpec,
 } from "../../api/connectors";
 import { refreshDeptHealth } from "../../store/dept-health";
 import { saveProviders } from "../../api/setup";
 import { ApiError } from "../../api/client";
+import { CatalogGrid } from "../../components/connectors/CatalogGrid";
+import { InstallBuiltinForm } from "../../components/connectors/InstallBuiltinForm";
 
 interface Props {
   totalSteps: number;
@@ -34,6 +38,9 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<EditingConnector | null>(null);
+  const [catalog, setCatalog] = useState<BuiltinTemplate[] | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [chosenTemplate, setChosenTemplate] = useState<BuiltinTemplate | null>(null);
   const [activeReview, setActiveReview] = useState<string | null>(null);
   const [reviewByConnector, setReviewByConnector] = useState<
     Record<string, ConnectorReviewState>
@@ -206,29 +213,51 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
       }
     >
       <div className="space-y-6">
-        <section>
-          <header className="mb-2">
-            <h3 className="text-sm font-medium text-text-primary">
-              Built-in templates
-            </h3>
-            <p className="text-xs text-text-secondary">
-              No built-in templates available — add a custom connector below.
-            </p>
-          </header>
-        </section>
-
         <section className="space-y-3">
           <header className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-text-primary">Connectors</h3>
-            <button
-              type="button"
-              onClick={() => setAdding((v) => !v)}
-              className="inline-flex items-center gap-2 rounded-md border border-dashed border-border-secondary px-3 py-1 text-xs text-text-secondary hover:text-text-primary"
-            >
-              <Plus size={14} />
-              {adding ? "Cancel" : "Add custom connector"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (catalog === null) setCatalog(await listBuiltinTemplates());
+                  setPicking(true);
+                }}
+                className="inline-flex items-center gap-2 rounded-md bg-accent-primary px-3 py-1 text-xs text-text-on-accent"
+              >
+                Add from catalog
+              </button>
+              <button
+                type="button"
+                onClick={() => setAdding((v) => !v)}
+                className="inline-flex items-center gap-2 rounded-md border border-dashed border-border-secondary px-3 py-1 text-xs text-text-secondary hover:text-text-primary"
+              >
+                <Plus size={14} />
+                {adding ? "Cancel" : "Add custom connector"}
+              </button>
+            </div>
           </header>
+
+          {picking && (
+            <CatalogGrid
+              templates={catalog ?? []}
+              onSelect={(t) => {
+                setChosenTemplate(t);
+                setPicking(false);
+              }}
+            />
+          )}
+
+          {chosenTemplate && (
+            <InstallBuiltinForm
+              template={chosenTemplate}
+              onCancel={() => setChosenTemplate(null)}
+              onInstalled={async (row) => {
+                setChosenTemplate(null);
+                await onCreated(row);
+              }}
+            />
+          )}
 
           {adding ? (
             <AddConnectorForm
@@ -251,7 +280,7 @@ export function ConnectorsStep({ totalSteps, onBack, onSaved }: Props) {
 
           {rows.length === 0 ? (
             <p className="text-sm text-text-secondary">
-              No connectors yet. Click "Add custom connector" to add one.
+              No connectors yet. Add one from the catalog or add a custom connector.
             </p>
           ) : (
             <ul className="space-y-2">
