@@ -141,10 +141,26 @@ class CallableSpec:
     result_path: tuple[str, ...] = ()
 
 
+# ISO 3166-1 alpha-2 → alpha-3 for the economies covered by the day-1 catalog.
+# EODHD's macro indicators API expects alpha-3 (e.g. USA, DEU, FRA).
+_COUNTRY_ISO2_TO_ISO3: dict[str, str] = {
+    "US": "USA", "GB": "GBR", "DE": "DEU", "FR": "FRA", "JP": "JPN",
+    "CN": "CHN", "IN": "IND", "BR": "BRA", "CA": "CAN", "AU": "AUS",
+    "IT": "ITA", "ES": "ESP", "NL": "NLD", "CH": "CHE", "SE": "SWE",
+    "NO": "NOR", "DK": "DNK", "MX": "MEX", "KR": "KOR", "RU": "RUS",
+    "ZA": "ZAF", "TR": "TUR", "ID": "IDN", "SA": "SAU", "AR": "ARG",
+}
+
+
+def _country_iso2_to_iso3(code: str) -> str:
+    code = code.upper()
+    return _COUNTRY_ISO2_TO_ISO3.get(code, code)
+
+
 TRANSFORMS: dict[str, Callable[[Any], Any]] = {
     "upper": str.upper,
     "lower": str.lower,
-    "iso_to_eodhd": lambda code: f"{code}.NYSE",  # placeholder; finalize during adapter authoring
+    "country_iso2_to_iso3": _country_iso2_to_iso3,
 }
 
 ALLOWED_TRANSFORMS: frozenset[str] = frozenset(TRANSFORMS.keys())
