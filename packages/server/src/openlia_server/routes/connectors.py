@@ -178,6 +178,14 @@ def _introspect_init(import_module: str, cls_name: str) -> list[ParamSpec]:
     return params
 
 
+class BuiltinTemplateOut(BaseModel):
+    template_id: str
+    display_name: str
+    category: str
+    api_key_env_var: str
+    covered_need_ids: list[str]
+
+
 class ConnectorOut(BaseModel):
     id: str
     provider_id: str
@@ -359,6 +367,21 @@ def build_connectors_router(
     @router.get("", response_model=list[ConnectorOut])
     def list_(db: DBSession = Depends(session_dep)) -> list[ConnectorOut]:
         return [_to_out(r) for r in connectors_service.list_connectors(db)]
+
+    @router.get("/builtins", response_model=list[BuiltinTemplateOut])
+    def get_builtin_templates() -> list[BuiltinTemplateOut]:
+        from openlia.connectors.builtins import list_templates
+
+        return [
+            BuiltinTemplateOut(
+                template_id=t.template_id,
+                display_name=t.display_name,
+                category=t.category.value,
+                api_key_env_var=t.api_key_env_var,
+                covered_need_ids=[s.need_id for s in t.runner_specs],
+            )
+            for t in list_templates()
+        ]
 
     @router.get("/{connector_id}", response_model=ConnectorDetail)
     def get(connector_id: str, db: DBSession = Depends(session_dep)) -> ConnectorDetail:

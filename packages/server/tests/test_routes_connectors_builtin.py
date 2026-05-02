@@ -78,3 +78,28 @@ def test_install_builtin_returns_201_and_connector_row(
     assert body["provider_id"] == "firecrawl"
     assert body["source"] == "built_in"
     assert body["status"] == "validated"
+
+
+def test_get_builtin_templates_returns_six_entries(client: TestClient) -> None:
+    res = client.get("/api/connectors/builtins")
+    assert res.status_code == 200
+    body = res.json()
+    assert isinstance(body, list)
+    template_ids = {t["template_id"] for t in body}
+    assert template_ids == {"eodhd", "fmp", "newsapi_ai", "mediastack", "firecrawl", "x"}
+
+
+def test_get_builtin_templates_card_shape(client: TestClient) -> None:
+    res = client.get("/api/connectors/builtins")
+    body = res.json()
+    for t in body:
+        assert {
+            "template_id",
+            "display_name",
+            "category",
+            "api_key_env_var",
+            "covered_need_ids",
+        }.issubset(t.keys())
+        # Internal recipe details are NOT exposed:
+        assert "available_modes" not in t
+        assert "runner_specs" not in t
