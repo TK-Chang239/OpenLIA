@@ -27,8 +27,16 @@ class MacroResearchDepartment:
     has_chat: bool = False
 
     # Connector dependencies (spec §10.1).
-    required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)
+    # WEB_SEARCH is required because four MR needs (usd_fx_reserve_share,
+    # cb_gold_purchases, foreign_treasury_holdings, interest_revenue) are
+    # only resolvable through Firecrawl-style scraping templates; no
+    # FINANCIAL provider exposes them.
+    required_categories: ClassVar[tuple[Category, ...]] = (
+        Category.FINANCIAL,
+        Category.WEB_SEARCH,
+    )
     optional_categories: ClassVar[tuple[Category, ...]] = (Category.NEWS,)
+    required_any_of: ClassVar[tuple[tuple[Category, ...], ...]] = ()
 
     # Runtime behavior (spec §5.2).
     requires_runner: ClassVar[bool] = True
