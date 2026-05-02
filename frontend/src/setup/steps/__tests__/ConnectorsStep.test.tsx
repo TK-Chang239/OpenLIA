@@ -22,6 +22,7 @@ vi.mock("../../../api/connectors", async () => {
     approveSpec: vi.fn(),
     getConnector: vi.fn(),
     updateConnector: vi.fn(),
+    listBuiltinTemplates: vi.fn(),
   };
 });
 
@@ -47,6 +48,7 @@ const mocked = connectorsApi as unknown as {
   approveSpec: ReturnType<typeof vi.fn>;
   getConnector: ReturnType<typeof vi.fn>;
   updateConnector: ReturnType<typeof vi.fn>;
+  listBuiltinTemplates: ReturnType<typeof vi.fn>;
 };
 
 function row(overrides: Partial<ConnectorRow> = {}): ConnectorRow {
@@ -94,16 +96,14 @@ beforeEach(() => {
     secret_keys: [],
   });
   mocked.updateConnector.mockResolvedValue(row());
+  mocked.listBuiltinTemplates.mockResolvedValue([]);
 });
 
 describe("ConnectorsStep", () => {
-  it("renders empty-state copy when no built-ins or connectors", async () => {
+  it("renders empty-state copy when no connectors exist", async () => {
     render(
       <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
     );
-    expect(
-      await screen.findByText(/no built-in templates available/i),
-    ).toBeInTheDocument();
     expect(
       await screen.findByText(/no connectors yet/i),
     ).toBeInTheDocument();
@@ -229,5 +229,40 @@ describe("ConnectorsStep", () => {
     expect(
       await screen.findByText(/no proposals at this time/i),
     ).toBeInTheDocument();
+  });
+
+  it("renders the catalog grid when 'Add from catalog' is clicked", async () => {
+    mocked.listBuiltinTemplates.mockResolvedValue([
+      {
+        template_id: "firecrawl",
+        display_name: "Firecrawl",
+        category: "web_search",
+        api_key_env_var: "FIRECRAWL_API_KEY",
+        covered_need_ids: [],
+      },
+    ]);
+    render(
+      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
+    expect(await screen.findByText("Firecrawl")).toBeInTheDocument();
+  });
+
+  it("opens the install form when a catalog card is clicked", async () => {
+    mocked.listBuiltinTemplates.mockResolvedValue([
+      {
+        template_id: "firecrawl",
+        display_name: "Firecrawl",
+        category: "web_search",
+        api_key_env_var: "FIRECRAWL_API_KEY",
+        covered_need_ids: [],
+      },
+    ]);
+    render(
+      <ConnectorsStep totalSteps={5} onBack={vi.fn()} onSaved={vi.fn()} />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /add from catalog/i }));
+    fireEvent.click(await screen.findByText("Firecrawl"));
+    expect(await screen.findByLabelText(/api key/i)).toBeInTheDocument();
   });
 });
