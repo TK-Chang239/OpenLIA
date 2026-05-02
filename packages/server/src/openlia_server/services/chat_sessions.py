@@ -119,6 +119,30 @@ def delete_session(db: Session, *, session_id: str, user_id: str) -> None:
     db.commit()
 
 
+def get_or_create_default_session(db: Session, *, user_id: str, department: str) -> ChatSession:
+    """Return the per-user default session for a department, creating one if
+    none exists.
+
+    Picks the oldest non-archived session as the stable identity so repeated
+    calls return the same row, then `ensure_titled` can rename it on the
+    first user message just like any other freshly created session.
+    """
+    stmt = (
+        select(ChatSession)
+        .where(
+            ChatSession.user_id == user_id,
+            ChatSession.department == department,
+            ChatSession.is_archived.is_(False),
+        )
+        .order_by(ChatSession.created_at.asc(), ChatSession.id.asc())
+        .limit(1)
+    )
+    existing = db.execute(stmt).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    return create_session(db, user_id=user_id, department=department, title="New chat")
+
+
 def list_messages(db: Session, *, session_id: str, user_id: str) -> list[ChatMessage]:
     get_session(db, session_id=session_id, user_id=user_id)  # authz
     stmt = (
