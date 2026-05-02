@@ -26,18 +26,36 @@ def test_fmp_remote_mcp_url_targets_official_endpoint() -> None:
     assert remote.url == "https://financialmodelingprep.com/mcp?apikey={FMP_API_KEY}"
 
 
-def test_fmp_runner_specs_cover_only_stock_quote() -> None:
-    """FMP and EODHD are alternative providers; FMP's runner-side day-1
-    coverage is just stock_quote.
+def test_fmp_runner_specs_cover_stock_quote_cpi_yoy_gdp_yoy() -> None:
+    """FMP and EODHD are alternative providers. FMP covers the macro
+    indicators its economics-indicators API actually exposes:
 
-    FMP's economics tool returns list[dict] of dated records (shape
-    mismatch with shape='float'); EODHD's macro indicators are wrapped
-    in ExtendedAPIClient reducer methods to return floats. The day-1
-    catalog targets EODHD as the macro-coverage path; FMP stock_quote
-    is the redundant alternative for users who prefer FMP.
+    - stock_quote (via the `quote` tool)
+    - cpi_yoy (via name=inflationRate, reduced with latest_value_by_date)
+    - gdp_yoy (via name=realGDP, reduced with yoy_pct_quarterly)
+
+    The other 4 macro/sentiment needs (debt_gdp, cpi_core_yoy, pmi,
+    social_posts) genuinely don't exist on FMP's hosted MCP. Users who
+    want full macro coverage pick EODHD.
     """
     need_ids = {spec.need_id for spec in FMP_TEMPLATE.runner_specs}
-    assert need_ids == {"stock_quote"}
+    assert need_ids == {"stock_quote", "cpi_yoy", "gdp_yoy"}
+
+
+def test_fmp_cpi_yoy_uses_inflation_rate_with_latest_value_reducer() -> None:
+    spec = next(s for s in FMP_TEMPLATE.runner_specs if s.need_id == "cpi_yoy")
+    assert spec.tool_name == "economics"
+    assert spec.constants["endpoint"] == "economics-indicators"
+    assert spec.constants["name"] == "inflationRate"
+    assert spec.result_reducer == "latest_value_by_date"
+
+
+def test_fmp_gdp_yoy_uses_real_gdp_with_yoy_pct_quarterly_reducer() -> None:
+    spec = next(s for s in FMP_TEMPLATE.runner_specs if s.need_id == "gdp_yoy")
+    assert spec.tool_name == "economics"
+    assert spec.constants["endpoint"] == "economics-indicators"
+    assert spec.constants["name"] == "realGDP"
+    assert spec.result_reducer == "yoy_pct_quarterly"
 
 
 def test_fmp_runner_specs_use_remote_mcp_with_tool_names() -> None:

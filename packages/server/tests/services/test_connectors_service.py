@@ -163,11 +163,15 @@ async def test_install_builtin_replaces_specs_for_overlapping_needs(
     rows = db_session.query(RunnerCallableSpec).all()
     by_need = {r.need_id: r for r in rows}
 
-    # stock_quote ownership transferred to FMP.
-    assert by_need["stock_quote"].connector_id == fmp.id
+    # FMP claims stock_quote, cpi_yoy, gdp_yoy — all transferred from EODHD.
+    fmp_owned = {"stock_quote", "cpi_yoy", "gdp_yoy"}
+    for need in fmp_owned:
+        assert by_need[need].connector_id == fmp.id, (
+            f"{need!r} should be owned by FMP after install"
+        )
 
     # EODHD's non-overlapping specs remain.
-    eodhd_only = {"gdp_yoy", "cpi_yoy", "debt_gdp", "cpi_core_yoy", "pmi", "social_posts"}
+    eodhd_only = {"debt_gdp", "cpi_core_yoy", "pmi", "social_posts"}
     for need in eodhd_only:
         assert by_need[need].connector_id == eodhd.id, (
             f"{need!r} should still be owned by EODHD after FMP install"

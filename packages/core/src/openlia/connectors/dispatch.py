@@ -29,7 +29,9 @@ from typing import Any
 
 from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
+    ALLOWED_RESULT_REDUCERS,
     ALLOWED_TRANSFORMS,
+    RESULT_REDUCERS,
     TRANSFORMS,
     CallableDefinition,
     CallableSpec,
@@ -248,4 +250,17 @@ class Dispatcher:
         else:
             raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
 
+        if spec.result_reducer is not None:
+            if spec.result_reducer not in ALLOWED_RESULT_REDUCERS:
+                raise DispatchError(
+                    f"unknown result_reducer {spec.result_reducer!r} "
+                    f"in spec for need {spec.need_id!r}",
+                )
+            try:
+                raw = RESULT_REDUCERS[spec.result_reducer](raw)
+            except (ValueError, TypeError, KeyError) as exc:
+                raise DispatchError(
+                    f"result_reducer {spec.result_reducer!r} failed for "
+                    f"need {spec.need_id!r}: {exc}",
+                ) from exc
         return _walk_result_path(raw, spec.result_path, need_id=spec.need_id)

@@ -45,6 +45,35 @@ _STOCK_QUOTE = CallableSpec(
     shape="dict",
 )
 
+# Macro indicators verified live (2026-05-02). FMP's economics-indicators
+# returns list[{name, date, value}]; we apply a result_reducer per spec
+# to collapse the time-series into a single float.
+_CPI_YOY = CallableSpec(
+    need_id="cpi_yoy",
+    access_mode="remote_mcp",
+    tool_name="economics",
+    constants={"endpoint": "economics-indicators", "name": "inflationRate"},
+    result_reducer="latest_value_by_date",
+    shape="float",
+)
+
+# realGDP returns quarterly *levels* — yoy_pct_quarterly reducer turns
+# them into year-over-year %. The reducer needs ≥5 quarterly records
+# (latest + 4 quarters back); FMP's default window is too narrow, so we
+# pin a wide `from` date to ensure enough history.
+_GDP_YOY = CallableSpec(
+    need_id="gdp_yoy",
+    access_mode="remote_mcp",
+    tool_name="economics",
+    constants={
+        "endpoint": "economics-indicators",
+        "name": "realGDP",
+        "from": "2020-01-01",
+    },
+    result_reducer="yoy_pct_quarterly",
+    shape="float",
+)
+
 
 FMP_TEMPLATE = BuiltInTemplate(
     template_id="fmp",
@@ -63,9 +92,8 @@ FMP_TEMPLATE = BuiltInTemplate(
     # FMP's hosted MCP, so we exercise the cheapest authenticated tool
     # (a single AAPL quote) at install time.
     canary_args=(("endpoint", "quote"), ("symbol", "AAPL")),
-    # FMP and EODHD are alternatives — the user installs one or the other
-    # to cover stock_quote. install_builtin's replace-on-conflict logic
-    # transfers ownership of (macro_research, stock_quote) to whichever
-    # template was installed most recently.
-    runner_specs=(_STOCK_QUOTE,),
+    # FMP and EODHD are alternatives — the user installs one or the other.
+    # install_builtin's replace-on-conflict logic transfers ownership of
+    # any overlapping (dept, need) to the most-recently-installed template.
+    runner_specs=(_STOCK_QUOTE, _CPI_YOY, _GDP_YOY),
 )

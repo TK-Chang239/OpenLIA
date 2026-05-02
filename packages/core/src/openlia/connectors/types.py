@@ -139,6 +139,12 @@ class CallableSpec:
     constants: dict[str, Any] = field(default_factory=dict)
     shape: str = "any"
     result_path: tuple[str, ...] = ()
+    # Optional reduction applied to the raw transport result BEFORE
+    # `result_path` is walked. Useful for upstream APIs that return a
+    # time-series list[dict] when the runner expects a single float
+    # (e.g. FMP's economics-indicators returns daily/quarterly records).
+    # See `RESULT_REDUCERS` for valid names.
+    result_reducer: str | None = None
 
 
 # ISO 3166-1 alpha-2 → alpha-3 for the economies covered by the day-1 catalog.
@@ -184,3 +190,48 @@ TRANSFORMS: dict[str, Callable[[Any], Any]] = {
 }
 
 ALLOWED_TRANSFORMS: frozenset[str] = frozenset(TRANSFORMS.keys())
+
+
+def _latest_value_by_date(records: Any) -> float:
+    """For `[{date, value}, ...]`, pick the latest record by `date` and
+    return its `value` as a float. Used by FMP economics-indicators
+    specs (e.g. inflationRate) that return a time-series but where the
+    runner expects a single float.
+    """
+    if not isinstance(records, list) or not records:
+        raise ValueError(
+            f"latest_value_by_date: expected non-empty list, got {type(records).__name__}",
+        )
+    sorted_records = sorted(records, key=lambda r: r.get("date") or "", reverse=True)
+    head = sorted_records[0]
+    val = head.get("value")
+    if val is None:
+        raise ValueError("latest_value_by_date: latest record has no 'value' field")
+    return float(val)
+
+
+def _yoy_pct_quarterly(records: Any) -> float:
+    """For `[{date, value}, ...]` of quarterly levels, return year-over-
+    year percent change as a float: (latest - 4_quarters_back) /
+    4_quarters_back * 100. Used by FMP realGDP spec where the API
+    returns levels and the runner expects a YoY %.
+    """
+    if not isinstance(records, list) or len(records) < 5:
+        raise ValueError(
+            f"yoy_pct_quarterly: need at least 5 quarterly records to compute YoY, "
+            f"got {len(records) if isinstance(records, list) else type(records).__name__}",
+        )
+    sorted_records = sorted(records, key=lambda r: r.get("date") or "", reverse=True)
+    latest = float(sorted_records[0]["value"])
+    four_back = float(sorted_records[4]["value"])
+    if four_back == 0:
+        raise ValueError("yoy_pct_quarterly: 4-quarters-back value is zero, cannot compute YoY %")
+    return (latest - four_back) / four_back * 100.0
+
+
+RESULT_REDUCERS: dict[str, Callable[[Any], Any]] = {
+    "latest_value_by_date": _latest_value_by_date,
+    "yoy_pct_quarterly": _yoy_pct_quarterly,
+}
+
+ALLOWED_RESULT_REDUCERS: frozenset[str] = frozenset(RESULT_REDUCERS.keys())
