@@ -87,7 +87,7 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
     for row in rows:
         assert row.department_id == "macro_research"
         assert row.connector_id == connector.id
-        assert row.access_mode == "remote_mcp"
+        assert row.access_mode == "python_lib"
         assert "need_id" in row.spec
 
 
