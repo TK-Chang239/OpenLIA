@@ -101,3 +101,47 @@ async def test_test_connection_failure_returns_structured_error() -> None:
         tr = await adapter.test_connection(model="claude-sonnet-4-6")
     assert tr.ok is False
     assert tr.error_class == "AuthError"
+
+
+async def test_stream_yields_text_deltas_and_terminal_stop_reason() -> None:
+    adapter = _adapter()
+    sse_body = (
+        b"event: content_block_delta\n"
+        b'data: {"type":"content_block_delta","index":0,'
+        b'"delta":{"type":"text_delta","text":"Hello"}}\n\n'
+        b"event: content_block_delta\n"
+        b'data: {"type":"content_block_delta","index":0,'
+        b'"delta":{"type":"text_delta","text":" world"}}\n\n'
+        b"event: message_delta\n"
+        b'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"}}\n\n'
+        b"event: message_stop\n"
+        b'data: {"type":"message_stop"}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200, content=sse_body, headers={"content-type": "text/event-stream"}
+        )
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert "".join(c.delta for c in chunks) == "Hello world"
+    assert chunks[-1].finish_reason == "end_turn"
+
+
+async def test_stream_sends_stream_true_in_payload() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.content.decode())
+        return httpx.Response(
+            200,
+            content=b'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+            headers={"content-type": "text/event-stream"},
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        async for _ in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            pass
+    assert captured["body"]["stream"] is True

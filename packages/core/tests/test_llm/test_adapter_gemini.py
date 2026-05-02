@@ -120,3 +120,23 @@ async def test_test_connection_ok() -> None:
         )
         tr = await adapter.test_connection(model="gemini-3-flash")
     assert tr.ok is True
+
+
+async def test_stream_yields_text_deltas_and_terminal_finish_reason() -> None:
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}],"role":"model"},'
+        b'"finishReason":null,"index":0}]}\n\n'
+        b'data: {"candidates":[{"content":{"parts":[{"text":"!"}],"role":"model"},'
+        b'"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert "".join(c.delta for c in chunks) == "Hi!"
+    assert chunks[-1].finish_reason == "STOP"

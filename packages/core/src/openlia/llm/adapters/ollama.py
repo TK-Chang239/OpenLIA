@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import AsyncIterator
 
@@ -89,8 +90,56 @@ class OllamaAdapter(LLMProvider):
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        raise NotImplementedError("OllamaAdapter.stream is implemented in Plan 5")
-        yield  # pragma: no cover
+        payload: dict = {
+            "model": self.model,
+            "messages": _to_messages(request),
+            "stream": True,
+            "options": {
+                "temperature": request.temperature,
+                "num_predict": request.max_tokens,
+            },
+        }
+        if request.stop:
+            payload["options"]["stop"] = request.stop
+        if request.tools:
+            payload["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    },
+                }
+                for t in request.tools
+            ]
+
+        base = (self.credentials.base_url or "http://localhost:11434").rstrip("/")
+
+        async with make_client(base_url=base) as client:
+            try:
+                async with client.stream("POST", "/api/chat", json=payload) as resp:
+                    if resp.status_code != 200:
+                        body_bytes = await resp.aread()
+                        status_to_exception(
+                            status_code=resp.status_code,
+                            body_text=body_bytes.decode("utf-8", errors="replace"),
+                            headers=dict(resp.headers),
+                        )
+                    async for line in resp.aiter_lines():
+                        if not line.strip():
+                            continue
+                        try:
+                            evt = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        message = evt.get("message") or {}
+                        text = message.get("content") or ""
+                        finish = evt.get("done_reason") if evt.get("done") else None
+                        if text or finish:
+                            yield LLMChunk(delta=text, finish_reason=finish)
+            except TRANSIENT_NETWORK_ERRORS as exc:
+                raise wrap_httpx_error(exc) from exc
 
     async def test_connection(self, model: str) -> TestResult:
         probe = OllamaAdapter(
