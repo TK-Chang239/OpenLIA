@@ -20,6 +20,22 @@ from typing import Any, cast
 
 from eodhd import APIClient
 
+from openlia.connectors.types import TRANSFORMS
+
+_iso2_to_iso3 = TRANSFORMS["country_iso2_to_iso3"]
+
+
+def _latest_macro_value(records: list[dict[str, Any]], indicator: str) -> float:
+    """Pick the most recent record with a non-null Value from EODHD's
+    macro-indicators feed (records carry Date + Value columns)."""
+    matching = [r for r in records if r.get("Value") is not None]
+    if not matching:
+        raise RuntimeError(
+            f"EODHD macro-indicators: no record with non-null Value for {indicator!r}",
+        )
+    matching.sort(key=lambda r: r.get("Date") or "", reverse=True)
+    return float(cast(Any, matching[0]["Value"]))
+
 
 def _latest_actual(events: list[dict[str, Any]], event_type: str) -> float:
     """Pick the most recent event with a non-null `actual` field for `event_type`."""
@@ -57,6 +73,25 @@ class ExtendedAPIClient(APIClient):
                 country=country, limit=1000, date_from=date_from, date_to=date_to,
             ),
         )
+
+    def _macro_latest(self, country: str, indicator: str) -> float:
+        """Fetch a macro-indicator series and reduce to the latest non-null Value."""
+        records = self.get_macro_indicators_data(
+            country=_iso2_to_iso3(country), indicator=indicator,
+        )
+        return _latest_macro_value(cast(list[dict[str, Any]], records), indicator)
+
+    def debt_to_gdp(self, country: str = "US") -> float:
+        """Latest central-government debt as % of GDP."""
+        return self._macro_latest(country, "debt_percent_gdp")
+
+    def gdp_growth_yoy(self, country: str = "US") -> float:
+        """Latest annual GDP growth (%, year-over-year)."""
+        return self._macro_latest(country, "gdp_growth_annual")
+
+    def cpi_yoy(self, country: str = "US") -> float:
+        """Latest headline CPI inflation (%, year-over-year)."""
+        return self._macro_latest(country, "inflation_consumer_prices_annual")
 
     def core_inflation_rate(self, country: str = "US", lookback_days: int = 180) -> float:
         """Latest YoY core CPI as published by the BLS.

@@ -26,16 +26,17 @@ def test_fmp_remote_mcp_url_targets_official_endpoint() -> None:
     assert remote.url == "https://financialmodelingprep.com/mcp?apikey={api_key}"
 
 
-def test_fmp_runner_specs_cover_only_verified_needs() -> None:
-    """FMP only ships specs for live-verified tool names + indicator codes.
+def test_fmp_runner_specs_cover_only_stock_quote() -> None:
+    """FMP only ships stock_quote.
 
-    Live MCP probe (2026-05-01) confirmed: GDP, CPI valid;
-    coreCPI/debtToGDP/PMI/interestToRevenue rejected as 'Invalid name';
-    no social-sentiment endpoint exists. Specs that named invalid
-    indicators or non-existent tools have been dropped.
+    Macro indicators (gdp_yoy, cpi_yoy) are removed because FMP's
+    economics tool returns list[dict] of dated records, not a float —
+    a runtime shape mismatch against shape='float'. EODHD already
+    covers gdp_yoy and cpi_yoy via reducer methods on
+    ExtendedAPIClient, so the day-1 catalog still hits 100% coverage.
     """
     need_ids = {spec.need_id for spec in FMP_TEMPLATE.runner_specs}
-    assert need_ids == {"gdp_yoy", "cpi_yoy", "stock_quote"}
+    assert need_ids == {"stock_quote"}
 
 
 def test_fmp_runner_specs_use_remote_mcp_with_tool_names() -> None:

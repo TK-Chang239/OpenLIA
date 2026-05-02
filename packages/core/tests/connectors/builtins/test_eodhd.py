@@ -51,6 +51,21 @@ def test_eodhd_runner_specs_cover_expected_needs() -> None:
     }
 
 
+def test_eodhd_macro_specs_target_float_reducer_methods() -> None:
+    """The 3 macro indicators that come from get_macro_indicators_data
+    (debt_gdp, gdp_yoy, cpi_yoy) must point at ExtendedAPIClient reducer
+    methods (debt_to_gdp / gdp_growth_yoy / cpi_yoy), not at the raw
+    SDK call. The raw call returns list[dict] which would be a runtime
+    shape mismatch against shape='float'.
+    """
+    method_for: dict[str, str] = {}
+    for spec in EODHD_TEMPLATE.runner_specs:
+        method_for[spec.need_id] = spec.method or ""
+    assert method_for["debt_gdp"] == "ExtendedAPIClient.debt_to_gdp"
+    assert method_for["gdp_yoy"] == "ExtendedAPIClient.gdp_growth_yoy"
+    assert method_for["cpi_yoy"] == "ExtendedAPIClient.cpi_yoy"
+
+
 def test_eodhd_runner_specs_have_python_lib_or_mcp_access_mode() -> None:
     for spec in EODHD_TEMPLATE.runner_specs:
         assert spec.access_mode in ("python_lib", "cli_mcp", "remote_mcp")
