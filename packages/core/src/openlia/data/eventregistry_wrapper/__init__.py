@@ -16,7 +16,7 @@ layer.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from eventregistry import EventRegistry, QueryArticlesIter, QueryItems
@@ -44,7 +44,7 @@ class EventRegistryWrapper(EventRegistry):
         Date window is `window_days` back from now; results are sorted
         by publish date desc and capped at `limit` items.
         """
-        date_start = (datetime.now(timezone.utc) - timedelta(days=window_days)).strftime(
+        date_start = (datetime.now(UTC) - timedelta(days=window_days)).strftime(
             "%Y-%m-%d",
         )
         q = QueryArticlesIter(

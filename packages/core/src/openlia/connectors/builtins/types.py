@@ -52,3 +52,7 @@ class BuiltInTemplate:
     available_modes: tuple[ModeRecipe, ...]
     canary_tool: str | None
     runner_specs: tuple[CallableSpec, ...] = ()
+    # Sample args to pass when invoking `canary_tool` at install time.
+    # `None` means skip canary (list_tools alone is the auth check).
+    # Tuple form keeps the dataclass hashable. Each entry is (arg, value).
+    canary_args: tuple[tuple[str, object], ...] | None = None

@@ -33,7 +33,6 @@ from openlia.connectors.types import (
     ParamBinding,
 )
 
-
 # Verified live: quote tool with endpoint='quote', symbol=<ticker>.
 # Returns a list with one quote dict.
 _STOCK_QUOTE = CallableSpec(
@@ -55,10 +54,18 @@ FMP_TEMPLATE = BuiltInTemplate(
     available_modes=(
         RemoteMcpRecipe(
             kind="remote_mcp",
-            url="https://financialmodelingprep.com/mcp?apikey={api_key}",
+            url="https://financialmodelingprep.com/mcp?apikey={FMP_API_KEY}",
             headers=(),
         ),
     ),
     canary_tool="quote",
+    # Authenticated round-trip: list_tools alone passes without auth on
+    # FMP's hosted MCP, so we exercise the cheapest authenticated tool
+    # (a single AAPL quote) at install time.
+    canary_args=(("endpoint", "quote"), ("symbol", "AAPL")),
+    # FMP and EODHD are alternatives — the user installs one or the other
+    # to cover stock_quote. install_builtin's replace-on-conflict logic
+    # transfers ownership of (macro_research, stock_quote) to whichever
+    # template was installed most recently.
     runner_specs=(_STOCK_QUOTE,),
 )

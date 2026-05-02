@@ -15,11 +15,10 @@ python_lib transport instead of the bare APIClient.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from eodhd import APIClient
-
 from openlia.connectors.types import TRANSFORMS
 
 _iso2_to_iso3 = TRANSFORMS["country_iso2_to_iso3"]
@@ -40,9 +39,7 @@ def _latest_macro_value(records: list[dict[str, Any]], indicator: str) -> float:
 def _latest_actual(events: list[dict[str, Any]], event_type: str) -> float:
     """Pick the most recent event with a non-null `actual` field for `event_type`."""
     matching = [
-        e
-        for e in events
-        if (e.get("type") or "") == event_type and e.get("actual") is not None
+        e for e in events if (e.get("type") or "") == event_type and e.get("actual") is not None
     ]
     if not matching:
         raise RuntimeError(
@@ -64,20 +61,24 @@ class ExtendedAPIClient(APIClient):
         """Fetch a backward-looking event window. We bound `date_to` to today
         so the page-1000 budget isn't burned on upcoming releases.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         date_from = (now - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
         date_to = now.strftime("%Y-%m-%d")
         return cast(
             list[dict[str, Any]],
             self.get_economic_events_data(
-                country=country, limit=1000, date_from=date_from, date_to=date_to,
+                country=country,
+                limit=1000,
+                date_from=date_from,
+                date_to=date_to,
             ),
         )
 
     def _macro_latest(self, country: str, indicator: str) -> float:
         """Fetch a macro-indicator series and reduce to the latest non-null Value."""
         records = self.get_macro_indicators_data(
-            country=_iso2_to_iso3(country), indicator=indicator,
+            country=_iso2_to_iso3(country),
+            indicator=indicator,
         )
         return _latest_macro_value(cast(list[dict[str, Any]], records), indicator)
 

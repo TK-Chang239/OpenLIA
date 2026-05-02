@@ -144,11 +144,31 @@ class CallableSpec:
 # ISO 3166-1 alpha-2 → alpha-3 for the economies covered by the day-1 catalog.
 # EODHD's macro indicators API expects alpha-3 (e.g. USA, DEU, FRA).
 _COUNTRY_ISO2_TO_ISO3: dict[str, str] = {
-    "US": "USA", "GB": "GBR", "DE": "DEU", "FR": "FRA", "JP": "JPN",
-    "CN": "CHN", "IN": "IND", "BR": "BRA", "CA": "CAN", "AU": "AUS",
-    "IT": "ITA", "ES": "ESP", "NL": "NLD", "CH": "CHE", "SE": "SWE",
-    "NO": "NOR", "DK": "DNK", "MX": "MEX", "KR": "KOR", "RU": "RUS",
-    "ZA": "ZAF", "TR": "TUR", "ID": "IDN", "SA": "SAU", "AR": "ARG",
+    "US": "USA",
+    "GB": "GBR",
+    "DE": "DEU",
+    "FR": "FRA",
+    "JP": "JPN",
+    "CN": "CHN",
+    "IN": "IND",
+    "BR": "BRA",
+    "CA": "CAN",
+    "AU": "AUS",
+    "IT": "ITA",
+    "ES": "ESP",
+    "NL": "NLD",
+    "CH": "CHE",
+    "SE": "SWE",
+    "NO": "NOR",
+    "DK": "DNK",
+    "MX": "MEX",
+    "KR": "KOR",
+    "RU": "RUS",
+    "ZA": "ZAF",
+    "TR": "TUR",
+    "ID": "IDN",
+    "SA": "SAU",
+    "AR": "ARG",
 }
 
 

@@ -46,6 +46,22 @@ def test_introspect_captures_signature_and_doc() -> None:
     assert "quote payload" in quote.doc.lower()
 
 
+def test_introspect_filters_to_named_class_only() -> None:
+    """When `cls_name` is provided, only that class's methods (and its
+    MRO's, modulo `object`) are returned. Sibling classes — e.g. parent
+    SDK clients re-imported into a wrapper module, or unrelated helpers
+    — must NOT appear.
+
+    This matters for chat-toolbox safety: our X wrapper module re-imports
+    `xdk.Client` (which exposes OAuth helpers like `exchange_code`).
+    Without filtering, those leak into the chat surface.
+    """
+    defs = introspect_python_lib("_adapter_fixture_lib", cls_name="Helper")
+    qns = _qualnames(defs)
+    assert "Helper.ping" in qns
+    assert not any(qn.startswith("Client.") for qn in qns)
+
+
 def test_introspect_skips_signature_failures(monkeypatch) -> None:
     """Members whose `inspect.signature` raises must be silently skipped."""
     import inspect as _inspect
