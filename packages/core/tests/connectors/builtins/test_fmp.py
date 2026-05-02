@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from openlia.connectors.builtins.fmp import FMP_TEMPLATE
-from openlia.connectors.builtins.types import PythonLibRecipe
+from openlia.connectors.builtins.types import RemoteMcpRecipe
 from openlia.connectors.types import Category
 
 
@@ -13,20 +13,23 @@ def test_fmp_template_id_and_category() -> None:
     assert FMP_TEMPLATE.api_key_env_var == "FMP_API_KEY"
 
 
-def test_fmp_has_python_lib_mode() -> None:
+def test_fmp_has_only_remote_mcp_mode() -> None:
+    """Stale fmpsdk and unverified local CLI are not shipped — hosted MCP only."""
     modes = FMP_TEMPLATE.available_modes
-    assert any(isinstance(m, PythonLibRecipe) for m in modes), "expected python_lib mode"
+    assert len(modes) == 1
+    assert isinstance(modes[0], RemoteMcpRecipe)
 
 
-def test_fmp_python_lib_recipe_pip_name_is_fmpsdk() -> None:
-    py = next(m for m in FMP_TEMPLATE.available_modes if isinstance(m, PythonLibRecipe))
-    assert py.pip_name == "fmpsdk"
-    assert py.import_module == "fmpsdk"
+def test_fmp_remote_mcp_url_targets_official_endpoint() -> None:
+    remote = FMP_TEMPLATE.available_modes[0]
+    assert isinstance(remote, RemoteMcpRecipe)
+    assert remote.url == "https://financialmodelingprep.com/mcp?apikey={api_key}"
 
 
-def test_fmp_runner_specs_cover_expected_needs() -> None:
+def test_fmp_runner_specs_cover_all_eight_needs() -> None:
+    """FMP picks up the macro indicators EODHD's catalog doesn't carry."""
     need_ids = {spec.need_id for spec in FMP_TEMPLATE.runner_specs}
-    expected = {
+    assert need_ids == {
         "debt_gdp",
         "interest_revenue",
         "gdp_yoy",
@@ -36,11 +39,16 @@ def test_fmp_runner_specs_cover_expected_needs() -> None:
         "stock_quote",
         "social_posts",
     }
-    # Same coverage assertion as EODHD: at least 6 of 8.
-    assert len(expected & need_ids) >= 6, (
-        f"FMP must cover most expected needs; missing: {expected - need_ids}"
-    )
 
 
-def test_fmp_canary_tool_is_set() -> None:
-    assert FMP_TEMPLATE.canary_tool is not None
+def test_fmp_runner_specs_use_remote_mcp_with_tool_names() -> None:
+    for spec in FMP_TEMPLATE.runner_specs:
+        assert spec.access_mode == "remote_mcp"
+        assert spec.tool_name is not None
+        assert spec.module is None
+        assert spec.method is None
+
+
+def test_fmp_canary_tool_is_quote() -> None:
+    """quote is verified from FMP's official MCP usage example."""
+    assert FMP_TEMPLATE.canary_tool == "quote"
