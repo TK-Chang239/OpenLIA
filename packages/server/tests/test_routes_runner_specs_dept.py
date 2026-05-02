@@ -71,9 +71,7 @@ def _seed_connector(session: DBSession) -> Connector:
         source="cli_mcp",
         category="financial",
         launch={
-            "modes": [
-                {"kind": "cli_mcp", "argv": ["eodhd-mcp"], "env_keys": ["EODHD_API_KEY"]}
-            ]
+            "modes": [{"kind": "cli_mcp", "argv": ["eodhd-mcp"], "env_keys": ["EODHD_API_KEY"]}]
         },
         secrets={},
         cached_tools=[
@@ -114,9 +112,7 @@ def test_resolve_returns_proposal_with_connector_id(
                     id="real_time_quote",
                     description="quote",
                     parameters=[
-                        NeedParameter(
-                            name="ticker", description="t", type="str", required=True
-                        )
+                        NeedParameter(name="ticker", description="t", type="str", required=True)
                     ],
                     shape="dict",
                 )
@@ -271,9 +267,7 @@ def test_re_resolve_single_need_endpoint(
         },
     )
 
-    resp = client.post(
-        "/api/departments/macro_research/proposed-specs/real_time_quote/resolve"
-    )
+    resp = client.post("/api/departments/macro_research/proposed-specs/real_time_quote/resolve")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert isinstance(body, list)
@@ -332,13 +326,9 @@ def test_re_resolve_single_need_404_when_unknown(
     engine: Engine, db_session_factory, db_session: DBSession
 ) -> None:
     runner_specs_service.set_dept_needs_for_testing({"macro_research": []})
-    runner_specs_service.set_dept_categories_for_testing(
-        {"macro_research": (set(), set())}
-    )
+    runner_specs_service.set_dept_categories_for_testing({"macro_research": (set(), set())})
     client = _client(db_session_factory)
-    resp = client.post(
-        "/api/departments/macro_research/proposed-specs/ghost/resolve"
-    )
+    resp = client.post("/api/departments/macro_research/proposed-specs/ghost/resolve")
     assert resp.status_code == 404
 
 

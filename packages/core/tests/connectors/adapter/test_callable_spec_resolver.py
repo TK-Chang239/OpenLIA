@@ -282,9 +282,7 @@ async def test_explicit_unsatisfiable_response_raises_resolver_error() -> None:
             input_schema={"type": "object", "properties": {"symbol": {"type": "string"}}},
         )
     ]
-    llm = _StubLlm(
-        {"unsatisfiable": True, "reason": "no slug for cb_gold_purchases in source"}
-    )
+    llm = _StubLlm({"unsatisfiable": True, "reason": "no slug for cb_gold_purchases in source"})
     with pytest.raises(ResolverError, match="cb_gold_purchases"):
         await resolve_callable_spec(
             need=_need(),

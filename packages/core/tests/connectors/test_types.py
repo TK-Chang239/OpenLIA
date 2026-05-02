@@ -168,11 +168,31 @@ def test_callable_spec_defaults_independent() -> None:
 
 
 def test_transforms_registry_keys() -> None:
-    assert {"upper", "lower", "iso_to_eodhd"} <= set(TRANSFORMS.keys())
+    assert {"upper", "lower", "country_iso2_to_iso3"} <= set(TRANSFORMS.keys())
     assert ALLOWED_TRANSFORMS == frozenset(TRANSFORMS.keys())
 
 
 def test_transforms_callable() -> None:
     assert TRANSFORMS["upper"]("aapl") == "AAPL"
     assert TRANSFORMS["lower"]("AAPL") == "aapl"
-    assert TRANSFORMS["iso_to_eodhd"]("AAPL") == "AAPL.NYSE"
+    # Known iso-2 → iso-3 expansion (EODHD macro API expects alpha-3).
+    assert TRANSFORMS["country_iso2_to_iso3"]("US") == "USA"
+    assert TRANSFORMS["country_iso2_to_iso3"]("de") == "DEU"
+    # Unknown / already-alpha-3 inputs pass through unchanged.
+    assert TRANSFORMS["country_iso2_to_iso3"]("ZZ") == "ZZ"
+    assert TRANSFORMS["country_iso2_to_iso3"]("USA") == "USA"
+
+
+def test_callable_spec_result_path_default_is_empty_tuple() -> None:
+    spec = CallableSpec(need_id="x", access_mode="cli_mcp", tool_name="t")
+    assert spec.result_path == ()
+
+
+def test_callable_spec_result_path_accepts_tuple() -> None:
+    spec = CallableSpec(
+        need_id="x",
+        access_mode="remote_mcp",
+        tool_name="firecrawl_extract",
+        result_path=("data", "usd_share_pct"),
+    )
+    assert spec.result_path == ("data", "usd_share_pct")

@@ -19,8 +19,14 @@ from openlia.llm.runtime.deterministic import (
 )
 
 
-def test_parse_macro_indicator() -> None:
-    assert parse_mr_requirement("macro_indicator:debt_gdp") == ("debt_gdp", {})
+def test_parse_macro_indicator_passes_country_default() -> None:
+    """needs.yaml declares macro indicators with `country` defaulting to "US",
+    but the dispatcher doesn't auto-merge yaml defaults. The parser is the
+    single place that knows about the legacy MR requirement format, so it
+    propagates the default. Without this, EODHD's get_macro_indicators_data
+    raises TypeError on a missing `country` arg.
+    """
+    assert parse_mr_requirement("macro_indicator:debt_gdp") == ("debt_gdp", {"country": "US"})
 
 
 def test_parse_stock_quote() -> None:
@@ -61,8 +67,8 @@ class _FakeDispatcher:
 @pytest.mark.asyncio
 async def test_fetch_mr_t1_walks_each_requirement() -> None:
     results: dict[tuple[str, frozenset], Any] = {
-        ("debt_gdp", frozenset()): 120.0,
-        ("interest_revenue", frozenset()): 16.0,
+        ("debt_gdp", frozenset({("country", "US")})): 120.0,
+        ("interest_revenue", frozenset({("country", "US")})): 16.0,
         ("stock_quote", frozenset({("ticker", "TIP")})): {"price": 110.0},
     }
     dispatcher = _FakeDispatcher(results)
@@ -124,8 +130,8 @@ async def test_dashboard_assembler_v2_path_invokes_dispatcher() -> None:
     from openlia.macro_research.assembler import DashboardAssembler
 
     results: dict[tuple[str, frozenset], Any] = {
-        ("debt_gdp", frozenset()): 130.0,
-        ("interest_revenue", frozenset()): 22.0,
+        ("debt_gdp", frozenset({("country", "US")})): 130.0,
+        ("interest_revenue", frozenset({("country", "US")})): 22.0,
         ("stock_quote", frozenset({("ticker", "TIP")})): {"price": 110.0},
         ("stock_quote", frozenset({("ticker", "UUP")})): {"price": 28.5},
     }

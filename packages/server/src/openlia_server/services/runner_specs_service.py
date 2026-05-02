@@ -34,17 +34,6 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from typing import Any
 
-
-def _jsonify(value: Any) -> Any:
-    """Coerce a canary value to a JSON-safe shape before persisting.
-
-    MCP transports return SDK objects (e.g. `CallToolResult`) that are not
-    JSON serializable. Round-trip through `json.dumps(default=str)` so any
-    non-serializable leaf becomes its `str()` representation, while plain
-    dict/list/scalar payloads are unchanged.
-    """
-    return json.loads(json.dumps(value, default=str))
-
 from openlia.connectors.adapter import (
     CanaryResult,
     LlmClient,
@@ -70,6 +59,17 @@ from openlia_server.services.agentic_resolver_client import AgenticResolverError
 from openlia_server.services.dispatcher_factory import _prepare_connector
 
 log = logging.getLogger(__name__)
+
+
+def _jsonify(value: Any) -> Any:
+    """Coerce a canary value to a JSON-safe shape before persisting.
+
+    MCP transports return SDK objects (e.g. `CallToolResult`) that are not
+    JSON serializable. Round-trip through `json.dumps(default=str)` so any
+    non-serializable leaf becomes its `str()` representation, while plain
+    dict/list/scalar payloads are unchanged.
+    """
+    return json.loads(json.dumps(value, default=str))
 
 
 # Phase 10: dept-health recompute hook. Installed at app startup so every
@@ -522,10 +522,7 @@ async def _resolve_one_need(
 
     if candidates:
         return candidates
-    aggregated_reason = (
-        "; ".join(f"{cid[:8]}: {r}" for cid, r in per_connector_reasons)
-        or None
-    )
+    aggregated_reason = "; ".join(f"{cid[:8]}: {r}" for cid, r in per_connector_reasons) or None
     return [
         ProposedSpec(
             department_id=department_id,
@@ -678,8 +675,7 @@ def approve_dept_spec(
         match = next((p for p in matches if p.connector_id == connector_id), None)
         if match is None:
             raise KeyError(
-                f"no candidate for ({department_id!r}, {need_id!r}) on connector "
-                f"{connector_id!r}"
+                f"no candidate for ({department_id!r}, {need_id!r}) on connector {connector_id!r}"
             )
     else:
         match = matches[0]

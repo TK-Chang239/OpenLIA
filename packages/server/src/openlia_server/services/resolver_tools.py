@@ -78,18 +78,14 @@ def list_directory(
     target = _resolve_under_root(connector_root, path)
     rel = "" if path in (".", "") else path.replace("\\", "/").strip("/")
     if not _within_grounding(rel, grounding_paths, is_dir=True):
-        raise ResolverToolError(
-            f"path {path!r} is outside the connector's grounding_paths"
-        )
+        raise ResolverToolError(f"path {path!r} is outside the connector's grounding_paths")
     entries: list[dict] = []
     for entry in os.scandir(target):
         entry_rel = (rel + "/" + entry.name).strip("/")
         is_dir = entry.is_dir(follow_symlinks=False)
         if not _within_grounding(entry_rel, grounding_paths, is_dir=is_dir):
             continue
-        entries.append(
-            {"name": entry.name, "type": "dir" if is_dir else "file"}
-        )
+        entries.append({"name": entry.name, "type": "dir" if is_dir else "file"})
     return entries
 
 
@@ -105,9 +101,7 @@ def read_file(
         raise ResolverToolError(f"not a regular file: {path!r}")
     rel = path.replace("\\", "/").strip("/")
     if not _within_grounding(rel, grounding_paths, is_dir=False):
-        raise ResolverToolError(
-            f"path {path!r} is outside the connector's grounding_paths"
-        )
+        raise ResolverToolError(f"path {path!r} is outside the connector's grounding_paths")
     raw = target.read_bytes()
     if len(raw) <= max_bytes:
         return raw.decode("utf-8", errors="replace")

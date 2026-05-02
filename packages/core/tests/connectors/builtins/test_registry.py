@@ -21,20 +21,8 @@ from openlia.connectors.builtins import (
 from openlia.connectors.types import Category
 
 
-def test_builtin_templates_is_empty_tuple() -> None:
-    assert BUILTIN_TEMPLATES == ()
-    assert isinstance(BUILTIN_TEMPLATES, tuple)
-
-
-def test_list_templates_returns_empty_tuple() -> None:
-    result = list_templates()
-    assert result == ()
-    assert isinstance(result, tuple)
-
-
 def test_get_template_unknown_returns_none() -> None:
     assert get_template("anything") is None
-    assert get_template("eodhd") is None
     assert get_template("") is None
 
 
@@ -79,6 +67,34 @@ def test_python_lib_recipe_is_frozen_with_kind_literal() -> None:
         recipe.pip_name = "bar"  # type: ignore[misc]
 
 
+def test_builtin_template_runner_specs_default_is_empty_tuple() -> None:
+    tpl = BuiltInTemplate(
+        template_id="x",
+        display_name="X",
+        category=Category.SOCIAL,
+        api_key_env_var="X_API_KEY",
+        available_modes=(),
+        canary_tool=None,
+    )
+    assert tpl.runner_specs == ()
+
+
+def test_builtin_template_runner_specs_accepts_tuple() -> None:
+    from openlia.connectors.types import CallableSpec
+
+    spec = CallableSpec(need_id="n", access_mode="remote_mcp", tool_name="t")
+    tpl = BuiltInTemplate(
+        template_id="x",
+        display_name="X",
+        category=Category.NEWS,
+        api_key_env_var="X_API_KEY",
+        available_modes=(),
+        canary_tool=None,
+        runner_specs=(spec,),
+    )
+    assert tpl.runner_specs == (spec,)
+
+
 def test_recipes_are_hashable() -> None:
     cli = CliMcpRecipe(kind="cli_mcp", argv=("uvx", "x"), env_keys=("K",))
     remote = RemoteMcpRecipe(kind="remote_mcp", url="https://x", headers=(("a", "b"),))
@@ -92,3 +108,61 @@ def test_recipes_are_hashable() -> None:
     )
     # Hashability sanity check: must work in a set.
     assert len({cli, remote, py}) == 3
+
+
+def test_builtin_templates_has_six_entries() -> None:
+    template_ids = {t.template_id for t in BUILTIN_TEMPLATES}
+    assert template_ids == {"eodhd", "fmp", "newsapi_ai", "mediastack", "firecrawl", "x"}
+
+
+def test_list_templates_returns_six_entries() -> None:
+    assert len(list_templates()) == 6
+
+
+def test_get_template_finds_each_builtin() -> None:
+    for tid in ("eodhd", "fmp", "newsapi_ai", "mediastack", "firecrawl", "x"):
+        tpl = get_template(tid)
+        assert tpl is not None, f"missing template: {tid}"
+        assert tpl.template_id == tid
+
+
+def test_runner_specs_reference_only_declared_need_ids() -> None:
+    """Every runner_spec's need_id must appear in some department's needs.yaml."""
+    from pathlib import Path
+
+    import yaml
+
+    needs_dir = Path(__file__).resolve().parents[3] / "src" / "openlia" / "departments"
+    declared: set[str] = set()
+    for yaml_path in needs_dir.glob("*.needs.yaml"):
+        data = yaml.safe_load(yaml_path.read_text())
+        for need in data.get("needs", []):
+            declared.add(need["id"])
+
+    for tpl in BUILTIN_TEMPLATES:
+        for spec in tpl.runner_specs:
+            assert spec.need_id in declared, (
+                f"template {tpl.template_id!r} references unknown need {spec.need_id!r}"
+            )
+
+
+def test_every_runner_need_is_covered_by_at_least_one_template() -> None:
+    """Every declared need (across both runner depts) is covered by at least one builtin."""
+    from pathlib import Path
+
+    import yaml
+
+    needs_dir = Path(__file__).resolve().parents[3] / "src" / "openlia" / "departments"
+    declared: set[str] = set()
+    for yaml_path in needs_dir.glob("*.needs.yaml"):
+        data = yaml.safe_load(yaml_path.read_text())
+        for need in data.get("needs", []):
+            declared.add(need["id"])
+
+    covered: set[str] = set()
+    for tpl in BUILTIN_TEMPLATES:
+        for spec in tpl.runner_specs:
+            covered.add(spec.need_id)
+
+    missing = declared - covered
+    assert not missing, f"runner needs uncovered by day-1 catalog: {missing}"
