@@ -232,6 +232,137 @@ def test_callable_specs_for_filters_by_department():
     assert {s.need_id for s in out} == {"a", "b"}
 
 
+# ----- runtime arg filtering -----
+
+
+@pytest.mark.asyncio
+async def test_invoke_spec_drops_unbound_runtime_args() -> None:
+    """Runtime args that have no matching `param_bindings` entry must be
+    dropped, not passed through. parse_mr_requirement adds country=US
+    uniformly for every macro_indicator: requirement, but Firecrawl-scrape
+    specs don't accept a country kwarg — passing it through becomes
+    `Firecrawl.scrape(url=..., formats=..., country='US')` which raises
+    TypeError on the SDK signature.
+    """
+    captured: dict[str, dict] = {}
+
+    class _T:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            captured["args"] = args
+            return {"json": {"x": 1.0}}
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    conn = PreparedConnector(
+        connector_id="c1",
+        provider_id="firecrawl",
+        category=Category.WEB_SEARCH,
+        status=ConnectorStatus.VALIDATED,
+        transport=_T(),  # type: ignore[arg-type]
+    )
+    spec = CallableSpec(
+        need_id="interest_revenue",
+        access_mode="python_lib",
+        method="Firecrawl.scrape",
+        constants={"url": "https://x"},
+        # No bindings — every kwarg is unbound.
+    )
+    dispatcher = Dispatcher(connectors={"c1": conn})
+    await dispatcher._invoke_spec(conn, spec, runtime_args={"country": "US"})
+    assert "country" not in captured["args"]
+    assert captured["args"] == {"url": "https://x"}
+
+
+# ----- spec_connector_id routing -----
+
+
+@pytest.mark.asyncio
+async def test_fetch_need_routes_via_persisted_spec_connector_id() -> None:
+    """When a spec's owning connector is recorded by id (set by the
+    server's hydrator from RunnerCallableSpec.connector_id), the
+    dispatcher routes there directly — no scanning by method qualname.
+
+    Without this, two python_lib connectors with disjoint callable
+    surfaces (e.g. EODHD + Firecrawl) cause method names that don't
+    appear in either registry to fall back to "any python_lib
+    connector", which routes wrong (the call lands on the first
+    connector registered, not the one that owns the spec).
+    """
+    captured: dict[str, str] = {}
+
+    class _FCTransport:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            captured["target"] = "firecrawl"
+            return {"json": {"x": 1.0}}
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    class _EODHDTransport:
+        async def call_tool(self, name: str, args: dict[str, Any]) -> Any:
+            captured["target"] = "eodhd"
+            return None  # would normally raise AttributeError on getattr
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def list_callables(self) -> list[CallableDefinition]:
+            return []
+
+    eodhd = PreparedConnector(
+        connector_id="eodhd-id",
+        provider_id="eodhd",
+        category=Category.FINANCIAL,
+        status=ConnectorStatus.VALIDATED,
+        transport=_EODHDTransport(),  # type: ignore[arg-type]
+        callables={
+            "ExtendedAPIClient.get_live_stock_prices": CallableDefinition(
+                qualname="ExtendedAPIClient.get_live_stock_prices",
+                signature="()",
+                doc="",
+            )
+        },
+    )
+    firecrawl = PreparedConnector(
+        connector_id="firecrawl-id",
+        provider_id="firecrawl",
+        category=Category.WEB_SEARCH,
+        status=ConnectorStatus.VALIDATED,
+        transport=_FCTransport(),  # type: ignore[arg-type]
+        # Firecrawl's instance methods aren't on the class — introspect
+        # finds nothing. Empty callables registry.
+        callables={},
+    )
+
+    spec = CallableSpec(
+        need_id="usd_fx_reserve_share",
+        access_mode="python_lib",
+        method="Firecrawl.scrape",
+        result_path=("json", "x"),
+        shape="float",
+    )
+
+    dispatcher = Dispatcher(
+        connectors={"eodhd-id": eodhd, "firecrawl-id": firecrawl},
+        callable_specs={("macro_research", "usd_fx_reserve_share"): spec},
+        spec_connector_ids={
+            ("macro_research", "usd_fx_reserve_share"): "firecrawl-id",
+        },
+    )
+
+    async with dispatcher.in_department("macro_research"):
+        result = await dispatcher.fetch_need("usd_fx_reserve_share")
+    assert result == 1.0
+    assert captured["target"] == "firecrawl"
+
+
 # ----- result_path -----
 
 

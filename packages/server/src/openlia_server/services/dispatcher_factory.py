@@ -201,6 +201,7 @@ def _hydrate_spec(row: RunnerCallableSpec) -> CallableSpec:
         param_bindings=bindings,
         constants=dict(raw.get("constants") or {}),
         shape=raw.get("shape", "any"),
+        result_path=tuple(raw.get("result_path") or ()),
     )
 
 
@@ -212,4 +213,11 @@ def build_dispatcher(session: Session) -> Dispatcher:
     specs: dict[tuple[str, str], CallableSpec] = {
         (s.department_id, s.need_id): _hydrate_spec(s) for s in spec_rows
     }
-    return Dispatcher(connectors=prepared, callable_specs=specs)
+    spec_connector_ids: dict[tuple[str, str], str] = {
+        (s.department_id, s.need_id): s.connector_id for s in spec_rows
+    }
+    return Dispatcher(
+        connectors=prepared,
+        callable_specs=specs,
+        spec_connector_ids=spec_connector_ids,
+    )

@@ -87,6 +87,14 @@ class Dispatcher:
     """Keyed by connector_id."""
     callable_specs: dict[tuple[str, str], CallableSpec] = field(default_factory=dict)
     """Keyed by (department_id, need_id)."""
+    spec_connector_ids: dict[tuple[str, str], str] = field(default_factory=dict)
+    """Authoritative connector ownership per spec, set by the server's
+    hydrator from RunnerCallableSpec.connector_id. When present,
+    `_connector_for_spec` uses it directly instead of scanning by
+    tool/method qualname — required when a spec's method name doesn't
+    appear in the connector's introspected callables registry (e.g.
+    Firecrawl SDK attaches methods per-instance, so class-walk
+    introspection misses them)."""
 
     # ----- chat candidate pool / tool routing (§8) -----
 
@@ -145,13 +153,17 @@ class Dispatcher:
     def _connector_for_spec(self, dept: str, need_id: str, spec: CallableSpec) -> PreparedConnector:
         """Locate the connector that owns this spec.
 
-        For MCP modes the connector is whichever one exposes `spec.tool_name`.
-        For `python_lib` mode the connector is whichever one's `cached_python_callables`
-        registers `spec.method` — but since the per-spec connector_id is recorded
-        in the DB row and propagated by the server's hydrator, we additionally
-        accept any connector whose category is compatible. To keep this layer
-        pure, we fall back to scanning by tool/method presence.
+        Prefers the persisted `spec_connector_ids` map (RunnerCallableSpec.connector_id
+        from the DB row). Falls back to scanning by `tool_name`/`method`
+        presence so older specs persisted before connector_id was tracked
+        keep working.
         """
+        cid = self.spec_connector_ids.get((dept, need_id))
+        if cid is not None:
+            conn = self.connectors.get(cid)
+            if conn is not None:
+                return conn
+
         access_mode = spec.access_mode
         if access_mode in {"cli_mcp", "remote_mcp"}:
             tool_name = spec.tool_name
@@ -195,14 +207,16 @@ class Dispatcher:
         bound: dict[str, Any] = {}
 
         # Apply param_bindings: rename caller's kwarg -> underlying arg, and
-        # apply named transform when present.
+        # apply named transform when present. Runtime args without a
+        # matching binding are dropped silently — the dispatcher's contract
+        # is that param_bindings + constants together fully describe the
+        # call's argument shape. (Earlier behavior passed unbound args
+        # through, but that breaks specs that share a need-id with a
+        # different shape — e.g. Firecrawl-scrape specs receiving a stray
+        # country=US from parse_mr_requirement.)
         for caller_name, value in runtime_args.items():
             binding = spec.param_bindings.get(caller_name)
             if binding is None:
-                # Not bound — pass through unchanged. The wizard adapter is
-                # expected to declare bindings for every need parameter, but
-                # runners may pass extra kwargs the underlying call accepts.
-                bound[caller_name] = value
                 continue
             if binding.transform is not None:
                 if binding.transform not in ALLOWED_TRANSFORMS:
