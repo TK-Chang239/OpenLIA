@@ -34,3 +34,14 @@ needs:
         required: false
         default: 200
     shape: list[dict]
+    # Canonical key set RawSocialPost expects after the executor's
+    # field_map renames each item. The resolver LLM authors per-spec
+    # field_maps that cover this set; missing keys raise FieldMapError
+    # at runtime.
+    canonical_keys:
+      id: str
+      ticker: str
+      source: str
+      text: str
+      created_at: str  # ISO-8601 timestamp
+      engagement: dict

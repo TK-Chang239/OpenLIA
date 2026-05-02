@@ -67,6 +67,9 @@ EXPECTED_TABLES = {
     # --- Connector redesign (replaces data_providers + data_provider_requirement_mapping) ---
     "connectors",
     "runner_callable_specs",
+    # --- Resolver redesign Phase 1 (audit tables) ---
+    "resolver_call_log",
+    "smoke_call_log",
 }
 
 

@@ -108,12 +108,19 @@ class NeedParameter:
 
 @dataclass(frozen=True)
 class RunnerNeed:
-    """Department-declared data need, resolved at wizard time."""
+    """Department-declared data need, resolved at wizard time.
+
+    For ``list[dict]``-shaped needs, ``canonical_keys`` declares the key
+    set that the dept-side adapter expects on each item. The resolver LLM
+    authors a per-spec ``field_map`` whose keys cover this set; the
+    runtime executor renames items in place using that map.
+    """
 
     id: str
     description: str
     parameters: list[NeedParameter]
     shape: str  # type hint string, e.g. "float", "list[dict]"
+    canonical_keys: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -124,7 +131,17 @@ class ParamBinding:
 
 @dataclass(frozen=True)
 class CallableSpec:
-    """Persisted resolution from a RunnerNeed to a concrete connector callable."""
+    """Persisted resolution from a RunnerNeed to a concrete connector callable.
+
+    ``result_path`` (optional dotted path) peels a wrapper off the transport
+    response before shape-specific post-processing — e.g. ``"data.posts"``
+    extracts the list from a ``{"data": {"posts": [...]}}`` response.
+
+    ``field_map`` (optional, ``list[dict]`` shape only) renames each item's
+    keys to the canonical set declared on the need's ``canonical_keys``.
+    Values may be dotted paths to extract nested fields per item.
+    A missing required canonical key at runtime raises ``FieldMapError``.
+    """
 
     need_id: str
     access_mode: Literal["cli_mcp", "remote_mcp", "python_lib"]
@@ -145,6 +162,14 @@ class CallableSpec:
     # (e.g. FMP's economics-indicators returns daily/quarterly records).
     # See `RESULT_REDUCERS` for valid names.
     result_reducer: str | None = None
+    # Per-item key rename map applied AFTER `result_path` for shape
+    # ``list[dict]``. Keys are the canonical names declared on the
+    # need's ``RunnerNeed.canonical_keys``; values are the source key
+    # on each raw item. Values may be tuples to extract nested fields.
+    # ``None`` or ``{}`` returns items unchanged. Missing source keys
+    # at runtime raise ``FieldMapError`` (smoke-classified as
+    # ``schema_miss``).
+    field_map: dict[str, str | tuple[str, ...]] | None = None
 
 
 # ISO 3166-1 alpha-2 → alpha-3 for the economies covered by the day-1 catalog.

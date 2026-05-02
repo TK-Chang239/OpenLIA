@@ -149,3 +149,13 @@ needs:
         required: false
         default: 25
     shape: list[dict]
+    # Canonical key set the World Order dashboard's narrative layer
+    # expects on each item. The resolver LLM authors a per-spec
+    # `field_map` whose keys cover this set; the runtime executor
+    # renames each item in place.
+    canonical_keys:
+      title: str
+      url: str
+      source: str
+      published_at: str  # ISO-8601 timestamp
+      summary: str
