@@ -53,6 +53,17 @@ class NeedNotResolved(DispatchError):
     pass
 
 
+class FieldMapError(DispatchError):
+    """Raised when a CallableSpec.field_map fails to resolve at runtime.
+
+    Surfaced for: missing source key on an item, missing nested-path
+    component, or attempting to walk a non-mapping. The smoke pipeline
+    classifies this as ``schema_miss`` and surfaces the offending key.
+    """
+
+    pass
+
+
 def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any:
     """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged.
 
@@ -67,6 +78,41 @@ def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any
         else:
             raise DispatchError(f"result_path {path!r} missing key {key!r} for need {need_id!r}")
     return value
+
+
+def _apply_field_map(value: Any, spec: CallableSpec) -> Any:
+    """Per-item rename for ``list[dict]``-shape specs (Phase 3).
+
+    No-op for any other shape, ``None``, or ``{}``. Missing source keys or
+    non-mapping items raise ``FieldMapError``.
+    """
+    if spec.shape != "list[dict]" or not spec.field_map:
+        return value
+
+    if not isinstance(value, list):
+        raise FieldMapError(
+            f"spec for need {spec.need_id!r} has shape 'list[dict]' but post-result_path "
+            f"value is not a list: got {type(value).__name__}"
+        )
+
+    out: list[dict[str, Any]] = []
+    for idx, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise FieldMapError(
+                f"spec for need {spec.need_id!r}: item at index {idx} is not a mapping"
+            )
+        renamed: dict[str, Any] = {}
+        for canonical_key, source in spec.field_map.items():
+            source_path: tuple[str, ...] = source if isinstance(source, tuple) else (source,)
+            try:
+                renamed[canonical_key] = _walk_result_path(item, source_path, need_id=spec.need_id)
+            except DispatchError as exc:
+                raise FieldMapError(
+                    f"spec for need {spec.need_id!r}: field_map[{canonical_key!r}] "
+                    f"source {source!r} missing on item at index {idx}"
+                ) from exc
+        out.append(renamed)
+    return out
 
 
 @dataclass(frozen=True)
@@ -263,4 +309,5 @@ class Dispatcher:
                     f"result_reducer {spec.result_reducer!r} failed for "
                     f"need {spec.need_id!r}: {exc}",
                 ) from exc
-        return _walk_result_path(raw, spec.result_path, need_id=spec.need_id)
+        walked = _walk_result_path(raw, spec.result_path, need_id=spec.need_id)
+        return _apply_field_map(walked, spec)

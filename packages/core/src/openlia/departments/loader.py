@@ -111,12 +111,49 @@ def load_needs(department_id: str) -> list[RunnerNeed]:
                     f"{path}: parameter for '{need_id}' missing required field {exc}"
                 ) from exc
 
+        canonical_raw = entry.get("canonical_keys")
+        canonical_keys: dict[str, str] | None
+        shape_str = str(shape)
+        if canonical_raw is None:
+            if shape_str == "list[dict]":
+                raise ValueError(
+                    f"{path}: '{need_id}' has shape 'list[dict]' but no "
+                    f"'canonical_keys' map; declare the canonical key set the "
+                    f"dept-side adapter expects."
+                )
+            canonical_keys = None
+        else:
+            if shape_str != "list[dict]":
+                raise ValueError(
+                    f"{path}: '{need_id}' has shape '{shape_str}' but declares "
+                    f"'canonical_keys'; canonical_keys is only valid for "
+                    f"shape 'list[dict]'."
+                )
+            if not isinstance(canonical_raw, dict) or not canonical_raw:
+                raise ValueError(
+                    f"{path}: '{need_id}.canonical_keys' must be a non-empty "
+                    f"mapping of str -> str type-hint."
+                )
+            canonical_keys = {}
+            for k, v in canonical_raw.items():
+                if not isinstance(k, str) or not k.strip():
+                    raise ValueError(
+                        f"{path}: '{need_id}.canonical_keys' has a non-string or empty key: {k!r}"
+                    )
+                if not isinstance(v, str) or not v.strip():
+                    raise ValueError(
+                        f"{path}: '{need_id}.canonical_keys[{k}]' must be a "
+                        f"non-empty type-hint string."
+                    )
+                canonical_keys[k] = v
+
         out.append(
             RunnerNeed(
                 id=str(need_id),
                 description=str(description).strip(),
                 parameters=params,
-                shape=str(shape),
+                shape=shape_str,
+                canonical_keys=canonical_keys,
             )
         )
     return out
