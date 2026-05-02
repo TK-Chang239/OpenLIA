@@ -25,7 +25,19 @@ def _unwrap_call_result(result: Any) -> Any:
        JSON-stringified payload (legacy / common path).
 
     Plain dicts/lists from non-MCP tests pass through unchanged.
+
+    When `isError` is True, raise so callers (e.g. install-time canary
+    checks) treat upstream tool failures as errors instead of silently
+    accepting the error string as a "result".
     """
+    if getattr(result, "isError", False):
+        content = getattr(result, "content", None)
+        message = ""
+        if content:
+            text = getattr(content[0], "text", None)
+            if isinstance(text, str):
+                message = text
+        raise RuntimeError(f"MCP tool error: {message}" if message else "MCP tool error")
     structured = getattr(result, "structured_content", None)
     if structured is not None:
         return structured

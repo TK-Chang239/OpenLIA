@@ -23,17 +23,18 @@ def test_fmp_has_only_remote_mcp_mode() -> None:
 def test_fmp_remote_mcp_url_targets_official_endpoint() -> None:
     remote = FMP_TEMPLATE.available_modes[0]
     assert isinstance(remote, RemoteMcpRecipe)
-    assert remote.url == "https://financialmodelingprep.com/mcp?apikey={api_key}"
+    assert remote.url == "https://financialmodelingprep.com/mcp?apikey={FMP_API_KEY}"
 
 
 def test_fmp_runner_specs_cover_only_stock_quote() -> None:
-    """FMP only ships stock_quote.
+    """FMP and EODHD are alternative providers; FMP's runner-side day-1
+    coverage is just stock_quote.
 
-    Macro indicators (gdp_yoy, cpi_yoy) are removed because FMP's
-    economics tool returns list[dict] of dated records, not a float —
-    a runtime shape mismatch against shape='float'. EODHD already
-    covers gdp_yoy and cpi_yoy via reducer methods on
-    ExtendedAPIClient, so the day-1 catalog still hits 100% coverage.
+    FMP's economics tool returns list[dict] of dated records (shape
+    mismatch with shape='float'); EODHD's macro indicators are wrapped
+    in ExtendedAPIClient reducer methods to return floats. The day-1
+    catalog targets EODHD as the macro-coverage path; FMP stock_quote
+    is the redundant alternative for users who prefer FMP.
     """
     need_ids = {spec.need_id for spec in FMP_TEMPLATE.runner_specs}
     assert need_ids == {"stock_quote"}

@@ -98,6 +98,83 @@ async def test_install_builtin_inserts_runner_callable_specs_for_runner_needs(
 
 
 # ---------------------------------------------------------------------------
+# alternative-template install: replace existing (dept, need) ownership
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_install_builtin_runs_canary_and_marks_failed_on_canary_error(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """list_tools succeeding isn't enough — for some MCP servers (FMP)
+    list_tools works unauthenticated. The canary call exercises an
+    authenticated tool with a sample argument so a wrong api_key flips
+    status to FAILED at install time, not at first dashboard request.
+    """
+    from openlia_server.services import connectors_service as cs
+
+    _stub_validate_ok(monkeypatch)
+
+    # Pretend the FMP canary call (`quote` with sample args) raises.
+    async def _fake_canary(*args, **kwargs):
+        raise RuntimeError("401 Unauthorized")
+
+    monkeypatch.setattr(cs, "_run_canary_call", _fake_canary)
+
+    connector = await install_builtin(db_session, template_id="fmp", api_key="bad-key")
+    assert connector.status == ConnectorStatus.FAILED.value
+    assert "401" in (connector.last_error or "")
+
+
+@pytest.mark.asyncio
+async def test_install_builtin_replaces_specs_for_overlapping_needs(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """EODHD and FMP are alternative providers — both claim
+    (macro_research, stock_quote). UNIQUE(dept, need) on
+    runner_callable_specs forbids two rows for the same key. Installing
+    the second should transfer ownership of overlapping needs to the
+    new connector (replace) rather than raising IntegrityError.
+
+    EODHD's non-overlapping specs (gdp_yoy, cpi_yoy, debt_gdp,
+    cpi_core_yoy, pmi, social_posts) must remain on the EODHD connector.
+    """
+    from openlia_server.services import connectors_service as cs
+
+    _stub_validate_ok(monkeypatch)
+
+    # Skip the live canary call so the test focuses on replace-semantics
+    # rather than re-testing canary behavior (covered by the test above).
+    async def _noop_canary(**kwargs):
+        return None
+
+    monkeypatch.setattr(cs, "_run_canary_call", _noop_canary)
+
+    eodhd = await install_builtin(db_session, template_id="eodhd", api_key="eodhd-k")
+    fmp = await install_builtin(db_session, template_id="fmp", api_key="fmp-k")
+
+    # Both connector rows persist.
+    assert eodhd.id != fmp.id
+    assert eodhd.status == ConnectorStatus.VALIDATED.value
+    assert fmp.status == ConnectorStatus.VALIDATED.value
+
+    rows = db_session.query(RunnerCallableSpec).all()
+    by_need = {r.need_id: r for r in rows}
+
+    # stock_quote ownership transferred to FMP.
+    assert by_need["stock_quote"].connector_id == fmp.id
+
+    # EODHD's non-overlapping specs remain.
+    eodhd_only = {"gdp_yoy", "cpi_yoy", "debt_gdp", "cpi_core_yoy", "pmi", "social_posts"}
+    for need in eodhd_only:
+        assert by_need[need].connector_id == eodhd.id, (
+            f"{need!r} should still be owned by EODHD after FMP install"
+        )
+
+
+# ---------------------------------------------------------------------------
 # test 4: template with no runner_specs inserts no rows
 # ---------------------------------------------------------------------------
 

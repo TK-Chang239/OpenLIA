@@ -42,8 +42,7 @@ class XClient(Client):
             if not page.data:
                 continue
             for item in page.data:
-                d = item if isinstance(item, dict) else getattr(item, "model_dump", lambda: vars(item))()
-                out.append(d)
+                out.append(_to_dict(item))
                 if len(out) >= max_results:
                     return out
         return out
@@ -54,7 +53,16 @@ class XClient(Client):
         data = getattr(resp, "data", None)
         if data is None:
             return None
-        return data if isinstance(data, dict) else getattr(data, "model_dump", lambda: vars(data))()
+        return _to_dict(data)
+
+
+def _to_dict(item: Any) -> dict[str, Any]:
+    if isinstance(item, dict):
+        return item
+    dump = getattr(item, "model_dump", None)
+    if callable(dump):
+        return dump()
+    return dict(vars(item))
 
 
 __all__ = ["XClient"]

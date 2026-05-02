@@ -143,6 +143,46 @@ async def test_call_tool_prefers_structured_content_when_populated() -> None:
 
 
 @pytest.mark.asyncio
+async def test_call_tool_raises_when_result_marked_is_error() -> None:
+    """MCP servers don't necessarily raise on upstream auth failures —
+    they return CallToolResult(isError=True, content=[TextContent(text='401 ...')]).
+    The transport surfaces this as a Python exception so install-time
+    canary checks can demote the connector to FAILED.
+    """
+
+    class _ErrBlock:
+        def __init__(self, text: str) -> None:
+            self.text = text
+
+    class _ErrResult:
+        def __init__(self) -> None:
+            self.isError = True
+            self.content = [_ErrBlock("Request failed with status code 401")]
+            self.structured_content = None
+
+    class _ErrSession:
+        def __init__(self, mode: RemoteMcpMode) -> None:
+            self.mode = mode
+
+        async def open(self) -> None:
+            pass
+
+        async def close(self) -> None:
+            pass
+
+        async def list_tools(self) -> list[ToolDefinition]:
+            return []
+
+        async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+            return _ErrResult()
+
+    mode = RemoteMcpMode(kind="remote_mcp", url="https://x", headers={})
+    t = RemoteMcpTransport(mode=mode, session_factory=lambda m: _ErrSession(m))
+    with pytest.raises(RuntimeError, match="401"):
+        await t.call_tool("any", {})
+
+
+@pytest.mark.asyncio
 async def test_aclose_closes_and_resets_session() -> None:
     holder: dict[str, _FakeSession] = {}
     t = _make(holder)

@@ -193,8 +193,14 @@ async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> V
         python_callables: list[dict[str, Any]] = []
         if selected_mode.get("kind") == "python_lib":
             module_name = selected_mode.get("import_module", "")
+            # Filter introspection to the configured instance class so
+            # parent SDK classes re-imported into wrapper modules
+            # (e.g. xdk.Client inside x_wrapper) don't leak OAuth helpers
+            # into the chat-toolbox surface.
+            factory = selected_mode.get("instance_factory") or {}
+            cls_name = factory.get("cls")
             try:
-                defs = introspect_python_lib(module_name)
+                defs = introspect_python_lib(module_name, cls_name=cls_name)
             except Exception as exc:
                 return ValidationFailure(error=f"introspect_python_lib failed: {exc}")
             python_callables = [
@@ -346,6 +352,35 @@ def _recipe_to_mode(
     )
 
 
+async def _run_canary_call(
+    *,
+    launch: dict[str, Any],
+    secrets: dict[str, str],
+    canary_tool: str,
+    canary_args: dict[str, Any],
+) -> None:
+    """Build a transport from the persisted launch dict and invoke the
+    canary tool with sample args. Raises any error from the upstream
+    call so callers can demote the connector to FAILED.
+
+    list_tools is not a sufficient auth check: FMP's hosted MCP returns
+    its tool list without authentication, so a wrong api_key would pass
+    `_validate_launch` silently. The canary forces an authenticated
+    round-trip on the same transport before we accept the install.
+    """
+    selected = _select_mode(launch)
+    if selected is None:
+        raise RuntimeError("canary skipped: no usable mode")
+    transport = _build_transport("<canary>", selected, secrets)
+    try:
+        await transport.call_tool(canary_tool, dict(canary_args))
+    finally:
+        try:
+            await transport.aclose()
+        except Exception:
+            pass
+
+
 async def install_builtin(
     session: Session,
     *,
@@ -355,8 +390,10 @@ async def install_builtin(
     """Install a built-in connector from the day-1 catalog without the wizard.
 
     Raises KeyError when `template_id` is not in the catalog.
-    Calls `create_connector` (which handles validation + dept-health invalidation),
-    then inserts one RunnerCallableSpec row per template.runner_specs entry.
+    Calls `create_connector` (validation + dept-health invalidation),
+    runs the template's canary call (when defined) to confirm the api
+    key actually authenticates, then inserts one RunnerCallableSpec
+    row per template.runner_specs entry.
     """
     template = get_template(template_id)
     if template is None:
@@ -375,7 +412,32 @@ async def install_builtin(
         secrets={template.api_key_env_var: api_key},
     )
 
+    # Canary check — only if list_tools succeeded and the template defines one.
+    if (
+        connector.status == ConnectorStatus.VALIDATED.value
+        and template.canary_tool is not None
+        and template.canary_args is not None
+    ):
+        try:
+            await _run_canary_call(
+                launch=connector.launch or {},
+                secrets=connector.secrets or {},
+                canary_tool=template.canary_tool,
+                canary_args=dict(template.canary_args),
+            )
+        except Exception as exc:
+            connector.status = ConnectorStatus.FAILED.value
+            connector.last_error = f"canary {template.canary_tool!r} failed: {exc}"
+            session.commit()
+            session.refresh(connector)
+
     if connector.status == ConnectorStatus.VALIDATED.value and template.runner_specs:
+        # Day-1 templates can be alternative providers (EODHD vs FMP both
+        # claim macro_research/stock_quote). The (dept, need) UNIQUE
+        # constraint forbids two rows for the same key, so we transfer
+        # ownership: delete any existing row for each (dept, need) this
+        # template covers, then insert the new spec. The previous
+        # connector row remains live for chat-toolbox use.
         for spec in template.runner_specs:
             dept_id = _NEED_DEPARTMENT_MAP.get(spec.need_id)
             if dept_id is None:
@@ -384,6 +446,10 @@ async def install_builtin(
                     spec.need_id,
                 )
                 continue
+            session.query(RunnerCallableSpec).filter(
+                RunnerCallableSpec.department_id == dept_id,
+                RunnerCallableSpec.need_id == spec.need_id,
+            ).delete(synchronize_session=False)
             row = RunnerCallableSpec(
                 id=str(uuid.uuid4()),
                 department_id=dept_id,
