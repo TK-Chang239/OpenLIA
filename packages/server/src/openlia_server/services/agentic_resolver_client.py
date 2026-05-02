@@ -161,9 +161,7 @@ class AgenticResolverClient:
             try:
                 parsed, _ = json.JSONDecoder().raw_decode(cleaned)
             except json.JSONDecodeError as exc2:
-                raise AgenticResolverError(
-                    f"adapter LLM returned non-JSON: {exc2}"
-                ) from exc2
+                raise AgenticResolverError(f"adapter LLM returned non-JSON: {exc2}") from exc2
         if not isinstance(parsed, dict):
             raise AgenticResolverError("adapter LLM returned a non-object JSON value")
         return parsed

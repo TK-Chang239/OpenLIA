@@ -55,9 +55,7 @@ def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any
     """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged."""
     for key in path:
         if not isinstance(value, dict) or key not in value:
-            raise DispatchError(
-                f"result_path {path!r} missing key {key!r} for need {need_id!r}"
-            )
+            raise DispatchError(f"result_path {path!r} missing key {key!r} for need {need_id!r}")
         value = value[key]
     return value
 
