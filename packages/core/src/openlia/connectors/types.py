@@ -108,12 +108,19 @@ class NeedParameter:
 
 @dataclass(frozen=True)
 class RunnerNeed:
-    """Department-declared data need, resolved at wizard time."""
+    """Department-declared data need, resolved at wizard time.
+
+    For ``list[dict]``-shaped needs, ``canonical_keys`` declares the key
+    set that the dept-side adapter expects on each item. The resolver LLM
+    authors a per-spec ``field_map`` whose keys cover this set; the
+    runtime executor renames items in place using that map.
+    """
 
     id: str
     description: str
     parameters: list[NeedParameter]
     shape: str  # type hint string, e.g. "float", "list[dict]"
+    canonical_keys: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
