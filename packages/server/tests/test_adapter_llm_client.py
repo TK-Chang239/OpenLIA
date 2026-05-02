@@ -147,9 +147,7 @@ def test_factory_raises_when_no_model_configured(db_session_factory) -> None:
         factory()
 
 
-def test_factory_builds_client_when_model_configured(
-    db_session_factory, db_session
-) -> None:
+def test_factory_builds_client_when_model_configured(db_session_factory, db_session) -> None:
     """Seed a provider+model and confirm the factory yields a working client."""
     from openlia_server.db.models.config import LLMModel, LLMProvider
 

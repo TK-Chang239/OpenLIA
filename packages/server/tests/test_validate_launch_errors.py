@@ -11,7 +11,6 @@ from __future__ import annotations
 import sys
 
 import pytest
-
 from openlia_server.services import connectors_service
 
 

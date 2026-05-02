@@ -44,9 +44,7 @@ def client(engine: Engine, db_session_factory) -> Iterator[TestClient]:
 
     app = FastAPI()
     app.include_router(
-        build_connectors_router(
-            db_session_factory=db_session_factory, mode="personal"
-        ),
+        build_connectors_router(db_session_factory=db_session_factory, mode="personal"),
         prefix="/api",
     )
     yield TestClient(app)
@@ -77,9 +75,7 @@ def _patch_validation_failure(monkeypatch, message="bad key"):
     monkeypatch.setattr("openlia_server.services.connectors_service._validate_launch", fake)
 
 
-def test_company_mode_rejects_unauthenticated_caller(
-    engine: Engine, db_session_factory
-) -> None:
+def test_company_mode_rejects_unauthenticated_caller(engine: Engine, db_session_factory) -> None:
     """In company mode, /api/connectors/* requires a valid admin session."""
     from openlia_server.routes.connectors import build_connectors_router
 
@@ -91,9 +87,7 @@ def test_company_mode_rejects_unauthenticated_caller(
 
     app = FastAPI()
     app.include_router(
-        build_connectors_router(
-            db_session_factory=db_session_factory, mode="company"
-        ),
+        build_connectors_router(db_session_factory=db_session_factory, mode="company"),
         prefix="/api",
     )
     client = TestClient(app)
@@ -217,9 +211,7 @@ def test_update_connector_revalidates_and_replaces_launch(client, monkeypatch):
             "category": "financial",
             "provider_id": "eodhd",
             "display_name": "EODHD",
-            "launch": {
-                "modes": [{"kind": "cli_mcp", "argv": ["old"], "env_keys": []}]
-            },
+            "launch": {"modes": [{"kind": "cli_mcp", "argv": ["old"], "env_keys": []}]},
             "secrets": {"EODHD_API_KEY": "old-value"},
         },
     )
@@ -232,9 +224,7 @@ def test_update_connector_revalidates_and_replaces_launch(client, monkeypatch):
             "category": "financial",
             "provider_id": "eodhd",
             "display_name": "EODHD (renamed)",
-            "launch": {
-                "modes": [{"kind": "cli_mcp", "argv": ["new", "argv"], "env_keys": []}]
-            },
+            "launch": {"modes": [{"kind": "cli_mcp", "argv": ["new", "argv"], "env_keys": []}]},
         },
     )
     assert resp.status_code == 200, resp.text
@@ -320,9 +310,7 @@ def test_install_python_package_success(client, monkeypatch):
         captured["args"] = list(args)
         return FakeProc()
 
-    monkeypatch.setattr(
-        "openlia_server.routes.connectors.subprocess.run", fake_run
-    )
+    monkeypatch.setattr("openlia_server.routes.connectors.subprocess.run", fake_run)
 
     resp = client.post(
         "/api/connectors/install-python-package",
@@ -392,6 +380,7 @@ def test_install_python_package_pip_failure_returns_stderr(client, monkeypatch):
 def test_install_python_package_invalidates_import_caches(client, monkeypatch):
     """After install succeeds we invalidate the importer cache so a subsequent
     introspect can find the just-installed module without restarting."""
+
     class FakeProc:
         returncode = 0
         stdout = "Successfully installed eodhd-1\n"
@@ -431,21 +420,25 @@ def test_create_connector_with_grounding_url_triggers_clone(client, monkeypatch,
 
     src.mkdir()
     env_args = [
-        "-c", "user.email=t@e.com", "-c", "user.name=T", "-c", "init.defaultBranch=main",
+        "-c",
+        "user.email=t@e.com",
+        "-c",
+        "user.name=T",
+        "-c",
+        "init.defaultBranch=main",
     ]
     _sp.run(["git", *env_args, "init", "-b", "main", str(src)], check=True, capture_output=True)
     (src / "README.md").write_text("hi\n")
     _sp.run(["git", "-C", str(src), *env_args, "add", "."], check=True, capture_output=True)
     _sp.run(
         ["git", "-C", str(src), *env_args, "commit", "-m", "init"],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
 
     from openlia_server.services import grounding_service
 
-    monkeypatch.setattr(
-        grounding_service, "_clones_root", lambda: tmp_path / "clones"
-    )
+    monkeypatch.setattr(grounding_service, "_clones_root", lambda: tmp_path / "clones")
 
     resp = client.post(
         "/api/connectors",
@@ -454,9 +447,7 @@ def test_create_connector_with_grounding_url_triggers_clone(client, monkeypatch,
             "category": "financial",
             "provider_id": "x",
             "display_name": "X",
-            "launch": {
-                "modes": [{"kind": "cli_mcp", "argv": ["x"], "env_keys": []}]
-            },
+            "launch": {"modes": [{"kind": "cli_mcp", "argv": ["x"], "env_keys": []}]},
             "source_repo_url": f"file://{src}",
             "source_repo_revision": "main",
         },

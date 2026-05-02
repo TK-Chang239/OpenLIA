@@ -491,5 +491,3 @@ def test_required_tiers_reads_from_registry(wizard_personal_client: TestClient) 
     assert "secretary" in body["enabled_departments"]
     # Real registry has thinking + everyday + quick across departments.
     assert "thinking" in body["required_tiers"]
-
-
