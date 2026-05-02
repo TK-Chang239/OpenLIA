@@ -24,21 +24,32 @@ import sys
 import traceback
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 from openlia.connectors.adapter.introspect import introspect_python_lib
+from openlia.connectors.builtins._registry import get_template
+from openlia.connectors.builtins.types import (
+    BuiltInTemplate,
+    CliMcpRecipe,
+    PythonLibRecipe,
+    RemoteMcpRecipe,
+)
 from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
     Category,
+    CliMcpMode,
     ConnectorSource,
     ConnectorStatus,
+    InstanceFactory,
     LaunchSpec,
+    PythonLibMode,
+    RemoteMcpMode,
 )
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.connectors import Connector
+from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
 from openlia_server.services.dispatcher_factory import _build_transport, _select_mode
 
 log = logging.getLogger(__name__)
@@ -183,8 +194,14 @@ async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> V
         python_callables: list[dict[str, Any]] = []
         if selected_mode.get("kind") == "python_lib":
             module_name = selected_mode.get("import_module", "")
+            # Filter introspection to the configured instance class so
+            # parent SDK classes re-imported into wrapper modules
+            # (e.g. xdk.Client inside x_wrapper) don't leak OAuth helpers
+            # into the chat-toolbox surface.
+            factory = selected_mode.get("instance_factory") or {}
+            cls_name = factory.get("cls")
             try:
-                defs = introspect_python_lib(module_name)
+                defs = introspect_python_lib(module_name, cls_name=cls_name)
             except Exception as exc:
                 return ValidationFailure(error=f"introspect_python_lib failed: {exc}")
             python_callables = [
@@ -286,6 +303,213 @@ async def create_connector(
         _trigger_grounding_clone(session, row.id)
     _invalidate(session)
     return row
+
+
+# Maps each declared runner need_id to its owning department_id.
+# Built from packages/core/src/openlia/departments/*.needs.yaml.
+_NEED_DEPARTMENT_MAP: dict[str, str] = {
+    # macro_research
+    "debt_gdp": "macro_research",
+    "interest_revenue": "macro_research",
+    "pmi": "macro_research",
+    "gdp_yoy": "macro_research",
+    "cpi_yoy": "macro_research",
+    "cpi_core_yoy": "macro_research",
+    "usd_fx_reserve_share": "macro_research",
+    "cb_gold_purchases": "macro_research",
+    "foreign_treasury_holdings": "macro_research",
+    "stock_quote": "macro_research",
+    "geopolitical_news": "macro_research",
+    # retail_sentiment
+    "social_posts": "retail_sentiment",
+}
+
+
+def _recipe_to_mode(
+    recipe: CliMcpRecipe | RemoteMcpRecipe | PythonLibRecipe,
+) -> CliMcpMode | RemoteMcpMode | PythonLibMode:
+    if isinstance(recipe, CliMcpRecipe):
+        return CliMcpMode(
+            kind="cli_mcp",
+            argv=list(recipe.argv),
+            env_keys=list(recipe.env_keys),
+        )
+    if isinstance(recipe, RemoteMcpRecipe):
+        return RemoteMcpMode(
+            kind="remote_mcp",
+            url=recipe.url,
+            headers=dict(recipe.headers),
+        )
+    # PythonLibRecipe
+    return PythonLibMode(
+        kind="python_lib",
+        pip_name=recipe.pip_name,
+        pip_version=recipe.pip_version,
+        import_module=recipe.import_module,
+        instance_factory=InstanceFactory(
+            cls=recipe.instance_factory_cls,
+            args=dict(recipe.instance_factory_args),
+        ),
+    )
+
+
+async def _run_canary_call(
+    *,
+    launch: dict[str, Any],
+    secrets: dict[str, str],
+    canary_tool: str,
+    canary_args: dict[str, Any],
+) -> None:
+    """Build a transport from the persisted launch dict and invoke the
+    canary tool with sample args. Raises any error from the upstream
+    call so callers can demote the connector to FAILED.
+
+    list_tools is not a sufficient auth check: FMP's hosted MCP returns
+    its tool list without authentication, so a wrong api_key would pass
+    `_validate_launch` silently. The canary forces an authenticated
+    round-trip on the same transport before we accept the install.
+    """
+    selected = _select_mode(launch)
+    if selected is None:
+        raise RuntimeError("canary skipped: no usable mode")
+    transport = _build_transport("<canary>", selected, secrets)
+    try:
+        await transport.call_tool(canary_tool, dict(canary_args))
+    finally:
+        try:
+            await transport.aclose()
+        except Exception:
+            pass
+
+
+async def install_builtin(
+    session: Session,
+    *,
+    template_id: str,
+    api_key: str,
+) -> Connector:
+    """Install a built-in connector from the day-1 catalog without the wizard.
+
+    Raises KeyError when `template_id` is not in the catalog.
+    Calls `create_connector` (validation + dept-health invalidation),
+    runs the template's canary call (when defined) to confirm the api
+    key actually authenticates, then inserts one RunnerCallableSpec
+    row per template.runner_specs entry.
+    """
+    template = get_template(template_id)
+    if template is None:
+        raise KeyError(f"unknown built-in template: {template_id!r}")
+
+    modes = [_recipe_to_mode(r) for r in template.available_modes]
+    launch = LaunchSpec(modes=modes)
+
+    connector = await create_connector(
+        session,
+        provider_id=template.template_id,
+        display_name=template.display_name,
+        source=ConnectorSource.BUILT_IN,
+        category=template.category,
+        launch=launch,
+        secrets={template.api_key_env_var: api_key},
+    )
+
+    # Canary check — only if list_tools succeeded and the template defines one.
+    if (
+        connector.status == ConnectorStatus.VALIDATED.value
+        and template.canary_tool is not None
+        and template.canary_args is not None
+    ):
+        try:
+            await _run_canary_call(
+                launch=connector.launch or {},
+                secrets=connector.secrets or {},
+                canary_tool=template.canary_tool,
+                canary_args=dict(template.canary_args),
+            )
+        except Exception as exc:
+            connector.status = ConnectorStatus.FAILED.value
+            connector.last_error = f"canary {template.canary_tool!r} failed: {exc}"
+            session.commit()
+            session.refresh(connector)
+
+    if connector.status == ConnectorStatus.VALIDATED.value and template.runner_specs:
+        _upsert_runner_specs_from_template(session, connector.id, template)
+        _invalidate(session)
+
+    return connector
+
+
+def _upsert_runner_specs_from_template(
+    session: Session,
+    connector_id: str,
+    template: BuiltInTemplate,
+) -> int:
+    """Insert / replace RunnerCallableSpec rows for `connector_id` from
+    `template.runner_specs`. Returns the number of specs upserted.
+
+    Day-1 templates can be alternative providers (EODHD vs FMP both
+    claim macro_research/stock_quote). The (dept, need) UNIQUE
+    constraint forbids two rows for the same key, so we transfer
+    ownership: delete any existing row for each (dept, need) this
+    template covers, then insert the new spec. The previous owning
+    connector row remains live for chat-toolbox use.
+    """
+    inserted = 0
+    for spec in template.runner_specs:
+        dept_id = _NEED_DEPARTMENT_MAP.get(spec.need_id)
+        if dept_id is None:
+            log.warning(
+                "sync_template_specs: no department mapping for need %r; skipping",
+                spec.need_id,
+            )
+            continue
+        session.query(RunnerCallableSpec).filter(
+            RunnerCallableSpec.department_id == dept_id,
+            RunnerCallableSpec.need_id == spec.need_id,
+        ).delete(synchronize_session=False)
+        row = RunnerCallableSpec(
+            id=str(uuid.uuid4()),
+            department_id=dept_id,
+            need_id=spec.need_id,
+            connector_id=connector_id,
+            access_mode=spec.access_mode,
+            spec=asdict(spec),
+        )
+        session.add(row)
+        inserted += 1
+    session.commit()
+    return inserted
+
+
+def sync_template_specs(session: Session, connector_id: str) -> int:
+    """Re-sync runner_callable_specs for an already-installed built-in
+    connector against its template's current runner_specs definition.
+
+    Used when a template gains a new runner spec (or modifies an
+    existing one) after the user already installed the connector.
+    Without this, those specs only land on fresh installs.
+
+    Raises KeyError when `connector_id` is unknown, or the connector is
+    not a built-in, or its provider_id no longer matches any template
+    in the registry.
+    """
+    connector = session.get(Connector, connector_id)
+    if connector is None:
+        raise KeyError(f"unknown connector: {connector_id!r}")
+    if connector.source != ConnectorSource.BUILT_IN.value:
+        raise KeyError(
+            f"connector {connector_id!r} is not built-in (source={connector.source!r})",
+        )
+    template = get_template(connector.provider_id)
+    if template is None:
+        raise KeyError(
+            f"no built-in template registered for provider_id={connector.provider_id!r}",
+        )
+    if not template.runner_specs:
+        return 0
+    inserted = _upsert_runner_specs_from_template(session, connector.id, template)
+    _invalidate(session)
+    return inserted
 
 
 def list_connectors(session: Session) -> list[Connector]:

@@ -9,10 +9,16 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   deleteConnector,
   listConnectors,
+  listBuiltinTemplates,
+  syncTemplateSpecs,
   validateConnector,
+  type BuiltinTemplate,
   type ConnectorRow,
 } from "../../../api/connectors";
-import { refreshDeptHealth } from "../../../store/dept-health";
+import { refreshDeptHealth, useDeptHealth } from "../../../store/dept-health";
+import { CatalogGrid } from "../../connectors/CatalogGrid";
+import { CategoryRequirementsPanel } from "../../connectors/CategoryRequirementsPanel";
+import { InstallBuiltinForm } from "../../connectors/InstallBuiltinForm";
 
 interface KV {
   key: string;
@@ -33,11 +39,18 @@ export function ConnectorsAdminPanel(): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<ConnectorRow | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [catalog, setCatalog] = useState<BuiltinTemplate[] | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [chosenTemplate, setChosenTemplate] = useState<BuiltinTemplate | null>(null);
+
+  const healths = useDeptHealth((s) => s.healths);
 
   const refresh = async () => {
     try {
       const r = await listConnectors();
       setRows(r);
+      await refreshDeptHealth();
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load connectors.");
@@ -71,16 +84,49 @@ export function ConnectorsAdminPanel(): JSX.Element {
     }
   };
 
+  const onSyncSpecs = async (row: ConnectorRow) => {
+    try {
+      const { inserted } = await syncTemplateSpecs(row.id);
+      await refresh();
+      await refreshDeptHealth();
+      setError(null);
+      alert(`Re-synced ${inserted} runner spec${inserted === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sync failed.");
+    }
+  };
+
   if (loading) return <p className="text-sm text-text-secondary">Loading...</p>;
 
   return (
     <div className="space-y-4">
-      <header>
-        <h2 className="text-base font-semibold text-text-primary">Connectors</h2>
-        <p className="mt-1 text-sm text-text-secondary">
-          Manage data-source connectors (MCP servers, Python libraries) used
-          by departments.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">Connectors</h2>
+          <p className="mt-1 text-sm text-text-secondary">
+            Manage data-source connectors (MCP servers, Python libraries) used
+            by departments.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={async () => {
+              if (catalog === null) setCatalog(await listBuiltinTemplates());
+              setPicking(true);
+            }}
+            className="rounded bg-accent-primary px-4 py-2 text-sm text-text-on-accent"
+          >
+            Add from catalog
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
+          >
+            Add custom
+          </button>
+        </div>
       </header>
 
       {error ? (
@@ -88,6 +134,8 @@ export function ConnectorsAdminPanel(): JSX.Element {
           {error}
         </p>
       ) : null}
+
+      <CategoryRequirementsPanel connectors={rows} healths={healths} />
 
       {rows.length === 0 ? (
         <p className="text-sm text-text-secondary">
@@ -146,6 +194,16 @@ export function ConnectorsAdminPanel(): JSX.Element {
                   >
                     Validate now
                   </button>
+                  {r.source === "built_in" ? (
+                    <button
+                      type="button"
+                      onClick={() => onSyncSpecs(r)}
+                      title="Re-sync runner specs from the built-in template (use after upgrading OpenLIA)."
+                      className="text-text-primary hover:underline"
+                    >
+                      Sync specs
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => onDelete(r)}
@@ -158,6 +216,33 @@ export function ConnectorsAdminPanel(): JSX.Element {
             ))}
           </tbody>
         </table>
+      )}
+
+      {picking && (
+        <CatalogGrid
+          templates={catalog ?? []}
+          onSelect={(t) => {
+            setChosenTemplate(t);
+            setPicking(false);
+          }}
+        />
+      )}
+
+      {chosenTemplate && (
+        <InstallBuiltinForm
+          template={chosenTemplate}
+          onCancel={() => setChosenTemplate(null)}
+          onInstalled={async (_row) => {
+            setChosenTemplate(null);
+            await refresh();
+          }}
+        />
+      )}
+
+      {adding && (
+        <p className="text-sm text-text-secondary">
+          To add a custom connector, use the setup wizard or the API.
+        </p>
       )}
 
       {editing ? (

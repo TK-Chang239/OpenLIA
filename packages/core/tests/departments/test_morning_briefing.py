@@ -14,15 +14,20 @@ def test_mb_single_mode():
 
 
 def test_mb_required_categories():
-    # Spec §10.1: MB needs both financial and news.
-    assert set(MorningBriefingDepartment.required_categories) == {
-        Category.FINANCIAL,
-        Category.NEWS,
-    }
+    # MB hard-requires financial. Headline source (news vs. web_search)
+    # is expressed via required_any_of so either provider satisfies it.
+    assert set(MorningBriefingDepartment.required_categories) == {Category.FINANCIAL}
 
 
-def test_mb_optional_categories():
-    assert Category.WEB_SEARCH in MorningBriefingDepartment.optional_categories
+def test_mb_required_any_of_covers_news_or_web_search():
+    groups = MorningBriefingDepartment.required_any_of
+    assert len(groups) == 1
+    assert set(groups[0]) == {Category.NEWS, Category.WEB_SEARCH}
+
+
+def test_mb_optional_categories_empty():
+    # WEB_SEARCH was promoted into the required_any_of group.
+    assert MorningBriefingDepartment.optional_categories == ()
 
 
 def test_mb_does_not_require_runner():

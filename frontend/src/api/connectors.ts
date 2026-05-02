@@ -133,6 +133,12 @@ export const validateConnector = (id: string) =>
     { method: "POST" },
   );
 
+export const syncTemplateSpecs = (id: string) =>
+  fetchJson<{ inserted: number }>(
+    `/api/connectors/${encodeURIComponent(id)}/sync-template-specs`,
+    { method: "POST" },
+  );
+
 // Backward-compatible alias used by older callers.
 export const revalidateConnector = validateConnector;
 
@@ -215,3 +221,25 @@ export const approveDeptSpec = (
           : { need_id: needId },
     },
   );
+
+export interface BuiltinTemplate {
+  template_id: string;
+  display_name: string;
+  category: Category;
+  api_key_env_var: string;
+  covered_need_ids: string[];
+}
+
+export interface InstallBuiltinInput {
+  template_id: string;
+  api_key: string;
+}
+
+export const listBuiltinTemplates = (): Promise<BuiltinTemplate[]> =>
+  fetchJson<BuiltinTemplate[]>("/api/connectors/builtins");
+
+export const installBuiltin = (input: InstallBuiltinInput): Promise<ConnectorRow> =>
+  fetchJson<ConnectorRow>("/api/connectors/install-builtin", {
+    method: "POST",
+    json: input,
+  });

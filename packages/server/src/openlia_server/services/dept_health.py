@@ -38,12 +38,21 @@ def compute_all(session: Session) -> dict[str, DepartmentHealth]:
 
 def serialize(health: DepartmentHealth) -> dict:
     """JSON-serializable shape for the GET endpoint."""
+    dept = _REGISTRY.get(health.department_id)
+    required_cats: list[str] = []
+    any_of: list[list[str]] = []
+    if dept is not None:
+        required_cats = [c.value for c in getattr(dept, "required_categories", ())]
+        any_of = [[c.value for c in group] for group in getattr(dept, "required_any_of", ()) or ()]
     return {
         "department_id": health.department_id,
         "status": health.status,
         "reason": health.reason,
         "missing_categories": [c.value for c in health.missing_categories],
         "unresolved_needs": list(health.unresolved_needs),
+        "required_categories": required_cats,
+        "required_any_of": any_of,
+        "unsatisfied_any_of": [[c.value for c in group] for group in health.unsatisfied_any_of],
     }
 
 

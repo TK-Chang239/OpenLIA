@@ -16,6 +16,7 @@ server still boots while their rows wait for migration.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from openlia.connectors.dispatch import Dispatcher, PreparedConnector
@@ -40,6 +41,17 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
 
 _MODE_PRIORITY = ("python_lib", "cli_mcp", "remote_mcp")
+
+_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def _substitute_secrets(value: str, secrets: dict[str, str]) -> str:
+    """Replace every `{NAME}` token in `value` with `secrets[NAME]`.
+    Tokens without a matching secret are left literal so a missing key
+    surfaces as an obvious failure (e.g. 401) rather than silently
+    coercing to an empty string.
+    """
+    return _PLACEHOLDER_RE.sub(lambda m: secrets.get(m.group(1), m.group(0)), value)
 
 
 class _UnboundTransport:
@@ -105,11 +117,19 @@ def _build_transport(connector_id: str, mode: dict, secrets: dict[str, str]) -> 
         )
         return CliMcpTransport(mode=cli_mode, secrets=secrets)
     if kind == "remote_mcp":
-        remote_mode = RemoteMcpMode(
-            kind="remote_mcp",
-            url=mode["url"],
-            headers=dict(mode.get("headers") or {}),
-        )
+        # Built-in templates declare URLs and headers with `{ENV_VAR_NAME}`
+        # placeholders that must be substituted with values from `secrets`
+        # before the request hits the upstream server. Without this, FMP
+        # (`?apikey={FMP_API_KEY}`) and Firecrawl
+        # (`mcp.firecrawl.dev/{FIRECRAWL_API_KEY}/v2/mcp`) pass the literal
+        # placeholder and validation passes silently while runtime calls
+        # 401 out.
+        url = _substitute_secrets(mode["url"], secrets)
+        headers = {
+            k: _substitute_secrets(v, secrets) if isinstance(v, str) else v
+            for k, v in (mode.get("headers") or {}).items()
+        }
+        remote_mode = RemoteMcpMode(kind="remote_mcp", url=url, headers=headers)
         return RemoteMcpTransport(mode=remote_mode)
     # Unknown kind: surface as an _UnboundTransport rather than crashing boot.
     return _UnboundTransport(connector_id)
@@ -181,6 +201,8 @@ def _hydrate_spec(row: RunnerCallableSpec) -> CallableSpec:
         param_bindings=bindings,
         constants=dict(raw.get("constants") or {}),
         shape=raw.get("shape", "any"),
+        result_path=tuple(raw.get("result_path") or ()),
+        result_reducer=raw.get("result_reducer"),
     )
 
 
@@ -192,4 +214,11 @@ def build_dispatcher(session: Session) -> Dispatcher:
     specs: dict[tuple[str, str], CallableSpec] = {
         (s.department_id, s.need_id): _hydrate_spec(s) for s in spec_rows
     }
-    return Dispatcher(connectors=prepared, callable_specs=specs)
+    spec_connector_ids: dict[tuple[str, str], str] = {
+        (s.department_id, s.need_id): s.connector_id for s in spec_rows
+    }
+    return Dispatcher(
+        connectors=prepared,
+        callable_specs=specs,
+        spec_connector_ids=spec_connector_ids,
+    )

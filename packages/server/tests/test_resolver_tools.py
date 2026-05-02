@@ -73,11 +73,7 @@ def test_read_file_rejects_directory(tmp_path: Path) -> None:
 def test_search_files_finds_pattern_with_line_numbers(tmp_path: Path) -> None:
     (tmp_path / "tools").mkdir()
     (tmp_path / "tools" / "macro.py").write_text(
-        "import x\n"
-        "ALLOWED_INDICATORS = {\n"
-        "    'gdp_current_usd',\n"
-        "    'debt_percent_gdp',\n"
-        "}\n"
+        "import x\nALLOWED_INDICATORS = {\n    'gdp_current_usd',\n    'debt_percent_gdp',\n}\n"
     )
     (tmp_path / "tools" / "news.py").write_text("# unrelated\n")
 

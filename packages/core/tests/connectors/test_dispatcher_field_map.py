@@ -1,7 +1,9 @@
 """Phase 3: executor honors CallableSpec.result_path + field_map.
 
-result_path peels a wrapper off the transport response (e.g. ``data.posts``);
-field_map renames each item's keys to the canonical set declared on the need.
+result_path peels a wrapper off the transport response (tuple form,
+e.g. ``("data", "posts")``); field_map renames each item's keys to the
+canonical set declared on the need. field_map values may be strings
+(top-level key) or tuples (nested-path extraction).
 """
 
 from __future__ import annotations
@@ -83,7 +85,7 @@ async def test_result_path_extracts_nested_list_then_field_map_renames() -> None
         access_mode="cli_mcp",
         tool_name="posts",
         shape="list[dict]",
-        result_path="data.posts",
+        result_path=("data", "posts"),
         field_map={"id": "pid", "ticker": "sym"},
     )
     d = Dispatcher(
@@ -96,7 +98,7 @@ async def test_result_path_extracts_nested_list_then_field_map_renames() -> None
 
 
 @pytest.mark.asyncio
-async def test_field_map_dotted_value_extracts_nested_per_item() -> None:
+async def test_field_map_tuple_value_extracts_nested_per_item() -> None:
     response = [
         {"id": "1", "user": {"handle": "alice"}, "msg": "hi"},
     ]
@@ -105,7 +107,7 @@ async def test_field_map_dotted_value_extracts_nested_per_item() -> None:
         access_mode="cli_mcp",
         tool_name="posts",
         shape="list[dict]",
-        field_map={"id": "id", "author": "user.handle", "text": "msg"},
+        field_map={"id": "id", "author": ("user", "handle"), "text": "msg"},
     )
     d = Dispatcher(
         connectors={"c1": _conn(response)},

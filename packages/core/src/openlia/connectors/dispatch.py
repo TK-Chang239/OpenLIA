@@ -29,7 +29,9 @@ from typing import Any
 
 from openlia.connectors.transports import CallableTransport
 from openlia.connectors.types import (
+    ALLOWED_RESULT_REDUCERS,
     ALLOWED_TRANSFORMS,
+    RESULT_REDUCERS,
     TRANSFORMS,
     CallableDefinition,
     CallableSpec,
@@ -54,12 +56,63 @@ class NeedNotResolved(DispatchError):
 class FieldMapError(DispatchError):
     """Raised when a CallableSpec.field_map fails to resolve at runtime.
 
-    Surfaced for: missing source key on an item, missing dotted-path
+    Surfaced for: missing source key on an item, missing nested-path
     component, or attempting to walk a non-mapping. The smoke pipeline
     classifies this as ``schema_miss`` and surfaces the offending key.
     """
 
     pass
+
+
+def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any:
+    """Reduce a tool result to a nested field per `path`. Empty path returns value unchanged.
+
+    Walks dict keys first, then falls back to attribute access so python_lib
+    transports returning Pydantic models / dataclasses traverse cleanly.
+    """
+    for key in path:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        elif hasattr(value, key):
+            value = getattr(value, key)
+        else:
+            raise DispatchError(f"result_path {path!r} missing key {key!r} for need {need_id!r}")
+    return value
+
+
+def _apply_field_map(value: Any, spec: CallableSpec) -> Any:
+    """Per-item rename for ``list[dict]``-shape specs (Phase 3).
+
+    No-op for any other shape, ``None``, or ``{}``. Missing source keys or
+    non-mapping items raise ``FieldMapError``.
+    """
+    if spec.shape != "list[dict]" or not spec.field_map:
+        return value
+
+    if not isinstance(value, list):
+        raise FieldMapError(
+            f"spec for need {spec.need_id!r} has shape 'list[dict]' but post-result_path "
+            f"value is not a list: got {type(value).__name__}"
+        )
+
+    out: list[dict[str, Any]] = []
+    for idx, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise FieldMapError(
+                f"spec for need {spec.need_id!r}: item at index {idx} is not a mapping"
+            )
+        renamed: dict[str, Any] = {}
+        for canonical_key, source in spec.field_map.items():
+            source_path: tuple[str, ...] = source if isinstance(source, tuple) else (source,)
+            try:
+                renamed[canonical_key] = _walk_result_path(item, source_path, need_id=spec.need_id)
+            except DispatchError as exc:
+                raise FieldMapError(
+                    f"spec for need {spec.need_id!r}: field_map[{canonical_key!r}] "
+                    f"source {source!r} missing on item at index {idx}"
+                ) from exc
+        out.append(renamed)
+    return out
 
 
 @dataclass(frozen=True)
@@ -82,6 +135,14 @@ class Dispatcher:
     """Keyed by connector_id."""
     callable_specs: dict[tuple[str, str], CallableSpec] = field(default_factory=dict)
     """Keyed by (department_id, need_id)."""
+    spec_connector_ids: dict[tuple[str, str], str] = field(default_factory=dict)
+    """Authoritative connector ownership per spec, set by the server's
+    hydrator from RunnerCallableSpec.connector_id. When present,
+    `_connector_for_spec` uses it directly instead of scanning by
+    tool/method qualname — required when a spec's method name doesn't
+    appear in the connector's introspected callables registry (e.g.
+    Firecrawl SDK attaches methods per-instance, so class-walk
+    introspection misses them)."""
 
     # ----- chat candidate pool / tool routing (§8) -----
 
@@ -140,13 +201,17 @@ class Dispatcher:
     def _connector_for_spec(self, dept: str, need_id: str, spec: CallableSpec) -> PreparedConnector:
         """Locate the connector that owns this spec.
 
-        For MCP modes the connector is whichever one exposes `spec.tool_name`.
-        For `python_lib` mode the connector is whichever one's `cached_python_callables`
-        registers `spec.method` — but since the per-spec connector_id is recorded
-        in the DB row and propagated by the server's hydrator, we additionally
-        accept any connector whose category is compatible. To keep this layer
-        pure, we fall back to scanning by tool/method presence.
+        Prefers the persisted `spec_connector_ids` map (RunnerCallableSpec.connector_id
+        from the DB row). Falls back to scanning by `tool_name`/`method`
+        presence so older specs persisted before connector_id was tracked
+        keep working.
         """
+        cid = self.spec_connector_ids.get((dept, need_id))
+        if cid is not None:
+            conn = self.connectors.get(cid)
+            if conn is not None:
+                return conn
+
         access_mode = spec.access_mode
         if access_mode in {"cli_mcp", "remote_mcp"}:
             tool_name = spec.tool_name
@@ -190,14 +255,16 @@ class Dispatcher:
         bound: dict[str, Any] = {}
 
         # Apply param_bindings: rename caller's kwarg -> underlying arg, and
-        # apply named transform when present.
+        # apply named transform when present. Runtime args without a
+        # matching binding are dropped silently — the dispatcher's contract
+        # is that param_bindings + constants together fully describe the
+        # call's argument shape. (Earlier behavior passed unbound args
+        # through, but that breaks specs that share a need-id with a
+        # different shape — e.g. Firecrawl-scrape specs receiving a stray
+        # country=US from parse_mr_requirement.)
         for caller_name, value in runtime_args.items():
             binding = spec.param_bindings.get(caller_name)
             if binding is None:
-                # Not bound — pass through unchanged. The wizard adapter is
-                # expected to declare bindings for every need parameter, but
-                # runners may pass extra kwargs the underlying call accepts.
-                bound[caller_name] = value
                 continue
             if binding.transform is not None:
                 if binding.transform not in ALLOWED_TRANSFORMS:
@@ -229,61 +296,18 @@ class Dispatcher:
         else:
             raise DispatchError(f"unknown access_mode {spec.access_mode!r}")
 
-        return _post_process(spec, raw)
-
-
-def _walk_dotted(obj: Any, path: str) -> Any:
-    """Walk a dotted path on a (potentially nested) mapping.
-
-    Raises ``FieldMapError`` with the offending segment when the path
-    cannot be resolved.
-    """
-    cur: Any = obj
-    for segment in path.split("."):
-        if not isinstance(cur, dict) or segment not in cur:
-            raise FieldMapError(
-                f"dotted path {path!r} cannot be resolved: missing segment {segment!r}"
-            )
-        cur = cur[segment]
-    return cur
-
-
-def _post_process(spec: CallableSpec, raw: Any) -> Any:
-    """Apply ``result_path`` then ``field_map`` per spec §3 (Phase 3).
-
-    - ``result_path``: optional dotted-path peel to extract a nested value.
-    - ``field_map``: only honored for ``shape == "list[dict]"``; renames
-      keys per item. ``None`` or ``{}`` returns items unchanged.
-    """
-    value = raw
-    if spec.result_path:
-        value = _walk_dotted(value, spec.result_path)
-
-    if spec.shape != "list[dict]" or not spec.field_map:
-        return value
-
-    if not isinstance(value, list):
-        raise FieldMapError(
-            f"spec for need {spec.need_id!r} has shape 'list[dict]' but post-result_path "
-            f"value is not a list: got {type(value).__name__}"
-        )
-
-    out: list[dict[str, Any]] = []
-    for idx, item in enumerate(value):
-        if not isinstance(item, dict):
-            raise FieldMapError(
-                f"spec for need {spec.need_id!r}: item at index {idx} is not a mapping"
-            )
-        renamed: dict[str, Any] = {}
-        for canonical_key, source_path in spec.field_map.items():
-            if "." in source_path:
-                renamed[canonical_key] = _walk_dotted(item, source_path)
-            else:
-                if source_path not in item:
-                    raise FieldMapError(
-                        f"spec for need {spec.need_id!r}: source key "
-                        f"{source_path!r} missing on item at index {idx}"
-                    )
-                renamed[canonical_key] = item[source_path]
-        out.append(renamed)
-    return out
+        if spec.result_reducer is not None:
+            if spec.result_reducer not in ALLOWED_RESULT_REDUCERS:
+                raise DispatchError(
+                    f"unknown result_reducer {spec.result_reducer!r} "
+                    f"in spec for need {spec.need_id!r}",
+                )
+            try:
+                raw = RESULT_REDUCERS[spec.result_reducer](raw)
+            except (ValueError, TypeError, KeyError) as exc:
+                raise DispatchError(
+                    f"result_reducer {spec.result_reducer!r} failed for "
+                    f"need {spec.need_id!r}: {exc}",
+                ) from exc
+        walked = _walk_result_path(raw, spec.result_path, need_id=spec.need_id)
+        return _apply_field_map(walked, spec)

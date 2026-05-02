@@ -51,8 +51,10 @@ class CliMcpTransport:
         return self._session
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        from openlia.connectors.transports.mcp_remote import _unwrap_call_result
+
         sess = await self._ensure_open()
-        return await sess.call_tool(name, arguments)
+        return _unwrap_call_result(await sess.call_tool(name, arguments))
 
     async def list_tools(self) -> list[dict]:
         sess = await self._ensure_open()

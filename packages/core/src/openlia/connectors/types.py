@@ -155,14 +155,108 @@ class CallableSpec:
     param_bindings: dict[str, ParamBinding] = field(default_factory=dict)
     constants: dict[str, Any] = field(default_factory=dict)
     shape: str = "any"
-    result_path: str | None = None
-    field_map: dict[str, str] | None = None
+    result_path: tuple[str, ...] = ()
+    # Optional reduction applied to the raw transport result BEFORE
+    # `result_path` is walked. Useful for upstream APIs that return a
+    # time-series list[dict] when the runner expects a single float
+    # (e.g. FMP's economics-indicators returns daily/quarterly records).
+    # See `RESULT_REDUCERS` for valid names.
+    result_reducer: str | None = None
+    # Per-item key rename map applied AFTER `result_path` for shape
+    # ``list[dict]``. Keys are the canonical names declared on the
+    # need's ``RunnerNeed.canonical_keys``; values are the source key
+    # on each raw item. Values may be tuples to extract nested fields.
+    # ``None`` or ``{}`` returns items unchanged. Missing source keys
+    # at runtime raise ``FieldMapError`` (smoke-classified as
+    # ``schema_miss``).
+    field_map: dict[str, str | tuple[str, ...]] | None = None
+
+
+# ISO 3166-1 alpha-2 → alpha-3 for the economies covered by the day-1 catalog.
+# EODHD's macro indicators API expects alpha-3 (e.g. USA, DEU, FRA).
+_COUNTRY_ISO2_TO_ISO3: dict[str, str] = {
+    "US": "USA",
+    "GB": "GBR",
+    "DE": "DEU",
+    "FR": "FRA",
+    "JP": "JPN",
+    "CN": "CHN",
+    "IN": "IND",
+    "BR": "BRA",
+    "CA": "CAN",
+    "AU": "AUS",
+    "IT": "ITA",
+    "ES": "ESP",
+    "NL": "NLD",
+    "CH": "CHE",
+    "SE": "SWE",
+    "NO": "NOR",
+    "DK": "DNK",
+    "MX": "MEX",
+    "KR": "KOR",
+    "RU": "RUS",
+    "ZA": "ZAF",
+    "TR": "TUR",
+    "ID": "IDN",
+    "SA": "SAU",
+    "AR": "ARG",
+}
+
+
+def _country_iso2_to_iso3(code: str) -> str:
+    code = code.upper()
+    return _COUNTRY_ISO2_TO_ISO3.get(code, code)
 
 
 TRANSFORMS: dict[str, Callable[[Any], Any]] = {
     "upper": str.upper,
     "lower": str.lower,
-    "iso_to_eodhd": lambda code: f"{code}.NYSE",  # placeholder; finalize during adapter authoring
+    "country_iso2_to_iso3": _country_iso2_to_iso3,
 }
 
 ALLOWED_TRANSFORMS: frozenset[str] = frozenset(TRANSFORMS.keys())
+
+
+def _latest_value_by_date(records: Any) -> float:
+    """For `[{date, value}, ...]`, pick the latest record by `date` and
+    return its `value` as a float. Used by FMP economics-indicators
+    specs (e.g. inflationRate) that return a time-series but where the
+    runner expects a single float.
+    """
+    if not isinstance(records, list) or not records:
+        raise ValueError(
+            f"latest_value_by_date: expected non-empty list, got {type(records).__name__}",
+        )
+    sorted_records = sorted(records, key=lambda r: r.get("date") or "", reverse=True)
+    head = sorted_records[0]
+    val = head.get("value")
+    if val is None:
+        raise ValueError("latest_value_by_date: latest record has no 'value' field")
+    return float(val)
+
+
+def _yoy_pct_quarterly(records: Any) -> float:
+    """For `[{date, value}, ...]` of quarterly levels, return year-over-
+    year percent change as a float: (latest - 4_quarters_back) /
+    4_quarters_back * 100. Used by FMP realGDP spec where the API
+    returns levels and the runner expects a YoY %.
+    """
+    if not isinstance(records, list) or len(records) < 5:
+        raise ValueError(
+            f"yoy_pct_quarterly: need at least 5 quarterly records to compute YoY, "
+            f"got {len(records) if isinstance(records, list) else type(records).__name__}",
+        )
+    sorted_records = sorted(records, key=lambda r: r.get("date") or "", reverse=True)
+    latest = float(sorted_records[0]["value"])
+    four_back = float(sorted_records[4]["value"])
+    if four_back == 0:
+        raise ValueError("yoy_pct_quarterly: 4-quarters-back value is zero, cannot compute YoY %")
+    return (latest - four_back) / four_back * 100.0
+
+
+RESULT_REDUCERS: dict[str, Callable[[Any], Any]] = {
+    "latest_value_by_date": _latest_value_by_date,
+    "yoy_pct_quarterly": _yoy_pct_quarterly,
+}
+
+ALLOWED_RESULT_REDUCERS: frozenset[str] = frozenset(RESULT_REDUCERS.keys())
