@@ -22,7 +22,12 @@ export function LoginPage() {
     let cancelled = false;
     getSignupPolicy()
       .then((p) => {
-        if (!cancelled) setPolicy(p);
+        // fetchJson returns null for 204 / non-JSON / parse failure;
+        // keep the FALLBACK_POLICY when the response is missing or malformed.
+        if (cancelled) return;
+        if (p && typeof p === "object" && typeof p.mode === "string") {
+          setPolicy(p);
+        }
       })
       .catch(() => {
         if (!cancelled) setPolicy(FALLBACK_POLICY);
