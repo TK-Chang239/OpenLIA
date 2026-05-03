@@ -69,12 +69,15 @@ _TRIPWIRES: tuple[Tripwire, ...] = (
     Tripwire(
         category="advice_phrasing",
         pattern=re.compile(
-            r"\b(?:I recommend|you should|my recommendation is)\s+(?:you\s+)?(?:buy|sell|short|sell short)\b"
+            r"\b(?:I recommend|you should|my recommendation is)"
+            r"\s+(?:you\s+)?(?:buy|sell|short|sell short)\b"
             r"|\b(?:buy|sell)\s+(?:this|the)\s+(?:stock|ticker)\b",
             re.IGNORECASE,
         ),
         action=ActionTier.WARN,
-        message="Flagged: directive advice phrasing — Lia normally lays out the case, not the call.",
+        message=(
+            "Flagged: directive advice phrasing — Lia normally lays out the case, not the call."
+        ),
     ),
     Tripwire(
         category="fabricated_quote",

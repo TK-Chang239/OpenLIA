@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.safety.output_moderation import (
     ActionTier,
     decide_action,

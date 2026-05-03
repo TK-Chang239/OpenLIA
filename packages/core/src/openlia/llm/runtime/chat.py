@@ -30,7 +30,6 @@ from typing import Any
 
 from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
-from openlia.safety.input_wrapper import wrap_user_input
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
@@ -61,6 +60,7 @@ from openlia.llm.types import (
     ToolCall,
     ToolSchema,
 )
+from openlia.safety.input_wrapper import wrap_user_input
 
 logger = logging.getLogger(__name__)
 
