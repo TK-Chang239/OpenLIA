@@ -67,14 +67,24 @@ def test_record_persona_refusal_writes_row(db_session) -> None:
 
 def test_list_events_filters_by_category_and_since(db_session) -> None:
     record_persona_refusal(
-        db_session, session_id="s1", user_id="u1", department_id="d1",
-        clause_id="no_advice", user_input_hash=_hash("a"),
-        response_excerpt="", model_ref=None,
+        db_session,
+        session_id="s1",
+        user_id="u1",
+        department_id="d1",
+        clause_id="no_advice",
+        user_input_hash=_hash("a"),
+        response_excerpt="",
+        model_ref=None,
     )
     record_persona_refusal(
-        db_session, session_id="s2", user_id="u1", department_id="d1",
-        clause_id="out_of_scope", user_input_hash=_hash("b"),
-        response_excerpt="", model_ref=None,
+        db_session,
+        session_id="s2",
+        user_id="u1",
+        department_id="d1",
+        clause_id="out_of_scope",
+        user_input_hash=_hash("b"),
+        response_excerpt="",
+        model_ref=None,
     )
     db_session.commit()
 
