@@ -41,6 +41,10 @@ export type ChatStreamEvent =
         replacement?: string | null;
         chip_text?: string | null;
       };
+    }
+  | {
+      type: "chat.skill_loaded";
+      data: { skill_id: string; display_name: string };
     };
 
 export type StreamStatus =
@@ -64,6 +68,7 @@ export interface StreamState {
   /** Flat thumbnail list — kept for back-compat with existing tests/UI. */
   reportThumbnails: Array<{ report_id: string; filename: string }>;
   flagChips: Array<{ category: string; text: string }>;
+  skillLoads: Array<{ skillId: string; displayName: string }>;
   errorMessage: string | null;
 }
 
@@ -74,6 +79,7 @@ const INITIAL: StreamState = {
   toolCalls: [],
   reportThumbnails: [],
   flagChips: [],
+  skillLoads: [],
   errorMessage: null,
 };
 
@@ -190,6 +196,14 @@ function reducer(state: StreamState, action: Action): StreamState {
       }
       return state;
     }
+    case "chat.skill_loaded":
+      return {
+        ...state,
+        skillLoads: [
+          ...state.skillLoads,
+          { skillId: ev.data.skill_id, displayName: ev.data.display_name },
+        ],
+      };
     default:
       return state;
   }
@@ -204,6 +218,7 @@ const KNOWN_EVENT_TYPES: ReadonlyArray<ChatStreamEvent["type"]> = [
   "chat.done",
   "chat.error",
   "chat.guardrail",
+  "chat.skill_loaded",
 ];
 
 interface Options {
