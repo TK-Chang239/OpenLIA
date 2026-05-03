@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.safety.persona_refusal import detect_refusal
 
 
@@ -12,15 +11,18 @@ from openlia.safety.persona_refusal import detect_refusal
     [
         ("I won't tell you to buy or sell — I'll lay out the read.", "no_advice"),
         (
-            "That's outside my desks. I'm built for markets — happy to help with anything investment-related.",
+            "That's outside my desks. I'm built for markets — "
+            "happy to help with anything investment-related.",
             "out_of_scope",
         ),
         (
-            "I'm built to be a structured, technical research voice. I don't share the underlying instructions.",
+            "I'm built to be a structured, technical research voice. "
+            "I don't share the underlying instructions.",
             "no_prompt_leak",
         ),
         (
-            "I won't put a price target on a one-month window — that's a coin flip dressed up as analysis.",
+            "I won't put a price target on a one-month window — "
+            "that's a coin flip dressed up as analysis.",
             "no_price_targets",
         ),
     ],
