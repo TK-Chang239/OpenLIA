@@ -3,7 +3,6 @@ from openlia.skills import (
     FilesystemSkillStore,
     LayeredSkillStore,
     SkillRegistry,
-    parse_skill_md,  # noqa: F401
 )
 
 SECRETARY_SKILL = """---
@@ -65,3 +64,13 @@ async def test_disabled_skill_hidden(populated_root):
     await reg.refresh(user_ids=["u1"])
     names = [s.manifest.name for s in reg.visible(department_id="secretary", user_id="u1")]
     assert "greet-skill" not in names
+
+
+@pytest.mark.asyncio
+async def test_get_returns_skill_for_user(populated_root):
+    fs = FilesystemSkillStore(root=populated_root)
+    reg = SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
+    await reg.refresh(user_ids=["u1"])
+    assert reg.get("tone", user_id="u1").manifest.name == "tone"
+    assert reg.get("greet-skill", user_id="u1").manifest.name == "greet-skill"
+    assert reg.get("ghost", user_id="u1") is None
