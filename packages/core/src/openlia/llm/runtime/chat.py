@@ -42,6 +42,7 @@ from openlia.llm.runtime.escalation import (
 from openlia.llm.runtime.events import (
     ChatDone,
     ChatError,
+    ChatSkillLoaded,
     ChatStart,
     ChatToken,
     ChatToolCallResult,
@@ -52,7 +53,13 @@ from openlia.llm.runtime.messages import Attachment, ChatMessage
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.router import LlmClient as RouterLlmClient
 from openlia.llm.runtime.router import route_tools
-from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolCallResult, ToolDispatcher
+from openlia.llm.runtime.tools import (
+    LOAD_SKILL_SCHEMA,
+    MAX_TOOL_TURNS,
+    ToolCallResult,
+    ToolDispatcher,
+    dispatch_load_skill,
+)
 from openlia.llm.types import (
     LLMRequest,
     Message,
@@ -61,6 +68,7 @@ from openlia.llm.types import (
     ToolSchema,
 )
 from openlia.safety.input_wrapper import wrap_user_input
+from openlia.skills import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +117,7 @@ class ChatRunner:
         resolve: ResolveFn,
         registry: ModelRegistry,
         provider_factory: ProviderFactory,
+        skill_registry: SkillRegistry,
         message_id_factory: Callable[[], str] | None = None,
         dispatcher: Any | None = None,
         router_llm_client: RouterLlmClient | None = None,
@@ -119,6 +128,7 @@ class ChatRunner:
         self._resolve = resolve
         self._registry = registry
         self._provider_factory = provider_factory
+        self._skill_registry = skill_registry
         self._message_id_factory = message_id_factory or (lambda: f"m_{uuid.uuid4().hex[:12]}")
         # Phase 9: v2 connector dispatcher + Haiku-tier router. When all
         # three are present the runner uses the spec §8 routing flow;
@@ -133,6 +143,17 @@ class ChatRunner:
             and self._router_llm is not None
             and self._routing_context_loader is not None
         )
+
+    def _maybe_with_skill_tool(
+        self,
+        tools: list[ToolSchema],
+        *,
+        department_id: str,
+        user_id: str | None,
+    ) -> list[ToolSchema]:
+        if len(self._skill_registry.visible(department_id=department_id, user_id=user_id)) > 0:
+            return [*tools, LOAD_SKILL_SCHEMA]
+        return tools
 
     async def run(
         self,
@@ -187,8 +208,12 @@ class ChatRunner:
                 yield event
             return
 
-        tools = await self._tools.build(
-            department_id, has_web_search=True, extra_tools=extra_tool_specs
+        tools = self._maybe_with_skill_tool(
+            await self._tools.build(
+                department_id, has_web_search=True, extra_tools=extra_tool_specs
+            ),
+            department_id=department_id,
+            user_id=user_id,
         )
 
         wrapped_messages = wrap_last_user_message(messages)
@@ -237,18 +262,50 @@ class ChatRunner:
                     tool_name=call.name,
                     args_preview=args_preview,
                 )
+
+            # Split load_skill calls from other calls — skills are dispatched
+            # directly through the SkillRegistry, not through ToolDispatcher.
+            load_skill_calls: list[ToolCall] = []
+            other_calls: list[ToolCall] = []
+            for c in response.tool_calls:
+                if c.name == "load_skill":
+                    load_skill_calls.append(c)
+                else:
+                    other_calls.append(c)
+
+            # Dispatch load_skill calls directly (registry, not ToolDispatcher).
+            load_skill_results: list[ToolCallResult] = []
             try:
-                results: list[ToolCallResult] = await self._await(
-                    self._tools.dispatch_many(
-                        department_id=department_id,
-                        calls=response.tool_calls,
-                        extra_tool_names=extra_tool_names,
-                        max_expansions=None,  # Secretary: unlimited.
-                    ),
-                    cancel_token=cancel_token,
-                )
+                for c in load_skill_calls:
+                    args = c.arguments if isinstance(c.arguments, dict) else json.loads(c.arguments)
+                    r = await dispatch_load_skill(
+                        self._skill_registry,
+                        user_id=user_id,
+                        skill_id=args["skill_id"],
+                        call_id=c.id,
+                    )
+                    load_skill_results.append(r)
             except asyncio.CancelledError:
                 return
+
+            # Dispatch all other calls through ToolDispatcher.
+            other_results: list[ToolCallResult] = []
+            if other_calls:
+                try:
+                    other_results = await self._await(
+                        self._tools.dispatch_many(
+                            department_id=department_id,
+                            calls=other_calls,
+                            extra_tool_names=extra_tool_names,
+                            max_expansions=None,  # Secretary: unlimited.
+                        ),
+                        cancel_token=cancel_token,
+                    )
+                except asyncio.CancelledError:
+                    return
+
+            results: list[ToolCallResult] = load_skill_results + other_results
+
             for r in results:
                 yield ChatToolCallResult(
                     message_id=message_id,
@@ -257,10 +314,24 @@ class ChatRunner:
                     summary=r.summary,
                     structured=r.structured,
                 )
+
+            # Emit ChatSkillLoaded for successful load_skill results.
+            for r in load_skill_results:
+                if r.ok and r.structured:
+                    yield ChatSkillLoaded(
+                        message_id=message_id,
+                        skill_id=r.structured["skill_id"],
+                        display_name=r.structured["display_name"],
+                    )
+
             for r in results:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
-            tools = await self._tools.build(
-                department_id, has_web_search=True, extra_tools=extra_tool_specs
+            tools = self._maybe_with_skill_tool(
+                await self._tools.build(
+                    department_id, has_web_search=True, extra_tools=extra_tool_specs
+                ),
+                department_id=department_id,
+                user_id=user_id,
             )
 
         # Final text turn — stream tokens.
