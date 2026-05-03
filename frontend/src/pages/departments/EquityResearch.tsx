@@ -39,6 +39,7 @@ export default function EquityResearch() {
     start: startReport,
     reset: resetReport,
     retry: retryReport,
+    stop: stopReport,
   } = useReportStream();
 
   const dispatchReport = async (text: string) => {
@@ -107,12 +108,6 @@ export default function EquityResearch() {
     };
   }, [reportState.status, reportState.reportId, schema]);
 
-  if (loading || !config) {
-    return <PageSkeleton />;
-  }
-
-  const active = sessionId !== null;
-
   const handleDownload = (id: string, fmt: "pdf" | "docx") => {
     const url = fmt === "pdf" ? reportPdfUrl(id) : reportDocxUrl(id);
     window.open(url, "_blank", "noopener");
@@ -162,7 +157,8 @@ export default function EquityResearch() {
     if (
       reportState.status === "complete" &&
       schema &&
-      reportState.reportId
+      reportState.reportId &&
+      config
     ) {
       items.push({
         after: "end",
@@ -189,6 +185,12 @@ export default function EquityResearch() {
     // rely on identity-stable refs to avoid spurious chat re-renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reportState, schema, config?.report_mode, subject]);
+
+  if (loading || !config) {
+    return <PageSkeleton />;
+  }
+
+  const active = sessionId !== null;
 
   return (
     <div className="flex flex-col h-full">
@@ -259,6 +261,10 @@ export default function EquityResearch() {
             streamUrl="/api/departments/equity-research/chat"
             bodyExtras={{ session_id: sessionId }}
             extraInlineMessages={inline}
+            extraIsStreaming={
+              reportState.status === "starting" || reportState.status === "writing"
+            }
+            onExtraStop={stopReport}
           />
         </div>
       )}
