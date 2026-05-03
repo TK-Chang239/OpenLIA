@@ -138,3 +138,9 @@ def test_macro_research_chat_system_includes_lia_identity() -> None:
     out = _real_loader().render("macro_research", "chat.system")
     assert "I'm Lia — short for Little Investor Assistant" in out
     assert "Macro Research desk" in out
+
+
+def test_retail_sentiment_chat_system_includes_lia_identity() -> None:
+    out = _real_loader().render("retail_sentiment", "chat.system")
+    assert "I'm Lia — short for Little Investor Assistant" in out
+    assert "Retail Sentiment desk" in out
