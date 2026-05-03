@@ -58,6 +58,18 @@ def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
     return WebSearchResolution(available=False, variant=None, adapter=None)
 
 
+def _empty_skill_registry() -> SkillRegistry:
+    """Return an empty SkillRegistry backed by a temp directory.
+
+    Placeholder until Task 16+ wires the real registry at startup.
+    visible() returns [] so skills_menu renders empty.
+    """
+    _empty_root = Path(tempfile.gettempdir()) / "openlia_skills_empty"
+    _empty_root.mkdir(exist_ok=True)
+    _empty_fs = FilesystemSkillStore(root=_empty_root)
+    return SkillRegistry(store=LayeredSkillStore(system=_empty_fs, user=_empty_fs))
+
+
 def _build_chat_runner_with_registry(
     registry: SQLModelRegistry,
     *,
@@ -77,20 +89,13 @@ def _build_chat_runner_with_registry(
             capabilities=resolved.capabilities,
         )
 
-    # TODO(skills/Task 13): replace with the real SkillRegistry wired at startup.
-    _empty_root = Path(tempfile.gettempdir()) / "openlia_skills_empty"
-    _empty_root.mkdir(exist_ok=True)
-    _empty_fs = FilesystemSkillStore(root=_empty_root)
-    _empty_registry = SkillRegistry(store=LayeredSkillStore(system=_empty_fs, user=_empty_fs))
-    # refresh is async; skip here — visible() returns [] until Task 13 wires the real registry.
-
     return ChatRunner(
         prompts=prompts,
         tools=tools,
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
-        skill_registry=_empty_registry,
+        skill_registry=_empty_skill_registry(),
     )
 
 
@@ -164,6 +169,8 @@ def _build_report_runner_with_registry(
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
+        skill_registry=_empty_skill_registry(),
+        # TODO(skills/Task 16+): replace with real SkillRegistry wired at startup.
     )
 
 

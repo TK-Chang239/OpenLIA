@@ -30,8 +30,14 @@ from openlia.llm.types import (
     ResolvedModel,
     ToolCall,
 )
+from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 
 pytestmark = pytest.mark.asyncio
+
+
+def _empty_skill_registry(tmp_path: Path) -> SkillRegistry:
+    fs = FilesystemSkillStore(root=tmp_path)
+    return SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
 
 
 @pytest.fixture
@@ -122,7 +128,7 @@ async def _collect(it):
 
 
 async def test_report_run_emits_start_phases_and_complete(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     filled = {"title": "AAPL Initiation", "sections": [{"id": "overview", "body": "..."}]}
     provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
@@ -136,6 +142,7 @@ async def test_report_run_emits_start_phases_and_complete(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -156,7 +163,7 @@ async def test_report_run_emits_start_phases_and_complete(
 
 
 async def test_report_start_includes_section_titles_after_filter(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     filled = {"title": "x", "sections": []}
     provider = FakeProvider(script=FakeProviderScript(turns=[("final_json", json.dumps(filled))]))
@@ -170,6 +177,7 @@ async def test_report_start_includes_section_titles_after_filter(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -190,7 +198,7 @@ async def test_report_start_includes_section_titles_after_filter(
 
 
 async def test_report_tool_call_carries_call_id_through_to_event(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     """NEW-5-02: ReportToolCall events carry the dispatcher's call_id so the
     FE can correlate them with the preceding report.tool_call.start."""
@@ -228,6 +236,7 @@ async def test_report_tool_call_carries_call_id_through_to_event(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -244,7 +253,7 @@ async def test_report_tool_call_carries_call_id_through_to_event(
 
 
 async def test_report_tool_call_start_event_emitted_before_dispatch(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     """NEW-5-03: report.tool_call.start fires before the tool runs so the FE
     can show progress while a long-running tool is in flight."""
@@ -284,6 +293,7 @@ async def test_report_tool_call_start_event_emitted_before_dispatch(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -306,7 +316,7 @@ async def test_report_tool_call_start_event_emitted_before_dispatch(
 
 
 async def test_report_tool_loop_emits_tool_events(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     filled = {"title": "x", "sections": []}
@@ -344,6 +354,7 @@ async def test_report_tool_loop_emits_tool_events(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -358,7 +369,7 @@ async def test_report_tool_loop_emits_tool_events(
 
 
 async def test_report_tier_not_configured_emits_report_error(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     provider = FakeProvider(script=FakeProviderScript(turns=[]))
     data = FakeDataDispatcher(manifest={"equity_research": {}})
@@ -371,6 +382,7 @@ async def test_report_tier_not_configured_emits_report_error(
         resolve=_raises(TierNotConfiguredError("thinking")),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -386,7 +398,7 @@ async def test_report_tier_not_configured_emits_report_error(
 
 
 async def test_report_capability_error_terminates(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     class _FailingProvider(FakeProvider):
         async def generate(self, request):
@@ -403,6 +415,7 @@ async def test_report_capability_error_terminates(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -418,7 +431,7 @@ async def test_report_capability_error_terminates(
 
 
 async def test_two_round_tool_loop_uses_both_results(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     call_a = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     call_b = ToolCall(id="c2", name="stock_quote", arguments={"symbol": "MSFT"})
@@ -456,6 +469,7 @@ async def test_two_round_tool_loop_uses_both_results(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -472,7 +486,7 @@ async def test_two_round_tool_loop_uses_both_results(
 
 
 async def test_max_rounds_falls_through_to_writing(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     from openlia.llm.runtime.tools import MAX_TOOL_TURNS
 
@@ -505,6 +519,7 @@ async def test_max_rounds_falls_through_to_writing(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -519,7 +534,7 @@ async def test_max_rounds_falls_through_to_writing(
 
 
 async def test_provider_error_in_report_tool_loop_emits_report_error(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     class _LoopErrorProvider(FakeProvider):
         async def generate(self, request):
@@ -552,6 +567,7 @@ async def test_provider_error_in_report_tool_loop_emits_report_error(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -567,7 +583,7 @@ async def test_provider_error_in_report_tool_loop_emits_report_error(
 
 
 async def test_report_cancellation_stops_yielding(
-    prompts_root: Path, frameworks_root: Path
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     call = ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"})
     provider = FakeProvider(
@@ -602,6 +618,7 @@ async def test_report_cancellation_stops_yielding(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -619,7 +636,9 @@ async def test_report_cancellation_stops_yielding(
     assert ReportComplete not in types
 
 
-async def test_report_emits_per_section_events(prompts_root: Path, frameworks_root: Path) -> None:
+async def test_report_emits_per_section_events(
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
+) -> None:
     """NEW-14-06 — runtime emits report.section.start/complete around the
     structured-output writing pass."""
     filled = {
@@ -640,6 +659,7 @@ async def test_report_emits_per_section_events(prompts_root: Path, frameworks_ro
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=frameworks_root,
         report_id_factory=lambda: "r_1",
     )
@@ -724,6 +744,7 @@ async def test_report_forwards_section_topics_and_reference_portfolio(
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
         frameworks_root=fwroot,
         report_id_factory=lambda: "r_1",
     )
