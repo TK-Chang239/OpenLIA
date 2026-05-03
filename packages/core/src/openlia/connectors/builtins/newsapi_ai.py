@@ -34,6 +34,10 @@ _ER_CLIENT = InstanceFactory(
     args={"apiKey": _API_KEY_PLACEHOLDER},
 )
 
+# EventRegistry article fields per their docs: title, url, source.title,
+# dateTime (ISO-8601), body. The wrapper passes articles through verbatim,
+# so field_map maps canonical keys to those source paths. Nested
+# `source.title` is expressed via tuple form (executor walks dotted paths).
 _GEOPOLITICAL_NEWS = CallableSpec(
     need_id="geopolitical_news",
     access_mode="python_lib",
@@ -47,6 +51,13 @@ _GEOPOLITICAL_NEWS = CallableSpec(
     constants={},
     result_path=(),
     shape="list[dict]",
+    field_map={
+        "title": "title",
+        "url": "url",
+        "source": ("source", "title"),
+        "published_at": "dateTime",
+        "summary": "body",
+    },
 )
 
 

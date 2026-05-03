@@ -119,6 +119,7 @@ class RunnerCallableSpec(Base):
         Boolean, nullable=False, server_default=text("0"), default=False
     )
     last_smoke_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    pending_default_change: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )
@@ -150,10 +151,10 @@ class ResolverCallLog(Base):
     __tablename__ = "resolver_call_log"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    spec_id: Mapped[str] = mapped_column(
+    spec_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("runner_callable_specs.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("runner_callable_specs.id", ondelete="SET NULL"),
+        nullable=True,
     )
     department_id: Mapped[str] = mapped_column(String(64), nullable=False)
     need_id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -185,10 +186,10 @@ class SmokeCallLog(Base):
     __tablename__ = "smoke_call_log"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    spec_id: Mapped[str] = mapped_column(
+    spec_id: Mapped[str | None] = mapped_column(
         String(36),
-        ForeignKey("runner_callable_specs.id", ondelete="CASCADE"),
-        nullable=False,
+        ForeignKey("runner_callable_specs.id", ondelete="SET NULL"),
+        nullable=True,
     )
     args: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False)

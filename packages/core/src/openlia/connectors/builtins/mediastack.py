@@ -25,6 +25,9 @@ _API_KEY_PLACEHOLDER = "$MEDIASTACK_API_KEY"
 _CLIENT = InstanceFactory(cls="MediastackClient", args={"api_key": _API_KEY_PLACEHOLDER})
 
 
+# Mediastack article fields per their docs: title, url, source, published_at
+# (ISO-8601), description. The wrapper returns the `data` array verbatim, so
+# canonical keys map directly to those source paths.
 _GEOPOLITICAL_NEWS = CallableSpec(
     need_id="geopolitical_news",
     access_mode="python_lib",
@@ -38,6 +41,13 @@ _GEOPOLITICAL_NEWS = CallableSpec(
     constants={},
     result_path=(),
     shape="list[dict]",
+    field_map={
+        "title": "title",
+        "url": "url",
+        "source": "source",
+        "published_at": "published_at",
+        "summary": "description",
+    },
 )
 
 

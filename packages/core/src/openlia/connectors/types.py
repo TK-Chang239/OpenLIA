@@ -208,10 +208,56 @@ def _country_iso2_to_iso3(code: str) -> str:
     return _COUNTRY_ISO2_TO_ISO3.get(code, code)
 
 
+def _to_float(x: Any) -> float:
+    return float(x)
+
+
+def _to_int(x: Any) -> int:
+    return int(x)
+
+
+def _strip(x: Any) -> str:
+    if not isinstance(x, str):
+        raise TypeError(f"strip: expected str, got {type(x).__name__}")
+    return x.strip()
+
+
+def _list_first(x: Any) -> Any:
+    if not isinstance(x, list) or not x:
+        raise ValueError(f"list_first: expected non-empty list, got {type(x).__name__}")
+    return x[0]
+
+
+def _iso_date(x: Any) -> str:
+    """Coerce a date-like string to ISO-8601 (YYYY-MM-DD).
+
+    Accepts already-ISO inputs, common epoch-second integers, and
+    datetime objects via their `isoformat()`. Anything else falls
+    through unchanged so the LLM can author bindings against
+    endpoints that already emit ISO strings.
+    """
+    from datetime import date, datetime
+
+    if isinstance(x, datetime):
+        return x.date().isoformat()
+    if isinstance(x, date):
+        return x.isoformat()
+    if isinstance(x, int | float):
+        return datetime.fromtimestamp(float(x)).date().isoformat()
+    if isinstance(x, str):
+        return x
+    raise TypeError(f"iso_date: cannot coerce {type(x).__name__}")
+
+
 TRANSFORMS: dict[str, Callable[[Any], Any]] = {
     "upper": str.upper,
     "lower": str.lower,
     "country_iso2_to_iso3": _country_iso2_to_iso3,
+    "to_float": _to_float,
+    "to_int": _to_int,
+    "strip": _strip,
+    "list_first": _list_first,
+    "iso_date": _iso_date,
 }
 
 ALLOWED_TRANSFORMS: frozenset[str] = frozenset(TRANSFORMS.keys())

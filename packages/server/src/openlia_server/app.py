@@ -503,7 +503,19 @@ def create_app(
             agentic_factory=_agentic_factory,
         )
     )
-    app.include_router(build_runner_specs_list_router(db_session_factory=factory))
+
+    def _transport_for_connector(conn: Any) -> Any:
+        from openlia_server.services.dispatcher_factory import _prepare_connector
+
+        return _prepare_connector(conn).transport
+
+    app.include_router(
+        build_runner_specs_list_router(
+            db_session_factory=factory,
+            llm_client_factory=_adapter_factory,
+            transport_factory=_transport_for_connector,
+        )
+    )
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
