@@ -50,7 +50,7 @@ def _fake_inner(monkeypatch):
             yield {"type": "chat.start", "label": self.label, "run": self.runs}
             yield {"type": "chat.done"}
 
-    def _fake_build(registry, *, web_search=None):
+    def _fake_build(registry, *, web_search=None, skill_registry=None):
         return _FakeRunner(label="fake")
 
     monkeypatch.setattr(svc, "_build_chat_runner_with_registry", _fake_build)
@@ -119,7 +119,9 @@ async def test_refreshing_chat_runner_closes_session_on_exception(monkeypatch) -
             raise RuntimeError("boom")
 
     monkeypatch.setattr(
-        svc, "_build_chat_runner_with_registry", lambda r, *, web_search=None: _BoomRunner()
+        svc,
+        "_build_chat_runner_with_registry",
+        lambda r, *, web_search=None, skill_registry=None: _BoomRunner(),
     )
 
     factory = _SpyFactory()
