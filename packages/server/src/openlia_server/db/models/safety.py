@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, CheckConstraint, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
@@ -41,7 +42,7 @@ class LiaGuardrailEvent(Base):
     response_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     tripwire_pattern: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class UserDisclaimerAcceptance(Base):

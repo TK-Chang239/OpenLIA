@@ -16,7 +16,7 @@ class Skill(Base):
     __table_args__ = (
         CheckConstraint(
             "scope IN ('system', 'user')",
-            name="ck_skills_scope",
+            name="scope_enum",  # naming convention expands to ck_skills_scope_enum
         ),
         Index("idx_skills_scope_skill_id", "scope", "skill_id", unique=False),
         Index("idx_skills_user_id", "user_id"),
