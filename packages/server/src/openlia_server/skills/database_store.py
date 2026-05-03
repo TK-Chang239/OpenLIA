@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 
 from openlia.skills.store import Scope
 from openlia.skills.types import InstalledSkill, SkillManifest
@@ -118,7 +117,7 @@ class DatabaseSkillStore:
             row = db.execute(
                 select(Skill).where(
                     and_(
-                        Skill.scope == "user",
+                        Skill.scope == scope,
                         Skill.skill_id == skill_id,
                         Skill.user_id == user_id,
                     )
@@ -138,6 +137,6 @@ class DatabaseSkillStore:
             scope=row.scope,  # type: ignore[arg-type]
             user_id=row.user_id,
             enabled=row.enabled,
-            installed_at=row.installed_at or datetime.now(UTC),
+            installed_at=row.installed_at,
             source=row.source,
         )
