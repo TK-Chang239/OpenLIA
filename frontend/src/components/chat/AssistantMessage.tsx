@@ -21,6 +21,7 @@ interface Props {
   streaming: boolean;
   timestamp?: string;
   stopped?: boolean;
+  flagChips?: Array<{ category: string; text: string }>;
 }
 
 function MarkdownText({ text }: { text: string }): JSX.Element {
@@ -42,6 +43,7 @@ export function AssistantMessage({
   streaming,
   timestamp,
   stopped,
+  flagChips,
 }: Props): JSX.Element {
   const inlineChunks: AssistantChunk[] =
     chunks ?? (content !== undefined ? [{ type: "text", text: content }] : []);
@@ -70,6 +72,19 @@ export function AssistantMessage({
             </span>
           ) : null}
         </div>
+        {flagChips && flagChips.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1">
+            {flagChips.map((chip, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-900"
+                title={chip.category}
+              >
+                {chip.text}
+              </span>
+            ))}
+          </div>
+        )}
         {stopped ? (
           <span className="mt-1.5 block font-mono text-[10px] italic text-text-tertiary">
             Response stopped.
