@@ -71,6 +71,7 @@ from openlia_server.routes.departments.retail_sentiment import (
 from openlia_server.routes.departments.secretary import build_secretary_router
 from openlia_server.routes.dept_health import build_dept_health_router
 from openlia_server.routes.disclaimer import build_disclaimer_router
+from openlia_server.routes.guardrail_events import build_guardrail_events_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
@@ -662,6 +663,7 @@ def create_app(
         app.state, "earnings_adapter", _NoopEarningsRecentAdapter()
     )
     app.include_router(build_disclaimer_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_guardrail_events_router(db_session_factory=factory, mode=mode))
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
 
     from openlia_server.routes.chat_sessions import build_chat_sessions_router
