@@ -11,6 +11,8 @@ import { ErrorMessage } from "./ErrorMessage";
 import { WelcomeOverlay } from "./WelcomeOverlay";
 import { useChatStream } from "./useChatStream";
 import { RedirectCard, type RedirectDepartment } from "./RedirectCard";
+import { useDisclaimerGate } from "../../hooks/useDisclaimerGate";
+import { AboutLiaModal } from "../safety/AboutLiaModal";
 
 interface Chip {
   label: string;
@@ -44,6 +46,9 @@ interface Props {
   extraIsStreaming?: boolean;
   /** Invoked when the user clicks Stop and `extraIsStreaming` is true. */
   onExtraStop?: () => void;
+  /** Deployment mode — determines how the About Lia disclaimer is fetched.
+   *  Defaults to "personal" when not provided. */
+  mode?: "personal" | "company";
 }
 
 interface PersistedToolCall {
@@ -67,7 +72,11 @@ export function ChatInterface({
   extraInlineMessages,
   extraIsStreaming,
   onExtraStop,
+  mode = "personal",
 }: Props): JSX.Element {
+  const aboutGate = useDisclaimerGate(mode);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -174,6 +183,20 @@ export function ChatInterface({
 
   return (
     <div className="relative flex h-full flex-col">
+      <div className="flex justify-end px-4 pt-2">
+        <button
+          onClick={() => setAboutOpen(true)}
+          className="text-xs text-slate-500 underline"
+        >
+          (?) About Lia
+        </button>
+      </div>
+      {aboutOpen && aboutGate.disclaimer && (
+        <AboutLiaModal
+          text={aboutGate.disclaimer.text}
+          onClose={() => setAboutOpen(false)}
+        />
+      )}
       <div className="relative flex-1">
         <AnimatePresence>
           {showWelcome ? (
