@@ -1,5 +1,6 @@
 from openlia.skills.filesystem_store import FilesystemSkillStore
 from openlia.skills.parser import parse_skill_md, serialize_skill_md
+from openlia.skills.registry import SkillRegistry
 from openlia.skills.store import LayeredSkillStore, Scope, SkillStore
 from openlia.skills.types import SKILL_ID_RE, InstalledSkill, SkillManifest
 
@@ -10,6 +11,7 @@ __all__ = [
     "LayeredSkillStore",
     "Scope",
     "SkillManifest",
+    "SkillRegistry",
     "SkillStore",
     "parse_skill_md",
     "serialize_skill_md",
