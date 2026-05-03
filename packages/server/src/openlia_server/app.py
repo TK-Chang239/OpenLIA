@@ -530,6 +530,7 @@ def create_app(
     # Skills system — store + registry constructed here, shared via app.state.
     from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 
+    from openlia_server.routes.admin_skills import build_admin_skills_router
     from openlia_server.routes.skills import build_skills_router
 
     _skills_root = Path(
@@ -545,6 +546,14 @@ def create_app(
     app.state.skills_registry = skills_registry
     app.include_router(
         build_skills_router(
+            db_session_factory=factory,
+            store=skills_layered,
+            registry=skills_registry,
+            mode=mode,
+        )
+    )
+    app.include_router(
+        build_admin_skills_router(
             db_session_factory=factory,
             store=skills_layered,
             registry=skills_registry,
