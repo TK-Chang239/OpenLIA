@@ -75,7 +75,10 @@ class FilesystemSkillStore:
         (target / "SKILL.md").write_text(serialize_skill_md(manifest, body))
         (target / ".source").write_text(source + "\n")
         got = await self.get(manifest.name, scope=scope, user_id=user_id)
-        assert got is not None
+        if got is None:
+            raise RuntimeError(
+                f"install succeeded but get('{manifest.name}') returned None"
+            )
         return got
 
     async def uninstall(self, skill_id: str, *, scope: Scope, user_id: str | None) -> None:

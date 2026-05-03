@@ -62,7 +62,6 @@ async def test_install_writes_skill_md(tmp_root):
     )
     assert installed.manifest.name == "alpha"
     assert (tmp_root / "user" / "alpha" / "SKILL.md").exists()
-    assert "alpha" == installed.manifest.name
 
 
 @pytest.mark.asyncio
