@@ -6,6 +6,8 @@ import { AccountSection } from '../components/settings/sections/AccountSection';
 import { AdminSection } from '../components/settings/sections/AdminSection';
 import { DisclaimerSection } from '../components/settings/sections/DisclaimerSection';
 import { GuardrailActivitySection } from '../components/settings/sections/GuardrailActivitySection';
+import { SkillsSection } from '../components/settings/sections/SkillsSection';
+import { AdminSkillsSection } from '../components/settings/sections/AdminSkillsSection';
 import { InvitesPanel } from '../components/settings/admin/InvitesPanel';
 import { UsersPanel } from '../components/settings/admin/UsersPanel';
 import { ResetRequestsPanel } from '../components/settings/admin/ResetRequestsPanel';
@@ -38,6 +40,7 @@ export function SettingsPage(): JSX.Element {
         />
         <Route path="disclaimer" element={<DisclaimerSection mode={mode} />} />
         <Route path="guardrails" element={<GuardrailActivitySection mode={mode} />} />
+        <Route path="skills" element={<SkillsSection />} />
         {isAdmin ? (
           <Route path="admin" element={<AdminSection />}>
             <Route index element={<Navigate to="invites" replace />} />
@@ -47,6 +50,7 @@ export function SettingsPage(): JSX.Element {
             <Route path="models" element={<ModelsAdminPanel />} />
             <Route path="connectors" element={<ConnectorsAdminPanel />} />
             <Route path="runner-specs" element={<RunnerCallableSpecsAdminPanel />} />
+            <Route path="skills" element={<AdminSkillsSection />} />
           </Route>
         ) : null}
         <Route path="*" element={<Navigate to="general" replace />} />
