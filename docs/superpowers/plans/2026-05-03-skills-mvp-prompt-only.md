@@ -929,7 +929,6 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 
 from sqlalchemy import and_, delete, select
 from sqlalchemy.orm import Session as DBSession
@@ -1046,7 +1045,7 @@ class DatabaseSkillStore:
             row = db.execute(
                 select(Skill).where(
                     and_(
-                        Skill.scope == "user",
+                        Skill.scope == scope,
                         Skill.skill_id == skill_id,
                         Skill.user_id == user_id,
                     )
@@ -1066,7 +1065,7 @@ class DatabaseSkillStore:
             scope=row.scope,  # type: ignore[arg-type]
             user_id=row.user_id,
             enabled=row.enabled,
-            installed_at=row.installed_at or datetime.now(UTC),
+            installed_at=row.installed_at,
             source=row.source,
         )
 ```
@@ -1082,6 +1081,9 @@ Expected: 3 PASS.
 git add packages/server/src/openlia_server/skills packages/server/tests/test_skills
 git commit -m "feat(skills): DatabaseSkillStore (company-mode user scope)"
 ```
+
+**Follow-up notes (deferred to Plan 2):**
+- Add a unique constraint on `(scope, skill_id, user_id)` to make `install` atomic at the DB level — the current SELECT-then-INSERT has a TOCTOU race under concurrent requests.
 
 ---
 
