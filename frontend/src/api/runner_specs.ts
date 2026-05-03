@@ -80,7 +80,7 @@ export const listRunnerSpecs = (departmentId?: string) => {
 export const resolveAndSaveSpec = (req: ResolveSaveRequest) =>
   fetchJson<ResolveSaveResult>("/api/runner-specs/resolve", {
     method: "POST",
-    body: JSON.stringify(req),
+    json: req,
   });
 
 export const getSpecHistory = (specId: string) =>

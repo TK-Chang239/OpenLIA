@@ -33,7 +33,6 @@ export function ResolveRow({
   spec,
   status,
   connectorId,
-  connectorCategory,
   endpointOptions,
   websearchAvailable,
   onSaved,

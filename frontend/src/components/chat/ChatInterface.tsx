@@ -38,6 +38,12 @@ interface Props {
   bodyExtras?: Record<string, unknown>;
   /** NEW-14-02: inline assistant-side nodes injected into the message list. */
   extraInlineMessages?: InlineExtraMessage[];
+  /** Treat as actively streaming even when the chat stream is idle (e.g.,
+   *  while a sibling report stream is generating). Causes the input to render
+   *  the Stop button. */
+  extraIsStreaming?: boolean;
+  /** Invoked when the user clicks Stop and `extraIsStreaming` is true. */
+  onExtraStop?: () => void;
 }
 
 interface PersistedToolCall {
@@ -59,6 +65,8 @@ export function ChatInterface({
   streamUrl,
   bodyExtras,
   extraInlineMessages,
+  extraIsStreaming,
+  onExtraStop,
 }: Props): JSX.Element {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -120,8 +128,13 @@ export function ChatInterface({
     send(text);
   };
 
-  const isStreaming =
+  const chatStreaming =
     state.status === "opening" || state.status === "thinking" || state.status === "streaming";
+  const isStreaming = chatStreaming || Boolean(extraIsStreaming);
+  const handleStop = () => {
+    if (chatStreaming) stop();
+    if (extraIsStreaming) onExtraStop?.();
+  };
 
   const hasInline = (extraInlineMessages?.length ?? 0) > 0;
   const showWelcome = loaded && !sentOnce && !loadError && !hasInline;
@@ -251,7 +264,7 @@ export function ChatInterface({
           </MessageList>
         ) : null}
       </div>
-      <ChatInput onSend={onSend} onStop={stop} isStreaming={isStreaming} placeholder={inputPlaceholder} />
+      <ChatInput onSend={onSend} onStop={handleStop} isStreaming={isStreaming} placeholder={inputPlaceholder} />
     </div>
   );
 }
