@@ -13,6 +13,8 @@ const ITEMS: NavItem[] = [
   { to: '/settings/general', label: 'General' },
   { to: '/settings/models', label: 'Models' },
   { to: '/settings/account', label: 'Account' },
+  { to: '/settings/disclaimer', label: 'Compliance disclaimer' },
+  { to: '/settings/guardrails', label: 'Guardrail activity' },
   { to: '/settings/admin', label: 'Admin', adminOnly: true },
 ];
 

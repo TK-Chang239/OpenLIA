@@ -899,6 +899,11 @@ def maintenance(
         typer.echo(f"{prefix}{label.ljust(width)} {detail}")
 
 
+from openlia_server.cli_guardrail import app as guardrail_app  # noqa: E402
+
+app.add_typer(guardrail_app, name="guardrail-events")
+
+
 def main() -> None:
     """Console-script entry point."""
     app()

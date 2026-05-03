@@ -70,6 +70,9 @@ EXPECTED_TABLES = {
     # --- Resolver redesign Phase 1 (audit tables) ---
     "resolver_call_log",
     "smoke_call_log",
+    # --- Lia Safety & Compliance Guardrails (MVP) ---
+    "lia_guardrail_events",
+    "user_disclaimer_acceptance",
 }
 
 

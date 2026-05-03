@@ -11,6 +11,8 @@ import { ErrorMessage } from "./ErrorMessage";
 import { WelcomeOverlay } from "./WelcomeOverlay";
 import { useChatStream } from "./useChatStream";
 import { RedirectCard, type RedirectDepartment } from "./RedirectCard";
+import { useDisclaimerGate } from "../../hooks/useDisclaimerGate";
+import { AboutLiaModal } from "../safety/AboutLiaModal";
 
 interface Chip {
   label: string;
@@ -38,6 +40,15 @@ interface Props {
   bodyExtras?: Record<string, unknown>;
   /** NEW-14-02: inline assistant-side nodes injected into the message list. */
   extraInlineMessages?: InlineExtraMessage[];
+  /** Treat as actively streaming even when the chat stream is idle (e.g.,
+   *  while a sibling report stream is generating). Causes the input to render
+   *  the Stop button. */
+  extraIsStreaming?: boolean;
+  /** Invoked when the user clicks Stop and `extraIsStreaming` is true. */
+  onExtraStop?: () => void;
+  /** Deployment mode — determines how the About Lia disclaimer is fetched.
+   *  Defaults to "personal" when not provided. */
+  mode?: "personal" | "company";
 }
 
 interface PersistedToolCall {
@@ -59,7 +70,13 @@ export function ChatInterface({
   streamUrl,
   bodyExtras,
   extraInlineMessages,
+  extraIsStreaming,
+  onExtraStop,
+  mode = "personal",
 }: Props): JSX.Element {
+  const aboutGate = useDisclaimerGate(mode);
+  const [aboutOpen, setAboutOpen] = useState(false);
+
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -120,8 +137,13 @@ export function ChatInterface({
     send(text);
   };
 
-  const isStreaming =
+  const chatStreaming =
     state.status === "opening" || state.status === "thinking" || state.status === "streaming";
+  const isStreaming = chatStreaming || Boolean(extraIsStreaming);
+  const handleStop = () => {
+    if (chatStreaming) stop();
+    if (extraIsStreaming) onExtraStop?.();
+  };
 
   const hasInline = (extraInlineMessages?.length ?? 0) > 0;
   const showWelcome = loaded && !sentOnce && !loadError && !hasInline;
@@ -161,6 +183,20 @@ export function ChatInterface({
 
   return (
     <div className="relative flex h-full flex-col">
+      <div className="flex justify-end px-4 pt-2">
+        <button
+          onClick={() => setAboutOpen(true)}
+          className="text-xs text-slate-500 underline"
+        >
+          (?) About Lia
+        </button>
+      </div>
+      {aboutOpen && aboutGate.disclaimer && (
+        <AboutLiaModal
+          text={aboutGate.disclaimer.text}
+          onClose={() => setAboutOpen(false)}
+        />
+      )}
       <div className="relative flex-1">
         <AnimatePresence>
           {showWelcome ? (
@@ -235,6 +271,7 @@ export function ChatInterface({
                 chunks={state.chunks}
                 streaming={state.status === "streaming"}
                 stopped={state.status === "stopped"}
+                flagChips={state.flagChips}
               />
             ) : null}
             {state.status === "error" && state.errorMessage ? (
@@ -251,7 +288,7 @@ export function ChatInterface({
           </MessageList>
         ) : null}
       </div>
-      <ChatInput onSend={onSend} onStop={stop} isStreaming={isStreaming} placeholder={inputPlaceholder} />
+      <ChatInput onSend={onSend} onStop={handleStop} isStreaming={isStreaming} placeholder={inputPlaceholder} />
     </div>
   );
 }

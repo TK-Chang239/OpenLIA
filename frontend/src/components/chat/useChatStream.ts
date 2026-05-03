@@ -32,7 +32,16 @@ export type ChatStreamEvent =
   | { type: "chat.token"; data: { text: string } }
   | { type: "chat.report_thumbnail"; data: { report_id: string; filename: string } }
   | { type: "chat.done"; data: Record<string, unknown> }
-  | { type: "chat.error"; data: { message: string } };
+  | { type: "chat.error"; data: { message: string } }
+  | {
+      type: "chat.guardrail";
+      data: {
+        category: string;
+        action: "replaced" | "warned" | "logged";
+        replacement?: string | null;
+        chip_text?: string | null;
+      };
+    };
 
 export type StreamStatus =
   | "idle"
@@ -54,6 +63,7 @@ export interface StreamState {
   toolCalls: ToolCallView[];
   /** Flat thumbnail list — kept for back-compat with existing tests/UI. */
   reportThumbnails: Array<{ report_id: string; filename: string }>;
+  flagChips: Array<{ category: string; text: string }>;
   errorMessage: string | null;
 }
 
@@ -63,6 +73,7 @@ const INITIAL: StreamState = {
   chunks: [],
   toolCalls: [],
   reportThumbnails: [],
+  flagChips: [],
   errorMessage: null,
 };
 
@@ -160,6 +171,25 @@ function reducer(state: StreamState, action: Action): StreamState {
       return { ...state, status: "done" };
     case "chat.error":
       return { ...state, status: "error", errorMessage: ev.data.message };
+    case "chat.guardrail": {
+      const action = ev.data.action;
+      if (action === "replaced") {
+        const replacement = ev.data.replacement ?? "";
+        return {
+          ...state,
+          message: replacement,
+          chunks: [{ type: "text", text: replacement }],
+        };
+      }
+      if (action === "warned") {
+        const text = ev.data.chip_text ?? "";
+        return {
+          ...state,
+          flagChips: [...state.flagChips, { category: ev.data.category, text }],
+        };
+      }
+      return state;
+    }
     default:
       return state;
   }
@@ -173,6 +203,7 @@ const KNOWN_EVENT_TYPES: ReadonlyArray<ChatStreamEvent["type"]> = [
   "chat.report_thumbnail",
   "chat.done",
   "chat.error",
+  "chat.guardrail",
 ];
 
 interface Options {

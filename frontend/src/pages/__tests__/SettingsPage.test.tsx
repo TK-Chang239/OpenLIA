@@ -3,6 +3,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { SettingsPage } from '../SettingsPage';
 
+vi.mock('../../auth/AuthContext', () => ({
+  useAuth: () => ({ status: 'personal' }),
+}));
+
 vi.mock('../../components/settings/sections/GeneralSection', () => ({
   GeneralSection: () => <p>general body</p>,
 }));
