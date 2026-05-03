@@ -39,7 +39,7 @@ async def test_visible_for_secretary_user(populated_root):
     fs = FilesystemSkillStore(root=populated_root)
     layered = LayeredSkillStore(system=fs, user=fs)
     reg = SkillRegistry(store=layered)
-    await reg.refresh()
+    await reg.refresh(user_ids=["u1"])
     visible = reg.visible(department_id="secretary", user_id="u1")
     names = [s.manifest.name for s in visible]
     assert "greet-skill" in names
@@ -50,7 +50,7 @@ async def test_visible_for_secretary_user(populated_root):
 async def test_filtered_by_department(populated_root):
     fs = FilesystemSkillStore(root=populated_root)
     reg = SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
-    await reg.refresh()
+    await reg.refresh(user_ids=["u1"])
     visible = reg.visible(department_id="equity_research", user_id="u1")
     names = [s.manifest.name for s in visible]
     assert "greet-skill" not in names
@@ -62,6 +62,6 @@ async def test_disabled_skill_hidden(populated_root):
     (populated_root / "user" / "greet-skill" / ".disabled").touch()
     fs = FilesystemSkillStore(root=populated_root)
     reg = SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
-    await reg.refresh()
+    await reg.refresh(user_ids=["u1"])
     names = [s.manifest.name for s in reg.visible(department_id="secretary", user_id="u1")]
     assert "greet-skill" not in names
