@@ -105,6 +105,14 @@ _STOCK_QUOTE = CallableSpec(
 
 # APIClient.get_sentiment(s, from_date=None, to_date=None). Comma-separated
 # tickers (we pass one). The runtime param "ticker" maps to the SDK's "s".
+#
+# EODHD's sentiment endpoint returns aggregated daily sentiment per ticker
+# ({date, count, normalized}), not per-post records. This catalog spec is
+# intentionally best-effort: the field_map covers RawSocialPost's canonical
+# key set so the spec passes the catalog invariant, but `text`/`source`/
+# `ticker` source paths are not present in the response. Phase 7 smoke
+# will classify the runtime KeyError as schema_miss and the user will be
+# prompted to repick a different connector or endpoint.
 _SOCIAL_POSTS = CallableSpec(
     need_id="social_posts",
     access_mode="python_lib",
@@ -115,6 +123,14 @@ _SOCIAL_POSTS = CallableSpec(
     constants={},
     result_path=(),
     shape="list[dict]",
+    field_map={
+        "id": "date",
+        "ticker": "ticker",
+        "source": "source",
+        "text": "text",
+        "created_at": "date",
+        "engagement": "count",
+    },
 )
 
 
