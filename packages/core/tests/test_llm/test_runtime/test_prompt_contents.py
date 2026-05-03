@@ -47,9 +47,11 @@ def test_every_department_declares_expected_slots(department_id: str, slots: lis
 
 
 def test_shared_include_voice_is_rendered_into_secretary_system() -> None:
+    """Secretary's chat.system pulls in the canonical Lia identity partial."""
     loader = PromptLoader()
     out = loader.render("secretary", "chat.system")
-    assert "clear, professional tone" in out
+    assert "I'm Lia — short for Little Investor Assistant" in out
+    assert "Secretary desk" in out
 
 
 def test_shared_include_output_discipline_is_rendered_into_report_system() -> None:
