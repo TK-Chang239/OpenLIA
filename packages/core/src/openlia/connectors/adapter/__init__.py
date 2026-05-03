@@ -17,13 +17,25 @@ from openlia.connectors.adapter.callable_spec_resolver import (
 )
 from openlia.connectors.adapter.canary import CanaryResult, run_canary
 from openlia.connectors.adapter.introspect import introspect_python_lib
+from openlia.connectors.adapter.manual_pick_resolver import (
+    ResolverResult,
+    resolve_user_picked_spec,
+)
+from openlia.connectors.adapter.validation import (
+    ValidationError,
+    validate_resolved_spec,
+)
 
 __all__ = [
     "CanaryResult",
     "LlmClient",
     "ResolverError",
+    "ResolverResult",
     "UnsatisfiableNeed",
+    "ValidationError",
     "introspect_python_lib",
     "resolve_callable_spec",
+    "resolve_user_picked_spec",
     "run_canary",
+    "validate_resolved_spec",
 ]

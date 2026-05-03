@@ -128,6 +128,10 @@ _INTEREST_REVENUE = _scrape_spec(
 # free + scrape-friendly. Replace-on-conflict semantics mean that if
 # the user later installs NewsAPI.ai, ownership transfers to the
 # dedicated news provider.
+# Firecrawl JSON-extraction returns headlines with title/url/source/date/summary.
+# We extend the prompt's schema to include url and source so the
+# canonical_keys contract can be honored end-to-end. The wrapper format is
+# {"json": {"headlines": [{...}, ...]}} — result_path peels both layers.
 _GEOPOLITICAL_NEWS = CallableSpec(
     need_id="geopolitical_news",
     access_mode="python_lib",
@@ -152,13 +156,30 @@ _GEOPOLITICAL_NEWS = CallableSpec(
                                 "type": "object",
                                 "properties": {
                                     "title": {"type": "string"},
+                                    "url": {
+                                        "type": "string",
+                                        "description": (
+                                            "Absolute URL to the source "
+                                            "article. Use the page's own "
+                                            "URL if no per-headline link."
+                                        ),
+                                    },
+                                    "source": {
+                                        "type": "string",
+                                        "description": (
+                                            "Publishing outlet name "
+                                            "(e.g. 'Reuters', 'BBC'). "
+                                            "Use 'Wikipedia Current "
+                                            "Events' if not stated."
+                                        ),
+                                    },
                                     "date": {
                                         "type": "string",
                                         "description": "ISO date (YYYY-MM-DD).",
                                     },
                                     "summary": {"type": "string"},
                                 },
-                                "required": ["title"],
+                                "required": ["title", "url", "source", "date"],
                             },
                         }
                     },
@@ -169,6 +190,13 @@ _GEOPOLITICAL_NEWS = CallableSpec(
     },
     result_path=("json", "headlines"),
     shape="list[dict]",
+    field_map={
+        "title": "title",
+        "url": "url",
+        "source": "source",
+        "published_at": "date",
+        "summary": "summary",
+    },
 )
 
 
