@@ -764,7 +764,7 @@ class Skill(Base):
     __table_args__ = (
         CheckConstraint(
             "scope IN ('system', 'user')",
-            name="ck_skills_scope",
+            name="scope_enum",  # naming convention expands to ck_skills_scope_enum
         ),
         Index("idx_skills_scope_skill_id", "scope", "skill_id", unique=False),
         Index("idx_skills_user_id", "user_id"),
@@ -810,7 +810,7 @@ department_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 category: Mapped[str | None] = mapped_column(String(64), nullable=True)
 user_input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 response_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
-payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 ```
 
 ```python

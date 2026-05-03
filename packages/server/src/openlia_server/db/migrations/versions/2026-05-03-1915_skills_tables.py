@@ -49,7 +49,7 @@ def upgrade() -> None:
         ),
         sa.Column("source", sa.String(length=256), nullable=False),
         sa.Column("version", sa.String(length=32), nullable=False),
-        sa.CheckConstraint("scope IN ('system', 'user')", name=op.f("ck_skills_ck_skills_scope")),
+        sa.CheckConstraint("scope IN ('system', 'user')", name=op.f("ck_skills_scope_enum")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_skills")),
     )
     with op.batch_alter_table("skills", schema=None) as batch_op:
