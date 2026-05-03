@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from openlia.skills.parser import parse_skill_md
+from openlia.skills.parser import parse_skill_md, serialize_skill_md
 from openlia.skills.store import Scope
 from openlia.skills.types import InstalledSkill, SkillManifest
 
@@ -57,7 +57,6 @@ class FilesystemSkillStore:
                 return s
         return None
 
-    # Write paths land in Task 4-5.
     async def install(
         self,
         source: str,
@@ -67,7 +66,17 @@ class FilesystemSkillStore:
         body: str,
         manifest: SkillManifest,
     ) -> InstalledSkill:
-        raise NotImplementedError  # Task 4
+        target = self._scope_dir(scope) / manifest.name
+        if target.exists():
+            raise FileExistsError(
+                f"Skill '{manifest.name}' already installed in scope '{scope}'"
+            )
+        target.mkdir(parents=True)
+        (target / "SKILL.md").write_text(serialize_skill_md(manifest, body))
+        (target / ".source").write_text(source + "\n")
+        got = await self.get(manifest.name, scope=scope, user_id=user_id)
+        assert got is not None
+        return got
 
     async def uninstall(self, skill_id: str, *, scope: Scope, user_id: str | None) -> None:
         raise NotImplementedError  # Task 5
