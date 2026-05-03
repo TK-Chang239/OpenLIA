@@ -271,7 +271,9 @@ async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
     )
     req = provider.captured_requests[0]
     contents = [m.content for m in req.messages]
-    assert contents == ["hi", "hello", "what's up?"]
+    # Last user message is wrapped in <user_input> tags at the provider layer (A.1).
+    # Earlier user messages are passed through unchanged.
+    assert contents == ["hi", "hello", "<user_input>what's up?</user_input>"]
 
 
 async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> None:

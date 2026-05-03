@@ -30,6 +30,7 @@ from typing import Any
 
 from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
+from openlia.safety.input_wrapper import wrap_user_input
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
@@ -71,6 +72,22 @@ ProviderFactory = Callable[[ResolvedModel], LLMProvider]
 # support cache_control can split on this token; adapters that don't
 # simply strip it and treat the prompt as plain text.
 CACHE_BREAKPOINT_MARKER = "<<<openlia:cache_breakpoint>>>"
+
+
+def wrap_last_user_message(messages: list[ChatMessage]) -> list[ChatMessage]:
+    """Return a new list where the LAST role='user' message has its content
+    wrapped in <user_input>...</user_input>. Earlier user messages are left
+    untouched (they were already wrapped in their own turn). System and
+    assistant messages are never wrapped."""
+    out = list(messages)
+    for i in range(len(out) - 1, -1, -1):
+        if out[i].role == "user":
+            out[i] = ChatMessage(
+                role="user",
+                content=wrap_user_input(out[i].content),
+            )
+            break
+    return out
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
@@ -174,7 +191,8 @@ class ChatRunner:
             department_id, has_web_search=True, extra_tools=extra_tool_specs
         )
 
-        conversation = [Message(role=m.role, content=m.content) for m in messages]
+        wrapped_messages = wrap_last_user_message(messages)
+        conversation = [Message(role=m.role, content=m.content) for m in wrapped_messages]
 
         # Tool loop — bounded by MAX_TOOL_TURNS (32) as an outer runaway guard.
         # Per the spec, Secretary (chat) is unlimited on `find_more_data`
@@ -387,7 +405,8 @@ class ChatRunner:
         disable_routing: bool,
     ) -> AsyncIterator[SseEvent]:
         assert self._dispatcher is not None
-        conversation = [Message(role=m.role, content=m.content) for m in messages]
+        wrapped_messages = wrap_last_user_message(messages)
+        conversation = [Message(role=m.role, content=m.content) for m in wrapped_messages]
 
         candidate_list = list(candidate_by_name.values())
 
