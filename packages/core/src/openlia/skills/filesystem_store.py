@@ -69,25 +69,19 @@ class FilesystemSkillStore:
     ) -> InstalledSkill:
         target = self._scope_dir(scope) / manifest.name
         if target.exists():
-            raise FileExistsError(
-                f"Skill '{manifest.name}' already installed in scope '{scope}'"
-            )
+            raise FileExistsError(f"Skill '{manifest.name}' already installed in scope '{scope}'")
         target.mkdir(parents=True)
         (target / "SKILL.md").write_text(serialize_skill_md(manifest, body))
         (target / ".source").write_text(source + "\n")
         got = await self.get(manifest.name, scope=scope, user_id=user_id)
         if got is None:
-            raise RuntimeError(
-                f"install succeeded but get('{manifest.name}') returned None"
-            )
+            raise RuntimeError(f"install succeeded but get('{manifest.name}') returned None")
         return got
 
     async def uninstall(self, skill_id: str, *, scope: Scope, user_id: str | None) -> None:
         target = self._scope_dir(scope) / skill_id
         if not target.exists():
-            raise FileNotFoundError(
-                f"Skill '{skill_id}' not installed in scope '{scope}'"
-            )
+            raise FileNotFoundError(f"Skill '{skill_id}' not installed in scope '{scope}'")
         shutil.rmtree(target)
 
     async def set_enabled(
@@ -95,9 +89,7 @@ class FilesystemSkillStore:
     ) -> None:
         target = self._scope_dir(scope) / skill_id
         if not target.exists():
-            raise FileNotFoundError(
-                f"Skill '{skill_id}' not installed in scope '{scope}'"
-            )
+            raise FileNotFoundError(f"Skill '{skill_id}' not installed in scope '{scope}'")
         marker = target / ".disabled"
         if enabled and marker.exists():
             marker.unlink()

@@ -17,9 +17,7 @@ Body.
 async def test_install_then_get(db_session_factory):
     store = DatabaseSkillStore(session_factory=db_session_factory)
     manifest, body = parse_skill_md(SAMPLE)
-    await store.install(
-        source="zip", scope="user", user_id="u1", body=body, manifest=manifest
-    )
+    await store.install(source="zip", scope="user", user_id="u1", body=body, manifest=manifest)
     got = await store.get("beta", scope="user", user_id="u1")
     assert got is not None
     assert got.manifest.name == "beta"
@@ -30,9 +28,7 @@ async def test_install_then_get(db_session_factory):
 async def test_install_then_uninstall(db_session_factory):
     store = DatabaseSkillStore(session_factory=db_session_factory)
     manifest, body = parse_skill_md(SAMPLE)
-    await store.install(
-        source="zip", scope="user", user_id="u1", body=body, manifest=manifest
-    )
+    await store.install(source="zip", scope="user", user_id="u1", body=body, manifest=manifest)
     await store.uninstall("beta", scope="user", user_id="u1")
     assert await store.get("beta", scope="user", user_id="u1") is None
 
@@ -41,9 +37,7 @@ async def test_install_then_uninstall(db_session_factory):
 async def test_set_enabled_persists(db_session_factory):
     store = DatabaseSkillStore(session_factory=db_session_factory)
     manifest, body = parse_skill_md(SAMPLE)
-    await store.install(
-        source="zip", scope="user", user_id="u1", body=body, manifest=manifest
-    )
+    await store.install(source="zip", scope="user", user_id="u1", body=body, manifest=manifest)
     await store.set_enabled("beta", False, scope="user", user_id="u1")
     got = await store.get("beta", scope="user", user_id="u1")
     assert got is not None

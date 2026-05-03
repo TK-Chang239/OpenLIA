@@ -29,9 +29,7 @@ class DatabaseSkillStore:
         self, skill_id: str, *, scope: Scope, user_id: str | None
     ) -> InstalledSkill | None:
         with self._sf() as db:
-            stmt = select(Skill).where(
-                and_(Skill.scope == scope, Skill.skill_id == skill_id)
-            )
+            stmt = select(Skill).where(and_(Skill.scope == scope, Skill.skill_id == skill_id))
             if scope == "user":
                 stmt = stmt.where(Skill.user_id == user_id)
             row = db.execute(stmt).scalar_one_or_none()
@@ -78,16 +76,12 @@ class DatabaseSkillStore:
 
     async def uninstall(self, skill_id: str, *, scope: Scope, user_id: str | None) -> None:
         with self._sf() as db:
-            stmt = delete(Skill).where(
-                and_(Skill.scope == scope, Skill.skill_id == skill_id)
-            )
+            stmt = delete(Skill).where(and_(Skill.scope == scope, Skill.skill_id == skill_id))
             if scope == "user":
                 stmt = stmt.where(Skill.user_id == user_id)
             res = db.execute(stmt)
             if res.rowcount == 0:
-                raise FileNotFoundError(
-                    f"Skill '{skill_id}' not installed in scope '{scope}'"
-                )
+                raise FileNotFoundError(f"Skill '{skill_id}' not installed in scope '{scope}'")
             db.commit()
 
     async def set_enabled(
@@ -106,9 +100,7 @@ class DatabaseSkillStore:
                     )
                 ).scalar_one_or_none()
                 if ov is None:
-                    ov = SkillUserOverride(
-                        user_id=user_id, skill_id=skill_id, enabled=enabled
-                    )
+                    ov = SkillUserOverride(user_id=user_id, skill_id=skill_id, enabled=enabled)
                     db.add(ov)
                 else:
                     ov.enabled = enabled
