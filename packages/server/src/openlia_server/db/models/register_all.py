@@ -31,4 +31,5 @@ from openlia_server.db.models import (  # noqa: F401
     scheduler,
     connectors,
     safety,
+    skills,
 )
