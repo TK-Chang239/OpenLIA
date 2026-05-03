@@ -65,3 +65,39 @@ def test_render_unknown_department_id_passes_label_through_as_id(
     loader = PromptLoader(root=tmp_path)
     out = loader.render("made_up", "chat.system")
     assert "Desk: made_up" in out
+
+
+def test_lia_identity_partial_renders_in_an_including_template(
+    tmp_path: Path,
+) -> None:
+    """A department prompt that includes lia_identity must produce the
+    canonical Lia self-introduction substring."""
+    (tmp_path / "shared").mkdir()
+    # Copy the real partial into the temp tree so the include resolves.
+    real_partial = (
+        Path(__file__).resolve().parents[3]
+        / "src"
+        / "openlia"
+        / "prompts"
+        / "shared"
+        / "lia_identity.yaml.j2"
+    )
+    (tmp_path / "shared" / "lia_identity.yaml.j2").write_text(
+        real_partial.read_text()
+    )
+    (tmp_path / "secretary.yaml").write_text(
+        "chat:\n"
+        "  system: |\n"
+        '    {% include "shared/lia_identity.yaml.j2" %}\n'
+    )
+    loader = PromptLoader(root=tmp_path)
+    out = loader.render("secretary", "chat.system")
+    # Identity claim
+    assert "I'm Lia" in out
+    assert "Little Investor Assistant" in out
+    # Desk awareness (auto-injected)
+    assert "Secretary desk" in out
+    # Voice rules header present
+    assert "voice rules" in out.lower()
+    # Guardrail header present
+    assert "won't do" in out.lower()
