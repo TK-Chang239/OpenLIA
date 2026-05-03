@@ -13,7 +13,9 @@ inject a system prompt and run through the chat builder.
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal
 
 from openlia.departments import get_department
@@ -25,6 +27,7 @@ from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.services.llm_registry import SQLModelRegistry
@@ -74,12 +77,20 @@ def _build_chat_runner_with_registry(
             capabilities=resolved.capabilities,
         )
 
+    # TODO(skills/Task 13): replace with the real SkillRegistry wired at startup.
+    _empty_root = Path(tempfile.gettempdir()) / "openlia_skills_empty"
+    _empty_root.mkdir(exist_ok=True)
+    _empty_fs = FilesystemSkillStore(root=_empty_root)
+    _empty_registry = SkillRegistry(store=LayeredSkillStore(system=_empty_fs, user=_empty_fs))
+    # refresh is async; skip here — visible() returns [] until Task 13 wires the real registry.
+
     return ChatRunner(
         prompts=prompts,
         tools=tools,
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
+        skill_registry=_empty_registry,
     )
 
 

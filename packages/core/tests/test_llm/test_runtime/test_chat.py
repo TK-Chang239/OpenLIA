@@ -28,8 +28,14 @@ from openlia.llm.types import (
     ResolvedModel,
     ToolCall,
 )
+from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 
 pytestmark = pytest.mark.asyncio
+
+
+def _empty_skill_registry(root: Path) -> SkillRegistry:
+    fs = FilesystemSkillStore(root=root)
+    return SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
 
 
 @pytest.fixture
@@ -111,6 +117,7 @@ async def test_streams_simple_reply_with_no_tools(prompts_root: Path) -> None:
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -165,6 +172,7 @@ async def test_tool_calling_turn_emits_tool_events(prompts_root: Path) -> None:
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -192,6 +200,7 @@ async def test_tier_not_configured_emits_chat_error_and_stops(prompts_root: Path
         resolve=_always_raises(),
         registry=_Registry(raises=True),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -226,6 +235,7 @@ async def test_cancellation_stops_yielding_without_terminal_event(
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events: list[Any] = []
@@ -256,6 +266,7 @@ async def test_user_message_includes_prior_history(prompts_root: Path) -> None:
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     await _collect(
@@ -315,6 +326,7 @@ async def test_two_round_tool_loop_appends_both_results(prompts_root: Path) -> N
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -363,6 +375,7 @@ async def test_max_rounds_falls_through_to_final_text(prompts_root: Path) -> Non
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -416,6 +429,7 @@ async def test_args_preview_unicode_safe(prompts_root: Path) -> None:
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -470,6 +484,7 @@ async def test_provider_error_in_tool_loop_emits_chat_error(prompts_root: Path) 
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = await _collect(
@@ -570,6 +585,7 @@ async def test_v2_router_happy_path_passes_subset_to_main_llm(prompts_root: Path
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
         dispatcher=dispatcher,
         router_llm_client=router,
@@ -635,6 +651,7 @@ async def test_v2_escalation_grows_tool_set_and_summarizes(prompts_root: Path) -
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
         dispatcher=dispatcher,
         router_llm_client=router,
@@ -684,6 +701,7 @@ async def test_v2_disable_runtime_routing_skips_router(prompts_root: Path, monke
         resolve=_always_resolved(resolved=_resolved()),
         registry=_Registry(),
         provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
         dispatcher=dispatcher,
         router_llm_client=_Sentinel(),

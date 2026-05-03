@@ -37,6 +37,13 @@ from openlia.llm.types import (
     ResolvedModel,
     ToolCall,
 )
+from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
+
+
+def _empty_skill_registry(root: Path) -> SkillRegistry:
+    fs = FilesystemSkillStore(root=root)
+    return SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
+
 
 pytestmark = pytest.mark.asyncio
 
@@ -121,6 +128,7 @@ async def test_token_flipped_midstream_stops_within_grace_window(prompts_root: P
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     t0 = time.monotonic()
@@ -202,6 +210,7 @@ async def test_slow_tool_call_running_past_grace_terminates_iterator(prompts_roo
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
 
@@ -249,6 +258,7 @@ async def test_none_token_short_circuits_to_direct_await(prompts_root: Path) -> 
         resolve=_always(_resolved()),
         registry=_Registry(),
         provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
         message_id_factory=lambda: "m_1",
     )
     events = [
