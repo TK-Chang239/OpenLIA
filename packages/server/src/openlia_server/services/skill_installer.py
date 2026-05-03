@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import io
-import shutil  # noqa: F401  -- imported per plan; may be unused (drop if ruff complains)
 import tempfile
 import zipfile
 from pathlib import Path
 
 from openlia.skills import (
-    FilesystemSkillStore,  # noqa: F401  -- per plan
     InstalledSkill,
     SkillStore,
     parse_skill_md,
