@@ -86,6 +86,17 @@ class ChatError:
 
 
 @dataclass(frozen=True)
+class ChatGuardrail:
+    TYPE = "chat.guardrail"
+    message_id: str
+    category: str
+    action: str  # 'replaced' | 'warned' | 'logged'
+    replacement: str | None = None
+    chip_text: str | None = None
+    ts: str = field(default_factory=_utc_now_iso)
+
+
+@dataclass(frozen=True)
 class ReportStart:
     TYPE = "report.start"
     report_id: str
@@ -175,6 +186,7 @@ SseEvent = (
     | ChatReportThumbnail
     | ChatDone
     | ChatError
+    | ChatGuardrail
     | ReportStart
     | ReportPhase
     | ReportToolCallStart
