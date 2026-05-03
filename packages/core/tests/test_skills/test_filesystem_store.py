@@ -72,3 +72,26 @@ async def test_install_rejects_duplicate(tmp_root, installed_alpha):
         await store.install(
             source="folder", scope="user", user_id="u", body=body, manifest=manifest
         )
+
+
+@pytest.mark.asyncio
+async def test_uninstall_removes_directory(tmp_root, installed_alpha):
+    store = FilesystemSkillStore(root=tmp_root)
+    await store.uninstall("alpha", scope="user", user_id="u")
+    assert not installed_alpha.exists()
+
+
+@pytest.mark.asyncio
+async def test_uninstall_missing_raises(tmp_root):
+    store = FilesystemSkillStore(root=tmp_root)
+    with pytest.raises(FileNotFoundError):
+        await store.uninstall("ghost", scope="user", user_id="u")
+
+
+@pytest.mark.asyncio
+async def test_set_enabled_toggles_marker(tmp_root, installed_alpha):
+    store = FilesystemSkillStore(root=tmp_root)
+    await store.set_enabled("alpha", False, scope="user", user_id="u")
+    assert (installed_alpha / ".disabled").exists()
+    await store.set_enabled("alpha", True, scope="user", user_id="u")
+    assert not (installed_alpha / ".disabled").exists()
