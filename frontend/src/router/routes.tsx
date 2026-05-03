@@ -22,6 +22,7 @@ import MacroResearch from "../pages/departments/MacroResearch";
 import PanicThermometer from "../pages/departments/PanicThermometer";
 import ReportPrintPage from "../pages/ReportPrintPage";
 import { DeptDisabledBanner } from "../components/sidebar/DeptDisabledBanner";
+import { DisclaimerGate } from "./DisclaimerGate";
 
 function WithDeptBanner({
   departmentId,
@@ -68,68 +69,73 @@ export const routes: RouteObject[] = [
         ),
         children: [
           {
-            element: <AppLayout />,
+            element: <DisclaimerGate />,
             children: [
-              { path: "/", element: <Navigate to="/secretary" replace /> },
-              { path: "/home", element: <Home /> },
-              { path: "/repository", element: <Repository /> },
-              { path: "/portfolio", element: <PortfolioPage /> },
-              { path: "/settings/*", element: <SettingsPage /> },
               {
-                path: "/secretary",
-                element: (
-                  <WithDeptBanner departmentId="secretary">
-                    <SecretaryRoute />
-                  </WithDeptBanner>
-                ),
-              },
-              {
-                path: "/equity-research",
-                element: (
-                  <WithDeptBanner departmentId="equity_research">
-                    <EquityResearch />
-                  </WithDeptBanner>
-                ),
-              },
-              {
-                path: "/earnings-update",
-                element: (
-                  <WithDeptBanner departmentId="earnings_update">
-                    <EarningsUpdate />
-                  </WithDeptBanner>
-                ),
-              },
-              {
-                path: "/morning-briefing",
-                element: (
-                  <WithDeptBanner departmentId="morning_briefing">
-                    <MorningBriefing />
-                  </WithDeptBanner>
-                ),
-              },
-              {
-                path: "/retail-sentiment",
-                element: (
-                  <WithDeptBanner departmentId="retail_sentiment">
-                    <RetailSentiment />
-                  </WithDeptBanner>
-                ),
-              },
-              {
-                path: "/macro-research/*",
-                element: (
-                  <WithDeptBanner departmentId="macro_research">
-                    <MacroResearch />
-                  </WithDeptBanner>
-                ),
-              },
-              {
-                path: "/panic-thermometer",
-                element: (
-                  <WithDeptBanner departmentId="panic_thermometer">
-                    <PanicThermometer />
-                  </WithDeptBanner>
-                ),
+                element: <AppLayout />,
+                children: [
+                  { path: "/", element: <Navigate to="/secretary" replace /> },
+                  { path: "/home", element: <Home /> },
+                  { path: "/repository", element: <Repository /> },
+                  { path: "/portfolio", element: <PortfolioPage /> },
+                  { path: "/settings/*", element: <SettingsPage /> },
+                  {
+                    path: "/secretary",
+                    element: (
+                      <WithDeptBanner departmentId="secretary">
+                        <SecretaryRoute />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    path: "/equity-research",
+                    element: (
+                      <WithDeptBanner departmentId="equity_research">
+                        <EquityResearch />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    path: "/earnings-update",
+                    element: (
+                      <WithDeptBanner departmentId="earnings_update">
+                        <EarningsUpdate />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    path: "/morning-briefing",
+                    element: (
+                      <WithDeptBanner departmentId="morning_briefing">
+                        <MorningBriefing />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    path: "/retail-sentiment",
+                    element: (
+                      <WithDeptBanner departmentId="retail_sentiment">
+                        <RetailSentiment />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    path: "/macro-research/*",
+                    element: (
+                      <WithDeptBanner departmentId="macro_research">
+                        <MacroResearch />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    path: "/panic-thermometer",
+                    element: (
+                      <WithDeptBanner departmentId="panic_thermometer">
+                        <PanicThermometer />
+                      </WithDeptBanner>
+                    ),
+                  },
+                ],
               },
             ],
           },
