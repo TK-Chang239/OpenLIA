@@ -355,8 +355,57 @@ def build_dept_proposed_specs_router(
     return router
 
 
-def build_runner_specs_list_router(*, db_session_factory: Callable[[], DBSession]) -> APIRouter:
-    """Mounts `GET /api/runner-specs?department_id=...` for the admin panel."""
+class ResolveSaveIn(BaseModel):
+    department_id: str
+    need_id: str
+    connector_id: str
+    resolution_mode: str  # "manual_endpoint" | "websearch"
+    user_picked_endpoint: str
+    user_hint: str | None = None
+    websearch_url: str | None = None
+    manually_overridden: bool = False
+
+
+class SmokeFailureOut(BaseModel):
+    status: str
+    attempts: int
+    error_class: str | None
+    error_message: str | None
+    response_excerpt: str | None
+
+
+class ResolveSaveSuccess(BaseModel):
+    ok: bool = True
+    spec: RunnerSpecRow
+    warning: str | None
+
+
+class ResolveSaveFailure(BaseModel):
+    ok: bool = False
+    failure: SmokeFailureOut
+    warning: str | None
+
+
+class HistoryEntryOut(BaseModel):
+    kind: str
+    status: str
+    error_class: str | None
+    error_message: str | None
+    created_at: str | None
+    attempt: int | None = None
+
+
+def build_runner_specs_list_router(
+    *,
+    db_session_factory: Callable[[], DBSession],
+    llm_client_factory: Callable[[], LlmClient] | None = None,
+    transport_factory: (Callable[[Any], Any] | None) = None,
+) -> APIRouter:
+    """Mounts:
+    - GET /api/runner-specs[?department_id=...]
+    - POST /api/runner-specs/resolve  (manual-pick save flow)
+    - GET /api/runner-specs/{id}/history  (audit log entries)
+    """
     router = APIRouter(prefix="/runner-specs", tags=["runner-specs"])
     session_dep = make_session_dependency(db_session_factory)
 
@@ -381,5 +430,95 @@ def build_runner_specs_list_router(*, db_session_factory: Callable[[], DBSession
             )
             for r in rows
         ]
+
+    @router.post("/resolve")
+    async def resolve_and_save(
+        body: ResolveSaveIn,
+        db: DBSession = Depends(session_dep),
+    ) -> dict[str, Any]:
+        from openlia_server.db.models.connectors import Connector
+        from openlia_server.services.resolver_save_flow import (
+            SaveFlowFailure,
+            save_user_picked_spec,
+        )
+
+        if llm_client_factory is None or transport_factory is None:
+            raise HTTPException(
+                status_code=500,
+                detail="resolve endpoint not configured",
+            )
+        connector = db.get(Connector, body.connector_id)
+        if connector is None:
+            raise HTTPException(status_code=404, detail="connector not found")
+
+        try:
+            llm_client = llm_client_factory()
+        except AdapterLlmNotConfigured as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "adapter_llm_not_configured",
+                    "message": str(exc),
+                },
+            ) from exc
+
+        result = await save_user_picked_spec(
+            session=db,
+            connector=connector,
+            department_id=body.department_id,
+            need_id=body.need_id,
+            resolution_mode=body.resolution_mode,  # type: ignore[arg-type]
+            user_picked_endpoint=body.user_picked_endpoint,
+            user_hint=body.user_hint,
+            websearch_url=body.websearch_url,
+            manually_overridden=body.manually_overridden,
+            llm_client=llm_client,
+            transport_factory=transport_factory,
+        )
+        if isinstance(result, SaveFlowFailure):
+            return {
+                "ok": False,
+                "warning": result.warning,
+                "failure": {
+                    "status": result.failure.status,
+                    "attempts": result.failure.attempts,
+                    "error_class": result.failure.error_class,
+                    "error_message": result.failure.error_message,
+                    "response_excerpt": result.failure.response_excerpt,
+                },
+            }
+        spec = result.spec
+        return {
+            "ok": True,
+            "warning": result.warning,
+            "spec": {
+                "id": spec.id,
+                "department_id": spec.department_id,
+                "need_id": spec.need_id,
+                "connector_id": spec.connector_id,
+                "access_mode": spec.access_mode,
+                "spec": spec.spec,
+                "canary_value": spec.canary_value,
+                "canary_at": spec.canary_at.isoformat() if spec.canary_at else None,
+                "created_at": spec.created_at.isoformat() if spec.created_at else None,
+                "updated_at": spec.updated_at.isoformat() if spec.updated_at else None,
+                "resolution_mode": spec.resolution_mode,
+                "manually_overridden": spec.manually_overridden,
+                "last_smoke_at": (spec.last_smoke_at.isoformat() if spec.last_smoke_at else None),
+                "llm_warning": spec.llm_warning,
+            },
+        }
+
+    @router.get("/{spec_id}/history", response_model=list[HistoryEntryOut])
+    def get_history(
+        spec_id: str,
+        db: DBSession = Depends(session_dep),
+    ) -> list[HistoryEntryOut]:
+        from openlia_server.services.resolver_save_flow import (
+            get_history as svc_get_history,
+        )
+
+        rows = svc_get_history(db, spec_id=spec_id)
+        return [HistoryEntryOut(**r) for r in rows]
 
     return router
