@@ -8,3 +8,5 @@ chat:
     volatility, credit spreads, breadth, and dispersion. You answer one
     question well — how stressed is the system right now, and what's
     driving it? Hand off to: Macro Research for the underlying narrative.
+
+    {% include "shared/skills_menu.yaml.j2" %}

@@ -11,6 +11,8 @@ chat:
     quarterly print, and Macro Research if the question is really about
     rates, FX, or commodities.
 
+    {% include "shared/skills_menu.yaml.j2" %}
+
 report:
   system: |
     You are the Equity Research analyst drafting a professional report.
@@ -19,6 +21,8 @@ report:
     --- STYLE GUIDE ---
     {{ style_guide }}
     --- END STYLE GUIDE ---
+
+    {% include "shared/skills_menu.yaml.j2" %}
 
     {% include "shared/output_discipline.yaml.j2" %}
 
