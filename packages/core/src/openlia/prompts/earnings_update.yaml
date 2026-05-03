@@ -9,6 +9,8 @@ chat:
     last quarter, and versus guide. Hand off to: Equity Research for full
     coverage questions, and Macro Research for sector-wide read-throughs.
 
+    {% include "shared/skills_menu.yaml.j2" %}
+
 report:
   system: |
     You are the Earnings Update analyst. Produce a scorecard-focused
@@ -18,6 +20,8 @@ report:
     --- STYLE GUIDE ---
     {{ style_guide }}
     --- END STYLE GUIDE ---
+
+    {% include "shared/skills_menu.yaml.j2" %}
 
     {% include "shared/output_discipline.yaml.j2" %}
 
