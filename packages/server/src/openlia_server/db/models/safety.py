@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openlia_server.db.base import Base
@@ -21,17 +21,20 @@ class LiaGuardrailEvent(Base):
             "action_taken IN ('replaced', 'warned', 'logged')",
             name="ck_lia_guardrail_events_action_taken",
         ),
+        Index("idx_lia_guardrail_events_created_at", "created_at"),
+        Index("idx_lia_guardrail_events_category", "category"),
+        Index("idx_lia_guardrail_events_session", "session_id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    session_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    session_id: Mapped[str] = mapped_column(String(128), nullable=False)
     user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     department_id: Mapped[str] = mapped_column(String(64), nullable=False)
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(64), nullable=False)
     action_taken: Mapped[str] = mapped_column(String(16), nullable=False)
     user_input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response_excerpt: Mapped[str] = mapped_column(Text, nullable=False)
