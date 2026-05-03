@@ -101,3 +101,16 @@ def test_lia_identity_partial_renders_in_an_including_template(
     assert "voice rules" in out.lower()
     # Guardrail header present
     assert "won't do" in out.lower()
+
+
+def _real_loader() -> PromptLoader:
+    """A loader bound to the real packaged prompts root."""
+    return PromptLoader()
+
+
+def test_secretary_chat_system_includes_lia_identity() -> None:
+    out = _real_loader().render("secretary", "chat.system")
+    assert "I'm Lia — short for Little Investor Assistant" in out
+    assert "Secretary desk" in out
+    # Department brief must mention routing — Secretary's defining duty.
+    assert "rout" in out.lower()
