@@ -97,6 +97,14 @@ class ChatGuardrail:
 
 
 @dataclass(frozen=True)
+class ChatSkillLoaded:
+    TYPE = "chat.skill_loaded"
+    message_id: str
+    skill_id: str
+    display_name: str
+
+
+@dataclass(frozen=True)
 class ReportStart:
     TYPE = "report.start"
     report_id: str
@@ -187,6 +195,7 @@ SseEvent = (
     | ChatDone
     | ChatError
     | ChatGuardrail
+    | ChatSkillLoaded
     | ReportStart
     | ReportPhase
     | ReportToolCallStart

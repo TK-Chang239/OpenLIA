@@ -57,6 +57,21 @@ _WEB_SEARCH_SCHEMA = ToolSchema(
     },
 )
 
+LOAD_SKILL_SCHEMA = ToolSchema(
+    name="load_skill",
+    description=(
+        "Load the full instructions/playbook for an installed skill. Returns the "
+        "skill's markdown body. Call this when the user's question matches a skill "
+        "from the menu and you want its detailed guidance before answering."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {"skill_id": {"type": "string", "description": "Id from the skill menu."}},
+        "required": ["skill_id"],
+        "additionalProperties": False,
+    },
+)
+
 
 @runtime_checkable
 class DataProviderDispatcher(Protocol):
