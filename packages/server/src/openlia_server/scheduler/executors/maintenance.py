@@ -4,6 +4,7 @@ CLI can invoke the same sweep synchronously."""
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
@@ -14,6 +15,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.dashboard import MrAssessmentCache, RsSnapshot
+from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.base import BaseExecutor, JobOutcome
 from openlia_server.scheduler.registry import JobStatus, JobType
@@ -24,6 +26,7 @@ MR_CACHE_POST_EXPIRY_DAYS = 30
 RS_SNAPSHOT_RETENTION_DAYS = 90
 NOTIFICATION_RETENTION_DAYS = 30
 JOB_RUN_RETENTION_DAYS = 90
+LIA_GUARDRAIL_LOG_RETENTION_DAYS_DEFAULT = 365
 
 
 def run_maintenance_once(session: Session) -> dict[str, int]:
@@ -98,6 +101,21 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         or 0
     )
 
+    guardrail_retention_days = int(
+        os.environ.get(
+            "LIA_GUARDRAIL_LOG_RETENTION_DAYS",
+            LIA_GUARDRAIL_LOG_RETENTION_DAYS_DEFAULT,
+        )
+    )
+    lia_guardrail_events_deleted = (
+        session.execute(
+            delete(LiaGuardrailEvent).where(
+                LiaGuardrailEvent.created_at < now - timedelta(days=guardrail_retention_days)
+            )
+        ).rowcount
+        or 0
+    )
+
     return {
         "sessions_deleted": int(sessions_deleted),
         "password_resets_expired": int(password_resets_expired),
@@ -106,6 +124,7 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         "rs_snapshots_deleted": int(rs_snapshots_deleted),
         "notifications_deleted": int(notifications_deleted),
         "job_runs_deleted": int(job_runs_deleted),
+        "lia_guardrail_events_deleted": int(lia_guardrail_events_deleted),
     }
 
 
