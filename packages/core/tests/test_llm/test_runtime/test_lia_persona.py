@@ -114,3 +114,9 @@ def test_secretary_chat_system_includes_lia_identity() -> None:
     assert "Secretary desk" in out
     # Department brief must mention routing — Secretary's defining duty.
     assert "rout" in out.lower()
+
+
+def test_equity_research_chat_system_includes_lia_identity() -> None:
+    out = _real_loader().render("equity_research", "chat.system")
+    assert "I'm Lia — short for Little Investor Assistant" in out
+    assert "Equity Research desk" in out
