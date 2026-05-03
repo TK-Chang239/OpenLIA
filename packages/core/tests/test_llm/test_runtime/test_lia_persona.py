@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+import pytest
+from openlia.llm.runtime.prompts import PromptLoader
 from openlia.prompts import DEPARTMENT_LABELS
 
 
@@ -18,21 +22,12 @@ def test_department_labels_cover_all_seven_desks() -> None:
     assert DEPARTMENT_LABELS == expected
 
 
-from pathlib import Path
-
-import pytest
-
-from openlia.llm.runtime.prompts import PromptLoader
-
-
 @pytest.fixture
 def desk_prompts_dir(tmp_path: Path) -> Path:
     """Minimal prompts root that renders {{ current_desk }}."""
     (tmp_path / "shared").mkdir()
     (tmp_path / "secretary.yaml").write_text(
-        "chat:\n"
-        "  system: |\n"
-        "    Right now you are at the {{ current_desk }} desk.\n"
+        "chat:\n  system: |\n    Right now you are at the {{ current_desk }} desk.\n"
     )
     return tmp_path
 
@@ -59,9 +54,7 @@ def test_render_unknown_department_id_passes_label_through_as_id(
     """An unknown department_id renders without crashing — the id falls
     through as the desk label so the prompt is still well-formed."""
     (tmp_path / "shared").mkdir()
-    (tmp_path / "made_up.yaml").write_text(
-        "chat:\n  system: |\n    Desk: {{ current_desk }}\n"
-    )
+    (tmp_path / "made_up.yaml").write_text("chat:\n  system: |\n    Desk: {{ current_desk }}\n")
     loader = PromptLoader(root=tmp_path)
     out = loader.render("made_up", "chat.system")
     assert "Desk: made_up" in out
@@ -82,13 +75,9 @@ def test_lia_identity_partial_renders_in_an_including_template(
         / "shared"
         / "lia_identity.yaml.j2"
     )
-    (tmp_path / "shared" / "lia_identity.yaml.j2").write_text(
-        real_partial.read_text()
-    )
+    (tmp_path / "shared" / "lia_identity.yaml.j2").write_text(real_partial.read_text())
     (tmp_path / "secretary.yaml").write_text(
-        "chat:\n"
-        "  system: |\n"
-        '    {% include "shared/lia_identity.yaml.j2" %}\n'
+        'chat:\n  system: |\n    {% include "shared/lia_identity.yaml.j2" %}\n'
     )
     loader = PromptLoader(root=tmp_path)
     out = loader.render("secretary", "chat.system")
