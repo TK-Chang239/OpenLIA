@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { LiaBadge } from "./LiaBadge";
 import { CodeBlock } from "./CodeBlock";
 import { ReportThumbnail } from "./ReportThumbnail";
+import { SkillLoadedCard } from "./SkillLoadedCard";
 
 export type AssistantChunk =
   | { type: "text"; text: string }
@@ -22,6 +23,7 @@ interface Props {
   timestamp?: string;
   stopped?: boolean;
   flagChips?: Array<{ category: string; text: string }>;
+  skillLoads?: Array<{ skillId: string; displayName: string }>;
 }
 
 function MarkdownText({ text }: { text: string }): JSX.Element {
@@ -44,6 +46,7 @@ export function AssistantMessage({
   timestamp,
   stopped,
   flagChips,
+  skillLoads,
 }: Props): JSX.Element {
   const inlineChunks: AssistantChunk[] =
     chunks ?? (content !== undefined ? [{ type: "text", text: content }] : []);
@@ -61,6 +64,13 @@ export function AssistantMessage({
                 <ReportThumbnail reportId={c.report_id} filename={c.filename} />
               </div>
             ),
+          )}
+          {skillLoads && skillLoads.length > 0 && (
+            <div className="mt-2">
+              {skillLoads.map((s, i) => (
+                <SkillLoadedCard key={`s-${i}`} skillId={s.skillId} displayName={s.displayName} />
+              ))}
+            </div>
           )}
           {streaming ? (
             <span
