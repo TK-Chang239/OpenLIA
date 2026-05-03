@@ -13,6 +13,10 @@ vi.mock('../auth/useCurrentUser', () => ({
   }),
 }));
 
+vi.mock('../auth/AuthContext', () => ({
+  useAuth: () => ({ status: 'personal' }),
+}));
+
 vi.mock('../components/settings/sections/GeneralSection', () => ({
   GeneralSection: () => <h1>General</h1>,
 }));
