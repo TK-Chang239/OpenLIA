@@ -1,7 +1,5 @@
 import pytest
-
-from openlia.skills import FilesystemSkillStore, parse_skill_md, serialize_skill_md
-
+from openlia.skills import FilesystemSkillStore
 
 SAMPLE = """---
 name: alpha

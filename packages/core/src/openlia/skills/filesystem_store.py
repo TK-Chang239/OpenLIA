@@ -5,7 +5,7 @@ from pathlib import Path
 
 from openlia.skills.parser import parse_skill_md
 from openlia.skills.store import Scope
-from openlia.skills.types import InstalledSkill
+from openlia.skills.types import InstalledSkill, SkillManifest
 
 
 class FilesystemSkillStore:
@@ -58,11 +58,21 @@ class FilesystemSkillStore:
         return None
 
     # Write paths land in Task 4-5.
-    async def install(self, source, *, scope, user_id, body, manifest):
+    async def install(
+        self,
+        source: str,
+        *,
+        scope: Scope,
+        user_id: str | None,
+        body: str,
+        manifest: SkillManifest,
+    ) -> InstalledSkill:
         raise NotImplementedError  # Task 4
 
-    async def uninstall(self, skill_id, *, scope, user_id):
+    async def uninstall(self, skill_id: str, *, scope: Scope, user_id: str | None) -> None:
         raise NotImplementedError  # Task 5
 
-    async def set_enabled(self, skill_id, enabled, *, scope, user_id):
+    async def set_enabled(
+        self, skill_id: str, enabled: bool, *, scope: Scope, user_id: str | None
+    ) -> None:
         raise NotImplementedError  # Task 5
