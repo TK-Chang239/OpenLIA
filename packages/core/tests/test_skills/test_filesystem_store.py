@@ -1,5 +1,6 @@
 import pytest
 from openlia.skills import FilesystemSkillStore
+from openlia.skills.parser import parse_skill_md
 
 SAMPLE = """---
 name: alpha
@@ -50,3 +51,25 @@ async def test_disabled_marker_flips_enabled(tmp_root, installed_alpha):
     store = FilesystemSkillStore(root=tmp_root)
     skills = await store.list(scope="user", user_id="any")
     assert skills[0].enabled is False
+
+
+@pytest.mark.asyncio
+async def test_install_writes_skill_md(tmp_root):
+    store = FilesystemSkillStore(root=tmp_root)
+    manifest, body = parse_skill_md(SAMPLE)
+    installed = await store.install(
+        source="folder", scope="user", user_id="u", body=body, manifest=manifest
+    )
+    assert installed.manifest.name == "alpha"
+    assert (tmp_root / "user" / "alpha" / "SKILL.md").exists()
+    assert "alpha" == installed.manifest.name
+
+
+@pytest.mark.asyncio
+async def test_install_rejects_duplicate(tmp_root, installed_alpha):
+    store = FilesystemSkillStore(root=tmp_root)
+    manifest, body = parse_skill_md(SAMPLE)
+    with pytest.raises(FileExistsError):
+        await store.install(
+            source="folder", scope="user", user_id="u", body=body, manifest=manifest
+        )
