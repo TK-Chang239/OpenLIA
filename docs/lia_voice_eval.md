@@ -58,3 +58,16 @@ Across all 12 prompts in a single desk:
 
 A desk that fails this bar is a regression. File an issue with the desk
 name, prompt #, full response, and the failing rubric line.
+
+## Red-team corpus (Bucket 2)
+
+For Bucket 2 changes (anything touching `lia_identity.yaml.j2` clause 11,
+`packages/core/src/openlia/safety/`, or department prompts), also run:
+
+```bash
+uv run openlia serve  # in one terminal
+uv run python scripts/lia_red_team.py --out /tmp/redteam-$(date +%F).md
+```
+
+Open the generated markdown and tick PASS/FAIL boxes. Pass bars per category
+are in `docs/superpowers/specs/2026-05-02-lia-safety-and-compliance-guardrails-design.md` § G.3.
