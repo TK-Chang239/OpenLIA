@@ -61,24 +61,12 @@ def upgrade() -> None:
     # SQLite cannot drop/recreate constraints in-place — batch_alter_table is required.
     with op.batch_alter_table("lia_guardrail_events", schema=None) as batch_op:
         batch_op.add_column(sa.Column("payload_json", sa.JSON(), nullable=True))
-        batch_op.alter_column(
-            "session_id", existing_type=sa.VARCHAR(length=128), nullable=True
-        )
-        batch_op.alter_column(
-            "department_id", existing_type=sa.VARCHAR(length=64), nullable=True
-        )
-        batch_op.alter_column(
-            "category", existing_type=sa.VARCHAR(length=64), nullable=True
-        )
-        batch_op.alter_column(
-            "user_input_hash", existing_type=sa.VARCHAR(length=64), nullable=True
-        )
-        batch_op.alter_column(
-            "response_excerpt", existing_type=sa.TEXT(), nullable=True
-        )
-        batch_op.drop_constraint(
-            "ck_lia_guardrail_events_event_type", type_="check"
-        )
+        batch_op.alter_column("session_id", existing_type=sa.VARCHAR(length=128), nullable=True)
+        batch_op.alter_column("department_id", existing_type=sa.VARCHAR(length=64), nullable=True)
+        batch_op.alter_column("category", existing_type=sa.VARCHAR(length=64), nullable=True)
+        batch_op.alter_column("user_input_hash", existing_type=sa.VARCHAR(length=64), nullable=True)
+        batch_op.alter_column("response_excerpt", existing_type=sa.TEXT(), nullable=True)
+        batch_op.drop_constraint("ck_lia_guardrail_events_event_type", type_="check")
         batch_op.create_check_constraint(
             "ck_lia_guardrail_events_event_type",
             "event_type IN ('persona_refusal', 'tripwire_flag', 'skill_installed', "
@@ -89,28 +77,18 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Restore lia_guardrail_events to its original shape.
     with op.batch_alter_table("lia_guardrail_events", schema=None) as batch_op:
-        batch_op.drop_constraint(
-            "ck_lia_guardrail_events_event_type", type_="check"
-        )
+        batch_op.drop_constraint("ck_lia_guardrail_events_event_type", type_="check")
         batch_op.create_check_constraint(
             "ck_lia_guardrail_events_event_type",
             "event_type IN ('persona_refusal', 'tripwire_flag')",
         )
-        batch_op.alter_column(
-            "response_excerpt", existing_type=sa.TEXT(), nullable=False
-        )
+        batch_op.alter_column("response_excerpt", existing_type=sa.TEXT(), nullable=False)
         batch_op.alter_column(
             "user_input_hash", existing_type=sa.VARCHAR(length=64), nullable=False
         )
-        batch_op.alter_column(
-            "category", existing_type=sa.VARCHAR(length=64), nullable=False
-        )
-        batch_op.alter_column(
-            "department_id", existing_type=sa.VARCHAR(length=64), nullable=False
-        )
-        batch_op.alter_column(
-            "session_id", existing_type=sa.VARCHAR(length=128), nullable=False
-        )
+        batch_op.alter_column("category", existing_type=sa.VARCHAR(length=64), nullable=False)
+        batch_op.alter_column("department_id", existing_type=sa.VARCHAR(length=64), nullable=False)
+        batch_op.alter_column("session_id", existing_type=sa.VARCHAR(length=128), nullable=False)
         batch_op.drop_column("payload_json")
 
     with op.batch_alter_table("skills", schema=None) as batch_op:
