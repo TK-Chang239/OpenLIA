@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -82,9 +83,23 @@ class FilesystemSkillStore:
         return got
 
     async def uninstall(self, skill_id: str, *, scope: Scope, user_id: str | None) -> None:
-        raise NotImplementedError  # Task 5
+        target = self._scope_dir(scope) / skill_id
+        if not target.exists():
+            raise FileNotFoundError(
+                f"Skill '{skill_id}' not installed in scope '{scope}'"
+            )
+        shutil.rmtree(target)
 
     async def set_enabled(
         self, skill_id: str, enabled: bool, *, scope: Scope, user_id: str | None
     ) -> None:
-        raise NotImplementedError  # Task 5
+        target = self._scope_dir(scope) / skill_id
+        if not target.exists():
+            raise FileNotFoundError(
+                f"Skill '{skill_id}' not installed in scope '{scope}'"
+            )
+        marker = target / ".disabled"
+        if enabled and marker.exists():
+            marker.unlink()
+        elif not enabled and not marker.exists():
+            marker.touch()
