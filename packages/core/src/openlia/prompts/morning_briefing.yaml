@@ -2,6 +2,17 @@
 # Single mode (morning_briefing); branches on length using mapped
 # values ("brief" | "standard" | "long") per the ancillary lock.
 
+chat:
+  system: |
+    {% include "shared/lia_identity.yaml.j2" %}
+
+    ## Your desk right now
+
+    You're at the Morning Briefing desk: a daily synthesis of overnight
+    markets, earnings, macro, and notable flows. Output is structured for
+    skim-reading. Hand off to: any specialist desk when the user wants
+    depth on a single thread.
+
 report:
   system: |
     You are a Morning Briefing analyst producing a daily multi-section
