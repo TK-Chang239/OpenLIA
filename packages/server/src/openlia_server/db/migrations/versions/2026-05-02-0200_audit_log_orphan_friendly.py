@@ -61,6 +61,7 @@ def _resolver_call_log_table(*, fk_name: str, fk_ondelete: str, spec_id_nullable
             "status IN ('success', 'invalid_output', 'llm_error', 'timeout')",
             name="resolver_call_log_status",
         ),
+        sa.Index("ix_resolver_call_log_spec_created", "spec_id", "created_at"),
     )
 
 
@@ -100,6 +101,7 @@ def _smoke_call_log_table(*, fk_name: str, fk_ondelete: str, spec_id_nullable: b
             "status IN ('success', 'auth', 'schema_miss', 'empty', 'bad_params', 'transient')",
             name="smoke_call_log_status",
         ),
+        sa.Index("ix_smoke_call_log_spec_created", "spec_id", "created_at"),
     )
 
 
@@ -111,14 +113,15 @@ def upgrade() -> None:
     environments, so `batch.drop_constraint("fk_...", ...)` raises
     "No such constraint" on some DBs. We bypass that with `copy_from`,
     handing batch_alter_table a fresh Table object that already has the
-    desired schema; SQLite recreates the table cleanly and copies data.
+    desired schema; alembic regenerates SQLite's table from that target
+    definition and copies the data.
     """
     target = _resolver_call_log_table(
         fk_name="fk_resolver_call_log_spec_id",
         fk_ondelete="SET NULL",
         spec_id_nullable=True,
     )
-    with op.batch_alter_table("resolver_call_log", copy_from=target):
+    with op.batch_alter_table("resolver_call_log", copy_from=target, recreate="always"):
         pass
 
     target = _smoke_call_log_table(
@@ -126,7 +129,7 @@ def upgrade() -> None:
         fk_ondelete="SET NULL",
         spec_id_nullable=True,
     )
-    with op.batch_alter_table("smoke_call_log", copy_from=target):
+    with op.batch_alter_table("smoke_call_log", copy_from=target, recreate="always"):
         pass
 
 
@@ -137,7 +140,7 @@ def downgrade() -> None:
         fk_ondelete="CASCADE",
         spec_id_nullable=False,
     )
-    with op.batch_alter_table("smoke_call_log", copy_from=target):
+    with op.batch_alter_table("smoke_call_log", copy_from=target, recreate="always"):
         pass
 
     target = _resolver_call_log_table(
@@ -145,5 +148,5 @@ def downgrade() -> None:
         fk_ondelete="CASCADE",
         spec_id_nullable=False,
     )
-    with op.batch_alter_table("resolver_call_log", copy_from=target):
+    with op.batch_alter_table("resolver_call_log", copy_from=target, recreate="always"):
         pass
