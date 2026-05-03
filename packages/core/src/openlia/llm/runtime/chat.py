@@ -108,6 +108,30 @@ def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
     return s[:max_len]
 
 
+def build_chat_system_prompt(
+    *,
+    department_id: str,
+    user_id: str | None,
+    registry: SkillRegistry,
+    loader: PromptLoader | None = None,
+) -> str:
+    """Render the chat.system slot with the user's visible skills menu."""
+    loader = loader or PromptLoader()
+    visible = registry.visible(department_id=department_id, user_id=user_id)
+    skills_menu = [
+        {
+            "id": s.manifest.name,
+            "description": s.manifest.description,
+            "tools": [
+                f"skill__{s.manifest.name.replace('-', '_')}__{t['name']}"
+                for t in (s.manifest.tools or [])
+            ],
+        }
+        for s in visible
+    ]
+    return loader.render(department_id, "chat.system", skills_menu=skills_menu)
+
+
 class ChatRunner:
     def __init__(
         self,
@@ -186,7 +210,12 @@ class ChatRunner:
             return
 
         provider = self._provider_factory(resolved)
-        system = self._prompts.render(department_id, "chat.system")
+        system = build_chat_system_prompt(
+            department_id=department_id,
+            user_id=user_id,
+            registry=self._skill_registry,
+            loader=self._prompts,
+        )
         dept = get_department(department_id)
         extra_tool_specs = dept.extra_tools if dept is not None else ()
         extra_tool_names = frozenset(spec["name"] for spec in extra_tool_specs)
