@@ -19,6 +19,8 @@ from typing import Any
 import yaml
 from jinja2 import Environment, FileSystemLoader, StrictUndefined, select_autoescape
 
+from openlia.prompts import DEPARTMENT_LABELS
+
 
 class PromptSlotNotFound(Exception):
     """Raised when a requested (department_id, slot) does not resolve."""
@@ -79,14 +81,23 @@ class PromptLoader:
         return node
 
     def render(self, department_id: str, slot: str, **context: Any) -> str:
-        """Render a slot with the provided context. Raises PromptSlotNotFound."""
+        """Render a slot with the provided context. Raises PromptSlotNotFound.
+
+        The `current_desk` template variable is auto-injected from
+        `DEPARTMENT_LABELS` if not supplied by the caller. Unknown department
+        ids fall through to the raw id so the prompt stays well-formed.
+        """
         try:
             data = self._load(department_id)
             template_src = self._resolve_slot(data, slot)
         except PromptSlotNotFound as exc:
             raise PromptSlotNotFound(f"{department_id}:{slot} — {exc}") from None
+        merged = {
+            "current_desk": DEPARTMENT_LABELS.get(department_id, department_id),
+            **context,
+        }
         template = self._env.from_string(template_src)
-        return template.render(**context)
+        return template.render(**merged)
 
     def validate_department_slots(self, department_id: str, *, expected: list[str]) -> None:
         """Startup-time check: every expected slot exists. Raises on the first miss."""

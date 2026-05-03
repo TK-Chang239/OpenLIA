@@ -4,6 +4,8 @@ import { GeneralSection } from '../components/settings/sections/GeneralSection';
 import { ModelsSection } from '../components/settings/sections/ModelsSection';
 import { AccountSection } from '../components/settings/sections/AccountSection';
 import { AdminSection } from '../components/settings/sections/AdminSection';
+import { DisclaimerSection } from '../components/settings/sections/DisclaimerSection';
+import { GuardrailActivitySection } from '../components/settings/sections/GuardrailActivitySection';
 import { InvitesPanel } from '../components/settings/admin/InvitesPanel';
 import { UsersPanel } from '../components/settings/admin/UsersPanel';
 import { ResetRequestsPanel } from '../components/settings/admin/ResetRequestsPanel';
@@ -11,11 +13,14 @@ import { ModelsAdminPanel } from '../components/settings/admin/ModelsAdminPanel'
 import { ConnectorsAdminPanel } from '../components/settings/admin/ConnectorsAdminPanel';
 import { RunnerCallableSpecsAdminPanel } from '../components/settings/admin/RunnerCallableSpecsAdminPanel';
 import { useCurrentUser } from '../auth/useCurrentUser';
+import { useAuth } from '../auth/AuthContext';
 
 export function SettingsPage(): JSX.Element {
   const user = useCurrentUser();
+  const { status } = useAuth();
   if (!user) return <p className="p-6 text-text-secondary">Loading...</p>;
   const isAdmin = user.role === 'admin';
+  const mode: 'personal' | 'company' = status === 'personal' ? 'personal' : 'company';
   return (
     <Routes>
       <Route element={<SettingsShell userRole={user.role} />}>
@@ -31,6 +36,8 @@ export function SettingsPage(): JSX.Element {
             />
           }
         />
+        <Route path="disclaimer" element={<DisclaimerSection mode={mode} />} />
+        <Route path="guardrails" element={<GuardrailActivitySection mode={mode} />} />
         {isAdmin ? (
           <Route path="admin" element={<AdminSection />}>
             <Route index element={<Navigate to="invites" replace />} />

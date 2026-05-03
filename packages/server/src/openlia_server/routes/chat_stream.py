@@ -11,6 +11,7 @@ Contract (Phase 12 ↔ 13):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import uuid
@@ -22,8 +23,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
-from openlia.llm.runtime.events import ChatError, to_wire
+from openlia.llm.runtime.events import ChatError, ChatGuardrail, to_wire
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
+from openlia.safety.output_moderation import ActionTier, decide_action
+from openlia.safety.output_moderation import scan as moderation_scan
+from openlia.safety.persona_refusal import detect_refusal
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
@@ -31,6 +35,10 @@ from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import ChatMessage
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
+from openlia_server.services.guardrail_log import (
+    record_persona_refusal,
+    record_tripwire_match,
+)
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +114,9 @@ def build_chat_stream_router(
                 department=session_row.department,
                 persist=persist,
                 request=request,
+                db_session_factory=db_session_factory,
+                session_id=session_id,
+                last_user_text=q,
             ),
             media_type="text/event-stream",
         )
@@ -178,12 +189,16 @@ async def _event_source(
     department: str,
     persist: _Persistence | None = None,
     request: Request | None = None,
+    db_session_factory: Callable[[], DBSession] | None = None,
+    session_id: str | None = None,
+    last_user_text: str = "",
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
 
     assistant_text: list[str] = []
     tool_calls_log: list[dict[str, Any]] = []
+    current_message_id: str = ""
 
     watcher: asyncio.Task[None] | None = None
     if request is not None:
@@ -198,7 +213,9 @@ async def _event_source(
         ):
             wire = to_wire(event)
             etype = wire["type"]
-            if etype == "chat.token":
+            if etype == "chat.start":
+                current_message_id = wire.get("message_id", "")
+            elif etype == "chat.token":
                 assistant_text.append(wire.get("text", ""))
             elif etype == "chat.tool_call.start":
                 tool_calls_log.append(
@@ -218,6 +235,57 @@ async def _event_source(
                             tc["structured"] = wire["structured"]
                         break
             yield _sse_frame(wire)
+
+        # Component B + E — post-stream moderation + audit
+        full_text = "".join(assistant_text)
+        if full_text and db_session_factory is not None and session_id is not None:
+            user_hash = hashlib.sha256(last_user_text.encode("utf-8")).hexdigest()
+            excerpt = full_text[:500]
+
+            matches = moderation_scan(full_text)
+            decision = decide_action(matches)
+            refusal_clause = detect_refusal(full_text)
+
+            if matches or refusal_clause is not None:
+                db_log = db_session_factory()
+                try:
+                    for m in matches:
+                        record_tripwire_match(
+                            db_log,
+                            session_id=session_id,
+                            user_id=user.id,
+                            department_id=department,
+                            match=m,
+                            user_input_hash=user_hash,
+                            response_excerpt=excerpt,
+                            model_ref=None,
+                        )
+                    if refusal_clause is not None:
+                        record_persona_refusal(
+                            db_log,
+                            session_id=session_id,
+                            user_id=user.id,
+                            department_id=department,
+                            clause_id=refusal_clause,
+                            user_input_hash=user_hash,
+                            response_excerpt=excerpt,
+                            model_ref=None,
+                        )
+                    db_log.commit()
+                finally:
+                    db_log.close()
+
+            if decision is not None and decision.action is not ActionTier.LOG:
+                guardrail_event = ChatGuardrail(
+                    message_id=current_message_id,
+                    category=decision.category,
+                    action=str(decision.action),
+                    replacement=(
+                        decision.message if decision.action is ActionTier.REPLACE else None
+                    ),
+                    chip_text=(decision.message if decision.action is ActionTier.WARN else None),
+                )
+                yield _sse_frame(to_wire(guardrail_event))
 
         if persist is not None:
             persist.save_assistant(
