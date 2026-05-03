@@ -569,7 +569,6 @@ async def test_install_writes_skill_md(tmp_root):
     )
     assert installed.manifest.name == "alpha"
     assert (tmp_root / "user" / "alpha" / "SKILL.md").exists()
-    assert "alpha" == installed.manifest.name
 
 
 @pytest.mark.asyncio
@@ -609,7 +608,10 @@ async def install(
     (target / "SKILL.md").write_text(serialize_skill_md(manifest, body))
     (target / ".source").write_text(source + "\n")
     got = await self.get(manifest.name, scope=scope, user_id=user_id)
-    assert got is not None
+    if got is None:
+        raise RuntimeError(
+            f"install succeeded but get('{manifest.name}') returned None"
+        )
     return got
 ```
 
