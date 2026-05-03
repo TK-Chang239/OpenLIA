@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import yaml
+from pydantic import ValidationError
 
 from openlia.skills.types import SkillManifest
 
@@ -9,6 +10,7 @@ _CLOSE = "\n---\n"
 
 
 def parse_skill_md(text: str) -> tuple[SkillManifest, str]:
+    text = text.replace("\r\n", "\n")
     if not text.startswith(_OPEN):
         raise ValueError("SKILL.md must start with '---' frontmatter")
     rest = text[len(_OPEN) :]
@@ -20,7 +22,12 @@ def parse_skill_md(text: str) -> tuple[SkillManifest, str]:
     data = yaml.safe_load(raw) or {}
     if not isinstance(data, dict):
         raise ValueError("SKILL.md frontmatter must be a YAML mapping")
-    manifest = SkillManifest(**data)
+    if "version" in data and not isinstance(data["version"], str):
+        data["version"] = str(data["version"])
+    try:
+        manifest = SkillManifest(**data)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
     return manifest, body
 
 

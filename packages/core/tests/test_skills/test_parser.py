@@ -56,3 +56,23 @@ def test_serialize_round_trips():
 def test_parse_rejects_no_frontmatter():
     with pytest.raises(ValueError, match="frontmatter"):
         parse_skill_md("just a body, no frontmatter\n")
+
+
+def test_crlf_line_endings_parse():
+    crlf = VALID_SKILL_MD.replace("\n", "\r\n")
+    manifest, _body = parse_skill_md(crlf)
+    assert manifest.name == "equity-toolkit"
+
+
+def test_unquoted_numeric_version_coerced_to_string():
+    text = VALID_SKILL_MD.replace('version: "1.0.0"', "version: 1.0")
+    manifest, _ = parse_skill_md(text)
+    assert isinstance(manifest.version, str)
+    assert manifest.version == "1.0"
+
+
+def test_invalid_skill_id_raises_plain_value_error():
+    bad = VALID_SKILL_MD.replace("equity-toolkit", "Equity Toolkit!")
+    with pytest.raises(ValueError) as ei:
+        parse_skill_md(bad)
+    assert type(ei.value) is ValueError
