@@ -74,6 +74,7 @@ def _build_chat_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     web_search: WebSearchResolution,
+    skill_registry: SkillRegistry | None = None,
 ) -> ChatRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
@@ -95,7 +96,7 @@ def _build_chat_runner_with_registry(
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
-        skill_registry=_empty_skill_registry(),
+        skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
     )
 
 
@@ -107,8 +108,13 @@ class RefreshingChatRunner:
     on iterator exhaustion / exception / client-disconnect.
     """
 
-    def __init__(self, db_session_factory: Callable[[], DBSession]) -> None:
+    def __init__(
+        self,
+        db_session_factory: Callable[[], DBSession],
+        skill_registry: SkillRegistry | None = None,
+    ) -> None:
         self._factory = db_session_factory
+        self._skill_registry = skill_registry
 
     async def run(
         self,
@@ -123,7 +129,9 @@ class RefreshingChatRunner:
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
-            runner = _build_chat_runner_with_registry(registry, web_search=web_search)
+            runner = _build_chat_runner_with_registry(
+                registry, web_search=web_search, skill_registry=self._skill_registry
+            )
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -139,15 +147,17 @@ class RefreshingChatRunner:
 def build_chat_runner(
     *,
     db_session_factory: Callable[[], DBSession],
+    skill_registry: SkillRegistry | None = None,
 ) -> RefreshingChatRunner:
     """Return a refreshing chat runner that opens a fresh DB session per run."""
-    return RefreshingChatRunner(db_session_factory)
+    return RefreshingChatRunner(db_session_factory, skill_registry=skill_registry)
 
 
 def _build_report_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     web_search: WebSearchResolution,
+    skill_registry: SkillRegistry | None = None,
 ) -> ReportRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
@@ -169,16 +179,20 @@ def _build_report_runner_with_registry(
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
-        skill_registry=_empty_skill_registry(),
-        # TODO(skills/Task 16+): replace with real SkillRegistry wired at startup.
+        skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
     )
 
 
 class RefreshingReportRunner:
     """Constructs a fresh ReportRunner (with fresh DB session and registry) per job run."""
 
-    def __init__(self, db_session_factory: Callable[[], DBSession]) -> None:
+    def __init__(
+        self,
+        db_session_factory: Callable[[], DBSession],
+        skill_registry: SkillRegistry | None = None,
+    ) -> None:
         self._factory = db_session_factory
+        self._skill_registry = skill_registry
 
     async def run(
         self,
@@ -192,7 +206,9 @@ class RefreshingReportRunner:
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
-            runner = _build_report_runner_with_registry(registry, web_search=web_search)
+            runner = _build_report_runner_with_registry(
+                registry, web_search=web_search, skill_registry=self._skill_registry
+            )
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -204,8 +220,11 @@ class RefreshingReportRunner:
             db.close()
 
 
-def build_report_runner(db_session_factory: Callable[[], DBSession]) -> RefreshingReportRunner:
-    return RefreshingReportRunner(db_session_factory)
+def build_report_runner(
+    db_session_factory: Callable[[], DBSession],
+    skill_registry: SkillRegistry | None = None,
+) -> RefreshingReportRunner:
+    return RefreshingReportRunner(db_session_factory, skill_registry=skill_registry)
 
 
 def _build_batch_runner_with_registry(registry: SQLModelRegistry) -> BatchRunner:
