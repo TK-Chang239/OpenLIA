@@ -101,6 +101,18 @@ def set_pinned(db: Session, *, session_id: str, user_id: str, pinned: bool) -> N
     db.commit()
 
 
+def set_session_model(db: Session, *, session_id: str, user_id: str, model_id: str | None) -> None:
+    """Set or clear the per-session LLM override.
+
+    ``model_id=None`` reverts to tier-based resolution. The caller is
+    responsible for verifying the model exists and is enabled — the FK
+    constraint blocks unknown ids regardless.
+    """
+    row = get_session(db, session_id=session_id, user_id=user_id)
+    row.model_id = model_id
+    db.commit()
+
+
 def archive_session(db: Session, *, session_id: str, user_id: str) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
     row.is_archived = True

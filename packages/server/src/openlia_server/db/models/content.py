@@ -43,6 +43,9 @@ class ChatSession(Base, TimestampMixin):
     is_pinned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_archived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    model_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("llm_models.id", ondelete="SET NULL"), nullable=True
+    )
 
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", cascade="all, delete-orphan", passive_deletes=True

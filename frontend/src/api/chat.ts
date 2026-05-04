@@ -14,6 +14,7 @@ export interface ChatSession {
   is_pinned: boolean;
   is_archived: boolean;
   created_at: string;
+  model_id?: string | null;
 }
 
 export interface ChatMessage {
@@ -54,6 +55,12 @@ export const patchSession = (
 
 export const deleteSession = (id: string) =>
   fetchJson<void>(`/api/chat/sessions/${id}`, { method: "DELETE" });
+
+export const setSessionModel = (id: string, model_id: string | null) =>
+  fetchJson<{ ok: true }>(`/api/chat/sessions/${id}/model`, {
+    method: "PUT",
+    json: { model_id },
+  });
 
 export const listMessages = (sessionId: string) =>
   fetchJson<{ items: ChatMessage[] }>(`/api/chat/sessions/${sessionId}/messages`);
