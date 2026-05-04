@@ -44,7 +44,14 @@ def _fake_inner(monkeypatch):
             self.runs = 0
 
         async def run(
-            self, *, department_id, user_id, messages, attachments=None, cancel_token=None
+            self,
+            *,
+            department_id,
+            user_id,
+            messages,
+            attachments=None,
+            cancel_token=None,
+            **_,
         ):
             self.runs += 1
             yield {"type": "chat.start", "label": self.label, "run": self.runs}

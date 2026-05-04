@@ -50,11 +50,10 @@ interface Props {
   /** Deployment mode — determines how the About Lia disclaimer is fetched.
    *  Defaults to "personal" when not provided. */
   mode?: "personal" | "company";
-  /** When set, an in-input model dropdown lets the user pick the LLM
-   *  for this session. Selection persists to ``chat_sessions.model_id``. */
+  /** When set, the chat input toolbar shows the global LLM model picker.
+   *  Selection persists at the user level (``user_prefs.preferred_model_id``)
+   *  so it follows the user across all chats and departments. */
   departmentId?: string;
-  /** Initial value of ``chat_sessions.model_id`` (null = follow tier default). */
-  initialModelId?: string | null;
 }
 
 interface PersistedToolCall {
@@ -80,12 +79,7 @@ export function ChatInterface({
   onExtraStop,
   mode = "personal",
   departmentId,
-  initialModelId = null,
 }: Props): JSX.Element {
-  const [modelId, setModelId] = useState<string | null>(initialModelId);
-  useEffect(() => {
-    setModelId(initialModelId);
-  }, [initialModelId, sessionId]);
   const aboutGate = useDisclaimerGate(mode);
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -94,6 +88,7 @@ export function ChatInterface({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sentOnce, setSentOnce] = useState(false);
   const lastSentRef = useRef<string>("");
+  const persistedStreamRef = useRef<string | null>(null);
   const { state, send, stop, reset } = useChatStream({
     sessionId,
     streamUrl,
@@ -106,6 +101,7 @@ export function ChatInterface({
     setLoadError(null);
     setHistory([]);
     setSentOnce(false);
+    persistedStreamRef.current = null;
     reset();
     listMessages(sessionId)
       .then((r) => {
@@ -133,6 +129,7 @@ export function ChatInterface({
   const onSend = (text: string) => {
     if (!sessionId) return;
     lastSentRef.current = text;
+    persistedStreamRef.current = null;
     setSentOnce(true);
     setHistory((prev) => [
       ...prev,
@@ -148,6 +145,45 @@ export function ChatInterface({
     ]);
     send(text);
   };
+
+  // When a stream completes, snapshot the assistant reply into the
+  // persistent history so it stays visible after the next user message
+  // (which resets the live stream state). The DB persists it server-side
+  // independently — this just keeps the local UI in sync without a refetch.
+  useEffect(() => {
+    if (state.status !== "done" && state.status !== "stopped") return;
+    if (state.chunks.length === 0 && !state.message) return;
+    const key = `${state.status}|${state.message.length}|${state.toolCalls.length}`;
+    if (persistedStreamRef.current === key) return;
+    persistedStreamRef.current = key;
+
+    const tool_calls =
+      state.toolCalls.length > 0
+        ? state.toolCalls.map((c) => ({
+            call_id: c.callId,
+            tool_name: c.toolName,
+            args_preview: c.argsPreview,
+            status: c.status,
+            summary: c.summary,
+            structured: c.structured ?? null,
+          }))
+        : null;
+    const now = new Date().toISOString();
+    setHistory((prev) => [
+      ...prev,
+      {
+        id: `streamed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        role: "assistant",
+        content: state.message,
+        tool_calls,
+        model_ref: null,
+        token_usage: null,
+        created_at: now,
+        stopped_at: state.status === "stopped" ? now : null,
+      },
+    ]);
+    reset();
+  }, [state.status, state.message, state.chunks.length, state.toolCalls, reset]);
 
   const chatStreaming =
     state.status === "opening" || state.status === "thinking" || state.status === "streaming";
@@ -306,16 +342,7 @@ export function ChatInterface({
         onStop={handleStop}
         isStreaming={isStreaming}
         placeholder={inputPlaceholder}
-        leftSlot={
-          departmentId ? (
-            <ModelPicker
-              sessionId={sessionId}
-              departmentId={departmentId}
-              modelId={modelId}
-              onChange={setModelId}
-            />
-          ) : null
-        }
+        leftSlot={departmentId ? <ModelPicker /> : null}
       />
     </div>
   );

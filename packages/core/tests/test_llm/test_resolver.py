@@ -22,6 +22,8 @@ class _FakeRegistry:
     user_pref: dict[tuple[str, ModelTier], ResolvedModelRow] | None = None
     tier_default: dict[ModelTier, ResolvedModelRow] | None = None
     any_in_tier: dict[ModelTier, ResolvedModelRow] | None = None
+    by_id: dict[str, ResolvedModelRow] | None = None
+    user_preferred: dict[str, ResolvedModelRow] | None = None
 
     def get_department_tier_override(self, department_id: str) -> ModelTier | None:
         return self.dept_tier_override
@@ -40,6 +42,16 @@ class _FakeRegistry:
         if not self.any_in_tier:
             return None
         return self.any_in_tier.get(tier)
+
+    def get_by_id(self, model_id: str) -> ResolvedModelRow | None:
+        if not self.by_id:
+            return None
+        return self.by_id.get(model_id)
+
+    def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None:
+        if not self.user_preferred:
+            return None
+        return self.user_preferred.get(user_id)
 
 
 def _row(kind: str = "openai", tier: ModelTier = ModelTier.EVERYDAY) -> ResolvedModelRow:
@@ -135,3 +147,36 @@ def test_tier_override_arg_trumps_everything() -> None:
         tier_override=ModelTier.QUICK,
     )
     assert result.tier is ModelTier.QUICK
+
+
+def test_resolve_uses_user_preferred_model_before_tier() -> None:
+    """User-level preferred model wins over both user-tier-pref and tier
+    default. Cross-cuts every department for the user."""
+    preferred = ResolvedModelRow(
+        model_id="user-pick",
+        model_ref="claude-special",
+        tier=ModelTier.QUICK,
+        overrides={},
+        provider_id="p-1",
+        provider_kind="anthropic",
+        credentials=ProviderCredentials(api_key="sk", base_url=None),
+        capability_override=None,
+    )
+    reg = _FakeRegistry(
+        user_preferred={"u-1": preferred},
+        user_pref={("u-1", ModelTier.EVERYDAY): _row()},
+        tier_default={ModelTier.EVERYDAY: _row(kind="other")},
+    )
+    result = resolve(department_id="secretary", registry=reg, user_id="u-1")
+    assert result.model_id == "user-pick"
+    assert result.tier is ModelTier.QUICK
+
+
+def test_resolve_falls_through_when_user_preferred_missing() -> None:
+    reg = _FakeRegistry(
+        user_pref={("u-1", ModelTier.EVERYDAY): _row()},
+        tier_default={ModelTier.EVERYDAY: _row(kind="other")},
+    )
+    result = resolve(department_id="secretary", registry=reg, user_id="u-1")
+    # Falls through to user-tier-pref since user_preferred is empty.
+    assert result.model_id == "m-1"

@@ -90,6 +90,11 @@ def _build_chat_runner_with_registry(
             capabilities=resolved.capabilities,
         )
 
+    from openlia_server import dev_events
+
+    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
+        dev_events.record(category, message, payload)
+
     return ChatRunner(
         prompts=prompts,
         tools=tools,
@@ -97,6 +102,7 @@ def _build_chat_runner_with_registry(
         registry=registry,
         provider_factory=_provider_factory,
         skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
+        trace=_trace,
     )
 
 
@@ -124,6 +130,8 @@ class RefreshingChatRunner:
         messages,
         attachments=None,
         cancel_token=None,
+        session_id: str | None = None,
+        model_id_override: str | None = None,
     ):
         db = self._factory()
         try:
@@ -138,6 +146,8 @@ class RefreshingChatRunner:
                 messages=messages,
                 attachments=attachments,
                 cancel_token=cancel_token,
+                session_id=session_id,
+                model_id_override=model_id_override,
             ):
                 yield event
         finally:

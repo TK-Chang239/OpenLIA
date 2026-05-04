@@ -34,7 +34,9 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import ChatMessage
 from openlia_server.middleware.auth import build_require_active_user
+from openlia_server import dev_events
 from openlia_server.routes.chat_stream import _watch_disconnect
+from openlia_server.services import chat_sessions as chat_sessions_svc
 from openlia_server.services.secretary_chat_runner import (
     SaveReportToRepoError,
     build_secretary_persistence_handlers,
@@ -74,6 +76,17 @@ def build_secretary_router(
         cancel_token = CancellationToken()
         messages = [RuntimeChatMessage(role="user", content=message)]
 
+        dev_events.record(
+            "chat.request",
+            f"secretary chat: {message[:80]}",
+            {
+                "department": "secretary",
+                "user_id": user.id,
+                "session_id": session_id,
+                "message_len": len(message),
+            },
+        )
+
         session_model_id: str | None = None
         # Persist the user message immediately when a session is supplied.
         if session_id:
@@ -92,6 +105,12 @@ def build_secretary_router(
                 )
             )
             db.commit()
+            # Auto-title the session from the first user message — no-op once
+            # the title is something other than the default "New chat".
+            try:
+                chat_sessions_svc.ensure_titled(db, session_id=session_id, first_user_text=message)
+            except Exception:
+                log.warning("ensure_titled failed", exc_info=True)
 
         handlers = build_secretary_persistence_handlers(
             db_session_factory=db_session_factory,
@@ -114,6 +133,38 @@ def build_secretary_router(
                 ):
                     wire = to_wire(event)
                     etype = wire["type"]
+                    if etype == "chat.start":
+                        dev_events.record(
+                            "chat.event",
+                            "stream started",
+                            {"message_id": wire.get("message_id")},
+                        )
+                    elif etype == "chat.tool_call.start":
+                        dev_events.record(
+                            "chat.tool_call",
+                            f"tool: {wire.get('tool_name')}",
+                            {
+                                "call_id": wire.get("call_id"),
+                                "tool_name": wire.get("tool_name"),
+                                "args_preview": wire.get("args_preview"),
+                            },
+                        )
+                    elif etype == "chat.tool_call.result":
+                        dev_events.record(
+                            "chat.tool_result",
+                            f"{'ok' if wire.get('ok') else 'failed'}",
+                            {
+                                "call_id": wire.get("call_id"),
+                                "ok": wire.get("ok"),
+                                "summary": wire.get("summary"),
+                            },
+                        )
+                    elif etype == "chat.error":
+                        dev_events.record(
+                            "chat.error",
+                            wire.get("message", "error"),
+                            {"error_class": wire.get("error_class")},
+                        )
                     if etype == "chat.token":
                         assistant_text.append(wire.get("text", ""))
                     elif etype == "chat.tool_call.start":
@@ -164,6 +215,15 @@ def build_secretary_router(
                         tool_calls=tool_calls_log or None,
                         stopped=cancel_token.is_cancelled,
                     )
+                dev_events.record(
+                    "chat.done",
+                    f"persisted {len(''.join(assistant_text))} chars",
+                    {
+                        "session_id": session_id,
+                        "tool_calls": len(tool_calls_log),
+                        "stopped": cancel_token.is_cancelled,
+                    },
+                )
             except asyncio.CancelledError:
                 cancel_token.cancel()
                 if session_id:
