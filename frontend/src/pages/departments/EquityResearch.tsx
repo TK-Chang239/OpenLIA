@@ -265,6 +265,7 @@ export default function EquityResearch() {
               reportState.status === "starting" || reportState.status === "writing"
             }
             onExtraStop={stopReport}
+            departmentId="equity_research"
           />
         </div>
       )}

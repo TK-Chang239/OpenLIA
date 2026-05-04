@@ -74,8 +74,14 @@ def build_secretary_router(
         cancel_token = CancellationToken()
         messages = [RuntimeChatMessage(role="user", content=message)]
 
+        session_model_id: str | None = None
         # Persist the user message immediately when a session is supplied.
         if session_id:
+            from openlia_server.db.models.content import ChatSession as DbChatSession
+
+            row = db.get(DbChatSession, session_id)
+            if row is not None and row.user_id == user.id:
+                session_model_id = row.model_id
             db.add(
                 ChatMessage(
                     id=str(uuid.uuid4()),
@@ -104,6 +110,7 @@ def build_secretary_router(
                     user_id=user.id,
                     messages=messages,
                     cancel_token=cancel_token,
+                    model_id_override=session_model_id,
                 ):
                     wire = to_wire(event)
                     etype = wire["type"]

@@ -188,6 +188,7 @@ class ChatRunner:
         attachments: list[Attachment] | None = None,
         cancel_token: CancellationToken | None = None,
         session_id: str | None = None,
+        model_id_override: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -200,6 +201,7 @@ class ChatRunner:
                 department_id=department_id,
                 user_id=user_id,
                 registry=self._registry,
+                model_id_override=model_id_override,
             )
         except LLMProviderError as exc:
             yield ChatError(

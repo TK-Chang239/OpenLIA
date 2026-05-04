@@ -29,6 +29,7 @@ class _CannedRunner:
         messages,
         cancel_token=None,
         attachments=None,
+        **_,
     ) -> AsyncIterator:
         mid = "m_test"
         yield ChatStart(message_id=mid)

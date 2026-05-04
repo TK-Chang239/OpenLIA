@@ -21,6 +21,7 @@ class SessionOut(BaseModel):
     is_pinned: bool
     is_archived: bool
     created_at: datetime
+    model_id: str | None = None
 
 
 class SessionListOut(BaseModel):
@@ -46,6 +47,12 @@ class SessionPatchIn(BaseModel):
     title: str | None = None
     pinned: bool | None = None
     archived: bool | None = None
+
+
+class SessionModelIn(BaseModel):
+    """``model_id=null`` clears the override and reverts to tier resolution."""
+
+    model_id: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -138,6 +145,36 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         except ValueError as exc:
             raise HTTPException(
                 status_code=422, detail={"code": "invalid", "message": str(exc)}
+            ) from exc
+        return {"ok": True}
+
+    @router.put("/{session_id}/model")
+    def put_session_model_ep(
+        session_id: str,
+        body: SessionModelIn,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, bool]:
+        if body.model_id is not None:
+            from openlia_server.db.models.config import LLMModel
+
+            model = db.get(LLMModel, body.model_id)
+            if model is None or not model.is_enabled:
+                raise HTTPException(
+                    status_code=404,
+                    detail={"code": "model_not_found", "message": "Model id not in roster."},
+                )
+        try:
+            svc.set_session_model(
+                db, session_id=session_id, user_id=user.id, model_id=body.model_id
+            )
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=403, detail={"code": "forbidden", "message": str(exc)}
+            ) from exc
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": "not_found", "message": str(exc)}
             ) from exc
         return {"ok": True}
 
