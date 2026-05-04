@@ -1,22 +1,13 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { setSessionModel } from "../../api/chat";
 import {
-  getEffectiveModel,
   getModelsRoster,
-  type EffectiveModel,
+  getPrefs,
+  updatePrefs,
   type ModelsRoster,
   type RosterEntry,
 } from "../../api/settings";
-
-interface Props {
-  sessionId: string;
-  departmentId: string;
-  /** Per-session override; null = follow tier resolution. */
-  modelId: string | null;
-  onChange: (modelId: string | null) => void;
-}
 
 const TIER_ORDER: ReadonlyArray<keyof ModelsRoster> = ["thinking", "everyday", "quick"];
 const TIER_LABEL: Record<keyof ModelsRoster, string> = {
@@ -25,66 +16,61 @@ const TIER_LABEL: Record<keyof ModelsRoster, string> = {
   quick: "Quick",
 };
 
-export function ModelPicker({
-  sessionId,
-  departmentId,
-  modelId,
-  onChange,
-}: Props): JSX.Element | null {
+/** User-level preferred LLM. Selection persists across all chats and
+ *  departments (writes ``user_prefs.preferred_model_id``). */
+export function ModelPicker(): JSX.Element | null {
   const [roster, setRoster] = useState<ModelsRoster | null>(null);
-  const [effective, setEffective] = useState<EffectiveModel | null>(null);
+  const [modelId, setModelId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       getModelsRoster().catch(() => null),
-      getEffectiveModel(departmentId).catch(() => null),
-    ]).then(([r, e]) => {
+      getPrefs().catch(() => null),
+    ]).then(([r, p]) => {
       if (cancelled) return;
       setRoster(r);
-      setEffective(e);
+      setModelId(p?.preferred_model_id ?? null);
     });
     return () => {
       cancelled = true;
     };
-  }, [departmentId]);
+  }, []);
 
   if (!roster) return null;
 
   const enabled = TIER_ORDER.flatMap((tier) =>
-    roster[tier].filter((m) => m.is_enabled).map((m) => ({ tier, ...m })),
+    roster[tier].filter((m) => m.is_enabled),
   );
   if (enabled.length === 0) return null;
 
+  // If the saved preference is missing from the roster (or null), fall back
+  // to the first enabled model so the dropdown always shows a real value.
+  const knownIds = new Set(enabled.map((m) => m.id));
+  const selected = modelId && knownIds.has(modelId) ? modelId : enabled[0].id;
+
   const handleChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value;
-    const next = value === "__default__" ? null : value;
+    const next = e.target.value;
     setBusy(true);
     try {
-      await setSessionModel(sessionId, next);
-      onChange(next);
+      await updatePrefs({ preferred_model_id: next });
+      setModelId(next);
     } catch {
-      // Re-fetch effective on failure to keep UI consistent; swallow the
-      // error so the picker stays usable for retry.
+      // swallow; user can retry.
     } finally {
       setBusy(false);
     }
   };
 
-  const defaultLabel = effective
-    ? `Default — ${labelFor(roster, effective.model_id) ?? effective.model_ref}`
-    : "Default";
-
   return (
     <select
       aria-label="Choose LLM model"
       disabled={busy}
-      value={modelId ?? "__default__"}
+      value={selected}
       onChange={handleChange}
-      className="h-7 max-w-[180px] truncate rounded-md border border-border-subtle bg-bg-elevated px-2 text-xs text-text-secondary outline-none hover:bg-surface-hover focus:border-yellow-600"
+      className="h-7 max-w-[200px] truncate rounded-md border border-border-subtle bg-bg-elevated px-2 text-xs text-text-secondary outline-none hover:bg-surface-hover focus:border-yellow-600"
     >
-      <option value="__default__">{defaultLabel}</option>
       {TIER_ORDER.map((tier) =>
         roster[tier].filter((m) => m.is_enabled).length === 0 ? null : (
           <optgroup key={tier} label={TIER_LABEL[tier]}>
@@ -100,12 +86,4 @@ export function ModelPicker({
       )}
     </select>
   );
-}
-
-function labelFor(roster: ModelsRoster, modelId: string): string | null {
-  for (const tier of TIER_ORDER) {
-    const hit = roster[tier].find((m) => m.id === modelId);
-    if (hit) return hit.display_name;
-  }
-  return null;
 }

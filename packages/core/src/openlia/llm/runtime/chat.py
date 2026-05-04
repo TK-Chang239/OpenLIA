@@ -132,6 +132,13 @@ def build_chat_system_prompt(
     return loader.render(department_id, "chat.system", skills_menu=skills_menu)
 
 
+TraceRecorder = Callable[[str, str, dict[str, Any] | None], None]
+
+
+def _no_trace(_category: str, _message: str, _payload: dict[str, Any] | None) -> None:
+    return None
+
+
 class ChatRunner:
     def __init__(
         self,
@@ -146,6 +153,7 @@ class ChatRunner:
         dispatcher: Any | None = None,
         router_llm_client: RouterLlmClient | None = None,
         routing_context_loader: Callable[[str], str] | None = None,
+        trace: TraceRecorder | None = None,
     ) -> None:
         self._prompts = prompts
         self._tools = tools
@@ -160,6 +168,9 @@ class ChatRunner:
         self._dispatcher = dispatcher
         self._router_llm = router_llm_client
         self._routing_context_loader = routing_context_loader
+        # Optional dev-mode hook so the server can mirror per-LLM-call
+        # detail (system prompt, tools, model_ref) into its event panel.
+        self._trace: TraceRecorder = trace or _no_trace
 
     def _v2_routing_enabled(self) -> bool:
         return (
@@ -218,6 +229,21 @@ class ChatRunner:
             registry=self._skill_registry,
             loader=self._prompts,
         )
+        self._trace(
+            "llm.resolved",
+            f"{resolved.provider_kind}:{resolved.model_ref}",
+            {
+                "department_id": department_id,
+                "model_id": resolved.model_id,
+                "model_ref": resolved.model_ref,
+                "provider_kind": resolved.provider_kind,
+                "tier": resolved.tier.value
+                if hasattr(resolved.tier, "value")
+                else str(resolved.tier),
+                "system_prompt_chars": len(system),
+                "system_prompt_excerpt": system[:400],
+            },
+        )
         dept = get_department(department_id)
         extra_tool_specs = dept.extra_tools if dept is not None else ()
         extra_tool_names = frozenset(spec["name"] for spec in extra_tool_specs)
@@ -257,6 +283,21 @@ class ChatRunner:
         for _ in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
+            tool_names_v1 = [t.get("name") for t in (tools or [])]
+            self._trace(
+                "llm.call.start",
+                f"{resolved.provider_kind}:{resolved.model_ref} ({len(conversation)} msgs, {len(tool_names_v1)} tools)",
+                {
+                    "model_ref": resolved.model_ref,
+                    "provider_kind": resolved.provider_kind,
+                    "messages": [
+                        {"role": m.role, "chars": len(m.content)} for m in conversation
+                    ],
+                    "tool_names": tool_names_v1,
+                    "system_prompt_chars": len(system),
+                    "max_tokens": 2048,
+                },
+            )
             try:
                 response = await self._await(
                     provider.generate(
@@ -272,12 +313,28 @@ class ChatRunner:
             except asyncio.CancelledError:
                 return
             except LLMProviderError as exc:
+                self._trace(
+                    "llm.call.error",
+                    f"{type(exc).__name__}: {exc}",
+                    {"model_ref": resolved.model_ref},
+                )
                 yield ChatError(
                     message_id=message_id,
                     error_class=type(exc).__name__,
                     message=str(exc),
                 )
                 return
+            self._trace(
+                "llm.call.done",
+                f"{len(response.tool_calls)} tool_calls, {len((response.text or ''))} chars",
+                {
+                    "model_ref": resolved.model_ref,
+                    "tool_calls": [
+                        {"name": c.name, "id": c.id} for c in response.tool_calls
+                    ],
+                    "text_chars": len(response.text or ""),
+                },
+            )
 
             if not response.tool_calls:
                 break
@@ -553,6 +610,22 @@ class ChatRunner:
         for _ in range(MAX_TOOL_TURNS):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
+            tool_names_v2 = [t.get("name") for t in (tools or [])]
+            self._trace(
+                "llm.call.start",
+                f"{resolved.provider_kind}:{resolved.model_ref} (v2 routed, {len(conversation)} msgs, {len(tool_names_v2)} tools)",
+                {
+                    "model_ref": resolved.model_ref,
+                    "provider_kind": resolved.provider_kind,
+                    "messages": [
+                        {"role": m.role, "chars": len(m.content)} for m in conversation
+                    ],
+                    "tool_names": tool_names_v2,
+                    "system_prompt_chars": len(system_prompt),
+                    "max_tokens": 2048,
+                    "routed": True,
+                },
+            )
             try:
                 response = await self._await(
                     provider.generate(
@@ -568,12 +641,29 @@ class ChatRunner:
             except asyncio.CancelledError:
                 return
             except LLMProviderError as exc:
+                self._trace(
+                    "llm.call.error",
+                    f"{type(exc).__name__}: {exc}",
+                    {"model_ref": resolved.model_ref},
+                )
                 yield ChatError(
                     message_id=message_id,
                     error_class=type(exc).__name__,
                     message=str(exc),
                 )
                 return
+            self._trace(
+                "llm.call.done",
+                f"{len(response.tool_calls)} tool_calls, {len((response.text or ''))} chars",
+                {
+                    "model_ref": resolved.model_ref,
+                    "tool_calls": [
+                        {"name": c.name, "id": c.id} for c in response.tool_calls
+                    ],
+                    "text_chars": len(response.text or ""),
+                    "routed": True,
+                },
+            )
 
             if not response.tool_calls:
                 break

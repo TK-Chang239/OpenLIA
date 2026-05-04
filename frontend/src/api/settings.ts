@@ -10,6 +10,7 @@ export interface Prefs {
   display_language: LangCode;
   response_language: LangCode;
   report_language: LangCode;
+  preferred_model_id?: string | null;
 }
 
 export interface PrefsPatch {
@@ -20,6 +21,7 @@ export interface PrefsPatch {
   display_language?: LangCode;
   response_language?: LangCode;
   report_language?: LangCode;
+  preferred_model_id?: string | null;
 }
 
 export interface EmailUpdateIn {
