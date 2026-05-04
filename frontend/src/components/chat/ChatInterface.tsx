@@ -272,6 +272,7 @@ export function ChatInterface({
                 streaming={state.status === "streaming"}
                 stopped={state.status === "stopped"}
                 flagChips={state.flagChips}
+                skillLoads={state.skillLoads}
               />
             ) : null}
             {state.status === "error" && state.errorMessage ? (

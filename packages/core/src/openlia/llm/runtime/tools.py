@@ -18,7 +18,10 @@ from __future__ import annotations
 import asyncio
 import json
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from openlia.skills import SkillRegistry
 
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import ToolCall, ToolSchema
@@ -54,6 +57,21 @@ _WEB_SEARCH_SCHEMA = ToolSchema(
         "type": "object",
         "properties": {"query": {"type": "string"}},
         "required": ["query"],
+    },
+)
+
+LOAD_SKILL_SCHEMA = ToolSchema(
+    name="load_skill",
+    description=(
+        "Load the full instructions/playbook for an installed skill. Returns the "
+        "skill's markdown body. Call this when the user's question matches a skill "
+        "from the menu and you want its detailed guidance before answering."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {"skill_id": {"type": "string", "description": "Id from the skill menu."}},
+        "required": ["skill_id"],
+        "additionalProperties": False,
     },
 )
 
@@ -336,3 +354,32 @@ class ToolDispatcher:
                 "results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results]
             },
         )
+
+
+async def dispatch_load_skill(
+    registry: SkillRegistry,
+    *,
+    user_id: str | None,
+    skill_id: str,
+    call_id: str,
+) -> ToolCallResult:
+    """Look up `skill_id` in the registry and return its body as a tool result."""
+    skill = registry.get(skill_id, user_id=user_id)
+    if skill is None:
+        return ToolCallResult(
+            call_id=call_id,
+            ok=False,
+            summary=f"Unknown skill: {skill_id}",
+            payload={"error": f"Unknown skill: {skill_id}"},
+        )
+    display = skill.manifest.display_name or skill.manifest.name
+    return ToolCallResult(
+        call_id=call_id,
+        ok=True,
+        summary=f"Loaded skill: {display}",
+        payload={"body": skill.body, "skill_id": skill.manifest.name},
+        structured={
+            "skill_id": skill.manifest.name,
+            "display_name": display,
+        },
+    )

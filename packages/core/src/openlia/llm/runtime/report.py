@@ -49,12 +49,40 @@ from openlia.llm.types import (
     ResolvedModel,
     ResponseFormat,
 )
+from openlia.skills import SkillRegistry
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
     if len(s) <= max_len:
         return s
     return s[:max_len]
+
+
+def build_report_system_prompt(
+    *,
+    department_id: str,
+    user_id: str | None,
+    registry: SkillRegistry,
+    style_guide: str,
+    loader: PromptLoader | None = None,
+) -> str:
+    """Render the report.system slot with the user's visible skills menu."""
+    loader = loader or PromptLoader()
+    visible = registry.visible(department_id=department_id, user_id=user_id)
+    skills_menu = [
+        {
+            "id": s.manifest.name,
+            "description": s.manifest.description,
+            "tools": [
+                f"skill__{s.manifest.name.replace('-', '_')}__{t['name']}"
+                for t in (s.manifest.tools or [])
+            ],
+        }
+        for s in visible
+    ]
+    return loader.render(
+        department_id, "report.system", style_guide=style_guide, skills_menu=skills_menu
+    )
 
 
 ResolveFn = Callable[..., ResolvedModel]
@@ -108,6 +136,7 @@ class ReportRunner:
         resolve: ResolveFn,
         registry: ModelRegistry,
         provider_factory: ProviderFactory,
+        skill_registry: SkillRegistry,
         frameworks_root: Path | None = None,
         report_id_factory: Callable[[], str] | None = None,
     ) -> None:
@@ -116,6 +145,7 @@ class ReportRunner:
         self._resolve = resolve
         self._registry = registry
         self._provider_factory = provider_factory
+        self._skill_registry = skill_registry
         self._frameworks_root = (
             frameworks_root if frameworks_root is not None else _default_frameworks_root()
         )
@@ -159,7 +189,13 @@ class ReportRunner:
 
         provider = self._provider_factory(resolved)
 
-        system = self._prompts.render(department_id, "report.system", style_guide=style_guide)
+        system = build_report_system_prompt(
+            department_id=department_id,
+            user_id=user_id,
+            registry=self._skill_registry,
+            style_guide=style_guide,
+            loader=self._prompts,
+        )
         user_msg = self._prompts.render(
             department_id,
             f"report.{request.mode}.user",

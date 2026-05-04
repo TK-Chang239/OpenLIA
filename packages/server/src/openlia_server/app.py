@@ -31,6 +31,7 @@ import logging
 import os
 from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from apscheduler import AsyncScheduler
@@ -344,7 +345,10 @@ def _make_lifespan(
                     session_factory=_sm,
                     settings=scheduler_settings,
                     scheduler=adapter,
-                    report_runner=build_report_runner(_sm),
+                    report_runner=build_report_runner(
+                        _sm,
+                        skill_registry=getattr(app.state, "skills_registry", None),
+                    ),
                     batch_runner=build_batch_runner(_sm),
                     eu_planner=eu_planner,
                     mb_builder=mb_builder,
@@ -522,6 +526,41 @@ def create_app(
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
+
+    # Skills system — store + registry constructed here, shared via app.state.
+    from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
+
+    from openlia_server.routes.admin_skills import build_admin_skills_router
+    from openlia_server.routes.skills import build_skills_router
+
+    _skills_root = Path(
+        os.environ.get("OPENLIA_SKILLS_ROOT", str(Path.home() / ".openlia" / "skills"))
+    )
+    _skills_root.mkdir(parents=True, exist_ok=True)
+    _fs_skill_store = FilesystemSkillStore(root=_skills_root)
+    # Plan 1: filesystem store for both scopes. DatabaseSkillStore reserved for
+    # company-mode user-scope in Plan 2 once real multi-user wiring is in place.
+    skills_layered = LayeredSkillStore(system=_fs_skill_store, user=_fs_skill_store)
+    skills_registry = SkillRegistry(store=skills_layered)
+    app.state.skills_layered = skills_layered
+    app.state.skills_registry = skills_registry
+    app.include_router(
+        build_skills_router(
+            db_session_factory=factory,
+            store=skills_layered,
+            registry=skills_registry,
+            mode=mode,
+        )
+    )
+    app.include_router(
+        build_admin_skills_router(
+            db_session_factory=factory,
+            store=skills_layered,
+            registry=skills_registry,
+            mode=mode,
+        )
+    )
+
     app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
@@ -650,13 +689,20 @@ def create_app(
         # create_all happens later, so skip silently and rely on a later
         # seed call at first dashboard request.
         pass
-    app.state.chat_runner_factory = lambda: build_chat_runner(db_session_factory=factory)
+    app.state.chat_runner_factory = lambda: build_chat_runner(
+        db_session_factory=factory,
+        skill_registry=getattr(app.state, "skills_registry", None),
+    )
     # Report runner is consumed by per-department routes (equity_research, earnings_update).
     # `build_report_runner` returns a RefreshingReportRunner that opens a fresh DB session
     # per run, so we can share a single instance across requests.
-    app.state.report_runner = build_report_runner(db_session_factory=factory)
+    app.state.report_runner = build_report_runner(
+        db_session_factory=factory,
+        skill_registry=getattr(app.state, "skills_registry", None),
+    )
     app.state.equity_research_inner_factory = lambda: build_report_runner(
-        db_session_factory=factory
+        db_session_factory=factory,
+        skill_registry=getattr(app.state, "skills_registry", None),
     )
     # Earnings data adapter — optional; when unset the EU on-demand route uses a no-op.
     app.state.earnings_adapter = getattr(

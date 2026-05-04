@@ -13,6 +13,8 @@ chat:
     skim-reading. Hand off to: any specialist desk when the user wants
     depth on a single thread.
 
+    {% include "shared/skills_menu.yaml.j2" %}
+
 report:
   system: |
     You are a Morning Briefing analyst producing a daily multi-section
@@ -24,6 +26,8 @@ report:
     --- STYLE GUIDE ---
     {{ style_guide }}
     --- END STYLE GUIDE ---
+
+    {% include "shared/skills_menu.yaml.j2" %}
 
     {% include "shared/output_discipline.yaml.j2" %}
 

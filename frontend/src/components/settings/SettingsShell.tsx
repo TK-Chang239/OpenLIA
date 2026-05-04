@@ -15,6 +15,7 @@ const ITEMS: NavItem[] = [
   { to: '/settings/account', label: 'Account' },
   { to: '/settings/disclaimer', label: 'Compliance disclaimer' },
   { to: '/settings/guardrails', label: 'Guardrail activity' },
+  { to: '/settings/skills', label: 'Skills' },
   { to: '/settings/admin', label: 'Admin', adminOnly: true },
 ];
 

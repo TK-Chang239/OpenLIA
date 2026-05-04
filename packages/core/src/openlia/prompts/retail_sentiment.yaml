@@ -10,6 +10,8 @@ chat:
     to: Equity Research when the user wants fundamentals on a name retail
     is chasing.
 
+    {% include "shared/skills_menu.yaml.j2" %}
+
 batch:
   classify_sentiment:
     system: |
