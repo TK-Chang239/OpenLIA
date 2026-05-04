@@ -26,6 +26,9 @@ def get_or_create(db: Session, *, user_id: str) -> UserPrefs:
     return prefs
 
 
+_UNSET: object = object()
+
+
 def update(
     db: Session,
     *,
@@ -36,6 +39,7 @@ def update(
     display_language: str | None = None,
     response_language: str | None = None,
     report_language: str | None = None,
+    preferred_model_id: object = _UNSET,
 ) -> UserPrefs:
     if theme is not None and theme not in _VALID_THEMES:
         raise ValueError(f"invalid theme: {theme}")
@@ -59,5 +63,9 @@ def update(
         prefs.response_language = response_language
     if report_language is not None:
         prefs.report_language = report_language
+    if preferred_model_id is not _UNSET:
+        # ``None`` clears the override; any other str sets it. The route
+        # validator confirms the model exists/is enabled before reaching here.
+        prefs.preferred_model_id = preferred_model_id  # type: ignore[assignment]
     db.flush()
     return prefs

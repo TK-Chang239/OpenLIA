@@ -15,7 +15,9 @@ from openlia_server.services import chat_sessions as svc
 
 
 class _RaisingChatRunner:
-    async def run(self, *, department_id, user_id, messages, attachments=None, cancel_token=None, **_):
+    async def run(
+        self, *, department_id, user_id, messages, attachments=None, cancel_token=None, **_
+    ):
         raise TierNotConfiguredError("everyday")
         yield  # unreachable; makes this an async generator
 

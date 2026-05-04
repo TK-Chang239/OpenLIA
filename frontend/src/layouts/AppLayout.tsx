@@ -5,6 +5,8 @@ import { TopBar } from "../components/shell/TopBar";
 import { MobileTabBar } from "../components/sidebar/MobileTabBar";
 import { MobileSidebarOverlay } from "../components/sidebar/MobileSidebarOverlay";
 import { MobileNavProvider, useMobileNav } from "./MobileNavContext";
+import { ChatHeaderProvider } from "./ChatHeaderContext";
+import { DevPanel } from "../components/dev/DevPanel";
 import { crumbsForPath, stampsForNow } from "./shellState";
 import { FileViewerProvider } from "../components/viewer/FileViewerContext";
 import { FileViewer } from "../components/viewer/FileViewer";
@@ -55,6 +57,7 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
         </main>
       </section>
       <MobileTabBar />
+      <DevPanel />
     </div>
   );
 }
@@ -64,7 +67,9 @@ export function AppLayout({ children }: AppLayoutProps = {}): JSX.Element {
     <MobileNavProvider>
       <ToastProvider>
         <FileViewerProvider>
-          <AppLayoutInner>{children}</AppLayoutInner>
+          <ChatHeaderProvider>
+            <AppLayoutInner>{children}</AppLayoutInner>
+          </ChatHeaderProvider>
         </FileViewerProvider>
       </ToastProvider>
     </MobileNavProvider>

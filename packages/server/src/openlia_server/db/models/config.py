@@ -137,6 +137,9 @@ class UserPrefs(Base):
     report_language: Mapped[str] = mapped_column(
         String(8), nullable=False, default="en", server_default="en"
     )
+    preferred_model_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("llm_models.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class WebSearchProvider(Base, TimestampMixin):
