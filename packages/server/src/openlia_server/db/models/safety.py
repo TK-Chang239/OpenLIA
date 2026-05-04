@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, func
+from sqlalchemy import JSON, CheckConstraint, DateTime, Index, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openlia_server.db.base import Base
@@ -14,7 +15,8 @@ class LiaGuardrailEvent(Base):
     __tablename__ = "lia_guardrail_events"
     __table_args__ = (
         CheckConstraint(
-            "event_type IN ('persona_refusal', 'tripwire_flag')",
+            "event_type IN ('persona_refusal', 'tripwire_flag', 'skill_installed', "
+            "'skill_uninstalled', 'skill_enabled', 'skill_disabled', 'skill_loaded')",
             name="ck_lia_guardrail_events_event_type",
         ),
         CheckConstraint(
@@ -30,16 +32,17 @@ class LiaGuardrailEvent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    session_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     user_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    department_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    department_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
-    category: Mapped[str] = mapped_column(String(64), nullable=False)
+    category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     action_taken: Mapped[str] = mapped_column(String(16), nullable=False)
-    user_input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    response_excerpt: Mapped[str] = mapped_column(Text, nullable=False)
+    user_input_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    response_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
     tripwire_pattern: Mapped[str | None] = mapped_column(Text, nullable=True)
     model_ref: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    payload_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class UserDisclaimerAcceptance(Base):

@@ -94,6 +94,7 @@ class PromptLoader:
             raise PromptSlotNotFound(f"{department_id}:{slot} — {exc}") from None
         merged = {
             "current_desk": DEPARTMENT_LABELS.get(department_id, department_id),
+            "skills_menu": [],  # default; callers override
             **context,
         }
         template = self._env.from_string(template_src)

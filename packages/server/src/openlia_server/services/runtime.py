@@ -13,7 +13,9 @@ inject a system prompt and run through the chat builder.
 
 from __future__ import annotations
 
+import tempfile
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Literal
 
 from openlia.departments import get_department
@@ -25,6 +27,7 @@ from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.services.llm_registry import SQLModelRegistry
@@ -55,10 +58,23 @@ def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
     return WebSearchResolution(available=False, variant=None, adapter=None)
 
 
+def _empty_skill_registry() -> SkillRegistry:
+    """Return an empty SkillRegistry backed by a temp directory.
+
+    Placeholder until Task 16+ wires the real registry at startup.
+    visible() returns [] so skills_menu renders empty.
+    """
+    _empty_root = Path(tempfile.gettempdir()) / "openlia_skills_empty"
+    _empty_root.mkdir(exist_ok=True)
+    _empty_fs = FilesystemSkillStore(root=_empty_root)
+    return SkillRegistry(store=LayeredSkillStore(system=_empty_fs, user=_empty_fs))
+
+
 def _build_chat_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     web_search: WebSearchResolution,
+    skill_registry: SkillRegistry | None = None,
 ) -> ChatRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
@@ -80,6 +96,7 @@ def _build_chat_runner_with_registry(
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
+        skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
     )
 
 
@@ -91,8 +108,13 @@ class RefreshingChatRunner:
     on iterator exhaustion / exception / client-disconnect.
     """
 
-    def __init__(self, db_session_factory: Callable[[], DBSession]) -> None:
+    def __init__(
+        self,
+        db_session_factory: Callable[[], DBSession],
+        skill_registry: SkillRegistry | None = None,
+    ) -> None:
         self._factory = db_session_factory
+        self._skill_registry = skill_registry
 
     async def run(
         self,
@@ -107,7 +129,9 @@ class RefreshingChatRunner:
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
-            runner = _build_chat_runner_with_registry(registry, web_search=web_search)
+            runner = _build_chat_runner_with_registry(
+                registry, web_search=web_search, skill_registry=self._skill_registry
+            )
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -123,15 +147,17 @@ class RefreshingChatRunner:
 def build_chat_runner(
     *,
     db_session_factory: Callable[[], DBSession],
+    skill_registry: SkillRegistry | None = None,
 ) -> RefreshingChatRunner:
     """Return a refreshing chat runner that opens a fresh DB session per run."""
-    return RefreshingChatRunner(db_session_factory)
+    return RefreshingChatRunner(db_session_factory, skill_registry=skill_registry)
 
 
 def _build_report_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     web_search: WebSearchResolution,
+    skill_registry: SkillRegistry | None = None,
 ) -> ReportRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
@@ -153,14 +179,20 @@ def _build_report_runner_with_registry(
         resolve=resolve,
         registry=registry,
         provider_factory=_provider_factory,
+        skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
     )
 
 
 class RefreshingReportRunner:
     """Constructs a fresh ReportRunner (with fresh DB session and registry) per job run."""
 
-    def __init__(self, db_session_factory: Callable[[], DBSession]) -> None:
+    def __init__(
+        self,
+        db_session_factory: Callable[[], DBSession],
+        skill_registry: SkillRegistry | None = None,
+    ) -> None:
         self._factory = db_session_factory
+        self._skill_registry = skill_registry
 
     async def run(
         self,
@@ -174,7 +206,9 @@ class RefreshingReportRunner:
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
-            runner = _build_report_runner_with_registry(registry, web_search=web_search)
+            runner = _build_report_runner_with_registry(
+                registry, web_search=web_search, skill_registry=self._skill_registry
+            )
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -186,8 +220,11 @@ class RefreshingReportRunner:
             db.close()
 
 
-def build_report_runner(db_session_factory: Callable[[], DBSession]) -> RefreshingReportRunner:
-    return RefreshingReportRunner(db_session_factory)
+def build_report_runner(
+    db_session_factory: Callable[[], DBSession],
+    skill_registry: SkillRegistry | None = None,
+) -> RefreshingReportRunner:
+    return RefreshingReportRunner(db_session_factory, skill_registry=skill_registry)
 
 
 def _build_batch_runner_with_registry(registry: SQLModelRegistry) -> BatchRunner:

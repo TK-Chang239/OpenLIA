@@ -1,0 +1,10 @@
+{# packages/core/src/openlia/prompts/shared/skills_menu.yaml.j2 #}
+{%- if skills_menu and skills_menu|length > 0 -%}
+## Skills available
+
+The following installed skills are scoped to your current desk. Each line is `id: description`. Call `load_skill(skill_id)` to fetch the full playbook before relying on a skill's guidance; tools listed are always callable.
+
+{% for s in skills_menu -%}
+- **{{ s.id }}**: {{ s.description }}{% if s.tools %} *Tools:* {{ s.tools | join(', ') }}.{% endif %}
+{% endfor %}
+{%- endif -%}
