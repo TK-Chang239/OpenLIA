@@ -38,6 +38,8 @@ class ModelRegistry(Protocol):
 
     def get_by_id(self, model_id: str) -> ResolvedModelRow | None: ...
 
+    def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None: ...
+
 
 def resolve_tier(
     department_id: str,
@@ -84,6 +86,14 @@ def resolve(
             return _to_resolved(row)
         # Fall through to tier-based resolution if the explicit pick is no
         # longer available (model deleted or disabled).
+
+    # User-level preferred model — set globally via Settings/preferences;
+    # cross-cuts every department for that user. Wins over tier resolution
+    # but loses to an explicit per-call ``model_id_override`` above.
+    if user_id is not None:
+        preferred = registry.get_user_preferred_model(user_id)
+        if preferred is not None:
+            return _to_resolved(preferred)
 
     tier = resolve_tier(department_id, tier_override, registry)
 

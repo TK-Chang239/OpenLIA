@@ -1,8 +1,11 @@
 import type { JSX } from "react";
-import { Menu } from "lucide-react";
+import { ChevronDown, Menu, Plus } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 import { LivePill } from "./LivePill";
 import { useMobileNav } from "../../layouts/MobileNavContext";
+import { useChatHeader } from "../../layouts/ChatHeaderContext";
+import { ChatHistoryPopover } from "../chat/ChatHistoryPopover";
+import { useState } from "react";
 
 export interface TopBarProps {
   crumbs: string[];
@@ -14,6 +17,8 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
   const last = crumbs[crumbs.length - 1];
   const head = crumbs.slice(0, -1);
   const { setOpen } = useMobileNav();
+  const chatHeader = useChatHeader();
+  const [popoverOpen, setPopoverOpen] = useState(false);
   return (
     <div
       className="flex items-center gap-[14px] px-7 py-[14px] border-b border-border-subtle bg-bg-base"
@@ -37,7 +42,37 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
             <span className="text-text-tertiary">/</span>
           </span>
         ))}
-        <strong className="text-text-primary font-semibold">{last}</strong>
+        {chatHeader ? (
+          <span className="relative flex items-center">
+            <button
+              type="button"
+              aria-haspopup="menu"
+              aria-expanded={popoverOpen}
+              onClick={() => setPopoverOpen((v) => !v)}
+              className="flex items-center gap-1 font-semibold text-text-primary hover:text-text-primary"
+            >
+              {last}
+              <ChevronDown size={12} strokeWidth={1.5} aria-hidden />
+            </button>
+            {popoverOpen ? (
+              <ChatHistoryPopover
+                departmentId={chatHeader.departmentId}
+                activeSessionId={chatHeader.activeSessionId}
+                onSelect={(id) => {
+                  chatHeader.onSelect(id);
+                  setPopoverOpen(false);
+                }}
+                onActiveDeleted={() => {
+                  chatHeader.onCreate();
+                  setPopoverOpen(false);
+                }}
+                onClose={() => setPopoverOpen(false)}
+              />
+            ) : null}
+          </span>
+        ) : (
+          <strong className="text-text-primary font-semibold">{last}</strong>
+        )}
       </nav>
       <div className="ml-auto flex items-center gap-[14px]">
         {live && <LivePill />}
@@ -50,6 +85,16 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
             {s}
           </span>
         ))}
+        {chatHeader ? (
+          <button
+            type="button"
+            onClick={chatHeader.onCreate}
+            className="inline-flex items-center gap-1 rounded-md border border-border-subtle px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
+          >
+            <Plus size={12} strokeWidth={2} aria-hidden />
+            New Chat
+          </button>
+        ) : null}
         <ThemeToggle />
       </div>
     </div>

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import { ChatInterface } from '../components/chat/ChatInterface';
-import { getDefaultSessionForDepartment } from '../api/chat';
+import { useCallback, useEffect, useState } from "react";
+import { ChatInterface } from "../components/chat/ChatInterface";
+import { createSession, listSessions } from "../api/chat";
+import { useChatHeaderRegistry } from "../layouts/ChatHeaderContext";
 
 export interface SecretaryPageUser {
   id: string;
@@ -12,33 +13,60 @@ export interface SecretaryPageProps {
 }
 
 const CHIPS = [
-  { label: 'What is LIA?', value: 'What is LIA?' },
-  { label: 'Get a quick market snapshot', value: 'Get a quick market snapshot' },
-  { label: 'How do I use Equity Research?', value: 'How do I use Equity Research?' },
-  { label: 'Summarize a financial term', value: 'Summarize a financial term' },
+  { label: "What is LIA?", value: "What is LIA?" },
+  { label: "Get a quick market snapshot", value: "Get a quick market snapshot" },
+  { label: "How do I use Equity Research?", value: "How do I use Equity Research?" },
+  { label: "Summarize a financial term", value: "Summarize a financial term" },
 ];
 
 export function SecretaryPage({ user }: SecretaryPageProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [initialModelId, setInitialModelId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const pickInitial = useCallback(async () => {
+    const r = await listSessions({ department: "secretary" });
+    if (r && r.items.length > 0) {
+      setSessionId(r.items[0].id);
+      return;
+    }
+    const fresh = await createSession({ department: "secretary", title: "New chat" });
+    setSessionId(fresh.id);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    getDefaultSessionForDepartment('secretary')
-      .then((s) => {
-        if (cancelled || !s) return;
-        setSessionId(s.id);
-        setInitialModelId(s.model_id ?? null);
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load chat session');
-      });
+    pickInitial().catch((err: unknown) => {
+      if (cancelled) return;
+      setError(err instanceof Error ? err.message : "Failed to load chat session");
+    });
     return () => {
       cancelled = true;
     };
+  }, [pickInitial]);
+
+  const onCreate = useCallback(async () => {
+    const fresh = await createSession({ department: "secretary", title: "New chat" });
+    setSessionId(fresh.id);
   }, []);
+
+  const onSelect = useCallback((id: string) => {
+    setSessionId(id);
+  }, []);
+
+  const { register, clear } = useChatHeaderRegistry();
+  useEffect(() => {
+    if (!sessionId) {
+      clear();
+      return;
+    }
+    register({
+      departmentId: "secretary",
+      activeSessionId: sessionId,
+      onSelect,
+      onCreate,
+    });
+    return () => clear();
+  }, [sessionId, onSelect, onCreate, register, clear]);
 
   if (error) {
     return (
@@ -60,7 +88,6 @@ export function SecretaryPage({ user }: SecretaryPageProps) {
         streamUrl="/api/departments/secretary/chat"
         bodyExtras={{ session_id: sessionId }}
         departmentId="secretary"
-        initialModelId={initialModelId}
       />
     </div>
   );

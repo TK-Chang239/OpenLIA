@@ -228,6 +228,43 @@ def test_secretary_chat_persists_session_messages(secretary_app):
         assert assistant.stopped_at is None
 
 
+def test_secretary_chat_renames_default_titled_session_from_first_message(secretary_app):
+    """A session created with the default "New chat" title gets auto-renamed
+    to the first 48 chars of the user's first message via ``ensure_titled``."""
+    from openlia_server.db.models.content import ChatSession as DbChatSession
+
+    app, session_id = secretary_app
+    # Reset the session title to the default that the frontend creates.
+    with session_mod.SessionLocal() as s:
+        row = s.get(DbChatSession, session_id)
+        assert row is not None
+        row.title = "New chat"
+        s.commit()
+
+    runner = _ScriptedRunner(
+        [
+            ChatStart(message_id="m1"),
+            ChatToken(message_id="m1", text="ok"),
+            ChatDone(message_id="m1", stop_reason="complete"),
+        ]
+    )
+    app.state.chat_runner_factory = lambda: runner
+    first_message = "What did Apple report for Q2 guidance and how does it compare to Q1?"
+    with TestClient(app) as client:
+        r = client.post(
+            "/departments/secretary/chat",
+            json={"message": first_message, "session_id": session_id},
+        )
+        assert r.status_code == 200
+        _ = r.text
+    with session_mod.SessionLocal() as s:
+        row = s.get(DbChatSession, session_id)
+        assert row is not None
+        assert row.title != "New chat"
+        # Spec: first 48 chars of the trimmed message.
+        assert row.title == first_message[:48]
+
+
 def test_secretary_chat_cancellation_persists_stopped_at(secretary_app):
     """When the runner's cancellation token is tripped, the persisted
     assistant message gets `stopped_at` populated. We exercise the

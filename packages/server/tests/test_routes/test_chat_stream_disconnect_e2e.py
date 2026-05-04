@@ -37,7 +37,9 @@ uvicorn = pytest.importorskip("uvicorn")
 
 
 class _SlowRunner:
-    async def run(self, *, department_id, user_id, messages, attachments=None, cancel_token=None, **_):
+    async def run(
+        self, *, department_id, user_id, messages, attachments=None, cancel_token=None, **_
+    ):
         yield ChatStart(message_id="m1")
         yield ChatToken(message_id="m1", text="partial-")
         if cancel_token is not None:
