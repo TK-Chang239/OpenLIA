@@ -20,6 +20,7 @@ const CHIPS = [
 
 export function SecretaryPage({ user }: SecretaryPageProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [initialModelId, setInitialModelId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -28,6 +29,7 @@ export function SecretaryPage({ user }: SecretaryPageProps) {
       .then((s) => {
         if (cancelled || !s) return;
         setSessionId(s.id);
+        setInitialModelId(s.model_id ?? null);
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -57,6 +59,8 @@ export function SecretaryPage({ user }: SecretaryPageProps) {
         inputPlaceholder="Ask LIA anything..."
         streamUrl="/api/departments/secretary/chat"
         bodyExtras={{ session_id: sessionId }}
+        departmentId="secretary"
+        initialModelId={initialModelId}
       />
     </div>
   );

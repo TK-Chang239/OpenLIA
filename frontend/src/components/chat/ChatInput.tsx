@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import type { JSX } from "react";
+import type { JSX, ReactNode } from "react";
 import { ArrowUp, Square } from "lucide-react";
 
 interface Props {
@@ -7,6 +7,8 @@ interface Props {
   onStop?: () => void;
   isStreaming: boolean;
   placeholder: string;
+  /** Rendered in the toolbar row, left of the send button. */
+  leftSlot?: ReactNode;
 }
 
 const MAX_HEIGHT = 120;
@@ -17,6 +19,7 @@ export function ChatInput({
   onStop,
   isStreaming,
   placeholder,
+  leftSlot,
 }: Props): JSX.Element {
   const [value, setValue] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -61,6 +64,7 @@ export function ChatInput({
             style={{ maxHeight: MAX_HEIGHT, overflowY: "auto" }}
           />
           <div className="flex items-center gap-2 px-2 py-[6px] pl-[10px]">
+            {leftSlot ?? null}
             <div className="flex-1" />
             {isStreaming ? (
               <button

@@ -25,6 +25,7 @@ class _ScriptedChatRunner:
         attachments=None,
         cancel_token=None,
         session_id: str | None = None,
+        **_,
     ):
         self.last_kwargs = {
             "department_id": department_id,

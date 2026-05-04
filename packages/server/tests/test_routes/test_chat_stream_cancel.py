@@ -22,7 +22,7 @@ class _InfiniteRunner:
     def __init__(self) -> None:
         self.captured_token: CancellationToken | None = None
 
-    async def run(self, *, department_id, user_id, messages, attachments=None, cancel_token=None):
+    async def run(self, *, department_id, user_id, messages, attachments=None, cancel_token=None, **_):
         self.captured_token = cancel_token
         yield ChatStart(message_id="m1")
         yield ChatToken(message_id="m1", text="hello")
@@ -100,7 +100,14 @@ async def test_no_disconnect_no_token_flip() -> None:
             self.captured_token: CancellationToken | None = None
 
         async def run(
-            self, *, department_id, user_id, messages, attachments=None, cancel_token=None
+            self,
+            *,
+            department_id,
+            user_id,
+            messages,
+            attachments=None,
+            cancel_token=None,
+            **_,
         ):
             self.captured_token = cancel_token
             yield ChatStart(message_id="m1")

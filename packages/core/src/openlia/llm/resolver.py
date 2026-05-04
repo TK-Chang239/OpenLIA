@@ -36,6 +36,8 @@ class ModelRegistry(Protocol):
 
     def get_any_in_tier(self, tier: ModelTier) -> ResolvedModelRow | None: ...
 
+    def get_by_id(self, model_id: str) -> ResolvedModelRow | None: ...
+
 
 def resolve_tier(
     department_id: str,
@@ -74,7 +76,15 @@ def resolve(
     registry: ModelRegistry,
     user_id: str | None,
     tier_override: ModelTier | None = None,
+    model_id_override: str | None = None,
 ) -> ResolvedModel:
+    if model_id_override is not None:
+        row = registry.get_by_id(model_id_override)
+        if row is not None:
+            return _to_resolved(row)
+        # Fall through to tier-based resolution if the explicit pick is no
+        # longer available (model deleted or disabled).
+
     tier = resolve_tier(department_id, tier_override, registry)
 
     if user_id is not None:

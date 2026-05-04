@@ -117,6 +117,7 @@ def build_chat_stream_router(
                 db_session_factory=db_session_factory,
                 session_id=session_id,
                 last_user_text=q,
+                model_id_override=session_row.model_id,
             ),
             media_type="text/event-stream",
         )
@@ -192,6 +193,7 @@ async def _event_source(
     db_session_factory: Callable[[], DBSession] | None = None,
     session_id: str | None = None,
     last_user_text: str = "",
+    model_id_override: str | None = None,
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
@@ -210,6 +212,7 @@ async def _event_source(
             user_id=user.id,
             messages=messages,
             cancel_token=token,
+            model_id_override=model_id_override,
         ):
             wire = to_wire(event)
             etype = wire["type"]

@@ -30,6 +30,7 @@ class _ScriptedChatRunner:
         messages,
         attachments=None,
         cancel_token=None,
+        **_,
     ):
         self.captured = {
             "department_id": department_id,

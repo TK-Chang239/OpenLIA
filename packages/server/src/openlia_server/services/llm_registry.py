@@ -78,6 +78,9 @@ class SQLModelRegistry(ModelRegistry):
             return None
         return self._build_row(model)
 
+    def get_by_id(self, model_id: str) -> ResolvedModelRow | None:
+        return self._load_row(model_id)
+
     def _load_row(self, model_id: str) -> ResolvedModelRow | None:
         model = self._db.get(LLMModel, model_id)
         if model is None or not model.is_enabled:

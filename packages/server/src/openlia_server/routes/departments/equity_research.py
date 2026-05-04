@@ -165,11 +165,15 @@ def build_equity_research_router(
         cancel_token = CancellationToken()
 
         session_id = payload.session_id
+        session_model_id: str | None = None
         if session_id is not None:
             try:
-                chat_sessions_svc.get_session(session, session_id=session_id, user_id=user.id)
+                session_row = chat_sessions_svc.get_session(
+                    session, session_id=session_id, user_id=user.id
+                )
             except (LookupError, PermissionError) as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
+            session_model_id = session_row.model_id
             session.add(
                 DbChatMessage(
                     id=str(uuid.uuid4()),
@@ -203,6 +207,7 @@ def build_equity_research_router(
                 messages=messages,
                 cancel_token=cancel_token,
                 session_id=session_id,
+                model_id_override=session_model_id,
             ):
                 wire = to_wire(event)
                 etype = wire["type"]

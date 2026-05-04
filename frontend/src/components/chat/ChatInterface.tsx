@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
+import { ModelPicker } from "./ModelPicker";
 import { MessageList } from "./MessageList";
 import { UserBubble } from "./UserBubble";
 import { AssistantMessage } from "./AssistantMessage";
@@ -49,6 +50,11 @@ interface Props {
   /** Deployment mode — determines how the About Lia disclaimer is fetched.
    *  Defaults to "personal" when not provided. */
   mode?: "personal" | "company";
+  /** When set, an in-input model dropdown lets the user pick the LLM
+   *  for this session. Selection persists to ``chat_sessions.model_id``. */
+  departmentId?: string;
+  /** Initial value of ``chat_sessions.model_id`` (null = follow tier default). */
+  initialModelId?: string | null;
 }
 
 interface PersistedToolCall {
@@ -73,7 +79,13 @@ export function ChatInterface({
   extraIsStreaming,
   onExtraStop,
   mode = "personal",
+  departmentId,
+  initialModelId = null,
 }: Props): JSX.Element {
+  const [modelId, setModelId] = useState<string | null>(initialModelId);
+  useEffect(() => {
+    setModelId(initialModelId);
+  }, [initialModelId, sessionId]);
   const aboutGate = useDisclaimerGate(mode);
   const [aboutOpen, setAboutOpen] = useState(false);
 
@@ -289,7 +301,22 @@ export function ChatInterface({
           </MessageList>
         ) : null}
       </div>
-      <ChatInput onSend={onSend} onStop={handleStop} isStreaming={isStreaming} placeholder={inputPlaceholder} />
+      <ChatInput
+        onSend={onSend}
+        onStop={handleStop}
+        isStreaming={isStreaming}
+        placeholder={inputPlaceholder}
+        leftSlot={
+          departmentId ? (
+            <ModelPicker
+              sessionId={sessionId}
+              departmentId={departmentId}
+              modelId={modelId}
+              onChange={setModelId}
+            />
+          ) : null
+        }
+      />
     </div>
   );
 }

@@ -143,6 +143,7 @@ export default function MorningBriefing() {
                 subtext={`Follow up on "${viewing.title}".`}
                 chips={FOLLOW_UP_CHIPS}
                 inputPlaceholder="Ask a follow-up about this briefing..."
+                departmentId="morning_briefing"
               />
             ) : (
               <div className="p-4 text-sm text-muted-foreground">
@@ -251,6 +252,7 @@ export default function MorningBriefing() {
               subtext="Ask a follow-up about any recent briefing."
               chips={FOLLOW_UP_CHIPS}
               inputPlaceholder="Ask about your Morning Briefings..."
+              departmentId="morning_briefing"
             />
           ) : (
             <div className="text-sm text-muted-foreground">Opening chat…</div>

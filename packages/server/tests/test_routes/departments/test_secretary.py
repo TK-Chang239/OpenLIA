@@ -43,6 +43,7 @@ class _ScriptedRunner:
         messages,
         attachments=None,
         cancel_token=None,
+        **_,
     ):
         self.captured = {
             "department_id": department_id,
