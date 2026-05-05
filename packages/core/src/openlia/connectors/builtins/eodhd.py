@@ -134,6 +134,46 @@ _SOCIAL_POSTS = CallableSpec(
 )
 
 
+# EODHD's `financial_news` SDK signature has every kwarg defaulting to
+# None, so a signature-derived JSON schema can't express that the
+# upstream API still requires either `s` (ticker) or `t` (topic).
+# Without this override the chat LLM happily calls the tool with no
+# args and EODHD returns "Incorrect value was fullfiled for s or t".
+_FINANCIAL_NEWS_OVERRIDE: dict = {
+    "description": (
+        "Fetch financial news from EODHD. REQUIRED: provide EITHER `s` "
+        "(comma-separated ticker codes, e.g. 'AAPL.US') OR `t` (a topic "
+        "tag like 'mergers and acquisitions', 'earnings', 'crypto'). "
+        "Calling without one of these will fail. Optional: `from_date`/"
+        "`to_date` (YYYY-MM-DD), `limit` (1-1000, default 50), `offset` "
+        "(default 0)."
+    ),
+    # Note: Anthropic's tool `input_schema` validator doesn't accept
+    # JSON-Schema combinators like `anyOf`/`oneOf` — only the basic
+    # `{type, properties, required}` triple. Express the s-OR-t
+    # constraint in the description and let the model honor it (or
+    # surface EODHD's runtime error, which the model can recover from
+    # on the next turn).
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "s": {
+                "type": "string",
+                "description": "Ticker code(s), comma-separated. Required if `t` is empty.",
+            },
+            "t": {
+                "type": "string",
+                "description": "Topic tag (e.g. 'earnings'). Required if `s` is empty.",
+            },
+            "from_date": {"type": "string", "description": "Start date YYYY-MM-DD."},
+            "to_date": {"type": "string", "description": "End date YYYY-MM-DD."},
+            "limit": {"type": "integer", "description": "1-1000, default 50."},
+            "offset": {"type": "integer", "description": "Default 0."},
+        },
+    },
+}
+
+
 EODHD_TEMPLATE = BuiltInTemplate(
     template_id="eodhd",
     display_name="EODHD",
@@ -164,4 +204,6 @@ EODHD_TEMPLATE = BuiltInTemplate(
         _STOCK_QUOTE,
         _SOCIAL_POSTS,
     ),
+    tool_overrides=(("financial_news", _FINANCIAL_NEWS_OVERRIDE),),
+    tool_argument_constraints=(("financial_news", "require_one_of", (("s", "t"),)),),
 )

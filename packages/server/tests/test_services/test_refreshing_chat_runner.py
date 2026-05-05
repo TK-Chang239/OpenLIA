@@ -57,7 +57,14 @@ def _fake_inner(monkeypatch):
             yield {"type": "chat.start", "label": self.label, "run": self.runs}
             yield {"type": "chat.done"}
 
-    def _fake_build(registry, *, web_search=None, skill_registry=None):
+    def _fake_build(
+        registry,
+        *,
+        web_search=None,
+        skill_registry=None,
+        db=None,
+        disabled_connector_ids=(),
+    ):
         return _FakeRunner(label="fake")
 
     monkeypatch.setattr(svc, "_build_chat_runner_with_registry", _fake_build)
@@ -128,7 +135,9 @@ async def test_refreshing_chat_runner_closes_session_on_exception(monkeypatch) -
     monkeypatch.setattr(
         svc,
         "_build_chat_runner_with_registry",
-        lambda r, *, web_search=None, skill_registry=None: _BoomRunner(),
+        lambda r, *, web_search=None, skill_registry=None, db=None, disabled_connector_ids=(): (
+            _BoomRunner()
+        ),
     )
 
     factory = _SpyFactory()

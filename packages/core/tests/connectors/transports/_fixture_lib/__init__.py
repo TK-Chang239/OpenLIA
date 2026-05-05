@@ -24,3 +24,15 @@ class Client:
 
     def _private(self) -> str:
         return "secret"
+
+    def fixed_signature(self, s: str | None = None, t: str | None = None) -> dict:
+        """Mimics EODHD's `financial_news(s, t, from_date, to_date, ...)`
+        — a method whose signature does NOT accept arbitrary kwargs and
+        will raise TypeError if the caller passes one not in the
+        signature (e.g. `from`, which is also a Python reserved word)."""
+        return {"s": s, "t": t}
+
+    def varkw(self, **kwargs) -> dict:
+        """Method that accepts **kwargs — the transport must pass
+        unknown keys straight through here."""
+        return dict(kwargs)

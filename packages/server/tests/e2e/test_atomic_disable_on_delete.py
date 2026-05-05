@@ -67,7 +67,7 @@ def test_atomic_disable_on_delete(client: TestClient, monkeypatch) -> None:
         lambda dept_id: [fake_need] if dept_id == "macro_research" else [],
     )
 
-    async def fake_validate(_launch, _secrets):
+    async def fake_validate(_launch, _secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(
             tools=[],
             python_callables=[

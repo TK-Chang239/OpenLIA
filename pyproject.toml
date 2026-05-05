@@ -27,4 +27,12 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
-addopts = ["-ra", "--strict-markers", "--import-mode=importlib"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--import-mode=importlib",
+    "-m", "not live_api",
+]
+markers = [
+    "live_api: hits a real third-party API. Requires the relevant *_API_KEY env var. Skipped by default; opt in with `-m live_api`.",
+]

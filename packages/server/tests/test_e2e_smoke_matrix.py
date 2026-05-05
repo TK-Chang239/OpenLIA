@@ -139,7 +139,7 @@ def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatc
     """
     from openlia_server.services import connectors_service
 
-    async def _validate_ok(_launch, _secrets):
+    async def _validate_ok(_launch, _secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(tools=[], python_callables=[])
 
     monkeypatch.setattr(connectors_service, "_validate_launch", _validate_ok)
@@ -543,11 +543,13 @@ class _ScriptedChatRunner:
         messages,
         attachments=None,
         cancel_token=None,
+        **_extra,
     ):
         self.captured = {
             "department_id": department_id,
             "user_id": user_id,
             "messages": messages,
+            **_extra,
         }
         for event in self._events:
             yield event

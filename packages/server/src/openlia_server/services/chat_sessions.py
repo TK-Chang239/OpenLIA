@@ -10,7 +10,38 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.content import ChatMessage, ChatSession
 
 
+def _inherit_disabled_lists_from_last_session(
+    db: Session, *, user_id: str, department: str
+) -> tuple[list[str], list[str]]:
+    """Look up the user's most recently updated session in `department`
+    and return its `(disabled_connector_ids, disabled_skill_ids)` pair.
+
+    Returns `([], [])` when no prior session exists. Per the locked
+    feature contract: per-session UX defaults inherit from the user's
+    last session in the same department, not the safe baseline.
+    """
+    stmt = (
+        select(ChatSession)
+        .where(
+            ChatSession.user_id == user_id,
+            ChatSession.department == department,
+        )
+        .order_by(
+            func.coalesce(ChatSession.updated_at, ChatSession.created_at).desc(),
+            ChatSession.created_at.desc(),
+        )
+        .limit(1)
+    )
+    last = db.execute(stmt).scalar_one_or_none()
+    if last is None:
+        return ([], [])
+    return (list(last.disabled_connector_ids or []), list(last.disabled_skill_ids or []))
+
+
 def create_session(db: Session, *, user_id: str, department: str, title: str) -> ChatSession:
+    inherited_connectors, inherited_skills = _inherit_disabled_lists_from_last_session(
+        db, user_id=user_id, department=department
+    )
     row = ChatSession(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -18,6 +49,8 @@ def create_session(db: Session, *, user_id: str, department: str, title: str) ->
         title=title,
         is_pinned=False,
         is_archived=False,
+        disabled_connector_ids=inherited_connectors,
+        disabled_skill_ids=inherited_skills,
     )
     db.add(row)
     db.commit()
@@ -98,6 +131,29 @@ def rename_session(db: Session, *, session_id: str, user_id: str, new_title: str
 def set_pinned(db: Session, *, session_id: str, user_id: str, pinned: bool) -> None:
     row = get_session(db, session_id=session_id, user_id=user_id)
     row.is_pinned = pinned
+    db.commit()
+
+
+def set_session_disabled_lists(
+    db: Session,
+    *,
+    session_id: str,
+    user_id: str,
+    disabled_connector_ids: list[str] | None,
+    disabled_skill_ids: list[str] | None,
+) -> None:
+    """Update the per-session connector + skill toggle lists.
+
+    Either argument can be `None` for "leave unchanged" — supports the
+    chat-input "Tools" dropdown's PATCH semantics where each section
+    can move independently. Raises `PermissionError` if the session
+    isn't owned by `user_id`.
+    """
+    row = get_session(db, session_id=session_id, user_id=user_id)
+    if disabled_connector_ids is not None:
+        row.disabled_connector_ids = list(disabled_connector_ids)
+    if disabled_skill_ids is not None:
+        row.disabled_skill_ids = list(disabled_skill_ids)
     db.commit()
 
 

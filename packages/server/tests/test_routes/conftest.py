@@ -18,11 +18,30 @@ def _clear_rate_limiter():
     limiter().clear()
 
 
+_WIZARD_ENV_KEYS = (
+    "OPENLIA_MODE",
+    "OPENLIA_BIND_HOST",
+    "OPENLIA_BIND_PORT",
+    "OPENLIA_DB_URL",
+    "OPENLIA_AUTH_ENABLED",
+    "OPENLIA_COOKIE_SECURE",
+    "OPENLIA_TRUST_PROXY_HEADERS",
+    "OPENLIA_SIGNUP_POLICY",
+    "OPENLIA_SIGNUP_ALLOWED_DOMAINS",
+)
+
+
 @pytest.fixture
-def wizard_personal_client(db_session):
-    """App for wizard route tests — no pre-existing local user, no OPENLIA_MODE override."""
+def wizard_personal_client(db_session, monkeypatch):
+    """App for wizard route tests — no pre-existing local user, no OPENLIA_MODE override.
+
+    Strips wizard-watched env vars so the dev shell's `.env`-loaded
+    `OPENLIA_DB_URL` (and friends) doesn't leak into `env_overrides`.
+    """
     from openlia_server.db import session as session_mod
 
+    for key in _WIZARD_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
     app = create_app(
         db_session_factory=session_mod.SessionLocal,
         is_loopback_request=lambda _: True,
@@ -31,10 +50,12 @@ def wizard_personal_client(db_session):
 
 
 @pytest.fixture
-def wizard_company_client(db_session):
+def wizard_company_client(db_session, monkeypatch):
     """App for wizard company route tests — no pre-existing users, no OPENLIA_MODE override."""
     from openlia_server.db import session as session_mod
 
+    for key in _WIZARD_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
     app = create_app(
         db_session_factory=session_mod.SessionLocal,
         is_loopback_request=lambda _: True,

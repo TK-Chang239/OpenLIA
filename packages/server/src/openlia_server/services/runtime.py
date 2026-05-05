@@ -13,13 +13,16 @@ inject a system prompt and run through the chat builder.
 
 from __future__ import annotations
 
+import logging
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
 from openlia.departments import get_department
+from openlia.departments.loader import load_routing_context
 from openlia.llm.adapters import build_adapter
+from openlia.llm.exceptions import TierNotConfiguredError
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.batch import BatchRunner
 from openlia.llm.runtime.chat import ChatRunner
@@ -27,10 +30,24 @@ from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.llm.types import ModelTier
 from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.services.chat_router_client import RouterLlmJsonClient
+from openlia_server.services.dispatcher_factory import build_dispatcher
 from openlia_server.services.llm_registry import SQLModelRegistry
+
+logger = logging.getLogger(__name__)
+
+# Tier the runtime tool router asks for; falls back through these in order
+# so a partial install (only Everyday or Thinking configured) still routes.
+_ROUTER_TIERS: tuple[ModelTier, ...] = (
+    ModelTier.QUICK,
+    ModelTier.EVERYDAY,
+    ModelTier.THINKING,
+)
+_ROUTER_DEPARTMENT_ID = "_chat_router"
 
 RuntimeMode = Literal["chat", "deterministic", "scheduled_chat"]
 
@@ -70,11 +87,45 @@ def _empty_skill_registry() -> SkillRegistry:
     return SkillRegistry(store=LayeredSkillStore(system=_empty_fs, user=_empty_fs))
 
 
+def _build_router_llm_client(db: DBSession) -> RouterLlmJsonClient | None:
+    """Resolve a model for the runtime tool router. Returns None when no
+    tier is configured so the caller can fall through to the legacy
+    (non-routed) chat path.
+    """
+    registry = SQLModelRegistry(db)
+    last_error: TierNotConfiguredError | None = None
+    for tier in _ROUTER_TIERS:
+        try:
+            resolved = resolve(
+                department_id=_ROUTER_DEPARTMENT_ID,
+                registry=registry,
+                user_id=None,
+                tier_override=tier,
+            )
+        except TierNotConfiguredError as exc:
+            last_error = exc
+            continue
+        provider = build_adapter(
+            kind=resolved.provider_kind,
+            credentials=resolved.credentials,
+            model=resolved.model_ref,
+            capabilities=resolved.capabilities,
+        )
+        return RouterLlmJsonClient(provider=provider)
+    logger.warning(
+        "no LLM tier configured for chat tool router; v2 routing disabled (%s)",
+        last_error,
+    )
+    return None
+
+
 def _build_chat_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     web_search: WebSearchResolution,
     skill_registry: SkillRegistry | None = None,
+    db: DBSession | None = None,
+    disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
 ) -> ChatRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
@@ -95,6 +146,19 @@ def _build_chat_runner_with_registry(
     def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
         dev_events.record(category, message, payload)
 
+    # v2 wiring: connector dispatcher + tool router + per-dept routing context.
+    # Each piece is best-effort; if any fails the runner silently falls back
+    # to the legacy v1 path (which has no real data tools, but at least
+    # boots cleanly while a misconfigured deploy is being repaired).
+    dispatcher = None
+    router_llm_client = None
+    if db is not None:
+        try:
+            dispatcher = build_dispatcher(db, disabled_connector_ids=disabled_connector_ids)
+        except Exception as exc:
+            logger.warning("connector dispatcher build failed; v2 routing disabled: %s", exc)
+        router_llm_client = _build_router_llm_client(db)
+
     return ChatRunner(
         prompts=prompts,
         tools=tools,
@@ -103,6 +167,9 @@ def _build_chat_runner_with_registry(
         provider_factory=_provider_factory,
         skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
         trace=_trace,
+        dispatcher=dispatcher,
+        router_llm_client=router_llm_client,
+        routing_context_loader=load_routing_context,
     )
 
 
@@ -132,13 +199,19 @@ class RefreshingChatRunner:
         cancel_token=None,
         session_id: str | None = None,
         model_id_override: str | None = None,
+        disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
+        disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
     ):
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
             runner = _build_chat_runner_with_registry(
-                registry, web_search=web_search, skill_registry=self._skill_registry
+                registry,
+                web_search=web_search,
+                skill_registry=self._skill_registry,
+                db=db,
+                disabled_connector_ids=disabled_connector_ids,
             )
             async for event in runner.run(
                 department_id=department_id,
@@ -148,6 +221,7 @@ class RefreshingChatRunner:
                 cancel_token=cancel_token,
                 session_id=session_id,
                 model_id_override=model_id_override,
+                disabled_skill_ids=frozenset(disabled_skill_ids),
             ):
                 yield event
         finally:
