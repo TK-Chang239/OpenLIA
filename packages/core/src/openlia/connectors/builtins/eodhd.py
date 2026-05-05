@@ -208,27 +208,43 @@ _FINANCIAL_NEWS_OVERRIDE: dict = {
     "description": (
         "Fetch financial news from EODHD. REQUIRED: provide EITHER `s` "
         "(comma-separated ticker codes, e.g. 'AAPL.US') OR `t` (a topic "
-        "tag like 'mergers and acquisitions', 'earnings', 'crypto'). "
-        "Calling without one of these will fail. Optional: `from_date`/"
-        "`to_date` (YYYY-MM-DD), `limit` (1-1000, default 50), `offset` "
-        "(default 0)."
+        "tag from the enum). Calling without one will fail. "
+        "For broad market-wide news (e.g. 'what moved the market today'), "
+        "set `s` to major index tickers like 'SPY.US,QQQ.US,DIA.US,IWM.US' "
+        "rather than guessing a topic tag — `t` is for topic-specific "
+        "filtering. Optional: `from_date`/`to_date` (YYYY-MM-DD), "
+        "`limit` (1-1000, default 50), `offset` (default 0)."
     ),
     # Note: Anthropic's tool `input_schema` validator doesn't accept
     # JSON-Schema combinators like `anyOf`/`oneOf` — only the basic
-    # `{type, properties, required}` triple. Express the s-OR-t
-    # constraint in the description and let the model honor it (or
-    # surface EODHD's runtime error, which the model can recover from
-    # on the next turn).
+    # `{type, properties, required}` triple plus `enum` on individual
+    # properties. The s-OR-t requirement stays in the description and
+    # is also enforced server-side by the dispatcher's `require_one_of`
+    # argument constraint. The `enum` on `t` lets the validator reject
+    # hallucinated tags before the SDK round-trip.
     "input_schema": {
         "type": "object",
         "properties": {
             "s": {
                 "type": "string",
-                "description": "Ticker code(s), comma-separated. Required if `t` is empty.",
+                "description": (
+                    "Ticker code(s), comma-separated (e.g. 'AAPL.US' or "
+                    "'SPY.US,QQQ.US'). Required if `t` is empty. Use this "
+                    "for broad market queries with index tickers."
+                ),
             },
             "t": {
                 "type": "string",
-                "description": "Topic tag (e.g. 'earnings'). Required if `s` is empty.",
+                "enum": list(_FINANCIAL_NEWS_STANDARD_TAGS),
+                "description": (
+                    "Topic tag for filtered news. Choose ONE value from "
+                    "the enum. Common picks: 'earnings results' / "
+                    "'quarterly earnings' for results, 'price target' / "
+                    "'ratings' for analyst calls, 'initial public offering' "
+                    "for IPOs, 'insider transactions' for insider activity, "
+                    "'press releases' for company announcements. Required "
+                    "if `s` is empty."
+                ),
             },
             "from_date": {"type": "string", "description": "Start date YYYY-MM-DD."},
             "to_date": {"type": "string", "description": "End date YYYY-MM-DD."},
