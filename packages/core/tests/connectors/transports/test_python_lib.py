@@ -167,3 +167,18 @@ async def test_aclose_clears_cached_instance() -> None:
     assert t._instance is not None
     await t.aclose()
     assert t._instance is None
+
+
+@pytest.mark.asyncio
+async def test_call_tool_converts_systemexit_to_runtime_error() -> None:
+    """Some SDKs (e.g. eodhd) call `sys.exit(1)` on API errors instead
+    of raising. SystemExit is a BaseException — it bypasses normal
+    `except Exception` handlers and propagates up through the async
+    stack, killing whatever request is in flight (in production this
+    crashed the SSE handler and surfaced as "Connection lost" in the
+    browser). The transport must trap SystemExit at the call boundary
+    and re-raise as a regular RuntimeError so the chat runtime can
+    surface a tool-error to the model and continue the turn."""
+    t = _make_transport()
+    with pytest.raises(RuntimeError, match=r"sys\.exit"):
+        await t.call_tool("sys_exit_caller", {})
