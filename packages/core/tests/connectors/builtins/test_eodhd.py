@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from openlia.connectors.builtins.eodhd import EODHD_TEMPLATE
+from openlia.connectors.builtins.eodhd import (
+    _FINANCIAL_NEWS_STANDARD_TAGS,
+    EODHD_TEMPLATE,
+)
 from openlia.connectors.builtins.types import CliMcpRecipe, PythonLibRecipe
 from openlia.connectors.types import Category
 
@@ -101,3 +104,21 @@ def test_eodhd_tool_overrides_use_anthropic_compatible_schema() -> None:
         assert isinstance(schema.get("properties"), dict), (
             f"{tool_name}: input_schema.properties must be an object"
         )
+
+
+def test_financial_news_standard_tags_constant() -> None:
+    """The standard-tag list is the source of truth for the financial_news
+    `t` enum. Lock its size, casing, and uniqueness so a careless edit
+    doesn't quietly drop a valid value."""
+    assert len(_FINANCIAL_NEWS_STANDARD_TAGS) == 53
+    assert len(set(_FINANCIAL_NEWS_STANDARD_TAGS)) == 53, "duplicate tags"
+    assert all(tag == tag.lower() for tag in _FINANCIAL_NEWS_STANDARD_TAGS), (
+        "all tags must be lowercase to match EODHD API"
+    )
+    for anchor in (
+        "earnings results",
+        "price target",
+        "initial public offering",
+        "zacks rank",
+    ):
+        assert anchor in _FINANCIAL_NEWS_STANDARD_TAGS

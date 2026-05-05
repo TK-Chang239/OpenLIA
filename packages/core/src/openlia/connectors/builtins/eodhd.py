@@ -134,6 +134,71 @@ _SOCIAL_POSTS = CallableSpec(
 )
 
 
+# EODHD's documented standard topic-tag vocabulary for the financial_news
+# endpoint. Source: https://eodhd.com/financial-apis/stock-market-financial-news-api
+# Anthropic's tool validator can enforce these as a schema enum so the
+# model can't hallucinate an unsupported tag (e.g. "general") that the
+# upstream API rejects with "Incorrect value was fullfiled for s or t".
+# EODHD also returns AI-auto-detected tags beyond this list, but those
+# are an open vocabulary, not a guaranteed contract — intentionally
+# excluded from the enum.
+_FINANCIAL_NEWS_STANDARD_TAGS: tuple[str, ...] = (
+    "balance sheet",
+    "capital employed",
+    "class action",
+    "company announcement",
+    "consensus eps estimate",
+    "consensus estimate",
+    "credit rating",
+    "discounted cash flow",
+    "dividend payments",
+    "earnings estimate",
+    "earnings growth",
+    "earnings per share",
+    "earnings release",
+    "earnings report",
+    "earnings results",
+    "earnings surprise",
+    "estimate revisions",
+    "european regulatory news",
+    "financial results",
+    "fourth quarter",
+    "free cash flow",
+    "future cash flows",
+    "growth rate",
+    "initial public offering",
+    "insider ownership",
+    "insider transactions",
+    "institutional investors",
+    "institutional ownership",
+    "intrinsic value",
+    "market research reports",
+    "net income",
+    "operating income",
+    "present value",
+    "press releases",
+    "price target",
+    "quarterly earnings",
+    "quarterly results",
+    "ratings",
+    "research analysis and reports",
+    "return on equity",
+    "revenue estimates",
+    "revenue growth",
+    "roce",
+    "roe",
+    "share price",
+    "shareholder",
+    "shareholder rights",
+    "shares outstanding",
+    "split",
+    "strong buy",
+    "total revenue",
+    "zacks investment research",
+    "zacks rank",
+)
+
+
 # EODHD's `financial_news` SDK signature has every kwarg defaulting to
 # None, so a signature-derived JSON schema can't express that the
 # upstream API still requires either `s` (ticker) or `t` (topic).
