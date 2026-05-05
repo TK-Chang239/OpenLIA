@@ -67,3 +67,29 @@ def test_apply_overrides_no_op_when_overrides_empty() -> None:
     tools = [{"name": "a", "description": "x", "input_schema": {}}]
     out = _apply_tool_overrides(tools, {})
     assert out == tools
+
+
+def test_apply_tool_overrides_preserves_property_enum() -> None:
+    """Overrides may declare per-property enums so the Anthropic
+    validator can lock the model to a fixed vocabulary (e.g. EODHD
+    financial_news topic tags). The shallow merge in
+    `_apply_tool_overrides` must carry the `enum` through unchanged."""
+    tools = [
+        {
+            "name": "financial_news",
+            "description": "auto",
+            "input_schema": {"type": "object", "properties": {"t": {"type": "string"}}},
+        }
+    ]
+    overrides = {
+        "financial_news": {
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "t": {"type": "string", "enum": ["earnings", "ratings"]},
+                },
+            },
+        }
+    }
+    out = _apply_tool_overrides(tools, overrides)
+    assert out[0]["input_schema"]["properties"]["t"]["enum"] == ["earnings", "ratings"]
