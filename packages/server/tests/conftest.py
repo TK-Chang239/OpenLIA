@@ -24,11 +24,16 @@ def db_url(db_path: Path) -> str:
 
 
 @pytest.fixture
-def engine(db_url: str) -> Iterator[Engine]:
+def engine(db_url: str, monkeypatch: pytest.MonkeyPatch) -> Iterator[Engine]:
     import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
     from openlia_server.db import session as session_mod
     from openlia_server.db.base import Base
 
+    # The app lifespan re-runs `configure_engine(resolve_db_url())` if
+    # OPENLIA_DB_URL is set, which would silently re-point SessionLocal
+    # at the developer's `.env` DB and break test isolation. Strip the
+    # var here so any TestClient context manager keeps the test's DB.
+    monkeypatch.delenv("OPENLIA_DB_URL", raising=False)
     session_mod.configure_engine(db_url)
     eng = session_mod.get_engine()
     Base.metadata.create_all(eng)

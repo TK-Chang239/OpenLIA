@@ -1,8 +1,9 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { type ChatMessage, listMessages } from "../../api/chat";
+import { type ChatMessage, getSession, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
 import { ModelPicker } from "./ModelPicker";
+import { ToolPicker } from "./ToolPicker";
 import { MessageList } from "./MessageList";
 import { UserBubble } from "./UserBubble";
 import { AssistantMessage } from "./AssistantMessage";
@@ -87,6 +88,8 @@ export function ChatInterface({
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sentOnce, setSentOnce] = useState(false);
+  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>([]);
+  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
   const lastSentRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
   const { state, send, stop, reset } = useChatStream({
@@ -103,6 +106,20 @@ export function ChatInterface({
     setSentOnce(false);
     persistedStreamRef.current = null;
     reset();
+    // Fire the session GET in parallel to refresh the disabled-tool lists
+    // (the chat-input ToolPicker reads them as initial state). Failures
+    // here are non-blocking — we degrade to "all on" defaults.
+    getSession(sessionId)
+      .then((s) => {
+        if (cancelled) return;
+        setDisabledConnectorIds(s.disabled_connector_ids ?? []);
+        setDisabledSkillIds(s.disabled_skill_ids ?? []);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDisabledConnectorIds([]);
+        setDisabledSkillIds([]);
+      });
     listMessages(sessionId)
       .then((r) => {
         if (cancelled) return;
@@ -342,7 +359,18 @@ export function ChatInterface({
         onStop={handleStop}
         isStreaming={isStreaming}
         placeholder={inputPlaceholder}
-        leftSlot={departmentId ? <ModelPicker /> : null}
+        leftSlot={
+          departmentId ? (
+            <div className="flex items-center gap-2">
+              <ModelPicker />
+              <ToolPicker
+                sessionId={sessionId}
+                initialDisabledConnectorIds={disabledConnectorIds}
+                initialDisabledSkillIds={disabledSkillIds}
+              />
+            </div>
+          ) : null
+        }
       />
     </div>
   );

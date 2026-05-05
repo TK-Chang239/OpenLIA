@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import pytest
-from openlia.connectors.types import ConnectorStatus
+from openlia.connectors.types import Category, ConnectorSource, ConnectorStatus
 from openlia_server.db.models.connectors import Connector, RunnerCallableSpec
 from openlia_server.services import connectors_service
-from openlia_server.services.connectors_service import ValidationOk, install_builtin
+from openlia_server.services.connectors_service import (
+    DuplicateConnectorError,
+    ValidationOk,
+    create_connector,
+    install_builtin,
+)
 from sqlalchemy.orm import Session
 
 
 def _stub_validate_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Monkeypatch _validate_launch to always return ValidationOk(tools=[], python_callables=[])."""
 
-    async def _ok(launch, secrets):
+    async def _ok(launch, secrets, *, tool_overrides=None):
         return ValidationOk(tools=[], python_callables=[])
 
     monkeypatch.setattr(connectors_service, "_validate_launch", _ok)
@@ -300,3 +305,106 @@ async def test_sync_template_specs_rejects_non_builtin_connector(
 
     with pytest.raises(KeyError, match="not built-in"):
         connectors_service.sync_template_specs(db_session, "custom-1")
+
+
+# ---------------------------------------------------------------------------
+# duplicate-install guard: same (provider_id, source) is rejected
+# ---------------------------------------------------------------------------
+
+
+def _firecrawl_remote_launch() -> dict:
+    return {
+        "modes": [
+            {
+                "kind": "remote_mcp",
+                "url": "https://mcp.firecrawl.dev/key/v2/mcp",
+                "headers": {},
+            }
+        ]
+    }
+
+
+@pytest.mark.asyncio
+async def test_create_connector_rejects_duplicate_provider_source(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_validate_ok(monkeypatch)
+
+    first = await create_connector(
+        db_session,
+        provider_id="firecrawl",
+        display_name="Firecrawl",
+        source=ConnectorSource.REMOTE_MCP,
+        category=Category.WEB_SEARCH,
+        launch=_firecrawl_remote_launch(),
+    )
+    assert first.status == ConnectorStatus.VALIDATED.value
+
+    with pytest.raises(DuplicateConnectorError) as exc:
+        await create_connector(
+            db_session,
+            provider_id="firecrawl",
+            display_name="Firecrawl",
+            source=ConnectorSource.REMOTE_MCP,
+            category=Category.WEB_SEARCH,
+            launch=_firecrawl_remote_launch(),
+        )
+
+    assert exc.value.existing_id == first.id
+    assert exc.value.provider_id == "firecrawl"
+    assert exc.value.source == ConnectorSource.REMOTE_MCP.value
+
+    rows = (
+        db_session.query(Connector)
+        .filter(
+            Connector.provider_id == "firecrawl",
+            Connector.source == ConnectorSource.REMOTE_MCP.value,
+        )
+        .all()
+    )
+    assert len(rows) == 1
+    assert rows[0].id == first.id
+
+
+@pytest.mark.asyncio
+async def test_create_connector_allows_same_provider_with_different_source(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """built_in install + a separately-managed remote_mcp install must coexist."""
+    _stub_validate_ok(monkeypatch)
+
+    builtin = await install_builtin(db_session, template_id="firecrawl", api_key="k")
+    assert builtin.source == ConnectorSource.BUILT_IN.value
+
+    sibling = await create_connector(
+        db_session,
+        provider_id="firecrawl",
+        display_name="Firecrawl",
+        source=ConnectorSource.REMOTE_MCP,
+        category=Category.WEB_SEARCH,
+        launch=_firecrawl_remote_launch(),
+    )
+    assert sibling.id != builtin.id
+
+
+@pytest.mark.asyncio
+async def test_install_builtin_rejects_second_install_of_same_template(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_validate_ok(monkeypatch)
+
+    first = await install_builtin(db_session, template_id="firecrawl", api_key="k1")
+
+    with pytest.raises(DuplicateConnectorError) as exc:
+        await install_builtin(db_session, template_id="firecrawl", api_key="k2")
+    assert exc.value.existing_id == first.id
+
+    rows = (
+        db_session.query(Connector)
+        .filter(Connector.provider_id == "firecrawl")
+        .all()
+    )
+    assert len(rows) == 1

@@ -18,8 +18,17 @@ def test_secretary_has_no_required_categories():
     assert SecretaryDepartment.required_categories == ()
 
 
-def test_secretary_optional_categories_include_web_search():
-    assert Category.WEB_SEARCH in SecretaryDepartment.optional_categories
+def test_secretary_optional_categories_cover_all_connector_kinds():
+    # Secretary now answers questions end-to-end and must reach every
+    # connector category any department uses, while staying zero-config
+    # (no required categories — see the test above).
+    optional = set(SecretaryDepartment.optional_categories)
+    assert {
+        Category.FINANCIAL,
+        Category.NEWS,
+        Category.SOCIAL,
+        Category.WEB_SEARCH,
+    } <= optional
 
 
 def test_secretary_does_not_require_runner():
@@ -44,6 +53,37 @@ def test_secretary_exposes_suggest_redirect_tool():
         "macro_research",
         "portfolio",
     }.issubset(enum)
+
+
+def _render_secretary_chat_system() -> str:
+    from openlia.llm.runtime.prompts import PromptLoader
+
+    return PromptLoader().render("secretary", "chat.system", skills_menu=[])
+
+
+def test_secretary_prompt_drops_old_handoff_paragraph():
+    # Old prompt explicitly listed "Hand off to: Equity Research for ...".
+    # Secretary now answers questions itself and only offers a handoff
+    # when the user asks for one (see the "ask first" test below).
+    rendered = _render_secretary_chat_system()
+    assert "Hand off to" not in rendered
+
+
+def test_secretary_prompt_requires_asking_before_redirect():
+    # Behavioral contract: never call suggest_redirect until the user
+    # has explicitly agreed in chat. We assert the contract phrase is
+    # rendered into the system prompt so prompt edits can't silently
+    # drop it.
+    rendered = _render_secretary_chat_system()
+    assert "suggest_redirect" in rendered
+    assert "ask the user" in rendered.lower()
+
+
+def test_secretary_welcome_drops_specialist_routing_invite():
+    from openlia.llm.runtime.prompts import PromptLoader
+
+    welcome = PromptLoader().render("secretary", "chat.welcome")
+    assert "specialist desk" not in welcome.lower()
 
 
 def test_prompt_file_loads_chat_section():

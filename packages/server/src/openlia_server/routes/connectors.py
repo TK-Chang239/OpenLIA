@@ -344,24 +344,45 @@ def build_connectors_router(
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except connectors_service.DuplicateConnectorError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": str(exc),
+                    "existing_id": exc.existing_id,
+                    "provider_id": exc.provider_id,
+                    "source": exc.source,
+                },
+            ) from exc
         return _to_out(connector)
 
     @router.post("", status_code=status.HTTP_201_CREATED, response_model=ConnectorOut)
     async def create(body: ConnectorCreate, db: DBSession = Depends(session_dep)) -> ConnectorOut:
         launch_dict = body.launch.model_dump(exclude_none=True)
-        row = await connectors_service.create_connector(
-            db,
-            provider_id=body.provider_id,
-            display_name=body.display_name,
-            source=ConnectorSource(body.source),
-            category=Category(body.category),
-            launch=launch_dict,
-            secrets=body.secrets,
-            source_repo_url=body.source_repo_url,
-            source_repo_revision=body.source_repo_revision,
-            grounding_paths=body.grounding_paths,
-            openapi_url=body.openapi_url,
-        )
+        try:
+            row = await connectors_service.create_connector(
+                db,
+                provider_id=body.provider_id,
+                display_name=body.display_name,
+                source=ConnectorSource(body.source),
+                category=Category(body.category),
+                launch=launch_dict,
+                secrets=body.secrets,
+                source_repo_url=body.source_repo_url,
+                source_repo_revision=body.source_repo_revision,
+                grounding_paths=body.grounding_paths,
+                openapi_url=body.openapi_url,
+            )
+        except connectors_service.DuplicateConnectorError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": str(exc),
+                    "existing_id": exc.existing_id,
+                    "provider_id": exc.provider_id,
+                    "source": exc.source,
+                },
+            ) from exc
         return _to_out(row)
 
     @router.get("", response_model=list[ConnectorOut])

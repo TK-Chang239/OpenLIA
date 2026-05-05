@@ -73,6 +73,9 @@ EXPECTED_TABLES = {
     # --- Lia Safety & Compliance Guardrails (MVP) ---
     "lia_guardrail_events",
     "user_disclaimer_acceptance",
+    # --- Skills MVP (PR #91) ---
+    "skills",
+    "skill_user_overrides",
 }
 
 

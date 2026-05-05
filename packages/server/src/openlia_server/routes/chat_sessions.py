@@ -22,6 +22,8 @@ class SessionOut(BaseModel):
     is_archived: bool
     created_at: datetime
     model_id: str | None = None
+    disabled_connector_ids: list[str] = Field(default_factory=list)
+    disabled_skill_ids: list[str] = Field(default_factory=list)
 
 
 class SessionListOut(BaseModel):
@@ -47,6 +49,8 @@ class SessionPatchIn(BaseModel):
     title: str | None = None
     pinned: bool | None = None
     archived: bool | None = None
+    disabled_connector_ids: list[str] | None = None
+    disabled_skill_ids: list[str] | None = None
 
 
 class SessionModelIn(BaseModel):
@@ -118,6 +122,24 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         row = svc.get_or_create_default_session(db, user_id=user.id, department=department)
         return SessionOut.model_validate(row, from_attributes=True)
 
+    @router.get("/{session_id}", response_model=SessionOut)
+    def get_session_ep(
+        session_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> SessionOut:
+        try:
+            row = svc.get_session(db, session_id=session_id, user_id=user.id)
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": "not_found", "message": str(exc)}
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=403, detail={"code": "forbidden", "message": str(exc)}
+            ) from exc
+        return SessionOut.model_validate(row, from_attributes=True)
+
     @router.patch("/{session_id}")
     def patch_session_ep(
         session_id: str,
@@ -134,6 +156,14 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
                 svc.archive_session(db, session_id=session_id, user_id=user.id)
             if body.archived is False:
                 svc.unarchive_session(db, session_id=session_id, user_id=user.id)
+            if body.disabled_connector_ids is not None or body.disabled_skill_ids is not None:
+                svc.set_session_disabled_lists(
+                    db,
+                    session_id=session_id,
+                    user_id=user.id,
+                    disabled_connector_ids=body.disabled_connector_ids,
+                    disabled_skill_ids=body.disabled_skill_ids,
+                )
         except PermissionError as exc:
             raise HTTPException(
                 status_code=403, detail={"code": "forbidden", "message": str(exc)}

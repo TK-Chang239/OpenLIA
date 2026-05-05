@@ -118,6 +118,8 @@ def build_chat_stream_router(
                 session_id=session_id,
                 last_user_text=q,
                 model_id_override=session_row.model_id,
+                disabled_connector_ids=tuple(session_row.disabled_connector_ids or ()),
+                disabled_skill_ids=tuple(session_row.disabled_skill_ids or ()),
             ),
             media_type="text/event-stream",
         )
@@ -194,6 +196,8 @@ async def _event_source(
     session_id: str | None = None,
     last_user_text: str = "",
     model_id_override: str | None = None,
+    disabled_connector_ids: tuple[str, ...] = (),
+    disabled_skill_ids: tuple[str, ...] = (),
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
@@ -213,6 +217,8 @@ async def _event_source(
             messages=messages,
             cancel_token=token,
             model_id_override=model_id_override,
+            disabled_connector_ids=disabled_connector_ids,
+            disabled_skill_ids=disabled_skill_ids,
         ):
             wire = to_wire(event)
             etype = wire["type"]

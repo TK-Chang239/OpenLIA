@@ -15,6 +15,8 @@ export interface ChatSession {
   is_archived: boolean;
   created_at: string;
   model_id?: string | null;
+  disabled_connector_ids?: string[];
+  disabled_skill_ids?: string[];
 }
 
 export interface ChatMessage {
@@ -50,7 +52,13 @@ export const createSession = (body: { department: DepartmentSlug; title: string 
 
 export const patchSession = (
   id: string,
-  patch: { title?: string; pinned?: boolean; archived?: boolean },
+  patch: {
+    title?: string;
+    pinned?: boolean;
+    archived?: boolean;
+    disabled_connector_ids?: string[];
+    disabled_skill_ids?: string[];
+  },
 ) => fetchJson<{ ok: true }>(`/api/chat/sessions/${id}`, { method: "PATCH", json: patch });
 
 export const deleteSession = (id: string) =>
@@ -67,3 +75,6 @@ export const listMessages = (sessionId: string) =>
 
 export const getDefaultSessionForDepartment = (department: DepartmentSlug) =>
   fetchJson<ChatSession>(`/api/chat/sessions/by-department/${department}`);
+
+export const getSession = (id: string) =>
+  fetchJson<ChatSession>(`/api/chat/sessions/${id}`);

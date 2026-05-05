@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from openlia.connectors.builtins._registry import get_template
 from openlia.connectors.dispatch import Dispatcher, PreparedConnector
 from openlia.connectors.transports import CallableTransport
 from openlia.connectors.transports.mcp_cli import CliMcpTransport
@@ -206,7 +207,21 @@ def _hydrate_spec(row: RunnerCallableSpec) -> CallableSpec:
     )
 
 
-def build_dispatcher(session: Session) -> Dispatcher:
+def build_dispatcher(
+    session: Session,
+    *,
+    disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
+) -> Dispatcher:
+    """Build a runtime `Dispatcher` from persisted connectors and specs.
+
+    `disabled_connector_ids` is a per-session opt-out: any connector whose
+    `id` is in this set is omitted from `candidate_tools()` so the chat
+    runtime router never sees it and the model can never call it. The
+    connector still lives in `dispatcher.connectors` so deterministic
+    dept runs (`fetch_need`) bound to that connector keep working — only
+    the chat-routing surface narrows.
+    """
+    disabled = frozenset(disabled_connector_ids)
     connector_rows = session.execute(select(Connector)).scalars().all()
     spec_rows = session.execute(select(RunnerCallableSpec)).scalars().all()
 
@@ -217,8 +232,20 @@ def build_dispatcher(session: Session) -> Dispatcher:
     spec_connector_ids: dict[tuple[str, str], str] = {
         (s.department_id, s.need_id): s.connector_id for s in spec_rows
     }
+    # Surface each built-in template's `tool_argument_constraints` so the
+    # dispatcher can short-circuit known-bad calls before the SDK round-trip
+    # (e.g. EODHD's `financial_news` requires `s` OR `t` per upstream API).
+    constraints: dict[str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]] = {}
+    for prep in prepared.values():
+        template = get_template(prep.provider_id)
+        if template is None:
+            continue
+        if template.tool_argument_constraints:
+            constraints[prep.provider_id] = tuple(template.tool_argument_constraints)
     return Dispatcher(
         connectors=prepared,
         callable_specs=specs,
         spec_connector_ids=spec_connector_ids,
+        chat_connector_blocklist=disabled,
+        tool_argument_constraints=constraints,
     )

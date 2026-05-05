@@ -105,6 +105,42 @@ def test_watchlist_item_composite_pk(create_tables) -> None:
     assert pk_cols == {"watchlist_id", "ticker"}
 
 
+def test_chat_session_disabled_lists_default_to_empty(create_tables, db_session: Session) -> None:
+    """Per-session connector + skill toggle storage. Defaults to empty
+    lists so existing sessions keep their current all-on behavior."""
+    from openlia_server.db.models.auth import User
+    from openlia_server.db.models.content import ChatSession
+
+    u = User(id="u_dl", email="u_dl@example.com", display_name="DL")
+    cs = ChatSession(id="cs_dl", user_id="u_dl", department="secretary")
+    db_session.add_all([u, cs])
+    db_session.commit()
+    db_session.refresh(cs)
+    assert cs.disabled_connector_ids == []
+    assert cs.disabled_skill_ids == []
+
+
+def test_chat_session_disabled_lists_persist(create_tables, db_session: Session) -> None:
+    from openlia_server.db.models.auth import User
+    from openlia_server.db.models.content import ChatSession
+
+    u = User(id="u_dl2", email="u_dl2@example.com", display_name="DL2")
+    cs = ChatSession(
+        id="cs_dl2",
+        user_id="u_dl2",
+        department="secretary",
+        disabled_connector_ids=["conn-1", "conn-2"],
+        disabled_skill_ids=["skill-a"],
+    )
+    db_session.add_all([u, cs])
+    db_session.commit()
+    db_session.expire_all()
+    fetched = db_session.get(ChatSession, "cs_dl2")
+    assert fetched is not None
+    assert fetched.disabled_connector_ids == ["conn-1", "conn-2"]
+    assert fetched.disabled_skill_ids == ["skill-a"]
+
+
 def test_chat_session_indexes(create_tables) -> None:
     from openlia_server.db.models.content import ChatSession
 

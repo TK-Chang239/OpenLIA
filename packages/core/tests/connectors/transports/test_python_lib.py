@@ -99,7 +99,30 @@ async def test_list_tools_returns_public_methods_only() -> None:
     assert "_private" not in names
     quote_entry = next(e for e in listed if e["name"] == "quote")
     assert "sync quote" in quote_entry["description"]
-    assert quote_entry["input_schema"] == {}
+
+
+@pytest.mark.asyncio
+async def test_list_tools_derives_input_schema_from_signature() -> None:
+    """Without parameter schemas, the LLM has only the docstring to go on
+    and routinely synthesizes wrong kwargs (e.g. EODHD's `from`/`to` from
+    the description text). Signature-derived schemas give it `properties`
+    and `required` to honor."""
+    t = _make_transport()
+    listed = await t.list_tools()
+    fixed = next(e for e in listed if e["name"] == "fixed_signature")
+    schema = fixed["input_schema"]
+    assert schema.get("type") == "object"
+    props = schema.get("properties") or {}
+    assert "s" in props
+    assert "t" in props
+    # `s` and `t` have defaults of None, so they're optional.
+    required = set(schema.get("required") or ())
+    assert required == set()
+    # A method with a no-default required param must mark it required.
+    quote = next(e for e in listed if e["name"] == "quote")
+    qprops = quote["input_schema"].get("properties") or {}
+    assert "symbol" in qprops
+    assert "symbol" in (quote["input_schema"].get("required") or [])
 
 
 @pytest.mark.asyncio
@@ -110,6 +133,31 @@ async def test_call_tool_accepts_qualified_method_name() -> None:
     t = _make_transport()
     result = await t.call_tool("Client.quote", {"symbol": "AAPL"})
     assert result == {"symbol": "AAPL", "key": "k-123", "region": "eu"}
+
+
+@pytest.mark.asyncio
+async def test_call_tool_drops_unknown_kwargs_for_fixed_signature() -> None:
+    """Real-world: an LLM tool call may include kwargs the underlying
+    SDK method doesn't accept (e.g. EODHD's `financial_news` describes
+    `from`/`to` in docs but the Python SDK uses `from_date`/`to_date`).
+    Without filtering, the transport raises TypeError and the chat
+    surfaces a 400. Drop unknown kwargs and let the SDK report a
+    real error if the remaining args are insufficient."""
+    t = _make_transport()
+    result = await t.call_tool(
+        "fixed_signature",
+        {"s": "AAPL", "from": "2026-05-04", "extra": "y"},
+    )
+    assert result == {"s": "AAPL", "t": None}
+
+
+@pytest.mark.asyncio
+async def test_call_tool_passes_unknown_kwargs_when_method_takes_varkw() -> None:
+    """Methods that declare `**kwargs` must receive everything; do not
+    over-filter."""
+    t = _make_transport()
+    result = await t.call_tool("varkw", {"alpha": 1, "from": "x"})
+    assert result == {"alpha": 1, "from": "x"}
 
 
 @pytest.mark.asyncio
