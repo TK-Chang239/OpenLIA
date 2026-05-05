@@ -160,9 +160,21 @@ class PythonLibTransport:
         # left, and let any genuine "missing required arg" error bubble
         # up from the SDK with a message the model can act on.
         bound = _filter_known_kwargs(method, arguments)
-        result = method(**bound)
-        if inspect.isawaitable(result):
-            result = await result
+        # Some SDKs (notably eodhd) call `sys.exit(1)` on API errors
+        # instead of raising. SystemExit is a BaseException — it
+        # bypasses normal `except Exception` handlers and propagates
+        # through the async stack, killing the SSE response handler
+        # ("Connection lost" in the browser). Convert it to a regular
+        # RuntimeError at this boundary so the chat runtime can surface
+        # a tool-error to the model and the turn continues.
+        try:
+            result = method(**bound)
+            if inspect.isawaitable(result):
+                result = await result
+        except SystemExit as exc:
+            raise RuntimeError(
+                f"SDK called sys.exit({exc.code!r}) during {name!r}; treat as tool failure"
+            ) from exc
         return result
 
     async def list_tools(self) -> list[dict]:
