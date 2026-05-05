@@ -36,3 +36,13 @@ class Client:
         """Method that accepts **kwargs — the transport must pass
         unknown keys straight through here."""
         return dict(kwargs)
+
+    def sys_exit_caller(self) -> None:
+        """Mimics misbehaving SDKs (e.g. eodhd) that call `sys.exit(1)`
+        on API errors instead of raising. Without a transport-level
+        guard the SystemExit propagates through the async stack and
+        kills the SSE response handler, surfacing as 'Connection
+        lost' in the browser."""
+        import sys
+
+        sys.exit(1)
