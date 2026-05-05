@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from openlia.connectors.builtins.eodhd import EODHD_TEMPLATE
+from openlia.connectors.builtins.eodhd import (
+    _FINANCIAL_NEWS_STANDARD_TAGS,
+    EODHD_TEMPLATE,
+)
 from openlia.connectors.builtins.types import CliMcpRecipe, PythonLibRecipe
 from openlia.connectors.types import Category
 
@@ -94,10 +97,79 @@ def test_eodhd_tool_overrides_use_anthropic_compatible_schema() -> None:
         schema = override.get("input_schema") or {}
         leaked = forbidden_keys & set(schema.keys())
         assert not leaked, (
-            f"{tool_name} override input_schema contains "
-            f"Anthropic-incompatible keys: {leaked}"
+            f"{tool_name} override input_schema contains Anthropic-incompatible keys: {leaked}"
         )
         assert schema.get("type") == "object", f"{tool_name}: input_schema.type must be 'object'"
         assert isinstance(schema.get("properties"), dict), (
             f"{tool_name}: input_schema.properties must be an object"
         )
+
+
+def test_financial_news_standard_tags_constant() -> None:
+    """The standard-tag list is the source of truth for the financial_news
+    `t` enum. Lock its size, casing, and uniqueness so a careless edit
+    doesn't quietly drop a valid value."""
+    assert len(_FINANCIAL_NEWS_STANDARD_TAGS) == 53
+    assert len(set(_FINANCIAL_NEWS_STANDARD_TAGS)) == 53, "duplicate tags"
+    assert all(tag == tag.lower() for tag in _FINANCIAL_NEWS_STANDARD_TAGS), (
+        "all tags must be lowercase to match EODHD API"
+    )
+    for anchor in (
+        "earnings results",
+        "price target",
+        "initial public offering",
+        "zacks rank",
+    ):
+        assert anchor in _FINANCIAL_NEWS_STANDARD_TAGS
+
+
+def test_financial_news_override_has_topic_enum() -> None:
+    """The `t` parameter must declare its full standard-tag enum so the
+    Anthropic tool validator rejects hallucinated topics before the SDK
+    round-trip. Without this, the model picks plausible-sounding values
+    like "general" and EODHD returns "Incorrect value was fullfiled for
+    s or t", killing the chat turn."""
+    overrides = dict(EODHD_TEMPLATE.tool_overrides)
+    schema = overrides["financial_news"]["input_schema"]
+    t_prop = schema["properties"]["t"]
+    assert t_prop["type"] == "string"
+    assert "enum" in t_prop, "`t` must declare an enum of valid topic tags"
+    assert tuple(t_prop["enum"]) == _FINANCIAL_NEWS_STANDARD_TAGS
+
+
+def test_financial_news_override_steers_broad_queries_to_tickers() -> None:
+    """The original failure mode: model picks `t="general"` for "what
+    happened in the market today". Even with the enum locking out
+    invalid values, a broad query has no good topic match. The tool's
+    top-level description must steer such queries toward `s` with
+    index tickers instead of guessing a topic."""
+    overrides = dict(EODHD_TEMPLATE.tool_overrides)
+    description = overrides["financial_news"]["description"].lower()
+    assert "broad" in description or "market-wide" in description, (
+        "description should explicitly address broad-market queries"
+    )
+    assert "spy" in description or "index" in description, (
+        "description should point at index tickers as the alternative to topic guessing"
+    )
+
+
+def test_financial_news_override_describes_s_as_single_ticker() -> None:
+    """EODHD's news endpoint rejects comma-separated values for `s`
+    with "Only one ticker is allowed in parameter s." The previous
+    description told the model `s` accepted a comma-separated list
+    (which is true for stock_prices, but NOT for news), and the model
+    duly tried 'SPY.US,QQQ.US,DIA.US,IWM.US'. Lock the description's
+    'single ticker' wording so the regression can't sneak back."""
+    overrides = dict(EODHD_TEMPLATE.tool_overrides)
+    description = overrides["financial_news"]["description"].lower()
+    s_prop_desc = overrides["financial_news"]["input_schema"]["properties"]["s"][
+        "description"
+    ].lower()
+    assert "single ticker" in description, (
+        "top-level description must say `s` is a single ticker for this endpoint"
+    )
+    assert (
+        "single ticker" in s_prop_desc
+        or "rejects comma-separated" in s_prop_desc
+        or "one per ticker" in s_prop_desc
+    ), "`s` property description must explicitly forbid comma-separated values"
