@@ -38,6 +38,100 @@ def _make_user(db_session, email: str):
 # ---------------------------------------------------------------------------
 
 
+def test_create_session_inherits_disabled_lists_from_last_session_in_dept(db_session):
+    """Per-dept inheritance: a fresh session starts with the same toggles
+    as the user's most recently updated session in the same department."""
+    u = _make_user(db_session, "inh@example.com")
+    older = svc.create_session(db_session, user_id=u.id, department="secretary", title="old")
+    svc.set_session_disabled_lists(
+        db_session,
+        session_id=older.id,
+        user_id=u.id,
+        disabled_connector_ids=["c-x"],
+        disabled_skill_ids=["s-y"],
+    )
+    new_row = svc.create_session(db_session, user_id=u.id, department="secretary", title="new")
+    assert new_row.disabled_connector_ids == ["c-x"]
+    assert new_row.disabled_skill_ids == ["s-y"]
+
+
+def test_create_session_inheritance_is_per_department(db_session):
+    """Different desks have different defaults — inheritance never crosses
+    department boundaries."""
+    u = _make_user(db_session, "inh2@example.com")
+    secretary_old = svc.create_session(
+        db_session, user_id=u.id, department="secretary", title="sec"
+    )
+    svc.set_session_disabled_lists(
+        db_session,
+        session_id=secretary_old.id,
+        user_id=u.id,
+        disabled_connector_ids=["c-eodhd"],
+        disabled_skill_ids=None,
+    )
+    eq_new = svc.create_session(db_session, user_id=u.id, department="equity_research", title="eq")
+    assert eq_new.disabled_connector_ids == []
+
+
+def test_create_session_falls_back_to_empty_lists_when_no_prior_session(db_session):
+    u = _make_user(db_session, "inh3@example.com")
+    row = svc.create_session(db_session, user_id=u.id, department="secretary", title="t")
+    assert row.disabled_connector_ids == []
+    assert row.disabled_skill_ids == []
+
+
+def test_set_session_disabled_lists_persists_both(db_session):
+    u = _make_user(db_session, "dl@example.com")
+    row = svc.create_session(db_session, user_id=u.id, department="secretary", title="t")
+    svc.set_session_disabled_lists(
+        db_session,
+        session_id=row.id,
+        user_id=u.id,
+        disabled_connector_ids=["c-1", "c-2"],
+        disabled_skill_ids=["s-a"],
+    )
+    db_session.refresh(row)
+    assert row.disabled_connector_ids == ["c-1", "c-2"]
+    assert row.disabled_skill_ids == ["s-a"]
+
+
+def test_set_session_disabled_lists_partial_update_ignores_none(db_session):
+    """Passing `None` for one list leaves it untouched (PATCH semantics)."""
+    u = _make_user(db_session, "dl2@example.com")
+    row = svc.create_session(db_session, user_id=u.id, department="secretary", title="t")
+    svc.set_session_disabled_lists(
+        db_session,
+        session_id=row.id,
+        user_id=u.id,
+        disabled_connector_ids=["c-1"],
+        disabled_skill_ids=None,
+    )
+    svc.set_session_disabled_lists(
+        db_session,
+        session_id=row.id,
+        user_id=u.id,
+        disabled_connector_ids=None,
+        disabled_skill_ids=["s-x"],
+    )
+    db_session.refresh(row)
+    assert row.disabled_connector_ids == ["c-1"]
+    assert row.disabled_skill_ids == ["s-x"]
+
+
+def test_set_session_disabled_lists_rejects_other_users(db_session):
+    u1 = _make_user(db_session, "owner@example.com")
+    u2 = _make_user(db_session, "intruder@example.com")
+    row = svc.create_session(db_session, user_id=u1.id, department="secretary", title="t")
+    with pytest.raises(PermissionError):
+        svc.set_session_disabled_lists(
+            db_session,
+            session_id=row.id,
+            user_id=u2.id,
+            disabled_connector_ids=["c-1"],
+            disabled_skill_ids=None,
+        )
+
+
 def test_create_session_returns_row(db_session):
     u = _make_user(db_session, "a@example.com")
     row = svc.create_session(db_session, user_id=u.id, department="secretary", title="hi")

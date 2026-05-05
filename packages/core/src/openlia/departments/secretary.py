@@ -69,9 +69,17 @@ class SecretaryDepartment:
     prompt_name: str = "secretary"
     tier: Tier = "everyday"
 
-    # Connector dependencies (spec §10.1).
+    # Connector dependencies (spec §10.1). Secretary now answers questions
+    # itself end-to-end, so it claims every connector category any
+    # department uses — all optional, so it stays zero-config and never
+    # gets disabled by a missing provider.
     required_categories: ClassVar[tuple[Category, ...]] = ()
-    optional_categories: ClassVar[tuple[Category, ...]] = (Category.WEB_SEARCH,)
+    optional_categories: ClassVar[tuple[Category, ...]] = (
+        Category.FINANCIAL,
+        Category.NEWS,
+        Category.SOCIAL,
+        Category.WEB_SEARCH,
+    )
 
     # Runtime behavior (spec §5.2).
     requires_runner: ClassVar[bool] = False

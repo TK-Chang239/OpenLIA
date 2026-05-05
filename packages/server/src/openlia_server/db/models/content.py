@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +46,16 @@ class ChatSession(Base, TimestampMixin):
     context: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     model_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("llm_models.id", ondelete="SET NULL"), nullable=True
+    )
+    # Per-session connector + skill toggles (chat-input "Tools" dropdown).
+    # Empty list = nothing disabled. Filtered out at dispatcher build /
+    # skill registry visibility, so disabled entries never reach the
+    # router or the model.
+    disabled_connector_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    disabled_skill_ids: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
     )
 
     messages: Mapped[list[ChatMessage]] = relationship(

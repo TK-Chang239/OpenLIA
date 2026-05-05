@@ -128,7 +128,7 @@ async def test_connector_create_triggers_invalidation(db_session_factory, monkey
     connectors_service.set_dept_health_hook(hook)
     try:
 
-        async def fake(launch, secrets):
+        async def fake(launch, secrets, *, tool_overrides=None):
             return connectors_service.ValidationOk(
                 tools=[{"name": "t", "description": "", "input_schema": {}}],
                 python_callables=[],

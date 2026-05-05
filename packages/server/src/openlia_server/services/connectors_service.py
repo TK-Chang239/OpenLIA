@@ -148,7 +148,47 @@ def _format_list_tools_error(mode: dict[str, Any], exc: Exception) -> str:
     return "\n".join(lines)
 
 
-async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> ValidationResult:
+def _overrides_for_provider(provider_id: str) -> dict[str, dict[str, Any]]:
+    """Look up `tool_overrides` from a built-in template by provider_id.
+    Returns `{}` for non-builtin connectors (custom MCP, etc.)."""
+    template = get_template(provider_id)
+    if template is None:
+        return {}
+    return {name: dict(spec) for name, spec in template.tool_overrides}
+
+
+def _apply_tool_overrides(
+    tools: list[dict[str, Any]], overrides: dict[str, dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Merge per-tool author overrides into the auto-derived tool list.
+
+    Lets a built-in template fix specific tools whose SDK signature is
+    looser than the upstream API requires (e.g. EODHD's `financial_news`
+    accepts all-None Python kwargs but the API rejects calls without `s`
+    or `t`). Override keys replace the corresponding tool field in
+    place; unspecified keys pass through unchanged.
+    """
+    if not overrides:
+        return tools
+    out: list[dict[str, Any]] = []
+    for tool in tools:
+        name = tool.get("name", "")
+        override = overrides.get(name)
+        if override is None:
+            out.append(tool)
+            continue
+        merged = dict(tool)
+        merged.update(override)
+        out.append(merged)
+    return out
+
+
+async def _validate_launch(
+    launch: dict[str, Any],
+    secrets: dict[str, str],
+    *,
+    tool_overrides: dict[str, dict[str, Any]] | None = None,
+) -> ValidationResult:
     """Pick the highest-priority mode and exercise it via `list_tools()`.
 
     For python_lib we also introspect the module to populate
@@ -208,6 +248,8 @@ async def _validate_launch(launch: dict[str, Any], secrets: dict[str, str]) -> V
                 {"qualname": d.qualname, "signature": d.signature, "doc": d.doc} for d in defs
             ]
 
+        if tool_overrides:
+            tools = _apply_tool_overrides(tools, tool_overrides)
         return ValidationOk(tools=tools, python_callables=python_callables)
     finally:
         try:
@@ -253,6 +295,23 @@ def _launch_to_dict(launch: LaunchSpec | dict[str, Any]) -> dict[str, Any]:
     return {"modes": modes_out}
 
 
+class DuplicateConnectorError(ValueError):
+    """Raised when a connector with the same (provider_id, source) already exists.
+
+    Carries the existing connector's id so callers (route handlers, UIs)
+    can render an "already installed" message or offer to update instead.
+    """
+
+    def __init__(self, *, provider_id: str, source: str, existing_id: str) -> None:
+        super().__init__(
+            f"connector already exists for provider={provider_id!r} source={source!r} "
+            f"(id={existing_id})"
+        )
+        self.provider_id = provider_id
+        self.source = source
+        self.existing_id = existing_id
+
+
 async def create_connector(
     session: Session,
     *,
@@ -267,6 +326,16 @@ async def create_connector(
     grounding_paths: list[str] | None = None,
     openapi_url: str | None = None,
 ) -> Connector:
+    existing = (
+        session.query(Connector)
+        .filter(Connector.provider_id == provider_id, Connector.source == source.value)
+        .first()
+    )
+    if existing is not None:
+        raise DuplicateConnectorError(
+            provider_id=provider_id, source=source.value, existing_id=existing.id
+        )
+
     cid = str(uuid.uuid4())
     launch_json = _launch_to_dict(launch)
     row = Connector(
@@ -286,7 +355,9 @@ async def create_connector(
     session.add(row)
     session.flush()
 
-    result = await _validate_launch(launch_json, secrets or {})
+    result = await _validate_launch(
+        launch_json, secrets or {}, tool_overrides=_overrides_for_provider(provider_id)
+    )
     if isinstance(result, ValidationOk):
         row.status = ConnectorStatus.VALIDATED.value
         row.cached_tools = result.tools
@@ -551,7 +622,9 @@ async def update_connector(
     if secrets is not None:
         row.secrets = secrets
     effective_secrets = row.secrets or {}
-    result = await _validate_launch(launch_json, effective_secrets)
+    result = await _validate_launch(
+        launch_json, effective_secrets, tool_overrides=_overrides_for_provider(provider_id)
+    )
     if isinstance(result, ValidationOk):
         row.status = ConnectorStatus.VALIDATED.value
         row.cached_tools = result.tools
@@ -582,7 +655,11 @@ async def revalidate_connector(session: Session, connector_id: str) -> Connector
     row = session.get(Connector, connector_id)
     if row is None:
         return None
-    result = await _validate_launch(row.launch or {}, row.secrets or {})
+    result = await _validate_launch(
+        row.launch or {},
+        row.secrets or {},
+        tool_overrides=_overrides_for_provider(row.provider_id),
+    )
     if isinstance(result, ValidationOk):
         row.status = ConnectorStatus.VALIDATED.value
         row.cached_tools = result.tools

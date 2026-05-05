@@ -67,6 +67,21 @@ async def test_disabled_skill_hidden(populated_root):
 
 
 @pytest.mark.asyncio
+async def test_visible_excludes_session_disabled_ids(populated_root):
+    """Per-session opt-out: chat input toggle hides skills for this turn
+    even though the user has them installed and enabled in Settings."""
+    fs = FilesystemSkillStore(root=populated_root)
+    reg = SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
+    await reg.refresh(user_ids=["u1"])
+    visible = reg.visible(
+        department_id="secretary", user_id="u1", disabled_skill_ids=frozenset({"tone"})
+    )
+    names = [s.manifest.name for s in visible]
+    assert "greet-skill" in names
+    assert "tone" not in names
+
+
+@pytest.mark.asyncio
 async def test_get_returns_skill_for_user(populated_root):
     fs = FilesystemSkillStore(root=populated_root)
     reg = SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))

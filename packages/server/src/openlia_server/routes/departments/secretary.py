@@ -30,11 +30,11 @@ from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server import dev_events
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import ChatMessage
 from openlia_server.middleware.auth import build_require_active_user
-from openlia_server import dev_events
 from openlia_server.routes.chat_stream import _watch_disconnect
 from openlia_server.services import chat_sessions as chat_sessions_svc
 from openlia_server.services.secretary_chat_runner import (
@@ -88,6 +88,8 @@ def build_secretary_router(
         )
 
         session_model_id: str | None = None
+        disabled_connector_ids: tuple[str, ...] = ()
+        disabled_skill_ids: tuple[str, ...] = ()
         # Persist the user message immediately when a session is supplied.
         if session_id:
             from openlia_server.db.models.content import ChatSession as DbChatSession
@@ -95,6 +97,8 @@ def build_secretary_router(
             row = db.get(DbChatSession, session_id)
             if row is not None and row.user_id == user.id:
                 session_model_id = row.model_id
+                disabled_connector_ids = tuple(row.disabled_connector_ids or ())
+                disabled_skill_ids = tuple(row.disabled_skill_ids or ())
             db.add(
                 ChatMessage(
                     id=str(uuid.uuid4()),
@@ -130,6 +134,8 @@ def build_secretary_router(
                     messages=messages,
                     cancel_token=cancel_token,
                     model_id_override=session_model_id,
+                    disabled_connector_ids=disabled_connector_ids,
+                    disabled_skill_ids=disabled_skill_ids,
                 ):
                     wire = to_wire(event)
                     etype = wire["type"]

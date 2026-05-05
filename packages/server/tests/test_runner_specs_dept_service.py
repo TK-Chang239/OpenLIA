@@ -507,7 +507,7 @@ async def test_resolve_logs_tool_call_events_when_factory_used(
                 "constants": {},
             }
 
-    def factory(connector_root, *, tool_call_listener=None):
+    def factory(connector_root, *, tool_call_listener=None, grounding_paths=None):
         client = _ToolFiringLlm()
         client.listener = tool_call_listener
         return client

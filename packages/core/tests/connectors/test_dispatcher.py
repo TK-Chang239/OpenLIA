@@ -120,6 +120,59 @@ async def test_dispatch_missing_separator_raises():
         await d.dispatch_tool_use("noprefix", {})
 
 
+# ----- tool_argument_constraints (require_one_of) -----
+
+
+async def test_dispatch_raises_missing_required_arg_when_no_alternative_supplied():
+    """EODHD's `financial_news` requires `s` OR `t`. With both missing
+    or empty, the dispatcher must short-circuit before the transport so
+    we don't burn an API call for a known-bad payload."""
+    from openlia.connectors.dispatch import MissingRequiredArgumentError
+
+    eod = _eodhd_mcp()
+    eod.tools["financial_news"] = _td("financial_news")
+    d = Dispatcher(
+        connectors={"c1": eod},
+        tool_argument_constraints={
+            "eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)
+        },
+    )
+    with pytest.raises(MissingRequiredArgumentError) as exc_info:
+        await d.dispatch_tool_use("eodhd__financial_news", {})
+    assert exc_info.value.missing == ("s", "t")
+    # transport never invoked
+    assert eod.transport.calls == []  # type: ignore[attr-defined]
+
+
+async def test_dispatch_constraint_treats_empty_string_and_none_as_missing():
+    from openlia.connectors.dispatch import MissingRequiredArgumentError
+
+    eod = _eodhd_mcp()
+    eod.tools["financial_news"] = _td("financial_news")
+    d = Dispatcher(
+        connectors={"c1": eod},
+        tool_argument_constraints={
+            "eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)
+        },
+    )
+    with pytest.raises(MissingRequiredArgumentError):
+        await d.dispatch_tool_use("eodhd__financial_news", {"s": "", "t": None})
+
+
+async def test_dispatch_constraint_passes_when_one_alternative_supplied():
+    eod = _eodhd_mcp()
+    eod.tools["financial_news"] = _td("financial_news")
+    d = Dispatcher(
+        connectors={"c1": eod},
+        tool_argument_constraints={
+            "eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)
+        },
+    )
+    # `s` set: should pass through to transport with no error.
+    await d.dispatch_tool_use("eodhd__financial_news", {"s": "AAPL.US"})
+    assert eod.transport.calls == [("financial_news", {"s": "AAPL.US"})]  # type: ignore[attr-defined]
+
+
 # ----- in_department / fetch_need -----
 
 
