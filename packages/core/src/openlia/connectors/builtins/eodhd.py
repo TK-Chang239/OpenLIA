@@ -207,13 +207,15 @@ _FINANCIAL_NEWS_STANDARD_TAGS: tuple[str, ...] = (
 _FINANCIAL_NEWS_OVERRIDE: dict = {
     "description": (
         "Fetch financial news from EODHD. REQUIRED: provide EITHER `s` "
-        "(comma-separated ticker codes, e.g. 'AAPL.US') OR `t` (a topic "
-        "tag from the enum). Calling without one will fail. "
-        "For broad market-wide news (e.g. 'what moved the market today'), "
-        "set `s` to major index tickers like 'SPY.US,QQQ.US,DIA.US,IWM.US' "
-        "rather than guessing a topic tag — `t` is for topic-specific "
-        "filtering. Optional: `from_date`/`to_date` (YYYY-MM-DD), "
-        "`limit` (1-1000, default 50), `offset` (default 0)."
+        "(a SINGLE ticker code, e.g. 'AAPL.US' — this endpoint rejects "
+        "comma-separated lists) OR `t` (a topic tag from the enum). "
+        "Calling without one will fail. For broad market-wide news "
+        "(e.g. 'what moved the market today'), pick ONE anchor index "
+        "ticker like 'SPY.US' for `s`, or call this tool multiple times "
+        "with different single tickers — do NOT guess a topic tag for "
+        "broad queries. `t` is for topic-specific filtering only. "
+        "Optional: `from_date`/`to_date` (YYYY-MM-DD), `limit` "
+        "(1-1000, default 50), `offset` (default 0)."
     ),
     # Note: Anthropic's tool `input_schema` validator doesn't accept
     # JSON-Schema combinators like `anyOf`/`oneOf` — only the basic
@@ -228,9 +230,10 @@ _FINANCIAL_NEWS_OVERRIDE: dict = {
             "s": {
                 "type": "string",
                 "description": (
-                    "Ticker code(s), comma-separated (e.g. 'AAPL.US' or "
-                    "'SPY.US,QQQ.US'). Required if `t` is empty. Use this "
-                    "for broad market queries with index tickers."
+                    "A SINGLE ticker code (e.g. 'AAPL.US' or 'SPY.US'). "
+                    "The news endpoint rejects comma-separated lists — "
+                    "if you need news on several tickers, call the tool "
+                    "once per ticker. Required if `t` is empty."
                 ),
             },
             "t": {

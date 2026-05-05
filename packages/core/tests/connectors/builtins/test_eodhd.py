@@ -151,3 +151,25 @@ def test_financial_news_override_steers_broad_queries_to_tickers() -> None:
     assert "spy" in description or "index" in description, (
         "description should point at index tickers as the alternative to topic guessing"
     )
+
+
+def test_financial_news_override_describes_s_as_single_ticker() -> None:
+    """EODHD's news endpoint rejects comma-separated values for `s`
+    with "Only one ticker is allowed in parameter s." The previous
+    description told the model `s` accepted a comma-separated list
+    (which is true for stock_prices, but NOT for news), and the model
+    duly tried 'SPY.US,QQQ.US,DIA.US,IWM.US'. Lock the description's
+    'single ticker' wording so the regression can't sneak back."""
+    overrides = dict(EODHD_TEMPLATE.tool_overrides)
+    description = overrides["financial_news"]["description"].lower()
+    s_prop_desc = overrides["financial_news"]["input_schema"]["properties"]["s"][
+        "description"
+    ].lower()
+    assert "single ticker" in description, (
+        "top-level description must say `s` is a single ticker for this endpoint"
+    )
+    assert (
+        "single ticker" in s_prop_desc
+        or "rejects comma-separated" in s_prop_desc
+        or "one per ticker" in s_prop_desc
+    ), "`s` property description must explicitly forbid comma-separated values"
