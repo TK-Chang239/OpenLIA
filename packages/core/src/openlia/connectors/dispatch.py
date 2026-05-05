@@ -49,6 +49,26 @@ class DispatchError(RuntimeError):
     pass
 
 
+class MissingRequiredArgumentError(DispatchError):
+    """Raised by `dispatch_tool_use` when a tool's argument constraints
+    fail before the transport is touched. Used to express "exactly one
+    of these args is required" — a constraint Anthropic's tool input
+    schema validator can't represent (no JSON-Schema combinators).
+
+    `missing` is a tuple of equally-acceptable parameter names; the
+    caller should report this in a structured payload so the model
+    can recover by retrying with one of them set.
+    """
+
+    def __init__(self, tool_name: str, missing: tuple[str, ...]) -> None:
+        self.tool_name = tool_name
+        self.missing = missing
+        joined = " or ".join(f"`{m}`" for m in missing)
+        super().__init__(
+            f"{tool_name} requires one of {joined}; none were supplied."
+        )
+
+
 class NeedNotResolved(DispatchError):
     pass
 
@@ -62,6 +82,15 @@ class FieldMapError(DispatchError):
     """
 
     pass
+
+
+def _is_supplied(value: Any) -> bool:
+    """Treat None / "" / [] / {} as missing for argument-constraint checks."""
+    if value is None:
+        return False
+    if isinstance(value, str | list | tuple | dict | set | frozenset):
+        return len(value) > 0
+    return True
 
 
 def _walk_result_path(value: Any, path: tuple[str, ...], *, need_id: str) -> Any:
@@ -143,14 +172,35 @@ class Dispatcher:
     appear in the connector's introspected callables registry (e.g.
     Firecrawl SDK attaches methods per-instance, so class-walk
     introspection misses them)."""
+    chat_connector_blocklist: frozenset[str] = field(default_factory=frozenset)
+    """Per-session opt-out: connector_ids in this set are omitted from
+    `candidate_tools()` (chat-routing surface) but remain available to
+    `fetch_need` so deterministic dept runs are unaffected. Backs the
+    chat-input "Tools" dropdown."""
+    tool_argument_constraints: dict[str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]] = field(  # noqa: E501
+        default_factory=dict
+    )
+    """Per-provider pre-dispatch argument constraints. Keyed by
+    `provider_id`, each entry is a tuple of
+    `(tool_name, kind, payload)` triples. Today only `kind="require_one_of"`
+    is supported; `payload` is a tuple of parameter-name groups, one of
+    which must be non-empty in the call's `arguments`. Surfaced from
+    BuiltInTemplate.tool_argument_constraints by `dispatcher_factory`."""
 
     # ----- chat candidate pool / tool routing (§8) -----
 
     def candidate_tools(self) -> list[dict[str, Any]]:
-        """Full validated tool inventory across all connectors. Per spec §8.1."""
+        """Full validated tool inventory across all connectors. Per spec §8.1.
+
+        Connectors in `chat_connector_blocklist` are excluded so a user
+        who toggles them off in the chat input never sees their tools
+        in the routed pool.
+        """
         out: list[dict[str, Any]] = []
         for conn in self.connectors.values():
             if conn.status != ConnectorStatus.VALIDATED:
+                continue
+            if conn.connector_id in self.chat_connector_blocklist:
                 continue
             for tool_name, td in conn.tools.items():
                 out.append(
@@ -166,10 +216,27 @@ class Dispatcher:
         if PREFIX_SEP not in prefixed_name:
             raise DispatchError(f"missing prefix in {prefixed_name!r}")
         provider_id, _, raw_name = prefixed_name.partition(PREFIX_SEP)
+        self._enforce_argument_constraints(provider_id, prefixed_name, raw_name, arguments)
         for conn in self.connectors.values():
             if conn.provider_id == provider_id and raw_name in conn.tools:
                 return await conn.transport.call_tool(raw_name, arguments)
         raise DispatchError(f"no connector for {prefixed_name!r}")
+
+    def _enforce_argument_constraints(
+        self,
+        provider_id: str,
+        prefixed_name: str,
+        raw_name: str,
+        arguments: dict[str, Any],
+    ) -> None:
+        for tool_name, kind, payload in self.tool_argument_constraints.get(provider_id, ()):
+            if tool_name != raw_name:
+                continue
+            if kind != "require_one_of":
+                continue
+            for group in payload:
+                if not any(_is_supplied(arguments.get(p)) for p in group):
+                    raise MissingRequiredArgumentError(prefixed_name, group)
 
     # ----- runner need fetch (§9) -----
 

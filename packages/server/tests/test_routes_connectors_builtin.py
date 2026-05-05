@@ -64,7 +64,7 @@ def test_install_builtin_returns_201_and_connector_row(
     """Happy path: install Firecrawl with stubbed canary."""
     from openlia_server.services import connectors_service
 
-    async def _fake_validate(launch, secrets):  # type: ignore[no-redef]
+    async def _fake_validate(launch, secrets, *, tool_overrides=None):  # type: ignore[no-redef]
         return connectors_service.ValidationOk(tools=[], python_callables=[])
 
     monkeypatch.setattr(connectors_service, "_validate_launch", _fake_validate)
@@ -78,6 +78,34 @@ def test_install_builtin_returns_201_and_connector_row(
     assert body["provider_id"] == "firecrawl"
     assert body["source"] == "built_in"
     assert body["status"] == "validated"
+
+
+def test_install_builtin_second_call_returns_409_with_existing_id(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openlia_server.services import connectors_service
+
+    async def _fake_validate(launch, secrets, *, tool_overrides=None):
+        return connectors_service.ValidationOk(tools=[], python_callables=[])
+
+    monkeypatch.setattr(connectors_service, "_validate_launch", _fake_validate)
+
+    first = client.post(
+        "/api/connectors/install-builtin",
+        json={"template_id": "firecrawl", "api_key": "user-key"},
+    )
+    assert first.status_code == 201
+    existing_id = first.json()["id"]
+
+    second = client.post(
+        "/api/connectors/install-builtin",
+        json={"template_id": "firecrawl", "api_key": "different-key"},
+    )
+    assert second.status_code == 409
+    detail = second.json()["detail"]
+    assert detail["existing_id"] == existing_id
+    assert detail["provider_id"] == "firecrawl"
+    assert detail["source"] == "built_in"
 
 
 def test_get_builtin_templates_returns_six_entries(client: TestClient) -> None:

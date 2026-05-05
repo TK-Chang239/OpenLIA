@@ -82,3 +82,22 @@ def test_eodhd_runner_specs_have_python_lib_or_mcp_access_mode() -> None:
 
 def test_eodhd_canary_tool_is_set() -> None:
     assert EODHD_TEMPLATE.canary_tool is not None
+
+
+def test_eodhd_tool_overrides_use_anthropic_compatible_schema() -> None:
+    """Anthropic's tool `input_schema` validator rejects JSON-Schema
+    combinators (`anyOf`, `oneOf`, `allOf`, `not`). A builtin override
+    that uses any of them breaks every chat turn for users on Claude
+    via OpenRouter. Guard against accidental reintroduction."""
+    forbidden_keys = {"anyOf", "oneOf", "allOf", "not"}
+    for tool_name, override in EODHD_TEMPLATE.tool_overrides:
+        schema = override.get("input_schema") or {}
+        leaked = forbidden_keys & set(schema.keys())
+        assert not leaked, (
+            f"{tool_name} override input_schema contains "
+            f"Anthropic-incompatible keys: {leaked}"
+        )
+        assert schema.get("type") == "object", f"{tool_name}: input_schema.type must be 'object'"
+        assert isinstance(schema.get("properties"), dict), (
+            f"{tool_name}: input_schema.properties must be an object"
+        )

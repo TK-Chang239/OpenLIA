@@ -28,6 +28,8 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from typing import Any
 
+from openlia.connectors.dispatch import MissingRequiredArgumentError
+from openlia.connectors.serialization import to_jsonable
 from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
@@ -114,10 +116,20 @@ def build_chat_system_prompt(
     user_id: str | None,
     registry: SkillRegistry,
     loader: PromptLoader | None = None,
+    disabled_skill_ids: frozenset[str] = frozenset(),
 ) -> str:
-    """Render the chat.system slot with the user's visible skills menu."""
+    """Render the chat.system slot with the user's visible skills menu.
+
+    `disabled_skill_ids` is the per-session opt-out set from the chat
+    input "Tools" dropdown. Disabled skills are dropped before
+    `skills_menu` is rendered so the model never knows they exist.
+    """
     loader = loader or PromptLoader()
-    visible = registry.visible(department_id=department_id, user_id=user_id)
+    visible = registry.visible(
+        department_id=department_id,
+        user_id=user_id,
+        disabled_skill_ids=disabled_skill_ids,
+    )
     skills_menu = [
         {
             "id": s.manifest.name,
@@ -185,8 +197,18 @@ class ChatRunner:
         *,
         department_id: str,
         user_id: str | None,
+        disabled_skill_ids: frozenset[str] = frozenset(),
     ) -> list[ToolSchema]:
-        if len(self._skill_registry.visible(department_id=department_id, user_id=user_id)) > 0:
+        if (
+            len(
+                self._skill_registry.visible(
+                    department_id=department_id,
+                    user_id=user_id,
+                    disabled_skill_ids=disabled_skill_ids,
+                )
+            )
+            > 0
+        ):
             return [*tools, LOAD_SKILL_SCHEMA]
         return tools
 
@@ -200,6 +222,7 @@ class ChatRunner:
         cancel_token: CancellationToken | None = None,
         session_id: str | None = None,
         model_id_override: str | None = None,
+        disabled_skill_ids: frozenset[str] = frozenset(),
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -228,6 +251,7 @@ class ChatRunner:
             user_id=user_id,
             registry=self._skill_registry,
             loader=self._prompts,
+            disabled_skill_ids=disabled_skill_ids,
         )
         self._trace(
             "llm.resolved",
@@ -258,9 +282,11 @@ class ChatRunner:
                 system=system,
                 department_id=department_id,
                 dept=dept,
+                resolved=resolved,
                 messages=messages,
                 cancel_token=cancel_token,
                 message_id=message_id,
+                extra_tool_specs=extra_tool_specs,
             ):
                 yield event
             return
@@ -271,6 +297,7 @@ class ChatRunner:
             ),
             department_id=department_id,
             user_id=user_id,
+            disabled_skill_ids=disabled_skill_ids,
         )
 
         wrapped_messages = wrap_last_user_message(messages)
@@ -283,16 +310,18 @@ class ChatRunner:
         for _ in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
-            tool_names_v1 = [t.get("name") for t in (tools or [])]
+            tool_names_v1 = [t.name for t in (tools or [])]
+            summary_v1 = (
+                f"{resolved.provider_kind}:{resolved.model_ref} "
+                f"({len(conversation)} msgs, {len(tool_names_v1)} tools)"
+            )
             self._trace(
                 "llm.call.start",
-                f"{resolved.provider_kind}:{resolved.model_ref} ({len(conversation)} msgs, {len(tool_names_v1)} tools)",
+                summary_v1,
                 {
                     "model_ref": resolved.model_ref,
                     "provider_kind": resolved.provider_kind,
-                    "messages": [
-                        {"role": m.role, "chars": len(m.content)} for m in conversation
-                    ],
+                    "messages": [{"role": m.role, "chars": len(m.content)} for m in conversation],
                     "tool_names": tool_names_v1,
                     "system_prompt_chars": len(system),
                     "max_tokens": 2048,
@@ -326,12 +355,10 @@ class ChatRunner:
                 return
             self._trace(
                 "llm.call.done",
-                f"{len(response.tool_calls)} tool_calls, {len((response.text or ''))} chars",
+                f"{len(response.tool_calls)} tool_calls, {len(response.text or '')} chars",
                 {
                     "model_ref": resolved.model_ref,
-                    "tool_calls": [
-                        {"name": c.name, "id": c.id} for c in response.tool_calls
-                    ],
+                    "tool_calls": [{"name": c.name, "id": c.id} for c in response.tool_calls],
                     "text_chars": len(response.text or ""),
                 },
             )
@@ -420,6 +447,7 @@ class ChatRunner:
                 ),
                 department_id=department_id,
                 user_id=user_id,
+                disabled_skill_ids=disabled_skill_ids,
             )
 
         # Final text turn — stream tokens.
@@ -478,9 +506,11 @@ class ChatRunner:
         system: str,
         department_id: str,
         dept: Any,
+        resolved: ResolvedModel,
         messages: list[ChatMessage],
         cancel_token: CancellationToken | None,
         message_id: str,
+        extra_tool_specs: tuple[dict[str, Any], ...] = (),
     ) -> AsyncIterator[SseEvent]:
         """Route + escalate per spec §8.
 
@@ -537,6 +567,7 @@ class ChatRunner:
                 provider=provider,
                 system=system,
                 department_id=department_id,
+                resolved=resolved,
                 routing_context_loader=self._routing_context_loader,
                 candidate_by_name=candidate_by_name,
                 routed_names=list(routed_names),
@@ -545,6 +576,7 @@ class ChatRunner:
                 cancel_token=cancel_token,
                 message_id=message_id,
                 disable_routing=disable_routing,
+                extra_tool_specs=extra_tool_specs,
             ):
                 yield event
 
@@ -554,6 +586,7 @@ class ChatRunner:
         provider: LLMProvider,
         system: str,
         department_id: str,
+        resolved: ResolvedModel,
         routing_context_loader: Callable[[str], str],
         candidate_by_name: dict[str, dict[str, Any]],
         routed_names: list[str],
@@ -562,12 +595,15 @@ class ChatRunner:
         cancel_token: CancellationToken | None,
         message_id: str,
         disable_routing: bool,
+        extra_tool_specs: tuple[dict[str, Any], ...] = (),
     ) -> AsyncIterator[SseEvent]:
         assert self._dispatcher is not None
         wrapped_messages = wrap_last_user_message(messages)
         conversation = [Message(role=m.role, content=m.content) for m in wrapped_messages]
 
         candidate_list = list(candidate_by_name.values())
+
+        extra_tool_names: frozenset[str] = frozenset(spec["name"] for spec in extra_tool_specs)
 
         def _build_main_tools(names: list[str]) -> list[ToolSchema]:
             schemas: list[ToolSchema] = []
@@ -590,6 +626,14 @@ class ChatRunner:
                         parameters=ESCALATION_TOOL_DEFINITION["input_schema"],
                     )
                 )
+            for spec in extra_tool_specs:
+                schemas.append(
+                    ToolSchema(
+                        name=spec["name"],
+                        description=spec.get("description", ""),
+                        parameters=spec.get("parameters", {"type": "object", "properties": {}}),
+                    )
+                )
             return schemas
 
         def _build_system(names: list[str]) -> str:
@@ -610,16 +654,18 @@ class ChatRunner:
         for _ in range(MAX_TOOL_TURNS):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
-            tool_names_v2 = [t.get("name") for t in (tools or [])]
+            tool_names_v2 = [t.name for t in (tools or [])]
+            summary_v2 = (
+                f"{resolved.provider_kind}:{resolved.model_ref} "
+                f"(v2 routed, {len(conversation)} msgs, {len(tool_names_v2)} tools)"
+            )
             self._trace(
                 "llm.call.start",
-                f"{resolved.provider_kind}:{resolved.model_ref} (v2 routed, {len(conversation)} msgs, {len(tool_names_v2)} tools)",
+                summary_v2,
                 {
                     "model_ref": resolved.model_ref,
                     "provider_kind": resolved.provider_kind,
-                    "messages": [
-                        {"role": m.role, "chars": len(m.content)} for m in conversation
-                    ],
+                    "messages": [{"role": m.role, "chars": len(m.content)} for m in conversation],
                     "tool_names": tool_names_v2,
                     "system_prompt_chars": len(system_prompt),
                     "max_tokens": 2048,
@@ -654,12 +700,10 @@ class ChatRunner:
                 return
             self._trace(
                 "llm.call.done",
-                f"{len(response.tool_calls)} tool_calls, {len((response.text or ''))} chars",
+                f"{len(response.tool_calls)} tool_calls, {len(response.text or '')} chars",
                 {
                     "model_ref": resolved.model_ref,
-                    "tool_calls": [
-                        {"name": c.name, "id": c.id} for c in response.tool_calls
-                    ],
+                    "tool_calls": [{"name": c.name, "id": c.id} for c in response.tool_calls],
                     "text_chars": len(response.text or ""),
                     "routed": True,
                 },
@@ -667,6 +711,18 @@ class ChatRunner:
 
             if not response.tool_calls:
                 break
+
+            # Replay the assistant turn that requested the tools. Required
+            # by OpenAI/OpenRouter/Anthropic — every `tool` message must
+            # pair with a prior assistant `tool_calls` block carrying the
+            # same id, otherwise the next request 400s.
+            conversation.append(
+                Message(
+                    role="assistant",
+                    content=response.text or "",
+                    tool_calls=tuple(response.tool_calls),
+                )
+            )
 
             # Emit start events for every call before dispatching.
             for call in response.tool_calls:
@@ -707,13 +763,35 @@ class ChatRunner:
                         structured=None,
                     )
                     conversation.append(
-                        Message(role="tool", content=json.dumps({"summary": summary}))
+                        Message(
+                            role="tool",
+                            content=json.dumps({"summary": summary}),
+                            tool_call_id=call.id,
+                        )
                     )
                     # Rebuild tool list and system prompt with the
                     # expanded routed set; the cache breakpoint stays
                     # in the same place so the prefix remains hot.
                     tools = _build_main_tools(routed_names)
                     system_prompt = _build_system(routed_names)
+                    continue
+
+                if call.name in extra_tool_names:
+                    args = dict(call.arguments)
+                    yield ChatToolCallResult(
+                        message_id=message_id,
+                        call_id=call.id,
+                        ok=True,
+                        summary=f"{call.name} suggested",
+                        structured=args,
+                    )
+                    conversation.append(
+                        Message(
+                            role="tool",
+                            content=json.dumps({"ack": True}),
+                            tool_call_id=call.id,
+                        )
+                    )
                     continue
 
                 payload, ok, summary_text = await self._dispatch_v2_call(call)
@@ -724,7 +802,13 @@ class ChatRunner:
                     summary=summary_text,
                     structured=None,
                 )
-                conversation.append(Message(role="tool", content=json.dumps(payload)))
+                conversation.append(
+                    Message(
+                        role="tool",
+                        content=json.dumps(payload),
+                        tool_call_id=call.id,
+                    )
+                )
 
         # Final streaming turn — same shape as the legacy path.
         del disable_routing  # currently unused after build; reserved for telemetry
@@ -765,14 +849,33 @@ class ChatRunner:
         yield ChatDone(message_id=message_id, stop_reason="complete")
 
     async def _dispatch_v2_call(self, call: ToolCall) -> tuple[dict[str, Any], bool, str]:
-        """Dispatch a v2 prefixed tool_use through the connector dispatcher."""
+        """Dispatch a v2 prefixed tool_use through the connector dispatcher.
+
+        Coerces the raw return through `to_jsonable` so non-JSON-native SDK
+        return types (firecrawl-py SearchData, pydantic models, dataclasses,
+        datetimes) round-trip through `json.dumps` without raising.
+        """
         assert self._dispatcher is not None
         try:
             raw = await self._dispatcher.dispatch_tool_use(call.name, call.arguments)
+        except MissingRequiredArgumentError as exc:
+            return (
+                {
+                    "error": str(exc),
+                    "missing": list(exc.missing),
+                    "hint": (
+                        "Retry the call with one of the listed arguments set "
+                        "(non-empty)."
+                    ),
+                },
+                False,
+                f"{call.name} missing required argument: {' or '.join(exc.missing)}",
+            )
         except Exception as exc:
             return ({"error": str(exc)}, False, f"{call.name} failed: {exc!s}")
-        if isinstance(raw, dict):
-            payload = raw
+        coerced = to_jsonable(raw)
+        if isinstance(coerced, dict):
+            payload = coerced
         else:
-            payload = {"value": raw}
+            payload = {"value": coerced}
         return (payload, True, f"Called {call.name}")

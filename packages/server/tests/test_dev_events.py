@@ -7,7 +7,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from openlia_server import dev_events
 
 

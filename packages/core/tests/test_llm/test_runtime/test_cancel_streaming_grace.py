@@ -91,7 +91,7 @@ class _Registry:
 
 
 def _always(resolved):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
         return resolved
 
     return _r

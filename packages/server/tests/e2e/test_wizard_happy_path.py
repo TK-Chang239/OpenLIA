@@ -36,7 +36,7 @@ def client(db_session) -> TestClient:
 
 
 def _patch_validation_ok(monkeypatch) -> None:
-    async def fake(_launch, _secrets):
+    async def fake(_launch, _secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(
             tools=[{"name": "get_quote", "description": "quote", "input_schema": {}}],
             python_callables=[],

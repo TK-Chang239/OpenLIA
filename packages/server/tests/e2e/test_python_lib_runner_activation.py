@@ -78,7 +78,7 @@ def test_python_lib_runner_activation(client: TestClient, monkeypatch) -> None:
     monkeypatch.setattr("openlia.departments.health.load_needs", _fake_load_needs)
 
     # 2. Stub validation to succeed and surface a python_lib callable.
-    async def fake_validate(_launch, _secrets):
+    async def fake_validate(_launch, _secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(
             tools=[],
             python_callables=[

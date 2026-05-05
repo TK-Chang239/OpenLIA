@@ -56,3 +56,19 @@ class BuiltInTemplate:
     # `None` means skip canary (list_tools alone is the auth check).
     # Tuple form keeps the dataclass hashable. Each entry is (arg, value).
     canary_args: tuple[tuple[str, object], ...] | None = None
+    # Per-tool overrides applied to `cached_tools` after auto-discovery.
+    # Lets a template fix tools whose SDK signature understates the
+    # upstream API's actual contract (e.g. EODHD's `financial_news`
+    # accepts all-None Python kwargs but the API requires `s` or `t`).
+    # Each entry is (tool_name, override_dict). Override keys (typically
+    # `description` and `input_schema`) replace those fields on the
+    # matching tool; other fields pass through unchanged.
+    tool_overrides: tuple[tuple[str, dict], ...] = ()
+    # Pre-dispatch argument constraints. Each entry is
+    # (tool_name, "require_one_of", (("s", "t"),)). Anthropic's tool
+    # input_schema validator forbids JSON-Schema combinators (anyOf /
+    # oneOf), so we can't express "exactly one of these is required" at
+    # the schema layer. The dispatcher consults these constraints before
+    # calling the transport and short-circuits with a structured error
+    # payload the model can recover from on the next turn.
+    tool_argument_constraints: tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...] = ()

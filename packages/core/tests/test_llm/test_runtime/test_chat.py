@@ -84,14 +84,14 @@ class _Registry:
 
 
 def _always_resolved(*, resolved: ResolvedModel):
-    def _resolve(*, department_id, user_id, registry, tier_override=None):
+    def _resolve(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
         return resolved
 
     return _resolve
 
 
 def _always_raises():
-    def _resolve(*, department_id, user_id, registry, tier_override=None):
+    def _resolve(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
         raise TierNotConfiguredError("everyday")
 
     return _resolve
@@ -722,3 +722,378 @@ async def test_v2_disable_runtime_routing_skips_router(prompts_root: Path, monke
     assert "newsapi_ai__search" in tool_names
     assert "request_additional_tools" not in tool_names
     assert type(events[-1]) is ChatDone
+
+
+async def test_run_threads_disabled_skill_ids_into_system_prompt(
+    prompts_root: Path,
+) -> None:
+    """Per-session opt-out: skills in `disabled_skill_ids` must not appear
+    in the rendered chat.system prompt's skills_menu."""
+    # Seed a skill on disk so the registry has something to filter.
+    skills_root = prompts_root / "_skills_with_one"
+    user_dir = skills_root / "user" / "demo-skill"
+    user_dir.mkdir(parents=True)
+    (user_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: demo-skill\n"
+        "description: a demo\n"
+        'version: "1.0.0"\n'
+        "departments: [secretary]\n"
+        "---\n"
+        "Body.\n"
+    )
+
+    from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
+
+    fs = FilesystemSkillStore(root=skills_root)
+    skill_reg = SkillRegistry(store=LayeredSkillStore(system=fs, user=fs))
+    await skill_reg.refresh(user_ids=["u_1"])
+
+    # Re-render the secretary prompt to include a skills_menu reference
+    # (the test prompt root is minimal — patch in a richer one).
+    (prompts_root / "secretary.yaml").write_text(
+        "chat:\n"
+        "  system: |\n"
+        "    secretary system\n"
+        "    skills:\n"
+        "    {% for s in skills_menu %}- {{ s.id }}\n"
+        "    {% endfor %}\n"
+    )
+
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])]))
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        skill_registry=skill_reg,
+        message_id_factory=lambda: "m_1",
+    )
+    await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="hi")],
+            disabled_skill_ids=frozenset({"demo-skill"}),
+        )
+    )
+    sys_prompt = provider.captured_requests[0].system or ""
+    assert "demo-skill" not in sys_prompt
+
+
+async def test_v2_replays_assistant_tool_calls_and_sets_tool_call_id(
+    prompts_root: Path,
+) -> None:
+    # OpenRouter/OpenAI/Anthropic all reject a `tool` message that doesn't
+    # pair with a prior assistant `tool_use`/`tool_calls` block carrying
+    # the same id. Verify the v2 loop both replays the assistant turn AND
+    # tags each tool message with its originating tool_call_id.
+    quote_call = ToolCall(id="qc_1", name="eodhd__get_quote", arguments={"symbol": "AAPL"})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [quote_call]),
+                ("final", ""),
+                ("tokens", ["done"]),
+            ]
+        )
+    )
+    router = _StubRouterLlm([["eodhd__get_quote"]])
+    dispatcher = _StubDispatcher(
+        _V2_CANDIDATES, dispatch_results={"eodhd__get_quote": {"price": 200}}
+    )
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL?")],
+        )
+    )
+    # Second main-LLM request must replay: user, assistant(tool_calls), tool(result).
+    second = provider.captured_requests[1]
+    roles = [m.role for m in second.messages]
+    assert "assistant" in roles, f"missing assistant turn in {roles}"
+    assistant = next(m for m in second.messages if m.role == "assistant")
+    assert any(tc.id == "qc_1" for tc in assistant.tool_calls)
+    tool_msg = next(m for m in second.messages if m.role == "tool")
+    assert tool_msg.tool_call_id == "qc_1"
+
+
+async def test_v2_exposes_dept_extra_tools_and_echoes_them(prompts_root: Path) -> None:
+    # Secretary's extra_tools (suggest_redirect, save_report_to_repo) must
+    # appear in the v2 main-LLM tool list AND, when called, be dispatched as
+    # a structured echo (NOT routed through the connector dispatcher).
+    suggest_call = ToolCall(
+        id="sr_1",
+        name="suggest_redirect",
+        arguments={"department": "equity_research", "reason": "deeper dive"},
+    )
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [suggest_call]),
+                ("final", ""),
+                ("tokens", ["ok"]),
+            ]
+        )
+    )
+    router = _StubRouterLlm([["eodhd__get_quote"]])
+    dispatcher = _StubDispatcher(_V2_CANDIDATES)
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="hi")],
+        )
+    )
+    main_request = provider.captured_requests[0]
+    tool_names = {t.name for t in (main_request.tools or [])}
+    assert "suggest_redirect" in tool_names
+    assert "save_report_to_repo" in tool_names
+    # Extra-tool call must NOT touch the connector dispatcher.
+    assert dispatcher.dispatched == []
+    # Result event must echo the LLM's args as a structured payload so the
+    # frontend can render the redirect card.
+    results = [e for e in events if isinstance(e, ChatToolCallResult)]
+    sr = next(r for r in results if r.call_id == "sr_1")
+    assert sr.ok is True
+    assert sr.structured == {"department": "equity_research", "reason": "deeper dive"}
+
+
+async def test_v2_dispatch_serializes_pydantic_style_tool_results(
+    prompts_root: Path,
+) -> None:
+    # Firecrawl's `search` returns a `SearchData` object. The Anthropic /
+    # OpenAI adapters require the conversation's role=tool message content
+    # to be a JSON-encoded string, so a non-dict / non-JSON-native return
+    # value must be coerced before json.dumps. Without coercion the chat
+    # turn dies with `TypeError: Object of type SearchData is not JSON
+    # serializable` and the user sees no answer.
+    import json as _json
+
+    class _FakeSearchData:
+        """Mimics firecrawl-py's SearchData shape: pydantic-like."""
+
+        def __init__(self) -> None:
+            self.web = [{"url": "https://example.com", "title": "Example"}]
+
+        def model_dump(self) -> dict:
+            return {"web": list(self.web)}
+
+    quote_call = ToolCall(
+        id="qc_1", name="firecrawl__search", arguments={"query": "openai"}
+    )
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [quote_call]),
+                ("final", ""),
+                ("tokens", ["done"]),
+            ]
+        )
+    )
+    candidates = [
+        {
+            "name": "firecrawl__search",
+            "description": "Search the web",
+            "input_schema": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        }
+    ]
+    router = _StubRouterLlm([["firecrawl__search"]])
+    dispatcher = _StubDispatcher(
+        candidates, dispatch_results={"firecrawl__search": _FakeSearchData()}
+    )
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    # Should NOT raise TypeError during dispatch.
+    await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="search openai")],
+        )
+    )
+    # The replayed conversation in the second main-LLM call must include a
+    # tool message whose content parses back as JSON containing the
+    # model_dump'd shape.
+    second = provider.captured_requests[1]
+    tool_msg = next(m for m in second.messages if m.role == "tool")
+    parsed = _json.loads(tool_msg.content)
+    assert parsed.get("web") == [{"url": "https://example.com", "title": "Example"}]
+
+
+async def test_v2_dispatch_serializes_dataclass_tool_results(
+    prompts_root: Path,
+) -> None:
+    # Generalize: any object exposing __dict__ (dataclass / plain) should
+    # round-trip via the boundary's _to_jsonable helper without raising.
+    import json as _json
+    from dataclasses import dataclass
+
+    @dataclass
+    class _Quote:
+        symbol: str
+        price: float
+
+    quote_call = ToolCall(id="qc_2", name="eodhd__get_quote", arguments={"symbol": "AAPL"})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [quote_call]),
+                ("final", ""),
+                ("tokens", ["ok"]),
+            ]
+        )
+    )
+    router = _StubRouterLlm([["eodhd__get_quote"]])
+    dispatcher = _StubDispatcher(
+        _V2_CANDIDATES,
+        dispatch_results={"eodhd__get_quote": _Quote(symbol="AAPL", price=200.5)},
+    )
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="AAPL?")],
+        )
+    )
+    second = provider.captured_requests[1]
+    tool_msg = next(m for m in second.messages if m.role == "tool")
+    parsed = _json.loads(tool_msg.content)
+    assert parsed["symbol"] == "AAPL"
+    assert parsed["price"] == 200.5
+
+
+async def test_v2_dispatch_formats_missing_required_arg_as_structured_payload(
+    prompts_root: Path,
+) -> None:
+    # When the dispatcher raises MissingRequiredArgumentError (a
+    # pre-dispatch constraint violation, e.g. EODHD financial_news called
+    # with neither `s` nor `t`), `_dispatch_v2_call` must surface a
+    # structured error payload (with a `missing` list and a hint), not an
+    # opaque string. This lets the model self-correct on its next turn.
+    import json as _json
+
+    from openlia.connectors.dispatch import MissingRequiredArgumentError
+
+    class _RaisingDispatcher(_StubDispatcher):
+        async def dispatch_tool_use(self, prefixed_name: str, arguments: dict):
+            self.dispatched.append((prefixed_name, arguments))
+            raise MissingRequiredArgumentError(prefixed_name, ("s", "t"))
+
+    bad_call = ToolCall(id="bn_1", name="eodhd__financial_news", arguments={})
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [bad_call]),
+                ("final", ""),
+                ("tokens", ["sorry"]),
+            ]
+        )
+    )
+    candidates = [
+        {
+            "name": "eodhd__financial_news",
+            "description": "Fetch financial news. Need s or t.",
+            "input_schema": {"type": "object", "properties": {}},
+        }
+    ]
+    router = _StubRouterLlm([["eodhd__financial_news"]])
+    dispatcher = _RaisingDispatcher(candidates)
+    runner = ChatRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always_resolved(resolved=_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda resolved: provider,
+        skill_registry=_empty_skill_registry(prompts_root / "_skills"),
+        message_id_factory=lambda: "m_1",
+        dispatcher=dispatcher,
+        router_llm_client=router,
+        routing_context_loader=lambda dept: f"context for {dept}",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="secretary",
+            user_id="u_1",
+            messages=[ChatMessage(role="user", content="any news?")],
+        )
+    )
+    results = [e for e in events if isinstance(e, ChatToolCallResult)]
+    fn = next(r for r in results if r.call_id == "bn_1")
+    assert fn.ok is False
+    second = provider.captured_requests[1]
+    tool_msg = next(m for m in second.messages if m.role == "tool")
+    parsed = _json.loads(tool_msg.content)
+    assert parsed.get("missing") == ["s", "t"]
+    assert "hint" in parsed
+    assert "error" in parsed

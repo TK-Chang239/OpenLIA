@@ -25,10 +25,25 @@ class SkillRegistry:
     async def refresh_user(self, user_id: str | None) -> None:
         self._user[user_id] = await self._store.user.list(scope="user", user_id=user_id)
 
-    def visible(self, *, department_id: str, user_id: str | None) -> list[InstalledSkill]:
+    def visible(
+        self,
+        *,
+        department_id: str,
+        user_id: str | None,
+        disabled_skill_ids: frozenset[str] = frozenset(),
+    ) -> list[InstalledSkill]:
+        """Skills the chat sees for `(department, user)`.
+
+        `disabled_skill_ids` is a per-session opt-out set (chat-input
+        "Tools" dropdown). Skills whose `manifest.name` is in the set
+        are filtered out so neither `skills_menu` nor `load_skill`
+        exposes them this turn.
+        """
         out: list[InstalledSkill] = []
         for s in self._system + self._user.get(user_id, []):
             if not s.enabled:
+                continue
+            if s.manifest.name in disabled_skill_ids:
                 continue
             depts = s.manifest.departments
             if "*" in depts or department_id in depts:

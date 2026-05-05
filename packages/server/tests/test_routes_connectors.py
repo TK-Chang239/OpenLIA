@@ -51,7 +51,7 @@ def client(engine: Engine, db_session_factory) -> Iterator[TestClient]:
 
 
 def _patch_validation_ok(monkeypatch, tools=None, callables=None):
-    async def fake(launch, secrets):
+    async def fake(launch, secrets, *, tool_overrides=None):
         return connectors_service.ValidationOk(
             tools=tools
             or [
@@ -69,7 +69,7 @@ def _patch_validation_ok(monkeypatch, tools=None, callables=None):
 
 
 def _patch_validation_failure(monkeypatch, message="bad key"):
-    async def fake(launch, secrets):
+    async def fake(launch, secrets, *, tool_overrides=None):
         return connectors_service.ValidationFailure(error=message)
 
     monkeypatch.setattr("openlia_server.services.connectors_service._validate_launch", fake)
