@@ -3,10 +3,6 @@ import { AppLayout } from "../layouts/AppLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { MustChangePasswordGate } from "./MustChangePasswordGate";
 import { SetupGate } from "./SetupGate";
-import { LoginPage } from "../pages/LoginPage";
-import { RegisterPage } from "../pages/RegisterPage";
-import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
-import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import Home from "../pages/Home";
 import Repository from "../pages/Repository";
 import PortfolioPage from "../pages/PortfolioPage";
@@ -52,10 +48,11 @@ export const routes: RouteObject[] = [
   {
     element: <SetupGate />,
     children: [
-      { path: "/login", element: <LoginPage /> },
-      { path: "/register", element: <RegisterPage /> },
-      { path: "/forgot-password", element: <ForgotPasswordPage /> },
-      { path: "/reset-password", element: <ResetPasswordPage /> },
+      // Login pages disabled — redirect any attempt back to the shell.
+      { path: "/login", element: <Navigate to="/" replace /> },
+      { path: "/register", element: <Navigate to="/" replace /> },
+      { path: "/forgot-password", element: <Navigate to="/" replace /> },
+      { path: "/reset-password", element: <Navigate to="/" replace /> },
       { path: "/setup", element: <SetupPage /> },
       // Full-bleed print/PDF page. No AppShell so backgrounds/margins are
       // controlled by the print stylesheet, and so the body of the page
@@ -74,8 +71,8 @@ export const routes: RouteObject[] = [
               {
                 element: <AppLayout />,
                 children: [
-                  { path: "/", element: <Navigate to="/secretary" replace /> },
-                  { path: "/home", element: <Home /> },
+                  { path: "/", element: <Home /> },
+                  { path: "/home", element: <Navigate to="/" replace /> },
                   { path: "/repository", element: <Repository /> },
                   { path: "/portfolio", element: <PortfolioPage /> },
                   { path: "/settings/*", element: <SettingsPage /> },

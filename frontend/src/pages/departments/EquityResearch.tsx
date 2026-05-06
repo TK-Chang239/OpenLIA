@@ -25,6 +25,15 @@ export default function EquityResearch() {
   const { config, loading, patch } = useErConfig();
   const [searchParams, setSearchParams] = useSearchParams();
   const tickerParam = searchParams.get("ticker");
+  const promptParam = searchParams.get("prompt");
+  const [initialDraft, setInitialDraft] = useState<string | null>(promptParam);
+  useEffect(() => {
+    if (!promptParam) return;
+    setInitialDraft(promptParam);
+    const next = new URLSearchParams(searchParams);
+    next.delete("prompt");
+    setSearchParams(next, { replace: true });
+  }, [promptParam, searchParams, setSearchParams]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [input, setInput] = useState(tickerParam ?? "");
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -266,6 +275,7 @@ export default function EquityResearch() {
             }
             onExtraStop={stopReport}
             departmentId="equity_research"
+            initialDraft={initialDraft}
           />
         </div>
       )}

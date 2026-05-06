@@ -70,6 +70,16 @@ export interface StreamState {
   flagChips: Array<{ category: string; text: string }>;
   skillLoads: Array<{ skillId: string; displayName: string }>;
   errorMessage: string | null;
+  /** Wall-clock timestamp (ms since epoch) when the SEND action was
+   *  dispatched. null until the next send. Internal — used to compute
+   *  latencyMs on terminal transitions. */
+  startedAt: number | null;
+  /** Wall-clock latency from SEND → terminal state, in milliseconds.
+   *  Populated when status transitions to done/stopped. */
+  latencyMs: number | null;
+  /** Total token count from chat.done event when the backend reports it,
+   *  otherwise null. */
+  tokens: number | null;
 }
 
 const INITIAL: StreamState = {
@@ -81,6 +91,9 @@ const INITIAL: StreamState = {
   flagChips: [],
   skillLoads: [],
   errorMessage: null,
+  startedAt: null,
+  latencyMs: null,
+  tokens: null,
 };
 
 type Action =
@@ -94,21 +107,34 @@ function isTerminal(s: StreamStatus): boolean {
   return s === "done" || s === "error" || s === "stopped";
 }
 
+function nowMs(): number {
+  return typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+}
+
 function reducer(state: StreamState, action: Action): StreamState {
   if (action.kind === "RESET") return INITIAL;
-  if (action.kind === "SEND") return { ...INITIAL, status: "opening" };
+  if (action.kind === "SEND")
+    return { ...INITIAL, status: "opening", startedAt: nowMs() };
   if (action.kind === "STOP") {
     if (isTerminal(state.status)) return state;
-    return { ...state, status: "stopped" };
+    const latencyMs =
+      state.startedAt !== null ? Math.round(nowMs() - state.startedAt) : null;
+    return { ...state, status: "stopped", latencyMs };
   }
   if (action.kind === "TRANSPORT_ERROR") {
     if (isTerminal(state.status)) return state;
+    const latencyMs =
+      state.startedAt !== null ? Math.round(nowMs() - state.startedAt) : null;
     // If any tokens arrived, treat as a soft stop; otherwise surface as error.
-    if (state.message.length > 0) return { ...state, status: "stopped" };
+    if (state.message.length > 0)
+      return { ...state, status: "stopped", latencyMs };
     return {
       ...state,
       status: "error",
       errorMessage: "Connection lost. Please try again.",
+      latencyMs,
     };
   }
   if (isTerminal(state.status)) return state;
@@ -173,10 +199,28 @@ function reducer(state: StreamState, action: Action): StreamState {
         ],
         reportThumbnails: [...state.reportThumbnails, ev.data],
       };
-    case "chat.done":
-      return { ...state, status: "done" };
-    case "chat.error":
-      return { ...state, status: "error", errorMessage: ev.data.message };
+    case "chat.done": {
+      const latencyMs =
+        state.startedAt !== null ? Math.round(nowMs() - state.startedAt) : null;
+      // chat.done sometimes carries token usage as { tokens: number } or
+      // { token_usage: { total_tokens: number } } — tolerate both shapes.
+      const data = ev.data ?? {};
+      let tokens: number | null = null;
+      if (typeof data.tokens === "number" && Number.isFinite(data.tokens)) {
+        tokens = data.tokens;
+      } else if (
+        data.token_usage &&
+        typeof (data.token_usage as Record<string, unknown>).total_tokens === "number"
+      ) {
+        tokens = (data.token_usage as Record<string, unknown>).total_tokens as number;
+      }
+      return { ...state, status: "done", latencyMs, tokens };
+    }
+    case "chat.error": {
+      const latencyMs =
+        state.startedAt !== null ? Math.round(nowMs() - state.startedAt) : null;
+      return { ...state, status: "error", errorMessage: ev.data.message, latencyMs };
+    }
     case "chat.guardrail": {
       const action = ev.data.action;
       if (action === "replaced") {

@@ -1,26 +1,37 @@
 import { useEffect } from "react";
 import type { JSX } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, LogOut, Settings, User } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { CORE_NAV, DEPARTMENT_NAV } from "./navData";
 import { NavItem } from "./NavItem";
 import { useCollapsed } from "./useCollapsed";
 import { useNotificationPoll } from "./useNotificationPoll";
 import { useAuth } from "../../auth/AuthContext";
 import { useDeptHealth } from "../../store/dept-health";
+import pkg from "../../../package.json";
+
+function deriveInitials(name: string | null, email: string | null): string {
+  if (name && name.trim()) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  if (email && email.length > 0) return email.slice(0, 2).toUpperCase();
+  return "LI";
+}
+
+function deriveDisplayName(name: string | null, email: string | null): string {
+  if (name && name.trim()) return name;
+  if (email) return email;
+  return "Local";
+}
 
 export function Sidebar(): JSX.Element {
   const [collapsed, setCollapsed] = useCollapsed();
   const { unreadByDepartment, markRead } = useNotificationPoll();
   const healths = useDeptHealth((s) => s.healths);
   const location = useLocation();
-  const { status, logout } = useAuth();
-  const navigate = useNavigate();
-
-  async function handleSignOut() {
-    await logout();
-    navigate("/login", { replace: true });
-  }
+  const { status, user } = useAuth();
 
   useEffect(() => {
     const match = DEPARTMENT_NAV.find((entry) => entry.path === location.pathname);
@@ -28,6 +39,11 @@ export function Sidebar(): JSX.Element {
       void markRead(match.departmentId);
     }
   }, [location.pathname, markRead, unreadByDepartment]);
+
+  const initials = deriveInitials(user?.display_name ?? null, user?.email ?? null);
+  const displayName = deriveDisplayName(user?.display_name ?? null, user?.email ?? null);
+  const modeLabel = status === "personal" ? "PERSONAL" : "COMPANY";
+  const roleLine = `${modeLabel} · v${pkg.version}`;
 
   return (
     <nav
@@ -82,7 +98,10 @@ export function Sidebar(): JSX.Element {
             icon={entry.icon}
             path={entry.path}
             collapsed={collapsed}
-            hasUnread={false}
+            hasUnread={
+              entry.departmentId !== null &&
+              (unreadByDepartment[entry.departmentId] ?? 0) > 0
+            }
           />
         ))}
 
@@ -130,7 +149,7 @@ export function Sidebar(): JSX.Element {
       </div>
 
       <footer
-        className="flex-shrink-0 px-2 py-2 space-y-0.5"
+        className="flex-shrink-0 px-2 pt-2 pb-[14px] space-y-0.5"
         style={{ borderTop: "1px solid var(--color-sidebar-divider)" }}
       >
         <NavItem
@@ -140,70 +159,68 @@ export function Sidebar(): JSX.Element {
           collapsed={collapsed}
           hasUnread={false}
         />
-        <NavLink
-          to="/settings/account"
-          aria-label={collapsed ? "Account" : undefined}
-          className={[
-            "flex items-center gap-[10px] px-2 py-[9px] rounded-md w-full",
-            "transition-colors duration-normal ease-out",
-            collapsed ? "justify-center" : "",
-          ].join(" ")}
-          style={({ isActive }: { isActive: boolean }) => ({
-            background: isActive ? "var(--color-sidebar-active)" : "transparent",
-            color: isActive
-              ? "var(--color-sidebar-text-strong)"
-              : "var(--color-sidebar-text)",
-          })}
-        >
-          <span
-            className="w-[18px] h-[18px] rounded-full inline-flex items-center justify-center"
-            style={{ background: "var(--color-accent-primary)" }}
-          >
-            <User
-              size={11}
-              strokeWidth={1.5}
-              style={{ color: "var(--color-accent-on)" }}
-            />
-          </span>
-          {collapsed ? null : (
-            <span className="text-[13px]">Account</span>
-          )}
-        </NavLink>
-        {status === "authenticated" && (
-          <button
-            type="button"
-            onClick={() => {
-              void handleSignOut();
-            }}
-            aria-label="Sign out"
-            className={[
-              "w-full flex items-center gap-2 px-2 py-[9px] text-[13px] rounded-md transition-colors duration-normal ease-out",
-              collapsed ? "justify-center" : "",
-            ].join(" ")}
-            style={{ color: "var(--color-sidebar-text)" }}
-          >
-            <LogOut size={16} strokeWidth={1.5} />
-            {collapsed ? null : <span>Sign out</span>}
-          </button>
-        )}
+
         <button
           type="button"
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-expanded={!collapsed}
           onClick={() => setCollapsed(!collapsed)}
           className={[
-            "w-full flex items-center gap-2 px-2 py-[9px] text-[13px] rounded-md transition-colors duration-normal ease-out",
-            collapsed ? "justify-center" : "",
+            "relative flex items-center gap-[10px] rounded-md w-full",
+            "transition-colors duration-normal ease-out",
+            collapsed ? "justify-center px-0 py-[9px]" : "px-[10px] py-[9px]",
           ].join(" ")}
           style={{ color: "var(--color-sidebar-text)" }}
         >
           {collapsed ? (
             <ChevronRight size={16} strokeWidth={1.5} />
           ) : (
-            <ChevronLeft size={16} strokeWidth={1.5} />
+            <>
+              <ChevronLeft size={16} strokeWidth={1.5} />
+              <span className="text-[13px] font-display truncate">Collapse</span>
+            </>
           )}
-          {collapsed ? null : <span>Collapse</span>}
         </button>
+
+        <div
+          className={[
+            "flex items-center gap-[10px] mt-2 pt-[14px]",
+            collapsed ? "justify-center" : "px-[10px]",
+          ].join(" ")}
+          style={{ borderTop: "1px solid var(--color-sidebar-divider)" }}
+        >
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center justify-center w-[28px] h-[28px] rounded-md flex-shrink-0 font-mono"
+            style={{
+              background: "var(--neutral-800)",
+              color: "var(--color-sidebar-text-strong)",
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            {initials}
+          </span>
+          {!collapsed && (
+            <div className="flex flex-col gap-[2px] min-w-0">
+              <span
+                className="text-[13px] truncate"
+                style={{ color: "var(--color-sidebar-text-strong)" }}
+              >
+                {displayName}
+              </span>
+              <span
+                className="font-mono text-[9px] uppercase truncate"
+                style={{
+                  letterSpacing: "var(--tracking-micro)",
+                  color: "var(--color-sidebar-text-muted)",
+                }}
+              >
+                {roleLine}
+              </span>
+            </div>
+          )}
+        </div>
       </footer>
     </nav>
   );

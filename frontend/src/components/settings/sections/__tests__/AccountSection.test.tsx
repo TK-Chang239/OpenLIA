@@ -60,4 +60,9 @@ describe('AccountSection', () => {
       expect(update).toHaveBeenCalledWith(expect.objectContaining({ display_language: 'zh-TW' })),
     );
   });
+
+  it('does not render a Sign out button (login pages disabled)', () => {
+    render(<AccountSection currentEmail="a@b.c" mustChangePassword={false} />);
+    expect(screen.queryByRole('button', { name: /sign out/i })).toBeNull();
+  });
 });
