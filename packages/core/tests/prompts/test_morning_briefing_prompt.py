@@ -35,6 +35,9 @@ def test_user_prompt_renders_enabled_sections(loader: PromptLoader) -> None:
         },
         custom_sections=[],
         reference_portfolio=None,
+        current_date="2026-05-05",
+        current_date_long="Tuesday, May 5, 2026",
+        has_tools=False,
     )
     assert "executive_summary" in text
     assert "global_macro" in text
@@ -59,6 +62,9 @@ def test_user_prompt_renders_custom_sections(loader: PromptLoader) -> None:
             },
         ],
         reference_portfolio=None,
+        current_date="2026-05-05",
+        current_date_long="Tuesday, May 5, 2026",
+        has_tools=False,
     )
     assert "My Macro Focus" in text
     assert "EUR" in text or "JPY" in text
@@ -77,6 +83,9 @@ def test_user_prompt_includes_reference_portfolio_when_provided(loader: PromptLo
             {"ticker": "AAPL", "name": "Apple Inc."},
             {"ticker": "NVDA", "name": "NVIDIA"},
         ],
+        current_date="2026-05-05",
+        current_date_long="Tuesday, May 5, 2026",
+        has_tools=False,
     )
     assert "AAPL" in text
     assert "NVDA" in text
@@ -92,6 +101,9 @@ def test_user_prompt_omits_reference_portfolio_when_none(loader: PromptLoader) -
         section_topics={},
         custom_sections=[],
         reference_portfolio=None,
+        current_date="2026-05-05",
+        current_date_long="Tuesday, May 5, 2026",
+        has_tools=False,
     )
     assert "Reference portfolio" not in text
 
@@ -106,6 +118,9 @@ def test_length_knob_changes_prompt(loader: PromptLoader) -> None:
         section_topics={},
         custom_sections=[],
         reference_portfolio=None,
+        current_date="2026-05-05",
+        current_date_long="Tuesday, May 5, 2026",
+        has_tools=False,
     )
     long_ = loader.render(
         "morning_briefing",
@@ -116,6 +131,9 @@ def test_length_knob_changes_prompt(loader: PromptLoader) -> None:
         section_topics={},
         custom_sections=[],
         reference_portfolio=None,
+        current_date="2026-05-05",
+        current_date_long="Tuesday, May 5, 2026",
+        has_tools=False,
     )
     assert brief != long_
     assert "brief" in brief.lower()

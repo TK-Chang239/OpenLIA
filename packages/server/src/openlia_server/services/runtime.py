@@ -63,10 +63,14 @@ class _EmptyDataDispatcher:
     ) -> dict[str, Any]:
         raise RuntimeError(f"no data-provider tools registered (attempted {tool_name!r})")
 
-    async def find_more_data(
-        self, *, department_id: str, description: str
-    ) -> dict[str, Any] | None:
-        return None
+    async def expand_tools(
+        self,
+        *,
+        department_id: str,
+        reason: str,
+        category_hint: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return []
 
 
 def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
@@ -241,11 +245,46 @@ def _build_report_runner_with_registry(
     registry: SQLModelRegistry,
     *,
     web_search: WebSearchResolution,
+    db: DBSession,
+    user_id: str,
+    department_id: str,
+    run_id: str,
+    run_date,
     skill_registry: SkillRegistry | None = None,
 ) -> ReportRunner:
+    """Build a per-run ``ReportRunner`` wired to the v2 connector dispatcher.
+
+    The bridge instance is pinned to ``(user_id, department_id, run_id,
+    run_date)`` so usage records the right cache row. ``RefreshingReportRunner``
+    creates a fresh ``ReportRunner`` per call so this binding is safe.
+    """
+    from openlia_server.services.report_dispatcher_bridge import ReportDispatcherBridge
+    from openlia_server.services.report_tool_cache import ReportToolCache
+
     prompts = PromptLoader()
+    cache = ReportToolCache(session=db)
+    cache.note_run_started(
+        user_id=user_id,
+        department_id=department_id,
+        run_id=run_id,
+        run_date=run_date,
+    )
+    try:
+        connector_dispatcher = build_dispatcher(db)
+    except Exception:
+        logger.exception("report runner: build_dispatcher failed; using empty dispatcher")
+        data_dispatcher: Any = _EmptyDataDispatcher()
+    else:
+        data_dispatcher = ReportDispatcherBridge(
+            dispatcher=connector_dispatcher,
+            cache=cache,
+            user_id=user_id,
+            department_id=department_id,
+            run_id=run_id,
+            run_date=run_date,
+        )
     tools = ToolDispatcher(
-        data_dispatcher=_EmptyDataDispatcher(),
+        data_dispatcher=data_dispatcher,
         web_search=web_search,
     )
 
@@ -257,6 +296,11 @@ def _build_report_runner_with_registry(
             capabilities=resolved.capabilities,
         )
 
+    from openlia_server import dev_events
+
+    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
+        dev_events.record(category, message, payload)
+
     return ReportRunner(
         prompts=prompts,
         tools=tools,
@@ -264,6 +308,7 @@ def _build_report_runner_with_registry(
         registry=registry,
         provider_factory=_provider_factory,
         skill_registry=skill_registry if skill_registry is not None else _empty_skill_registry(),
+        trace=_trace,
     )
 
 
@@ -286,13 +331,27 @@ class RefreshingReportRunner:
         request,
         cancel_token=None,
     ):
+        import uuid as _uuid
+        from datetime import UTC as _UTC
+        from datetime import datetime as _dt
+
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
+            run_id = f"r_{_uuid.uuid4().hex[:12]}"
+            run_date = _dt.now(_UTC).date()
             runner = _build_report_runner_with_registry(
-                registry, web_search=web_search, skill_registry=self._skill_registry
+                registry,
+                web_search=web_search,
+                skill_registry=self._skill_registry,
+                db=db,
+                user_id=user_id,
+                department_id=department_id,
+                run_id=run_id,
+                run_date=run_date,
             )
+            db.commit()
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -300,6 +359,7 @@ class RefreshingReportRunner:
                 cancel_token=cancel_token,
             ):
                 yield event
+            db.commit()
         finally:
             db.close()
 

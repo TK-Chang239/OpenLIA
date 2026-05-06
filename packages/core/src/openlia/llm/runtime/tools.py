@@ -3,7 +3,8 @@
 Three sources:
   1. Mapped requirement tools — loaded from DataProviderDispatcher
      (which reads ~/.openlia/mappings/<department>.yaml).
-  2. `find_more_data` meta-tool — always present when any data tools exist.
+  2. `request_additional_tools` meta-tool — always present when any data
+     tools exist; lets the LLM pull the rest of the inventory mid-run.
   3. `web_search` — present only when resolve_web_search() returned available.
 
 Dispatch:
@@ -26,27 +27,35 @@ if TYPE_CHECKING:
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import ToolCall, ToolSchema
 
-# Hard outer cap on tool-loop iterations; per spec, Secretary (chat) is
-# unlimited on `find_more_data` expansions, but this guard still prevents
-# runaway provider calls if a model loops on a non-expansion tool.
+# Hard outer cap on tool-loop iterations to prevent runaway provider calls
+# when a model loops on the same tool without convergence.
 MAX_TOOL_TURNS = 32
 
-_FIND_MORE_DATA_SCHEMA = ToolSchema(
-    name="find_more_data",
+_REQUEST_ADDITIONAL_TOOLS_NAME = "request_additional_tools"
+
+_REQUEST_ADDITIONAL_TOOLS_SCHEMA = ToolSchema(
+    name=_REQUEST_ADDITIONAL_TOOLS_NAME,
     description=(
-        "Search all configured data providers for an endpoint matching a "
-        "description. If found, the endpoint becomes available as a new tool "
-        "you can call in a follow-up turn."
+        "Call this if you realize you need a capability that's not in your "
+        "current toolset. Provide a one-sentence reason describing what you "
+        "want to do; matching tools will be added to your toolset for the "
+        "rest of this run."
     ),
     parameters={
         "type": "object",
         "properties": {
-            "description": {
+            "reason": {
                 "type": "string",
-                "description": "Plain-language description of the data you need.",
-            }
+                "description": "One-sentence description of the missing capability.",
+            },
+            "category_hint": {
+                "type": "string",
+                "description": (
+                    "Optional connector category hint (financial, news, social, ...)."
+                ),
+            },
         },
-        "required": ["description"],
+        "required": ["reason"],
     },
 )
 
@@ -78,16 +87,18 @@ LOAD_SKILL_SCHEMA = ToolSchema(
 
 @runtime_checkable
 class DataProviderDispatcher(Protocol):
-    """Plan 3 implements this.
+    """v1 dispatcher Protocol consumed by ``ToolDispatcher``.
 
-    `list_requirement_tools(department_id)` returns the mapped-tool entries
-    from `~/.openlia/mappings/<department>.yaml` (name/description/parameters).
+    ``list_requirement_tools(department_id)`` returns the active subset of
+    tool entries (name/description/parameters) — for the report path this
+    is the cache-filtered list, for chat it's the legacy mapped set.
 
-    `dispatch_requirement(tool_name, arguments)` invokes the winning data
-    provider for this requirement and returns its normalized JSON payload.
+    ``dispatch_requirement(tool_name, arguments)`` invokes the underlying
+    provider/connector and returns its normalized JSON payload.
 
-    `find_more_data(department_id, description)` runs the Quick-tier LLM
-    catalog search; returns a mapping-tool entry on hit, None on miss.
+    ``expand_tools(department_id, reason, category_hint)`` is the
+    escalation surface bound to ``request_additional_tools``: returns
+    additional tool entries the LLM may call on the next turn.
     """
 
     async def list_requirement_tools(self, department_id: str) -> list[dict[str, Any]]: ...
@@ -96,9 +107,13 @@ class DataProviderDispatcher(Protocol):
         self, *, tool_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]: ...
 
-    async def find_more_data(
-        self, *, department_id: str, description: str
-    ) -> dict[str, Any] | None: ...
+    async def expand_tools(
+        self,
+        *,
+        department_id: str,
+        reason: str,
+        category_hint: str | None = None,
+    ) -> list[dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)
@@ -164,10 +179,6 @@ class ToolDispatcher:
         self._data = data_dispatcher
         self._web_search = web_search
         self._expanded: dict[str, list[ToolSchema]] = {}  # per-department
-        # Per-department count of successful + attempted `find_more_data`
-        # invocations against the budget. Counts every call regardless of
-        # outcome so a stream of misses cannot bypass the cap.
-        self._expansion_count: dict[str, int] = {}
 
     async def build(
         self,
@@ -189,7 +200,7 @@ class ToolDispatcher:
         tools: list[ToolSchema] = list(mapped)
 
         if mapped:
-            tools.append(_FIND_MORE_DATA_SCHEMA)
+            tools.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
         if has_web_search and self._web_search.available:
             tools.append(_WEB_SEARCH_SCHEMA)
         # Department-provided structured tools (e.g. Secretary's suggest_redirect).
@@ -211,15 +222,12 @@ class ToolDispatcher:
         department_id: str,
         call: ToolCall,
         extra_tool_names: frozenset[str] = frozenset(),
-        max_expansions: int | None = None,
     ) -> ToolCallResult:
         name = call.name
         if name in extra_tool_names:
             return self._dispatch_structured_echo(call)
-        if name == "find_more_data":
-            return await self._dispatch_find_more_data(
-                department_id, call, max_expansions=max_expansions
-            )
+        if name == _REQUEST_ADDITIONAL_TOOLS_NAME:
+            return await self._dispatch_request_additional_tools(department_id, call)
         if name == "web_search":
             return await self._dispatch_web_search(call)
         return await self._dispatch_requirement(call)
@@ -230,14 +238,12 @@ class ToolDispatcher:
         department_id: str,
         calls: list[ToolCall],
         extra_tool_names: frozenset[str] = frozenset(),
-        max_expansions: int | None = None,
     ) -> list[ToolCallResult]:
         coros = [
             self.dispatch(
                 department_id=department_id,
                 call=c,
                 extra_tool_names=extra_tool_names,
-                max_expansions=max_expansions,
             )
             for c in calls
         ]
@@ -276,54 +282,57 @@ class ToolDispatcher:
             payload=_normalize_payload(payload),
         )
 
-    async def _dispatch_find_more_data(
+    async def _dispatch_request_additional_tools(
         self,
         department_id: str,
         call: ToolCall,
-        *,
-        max_expansions: int | None = None,
     ) -> ToolCallResult:
-        if max_expansions is not None:
-            used = self._expansion_count.get(department_id, 0)
-            if used >= max_expansions:
-                return ToolCallResult(
-                    call_id=call.id,
-                    ok=False,
-                    summary="expansion budget exhausted",
-                    payload={"error": "expansion budget exhausted", "found": False},
-                )
-        # Charge the budget before calling the catalog so misses still count.
-        self._expansion_count[department_id] = self._expansion_count.get(department_id, 0) + 1
-        description = str(call.arguments.get("description", ""))
+        reason = str(call.arguments.get("reason", "")).strip()
+        category_hint_raw = call.arguments.get("category_hint")
+        category_hint = (
+            str(category_hint_raw).strip()
+            if isinstance(category_hint_raw, str) and category_hint_raw.strip()
+            else None
+        )
         try:
-            entry = await self._data.find_more_data(
-                department_id=department_id, description=description
+            entries = await self._data.expand_tools(
+                department_id=department_id,
+                reason=reason,
+                category_hint=category_hint,
             )
         except Exception as exc:
             return ToolCallResult(
                 call_id=call.id,
                 ok=False,
-                summary=f"find_more_data failed: {exc!s}",
+                summary=f"request_additional_tools failed: {exc!s}",
                 payload={"error": str(exc)},
             )
-        if entry is None:
+        existing = {s.name for s in self._expanded.get(department_id, [])}
+        added: list[str] = []
+        for entry in entries:
+            name = entry["name"]
+            if name in existing:
+                continue
+            schema = ToolSchema(
+                name=name,
+                description=entry.get("description", ""),
+                parameters=entry.get("parameters") or {},
+            )
+            self._expanded.setdefault(department_id, []).append(schema)
+            existing.add(name)
+            added.append(name)
+        if not added:
             return ToolCallResult(
                 call_id=call.id,
                 ok=False,
-                summary=f"No matching endpoint available for '{description}'",
-                payload={"found": False},
+                summary="No additional tools matched the request.",
+                payload={"added_tools": [], "found": False},
             )
-        schema = ToolSchema(
-            name=entry["name"],
-            description=entry["description"],
-            parameters=entry["parameters"],
-        )
-        self._expanded.setdefault(department_id, []).append(schema)
         return ToolCallResult(
             call_id=call.id,
             ok=True,
-            summary=f"Added tool: {schema.name}",
-            payload={"added_tool": schema.name, "found": True},
+            summary=f"Added tools: {', '.join(added)}",
+            payload={"added_tools": added, "found": True},
         )
 
     async def _dispatch_web_search(self, call: ToolCall) -> ToolCallResult:

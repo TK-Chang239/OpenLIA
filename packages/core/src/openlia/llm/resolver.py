@@ -40,6 +40,10 @@ class ModelRegistry(Protocol):
 
     def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None: ...
 
+    def get_department_user_override(
+        self, user_id: str, department_id: str
+    ) -> ResolvedModelRow | None: ...
+
 
 def resolve_tier(
     department_id: str,
@@ -87,9 +91,17 @@ def resolve(
         # Fall through to tier-based resolution if the explicit pick is no
         # longer available (model deleted or disabled).
 
+    # Per-(user, department) override — set via the per-page model picker
+    # (e.g., the dropdown next to "Generate Report" on the MB page).
+    # Wins over the user-level preferred model and tier defaults.
+    if user_id is not None:
+        dept_override = registry.get_department_user_override(user_id, department_id)
+        if dept_override is not None:
+            return _to_resolved(dept_override)
+
     # User-level preferred model — set globally via Settings/preferences;
     # cross-cuts every department for that user. Wins over tier resolution
-    # but loses to an explicit per-call ``model_id_override`` above.
+    # but loses to the per-department pick above.
     if user_id is not None:
         preferred = registry.get_user_preferred_model(user_id)
         if preferred is not None:

@@ -10,6 +10,7 @@ from openlia.llm.types import (
     LLMRequest,
     Message,
     ProviderCredentials,
+    ToolSchema,
 )
 
 
@@ -68,6 +69,69 @@ async def test_generate_happy_path_separates_system_from_messages() -> None:
     body = json.loads(captured["payload"])
     assert body["system"] == "be nice"
     assert all(m["role"] != "system" for m in body["messages"])
+
+
+async def test_generate_forwards_tool_choice_when_set() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return httpx.Response(
+            200,
+            json={
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "submit_report",
+                        "input": {"ok": True},
+                    }
+                ],
+                "stop_reason": "tool_use",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="submit_report",
+                        description="Submit the final report.",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ],
+                tool_choice={"type": "tool", "name": "submit_report"},
+            )
+        )
+    body = json.loads(captured["payload"])
+    assert body["tool_choice"] == {"type": "tool", "name": "submit_report"}
+
+
+async def test_generate_omits_tool_choice_when_unset() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return httpx.Response(
+            200,
+            json={
+                "content": [{"type": "text", "text": "ok"}],
+                "stop_reason": "end_turn",
+                "usage": {"input_tokens": 1, "output_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    body = json.loads(captured["payload"])
+    assert "tool_choice" not in body
 
 
 async def test_generate_includes_api_key_header() -> None:

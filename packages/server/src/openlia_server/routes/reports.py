@@ -560,7 +560,7 @@ def build_reports_router(
             )
         )
 
-    @router.post("/{report_id}/export/pdf")
+    @router.api_route("/{report_id}/export/pdf", methods=["GET", "POST"])
     async def export_report_pdf_route(
         report_id: str,
         request: Request,

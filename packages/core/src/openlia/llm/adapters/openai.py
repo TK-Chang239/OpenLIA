@@ -132,6 +132,8 @@ class OpenAIAdapter(LLMProvider):
             }
         elif request.response_format and request.response_format.kind == "json_object":
             payload["response_format"] = {"type": "json_object"}
+        if request.tool_choice is not None:
+            payload["tool_choice"] = request.tool_choice
 
         async def _post() -> dict:
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:

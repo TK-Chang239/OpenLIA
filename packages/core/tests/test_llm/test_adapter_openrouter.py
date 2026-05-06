@@ -10,6 +10,7 @@ from openlia.llm.types import (
     LLMRequest,
     Message,
     ProviderCredentials,
+    ToolSchema,
 )
 
 
@@ -45,6 +46,73 @@ async def test_generate_uses_openai_compat_endpoint() -> None:
         resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
     assert resp.text == "ok"
     assert resp.input_tokens == 3
+
+
+async def test_generate_forwards_tool_choice_when_set() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://openrouter.ai/api/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="submit_report",
+                        description="Submit the final report.",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ],
+                tool_choice={"type": "function", "function": {"name": "submit_report"}},
+            )
+        )
+    body = json.loads(captured["payload"])
+    assert body["tool_choice"] == {
+        "type": "function",
+        "function": {"name": "submit_report"},
+    }
+
+
+async def test_generate_omits_tool_choice_when_unset() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://openrouter.ai/api/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    body = json.loads(captured["payload"])
+    assert "tool_choice" not in body
 
 
 async def test_generate_includes_bearer_token() -> None:

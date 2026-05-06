@@ -66,6 +66,15 @@ class LLMRequest:
     max_tokens: int = 1024
     temperature: float = 0.7
     stop: list[str] | None = None
+    # Provider-specific tool selection directive. When set, the request
+    # forces or biases the model toward a specific tool. Each adapter
+    # forwards this verbatim to its upstream API, so callers must use
+    # the upstream's expected shape:
+    #   OpenAI / OpenRouter (chat.completions): {"type": "function", "function": {"name": "..."}}
+    #   Anthropic (messages):                   {"type": "tool", "name": "..."}
+    #   Gemini (generateContent):               {"function_calling_config": {"mode": "ANY"|"AUTO"|"NONE", "allowed_function_names": [...]}}
+    # `None` means no constraint (model decides).
+    tool_choice: dict | None = None
 
 
 @dataclass(frozen=True)

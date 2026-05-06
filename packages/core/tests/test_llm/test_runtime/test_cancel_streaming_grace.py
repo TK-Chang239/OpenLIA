@@ -164,7 +164,6 @@ class _SlowToolDispatcher(ToolDispatcher):
         department_id,
         calls,
         extra_tool_names=frozenset(),
-        max_expansions=None,
     ):
         # Wait either for the release event OR until exceeding the finish window.
         try:

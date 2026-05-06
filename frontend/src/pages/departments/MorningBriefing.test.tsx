@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
@@ -41,21 +42,8 @@ vi.mock("../../hooks/useMbReports", () => ({
   }),
 }));
 
-vi.mock("../../hooks/useMbChatSession", () => ({
-  useMbChatSession: () => ({ sessionId: "sess-mb-1", error: null }),
-}));
-
-vi.mock("../../components/chat/ChatInterface", () => ({
-  ChatInterface: (props: {
-    sessionId: string;
-    inputPlaceholder: string;
-  }) => (
-    <div
-      data-testid="chat-interface"
-      data-session-id={props.sessionId}
-      data-placeholder={props.inputPlaceholder}
-    />
-  ),
+vi.mock("../../components/morning-briefing/ModelPicker", () => ({
+  ModelPicker: () => <select data-testid="mb-model-picker" />,
 }));
 
 vi.mock("../../components/report/ReportRenderer", () => ({
@@ -77,48 +65,40 @@ vi.mock("../../api/reports", () => ({
 
 function renderPage() {
   return render(
-    <FileViewerProvider>
-      <MorningBriefing />
-    </FileViewerProvider>,
+    <MemoryRouter>
+      <FileViewerProvider>
+        <MorningBriefing />
+      </FileViewerProvider>
+    </MemoryRouter>,
   );
 }
 
 describe("MorningBriefing page", () => {
-  it("renders header, archive list, and all three tabs", () => {
+  it("renders header with model picker and only Archive + Settings tabs (no Chat)", () => {
     renderPage();
     expect(screen.getByText(/Morning Briefings/i)).toBeInTheDocument();
     expect(screen.getByText(/Morning Briefing 2026-04-24/)).toBeInTheDocument();
+    expect(screen.getByTestId("mb-model-picker")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Archive$/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Chat$/ })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Settings$/ }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Chat$/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("Chat tab mounts ChatInterface bound to the MB session", () => {
-    renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^Chat$/ }));
-    const chat = screen.getByTestId("chat-interface");
-    expect(chat).toHaveAttribute("data-session-id", "sess-mb-1");
-    expect(chat).toHaveAttribute(
-      "data-placeholder",
-      expect.stringContaining("Morning Briefings") as unknown as string,
-    );
-  });
-
-  it("opening a briefing shows the viewer with ReportRenderer + follow-up chat", async () => {
+  it("opening a briefing shows the viewer with ReportRenderer (no inline chat)", async () => {
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: /^Open$/ }));
     await waitFor(() =>
       expect(screen.getByTestId("mb-viewer")).toBeInTheDocument(),
     );
-    expect(screen.getByText(/Follow-up chat/i)).toBeInTheDocument();
-    const chat = screen.getByTestId("chat-interface");
-    expect(chat).toHaveAttribute("data-session-id", "sess-mb-1");
-    expect(chat).toHaveAttribute(
-      "data-placeholder",
-      expect.stringContaining("follow-up") as unknown as string,
-    );
+    expect(screen.queryByText(/Follow-up chat/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("report-renderer")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("mb-ask-in-secretary"),
+    ).toBeInTheDocument();
   });
 
   it("Close button returns to the archive", async () => {

@@ -18,7 +18,6 @@ from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import ChatSession
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import mb_config as config_svc
 from openlia_server.services import mb_runner
@@ -84,10 +83,6 @@ class _ScheduleOut(BaseModel):
 class _ReportIn(BaseModel):
     user_input: str = Field(default="", max_length=4000)
     session_id: str | None = None
-
-
-class _ChatSessionOut(BaseModel):
-    session_id: str
 
 
 def build_morning_briefing_router(
@@ -249,34 +244,5 @@ def build_morning_briefing_router(
             media_type="text/event-stream",
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
         )
-
-    # ----- Chat session resolve-or-create -----
-
-    @router.post("/chat/session", response_model=_ChatSessionOut)
-    def resolve_or_create_chat_session(
-        user: User = require_auth,
-        db: DBSession = Depends(session_dep),
-    ) -> _ChatSessionOut:
-        import uuid
-
-        existing = (
-            db.query(ChatSession)
-            .filter_by(user_id=user.id, department="morning_briefing")
-            .order_by(ChatSession.updated_at.desc())
-            .first()
-        )
-        if existing is not None:
-            return _ChatSessionOut(session_id=existing.id)
-        sid = str(uuid.uuid4())
-        db.add(
-            ChatSession(
-                id=sid,
-                user_id=user.id,
-                department="morning_briefing",
-                title="Morning Briefing",
-            )
-        )
-        db.commit()
-        return _ChatSessionOut(session_id=sid)
 
     return router

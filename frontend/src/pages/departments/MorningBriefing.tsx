@@ -1,41 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { type RecentReport } from "../../api/morning-briefing";
-import { fetchReport, type ReportSchema } from "../../api/reports";
-import { ChatInterface } from "../../components/chat/ChatInterface";
-import { ReportThumbnail } from "../../components/chat/ReportThumbnail";
+import { fetchReport, reportPdfUrl, type ReportSchema } from "../../api/reports";
 import { MBArchiveView } from "../../components/morning-briefing/MBArchiveView";
 import { MBSettingsView } from "../../components/morning-briefing/MBSettingsView";
+import { ModelPicker } from "../../components/morning-briefing/ModelPicker";
 import { OnDemandBriefingButton } from "../../components/morning-briefing/OnDemandBriefingButton";
 import { ReportRenderer } from "../../components/report/ReportRenderer";
-import { useMbChatSession } from "../../hooks/useMbChatSession";
 import { useMbConfig } from "../../hooks/useMbConfig";
 import { useMbReports } from "../../hooks/useMbReports";
 import { useMbSchedule } from "../../hooks/useMbSchedule";
 
-type Tab = "archive" | "chat" | "settings";
-
-const FOLLOW_UP_CHIPS = [
-  {
-    label: "Summarize today's briefing",
-    value: "Summarize today's Morning Briefing in 3 bullets.",
-  },
-  {
-    label: "Biggest risks",
-    value: "What are the biggest risks flagged in the latest briefing?",
-  },
-  {
-    label: "What changed vs yesterday?",
-    value:
-      "What changed materially in the latest briefing compared to the previous one?",
-  },
-  {
-    label: "Explain macro section",
-    value: "Explain the macro section of the latest briefing in plain English.",
-  },
-];
+type Tab = "archive" | "settings";
 
 export default function MorningBriefing() {
+  const navigate = useNavigate();
   const { config, save: saveConfig, loading: configLoading } = useMbConfig();
   const {
     schedule,
@@ -43,7 +23,6 @@ export default function MorningBriefing() {
     remove: removeSchedule,
   } = useMbSchedule();
   const { reports, loading: reportsLoading, refresh } = useMbReports();
-  const { sessionId: chatSessionId } = useMbChatSession();
   const [tab, setTab] = useState<Tab>("archive");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [viewing, setViewing] = useState<RecentReport | null>(null);
@@ -88,19 +67,41 @@ export default function MorningBriefing() {
     [refresh],
   );
 
+  const askInSecretary = useCallback(() => {
+    if (!viewing) return;
+    navigate(`/secretary?attached_report=${encodeURIComponent(viewing.id)}`);
+  }, [navigate, viewing]);
+
   if (viewing) {
     return (
-      <div className="flex h-full" data-testid="mb-viewer">
-        <div className="w-1/2 flex flex-col border-r border-border min-w-0">
-          <header className="flex items-center justify-between p-3 border-b border-border gap-2">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold truncate">
-                {viewing.title}
-              </h2>
-              <p className="text-xs text-muted-foreground">
-                {new Date(viewing.created_at).toLocaleString()}
-              </p>
-            </div>
+      <div
+        className="mx-auto max-w-7xl p-6 space-y-4 h-full flex flex-col"
+        data-testid="mb-viewer"
+      >
+        <header className="flex items-center justify-between gap-3 flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold truncate">{viewing.title}</h2>
+            <p className="text-xs text-muted-foreground">
+              {new Date(viewing.created_at).toLocaleString()}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <a
+              href={reportPdfUrl(viewing.id)}
+              download={`${viewing.title}.pdf`}
+              className="text-sm border border-border-subtle rounded-md px-3 py-1.5 hover:bg-surface-hover"
+              data-testid="mb-viewer-download"
+            >
+              ↓ Download
+            </a>
+            <button
+              type="button"
+              onClick={askInSecretary}
+              className="text-sm border border-border-subtle rounded-md px-3 py-1.5 hover:bg-surface-hover"
+              data-testid="mb-ask-in-secretary"
+            >
+              Ask in Secretary →
+            </button>
             <button
               type="button"
               className="text-sm text-muted-foreground hover:underline"
@@ -108,49 +109,18 @@ export default function MorningBriefing() {
             >
               Close
             </button>
-          </header>
-          <div className="flex-1 overflow-y-auto">
-            {viewingError ? (
-              <div className="p-4 text-sm text-destructive">
-                {viewingError}
-              </div>
-            ) : viewingSchema ? (
-              <ReportRenderer schema={viewingSchema} />
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground">
-                Loading briefing…
-              </div>
-            )}
           </div>
-        </div>
-        <div className="w-1/2 flex flex-col min-w-0">
-          <header className="p-3 border-b border-border flex items-center gap-2">
-            <div className="text-sm font-semibold flex-shrink-0">
-              Follow-up chat
+        </header>
+        <div className="flex-1 overflow-y-auto">
+          {viewingError ? (
+            <div className="p-4 text-sm text-destructive">{viewingError}</div>
+          ) : viewingSchema ? (
+            <ReportRenderer schema={viewingSchema} />
+          ) : (
+            <div className="p-4 text-sm text-muted-foreground">
+              Loading briefing…
             </div>
-            <div className="min-w-0 flex-1">
-              <ReportThumbnail
-                reportId={viewing.id}
-                filename={`${viewing.title}.pdf`}
-              />
-            </div>
-          </header>
-          <div className="flex-1 min-h-0">
-            {chatSessionId ? (
-              <ChatInterface
-                sessionId={chatSessionId}
-                greeting="Ask about this briefing"
-                subtext={`Follow up on "${viewing.title}".`}
-                chips={FOLLOW_UP_CHIPS}
-                inputPlaceholder="Ask a follow-up about this briefing..."
-                departmentId="morning_briefing"
-              />
-            ) : (
-              <div className="p-4 text-sm text-muted-foreground">
-                Opening chat…
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
     );
@@ -166,6 +136,10 @@ export default function MorningBriefing() {
           <h1 className="text-2xl font-semibold truncate">Morning Briefings</h1>
         </div>
         <div className="flex items-center gap-2">
+          <ModelPicker
+            departmentSlug="morning-briefing"
+            onError={setErrorMsg}
+          />
           <OnDemandBriefingButton
             onSaved={onReportSaved}
             onError={setErrorMsg}
@@ -201,7 +175,6 @@ export default function MorningBriefing() {
         {(
           [
             { id: "archive", label: "Archive" },
-            { id: "chat", label: "Chat" },
             { id: "settings", label: "Settings" },
           ] as { id: Tab; label: string }[]
         ).map((t) => (
@@ -243,21 +216,6 @@ export default function MorningBriefing() {
           onOpen={onOpen}
           onGoToSettings={() => setTab("settings")}
         />
-      ) : tab === "chat" ? (
-        <div className="h-[600px]" data-testid="mb-chat-tab">
-          {chatSessionId ? (
-            <ChatInterface
-              sessionId={chatSessionId}
-              greeting="Morning Briefing chat"
-              subtext="Ask a follow-up about any recent briefing."
-              chips={FOLLOW_UP_CHIPS}
-              inputPlaceholder="Ask about your Morning Briefings..."
-              departmentId="morning_briefing"
-            />
-          ) : (
-            <div className="text-sm text-muted-foreground">Opening chat…</div>
-          )}
-        </div>
       ) : configLoading || !config ? (
         <div className="text-sm text-muted-foreground">Loading settings…</div>
       ) : (

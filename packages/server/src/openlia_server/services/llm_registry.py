@@ -89,6 +89,16 @@ class SQLModelRegistry(ModelRegistry):
             return None
         return self._load_row(prefs.preferred_model_id)
 
+    def get_department_user_override(
+        self, user_id: str, department_id: str
+    ) -> ResolvedModelRow | None:
+        from openlia_server.db.models.config import UserDepartmentModelPref
+
+        pref = self._db.get(UserDepartmentModelPref, (user_id, department_id))
+        if pref is None:
+            return None
+        return self._load_row(pref.model_id)
+
     def _load_row(self, model_id: str) -> ResolvedModelRow | None:
         model = self._db.get(LLMModel, model_id)
         if model is None or not model.is_enabled:
