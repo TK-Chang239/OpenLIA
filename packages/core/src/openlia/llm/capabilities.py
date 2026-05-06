@@ -26,7 +26,7 @@ def _anthropic_opus() -> Capabilities:
         vision=True,
         web_search_native=True,
         max_context_tokens=200_000,
-        max_output_tokens=8_192,
+        max_output_tokens=32_000,
     )
 
 
@@ -38,7 +38,7 @@ def _anthropic_sonnet() -> Capabilities:
         vision=True,
         web_search_native=True,
         max_context_tokens=200_000,
-        max_output_tokens=8_192,
+        max_output_tokens=64_000,
     )
 
 
@@ -50,7 +50,7 @@ def _anthropic_haiku() -> Capabilities:
         vision=True,
         web_search_native=False,
         max_context_tokens=200_000,
-        max_output_tokens=4_096,
+        max_output_tokens=16_000,
     )
 
 
@@ -139,9 +139,11 @@ def _ollama_tool_family() -> Capabilities:
 
 
 _CAPABILITY_MAP: list[tuple[str, re.Pattern[str], object]] = [
-    ("anthropic", re.compile(r"^claude-opus-4", re.IGNORECASE), _anthropic_opus),
-    ("anthropic", re.compile(r"^claude-sonnet-4", re.IGNORECASE), _anthropic_sonnet),
-    ("anthropic", re.compile(r"^claude-haiku-4", re.IGNORECASE), _anthropic_haiku),
+    # ``-latest`` (and bare ``-opus``/``-sonnet``/``-haiku``) cover OpenRouter
+    # floating-version aliases like ``anthropic/claude-sonnet-latest``.
+    ("anthropic", re.compile(r"^claude-opus(-|$)", re.IGNORECASE), _anthropic_opus),
+    ("anthropic", re.compile(r"^claude-sonnet(-|$)", re.IGNORECASE), _anthropic_sonnet),
+    ("anthropic", re.compile(r"^claude-haiku(-|$)", re.IGNORECASE), _anthropic_haiku),
     ("openai", re.compile(r"^gpt-5\.4-pro", re.IGNORECASE), _openai_gpt_5_4_pro),
     ("openai", re.compile(r"^gpt-5\.4-mini", re.IGNORECASE), _openai_gpt_5_4_mini),
     ("openai", re.compile(r"^gpt-5\.4", re.IGNORECASE), _openai_gpt_5_4),
@@ -158,6 +160,10 @@ _CAPABILITY_MAP: list[tuple[str, re.Pattern[str], object]] = [
 def _lookup_base(provider_kind: str, model: str) -> Capabilities:
     if provider_kind == "openrouter" and "/" in model:
         upstream_kind, upstream_model = model.split("/", 1)
+        # OpenRouter prefixes some routes with ``~`` to denote a floating
+        # alias (e.g. ``~anthropic/claude-sonnet-latest``). Strip it so the
+        # upstream-kind lookup matches a real provider.
+        upstream_kind = upstream_kind.lstrip("~")
         return _lookup_base(upstream_kind, upstream_model)
 
     if provider_kind == "openai_compat":

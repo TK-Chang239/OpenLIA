@@ -76,6 +76,11 @@ EXPECTED_TABLES = {
     # --- Skills MVP (PR #91) ---
     "skills",
     "skill_user_overrides",
+    # --- Report tool cache (per-(user, dept) warm-up + usage log) ---
+    "report_tool_warmup",
+    "report_tool_usage",
+    # --- Per-(user, dept) model preference (model picker) ---
+    "user_department_model_prefs",
 }
 
 

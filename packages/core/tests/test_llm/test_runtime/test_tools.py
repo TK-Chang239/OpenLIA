@@ -35,7 +35,7 @@ _MANIFEST = {
 }
 
 
-async def test_build_returns_mapping_tools_plus_find_more_data() -> None:
+async def test_build_returns_mapping_tools_plus_request_additional_tools() -> None:
     data = FakeDataDispatcher(manifest=_MANIFEST)
     disp = ToolDispatcher(
         data_dispatcher=data,
@@ -45,7 +45,7 @@ async def test_build_returns_mapping_tools_plus_find_more_data() -> None:
     names = [t.name for t in tools]
     assert "stock_quote" in names
     assert "financial_statements" in names
-    assert "find_more_data" in names
+    assert "request_additional_tools" in names
     assert "web_search" not in names
 
 
@@ -104,7 +104,7 @@ async def test_dispatch_requirement_tool_surfaces_failure_as_ok_false() -> None:
     assert "Failed" in result.summary
 
 
-async def test_dispatch_find_more_data_hit_adds_tool_for_next_turn() -> None:
+async def test_dispatch_request_additional_tools_hit_adds_tool_for_next_turn() -> None:
     new_tool = {
         "name": "options_chain",
         "description": "Options chain",
@@ -116,7 +116,7 @@ async def test_dispatch_find_more_data_hit_adds_tool_for_next_turn() -> None:
     }
     data = FakeDataDispatcher(
         manifest=_MANIFEST,
-        results={"expand::options chain": new_tool},
+        results={"expand::need options chain": new_tool},
     )
     disp = ToolDispatcher(
         data_dispatcher=data,
@@ -127,14 +127,19 @@ async def test_dispatch_find_more_data_hit_adds_tool_for_next_turn() -> None:
 
     result = await disp.dispatch(
         department_id="equity_research",
-        call=ToolCall(id="c1", name="find_more_data", arguments={"description": "options chain"}),
+        call=ToolCall(
+            id="c1",
+            name="request_additional_tools",
+            arguments={"reason": "need options chain"},
+        ),
     )
     assert result.ok is True
+    assert "options_chain" in result.payload.get("added_tools", [])
     after = await disp.build("equity_research", has_web_search=False)
     assert "options_chain" in [t.name for t in after]
 
 
-async def test_dispatch_find_more_data_miss_returns_ok_false() -> None:
+async def test_dispatch_request_additional_tools_miss_returns_ok_false() -> None:
     data = FakeDataDispatcher(manifest=_MANIFEST)
     disp = ToolDispatcher(
         data_dispatcher=data,
@@ -142,10 +147,57 @@ async def test_dispatch_find_more_data_miss_returns_ok_false() -> None:
     )
     result = await disp.dispatch(
         department_id="equity_research",
-        call=ToolCall(id="c1", name="find_more_data", arguments={"description": "nonsense data"}),
+        call=ToolCall(
+            id="c1",
+            name="request_additional_tools",
+            arguments={"reason": "obscure thing nothing matches"},
+        ),
     )
     assert result.ok is False
-    assert "not available" in result.summary.lower() or "no match" in result.summary.lower()
+    assert "no" in result.summary.lower() and "match" in result.summary.lower()
+
+
+async def test_dispatch_request_additional_tools_dedupes_against_existing() -> None:
+    """A second escalation that returns an already-added tool must not
+    re-add it nor flap ``ok``."""
+    new_tool = {
+        "name": "options_chain",
+        "description": "Options chain",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }
+    data = FakeDataDispatcher(
+        manifest=_MANIFEST,
+        results={
+            "expand::first call": new_tool,
+            "expand::second call": new_tool,
+        },
+    )
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    r1 = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(
+            id="c1",
+            name="request_additional_tools",
+            arguments={"reason": "first call"},
+        ),
+    )
+    assert r1.ok is True
+    r2 = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(
+            id="c2",
+            name="request_additional_tools",
+            arguments={"reason": "second call"},
+        ),
+    )
+    # No new tool was added (dedupe), so the second call is ok=False.
+    assert r2.ok is False
+    after = await disp.build("equity_research", has_web_search=False)
+    # The tool still appears exactly once.
+    assert [t.name for t in after].count("options_chain") == 1
 
 
 async def test_dispatch_web_search_configured_calls_adapter() -> None:
@@ -249,78 +301,6 @@ async def test_dispatch_extra_tool_echoes_arguments_into_structured() -> None:
         "department": "equity_research",
         "reason": "needs research",
     }
-
-
-async def test_find_more_data_budget_exhaustion_returns_ok_false() -> None:
-    """NEW-5-04: when `max_expansions` is reached, find_more_data returns
-    `ok=False, summary="expansion budget exhausted"` and the catalog is
-    never consulted."""
-
-    class _SpyDataDispatcher(FakeDataDispatcher):
-        find_more_data_calls: int = 0
-
-        async def find_more_data(self, *, department_id: str, description: str):
-            type(self).find_more_data_calls += 1
-            return {
-                "name": f"new_tool_{type(self).find_more_data_calls}",
-                "description": "added",
-                "parameters": {"type": "object", "properties": {}, "required": []},
-            }
-
-    data = _SpyDataDispatcher(manifest=_MANIFEST)
-    disp = ToolDispatcher(
-        data_dispatcher=data,
-        web_search=WebSearchResolution(False, None, None),
-    )
-    # Budget = 2 expansions for the department.
-    r1 = await disp.dispatch(
-        department_id="equity_research",
-        call=ToolCall(id="c1", name="find_more_data", arguments={"description": "a"}),
-        max_expansions=2,
-    )
-    r2 = await disp.dispatch(
-        department_id="equity_research",
-        call=ToolCall(id="c2", name="find_more_data", arguments={"description": "b"}),
-        max_expansions=2,
-    )
-    r3 = await disp.dispatch(
-        department_id="equity_research",
-        call=ToolCall(id="c3", name="find_more_data", arguments={"description": "c"}),
-        max_expansions=2,
-    )
-    assert r1.ok is True
-    assert r2.ok is True
-    assert r3.ok is False
-    assert r3.summary == "expansion budget exhausted"
-    # Spy: catalog called twice (within budget); never on the third.
-    assert type(data).find_more_data_calls == 2
-
-
-async def test_find_more_data_budget_none_means_unlimited() -> None:
-    """NEW-5-04 — chat path: Secretary passes max_expansions=None, so the
-    budget never blocks the call."""
-
-    class _CountingDispatcher(FakeDataDispatcher):
-        catalog_calls: int = 0
-
-        async def find_more_data(self, *, department_id: str, description: str):
-            type(self).catalog_calls += 1
-            return None
-
-    data = _CountingDispatcher(manifest=_MANIFEST)
-    disp = ToolDispatcher(
-        data_dispatcher=data,
-        web_search=WebSearchResolution(False, None, None),
-    )
-    for i in range(50):
-        result = await disp.dispatch(
-            department_id="equity_research",
-            call=ToolCall(id=f"c{i}", name="find_more_data", arguments={"description": "x"}),
-            max_expansions=None,
-        )
-        # All calls reach the catalog; none gets blocked.
-        assert "expansion budget exhausted" not in result.summary
-    assert type(data).catalog_calls == 50
 
 
 async def test_dispatch_known_data_tool_ignores_extra_tool_names() -> None:

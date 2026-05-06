@@ -47,8 +47,11 @@ export const listSessions = (opts: ListSessionsOptions = {}) => {
   );
 };
 
-export const createSession = (body: { department: DepartmentSlug; title: string }) =>
-  fetchJson<ChatSession>("/api/chat/sessions", { method: "POST", json: body });
+export const createSession = (body: {
+  department: DepartmentSlug;
+  title: string;
+  attached_report_id?: string;
+}) => fetchJson<ChatSession>("/api/chat/sessions", { method: "POST", json: body });
 
 export const patchSession = (
   id: string,

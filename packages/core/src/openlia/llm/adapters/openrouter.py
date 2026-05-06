@@ -98,6 +98,8 @@ class OpenRouterAdapter(LLMProvider):
                 }
                 for t in request.tools
             ]
+        if request.tool_choice is not None:
+            payload["tool_choice"] = request.tool_choice
 
         async def _post() -> dict:
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:

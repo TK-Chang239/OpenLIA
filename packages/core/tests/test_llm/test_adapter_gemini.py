@@ -12,6 +12,7 @@ from openlia.llm.types import (
     LLMRequest,
     Message,
     ProviderCredentials,
+    ToolSchema,
 )
 
 
@@ -86,6 +87,91 @@ async def test_generate_happy_path_uses_key_query_param() -> None:
     assert resp.finish_reason == "STOP"
     assert resp.input_tokens == 4
     assert resp.output_tokens == 2
+
+
+async def test_generate_forwards_tool_choice_as_tool_config() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "submit_report",
+                                        "args": {"ok": True},
+                                    }
+                                }
+                            ]
+                        },
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="submit_report",
+                        description="Submit the final report.",
+                        parameters={"type": "object", "properties": {}},
+                    )
+                ],
+                tool_choice={
+                    "function_calling_config": {
+                        "mode": "ANY",
+                        "allowed_function_names": ["submit_report"],
+                    }
+                },
+            )
+        )
+    assert captured["body"]["toolConfig"] == {
+        "function_calling_config": {
+            "mode": "ANY",
+            "allowed_function_names": ["submit_report"],
+        }
+    }
+
+
+async def test_generate_omits_tool_config_when_unset() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return httpx.Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": "hi"}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert "toolConfig" not in captured["body"]
 
 
 async def test_generate_auth_error() -> None:

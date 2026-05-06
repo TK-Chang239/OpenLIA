@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -10,8 +12,46 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.content import ChatMessage, Report
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
+
+
+def _attach_report_as_context(
+    db: Session, *, session_id: str, user_id: str, report_id: str
+) -> None:
+    """Insert a ``user``-role chat message containing the report's title +
+    structured payload as JSON. The Secretary LLM sees this as the first
+    message in the conversation and can ground follow-ups against it.
+
+    Silently no-ops when the report is missing or owned by a different user
+    so a malformed handoff URL doesn't fail session creation.
+    """
+    report = db.get(Report, report_id)
+    if report is None or report.user_id != user_id:
+        return
+    payload: dict = {
+        "type": "attached_report",
+        "report_id": report.id,
+        "department": report.department,
+        "title": report.title,
+        "schema": report.content_structured,
+    }
+    body = (
+        f"[Report attached: {report.title}]\n"
+        f"The user has attached a report from {report.department}. "
+        "Use it as the primary reference when answering follow-up questions.\n\n"
+        f"```json\n{json.dumps(payload)}\n```"
+    )
+    db.add(
+        ChatMessage(
+            id=str(uuid.uuid4()),
+            session_id=session_id,
+            role="user",
+            content=body,
+        )
+    )
+    db.flush()
 
 
 class SessionOut(BaseModel):
@@ -39,6 +79,11 @@ _DEPARTMENT_PATTERN = (
 class SessionCreateIn(BaseModel):
     department: str = Field(..., pattern=_DEPARTMENT_PATTERN)
     title: str = Field(..., min_length=1, max_length=200)
+    # Optional report to attach to the new session. When set, the server
+    # injects a system-role message containing the report's structured
+    # JSON so the assistant has the report content as conversational
+    # context. Used by "Ask in Secretary →" handoffs from report viewers.
+    attached_report_id: str | None = None
 
 
 class DepartmentIn(BaseModel):
@@ -105,6 +150,10 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         user: User = require_auth,
     ) -> SessionOut:
         row = svc.create_session(db, user_id=user.id, department=body.department, title=body.title)
+        if body.attached_report_id:
+            _attach_report_as_context(
+                db, session_id=row.id, user_id=user.id, report_id=body.attached_report_id
+            )
         return SessionOut.model_validate(row, from_attributes=True)
 
     @router.get("/by-department/{department}", response_model=SessionOut)

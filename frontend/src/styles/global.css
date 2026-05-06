@@ -1,6 +1,7 @@
 @import "./tokens.css";
 @import "./report/theme-light.css";
 @import "./report/theme-dark.css";
+@import "./report/layout.css";
 
 @font-face {
   font-family: "Geist";

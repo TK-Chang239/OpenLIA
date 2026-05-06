@@ -5,7 +5,6 @@ import {
   fetchConfig,
   fetchReports,
   fetchSchedule,
-  resolveChatSession,
   updateConfig,
   upsertSchedule,
 } from "../morning-briefing";
@@ -102,22 +101,13 @@ describe("morning-briefing api client", () => {
     expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
   });
 
-  it("resolveChatSession POSTs /chat/session", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(okJson({ session_id: "s_chat_1" }));
-    vi.stubGlobal("fetch", fetchMock);
-    const r = await resolveChatSession();
-    expect(r.session_id).toBe("s_chat_1");
-    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
-  });
-
   it("fetchReports hits shared /reports with department filter", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okJson({ reports: [] }));
+    const fetchMock = vi.fn().mockResolvedValue(okJson({ items: [] }));
     vi.stubGlobal("fetch", fetchMock);
-    await fetchReports();
+    const r = await fetchReports();
     expect(fetchMock.mock.calls[0][0]).toBe(
       "/api/reports?department=morning_briefing",
     );
+    expect(r.reports).toEqual([]);
   });
 });
