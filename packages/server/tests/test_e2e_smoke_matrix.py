@@ -614,62 +614,9 @@ def test_journey_secretary_chat_stream(db_session, monkeypatch, make_user) -> No
 
 
 # ---------------------------------------------------------------------------
-# Journey 8: Morning Briefing follow-up chat — resolve-or-create session + stream
-# ---------------------------------------------------------------------------
-
-
-def test_journey_mb_followup_chat(db_session, monkeypatch, make_user) -> None:
-    from openlia.llm.runtime.events import ChatDone, ChatStart, ChatToken
-
-    user = make_user(password="CorrectHorseBattery9!")
-    client = _company_client(monkeypatch, db_session)
-    assert (
-        client.post(
-            "/auth/login",
-            json={"email": user.email, "password": "CorrectHorseBattery9!"},
-        ).status_code
-        == 200
-    )
-
-    runner = _ScriptedChatRunner(
-        events=[
-            ChatStart(message_id="mb1"),
-            ChatToken(message_id="mb1", text="summary"),
-            ChatDone(message_id="mb1", stop_reason="stop"),
-        ]
-    )
-    client.app.state.chat_runner_factory = lambda: runner
-
-    # Resolve-or-create the user's single MB chat session.
-    resolved = client.post("/departments/morning-briefing/chat/session")
-    assert resolved.status_code == 200
-    session_id = resolved.json()["session_id"]
-    assert isinstance(session_id, str) and session_id
-
-    # Calling again returns the same session id (resolve, not duplicate).
-    again = client.post("/departments/morning-briefing/chat/session")
-    assert again.json()["session_id"] == session_id
-
-    # Send a follow-up question through the shared chat stream.
-    resp = client.get(
-        f"/chat/sessions/{session_id}/stream",
-        params={"q": "summarize today's briefing"},
-    )
-    assert resp.status_code == 200
-    events = _parse_sse_event_names(resp.text)
-    assert events[0] == "chat.start"
-    assert events[-1] == "chat.done"
-
-    # Runner saw the MB department wired through from the ChatSession.
-    assert runner.captured["department_id"] == "morning_briefing"
-    assert runner.captured["user_id"] == user.id
-
-    # The follow-up message persisted on the same resolve-or-create session.
-    listing = client.get(f"/chat/sessions/{session_id}/messages").json()["items"]
-    assert [m["role"] for m in listing] == ["user", "assistant"]
-    assert listing[0]["content"] == "summarize today's briefing"
-    assert listing[1]["content"] == "summary"
-
+# Journey 8 retired: MB no longer hosts a chat tab. Follow-ups are handled
+# via the Secretary handoff (`/secretary?attached_report=<id>`), exercised
+# by the chat-sessions and Secretary routes.
 
 # ---------------------------------------------------------------------------
 # Journey 9: Equity Research on-demand report generation (SSE + persistence)

@@ -132,10 +132,19 @@ class FakeDataDispatcher:
             raise RuntimeError(f"provider blew up for {tool_name}")
         return self.results.get(tool_name, {"tool": tool_name, "args": arguments})
 
-    async def find_more_data(
-        self, *, department_id: str, description: str
-    ) -> dict[str, Any] | None:
-        return self.results.get(f"expand::{description}")
+    async def expand_tools(
+        self,
+        *,
+        department_id: str,
+        reason: str,
+        category_hint: str | None = None,
+    ) -> list[dict[str, Any]]:
+        entry = self.results.get(f"expand::{reason}")
+        if entry is None:
+            return []
+        if isinstance(entry, list):
+            return entry
+        return [entry]
 
 
 @dataclass

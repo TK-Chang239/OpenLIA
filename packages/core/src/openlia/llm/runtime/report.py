@@ -19,8 +19,10 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 import uuid
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -47,15 +49,177 @@ from openlia.llm.types import (
     LLMRequest,
     Message,
     ResolvedModel,
-    ResponseFormat,
+    ToolSchema,
 )
+from openlia.reports.schema import ReportSchema
 from openlia.skills import SkillRegistry
+
+_SUBMIT_REPORT_TOOL_NAME = "submit_report"
+_SUBMIT_REPORT_DESCRIPTION = (
+    "Submit the final report. Call this tool exactly once with the structured "
+    "report payload as `arguments`. Top-level keys MUST be `cover` and `sections` "
+    "matching the framework. Server fills schema_version, department, and "
+    "generated_at — do not include those."
+)
+
+
+def _submit_report_input_schema() -> dict[str, Any]:
+    """JSON Schema for `submit_report.arguments` derived from `ReportSchema`.
+
+    Server-controlled meta fields (`schema_version`, `department`,
+    `generated_at`) are stripped — the runner injects them post-LLM.
+    """
+    schema = copy.deepcopy(ReportSchema.model_json_schema())
+    props = schema.get("properties", {})
+    for stripped in ("schema_version", "department", "generated_at"):
+        props.pop(stripped, None)
+    required = schema.get("required") or []
+    schema["required"] = [
+        r for r in required if r not in {"schema_version", "department", "generated_at"}
+    ]
+    schema["properties"] = props
+    return schema
+
+
+def _submit_report_tool() -> ToolSchema:
+    return ToolSchema(
+        name=_SUBMIT_REPORT_TOOL_NAME,
+        description=_SUBMIT_REPORT_DESCRIPTION,
+        parameters=_submit_report_input_schema(),
+    )
+
+
+def _extract_writing_payload(final: Any) -> dict[str, Any] | None:
+    """Pull the report payload from the writing-turn LLM response.
+
+    Preferred path: a tool_use call to `submit_report` whose `arguments`
+    is the structured payload. Backward-compat fallback: parse JSON from
+    `final.text`, tolerating markdown fences and prose preambles.
+    Returns `None` when neither path produces a parseable payload.
+    """
+    for call in final.tool_calls or []:
+        if call.name == _SUBMIT_REPORT_TOOL_NAME and isinstance(call.arguments, dict):
+            return call.arguments
+    raw_text = (final.text or "").strip()
+    if not raw_text:
+        return None
+    try:
+        return json.loads(_extract_json_object(raw_text))
+    except json.JSONDecodeError:
+        return None
+
+
+def _submit_report_tool_choice(provider_kind: str) -> dict[str, Any]:
+    """Return the provider-specific `tool_choice` payload that forces the
+    model to emit a `submit_report` tool_use. Adapters forward verbatim."""
+    if provider_kind == "anthropic":
+        return {"type": "tool", "name": _SUBMIT_REPORT_TOOL_NAME}
+    if provider_kind == "gemini":
+        return {
+            "function_calling_config": {
+                "mode": "ANY",
+                "allowed_function_names": [_SUBMIT_REPORT_TOOL_NAME],
+            }
+        }
+    # OpenAI, OpenRouter, openai_compat, ollama (OpenAI-compatible) all use
+    # the chat-completions tool_choice shape.
+    return {"type": "function", "function": {"name": _SUBMIT_REPORT_TOOL_NAME}}
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
     if len(s) <= max_len:
         return s
     return s[:max_len]
+
+
+_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
+
+
+def _normalize_schema_payload(
+    payload: dict[str, Any], *, department_id: str, generated_at: datetime
+) -> dict[str, Any]:
+    """Force server-controlled top-level fields and forgive common LLM drift.
+
+    The strict ReportSchema requires exactly five top-level keys. Models
+    sometimes wrap the payload (`{"report": {...}}`), invent meta wrappers
+    (`{"report_metadata": {...}, ...}`), or simply forget meta fields.
+    Strip those, hoist `cover`/`sections` if needed, and overwrite the
+    server-controlled fields.
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    if "cover" not in payload and "sections" not in payload:
+        for wrapper_key in ("report", "data", "payload", "result"):
+            inner = payload.get(wrapper_key)
+            if isinstance(inner, dict) and ("cover" in inner or "sections" in inner):
+                payload = inner
+                break
+
+    payload.pop("report_metadata", None)
+    payload.pop("report_mode", None)
+
+    payload["schema_version"] = "1.0"
+    payload["department"] = department_id
+    payload["generated_at"] = generated_at.isoformat()
+    payload.setdefault("cover", {})
+    payload.setdefault("sections", [])
+
+    cover = payload["cover"] if isinstance(payload["cover"], dict) else {}
+    _coerce_metric_list(cover.get("key_metrics"))
+    _coerce_metric_list(cover.get("stats_panel"))
+    sections = payload["sections"] if isinstance(payload["sections"], list) else []
+    for section in sections:
+        if isinstance(section, dict):
+            _coerce_blocks(section.get("blocks"))
+    return payload
+
+
+def _coerce_metric_value(v: Any) -> Any:
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return str(v)
+    return v
+
+
+def _coerce_metric_list(metrics: Any) -> None:
+    if not isinstance(metrics, list):
+        return
+    for m in metrics:
+        if not isinstance(m, dict):
+            continue
+        if "value" in m:
+            m["value"] = _coerce_metric_value(m["value"])
+        if "delta" in m:
+            m["delta"] = _coerce_metric_value(m["delta"])
+
+
+def _coerce_blocks(blocks: Any) -> None:
+    if not isinstance(blocks, list):
+        return
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        btype = block.get("type")
+        if btype == "metric_cards":
+            _coerce_metric_list(block.get("metrics"))
+        elif btype == "group":
+            _coerce_blocks(block.get("blocks"))
+
+
+def _extract_json_object(text: str) -> str:
+    s = text.strip()
+    fence = _FENCE_RE.match(s)
+    if fence is not None:
+        s = fence.group(1).strip()
+    if s.startswith("{") or s.startswith("["):
+        return s
+    start = s.find("{")
+    end = s.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        return s[start : end + 1]
+    return s
 
 
 def build_report_system_prompt(
@@ -127,6 +291,13 @@ def _tool_name_for_result(response: Any, call_id: str) -> str:
     return "unknown"
 
 
+TraceRecorder = Callable[[str, str, dict[str, Any] | None], None]
+
+
+def _no_trace(_category: str, _message: str, _payload: dict[str, Any] | None) -> None:
+    return None
+
+
 class ReportRunner:
     def __init__(
         self,
@@ -139,6 +310,7 @@ class ReportRunner:
         skill_registry: SkillRegistry,
         frameworks_root: Path | None = None,
         report_id_factory: Callable[[], str] | None = None,
+        trace: TraceRecorder | None = None,
     ) -> None:
         self._prompts = prompts
         self._tools = tools
@@ -150,6 +322,7 @@ class ReportRunner:
             frameworks_root if frameworks_root is not None else _default_frameworks_root()
         )
         self._report_id_factory = report_id_factory or (lambda: f"r_{uuid.uuid4().hex[:12]}")
+        self._trace: TraceRecorder = trace or _no_trace
 
     async def run(
         self,
@@ -158,13 +331,25 @@ class ReportRunner:
         user_id: str | None,
         request: ReportRequest,
         cancel_token: CancellationToken | None = None,
-        max_expansions: int | None = None,
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
         framework_raw = _load_framework(self._frameworks_root, request.mode)
         framework = _customize_framework(framework_raw, request)
         style_guide = _load_style_guide(self._frameworks_root, request.mode)
+
+        self._trace(
+            "report.request",
+            f"report start department={department_id} mode={request.mode}",
+            {
+                "report_id": report_id,
+                "department_id": department_id,
+                "mode": request.mode,
+                "user_id": user_id,
+                "length": request.length,
+                "enabled_sections": list(request.enabled_sections or []),
+            },
+        )
 
         yield ReportStart(
             report_id=report_id,
@@ -180,6 +365,11 @@ class ReportRunner:
                 registry=self._registry,
             )
         except LLMProviderError as exc:
+            self._trace(
+                "report.error",
+                f"resolve failed: {exc}",
+                {"report_id": report_id, "error_class": type(exc).__name__},
+            )
             yield ReportError(
                 report_id=report_id,
                 error_class=type(exc).__name__,
@@ -187,6 +377,16 @@ class ReportRunner:
             )
             return
 
+        self._trace(
+            "llm.resolved",
+            f"resolved provider={resolved.provider_kind} model={resolved.model_ref}",
+            {
+                "report_id": report_id,
+                "provider_kind": resolved.provider_kind,
+                "model_ref": resolved.model_ref,
+                "tier": str(resolved.tier),
+            },
+        )
         provider = self._provider_factory(resolved)
 
         system = build_report_system_prompt(
@@ -196,6 +396,10 @@ class ReportRunner:
             style_guide=style_guide,
             loader=self._prompts,
         )
+        tools = await self._tools.build(department_id, has_web_search=True)
+        now = datetime.now(UTC)
+        current_date = now.date().isoformat()
+        current_date_long = f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
         user_msg = self._prompts.render(
             department_id,
             f"report.{request.mode}.user",
@@ -206,16 +410,23 @@ class ReportRunner:
             custom_sections=request.custom_sections,
             section_topics=request.section_topics,
             reference_portfolio=request.reference_portfolio,
+            current_date=current_date,
+            current_date_long=current_date_long,
+            has_tools=bool(tools),
         )
 
         conversation = [Message(role="user", content=user_msg)]
-        tools = await self._tools.build(department_id, has_web_search=True)
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
-        for _ in range(MAX_TOOL_TURNS) if tools else range(0):
+        for turn_idx in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
+            self._trace(
+                "llm.call.start",
+                f"tool turn {turn_idx} (tools={len(tools or [])})",
+                {"report_id": report_id, "phase": "fetching_data", "turn": turn_idx},
+            )
             try:
                 response = await self._await(
                     provider.generate(
@@ -231,18 +442,52 @@ class ReportRunner:
             except asyncio.CancelledError:
                 return
             except LLMProviderError as exc:
+                self._trace(
+                    "llm.call.error",
+                    f"provider error: {exc}",
+                    {"report_id": report_id, "error_class": type(exc).__name__},
+                )
                 yield ReportError(
                     report_id=report_id,
                     error_class=type(exc).__name__,
                     message=str(exc),
                 )
                 return
+            self._trace(
+                "llm.call.done",
+                f"tool turn {turn_idx} done tool_calls={len(response.tool_calls)}",
+                {
+                    "report_id": report_id,
+                    "turn": turn_idx,
+                    "tool_calls": [c.name for c in response.tool_calls],
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                },
+            )
             if not response.tool_calls:
                 break
+            # Replay the assistant's tool-call turn so the next provider
+            # request preserves the standard tool-use protocol shape:
+            #   user → assistant(tool_calls) → tool(result, tool_call_id) → ...
+            # Without this, OpenRouter forwards the tool result with an
+            # empty tool_use_id and Anthropic rejects it (regex
+            # ^[a-zA-Z0-9_-]+$).
+            conversation.append(
+                Message(
+                    role="assistant",
+                    content=response.text or "",
+                    tool_calls=tuple(response.tool_calls),
+                )
+            )
             for call in response.tool_calls:
                 args_preview = _unicode_safe_truncate(
                     json.dumps(call.arguments, separators=(",", ":"), ensure_ascii=False),
                     max_len=120,
+                )
+                self._trace(
+                    "report.tool_call",
+                    f"{call.name}({args_preview})",
+                    {"report_id": report_id, "call_id": call.id, "tool": call.name},
                 )
                 yield ReportToolCallStart(
                     report_id=report_id,
@@ -255,20 +500,31 @@ class ReportRunner:
                     self._tools.dispatch_many(
                         department_id=department_id,
                         calls=response.tool_calls,
-                        max_expansions=max_expansions,
                     ),
                     cancel_token=cancel_token,
                 )
             except asyncio.CancelledError:
                 return
             for r in results:
+                tool_name = _tool_name_for_result(response, r.call_id)
+                self._trace(
+                    "report.tool_result",
+                    f"{tool_name} -> {_unicode_safe_truncate(r.summary, max_len=160)}",
+                    {"report_id": report_id, "call_id": r.call_id, "tool": tool_name},
+                )
                 yield ReportToolCall(
                     report_id=report_id,
-                    tool_name=_tool_name_for_result(response, r.call_id),
+                    tool_name=tool_name,
                     summary=r.summary,
                     call_id=r.call_id,
                 )
-                conversation.append(Message(role="tool", content=json.dumps(r.payload)))
+                conversation.append(
+                    Message(
+                        role="tool",
+                        content=json.dumps(r.payload),
+                        tool_call_id=r.call_id,
+                    )
+                )
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
             tools = await self._tools.build(department_id, has_web_search=True)
@@ -288,14 +544,23 @@ class ReportRunner:
                 total=total_sections,
             )
 
+        writing_max_tokens = resolved.capabilities.max_output_tokens
+        submit_tool = _submit_report_tool()
+        submit_choice = _submit_report_tool_choice(resolved.provider_kind)
+        self._trace(
+            "llm.call.start",
+            f"writing turn max_tokens={writing_max_tokens} (forced submit_report)",
+            {"report_id": report_id, "phase": "writing", "max_tokens": writing_max_tokens},
+        )
         try:
             final = await self._await(
                 provider.generate(
                     LLMRequest(
                         messages=conversation,
                         system=system,
-                        response_format=ResponseFormat(kind="json_schema", json_schema=framework),
-                        max_tokens=4096,
+                        tools=[submit_tool],
+                        tool_choice=submit_choice,
+                        max_tokens=writing_max_tokens,
                     )
                 ),
                 cancel_token=cancel_token,
@@ -303,26 +568,72 @@ class ReportRunner:
         except asyncio.CancelledError:
             return
         except LLMProviderError as exc:
+            self._trace(
+                "llm.call.error",
+                f"writing-turn provider error: {exc}",
+                {"report_id": report_id, "error_class": type(exc).__name__},
+            )
             yield ReportError(
                 report_id=report_id,
                 error_class=type(exc).__name__,
                 message=str(exc),
             )
             return
+        self._trace(
+            "llm.call.done",
+            f"writing turn done tool_calls={len(final.tool_calls)}",
+            {
+                "report_id": report_id,
+                "phase": "writing",
+                "input_tokens": final.input_tokens,
+                "output_tokens": final.output_tokens,
+                "finish_reason": final.finish_reason,
+                "tool_call_names": [c.name for c in final.tool_calls],
+                "text_preview": _unicode_safe_truncate(final.text or "", max_len=200),
+            },
+        )
 
         yield ReportPhase(report_id=report_id, phase="finalizing")
         if cancel_token is not None and cancel_token.is_cancelled:
             return
 
-        try:
-            schema_payload = json.loads(final.text) if final.text else {}
-        except json.JSONDecodeError as exc:
+        if final.finish_reason == "length":
+            yield ReportError(
+                report_id=report_id,
+                error_class="OutputLimitReached",
+                message=(
+                    f"Model output limit reached (max_output_tokens="
+                    f"{writing_max_tokens}, model={resolved.model_ref}). "
+                    "Pick a model with a larger output cap from the "
+                    "department's model picker, or reduce enabled sections."
+                ),
+            )
+            return
+
+        schema_payload = _extract_writing_payload(final)
+        if schema_payload is None:
+            preview = _unicode_safe_truncate((final.text or "").strip(), max_len=200)
+            self._trace(
+                "report.error",
+                "writing turn returned no submit_report tool_use",
+                {"report_id": report_id, "preview": preview},
+            )
             yield ReportError(
                 report_id=report_id,
                 error_class="RuntimeError",
-                message=f"LLM returned non-JSON response: {exc!s}",
+                message=(
+                    "LLM did not call submit_report; got "
+                    f"{len(final.tool_calls)} tool_calls and {len(final.text or '')} chars of text "
+                    f"(starts with: {preview!r})"
+                ),
             )
             return
+
+        schema_payload = _normalize_schema_payload(
+            schema_payload,
+            department_id=department_id,
+            generated_at=datetime.now(UTC),
+        )
 
         for section in schema_payload.get("sections", []) or []:
             yield ReportSectionComplete(
@@ -331,6 +642,14 @@ class ReportRunner:
                 blocks=list(section.get("blocks", []) or []),
             )
 
+        self._trace(
+            "report.complete",
+            f"report complete sections={len(schema_payload.get('sections') or [])}",
+            {
+                "report_id": report_id,
+                "sections": len(schema_payload.get("sections") or []),
+            },
+        )
         yield ReportComplete(report_id=report_id, schema=schema_payload)
 
     @staticmethod

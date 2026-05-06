@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import pytest
 from openlia.llm.runtime.events import ReportComplete, ReportStart
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import PortfolioHolding
+from openlia_server.db.models.content import PortfolioHolding, Report
 from openlia_server.db.models.departments import MbUserConfig
 from openlia_server.services.mb_runner import ReportSavedEvent, run_on_demand
 from sqlalchemy.orm import Session
@@ -108,6 +111,61 @@ async def test_on_demand_no_persist_when_no_complete(
         collected.append(ev)
     saved = [e for e in collected if isinstance(e, ReportSavedEvent)]
     assert saved == []
+
+
+@pytest.mark.asyncio
+async def test_on_demand_titles_report_with_date_and_session(
+    create_tables, db_session, fake_report_runner, monkeypatch
+) -> None:
+    """Stage 14: persisted report.title follows MM/DD/YYYY <Session> format
+    derived from local time, not whatever the LLM put in cover.title."""
+    _mk_user(db_session)
+    fixed_local = datetime(2026, 5, 5, 8, 30, tzinfo=ZoneInfo("America/Los_Angeles"))
+    monkeypatch.setattr(
+        "openlia_server.services.mb_runner._now_local", lambda: fixed_local
+    )
+    fake_report_runner.queue_events(
+        [ReportComplete(report_id="pending_r", schema=MINIMAL_SCHEMA)]
+    )
+    async for _ in run_on_demand(
+        session=db_session, user_id="u_1", report_runner=fake_report_runner
+    ):
+        pass
+    saved = db_session.query(Report).filter_by(user_id="u_1").one()
+    assert saved.title == "05/05/2026 Morning"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hour", "expected_label"),
+    [
+        (4, "Morning"),
+        (11, "Morning"),
+        (12, "Noon"),
+        (16, "Noon"),
+        (17, "Night"),
+        (3, "Night"),
+    ],
+)
+async def test_on_demand_session_label_buckets_hours(
+    create_tables, db_session, fake_report_runner, monkeypatch, hour, expected_label
+) -> None:
+    _mk_user(db_session)
+    fixed_local = datetime(2026, 5, 5, hour, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
+    monkeypatch.setattr(
+        "openlia_server.services.mb_runner._now_local", lambda: fixed_local
+    )
+    fake_report_runner.queue_events(
+        [ReportComplete(report_id="pending_r", schema=MINIMAL_SCHEMA)]
+    )
+    async for _ in run_on_demand(
+        session=db_session, user_id="u_1", report_runner=fake_report_runner
+    ):
+        pass
+    saved = db_session.query(Report).filter_by(user_id="u_1").one()
+    assert saved.title.endswith(expected_label), (
+        f"hour {hour} expected {expected_label}, got {saved.title!r}"
+    )
 
 
 @pytest.mark.asyncio
