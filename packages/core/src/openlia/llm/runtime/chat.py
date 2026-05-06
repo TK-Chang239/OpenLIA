@@ -304,7 +304,7 @@ class ChatRunner:
         conversation = [Message(role=m.role, content=m.content) for m in wrapped_messages]
 
         # Tool loop — bounded by MAX_TOOL_TURNS (32) as an outer runaway guard.
-        # Per the spec, Secretary (chat) is unlimited on `find_more_data`
+        # Chat exposes the same `request_additional_tools` escalation as the
         # expansions; the budget arg is None here so only the outer cap fires.
         # Only runs when tools are configured; otherwise falls through to streaming.
         for _ in range(MAX_TOOL_TURNS) if tools else range(0):
@@ -412,7 +412,6 @@ class ChatRunner:
                             department_id=department_id,
                             calls=other_calls,
                             extra_tool_names=extra_tool_names,
-                            max_expansions=None,  # Secretary: unlimited.
                         ),
                         cancel_token=cancel_token,
                     )

@@ -91,6 +91,8 @@ class GeminiAdapter(LLMProvider):
                     ]
                 }
             ]
+        if request.tool_choice is not None:
+            payload["toolConfig"] = request.tool_choice
 
         path = f"/v1beta/models/{self.model}:generateContent"
 
@@ -148,6 +150,8 @@ class GeminiAdapter(LLMProvider):
                     ]
                 }
             ]
+        if request.tool_choice is not None:
+            payload["toolConfig"] = request.tool_choice
 
         path = f"/v1beta/models/{self.model}:streamGenerateContent"
         params = {**self._query(), "alt": "sse"}

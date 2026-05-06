@@ -526,6 +526,11 @@ def create_app(
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
+    from openlia_server.routes.department_model_pref import (
+        build_department_model_pref_router,
+    )
+
+    app.include_router(build_department_model_pref_router(db_session_factory=factory, mode=mode))
 
     # Skills system — store + registry constructed here, shared via app.state.
     from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry

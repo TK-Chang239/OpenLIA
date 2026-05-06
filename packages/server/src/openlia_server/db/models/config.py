@@ -142,6 +142,24 @@ class UserPrefs(Base):
     )
 
 
+class UserDepartmentModelPref(Base, TimestampMixin):
+    """Per-(user, department) model override.
+
+    Wins over the user-level ``preferred_model_id`` and tier defaults
+    in the resolver. Absence of a row falls back to the prior chain.
+    """
+
+    __tablename__ = "user_department_model_prefs"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    department_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    model_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("llm_models.id", ondelete="CASCADE"), nullable=False
+    )
+
+
 class WebSearchProvider(Base, TimestampMixin):
     __tablename__ = "web_search_providers"
 

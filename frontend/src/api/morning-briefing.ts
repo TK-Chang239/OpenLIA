@@ -60,10 +60,9 @@ export const upsertSchedule = (payload: MbScheduleUpsert): Promise<MbSchedule> =
 export const deleteSchedule = (): Promise<void> =>
   fetchJson<void>(`${BASE}/schedule`, { method: "DELETE" }).then(() => undefined);
 
-export const resolveChatSession = (): Promise<{ session_id: string }> =>
-  fetchJson<{ session_id: string }>(`${BASE}/chat/session`, { method: "POST" });
-
-export const fetchReports = (): Promise<RecentReportsListResponse> =>
-  fetchJson<RecentReportsListResponse>(
+export const fetchReports = async (): Promise<RecentReportsListResponse> => {
+  const { items } = await fetchJson<{ items: RecentReport[] }>(
     `/api/reports?department=morning_briefing`,
   );
+  return { reports: items };
+};

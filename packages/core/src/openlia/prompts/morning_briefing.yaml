@@ -33,6 +33,10 @@ report:
 
   morning_briefing:
     user: |
+      Today is {{ current_date_long }} ({{ current_date }}). Anchor every
+      "today", "overnight", and "yesterday" reference to this date. Use this
+      date in the report cover subtitle.
+
       User instructions:
       {{ user_input }}
 
@@ -85,3 +89,27 @@ report:
 
       Follow the framework exactly. Emit only the ReportSchema JSON; no
       commentary outside the schema.
+
+      Top-level JSON keys MUST be exactly: `cover` and `sections`. Do
+      NOT include `report_metadata`, `report_mode`, `schema_version`,
+      `department`, or `generated_at` at the top level — the server
+      fills those in. `cover` is an object with keys `title`, `subtitle`,
+      `tagline`, `key_metrics` (list of {label, value, delta?,
+      delta_direction?}), and `stats_panel` (same shape). `sections`
+      is a list of `{id, title, blocks}` matching the framework's
+      section ids.
+
+      Each metric's `value` and `delta` MUST be a pre-formatted string,
+      including units and sign. Examples: `"5,680.42"`, `"+0.78%"`,
+      `"-12 bp"`, `"$78.40"`, `"4.85%"`. Never emit raw numbers — wrap
+      every numeric quantity in quotes. The same rule applies to
+      `metric_cards` blocks inside any section.
+
+      {% if not has_tools %}
+      You have no live data tools for this run. Produce the report from
+      general market knowledge as of {{ current_date }}. For any specific
+      level, print, or quote you do not know with certainty, leave the
+      numeric field as null and write "Data unavailable." in the
+      corresponding text block. Do NOT refuse — always emit the JSON
+      schema, even if many fields are null or marked unavailable.
+      {% endif %}

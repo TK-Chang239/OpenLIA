@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 import respx
 from openlia.llm.adapters.openai import OpenAIAdapter
@@ -9,6 +11,7 @@ from openlia.llm.types import (
     LLMRequest,
     Message,
     ProviderCredentials,
+    ToolSchema,
 )
 
 
@@ -66,6 +69,60 @@ async def test_generate_happy_path() -> None:
     assert resp.finish_reason == "stop"
     assert resp.input_tokens == 5
     assert resp.output_tokens == 2
+
+
+async def test_generate_forwards_tool_choice_when_set() -> None:
+    adapter = _adapter()
+    submit_tool = ToolSchema(
+        name="submit_report",
+        description="Submit the final report.",
+        parameters={"type": "object", "properties": {}},
+    )
+    with respx.mock() as mock:
+        route = mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": ""},
+                        "finish_reason": "tool_calls",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[submit_tool],
+                tool_choice={"type": "function", "function": {"name": "submit_report"}},
+            )
+        )
+    body = json.loads(route.calls[0].request.content)
+    assert body.get("tool_choice") == {
+        "type": "function",
+        "function": {"name": "submit_report"},
+    }
+
+
+async def test_generate_omits_tool_choice_when_unset() -> None:
+    adapter = _adapter()
+    with respx.mock() as mock:
+        route = mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "hi"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    body = json.loads(route.calls[0].request.content)
+    assert "tool_choice" not in body
 
 
 async def test_generate_rate_limit_extracts_retry_after() -> None:

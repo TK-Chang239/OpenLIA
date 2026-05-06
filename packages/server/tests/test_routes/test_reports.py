@@ -73,6 +73,20 @@ def test_export_pdf_streams_pdf_bytes(personal_client: TestClient, db_session: S
     assert r.content[:4] == b"%PDF"
 
 
+def test_export_pdf_via_get_for_download_links(
+    personal_client: TestClient, db_session: Session
+) -> None:
+    """The download anchor (`<a href download>`) issues a GET, so the PDF
+    export must be reachable via GET as well as POST."""
+    rid = _seed_report(db_session, "local")
+    db_session.commit()
+    r = personal_client.get(f"/reports/{rid}/export/pdf")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert "attachment" in r.headers["content-disposition"]
+    assert r.content[:4] == b"%PDF"
+
+
 def test_export_docx_streams_docx_bytes(personal_client: TestClient, db_session: Session) -> None:
     rid = _seed_report(db_session, "local")
     db_session.commit()

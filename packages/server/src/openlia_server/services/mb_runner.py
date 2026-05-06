@@ -11,7 +11,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
+from zoneinfo import ZoneInfo
 
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import ReportComplete, SseEvent
@@ -19,8 +21,55 @@ from openlia.llm.runtime.messages import ReportRequest
 from openlia.reports.validator import validate_report_payload
 from sqlalchemy.orm import Session
 
+from openlia_server.db.models.scheduler import MbSchedule
 from openlia_server.services import reports as reports_svc
 from openlia_server.services.mb_request_builder import MbRequestBuilderImpl
+
+
+def _now_local() -> datetime:
+    """Return current wall-clock time as a tz-aware datetime in UTC.
+
+    Replaceable in tests; the report-naming helper layers the user's MB
+    schedule timezone on top of this so a single seam makes the whole
+    auto-titling pipeline deterministic under monkeypatch.
+    """
+    return datetime.now(ZoneInfo("UTC"))
+
+
+def _session_label_for_hour(hour: int) -> str:
+    """Bucket a 0-23 hour into Morning/Noon/Night.
+
+    Morning 04-11, Noon 12-16, Night 17-03. Tuned so the most common
+    on-demand window (pre-market through lunch) reads "Morning"/"Noon",
+    and after-hours runs roll into "Night".
+    """
+    if 4 <= hour <= 11:
+        return "Morning"
+    if 12 <= hour <= 16:
+        return "Noon"
+    return "Night"
+
+
+def _auto_title(local_now: datetime) -> str:
+    return f"{local_now:%m/%d/%Y} {_session_label_for_hour(local_now.hour)}"
+
+
+def _resolve_local_now(session: Session, *, user_id: str) -> datetime:
+    """Convert ``_now_local()`` into the user's MB-schedule timezone if set."""
+    base = _now_local()
+    schedule = (
+        session.query(MbSchedule)
+        .filter(MbSchedule.user_id == user_id)
+        .order_by(MbSchedule.created_at.desc())
+        .first()
+    )
+    if schedule is None:
+        return base
+    try:
+        tz = ZoneInfo(schedule.timezone)
+    except Exception:
+        return base
+    return base.astimezone(tz)
 
 
 @dataclass(frozen=True)
@@ -76,6 +125,7 @@ async def run_on_demand(
         department="morning_briefing",
         mode="morning_briefing",
         schema=schema_obj,
+        title=_auto_title(_resolve_local_now(session, user_id=user_id)),
     )
     session.commit()
     yield ReportSavedEvent(report_id=report_id)

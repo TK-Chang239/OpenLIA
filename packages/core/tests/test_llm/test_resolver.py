@@ -24,6 +24,7 @@ class _FakeRegistry:
     any_in_tier: dict[ModelTier, ResolvedModelRow] | None = None
     by_id: dict[str, ResolvedModelRow] | None = None
     user_preferred: dict[str, ResolvedModelRow] | None = None
+    dept_user_override: dict[tuple[str, str], ResolvedModelRow] | None = None
 
     def get_department_tier_override(self, department_id: str) -> ModelTier | None:
         return self.dept_tier_override
@@ -52,6 +53,13 @@ class _FakeRegistry:
         if not self.user_preferred:
             return None
         return self.user_preferred.get(user_id)
+
+    def get_department_user_override(
+        self, user_id: str, department_id: str
+    ) -> ResolvedModelRow | None:
+        if not self.dept_user_override:
+            return None
+        return self.dept_user_override.get((user_id, department_id))
 
 
 def _row(kind: str = "openai", tier: ModelTier = ModelTier.EVERYDAY) -> ResolvedModelRow:
@@ -180,3 +188,52 @@ def test_resolve_falls_through_when_user_preferred_missing() -> None:
     result = resolve(department_id="secretary", registry=reg, user_id="u-1")
     # Falls through to user-tier-pref since user_preferred is empty.
     assert result.model_id == "m-1"
+
+
+def _row_with(model_id: str) -> ResolvedModelRow:
+    base = _row()
+    return ResolvedModelRow(
+        model_id=model_id,
+        model_ref=base.model_ref,
+        tier=base.tier,
+        overrides=base.overrides,
+        provider_id=base.provider_id,
+        provider_kind=base.provider_kind,
+        credentials=base.credentials,
+        capability_override=base.capability_override,
+    )
+
+
+def test_department_user_override_wins_over_user_global_pref() -> None:
+    reg = _FakeRegistry(
+        dept_user_override={("u-1", "morning_briefing"): _row_with("dept-pick")},
+        user_preferred={"u-1": _row_with("global-pick")},
+        tier_default={ModelTier.EVERYDAY: _row_with("tier-default")},
+    )
+    result = resolve(department_id="morning_briefing", registry=reg, user_id="u-1")
+    assert result.model_id == "dept-pick"
+
+
+def test_department_user_override_only_applies_to_matching_department() -> None:
+    reg = _FakeRegistry(
+        dept_user_override={("u-1", "morning_briefing"): _row_with("dept-pick")},
+        user_preferred={"u-1": _row_with("global-pick")},
+        tier_default={ModelTier.EVERYDAY: _row_with("tier-default")},
+    )
+    result = resolve(department_id="equity_research", registry=reg, user_id="u-1")
+    # No row for equity_research → falls through to the user's global pref.
+    assert result.model_id == "global-pick"
+
+
+def test_department_user_override_loses_to_explicit_model_id_override() -> None:
+    reg = _FakeRegistry(
+        dept_user_override={("u-1", "morning_briefing"): _row_with("dept-pick")},
+        by_id={"explicit": _row_with("explicit")},
+    )
+    result = resolve(
+        department_id="morning_briefing",
+        registry=reg,
+        user_id="u-1",
+        model_id_override="explicit",
+    )
+    assert result.model_id == "explicit"
