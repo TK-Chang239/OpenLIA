@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { AuthProvider } from "../../auth/AuthContext";
@@ -82,32 +82,22 @@ describe("Sidebar", () => {
     });
   });
 
-  it("calls signOut when the sign-out button is clicked", async () => {
-    const spy = vi.fn().mockImplementation((input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url.includes("/auth/session")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ user_id: "u1", email: "a", is_admin: true }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
-          ),
-        );
-      }
-      return Promise.resolve(new Response(null, { status: 204 }));
-    });
-    global.fetch = spy as unknown as typeof fetch;
-
+  it("does not render a sign-out button (moved to Settings → Account)", async () => {
     renderAt("/");
-
     await waitFor(() =>
-      expect(screen.queryByRole("button", { name: /sign out/i })).toBeTruthy(),
+      expect(screen.getByRole("link", { name: /home/i })).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
+  });
 
-    await waitFor(() => {
-      const urls = (spy.mock.calls as [string][]).map((c) => c[0]);
-      expect(urls).toContain("/api/auth/logout");
-    });
+  it("renders the user-chip with initials and role line", async () => {
+    renderAt("/");
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: /home/i })).toBeInTheDocument(),
+    );
+    // Personal mode (the test's mocked /auth/session 404 path is not hit;
+    // 200 response sets status="authenticated") — role line includes mode + version.
+    expect(screen.getByText(/COMPANY · v/i)).toBeInTheDocument();
   });
 
   it("renders at 220px expanded width by default", () => {

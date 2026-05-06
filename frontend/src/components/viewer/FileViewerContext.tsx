@@ -94,6 +94,13 @@ export function useFileViewer(): ContextShape {
   return ctx;
 }
 
+/** Same as `useFileViewer` but returns null when no provider is mounted.
+ *  Useful for components that are sometimes rendered in isolation (tests,
+ *  storybook, embedded previews) and gracefully no-op the open() flow. */
+export function useFileViewerOptional(): ContextShape | null {
+  return useContext(FileViewerContext);
+}
+
 export function kindFromFilename(name: string): FileKind {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "pdf") return "pdf";

@@ -14,7 +14,6 @@ import {
   type AuthUser,
   type LoginInput,
 } from "../api/auth";
-import { ApiError } from "../api/client";
 
 export type AuthStatus =
   | "loading"
@@ -48,22 +47,24 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     useState<boolean>(false);
 
   const refresh = useCallback(async (): Promise<void> => {
+    // Login pages disabled for the UI remake: any session-fetch outcome that
+    // is not a fully-formed authenticated payload collapses into personal
+    // mode with the synthetic local user. ProtectedRoute therefore never
+    // sees "unauthenticated" and never redirects to /login.
     try {
       const fetched = await getSession();
-      setUser(fetched.user);
-      setMustChangePasswordState(fetched.must_change_password);
-      setStatus("authenticated");
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        setUser(LOCAL_USER);
-        setMustChangePasswordState(false);
-        setStatus("personal");
+      if (fetched && fetched.user) {
+        setUser(fetched.user);
+        setMustChangePasswordState(fetched.must_change_password);
+        setStatus("authenticated");
         return;
       }
-      setUser(null);
-      setMustChangePasswordState(false);
-      setStatus("unauthenticated");
+    } catch {
+      // fall through to personal mode below
     }
+    setUser(LOCAL_USER);
+    setMustChangePasswordState(false);
+    setStatus("personal");
   }, []);
 
   const login = useCallback(async (input: LoginInput): Promise<void> => {
@@ -79,9 +80,11 @@ export function AuthProvider({ children }: AuthProviderProps): JSX.Element {
     } catch (err) {
       console.warn("logout failed", err);
     }
-    setUser(null);
+    // Login pages disabled: collapse back to personal mode rather than
+    // bouncing through /login.
+    setUser(LOCAL_USER);
     setMustChangePasswordState(false);
-    setStatus("unauthenticated");
+    setStatus("personal");
   }, []);
 
   const setMustChangePassword = useCallback((v: boolean) => {

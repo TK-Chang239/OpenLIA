@@ -1,0 +1,30 @@
+Rich block formatting (chat surface only — not for structured reports):
+
+When a chat reply benefits from a tight inline KPI grid or a punchy quote
+callout, use one of these fenced markdown languages instead of plain
+markdown tables or blockquotes. The frontend recognises them and renders
+the design's bordered grid / accent callout.
+
+KPI grid — `databloc` fence. One row per line, pipe-separated cells:
+LABEL | VALUE | DELTA. The DELTA cell is optional; when present, prefix
+with `+` for positive and `-` for negative so the renderer can colour it.
+
+```databloc
+REVENUE | $35.1B | +94% y/y
+DATA CENTER | $30.8B | +112% y/y
+GROSS MARGIN | 75.0% | +180 bp
+Q4 GUIDE | $37.5B | +4.2 vs street
+```
+
+Pull quote — `pullquote` fence. Body is the quote; the citation line
+starts with an em-dash (`—`) and uses middle-dot (`·`) to separate
+attribution, source, and timestamp cells.
+
+```pullquote
+Demand for Blackwell is staggering, and we expect to be capacity-constrained
+through calendar 2025.
+— JENSEN HUANG · EARNINGS CALL · 14:32 UTC
+```
+
+Use these only when the structure earns the visual weight — not for every
+list of numbers or every quoted sentence. Plain prose remains the default.

@@ -39,23 +39,24 @@ describe("ThinkingIndicator", () => {
 });
 
 describe("ToolCallChip", () => {
-  it("renders running state with ellipsis", () => {
+  it("renders running state with the friendly mapped label", () => {
     render(<ToolCallChip toolName="get_quote" argsPreview="AAPL" status="running" />);
-    expect(screen.getByText(/get_quote.*AAPL/i)).toBeInTheDocument();
+    // get_quote is mapped to "Market data — <ticker/args>".
+    expect(screen.getByText(/market data — aapl/i)).toBeInTheDocument();
   });
 
-  it("renders done state with summary", () => {
+  it("renders done state with the supplied summary verbatim", () => {
     render(
       <ToolCallChip toolName="get_quote" argsPreview="AAPL" status="done" summary="Got AAPL" />,
     );
     expect(screen.getByText("Got AAPL")).toBeInTheDocument();
   });
 
-  it("renders failed state", () => {
+  it("renders failed state with a `<tool> failed` label", () => {
     render(
       <ToolCallChip toolName="get_quote" argsPreview="AAPL" status="failed" summary="Failed" />,
     );
-    expect(screen.getByText("Failed")).toBeInTheDocument();
+    expect(screen.getByText(/get_quote failed/i)).toBeInTheDocument();
   });
 });
 

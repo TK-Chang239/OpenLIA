@@ -11,13 +11,33 @@ import { ImageRenderer } from "./renderers/ImageRenderer";
 import { UnsupportedRenderer } from "./renderers/UnsupportedRenderer";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 
+type ViewerTab = "preview" | "raw";
+
+const TEXT_LIKE_KINDS = new Set(["markdown", "text", "code", "csv"]);
+
+const MIN_WIDTH = 360;
+const MAX_WIDTH = 1000;
+const DEFAULT_VIEWPORT_FRACTION = 0.4;
+
+function defaultWidth(): number {
+  if (typeof window === "undefined") return 560;
+  const target = Math.round(window.innerWidth * DEFAULT_VIEWPORT_FRACTION);
+  return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, target));
+}
+
 function initialWidth(): number {
   try {
     const stored = localStorage.getItem("fileviewer_width");
-    return stored ? Math.max(360, parseInt(stored, 10) || 560) : 560;
+    if (stored) {
+      const parsed = parseInt(stored, 10);
+      if (Number.isFinite(parsed)) {
+        return Math.max(MIN_WIDTH, parsed);
+      }
+    }
   } catch {
-    return 560;
+    // localStorage may be unavailable (private mode, SSR) — fall through.
   }
+  return defaultWidth();
 }
 
 function isMobile(): boolean {
@@ -37,9 +57,16 @@ export function FileViewer(): JSX.Element | null {
     typeof window !== "undefined" ? window.innerWidth : 1200,
   );
   const [mobile, setMobile] = useState<boolean>(isMobile);
+  const [tab, setTab] = useState<ViewerTab>("preview");
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const previousFilenameRef = useRef<string | null>(null);
+
+  // Reset to Preview whenever the open target changes — Raw is per-file state
+  // and shouldn't leak across opens.
+  useEffect(() => {
+    setTab("preview");
+  }, [current?.filename]);
 
   useEffect(() => {
     const onResize = () => {
@@ -134,10 +161,11 @@ export function FileViewer(): JSX.Element | null {
             onClose={close}
             closeButtonRef={closeButtonRef}
           />
+          <ViewerTabs tab={tab} onTabChange={setTab} />
           <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
-                key={current.filename}
+                key={`${current.filename}-${tab}`}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{
@@ -146,14 +174,22 @@ export function FileViewer(): JSX.Element | null {
                 }}
                 transition={{ duration: fadeInDuration, ease: "easeOut" }}
               >
-                {current.kind === "markdown" && <MarkdownRenderer source={current.source} />}
-                {current.kind === "pdf" && <PdfRenderer source={current.source} />}
-                {current.kind === "csv" && <CsvRenderer source={current.source} />}
-                {current.kind === "code" && <CodeRenderer source={current.source} />}
-                {current.kind === "text" && <CodeRenderer source={current.source} />}
-                {current.kind === "image" && <ImageRenderer source={current.source} />}
-                {(current.kind === "docx" || current.kind === "unknown") && (
-                  <UnsupportedRenderer source={current.source} filename={current.filename} />
+                {tab === "preview" ? (
+                  <>
+                    {current.kind === "markdown" && <MarkdownRenderer source={current.source} />}
+                    {current.kind === "pdf" && <PdfRenderer source={current.source} />}
+                    {current.kind === "csv" && <CsvRenderer source={current.source} />}
+                    {current.kind === "code" && <CodeRenderer source={current.source} />}
+                    {current.kind === "text" && <CodeRenderer source={current.source} />}
+                    {current.kind === "image" && <ImageRenderer source={current.source} />}
+                    {(current.kind === "docx" || current.kind === "unknown") && (
+                      <UnsupportedRenderer source={current.source} filename={current.filename} />
+                    )}
+                  </>
+                ) : TEXT_LIKE_KINDS.has(current.kind) ? (
+                  <CodeRenderer source={current.source} />
+                ) : (
+                  <RawUnavailable kind={current.kind} />
                 )}
               </motion.div>
             </AnimatePresence>
@@ -161,5 +197,63 @@ export function FileViewer(): JSX.Element | null {
         </motion.aside>
       ) : null}
     </AnimatePresence>
+  );
+}
+
+function ViewerTabs({
+  tab,
+  onTabChange,
+}: {
+  tab: ViewerTab;
+  onTabChange: (next: ViewerTab) => void;
+}): JSX.Element {
+  const tabs: ReadonlyArray<{ id: ViewerTab; label: string }> = [
+    { id: "preview", label: "Preview" },
+    { id: "raw", label: "Raw" },
+  ];
+  return (
+    <div
+      role="tablist"
+      aria-label="File viewer mode"
+      className="flex border-b"
+      style={{ borderColor: "var(--color-border-subtle)" }}
+    >
+      {tabs.map((t) => {
+        const active = t.id === tab;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onTabChange(t.id)}
+            className="-mb-px px-[14px] py-[10px] font-mono text-[10px] uppercase transition-colors duration-normal ease-out"
+            style={{
+              letterSpacing: "var(--tracking-label)",
+              color: active
+                ? "var(--color-text-primary)"
+                : "var(--color-text-secondary)",
+              borderBottom: `2px solid ${
+                active ? "var(--color-accent-primary)" : "transparent"
+              }`,
+            }}
+          >
+            {t.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function RawUnavailable({ kind }: { kind: string }): JSX.Element {
+  return (
+    <div
+      role="status"
+      className="mx-auto max-w-[480px] px-6 py-12 text-center font-mono text-[12px]"
+      style={{ color: "var(--color-text-tertiary)" }}
+    >
+      Raw view is not available for {kind} files.
+    </div>
   );
 }

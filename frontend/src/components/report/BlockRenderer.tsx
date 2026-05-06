@@ -4,6 +4,7 @@ import { MetricCardsBlock } from './blocks/MetricCardsBlock';
 import { KeyFindingBlock } from './blocks/KeyFindingBlock';
 import { RatingBadgeBlock } from './blocks/RatingBadgeBlock';
 import { GroupBlock, type ForcedHeight } from './blocks/GroupBlock';
+import { PullQuoteBlock } from './blocks/PullQuoteBlock';
 import { LineChartBlock } from './charts/LineChartBlock';
 import { BarChartBlock } from './charts/BarChartBlock';
 import { AreaChartBlock } from './charts/AreaChartBlock';
@@ -32,6 +33,8 @@ export function BlockRenderer({ block, forcedHeight }: BlockRendererProps) {
       return <KeyFindingBlock {...block} />;
     case 'rating_badge':
       return <RatingBadgeBlock {...block} />;
+    case 'pull_quote':
+      return <PullQuoteBlock {...block} />;
     case 'group':
       return (
         <GroupBlock

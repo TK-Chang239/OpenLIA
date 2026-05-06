@@ -75,6 +75,39 @@ body {
   }
 }
 
+@keyframes ol-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.ol-dot {
+  animation: ol-dot-bounce 1.2s infinite ease-in-out both;
+}
+.ol-dot[data-i="0"] {
+  animation-delay: -0.32s;
+}
+.ol-dot[data-i="1"] {
+  animation-delay: -0.16s;
+}
+.ol-dot[data-i="2"] {
+  animation-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ol-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* ----- Print / PDF route (/reports/:id/render) ----------------------- */
 .report-print-root {
   background: var(--color-bg, #ffffff);

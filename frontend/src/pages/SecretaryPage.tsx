@@ -26,6 +26,17 @@ export function SecretaryPage({ user }: SecretaryPageProps) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const attachedReportId = searchParams.get("attached_report");
+  const promptParam = searchParams.get("prompt");
+  // Capture-once: read on first render, then strip from URL so a refresh
+  // doesn't re-seed and so a follow-up navigation can deliver a new prompt.
+  const [initialDraft, setInitialDraft] = useState<string | null>(promptParam);
+  useEffect(() => {
+    if (!promptParam) return;
+    setInitialDraft(promptParam);
+    const next = new URLSearchParams(searchParams);
+    next.delete("prompt");
+    setSearchParams(next, { replace: true });
+  }, [promptParam, searchParams, setSearchParams]);
 
   const pickInitial = useCallback(async () => {
     if (attachedReportId) {
@@ -106,6 +117,7 @@ export function SecretaryPage({ user }: SecretaryPageProps) {
         streamUrl="/api/departments/secretary/chat"
         bodyExtras={{ session_id: sessionId }}
         departmentId="secretary"
+        initialDraft={initialDraft}
       />
     </div>
   );

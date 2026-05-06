@@ -74,6 +74,20 @@ class RatingBadgeBlock(_Strict):
     change_date: str | None = None
 
 
+class PullQuoteBlock(_Strict):
+    """Editorial pull-quote callout. Renders with an accent left-border and
+    a citation line composed from `attribution`, `source`, and `timestamp`.
+
+    Use sparingly: a pull quote is the punchline ("the line everyone will
+    repeat"), not a generic blockquote. One per section is plenty."""
+
+    type: Literal["pull_quote"]
+    text: str
+    attribution: str | None = None
+    source: str | None = None
+    timestamp: str | None = None
+
+
 class LineChartBlock(_Strict):
     type: Literal["line_chart"]
     title: str
@@ -196,6 +210,7 @@ LeafBlock = (
     | MetricCardsBlock
     | KeyFindingBlock
     | RatingBadgeBlock
+    | PullQuoteBlock
     | LineChartBlock
     | BarChartBlock
     | AreaChartBlock
