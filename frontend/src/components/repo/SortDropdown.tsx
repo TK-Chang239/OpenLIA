@@ -32,10 +32,15 @@ export function SortDropdown({ value, onChange }: SortDropdownProps): JSX.Elemen
         <button
           type="button"
           aria-label="Sort"
-          className="flex items-center gap-1 text-sm text-[--color-text-secondary] hover:text-[--color-text-primary]"
+          className="inline-flex items-center gap-1 text-[12.5px] text-[--color-text-secondary] transition-colors hover:text-[--color-text-primary]"
         >
-          <span>Sort: {SORT_LABELS[value]}</span>
-          <ChevronDown size={12} strokeWidth={1.5} />
+          <span>
+            Sort:{" "}
+            <b className="ml-[3px] font-medium text-[--color-text-primary]">
+              {SORT_LABELS[value]}
+            </b>
+          </span>
+          <ChevronDown size={12} strokeWidth={1.8} />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>

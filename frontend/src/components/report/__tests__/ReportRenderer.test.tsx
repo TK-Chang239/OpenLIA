@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 vi.mock('echarts-for-react', () => ({
@@ -8,10 +8,26 @@ vi.mock('react-intersection-observer', () => ({
   useInView: () => ({ ref: () => {}, inView: false }),
 }));
 
-import { ReportRenderer } from '../ReportRenderer';
+beforeAll(() => {
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+      root = null;
+      rootMargin = '';
+      thresholds = [];
+      takeRecords() { return []; }
+    },
+  );
+});
 
-const schema = {
-  schema_version: '1.0' as const,
+import { ReportRenderer } from '../ReportRenderer';
+import type { ReportSchema } from '../../../api/reports';
+
+const schema: ReportSchema = {
+  schema_version: '2.0',
   department: 'equity_research',
   page_furniture: {
     header: { left: 'OpenLIA', right: 'Equity Research' },

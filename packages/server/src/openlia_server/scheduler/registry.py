@@ -51,22 +51,32 @@ def department_for_job_type(job_type: JobType) -> str:
         raise ValueError(f"no department mapping for {job_type!r}") from exc
 
 
-def job_key(job_type: JobType, user_id: str | None = None) -> str:
+def job_key(
+    job_type: JobType,
+    user_id: str | None = None,
+    schedule_id: str | None = None,
+) -> str:
     if job_type is JobType.SYSTEM_MAINTENANCE:
         return MAINTENANCE_JOB_KEY
     if not user_id:
         raise ValueError(f"user_id required for job_type={job_type.value}")
-    return f"{job_type.value}:{user_id}"
+    base = f"{job_type.value}:{user_id}"
+    if schedule_id:
+        return f"{base}:sched:{schedule_id}"
+    return base
 
 
 def parse_job_key(key: str) -> tuple[JobType, str | None]:
+    """Return (job_type, user_id). The optional `:sched:<id>` suffix is
+    stripped — callers that need the schedule_id should keep it themselves."""
     if key == MAINTENANCE_JOB_KEY:
         return (JobType.SYSTEM_MAINTENANCE, None)
-    prefix, _, user_id = key.partition(":")
+    prefix, _, rest = key.partition(":")
     try:
         job_type = JobType(prefix)
     except ValueError as exc:
         raise ValueError(f"unknown job type in key {key!r}") from exc
+    user_id, _sep, _suffix = rest.partition(":")
     if not user_id:
         raise ValueError(f"missing user_id in key {key!r}")
     return (job_type, user_id)

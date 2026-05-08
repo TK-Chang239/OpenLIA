@@ -7,7 +7,7 @@ import json
 from openlia.llm.runtime.events import ReportComplete, ReportPhase, ReportStart
 
 MINIMAL_SCHEMA = {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "department": "morning_briefing",
     "generated_at": "2026-04-23T00:00:00Z",
     "cover": {

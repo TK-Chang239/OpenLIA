@@ -1,15 +1,14 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "department": "equity_research",
   "report_mode": "stock_initiation",
   "cover": {
-    "instructions": "Fill in the report cover. Title should be 'Stock Initiation Report'. Subtitle is the full company name. Ticker is the stock ticker symbol. Tagline is a one-sentence investment thesis (what makes this stock interesting right now). Key metrics: include current stock price (with recent % change), market cap, P/E ratio, and 1-2 other metrics most relevant to this company. Stats panel: include rating (Buy/Hold/Sell or Overweight/Equal Weight/Underweight), target price, upside/downside %, market cap, free float %, sector, exchange, and report date.",
+    "instructions": "Fill in the report cover. Title should be 'Stock Initiation Report'. Subtitle is the full company name. Eyebrow is a short context line (e.g., 'Stock Initiation \u00b7 <date>'). Ticker is the stock ticker symbol. Tagline is a one-sentence investment thesis. tldr is a list of 1\u20133 short paragraphs capturing the punchline (the line a reader would repeat); tldr_label can be left null to use the default 'TL;DR'. Key metrics (rendered in the doc-meta strip below the title): include current stock price (with recent % change), market cap, P/E ratio, and 1\u20132 other metrics most relevant to this company.",
     "title": null,
     "subtitle": null,
     "ticker": null,
     "tagline": null,
-    "key_metrics": [],
-    "stats_panel": []
+    "key_metrics": []
   },
   "sections": [
     {
@@ -90,5 +89,12 @@
       "instructions": "Provide the final investment verdict. State the current stock price and date. Use a rating badge block to show the recommendation (Buy / Hold / Sell, or Overweight / Equal Weight / Underweight). Summarize the bull case and bear case in 2-3 sentences each. State the target price and expected upside/downside. End with a key finding block containing the single most important reason to invest or not invest in this stock.",
       "blocks": []
     }
-  ]
+  ],
+  "rail": {
+    "instructions": "Populate the Rail object: rail.verdict with rating (Buy/Hold/Sell or Overweight/Equal-Weight/Underweight), previous_rating if changed, target price, upside %, and as_of date; rail.quick_stats with market cap, free float %, sector, exchange, 52-week range, and ADTV; rail.sparkline with 60-day daily close points labeled 'Last 60 days'.",
+    "verdict": null,
+    "quick_stats": [],
+    "sparkline": null
+  },
+  "citations": []
 }

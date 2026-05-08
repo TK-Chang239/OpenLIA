@@ -1,31 +1,66 @@
+/* Report theme — aliases the design system's global --color-* / --font-*
+   tokens so the in-app report renders with the same editorial palette and
+   typography as the design files (Geist + IBM Plex Mono, warm-beige bg,
+   acid-yellow accent, olive green / burnt orange for pos/neg). */
+
+/* Structural tokens are mode-independent — they describe the document's
+   geometry (max width, padding, gaps, radii), not its palette. Apply to
+   both [data-report-theme='light'] and [data-report-theme='dark'] so the
+   layout does not collapse when the user toggles dark mode. */
+[data-report-theme='light'],
+[data-report-theme='dark'] {
+  --report-max-width:    720px;
+  --report-padding-x:    32px;
+  --report-section-gap:  30px;
+  --report-block-gap:    20px;
+  --report-group-gap:    16px;
+  --report-radius-sm:    3px;
+  --report-radius-md:    6px;
+  --report-radius-lg:    8px;
+}
+
 [data-report-theme='light'] {
-  --report-text-primary: #1a1a1a;
-  --report-text-secondary: #6b7280;
-  --report-text-tertiary: #9ca3af;
-  --report-bg: #ffffff;
-  --report-bg-elevated: #f9fafb;
-  --report-border: #e5e7eb;
-  --report-accent: #2563eb;
-  --report-positive: #16a34a;
-  --report-negative: #dc2626;
-  --report-neutral: #6b7280;
+  --report-text-primary:   var(--color-text-primary);
+  --report-text-secondary: var(--color-text-secondary);
+  --report-text-tertiary:  var(--color-text-tertiary);
+  --report-bg:             var(--color-bg-base);
+  --report-bg-elevated:    var(--color-bg-elevated);
+  --report-border:         var(--color-border-subtle);
+  --report-border-strong:  var(--color-border-secondary);
+  --report-accent:         var(--color-accent-primary);
+  --report-accent-on:      var(--color-accent-on);
+  --report-positive:       var(--color-feedback-success);
+  --report-negative:       var(--color-feedback-error);
+  --report-neutral:        var(--color-text-secondary);
 
-  --report-chart-1: #2563eb;
-  --report-chart-2: #7c3aed;
-  --report-chart-3: #0891b2;
-  --report-chart-4: #ea580c;
-  --report-chart-5: #4f46e5;
-  --report-chart-6: #0d9488;
-  --report-chart-7: #b91c1c;
-  --report-chart-8: #ca8a04;
+  --report-font-sans:    var(--font-display);
+  --report-font-display: var(--font-display);
+  --report-font-mono:    var(--font-mono);
 
-  --report-max-width: 780px;
-  --report-padding-x: 48px;
-  --report-section-gap: 40px;
-  --report-block-gap: 24px;
-  --report-group-gap: 20px;
-  --report-radius-sm: 4px;
-  --report-radius-md: 8px;
-  --report-radius-lg: 12px;
-  --report-font-sans: 'Inter', system-ui, sans-serif;
+  /* Editorial chart palette — primary acid-yellow accent first, then olive/
+     burnt-orange feedback colors, then warm darks. Avoids the generic
+     blue/purple/cyan look that ECharts defaults to. */
+  --report-chart-1: var(--color-accent-primary);
+  --report-chart-2: var(--color-feedback-success);
+  --report-chart-3: var(--color-text-primary);
+  --report-chart-4: var(--color-feedback-error);
+  --report-chart-5: var(--color-feedback-warning);
+  --report-chart-6: #5C7000;
+  --report-chart-7: #B8E600;
+  --report-chart-8: var(--color-text-secondary);
+
+  /* Per-mode overlay + link tokens.
+     Light: acid-yellow has near-zero contrast on warm beige, so links/borders/
+     soft tints lean on the olive-green feedback color instead. The pure
+     acid-yellow accent is reserved for solid badges (where its yellow-900
+     foreground keeps it legible) and for high-density highlights like mark()
+     where the yellow itself is the signal. */
+  --report-link:            var(--color-feedback-success);
+  --report-accent-soft-bg:  rgba(107, 130, 0, 0.08);
+  --report-accent-glow:     rgba(107, 130, 0, 0.18);
+  --report-mark-bg:         rgba(212, 255, 0, 0.55);
+  --report-table-hover:     rgba(0, 0, 0, 0.025);
+  --report-chart-prev:      #6B8200;
+  --report-on-negative:     #FFFFFF;
+  --report-warn:            var(--color-feedback-warning);
 }

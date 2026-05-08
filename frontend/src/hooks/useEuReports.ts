@@ -4,6 +4,7 @@ import {
   fetchRecentReports,
   type RecentReport,
 } from "../api/earnings-update";
+import { getDemoReports, isDemoMode } from "../lib/earnings-update/demo-data";
 
 export function useEuReports(limit = 5) {
   const [reports, setReports] = useState<RecentReport[]>([]);
@@ -11,6 +12,12 @@ export function useEuReports(limit = 5) {
   const [error, setError] = useState<Error | null>(null);
 
   const refresh = useCallback(async () => {
+    if (isDemoMode()) {
+      setReports(getDemoReports().slice(0, limit));
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const r = await fetchRecentReports(limit);

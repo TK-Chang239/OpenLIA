@@ -1,21 +1,40 @@
+/* Dark theme also aliases the global tokens so the report stays in lock-step
+   with the app's [data-theme="dark"] override defined in tokens.css. */
 [data-report-theme='dark'] {
-  --report-text-primary: #f0f0f0;
-  --report-text-secondary: #9ca3af;
-  --report-text-tertiary: #6b7280;
-  --report-bg: #141414;
-  --report-bg-elevated: #1e1e1e;
-  --report-border: #2e2e2e;
-  --report-accent: #3b82f6;
-  --report-positive: #22c55e;
-  --report-negative: #ef4444;
-  --report-neutral: #9ca3af;
+  --report-text-primary:   var(--color-text-primary);
+  --report-text-secondary: var(--color-text-secondary);
+  --report-text-tertiary:  var(--color-text-tertiary);
+  --report-bg:             var(--color-bg-base);
+  --report-bg-elevated:    var(--color-bg-elevated);
+  --report-border:         var(--color-border-subtle);
+  --report-border-strong:  var(--color-border-secondary);
+  --report-accent:         var(--color-accent-primary);
+  --report-accent-on:      var(--color-accent-on);
+  --report-positive:       var(--color-feedback-success);
+  --report-negative:       var(--color-feedback-error);
+  --report-neutral:        var(--color-text-secondary);
 
-  --report-chart-1: #3b82f6;
-  --report-chart-2: #8b5cf6;
-  --report-chart-3: #06b6d4;
-  --report-chart-4: #f97316;
-  --report-chart-5: #6366f1;
-  --report-chart-6: #14b8a6;
-  --report-chart-7: #ef4444;
-  --report-chart-8: #eab308;
+  --report-font-sans:    var(--font-display);
+  --report-font-display: var(--font-display);
+  --report-font-mono:    var(--font-mono);
+
+  --report-chart-1: var(--color-accent-primary);
+  --report-chart-2: var(--color-feedback-success);
+  --report-chart-3: var(--color-text-primary);
+  --report-chart-4: var(--color-feedback-error);
+  --report-chart-5: var(--color-feedback-warning);
+  --report-chart-6: #5C7000;
+  --report-chart-7: #B8E600;
+  --report-chart-8: var(--color-text-secondary);
+
+  /* On near-black surfaces the acid-yellow accent becomes the highest-contrast
+     foreground available, so links + soft glows can ride it directly. */
+  --report-link:            var(--color-accent-primary);
+  --report-accent-soft-bg:  rgba(212, 255, 0, 0.08);
+  --report-accent-glow:     rgba(212, 255, 0, 0.22);
+  --report-mark-bg:         rgba(212, 255, 0, 0.32);
+  --report-table-hover:     rgba(255, 255, 255, 0.04);
+  --report-chart-prev:      #B8E600;
+  --report-on-negative:     #FFFFFF;
+  --report-warn:            var(--color-feedback-warning);
 }

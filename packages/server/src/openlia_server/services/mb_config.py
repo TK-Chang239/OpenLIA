@@ -36,6 +36,70 @@ class MbConfigDTO:
     reference_portfolio: bool
 
 
+@dataclass(frozen=True)
+class MbConfigOverrides:
+    """Optional per-run overrides applied on top of the saved MbConfig.
+
+    Each ``None`` field means "use saved config." Validation mirrors
+    ``update_config``: invalid section ids or invalid lengths raise.
+    """
+
+    report_length: str | None = None
+    enabled_section_ids: list[str] | None = None
+    section_topics: dict[str, list[dict]] | None = None
+    custom_sections: list[dict] | None = None
+    reference_portfolio: bool | None = None
+
+
+def apply_overrides(cfg: MbConfigDTO, overrides: MbConfigOverrides) -> MbConfigDTO:
+    """Return a new MbConfigDTO with non-None override fields replaced.
+
+    Validates each non-None field the same way as ``update_config``.
+    """
+    if overrides.report_length is not None and overrides.report_length not in _VALID_LENGTHS:
+        raise ValueError(f"invalid report_length: {overrides.report_length!r}")
+
+    if overrides.enabled_section_ids is not None:
+        for sid in overrides.enabled_section_ids:
+            if sid not in _STANDARD_SECTION_SET:
+                raise ValueError(f"unknown section id: {sid!r}")
+
+    if overrides.section_topics is not None:
+        for sid, topics in overrides.section_topics.items():
+            if sid not in _STANDARD_SECTION_SET:
+                raise ValueError(f"unknown section id in topics: {sid!r}")
+            for t in topics:
+                if not isinstance(t, dict) or not t.get("topic"):
+                    raise ValueError(
+                        f"topic entry requires non-empty 'topic' in section {sid!r}"
+                    )
+
+    if overrides.custom_sections is not None:
+        for cs in overrides.custom_sections:
+            if not isinstance(cs, dict) or not cs.get("title"):
+                raise ValueError("custom section requires a non-empty title")
+            if not cs.get("id"):
+                raise ValueError("custom section requires an id")
+
+    return MbConfigDTO(
+        report_length=overrides.report_length
+        if overrides.report_length is not None
+        else cfg.report_length,
+        enabled_section_ids=list(overrides.enabled_section_ids)
+        if overrides.enabled_section_ids is not None
+        else list(cfg.enabled_section_ids),
+        section_topics=dict(overrides.section_topics)
+        if overrides.section_topics is not None
+        else dict(cfg.section_topics),
+        custom_sections=list(overrides.custom_sections)
+        if overrides.custom_sections is not None
+        else list(cfg.custom_sections),
+        reference_portfolio=bool(overrides.reference_portfolio)
+        if overrides.reference_portfolio is not None
+        else bool(cfg.reference_portfolio),
+    )
+
+
 def get_config(db: Session, *, user_id: str) -> MbConfigDTO:
     row = db.query(MbUserConfig).filter_by(user_id=user_id).one_or_none()
     if row is None:

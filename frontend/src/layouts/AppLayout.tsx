@@ -8,7 +8,7 @@ import { MobileNavProvider, useMobileNav } from "./MobileNavContext";
 import { ChatHeaderProvider } from "./ChatHeaderContext";
 import { DevPanel } from "../components/dev/DevPanel";
 import { crumbsForPath, stampsForNow } from "./shellState";
-import { FileViewerProvider } from "../components/viewer/FileViewerContext";
+import { FileViewerProvider, useFileViewer } from "../components/viewer/FileViewerContext";
 import { FileViewer } from "../components/viewer/FileViewer";
 import { ToastProvider } from "../components/primitives/Toast";
 import { useDeptHealth } from "../store/dept-health";
@@ -22,9 +22,13 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
   const crumbs = crumbsForPath(pathname);
   const { open, setOpen } = useMobileNav();
   const refreshHealth = useDeptHealth((s) => s.refresh);
+  const { close: closeViewer } = useFileViewer();
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+  useEffect(() => {
+    closeViewer();
+  }, [pathname, closeViewer]);
   return (
     <div
       className="grid h-screen w-full bg-bg-base text-text-primary"

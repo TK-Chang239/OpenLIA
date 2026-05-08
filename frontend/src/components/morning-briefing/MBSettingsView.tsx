@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 
 import type {
   CustomSection,
   MbConfig,
-  MbSchedule,
-  MbScheduleUpsert,
   ReportLength,
   TopicEntry,
 } from "../../api/morning-briefing";
@@ -12,46 +11,46 @@ import {
   DEFAULT_MB_SECTIONS,
   MB_SECTION_CATALOG,
 } from "../../lib/morning-briefing/section-catalog";
-import { AddScheduleModal } from "./AddScheduleModal";
 import { CustomSectionRow } from "./CustomSectionRow";
+import { ModelPicker } from "./ModelPicker";
 import { NotesPopover } from "./NotesPopover";
-import { ScheduleRow } from "./ScheduleRow";
 import { SectionRow } from "./SectionRow";
 import { TopicChip } from "./TopicChip";
 
-const LENGTHS: readonly ReportLength[] = ["concise", "normal", "elaborative"];
+const LENGTHS: readonly { id: ReportLength; label: string }[] = [
+  { id: "concise", label: "Concise" },
+  { id: "normal", label: "Normal" },
+  { id: "elaborative", label: "Elaborative" },
+];
 
 interface Props {
   config: MbConfig;
-  schedule: MbSchedule | null;
   onSaveConfig: (cfg: MbConfig) => Promise<MbConfig>;
-  onSaveSchedule: (payload: MbScheduleUpsert) => Promise<MbSchedule>;
-  onRemoveSchedule: () => Promise<void>;
+  onError?: (msg: string) => void;
 }
 
 type Toast = { kind: "success" | "error"; text: string };
 
-export function MBSettingsView({
-  config,
-  schedule,
-  onSaveConfig,
-  onSaveSchedule,
-  onRemoveSchedule,
-}: Props) {
+export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
   const [draft, setDraft] = useState<MbConfig>(config);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
-  const [scheduleInitial, setScheduleInitial] = useState<
-    MbScheduleUpsert | undefined
-  >(undefined);
-  const [topicInputs, setTopicInputs] = useState<Record<string, string>>({});
+  const [editingTopicSection, setEditingTopicSection] = useState<string | null>(
+    null,
+  );
+  const topicInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!toast) return;
     const id = window.setTimeout(() => setToast(null), 3000);
     return () => window.clearTimeout(id);
   }, [toast]);
+
+  useEffect(() => {
+    if (editingTopicSection && topicInputRef.current) {
+      topicInputRef.current.focus();
+    }
+  }, [editingTopicSection]);
 
   const enabled = new Set(draft.enabled_section_ids);
 
@@ -69,12 +68,14 @@ export function MBSettingsView({
     });
   };
 
-  const addTopic = (sectionId: string) => {
-    const text = (topicInputs[sectionId] ?? "").trim();
+  const commitTopic = (sectionId: string, value: string) => {
+    const text = value.trim();
     if (!text) return;
     const current = draft.section_topics[sectionId] ?? [];
+    if (current.some((t) => t.topic.toLowerCase() === text.toLowerCase())) {
+      return;
+    }
     updateTopics(sectionId, [...current, { topic: text, notes: "" }]);
-    setTopicInputs((p) => ({ ...p, [sectionId]: "" }));
   };
 
   const addCustom = () => {
@@ -110,73 +111,54 @@ export function MBSettingsView({
     }
   };
 
-  const submitSchedule = async (payload: MbScheduleUpsert) => {
-    try {
-      await onSaveSchedule(payload);
-      setScheduleModalOpen(false);
-      setScheduleInitial(undefined);
-      setToast({ kind: "success", text: "Schedule saved." });
-    } catch (err) {
-      const text =
-        err instanceof Error ? err.message : "Schedule save failed.";
-      setToast({ kind: "error", text });
-    }
-  };
-
-  const editSchedule = () => {
-    if (!schedule) return;
-    setScheduleInitial({
-      time: schedule.time,
-      timezone: schedule.timezone,
-      days_of_week: schedule.days_of_week,
-      label: schedule.label,
-    });
-    setScheduleModalOpen(true);
-  };
-
-  const deleteSchedule = async () => {
-    try {
-      await onRemoveSchedule();
-      setToast({ kind: "success", text: "Schedule removed." });
-    } catch (err) {
-      const text = err instanceof Error ? err.message : "Remove failed.";
-      setToast({ kind: "error", text });
-    }
-  };
-
   return (
-    <div className="space-y-6 relative" data-testid="mb-settings-view">
-      <section>
-        <h3 className="text-base font-semibold mb-2">Length</h3>
-        <div className="flex gap-2">
-          {LENGTHS.map((l) => (
-            <button
-              type="button"
-              key={l}
-              aria-pressed={draft.report_length === l}
-              className="px-3 py-1 rounded-[var(--radius-lg,0.5rem)] border text-sm"
-              style={{
-                borderColor: "var(--color-border-subtle)",
-                background:
-                  draft.report_length === l
+    <div
+      className="max-w-[880px] mx-auto px-8 pt-7 pb-16 relative"
+      data-testid="mb-settings-view"
+    >
+      <SetSection eyebrow="Report Length">
+        <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
+          Controls how detailed each briefing is.
+        </p>
+        <div
+          className="inline-flex p-0.5 rounded-md border bg-[--color-bg-elevated]"
+          style={{ borderColor: "var(--color-border-subtle)" }}
+        >
+          {LENGTHS.map((l) => {
+            const active = draft.report_length === l.id;
+            return (
+              <button
+                type="button"
+                key={l.id}
+                aria-pressed={active}
+                onClick={() => setDraft({ ...draft, report_length: l.id })}
+                className="h-7 px-3.5 rounded-[5px] text-[13px] font-medium transition-colors duration-[--duration-normal]"
+                style={{
+                  background: active
                     ? "var(--color-accent-primary)"
-                    : "var(--color-bg-base)",
-                color:
-                  draft.report_length === l
+                    : "transparent",
+                  color: active
                     ? "var(--color-accent-on)"
-                    : "inherit",
-              }}
-              onClick={() => setDraft({ ...draft, report_length: l })}
-            >
-              {l}
-            </button>
-          ))}
+                    : "var(--color-text-secondary)",
+                }}
+              >
+                {l.label}
+              </button>
+            );
+          })}
         </div>
-      </section>
+      </SetSection>
 
-      <section>
-        <h3 className="text-base font-semibold mb-2">Coverage sections</h3>
-        <div className="space-y-2">
+      <SetSection number="01" eyebrow="Report Sections">
+        <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
+          Standard sections are fixed. Toggle each on or off, and add the
+          topics you want covered. Click any topic chip to add notes for the
+          LLM.
+        </p>
+        <div
+          className="bg-[--color-bg-elevated] border rounded-[--radius-lg] overflow-hidden"
+          style={{ borderColor: "var(--color-border-subtle)" }}
+        >
           {DEFAULT_MB_SECTIONS.map((id) => {
             const entry = MB_SECTION_CATALOG[id];
             const topics = draft.section_topics[id] ?? [];
@@ -187,77 +169,85 @@ export function MBSettingsView({
                 id={id}
                 title={entry.title}
                 hint={entry.hint}
+                badge={
+                  id === "executive_summary" ? "Always-on summary" : undefined
+                }
                 checked={isEnabled}
                 onChange={(c) => toggleSection(id, c)}
               >
                 {isEnabled && entry.hasTopics && (
-                  <div className="space-y-2 mt-2">
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 rounded border px-2 py-1 text-sm"
-                        style={{
-                          borderColor: "var(--color-border-subtle)",
-                        }}
-                        placeholder={entry.topicPlaceholder}
-                        value={topicInputs[id] ?? ""}
-                        onChange={(e) =>
-                          setTopicInputs((p) => ({
-                            ...p,
-                            [id]: e.target.value,
-                          }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            addTopic(id);
-                          }
-                        }}
-                        data-testid={`topic-input-${id}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => addTopic(id)}
-                        className="px-3 py-1 rounded border text-sm"
-                        style={{
-                          borderColor: "var(--color-border-subtle)",
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {topics.map((t, idx) => (
+                      <NotesPopover
+                        key={`${t.topic}-${idx}`}
+                        topic={t.topic}
+                        notes={t.notes}
+                        onSave={(notes) => {
+                          const next = topics.map((x, i) =>
+                            i === idx ? { ...x, notes } : x,
+                          );
+                          updateTopics(id, next);
                         }}
                       >
-                        Add
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {topics.map((t, idx) => (
-                        <NotesPopover
-                          key={`${t.topic}-${idx}`}
-                          topic={t.topic}
-                          notes={t.notes}
-                          onSave={(notes) => {
-                            const next = topics.map((x, i) =>
-                              i === idx ? { ...x, notes } : x,
-                            );
-                            updateTopics(id, next);
+                        <span>
+                          <TopicChip
+                            topic={t.topic}
+                            hasNotes={t.notes.trim().length > 0}
+                            onClick={() => {}}
+                            onRemove={() => {
+                              updateTopics(
+                                id,
+                                topics.filter((_, i) => i !== idx),
+                              );
+                            }}
+                          />
+                        </span>
+                      </NotesPopover>
+                    ))}
+                    {editingTopicSection === id ? (
+                      <span
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border-dashed border bg-transparent"
+                        style={{ borderColor: "var(--color-border-secondary)" }}
+                      >
+                        <input
+                          ref={topicInputRef}
+                          type="text"
+                          placeholder="Type and press Enter"
+                          data-testid={`topic-input-${id}`}
+                          className="bg-transparent border-0 outline-0 text-[13px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] w-[150px]"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === ",") {
+                              e.preventDefault();
+                              commitTopic(id, e.currentTarget.value);
+                              e.currentTarget.value = "";
+                            } else if (e.key === "Escape") {
+                              setEditingTopicSection(null);
+                            }
                           }}
-                        >
-                          <span>
-                            <TopicChip
-                              topic={t.topic}
-                              hasNotes={t.notes.trim().length > 0}
-                              onClick={() => {}}
-                              onRemove={() => {
-                                updateTopics(
-                                  id,
-                                  topics.filter((_, i) => i !== idx),
-                                );
-                              }}
-                            />
-                          </span>
-                        </NotesPopover>
-                      ))}
-                    </div>
+                          onBlur={(e) => {
+                            commitTopic(id, e.currentTarget.value);
+                            setEditingTopicSection(null);
+                          }}
+                        />
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditingTopicSection(id)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border-dashed border bg-transparent text-[13px] text-[--color-text-tertiary] hover:text-[--color-text-secondary] hover:border-[--color-text-secondary]"
+                        style={{ borderColor: "var(--color-border-secondary)" }}
+                      >
+                        <Plus size={11} strokeWidth={2.5} />
+                        {entry.topicPlaceholder || "Add topic"}
+                      </button>
+                    )}
                   </div>
                 )}
                 {isEnabled && entry.hasReferencePortfolioToggle && (
-                  <label className="flex items-center gap-2 mt-2 text-sm">
+                  <label
+                    className="flex items-center gap-2.5 mt-3 px-3 py-2.5 rounded-md border bg-[--color-bg-base] text-[13px] text-[--color-text-secondary]"
+                    style={{ borderColor: "var(--color-border-subtle)" }}
+                  >
                     <input
                       type="checkbox"
                       checked={draft.reference_portfolio}
@@ -267,82 +257,82 @@ export function MBSettingsView({
                           reference_portfolio: e.target.checked,
                         })
                       }
+                      className="accent-[--color-accent-primary]"
                     />
-                    Reference Portfolio (inject holdings for the Portfolio
-                    Watch block)
+                    <span>
+                      <strong className="text-[--color-text-primary] font-medium">
+                        Reference Portfolio
+                      </strong>{" "}
+                      — automatically include tickers from your Portfolio in
+                      this section.
+                    </span>
                   </label>
                 )}
               </SectionRow>
             );
           })}
         </div>
-      </section>
+      </SetSection>
 
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-base font-semibold">Custom sections</h3>
+      <SetSection
+        number="02"
+        eyebrow="Custom Sections"
+        action={
           <button
             type="button"
-            className="text-sm underline"
             onClick={addCustom}
             data-testid="mb-add-custom-section"
+            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md border bg-transparent text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
+            style={{ borderColor: "var(--color-border-secondary)" }}
           >
-            + Add
+            <Plus size={13} strokeWidth={1.8} />
+            Add Section
           </button>
-        </div>
-        <div className="space-y-2">
-          {draft.custom_sections.map((cs, idx) => (
-            <CustomSectionRow
-              key={cs.id}
-              section={cs}
-              onChange={(p) => updateCustom(idx, p)}
-              onRemove={() => removeCustom(idx)}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-base font-semibold">Schedule</h3>
-          {!schedule && (
-            <button
-              type="button"
-              onClick={() => {
-                setScheduleInitial(undefined);
-                setScheduleModalOpen(true);
-              }}
-              className="text-sm underline"
-              data-testid="mb-add-schedule"
-            >
-              + Add schedule
-            </button>
-          )}
-        </div>
-        {schedule ? (
-          <ScheduleRow
-            schedule={schedule}
-            onEdit={editSchedule}
-            onDelete={deleteSchedule}
-          />
-        ) : (
-          <p
-            className="text-xs"
-            style={{ color: "var(--color-text-tertiary)" }}
+        }
+      >
+        <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
+          Add custom sections with a description that tells the LLM what to
+          cover.
+        </p>
+        {draft.custom_sections.length === 0 ? (
+          <div
+            className="bg-[--color-bg-elevated] border rounded-[--radius-lg] py-7 text-center text-[13px]"
+            style={{
+              borderColor: "var(--color-border-subtle)",
+              color: "var(--color-text-tertiary)",
+            }}
           >
-            No schedule yet.
-          </p>
+            No custom sections yet.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {draft.custom_sections.map((cs, idx) => (
+              <CustomSectionRow
+                key={cs.id}
+                section={cs}
+                onChange={(p) => updateCustom(idx, p)}
+                onRemove={() => removeCustom(idx)}
+              />
+            ))}
+          </div>
         )}
-      </section>
+      </SetSection>
 
-      <div className="flex justify-end">
+      <SetSection number="03" eyebrow="Default Model">
+        <p className="text-[13px] text-[--color-text-secondary] mb-3 leading-[1.5] m-0 -mt-1.5">
+          Default model used for scheduled briefings and as the starting point
+          on the Run Now tab.
+        </p>
+        <ModelPicker
+          departmentSlug="morning-briefing"
+          onError={onError}
+        />
+      </SetSection>
+
+      <div className="flex justify-end mt-8">
         <button
           type="button"
-          className="px-4 py-2 rounded-[var(--radius-lg,0.5rem)] text-sm disabled:opacity-50"
-          style={{
-            background: "var(--color-accent-primary)",
-            color: "var(--color-accent-on)",
-          }}
+          className="inline-flex items-center h-9 px-4 rounded-md text-[13.5px] font-medium disabled:opacity-50 bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover]"
           disabled={saving}
           onClick={save}
           data-testid="mb-save-settings"
@@ -351,32 +341,58 @@ export function MBSettingsView({
         </button>
       </div>
 
-      <AddScheduleModal
-        open={scheduleModalOpen}
-        onClose={() => {
-          setScheduleModalOpen(false);
-          setScheduleInitial(undefined);
-        }}
-        onSubmit={submitSchedule}
-        initial={scheduleInitial}
-      />
-
       {toast && (
         <div
           role="status"
           data-testid={`mb-toast-${toast.kind}`}
-          className="fixed bottom-4 right-4 rounded-[var(--radius-lg,0.5rem)] px-3 py-2 text-sm shadow-md z-50"
+          className="fixed bottom-6 right-6 inline-flex items-center gap-2.5 px-3.5 py-2.5 rounded-md text-[13px] shadow-md z-50"
           style={{
             background:
               toast.kind === "success"
-                ? "var(--color-accent-primary)"
+                ? "var(--color-text-primary)"
                 : "var(--color-feedback-error)",
-            color: "var(--color-accent-on)",
+            color:
+              toast.kind === "success"
+                ? "var(--color-bg-base)"
+                : "var(--color-feedback-error-on)",
           }}
         >
-          {toast.text}
+          {toast.kind === "success" ? (
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: "var(--color-accent-primary)" }}
+            />
+          ) : null}
+          <span>{toast.text}</span>
         </div>
       )}
     </div>
+  );
+}
+
+function SetSection({
+  number,
+  eyebrow,
+  action,
+  children,
+}: {
+  number?: string;
+  eyebrow: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-8 first:mt-0">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <span className="font-mono text-[11px] font-medium tracking-[0.14em] uppercase text-[--color-text-secondary] flex items-center gap-2">
+          {number ? (
+            <span className="text-[--color-text-tertiary]">{number}</span>
+          ) : null}
+          {eyebrow}
+        </span>
+        {action}
+      </div>
+      {children}
+    </section>
   );
 }

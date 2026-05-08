@@ -19,11 +19,14 @@ vi.mock("../../hooks/useMbConfig", () => ({
   }),
 }));
 
-vi.mock("../../hooks/useMbSchedule", () => ({
-  useMbSchedule: () => ({
-    schedule: null,
-    save: vi.fn().mockResolvedValue(undefined),
+vi.mock("../../hooks/useMbSchedules", () => ({
+  useMbSchedules: () => ({
+    schedules: [],
+    loading: false,
+    create: vi.fn().mockResolvedValue(undefined),
+    update: vi.fn().mockResolvedValue(undefined),
     remove: vi.fn().mockResolvedValue(undefined),
+    refresh: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
@@ -54,7 +57,7 @@ vi.mock("../../components/report/ReportRenderer", () => ({
 
 vi.mock("../../api/reports", () => ({
   fetchReport: vi.fn().mockResolvedValue({
-    schema_version: "1.0",
+    schema_version: "2.0",
     department: "morning_briefing",
     generated_at: "2026-04-24T13:00:00Z",
     cover: { title: "Morning Briefing", subtitle: "", tagline: "" },
@@ -74,23 +77,34 @@ function renderPage() {
 }
 
 describe("MorningBriefing page", () => {
-  it("renders header with model picker and only Archive + Settings tabs (no Chat)", () => {
+  it("renders Archive | Run Now | Schedule | Settings tabs (no Chat); ModelPicker lives on Run Now / Settings", () => {
     renderPage();
     expect(screen.getByText(/Morning Briefings/i)).toBeInTheDocument();
     expect(screen.getByText(/Morning Briefing 2026-04-24/)).toBeInTheDocument();
-    expect(screen.getByTestId("mb-model-picker")).toBeInTheDocument();
+    // Tabs
     expect(screen.getByRole("button", { name: /^Archive$/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Run Now$/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /^Schedule$/ }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Settings$/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /^Chat$/ }),
     ).not.toBeInTheDocument();
+    // ModelPicker not shown on Archive
+    expect(screen.queryByTestId("mb-model-picker")).not.toBeInTheDocument();
+    // Switch to Settings — ModelPicker should appear
+    fireEvent.click(screen.getByRole("button", { name: /^Settings$/ }));
+    expect(screen.getByTestId("mb-model-picker")).toBeInTheDocument();
   });
 
   it("opening a briefing shows the viewer with ReportRenderer (no inline chat)", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^Open$/ }));
+    fireEvent.click(screen.getByTestId("mb-hero-open"));
     await waitFor(() =>
       expect(screen.getByTestId("mb-viewer")).toBeInTheDocument(),
     );
@@ -103,7 +117,7 @@ describe("MorningBriefing page", () => {
 
   it("Close button returns to the archive", async () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /^Open$/ }));
+    fireEvent.click(screen.getByTestId("mb-hero-open"));
     await waitFor(() =>
       expect(screen.getByTestId("mb-viewer")).toBeInTheDocument(),
     );

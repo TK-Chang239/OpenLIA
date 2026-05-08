@@ -12,9 +12,26 @@ class _Strict(BaseModel):
 
 Align = Literal["left", "center", "right"]
 RowStyle = Literal["default", "subtotal", "total", "header_group"]
-FormatRule = Literal["negative", "positive", "directional", "bold", "muted"]
+FormatRule = Literal[
+    "negative",
+    "positive",
+    "directional",
+    "bold",
+    "muted",
+    "tag-beat",
+    "tag-miss",
+    "tag-info",
+]
 ChartHeight = Literal["small", "medium", "tall"]
 DeltaDirection = Literal["up", "down", "flat"]
+Tone = Literal["positive", "negative", "neutral", "warn"]
+
+
+class Tag(_Strict):
+    """Inline chip used by metrics, timeline events, and quote attribution."""
+
+    label: str
+    tone: Tone = "neutral"
 
 
 class Metric(_Strict):
@@ -22,6 +39,9 @@ class Metric(_Strict):
     value: str
     delta: str | None = None
     delta_direction: DeltaDirection | None = None
+    context: str | None = None
+    tag: Tag | None = None
+    highlight: bool = False
 
 
 class ChartOptions(_Strict):
@@ -75,16 +95,82 @@ class RatingBadgeBlock(_Strict):
 
 
 class PullQuoteBlock(_Strict):
-    """Editorial pull-quote callout. Renders with an accent left-border and
-    a citation line composed from `attribution`, `source`, and `timestamp`.
+    """Editorial pull-quote callout with accent left-border.
 
-    Use sparingly: a pull quote is the punchline ("the line everyone will
-    repeat"), not a generic blockquote. One per section is plenty."""
+    Use sparingly: the punchline of the section, not a generic blockquote."""
 
     type: Literal["pull_quote"]
     text: str
     attribution: str | None = None
     source: str | None = None
+    timestamp: str | None = None
+
+
+class CalloutItem(_Strict):
+    eyebrow: str | None = None
+    title: str
+    description: str
+
+
+class CalloutGridBlock(_Strict):
+    """N-card callout grid (2-4 columns). Generic for thesis pillars,
+    drivers, themes, options, frameworks."""
+
+    type: Literal["callout_grid"]
+    columns: int = Field(ge=2, le=4, default=3)
+    items: Annotated[list[CalloutItem], Field(min_length=2)]
+
+
+class TimelineEvent(_Strict):
+    when: str
+    what: str
+    impact: str | None = None
+    impact_tag: Tag | None = None
+    highlight: bool = False
+
+
+class TimelineBlock(_Strict):
+    """Time-ordered events with optional tone-tagged impact line.
+    Generic for catalysts, milestones, history, agendas."""
+
+    type: Literal["timeline"]
+    title: str | None = None
+    events: Annotated[list[TimelineEvent], Field(min_length=1)]
+
+
+class BulletListBlock(_Strict):
+    type: Literal["bullet_list"]
+    items: Annotated[list[str], Field(min_length=1)]
+    tone: Literal["default", "positive", "negative"] = "default"
+
+
+class ComparisonColumn(_Strict):
+    title: str
+    tone: Tone = "neutral"
+    items: Annotated[list[str], Field(min_length=1)]
+
+
+class ComparisonSplitBlock(_Strict):
+    """Two-column tone-tagged comparison. Risks (up/down), pros/cons,
+    bull/bear, before/after."""
+
+    type: Literal["comparison_split"]
+    left: ComparisonColumn
+    right: ComparisonColumn
+
+
+class QuoteBlock(_Strict):
+    """Attributed quote with optional speaker/role/tag/timestamp.
+    Inline ``==marks==`` in `text` render as highlight spans.
+
+    Distinct from PullQuoteBlock (editorial) — QuoteBlock is for
+    earnings-call transcripts, expert interviews, news quotes."""
+
+    type: Literal["quote"]
+    text: str
+    speaker: str | None = None
+    role: str | None = None
+    tag: Tag | None = None
     timestamp: str | None = None
 
 
@@ -211,6 +297,11 @@ LeafBlock = (
     | KeyFindingBlock
     | RatingBadgeBlock
     | PullQuoteBlock
+    | CalloutGridBlock
+    | TimelineBlock
+    | BulletListBlock
+    | ComparisonSplitBlock
+    | QuoteBlock
     | LineChartBlock
     | BarChartBlock
     | AreaChartBlock
@@ -245,10 +336,12 @@ class Section(_Strict):
 class Cover(_Strict):
     title: str
     subtitle: str
+    eyebrow: str | None = None
     ticker: str | None = None
     tagline: str
+    tldr: list[str] = Field(default_factory=list)
+    tldr_label: str | None = None
     key_metrics: list[Metric] = Field(default_factory=list)
-    stats_panel: list[Metric] = Field(default_factory=list)
 
 
 class PageFurniture(_Strict):
@@ -257,13 +350,51 @@ class PageFurniture(_Strict):
     disclaimer: str
 
 
+class Verdict(_Strict):
+    rating: str
+    previous_rating: str | None = None
+    target: str | None = None
+    upside: str | None = None
+    as_of: str | None = None
+
+
+class SparklinePoint(_Strict):
+    x: float
+    y: float
+
+
+class Sparkline(_Strict):
+    label: str
+    points: Annotated[list[SparklinePoint], Field(min_length=2)]
+
+
+class Rail(_Strict):
+    """Sticky right-rail summary. Renderer falls back to 2-column when
+    omitted. ``Rail.related`` is renderer-derived (cross-report query),
+    not authored — kept off the schema deliberately."""
+
+    verdict: Verdict | None = None
+    quick_stats: list[Metric] = Field(default_factory=list)
+    sparkline: Sparkline | None = None
+
+
+class Citation(_Strict):
+    id: str
+    title: str
+    source: str | None = None
+    url: str | None = None
+    date: str | None = None
+
+
 class ReportSchema(_Strict):
-    schema_version: Literal["1.0"]
+    schema_version: Literal["2.0"]
     department: str
     generated_at: datetime
     page_furniture: PageFurniture | None = None
     cover: Cover
     sections: list[Section]
+    rail: Rail | None = None
+    citations: list[Citation] = Field(default_factory=list)
 
 
 TreemapNode.model_rebuild()

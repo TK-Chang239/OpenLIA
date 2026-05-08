@@ -18,7 +18,7 @@ from openlia_server.services.reports import (
 
 def _sample_schema() -> ReportSchema:
     return ReportSchema(
-        schema_version="1.0",
+        schema_version="2.0",
         department="equity_research",
         generated_at=datetime(2026, 4, 11, tzinfo=UTC),
         page_furniture=PageFurniture(

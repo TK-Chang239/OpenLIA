@@ -22,6 +22,7 @@ from openlia.reports.validator import validate_report_payload
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.scheduler import MbSchedule
+from openlia_server.services import mb_config as mb_config_svc
 from openlia_server.services import reports as reports_svc
 from openlia_server.services.mb_request_builder import MbRequestBuilderImpl
 
@@ -100,9 +101,15 @@ async def run_on_demand(
     user_id: str,
     report_runner: ReportRunnerLike,
     cancel_token: CancellationToken | None = None,
+    overrides: mb_config_svc.MbConfigOverrides | None = None,
 ) -> AsyncIterator[SseEvent | ReportSavedEvent]:
     builder = MbRequestBuilderImpl()
-    request = builder.build(session=session, user_id=user_id, schedule_id="on_demand")
+    request = builder.build(
+        session=session,
+        user_id=user_id,
+        schedule_id="on_demand",
+        overrides=overrides,
+    )
 
     last_complete: ReportComplete | None = None
     async for event in report_runner.run(

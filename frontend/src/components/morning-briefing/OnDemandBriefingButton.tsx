@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Plus } from "lucide-react";
 
 import { useReportStream } from "../report/useReportStream";
 
@@ -52,11 +53,13 @@ export function OnDemandBriefingButton({ onSaved, onError }: Props) {
   return (
     <button
       type="button"
-      className="px-4 py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
       disabled={running}
       onClick={onClick}
+      className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] disabled:opacity-50"
+      style={{ borderColor: "var(--color-border-secondary)" }}
     >
-      {running ? "Generating…" : "Generate Briefing"}
+      <Plus size={13} strokeWidth={1.8} />
+      {running ? "Generating…" : "Run now"}
     </button>
   );
 }

@@ -1,11 +1,12 @@
 import type { JSX } from "react";
+import { useState } from "react";
 import { ChevronDown, Menu, Plus } from "lucide-react";
-import { ThemeToggle } from "./ThemeToggle";
-import { LivePill } from "./LivePill";
+
 import { useMobileNav } from "../../layouts/MobileNavContext";
 import { useChatHeader } from "../../layouts/ChatHeaderContext";
 import { ChatHistoryPopover } from "../chat/ChatHistoryPopover";
-import { useState } from "react";
+import { LivePill } from "./LivePill";
+import { ThemeToggle } from "./ThemeToggle";
 
 export interface TopBarProps {
   crumbs: string[];
@@ -13,16 +14,20 @@ export interface TopBarProps {
   live?: boolean;
 }
 
-export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.Element {
+export function TopBar({
+  crumbs,
+  stamps = [],
+  live = false,
+}: TopBarProps): JSX.Element {
   const last = crumbs[crumbs.length - 1];
   const head = crumbs.slice(0, -1);
   const { setOpen } = useMobileNav();
   const chatHeader = useChatHeader();
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const showChatCrumb = Boolean(chatHeader && chatHeader.chatTitle);
+
   return (
-    <div
-      className="flex items-center gap-[14px] px-7 py-[14px] border-b border-border-subtle bg-bg-base"
-    >
+    <div className="flex items-center gap-[14px] border-b border-border-subtle bg-bg-base px-7 py-[14px]">
       <button
         type="button"
         aria-label="Open navigation"
@@ -42,8 +47,10 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
             <span className="text-text-tertiary">/</span>
           </span>
         ))}
-        {chatHeader ? (
-          <span className="relative flex items-center">
+        <strong className="font-semibold text-text-primary">{last}</strong>
+        {showChatCrumb && chatHeader ? (
+          <span className="relative flex items-center gap-2">
+            <span className="text-text-tertiary">/</span>
             <button
               type="button"
               aria-haspopup="menu"
@@ -51,7 +58,9 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
               onClick={() => setPopoverOpen((v) => !v)}
               className="flex items-center gap-1 font-semibold text-text-primary hover:text-text-primary"
             >
-              {last}
+              <span className="max-w-[260px] truncate">
+                {chatHeader.chatTitle}
+              </span>
               <ChevronDown size={12} strokeWidth={1.5} aria-hidden />
             </button>
             {popoverOpen ? (
@@ -70,21 +79,10 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
               />
             ) : null}
           </span>
-        ) : (
-          <strong className="text-text-primary font-semibold">{last}</strong>
-        )}
+        ) : null}
       </nav>
       <div className="ml-auto flex items-center gap-[14px]">
         {live && <LivePill />}
-        {stamps.map((s) => (
-          <span
-            key={s}
-            className="font-mono text-[10px] uppercase text-text-tertiary"
-            style={{ letterSpacing: "var(--tracking-label)" }}
-          >
-            {s}
-          </span>
-        ))}
         {chatHeader ? (
           <button
             type="button"
@@ -95,6 +93,15 @@ export function TopBar({ crumbs, stamps = [], live = false }: TopBarProps): JSX.
             New Chat
           </button>
         ) : null}
+        {stamps.map((s) => (
+          <span
+            key={s}
+            className="font-mono text-[10px] uppercase text-text-tertiary"
+            style={{ letterSpacing: "var(--tracking-label)" }}
+          >
+            {s}
+          </span>
+        ))}
         <ThemeToggle />
       </div>
     </div>

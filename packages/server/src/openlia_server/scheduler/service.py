@@ -148,11 +148,20 @@ class SchedulerService:
         job_type = self._job_type_for(schedule)
         if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
             raise ValueError("assessment_schedule must be set before modifying an MR schedule")
-        await self.remove_schedule(job_type=job_type, user_id=schedule.user_id)
+        sid = schedule.id if isinstance(schedule, MbSchedule) else None
+        await self.remove_schedule(
+            job_type=job_type, user_id=schedule.user_id, schedule_id=sid
+        )
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
-    async def remove_schedule(self, *, job_type: JobType, user_id: str) -> None:
-        await self.scheduler.remove_schedule(job_key(job_type, user_id))
+    async def remove_schedule(
+        self,
+        *,
+        job_type: JobType,
+        user_id: str,
+        schedule_id: str | None = None,
+    ) -> None:
+        await self.scheduler.remove_schedule(job_key(job_type, user_id, schedule_id))
 
     async def run_retry(self, *, run_id: str) -> None:
         """Fire a one-shot re-run of a prior job_runs row. Looks up the
@@ -218,8 +227,26 @@ class SchedulerService:
             executor._mr_cache_store = cache_store
 
     async def remove_all_for_user(self, user_id: str) -> None:
+        # MB allows multiple schedules per user — find every row and remove
+        # each by its own (user_id, schedule_id) key.
+        with self.session_factory() as session:
+            mb_ids = [
+                row.id
+                for row in session.query(MbSchedule).filter(MbSchedule.user_id == user_id)
+            ]
+        for sid in mb_ids:
+            try:
+                await self.scheduler.remove_schedule(
+                    job_key(JobType.MB_BRIEFING, user_id, sid)
+                )
+            except Exception:
+                log.debug(
+                    "remove_schedule failed for mb_briefing/%s/%s (may not be registered)",
+                    user_id,
+                    sid,
+                )
+
         for jt in (
-            JobType.MB_BRIEFING,
             JobType.EU_SCAN,
             JobType.MR_ASSESSMENT,
             JobType.RS_SNAPSHOT,
@@ -240,11 +267,15 @@ class SchedulerService:
         schedule_id: str | None,
         run_id: str | None = None,
     ) -> None:
-        key = (
-            MAINTENANCE_JOB_KEY
-            if job_type is JobType.SYSTEM_MAINTENANCE
-            else job_key(job_type, user_id or "")
-        )
+        if job_type is JobType.SYSTEM_MAINTENANCE:
+            key = MAINTENANCE_JOB_KEY
+        elif job_type is JobType.MB_BRIEFING:
+            # MB now supports multiple schedules per user, each with its own
+            # cancellation slot so two distinct schedules don't block each
+            # other.
+            key = job_key(job_type, user_id or "", schedule_id)
+        else:
+            key = job_key(job_type, user_id or "")
         if key in self._active_tokens:
             log.info("skipping %s: previous run still active", key)
             return
@@ -305,10 +336,13 @@ class SchedulerService:
         # MR executor uses the dashboard slug in the schedule_id slot so it
         # knows which dashboard to run; MB/EU use the row id.
         schedule_id = schedule.dashboard if isinstance(schedule, MrDashboardState) else schedule.id
+        # MB allows multiple schedules per user — key by schedule_id so they
+        # don't collide. Other job types remain keyed by (type, user) only.
+        key_schedule_id = schedule.id if isinstance(schedule, MbSchedule) else None
         await self.scheduler.add_schedule(
             self._run_job,
             trigger,
-            id=job_key(job_type, schedule.user_id),
+            id=job_key(job_type, schedule.user_id, key_schedule_id),
             args=(job_type, schedule.user_id, schedule_id),
             misfire_grace_time=self.settings.misfire_grace_seconds,
             max_instances=1,
@@ -346,10 +380,11 @@ class SchedulerService:
             return
 
         run_time = self.clock() + timedelta(seconds=1)
+        key_schedule_id = schedule.id if isinstance(schedule, MbSchedule) else None
         await self.scheduler.add_schedule(
             self._run_job,
             DateTrigger(run_time=run_time),
-            id=f"{job_key(job_type, schedule.user_id)}:backfill",
+            id=f"{job_key(job_type, schedule.user_id, key_schedule_id)}:backfill",
             args=(job_type, schedule.user_id, schedule.id),
             misfire_grace_time=self.settings.misfire_grace_seconds,
         )

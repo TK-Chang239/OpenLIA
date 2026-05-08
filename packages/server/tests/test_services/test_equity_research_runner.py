@@ -9,7 +9,7 @@ from openlia_server.services.equity_research_runner import (
 )
 
 MINIMAL_SCHEMA = {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "department": "equity_research",
     "generated_at": "2026-04-23T00:00:00Z",
     "cover": {

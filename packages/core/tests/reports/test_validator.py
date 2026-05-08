@@ -7,7 +7,7 @@ from openlia.reports.validator import (
 
 def _good() -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "department": "equity_research",
         "generated_at": "2026-04-11T09:30:00Z",
         "cover": {

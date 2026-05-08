@@ -38,8 +38,11 @@ class MbRequestBuilderImpl:
         session: Session,
         user_id: str,
         schedule_id: str,
+        overrides: mb_config_svc.MbConfigOverrides | None = None,
     ) -> ReportRequest:
         cfg = mb_config_svc.get_config(session, user_id=user_id)
+        if overrides is not None:
+            cfg = mb_config_svc.apply_overrides(cfg, overrides)
 
         reference_portfolio: list[dict] | None = None
         if cfg.reference_portfolio:

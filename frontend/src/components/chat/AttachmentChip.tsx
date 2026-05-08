@@ -24,6 +24,7 @@ const ICON: Record<FileKind, LucideIcon> = {
   csv: Sheet,
   image: ImageIcon,
   docx: FileText,
+  report: FileText,
   unknown: File,
 };
 
