@@ -107,6 +107,15 @@ def test_spikes_empty_without_history(rs_client):
     assert r.json() == {"spikes": []}
 
 
+def test_quotes_returns_empty_without_eodhd_key(rs_client, monkeypatch):
+    monkeypatch.delenv("EODHD_API_KEY", raising=False)
+    r = rs_client.get("/departments/retail_sentiment/dashboard/quotes?ticker=TSM")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ticker"] == "TSM"
+    assert body["bars"] == []
+
+
 # ---------------------------------------------------------------------------
 # NEW-20-14 route smoke tests for shipped surface
 # ---------------------------------------------------------------------------
