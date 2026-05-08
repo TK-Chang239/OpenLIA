@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { TickerSelector } from "../TickerSelector";
 
 describe("TickerSelector", () => {
-  it("invokes onAdd when typing + clicking + Add", () => {
+  it("invokes onAdd via the add input + Enter key", () => {
     const onAdd = vi.fn();
     render(
       <TickerSelector
@@ -15,9 +15,10 @@ describe("TickerSelector", () => {
         onRemove={() => {}}
       />,
     );
-    const input = screen.getByPlaceholderText("Add ticker");
+    fireEvent.click(screen.getByTestId("ticker-add-button"));
+    const input = screen.getByTestId("ticker-add-input");
     fireEvent.change(input, { target: { value: "msft" } });
-    fireEvent.click(screen.getByText("+ Add"));
+    fireEvent.keyDown(input, { key: "Enter" });
     expect(onAdd).toHaveBeenCalledWith("MSFT");
   });
 
