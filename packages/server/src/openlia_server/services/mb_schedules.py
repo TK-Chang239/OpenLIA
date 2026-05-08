@@ -1,7 +1,8 @@
-"""CRUD on mb_schedules. One schedule per user (Plan 6 job_key lock).
+"""CRUD on mb_schedules. Multiple schedules per user (Plan 6 multi-schedule).
 
 Hot-reloads the running SchedulerService via the shipped
-`add_schedule` / `modify_schedule` / `remove_schedule` methods.
+`add_schedule` / `modify_schedule` / `remove_schedule` methods. Each row
+is keyed in APScheduler by (user_id, schedule_id) so they don't collide.
 """
 
 from __future__ import annotations
@@ -36,7 +37,9 @@ class MbScheduleDTO:
 class SchedulerControl(Protocol):
     async def add_schedule(self, schedule: MbSchedule) -> None: ...
     async def modify_schedule(self, schedule: MbSchedule) -> None: ...
-    async def remove_schedule(self, *, job_type: JobType, user_id: str) -> None: ...
+    async def remove_schedule(
+        self, *, job_type: JobType, user_id: str, schedule_id: str | None = None
+    ) -> None: ...
 
 
 def _validate(time: str, timezone: str, days_of_week: list[str]) -> None:
@@ -62,14 +65,26 @@ def _to_dto(row: MbSchedule) -> MbScheduleDTO:
     )
 
 
-def get_schedule(db: Session, *, user_id: str) -> MbScheduleDTO | None:
-    row = db.query(MbSchedule).filter_by(user_id=user_id).one_or_none()
+def list_schedules(db: Session, *, user_id: str) -> list[MbScheduleDTO]:
+    rows = (
+        db.query(MbSchedule)
+        .filter(MbSchedule.user_id == user_id)
+        .order_by(MbSchedule.time, MbSchedule.created_at)
+        .all()
+    )
+    return [_to_dto(r) for r in rows]
+
+
+def get_schedule_by_id(
+    db: Session, *, user_id: str, schedule_id: str
+) -> MbScheduleDTO | None:
+    row = db.query(MbSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
     if row is None:
         return None
     return _to_dto(row)
 
 
-async def upsert_schedule(
+async def create_schedule(
     db: Session,
     *,
     user_id: str,
@@ -80,33 +95,46 @@ async def upsert_schedule(
     scheduler: SchedulerControl,
 ) -> MbScheduleDTO:
     _validate(time, timezone, days_of_week)
-    row = db.query(MbSchedule).filter_by(user_id=user_id).one_or_none()
-    is_new = row is None
-    if row is None:
-        row = MbSchedule(
-            id=str(uuid.uuid4()),
-            user_id=user_id,
-            time=time,
-            timezone=timezone,
-            days_of_week=json.dumps(list(days_of_week)),
-            label=label,
-            is_enabled=True,
-        )
-        db.add(row)
-    else:
-        row.time = time
-        row.timezone = timezone
-        row.days_of_week = json.dumps(list(days_of_week))
-        row.label = label
-        row.is_enabled = True
+    row = MbSchedule(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        time=time,
+        timezone=timezone,
+        days_of_week=json.dumps(list(days_of_week)),
+        label=label,
+        is_enabled=True,
+    )
+    db.add(row)
     db.commit()
     db.refresh(row)
 
-    if is_new:
-        await scheduler.add_schedule(row)
-    else:
-        await scheduler.modify_schedule(row)
+    await scheduler.add_schedule(row)
+    return _to_dto(row)
 
+
+async def update_schedule(
+    db: Session,
+    *,
+    user_id: str,
+    schedule_id: str,
+    time: str,
+    timezone: str,
+    days_of_week: list[str],
+    label: str,
+    scheduler: SchedulerControl,
+) -> MbScheduleDTO | None:
+    _validate(time, timezone, days_of_week)
+    row = db.query(MbSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
+    if row is None:
+        return None
+    row.time = time
+    row.timezone = timezone
+    row.days_of_week = json.dumps(list(days_of_week))
+    row.label = label
+    db.commit()
+    db.refresh(row)
+
+    await scheduler.modify_schedule(row)
     return _to_dto(row)
 
 
@@ -114,11 +142,15 @@ async def delete_schedule(
     db: Session,
     *,
     user_id: str,
+    schedule_id: str,
     scheduler: SchedulerControl,
-) -> None:
-    row = db.query(MbSchedule).filter_by(user_id=user_id).one_or_none()
+) -> bool:
+    row = db.query(MbSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
     if row is None:
-        return
+        return False
     db.delete(row)
     db.commit()
-    await scheduler.remove_schedule(job_type=JobType.MB_BRIEFING, user_id=user_id)
+    await scheduler.remove_schedule(
+        job_type=JobType.MB_BRIEFING, user_id=user_id, schedule_id=schedule_id
+    )
+    return True

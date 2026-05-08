@@ -44,10 +44,14 @@ describe("RepoFilterChips", () => {
       />,
     );
     expect(screen.getByText('Search: "aapl"')).toBeInTheDocument();
-    expect(screen.getByText("Equity Research")).toBeInTheDocument();
+    expect(screen.getByText("Department: Equity Research")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Remove filter Search/ }));
     expect(onRemoveSearch).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: /Remove filter Equity Research/ }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remove filter Department: Equity Research/,
+      }),
+    );
     expect(onRemoveDepartment).toHaveBeenCalledWith("equity_research");
     fireEvent.click(screen.getByText("Clear all"));
     expect(onClearAll).toHaveBeenCalledTimes(1);

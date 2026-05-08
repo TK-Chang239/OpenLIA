@@ -75,7 +75,7 @@ export function ImportCsvDialog({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative w-[520px] max-h-[80vh] overflow-y-auto bg-[--color-surface-elevated] border border-[--color-border-subtle] rounded-[--radius-md] p-5">
+      <div className="relative w-[520px] max-h-[80vh] overflow-y-auto bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-md] p-5">
         <h2 className="text-lg font-semibold mb-3">Import CSV</h2>
         <p className="text-xs text-[--color-text-tertiary] mb-2">
           Required columns: ticker. Optional: shares, cost_basis, currency, notes.

@@ -106,7 +106,7 @@ function ToastContainer(): JSX.Element {
           role="status"
           data-testid="toast-item"
           data-tone={t.tone ?? "info"}
-          className="pointer-events-auto min-w-[220px] max-w-[360px] px-3 py-2 rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-surface-elevated] text-sm shadow flex items-center justify-between gap-3 animate-[fadeIn_120ms_ease-out]"
+          className="pointer-events-auto min-w-[220px] max-w-[360px] px-3 py-2 rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] text-sm shadow flex items-center justify-between gap-3 animate-[fadeIn_120ms_ease-out]"
         >
           <span className="text-[--color-text-primary]">{t.title}</span>
           {t.undo ? (

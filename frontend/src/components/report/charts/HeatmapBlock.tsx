@@ -1,7 +1,5 @@
-// frontend/src/components/report/charts/HeatmapBlock.tsx
-import ReactECharts from 'echarts-for-react';
-import { ChartFrame, type ChartHeight } from './ChartFrame';
-import type { ForcedHeight } from '../blocks/GroupBlock';
+import { useMemo } from 'react';
+import { CHART_VIEWBOX } from './svgUtils';
 
 export interface HeatmapBlockProps {
   type: 'heatmap';
@@ -9,35 +7,113 @@ export interface HeatmapBlockProps {
   x_labels: string[];
   y_labels: string[];
   values: number[][];
-  options?: { height?: ChartHeight };
-  forcedHeight?: ForcedHeight;
+  options?: { show_legend?: boolean };
 }
 
-export function HeatmapBlock({ title, x_labels, y_labels, values, options, forcedHeight }: HeatmapBlockProps) {
-  const points: [number, number, number][] = [];
-  for (let y = 0; y < y_labels.length; y++) {
-    for (let x = 0; x < x_labels.length; x++) {
-      points.push([x, y, values[y]?.[x] ?? 0]);
-    }
+const { W } = CHART_VIEWBOX;
+
+export function HeatmapBlock({ title, x_labels, y_labels, values, options }: HeatmapBlockProps) {
+  const showLegend = options?.show_legend !== false;
+
+  const flat = useMemo(() => {
+    const out: number[] = [];
+    for (const row of values) for (const v of row) out.push(v);
+    return out;
+  }, [values]);
+
+  if (flat.length === 0) {
+    return (
+      <figure className="report-chart">
+        <figcaption className="report-chart__title">{title}</figcaption>
+        <div className="report-chart__empty">No data</div>
+      </figure>
+    );
   }
-  const all = points.map((p) => p[2]);
-  const option = {
-    tooltip: { position: 'top' },
-    grid: { left: 60, right: 20, top: 30, bottom: 60 },
-    xAxis: { type: 'category', data: x_labels, splitArea: { show: true } },
-    yAxis: { type: 'category', data: y_labels, splitArea: { show: true } },
-    visualMap: {
-      min: Math.min(...all),
-      max: Math.max(...all),
-      calculable: true,
-      orient: 'horizontal',
-      bottom: 0,
-    },
-    series: [{ type: 'heatmap', data: points }],
+
+  const minV = Math.min(...flat);
+  const maxV = Math.max(...flat);
+  const range = maxV - minV || 1;
+  const padL = 64;
+  const padT = 8;
+  const cellW = (W - padL - 16) / Math.max(1, x_labels.length);
+  const cellH = 24;
+  const totalH = padT + y_labels.length * cellH + 28;
+
+  const tone = (v: number) => {
+    const t = (v - minV) / range;
+    return `rgba(212, 255, 0, ${0.1 + t * 0.85})`;
   };
+
   return (
-    <ChartFrame title={title} height={options?.height} forcedHeight={forcedHeight}>
-      <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
-    </ChartFrame>
+    <figure className="report-chart">
+      <figcaption className="report-chart__title">{title}</figcaption>
+      <svg
+        className="report-line-chart"
+        viewBox={`0 0 ${W} ${totalH}`}
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={title}
+      >
+        {y_labels.map((yl, yi) => (
+          <g key={yl}>
+            <text
+              className="tick-label"
+              x={padL - 8}
+              y={padT + yi * cellH + cellH / 2}
+              dy="0.32em"
+              textAnchor="end"
+            >
+              {yl}
+            </text>
+            {x_labels.map((_xl, xi) => {
+              const v = values[yi]?.[xi] ?? 0;
+              return (
+                <g key={`${yi}-${xi}`}>
+                  <rect
+                    x={padL + xi * cellW}
+                    y={padT + yi * cellH}
+                    width={cellW - 1}
+                    height={cellH - 1}
+                    style={{ fill: tone(v), stroke: 'var(--report-border)', strokeWidth: 0.5 }}
+                  />
+                  <text
+                    x={padL + xi * cellW + cellW / 2}
+                    y={padT + yi * cellH + cellH / 2}
+                    dy="0.32em"
+                    textAnchor="middle"
+                    style={{ fill: 'var(--report-text-primary)', fontFamily: 'var(--report-font-mono)', fontSize: 10 }}
+                  >
+                    {Number.isFinite(v) ? v.toFixed(2) : ''}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        ))}
+        {x_labels.map((xl, xi) => (
+          <text
+            key={xl}
+            className="tick-label"
+            x={padL + xi * cellW + cellW / 2}
+            y={padT + y_labels.length * cellH + 14}
+            textAnchor="middle"
+          >
+            {xl}
+          </text>
+        ))}
+      </svg>
+      {showLegend ? (
+        <div className="report-chart__legend">
+          <span>
+            <span className="report-chart__legend-swatch" style={{ background: 'rgba(212,255,0,0.1)' }} />
+            min {minV.toFixed(2)}
+          </span>
+          <span>
+            <span className="report-chart__legend-swatch" style={{ background: 'rgba(212,255,0,0.95)' }} />
+            max {maxV.toFixed(2)}
+          </span>
+        </div>
+      ) : null}
+    </figure>
   );
 }

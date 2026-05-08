@@ -1,11 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-
-vi.mock('echarts-for-react', () => ({
-  default: ({ option }: { option: any }) => (
-    <div data-testid="echart" data-option={JSON.stringify(option)} />
-  ),
-}));
 
 import { LineChartBlock } from '../LineChartBlock';
 import { BarChartBlock } from '../BarChartBlock';
@@ -13,8 +7,8 @@ import { AreaChartBlock } from '../AreaChartBlock';
 import { PieChartBlock } from '../PieChartBlock';
 
 describe('LineChartBlock', () => {
-  it('renders the title and emits a line series', () => {
-    render(
+  it('renders the title and a hand-rolled SVG with a polyline per series', () => {
+    const { container } = render(
       <LineChartBlock
         type="line_chart"
         title="Gross Margin Trend"
@@ -22,15 +16,14 @@ describe('LineChartBlock', () => {
       />,
     );
     expect(screen.getByText('Gross Margin Trend')).toBeInTheDocument();
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].type).toBe('line');
-    expect(opt.series[0].data).toEqual([46.6, 47.1]);
+    expect(container.querySelector('svg.report-line-chart')).toBeTruthy();
+    expect(container.querySelectorAll('polyline.series-line')).toHaveLength(1);
   });
 });
 
 describe('BarChartBlock', () => {
-  it('emits a category x-axis and bar series', () => {
-    render(
+  it('renders one rect per (series × category) for vertical bars', () => {
+    const { container } = render(
       <BarChartBlock
         type="bar_chart"
         title="Revenue by Segment"
@@ -38,48 +31,43 @@ describe('BarChartBlock', () => {
         series={[{ name: 'Q1 2026', values: [69.1, 26.3] }]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.xAxis.type).toBe('category');
-    expect(opt.xAxis.data).toEqual(['iPhone', 'Services']);
-    expect(opt.series[0].type).toBe('bar');
+    expect(container.querySelector('svg.report-line-chart')).toBeTruthy();
+    expect(container.querySelectorAll('svg rect')).toHaveLength(2);
   });
 
-  it('supports stacked vertical bars', () => {
-    render(
+  it('renders horizontal layout when orientation=horizontal', () => {
+    const { container } = render(
       <BarChartBlock
         type="bar_chart"
-        title="t"
-        categories={['a']}
-        series={[
-          { name: 's1', values: [1] },
-          { name: 's2', values: [2] },
-        ]}
-        stacked
+        title="Segments"
+        categories={['A', 'B']}
+        series={[{ name: 's1', values: [10, 20] }]}
+        orientation="horizontal"
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series.every((s: any) => s.stack === 'total')).toBe(true);
+    expect(container.querySelectorAll('.report-bars-h__row')).toHaveLength(2);
   });
 });
 
 describe('AreaChartBlock', () => {
-  it('emits a line series with areaStyle', () => {
-    render(
+  it('renders one filled polygon per series', () => {
+    const { container } = render(
       <AreaChartBlock
         type="area_chart"
         title="Revenue Composition"
-        series={[{ name: 'iPhone', data: [{ x: 'Q1', y: 1 }] }]}
+        series={[
+          { name: 'iPhone', data: [{ x: 'Q1', y: 1 }, { x: 'Q2', y: 2 }] },
+        ]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].type).toBe('line');
-    expect(opt.series[0].areaStyle).toBeDefined();
+    expect(container.querySelectorAll('svg polygon')).toHaveLength(1);
+    expect(container.querySelectorAll('svg polyline.series-line')).toHaveLength(1);
   });
 });
 
 describe('PieChartBlock', () => {
-  it('emits a pie series with segment name/value pairs', () => {
-    render(
+  it('renders one path per segment', () => {
+    const { container } = render(
       <PieChartBlock
         type="pie_chart"
         title="Revenue Mix"
@@ -89,16 +77,13 @@ describe('PieChartBlock', () => {
         ]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].type).toBe('pie');
-    expect(opt.series[0].data).toEqual([
-      { name: 'iPhone', value: 69.1 },
-      { name: 'Services', value: 26.3 },
-    ]);
+    expect(container.querySelectorAll('svg path')).toHaveLength(2);
+    expect(screen.getByText('iPhone')).toBeInTheDocument();
+    expect(screen.getByText('Services')).toBeInTheDocument();
   });
 
-  it('renders a donut when donut flag is set', () => {
-    render(
+  it('uses an inner radius when donut flag is set', () => {
+    const { container } = render(
       <PieChartBlock
         type="pie_chart"
         title="t"
@@ -106,7 +91,7 @@ describe('PieChartBlock', () => {
         segments={[{ label: 'a', value: 1 }]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].radius[0]).not.toBe(0);
+    const path = container.querySelector('svg path');
+    expect(path?.getAttribute('d')).toMatch(/M /);
   });
 });

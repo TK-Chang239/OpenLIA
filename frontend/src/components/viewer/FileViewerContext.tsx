@@ -15,6 +15,7 @@ export type FileKind =
   | "csv"
   | "image"
   | "docx"
+  | "report"
   | "unknown";
 
 export type FileSource =

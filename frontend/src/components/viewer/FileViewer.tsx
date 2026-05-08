@@ -9,6 +9,7 @@ import { CsvRenderer } from "./renderers/CsvRenderer";
 import { CodeRenderer } from "./renderers/CodeRenderer";
 import { ImageRenderer } from "./renderers/ImageRenderer";
 import { UnsupportedRenderer } from "./renderers/UnsupportedRenderer";
+import { StructuredReportRenderer } from "./renderers/StructuredReportRenderer";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 type ViewerTab = "preview" | "raw";
@@ -176,6 +177,7 @@ export function FileViewer(): JSX.Element | null {
               >
                 {tab === "preview" ? (
                   <>
+                    {current.kind === "report" && <StructuredReportRenderer source={current.source} />}
                     {current.kind === "markdown" && <MarkdownRenderer source={current.source} />}
                     {current.kind === "pdf" && <PdfRenderer source={current.source} />}
                     {current.kind === "csv" && <CsvRenderer source={current.source} />}

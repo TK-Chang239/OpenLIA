@@ -5,6 +5,21 @@ import { MemoryRouter } from "react-router-dom";
 import EquityResearch from "./EquityResearch";
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
 
+vi.mock("../../auth/AuthContext", () => ({
+  useAuth: () => ({
+    status: "authenticated",
+    user: {
+      id: "u1",
+      email: "tk@example.com",
+      display_name: "TK Chang",
+      role: "user",
+    },
+    login: vi.fn(),
+    logout: vi.fn(),
+    refresh: vi.fn(),
+  }),
+}));
+
 vi.mock("../../hooks/useErConfig", () => ({
   useErConfig: () => ({
     config: {
@@ -26,10 +41,30 @@ vi.mock("../../hooks/useErConfig", () => ({
   }),
 }));
 
-vi.mock("../../api/chat", () => ({
-  createSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
-  listMessages: vi.fn().mockResolvedValue({ items: [] }),
-}));
+vi.mock("../../api/chat", async () => {
+  const actual =
+    await vi.importActual<typeof import("../../api/chat")>("../../api/chat");
+  return {
+    ...actual,
+    createSession: vi.fn().mockResolvedValue({
+      id: "sess-1",
+      department: "equity_research",
+      title: "AAPL",
+      is_pinned: false,
+      is_archived: false,
+      created_at: "2026-04-29T00:00:00Z",
+    }),
+    getSession: vi.fn().mockResolvedValue({
+      id: "sess-1",
+      department: "equity_research",
+      title: "AAPL",
+      is_pinned: false,
+      is_archived: false,
+      created_at: "2026-04-29T00:00:00Z",
+    }),
+    listMessages: vi.fn().mockResolvedValue({ items: [] }),
+  };
+});
 
 vi.mock("../../api/reports", async () => {
   const actual = await vi.importActual<typeof import("../../api/reports")>(
@@ -38,28 +73,24 @@ vi.mock("../../api/reports", async () => {
   return {
     ...actual,
     fetchReport: vi.fn().mockResolvedValue({
-      schema_version: "1.0",
+      schema_version: "2.0",
       department: "equity_research",
       generated_at: "2026-04-24T00:00:00Z",
-      cover: { title: "AAPL Initiation", subtitle: "x", tagline: "Strong" },
+      cover: { title: "AAPL · Apple Inc.", subtitle: "x", tagline: "Strong" },
       sections: [],
     }),
   };
 });
 
-const renderPage = () =>
+const renderPage = (initialEntries: string[] = ["/equity-research"]) =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <FileViewerProvider>
         <EquityResearch />
       </FileViewerProvider>
     </MemoryRouter>,
   );
 
-/**
- * Encode an SSE response body from `event:`/`data:` frames so the
- * report-stream / chat-stream consumers parse them correctly.
- */
 function sseBody(frames: { event: string; data: unknown }[]): ReadableStream<Uint8Array> {
   const text = frames
     .map((f) => `event: ${f.event}\ndata: ${JSON.stringify(f.data)}\n\n`)
@@ -84,33 +115,34 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function submitInput(value: string) {
+  const ta = screen.getByPlaceholderText(/Enter a ticker/i) as HTMLTextAreaElement;
+  fireEvent.change(ta, { target: { value } });
+  fireEvent.keyDown(ta, { key: "Enter", code: "Enter" });
+}
+
 describe("EquityResearchPage", () => {
-  it("renders welcome state heading and chips", () => {
+  it("renders the welcome stage when no session is active", () => {
     renderPage();
-    const headings = screen.getAllByRole("heading", { name: /equity research/i });
-    expect(headings.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByRole("button", { name: "AAPL" })).toBeInTheDocument();
+    expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
   });
 
   it("pre-fills the input from the ?ticker= query param (NEW-21-09)", () => {
-    render(
-      <MemoryRouter initialEntries={["/equity-research?ticker=NVDA"]}>
-        <FileViewerProvider>
-          <EquityResearch />
-        </FileViewerProvider>
-      </MemoryRouter>,
-    );
+    renderPage(["/equity-research?ticker=NVDA"]);
     const textarea = screen.getByPlaceholderText(/Enter a ticker/i) as HTMLTextAreaElement;
     expect(textarea.value).toBe("NVDA");
   });
 
-  it("Report Settings button opens the modal", () => {
+  it("composer mode pill opens the report settings modal", () => {
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: /report settings/i }));
+    const modeBtns = screen.getAllByRole("button", {
+      name: /change report mode and length/i,
+    });
+    fireEvent.click(modeBtns[0]);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("clicking a chip auto-submits the /report POST exactly once (NEW-14-03)", async () => {
+  it("typing a ticker and submitting fires the /report POST exactly once", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
       status: 200,
@@ -120,7 +152,7 @@ describe("EquityResearchPage", () => {
 
     renderPage();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "TSLA" }));
+      submitInput("TSLA");
     });
 
     const calls = fetchMock.mock.calls as unknown as [string, RequestInit?][];
@@ -133,7 +165,6 @@ describe("EquityResearchPage", () => {
     const reportCall = calls.find((c) =>
       String(c[0]).includes("/api/departments/equity-research/report"),
     );
-    expect(reportCall).toBeDefined();
     const body = JSON.parse(String(reportCall?.[1]?.body ?? "{}"));
     expect(body.user_input).toBe("TSLA");
     expect(body.session_id).toBe("sess-1");
@@ -161,7 +192,7 @@ describe("EquityResearchPage", () => {
 
     renderPage();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "AAPL" }));
+      submitInput("AAPL");
     });
 
     await waitFor(
@@ -178,17 +209,14 @@ describe("EquityResearchPage", () => {
       ok: true,
       status: 200,
       body: sseBody([
-        {
-          event: "report.error",
-          data: { report_id: "r_42", message: "boom" },
-        },
+        { event: "report.error", data: { report_id: "r_42", message: "boom" } },
       ]),
     }) as unknown as Response);
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     renderPage();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "AAPL" }));
+      submitInput("AAPL");
     });
 
     const retry = await screen.findByRole("button", { name: /try again/i });
@@ -230,14 +258,14 @@ describe("EquityResearchPage", () => {
 
     renderPage();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "AAPL" }));
+      submitInput("AAPL");
     });
 
     await waitFor(() => {
       expect(screen.getByTestId("er-report-card")).toBeInTheDocument();
     });
 
-    const chatInput = await screen.findByRole("textbox");
+    const chatInput = await screen.findByPlaceholderText(/follow-up question/i);
     fireEvent.change(chatInput, { target: { value: "Tell me more" } });
     fireEvent.keyDown(chatInput, { key: "Enter", code: "Enter" });
 

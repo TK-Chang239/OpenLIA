@@ -5,6 +5,11 @@ import { KeyFindingBlock } from './blocks/KeyFindingBlock';
 import { RatingBadgeBlock } from './blocks/RatingBadgeBlock';
 import { GroupBlock, type ForcedHeight } from './blocks/GroupBlock';
 import { PullQuoteBlock } from './blocks/PullQuoteBlock';
+import { CalloutGridBlock } from './blocks/CalloutGridBlock';
+import { TimelineBlock } from './blocks/TimelineBlock';
+import { BulletListBlock } from './blocks/BulletListBlock';
+import { ComparisonSplitBlock } from './blocks/ComparisonSplitBlock';
+import { QuoteBlock } from './blocks/QuoteBlock';
 import { LineChartBlock } from './charts/LineChartBlock';
 import { BarChartBlock } from './charts/BarChartBlock';
 import { AreaChartBlock } from './charts/AreaChartBlock';
@@ -21,7 +26,7 @@ export interface BlockRendererProps {
   forcedHeight?: ForcedHeight;
 }
 
-export function BlockRenderer({ block, forcedHeight }: BlockRendererProps) {
+export function BlockRenderer({ block, forcedHeight: _forcedHeight }: BlockRendererProps) {
   switch (block.type) {
     case 'text':
       return <TextBlock content={block.content} />;
@@ -35,6 +40,16 @@ export function BlockRenderer({ block, forcedHeight }: BlockRendererProps) {
       return <RatingBadgeBlock {...block} />;
     case 'pull_quote':
       return <PullQuoteBlock {...block} />;
+    case 'callout_grid':
+      return <CalloutGridBlock {...block} />;
+    case 'timeline':
+      return <TimelineBlock {...block} />;
+    case 'bullet_list':
+      return <BulletListBlock {...block} />;
+    case 'comparison_split':
+      return <ComparisonSplitBlock {...block} />;
+    case 'quote':
+      return <QuoteBlock {...block} />;
     case 'group':
       return (
         <GroupBlock
@@ -45,25 +60,25 @@ export function BlockRenderer({ block, forcedHeight }: BlockRendererProps) {
         />
       );
     case 'line_chart':
-      return <LineChartBlock {...block} forcedHeight={forcedHeight} />;
+      return <LineChartBlock {...block} />;
     case 'bar_chart':
-      return <BarChartBlock {...block} forcedHeight={forcedHeight} />;
+      return <BarChartBlock {...block} />;
     case 'area_chart':
-      return <AreaChartBlock {...block} forcedHeight={forcedHeight} />;
+      return <AreaChartBlock {...block} />;
     case 'pie_chart':
-      return <PieChartBlock {...block} forcedHeight={forcedHeight} />;
+      return <PieChartBlock {...block} />;
     case 'candlestick_chart':
-      return <CandlestickBlock {...block} forcedHeight={forcedHeight} />;
+      return <CandlestickBlock {...block} />;
     case 'waterfall_chart':
-      return <WaterfallBlock {...block} forcedHeight={forcedHeight} />;
+      return <WaterfallBlock {...block} />;
     case 'scatter_plot':
-      return <ScatterBlock {...block} forcedHeight={forcedHeight} />;
+      return <ScatterBlock {...block} />;
     case 'heatmap':
-      return <HeatmapBlock {...block} forcedHeight={forcedHeight} />;
+      return <HeatmapBlock {...block} />;
     case 'treemap':
-      return <TreemapBlock {...block} forcedHeight={forcedHeight} />;
+      return <TreemapBlock {...block} />;
     case 'combo_chart':
-      return <ComboChartBlock {...block} forcedHeight={forcedHeight} />;
+      return <ComboChartBlock {...block} />;
     default:
       return (
         <div className="report-block--unsupported" role="alert">

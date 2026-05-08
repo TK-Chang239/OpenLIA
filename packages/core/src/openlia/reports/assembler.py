@@ -89,7 +89,7 @@ def assemble_report(
     stripped = _strip_instructions(deepcopy(payload))
     stripped.pop("page_furniture", None)
     stripped["page_furniture"] = _build_furniture(furniture, department, now)
-    stripped.setdefault("schema_version", "1.0")
+    stripped.setdefault("schema_version", "2.0")
     stripped.setdefault("department", department)
     stripped.setdefault("generated_at", now.isoformat())
     _assert_no_tool_placeholders(stripped)

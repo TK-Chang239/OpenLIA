@@ -94,7 +94,7 @@ async def test_end_to_end_morning_briefing_fires_saves_and_notifies(
     await svc.start()
 
     # Confirm the schedule was rehydrated.
-    key = job_key(JobType.MB_BRIEFING, "u_1")
+    key = job_key(JobType.MB_BRIEFING, "u_1", "sch_mb")
     assert key in fake_scheduler.jobs
 
     # --- fire the scheduled callback ---

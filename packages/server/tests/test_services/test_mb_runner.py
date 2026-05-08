@@ -12,7 +12,7 @@ from openlia_server.services.mb_runner import ReportSavedEvent, run_on_demand
 from sqlalchemy.orm import Session
 
 MINIMAL_SCHEMA = {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "department": "morning_briefing",
     "generated_at": "2026-04-23T00:00:00Z",
     "cover": {"title": "Morning Briefing 2026-04-23", "subtitle": "", "tagline": ""},

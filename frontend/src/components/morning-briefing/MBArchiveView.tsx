@@ -1,9 +1,16 @@
-import type { RecentReport } from "../../api/morning-briefing";
+import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
+
+import type { MbSchedule, RecentReport } from "../../api/morning-briefing";
+import { DEMO_BRIEFING_META } from "../../lib/morning-briefing/demo-data";
+import { pickEarliestNextBriefing } from "../../lib/morning-briefing/next-briefing";
+import { MBHeroCard } from "./MBHeroCard";
 import { MBReportCard } from "./MBReportCard";
 
 interface MBArchiveViewProps {
   reports: RecentReport[];
   loading: boolean;
+  schedules?: MbSchedule[];
   onOpen: (report: RecentReport) => void;
   onGoToSettings?: () => void;
 }
@@ -52,6 +59,10 @@ function groupReports(reports: RecentReport[], today: Date): DayGroup[] {
   const out: DayGroup[] = [];
   for (const [key, list] of map) {
     const date = new Date(key);
+    list.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
     out.push({ key, heading: dayHeading(date, today), reports: list });
   }
   out.sort((a, b) => (a.key < b.key ? 1 : -1));
@@ -79,12 +90,32 @@ function SunIcon({ size = 40 }: { size?: number }) {
   );
 }
 
+function searchMatches(report: RecentReport, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (report.title.toLowerCase().includes(q)) return true;
+  const summary = DEMO_BRIEFING_META[report.id]?.summary?.toLowerCase() ?? "";
+  if (summary.includes(q)) return true;
+  return false;
+}
+
 export function MBArchiveView({
   reports,
   loading,
+  schedules,
   onOpen,
   onGoToSettings,
 }: MBArchiveViewProps) {
+  const [search, setSearch] = useState("");
+
+  const filtered = useMemo(
+    () => reports.filter((r) => searchMatches(r, search)),
+    [reports, search],
+  );
+
+  const today = useMemo(() => new Date(), []);
+  const groups = useMemo(() => groupReports(filtered, today), [filtered, today]);
+
   if (loading) {
     return (
       <div
@@ -98,21 +129,30 @@ export function MBArchiveView({
   if (reports.length === 0) {
     return (
       <div
-        className="flex flex-col items-center justify-center text-center py-12 gap-3"
+        className="flex flex-col items-center justify-center text-center py-20 gap-3.5"
         data-testid="mb-archive-empty"
       >
-        <SunIcon size={40} />
-        <p
-          className="text-sm"
-          style={{ color: "var(--color-text-tertiary)" }}
+        <div
+          className="w-14 h-14 rounded-[14px] border bg-[--color-bg-elevated] flex items-center justify-center"
+          style={{ borderColor: "var(--color-border-subtle)" }}
         >
-          No reports yet.
+          <SunIcon size={24} />
+        </div>
+        <h3 className="text-[17px] font-medium m-0 text-[--color-text-primary]">
+          No reports yet
+        </h3>
+        <p
+          className="text-[14px] m-0 max-w-[460px] leading-[1.55]"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          Configure your sections and schedule, then generate your first
+          briefing.
         </p>
         {onGoToSettings && (
           <button
             type="button"
             onClick={onGoToSettings}
-            className="text-sm underline"
+            className="text-sm underline mt-1"
             data-testid="mb-empty-go-to-settings"
           >
             {"⚙ Go to Settings"}
@@ -121,25 +161,139 @@ export function MBArchiveView({
       </div>
     );
   }
-  const groups = groupReports(reports, new Date());
+
+  const todayLabel = today.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  const nextOccurrence = pickEarliestNextBriefing(schedules ?? [], today);
+  const nextBriefing = nextOccurrence?.display ?? "—";
+  const activeSchedules = (schedules ?? []).filter((s) => s.is_enabled).length;
+
+  const heroReport = !search.trim() && groups.length > 0 ? groups[0].reports[0] : null;
+  const restGroups = heroReport
+    ? groups.map((g, i) =>
+        i === 0
+          ? { ...g, reports: g.reports.slice(1) }
+          : g,
+      )
+    : groups;
+
   return (
-    <div className="space-y-6">
-      {groups.map((g) => (
-        <section key={g.key}>
-          <h3
-            className="text-sm font-semibold mb-2"
+    <div className="max-w-[1200px] mx-auto px-8 pt-6 pb-12">
+      <div
+        className="flex items-center gap-[18px] flex-wrap pb-[18px] mb-[22px] border-b animate-feed-fade-up"
+        style={{ borderColor: "var(--color-border-subtle)" }}
+      >
+        <Stat label="Today" value={todayLabel} />
+        <Divider />
+        <Stat label="Next briefing" value={nextBriefing} mono />
+        <Divider />
+        <Stat label="Active schedules" value={String(activeSchedules)} mono />
+        <label
+          className="ml-auto inline-flex items-center gap-2 h-8 px-3 rounded-md border bg-[--color-bg-input] text-[13px] min-w-[240px]"
+          style={{ borderColor: "var(--color-border-secondary)" }}
+        >
+          <Search size={14} className="text-[--color-text-tertiary]" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search briefings…"
+            className="flex-1 bg-transparent border-0 outline-0 text-[13px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] min-w-0"
+            data-testid="mb-archive-search"
+          />
+        </label>
+      </div>
+
+      {heroReport ? (
+        <div
+          className="mb-[22px] animate-feed-fade-up"
+          style={{ animationDelay: "80ms" }}
+        >
+          <MBHeroCard report={heroReport} onOpen={onOpen} />
+        </div>
+      ) : null}
+
+      <div className="space-y-[22px]">
+        {restGroups.map((g, gi) => {
+          if (g.reports.length === 0) return null;
+          const delay = 160 + gi * 80;
+          return (
+            <section
+              key={g.key}
+              className="animate-feed-fade-up"
+              style={{ animationDelay: `${delay}ms` }}
+            >
+              <h3
+                className="m-0 mb-3 text-[13px] font-medium flex items-baseline gap-2"
+                style={{ color: "var(--color-text-secondary)" }}
+                data-testid={`mb-archive-group-${g.key}`}
+              >
+                <span className="text-[--color-text-primary] font-medium">
+                  {g.heading}
+                </span>
+                <span
+                  className="font-mono text-[10px] tracking-[0.08em]"
+                  style={{ color: "var(--color-text-tertiary)" }}
+                >
+                  · {g.reports.length} report{g.reports.length === 1 ? "" : "s"}
+                </span>
+              </h3>
+              <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
+                {g.reports.map((r) => (
+                  <MBReportCard key={r.id} report={r} onOpen={onOpen} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
+        {groups.length === 0 ? (
+          <p
+            className="text-sm py-8 text-center"
             style={{ color: "var(--color-text-tertiary)" }}
-            data-testid={`mb-archive-group-${g.key}`}
           >
-            {g.heading}
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {g.reports.map((r) => (
-              <MBReportCard key={r.id} report={r} onOpen={onOpen} />
-            ))}
-          </div>
-        </section>
-      ))}
+            No briefings match your search.
+          </p>
+        ) : null}
+      </div>
     </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span
+        className="font-mono text-[9.5px] tracking-[0.12em] uppercase"
+        style={{ color: "var(--color-text-tertiary)" }}
+      >
+        {label}
+      </span>
+      <span
+        className={`text-[15px] font-medium text-[--color-text-primary] ${mono ? "font-mono tabular-nums" : ""}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function Divider() {
+  return (
+    <span
+      className="w-px h-7"
+      style={{ background: "var(--color-border-subtle)" }}
+    />
   );
 }

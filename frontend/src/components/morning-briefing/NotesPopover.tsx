@@ -29,33 +29,26 @@ export function NotesPopover({ topic, notes, onSave, children }: Props) {
         <Popover.Content
           align="start"
           sideOffset={6}
-          className="rounded-[var(--radius-lg,0.5rem)] border p-3 shadow-md w-64 z-50"
-          style={{
-            borderColor: "var(--color-border-subtle)",
-            background: "var(--color-bg-base)",
-          }}
+          className="z-[60] flex flex-col gap-2.5 p-4 w-[296px] rounded-[--radius-lg] border bg-[--color-bg-elevated] shadow-md"
+          style={{ borderColor: "var(--color-border-subtle)" }}
           data-testid={`notes-popover-${topic}`}
         >
-          <label className="block text-xs mb-1 font-medium">
-            Notes for {topic}
-          </label>
+          <span className="text-[15px] font-semibold text-[--color-text-primary]">
+            {topic}
+          </span>
           <textarea
             data-testid={`notes-popover-textarea-${topic}`}
-            className="w-full text-xs rounded border p-1"
+            placeholder="Add sub-topics or focus areas… (e.g., Semiconductors, China–Taiwan tension)"
+            className="w-full h-20 resize-none rounded-md border bg-[--color-bg-input] px-2.5 py-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary] placeholder:text-[--color-text-tertiary]"
             style={{ borderColor: "var(--color-border-subtle)" }}
-            rows={4}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
           />
-          <div className="flex justify-end mt-2">
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={done}
-              className="px-3 py-1 rounded text-xs"
-              style={{
-                background: "var(--color-accent-primary)",
-                color: "var(--color-accent-on)",
-              }}
+              className="inline-flex items-center h-7 px-3 rounded-md text-[13px] font-medium bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover]"
               data-testid={`notes-popover-done-${topic}`}
             >
               Done

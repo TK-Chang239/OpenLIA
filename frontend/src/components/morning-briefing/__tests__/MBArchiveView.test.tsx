@@ -23,6 +23,7 @@ describe("MBArchiveView", () => {
 
   it("groups reports by date heading (Today / Yesterday / older)", () => {
     const today = new Date("2026-04-09T15:00:00Z");
+    const todayEarlier = new Date("2026-04-09T07:00:00Z");
     const yesterday = new Date(today.getTime() - 24 * 3600 * 1000);
     const older = new Date("2026-04-07T12:00:00Z");
     const reports: RecentReport[] = [
@@ -31,6 +32,12 @@ describe("MBArchiveView", () => {
         title: "A",
         report_type: "morning_briefing",
         created_at: today.toISOString(),
+      },
+      {
+        id: "1b",
+        title: "A2",
+        report_type: "morning_briefing",
+        created_at: todayEarlier.toISOString(),
       },
       {
         id: "2",
@@ -57,6 +64,7 @@ describe("MBArchiveView", () => {
     expect(screen.getByText(/^Today —/)).toBeInTheDocument();
     expect(screen.getByText(/^Yesterday —/)).toBeInTheDocument();
     expect(screen.getByText(/^April 7$/)).toBeInTheDocument();
+    expect(screen.getByTestId("mb-hero-card")).toBeInTheDocument();
     vi.useRealTimers();
   });
 });

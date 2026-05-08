@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { X } from "lucide-react";
 
 import {
   CustomSection,
@@ -20,7 +21,11 @@ interface Props {
   onSave: (next: EuConfig) => Promise<void>;
 }
 
-const LENGTHS: ReportLength[] = ["concise", "normal", "elaborative"];
+const LENGTHS: { id: ReportLength; label: string; hint: string }[] = [
+  { id: "concise", label: "Concise", hint: "Shorter" },
+  { id: "normal", label: "Normal", hint: "Balanced" },
+  { id: "elaborative", label: "Elaborative", hint: "Deeper" },
+];
 
 function randomId(): string {
   return `custom_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
@@ -83,91 +88,176 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
   return (
     <Dialog.Root open={open} onOpenChange={(v) => (!v ? onClose() : null)}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[560px] max-h-[85vh] bg-[--color-bg-elevated] rounded-[--radius-lg] p-6 shadow-lg overflow-y-auto">
-          <Dialog.Title className="text-lg font-semibold mb-4">
-            Report Settings
-          </Dialog.Title>
-
-          <section className="mb-4">
-            <h4 className="text-xs uppercase text-[--color-text-tertiary] tracking-[0.04em] mb-2">
-              Report Length
-            </h4>
-            <div className="flex gap-2">
-              {LENGTHS.map((l) => (
-                <label key={l} className="text-sm flex items-center gap-1">
-                  <input
-                    type="radio"
-                    name="length"
-                    checked={length === l}
-                    onChange={() => setLength(l)}
-                    aria-label={l}
-                  />
-                  {l[0].toUpperCase() + l.slice(1)}
-                </label>
-              ))}
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-[560px] max-w-[92vw] max-h-[85vh] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[12px] shadow-lg flex flex-col overflow-hidden">
+          <header className="flex items-center justify-between px-5 h-12 border-b border-[--color-border-subtle] flex-shrink-0">
+            <div>
+              <Dialog.Title asChild>
+                <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
+                  Report Settings
+                </h2>
+              </Dialog.Title>
+              <Dialog.Description asChild>
+                <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[--color-text-tertiary] m-0">
+                  Customize earnings update reports
+                </p>
+              </Dialog.Description>
             </div>
-          </section>
-
-          <section className="mb-4">
-            <h4 className="text-xs uppercase text-[--color-text-tertiary] tracking-[0.04em] mb-2">
-              Sections
-            </h4>
-            {defaultRows.map((row) => (
-              <label
-                key={row.id}
-                className="flex items-start gap-2 text-sm mb-2"
-              >
-                <input
-                  type="checkbox"
-                  aria-label={row.title}
-                  checked={enabled.has(row.id)}
-                  onChange={() => toggle(row.id)}
-                />
-                <span>
-                  <strong>{row.title}</strong>
-                  <span className="text-[--color-text-secondary]">
-                    {" "}— {row.description}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </section>
-
-          <section className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-xs uppercase text-[--color-text-tertiary] tracking-[0.04em]">
-                Custom Sections
-              </h4>
+            <Dialog.Close asChild>
               <button
                 type="button"
-                onClick={addCustom}
-                className="text-sm text-[--color-accent-primary]"
+                aria-label="Close report settings"
+                className="text-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
               >
-                + Custom Section
+                <X size={16} />
               </button>
-            </div>
-            {customs.map((c, idx) => (
-              <CustomSectionRow
-                key={c.id}
-                value={c}
-                onChange={(next) =>
-                  setCustoms((prev) =>
-                    prev.map((x, i) => (i === idx ? next : x)),
-                  )
-                }
-                onRemove={() =>
-                  setCustoms((prev) => prev.filter((_, i) => i !== idx))
-                }
-              />
-            ))}
-          </section>
+            </Dialog.Close>
+          </header>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            <section className="mb-7">
+              <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
+                Report length
+              </h3>
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                How thoroughly the report walks through each section.
+              </p>
+              <div
+                role="radiogroup"
+                aria-label="Report length"
+                className="inline-flex gap-1 p-1 bg-[--color-surface-hover] rounded-lg"
+              >
+                {LENGTHS.map((l) => {
+                  const active = length === l.id;
+                  return (
+                    <button
+                      key={l.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      aria-label={l.id}
+                      onClick={() => setLength(l.id)}
+                      className={[
+                        "px-3.5 py-1.5 rounded-md text-[13px] transition-all duration-[--duration-fast]",
+                        active
+                          ? "bg-[--color-bg-elevated] text-[--color-text-primary] font-medium shadow-sm"
+                          : "text-[--color-text-secondary] hover:text-[--color-text-primary]",
+                      ].join(" ")}
+                    >
+                      {l.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            <section className="mb-7">
+              <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
+                Sections
+              </h3>
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                Toggle which default sections each report includes.
+              </p>
+              <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden">
+                {defaultRows.map((row, idx) => {
+                  const on = enabled.has(row.id);
+                  return (
+                    <label
+                      key={row.id}
+                      className={[
+                        "flex items-center justify-between gap-4 px-4 py-3.5 cursor-pointer hover:bg-[--color-surface-hover] transition-colors",
+                        idx < defaultRows.length - 1
+                          ? "border-b border-[--color-border-subtle]"
+                          : "",
+                      ].join(" ")}
+                    >
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-[13.5px] font-medium text-[--color-text-primary]">
+                          {row.title}
+                        </span>
+                        <span className="text-[12px] text-[--color-text-secondary] leading-[1.4]">
+                          {row.description}
+                        </span>
+                      </div>
+                      <span
+                        role="switch"
+                        aria-checked={on}
+                        className={[
+                          "relative w-10 h-6 rounded-full flex-shrink-0 transition-colors",
+                          on
+                            ? "bg-[--color-accent-primary]"
+                            : "bg-[--color-border-subtle]",
+                        ].join(" ")}
+                      >
+                        <span
+                          className={[
+                            "absolute top-1 w-4 h-4 rounded-full bg-white shadow-sm transition-[left]",
+                            on ? "left-5" : "left-1",
+                          ].join(" ")}
+                        />
+                      </span>
+                      <input
+                        type="checkbox"
+                        aria-label={row.title}
+                        checked={on}
+                        onChange={() => toggle(row.id)}
+                        className="sr-only"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+
+            <hr className="border-0 border-t border-[--color-border-subtle] my-7" />
+
+            <section className="mb-2">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-[15px] font-semibold text-[--color-text-primary]">
+                  Custom sections
+                </h3>
+                <button
+                  type="button"
+                  onClick={addCustom}
+                  className="inline-flex items-center h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px]"
+                >
+                  + Custom section
+                </button>
+              </div>
+              <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
+                Add your own sections — the description guides the LLM on what
+                to write.
+              </p>
+              {customs.length === 0 ? (
+                <div className="border border-dashed border-[--color-border-subtle] rounded-md px-4 py-6 text-center text-[12.5px] text-[--color-text-tertiary]">
+                  No custom sections yet.
+                </div>
+              ) : (
+                customs.map((c, idx) => (
+                  <CustomSectionRow
+                    key={c.id}
+                    value={c}
+                    onChange={(next) =>
+                      setCustoms((prev) =>
+                        prev.map((x, i) => (i === idx ? next : x)),
+                      )
+                    }
+                    onRemove={() =>
+                      setCustoms((prev) => prev.filter((_, i) => i !== idx))
+                    }
+                  />
+                ))
+              )}
+            </section>
+          </div>
+
+          <footer className="flex items-center justify-end gap-2 px-5 h-14 border-t border-[--color-border-subtle] flex-shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="text-sm text-[--color-text-secondary] px-3 h-8 rounded-[--radius-md]"
+              className="inline-flex items-center h-9 px-4 rounded-md border border-[--color-border-subtle] bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:border-[--color-border-strong] transition-colors text-[13px] font-medium"
             >
               Cancel
             </button>
@@ -175,11 +265,11 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
               type="button"
               onClick={() => void handleSave()}
               disabled={saving}
-              className="text-sm bg-[--color-accent-primary] text-white px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover] disabled:opacity-50"
+              className="inline-flex items-center h-9 px-5 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] disabled:opacity-50 transition-colors"
             >
-              {saving ? "Saving..." : "Save"}
+              {saving ? "Saving..." : "Save changes"}
             </button>
-          </div>
+          </footer>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

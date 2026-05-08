@@ -10,7 +10,7 @@ from uuid import uuid4
 from openlia.llm.runtime.events import ReportComplete, ReportStart
 
 MINIMAL_SCHEMA = {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "department": "earnings_update",
     "generated_at": "2026-04-23T00:00:00Z",
     "cover": {"title": "AAPL Q1 FY2026", "subtitle": "", "tagline": ""},
