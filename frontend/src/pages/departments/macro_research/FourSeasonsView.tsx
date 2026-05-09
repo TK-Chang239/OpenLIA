@@ -1,122 +1,293 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  getDashboard,
-  type DashboardResult,
-} from "../../../api/macro_research";
-import {
-  ErrorBlock,
-  FreshnessBadge,
-  LoadingBlock,
-  Panel,
-  SeverityPill,
-  SmartModeToggle,
-  tierOf,
-} from "./DashboardFrame";
+import { useEffect, useState } from "react";
 
-type T3 = {
-  season?: string;
-  confidence?: string;
-  growth_axis?: string;
-  inflation_axis?: string;
-  credit_spread?: number;
-  asset_playbook?: { best?: string[]; worst?: string[] };
-};
+import { getDashboard } from "../../../api/macro_research";
+import { FOUR_SEASONS_FALLBACK } from "../../../lib/macro_research/dalio_copy/four_seasons";
+import type {
+  FourSeasonsData,
+  Status,
+  T2AssetCard,
+  T2Direction,
+  T2QuadrantMarker,
+  T2QuadrantSeason,
+  T2ScorecardRow,
+  T2Tone,
+} from "../../../lib/macro_research/dalio_copy/types";
+import {
+  DashHero,
+  ProseCard,
+  ScenarioDuo,
+  SectionLabel,
+  Spill,
+  SrcFoot,
+  Verdict,
+} from "../../../components/macro_research/_shared/widgets";
+
+function toneToStatus(tone: T2Tone): Status {
+  switch (tone) {
+    case "red":    return "bad";
+    case "amber":  return "warn";
+    case "green":  return "ok";
+    case "blue":   return "info";
+    case "purple": return "acid";
+  }
+}
+
+function fillClassFromStatus(s: Status): string {
+  switch (s) {
+    case "bad":  return "mr-fill-bad";
+    case "warn": return "mr-fill-warn";
+    case "ok":
+    case "info": return "mr-fill-ok";
+    case "acid": return "mr-fill-acid";
+    case "flat": return "mr-fill-flat";
+  }
+}
 
 export default function FourSeasonsView(): JSX.Element {
-  const [data, setData] = useState<DashboardResult | null>(null);
-  const [smartMode, setSmartMode] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback((sm: boolean) => {
-    getDashboard("four_seasons", sm)
-      .then((r) => {
-        setData(r);
-        setError(null);
-      })
-      .catch((e: unknown) => setError(String(e)));
-  }, []);
+  const [, setLive] = useState<FourSeasonsData | null>(null);
 
   useEffect(() => {
-    load(smartMode);
-  }, [load, smartMode]);
+    getDashboard("four_seasons").catch(() => undefined);
+  }, []);
 
-  if (error) return <ErrorBlock message={error} />;
-  if (!data) return <LoadingBlock label="Four Seasons" />;
+  void setLive;
+  const data: FourSeasonsData = FOUR_SEASONS_FALLBACK;
 
-  const t3 = tierOf(data, "T3")?.data as T3 | undefined;
-  const playbook = t3?.asset_playbook ?? { best: [], worst: [] };
+  const heroStats = data.scorecard.rows
+    .slice(0, 4)
+    .map((r) => ({
+      k: r.name.replace(/\s*\(.*\)/, "").split(",")[0].trim(),
+      v: r.current,
+      status: toneToStatus(r.currentTone),
+    }));
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-[--color-text-primary]">
-            Four Seasons
-          </h2>
-          <SeverityPill severity={data.severity} />
-          <FreshnessBadge generatedAt={data.generated_at} />
-        </div>
-        <div className="flex items-center gap-3">
-          <SmartModeToggle value={smartMode} onChange={setSmartMode} />
-        </div>
-      </header>
+    <article>
+      <DashHero
+        eyebrow={data.header.subtitle}
+        headline={data.header.title}
+        lede={data.transitionRisk.intro}
+        stats={heroStats}
+      />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Panel title="Season">
-          <div className="text-2xl font-semibold text-[--color-text-primary]">
-            {t3?.season ?? "Unknown"}
-          </div>
-          <div className="mt-1 text-xs text-[--color-text-tertiary]">
-            Confidence: {t3?.confidence ?? "—"}
-          </div>
-        </Panel>
-        <Panel title="Growth / Inflation">
-          <ul className="space-y-1 text-sm text-[--color-text-primary]">
-            <li>Growth: {t3?.growth_axis ?? "—"}</li>
-            <li>Inflation: {t3?.inflation_axis ?? "—"}</li>
-            <li>
-              Credit spread:{" "}
-              <span className="font-mono">
-                {typeof t3?.credit_spread === "number"
-                  ? t3.credit_spread.toFixed(3)
-                  : "—"}
-              </span>
-            </li>
-          </ul>
-        </Panel>
-        <Panel title="Asset Playbook">
-          <div className="space-y-2 text-sm">
-            <div>
-              <div className="text-xs uppercase text-[--color-feedback-success]">
-                Best
+      <SectionLabel first count={`${data.scorecard.rows.length} indicators`}>
+        Section A — quadrant inputs
+      </SectionLabel>
+      <T2Scorecard rows={data.scorecard.rows} />
+
+      <SectionLabel>Section B — current macro regime</SectionLabel>
+      <QuadrantMap seasons={data.quadrant.seasons} markers={data.quadrant.markers} />
+
+      <div className="mr-card" data-testid="t2-verdict" style={{ padding: "18px 20px", margin: "16px 0" }}>
+        <SectionLabel>Primary season verdict</SectionLabel>
+        <div className="mr-card-title" style={{ fontSize: 18, marginTop: 8 }}>
+          {data.verdict.title}
+        </div>
+        <div className="mr-card-body-text" style={{ marginTop: 6 }}>
+          {data.verdict.body}
+        </div>
+        <div className="mr-grid3" style={{ marginTop: 14 }}>
+          {data.verdict.sideCards.map((s) => (
+            <div key={s.label} className="mr-card-sm">
+              <div
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  letterSpacing: "0.12em",
+                  textTransform: "uppercase",
+                  color: "var(--color-text-tertiary)",
+                }}
+              >
+                {s.label}
               </div>
-              <ul className="list-disc pl-4 text-[--color-text-primary]">
-                {(playbook.best ?? []).map((x) => (
-                  <li key={`b-${x}`}>{x}</li>
-                ))}
-                {(playbook.best ?? []).length === 0 ? <li>—</li> : null}
-              </ul>
-            </div>
-            <div>
-              <div className="text-xs uppercase text-[--color-feedback-error]">
-                Worst
+              <div
+                className="mr-card-title"
+                style={{
+                  fontSize: 18,
+                  color:
+                    s.valueTone === "red"   ? "var(--color-feedback-error)" :
+                    s.valueTone === "amber" ? "var(--color-feedback-warning)" :
+                    s.valueTone === "green" ? "var(--color-feedback-success)" :
+                    "var(--color-text-primary)",
+                }}
+              >
+                {s.value}
               </div>
-              <ul className="list-disc pl-4 text-[--color-text-primary]">
-                {(playbook.worst ?? []).map((x) => (
-                  <li key={`w-${x}`}>{x}</li>
-                ))}
-                {(playbook.worst ?? []).length === 0 ? <li>—</li> : null}
-              </ul>
+              <div className="mr-card-body-text">{s.note}</div>
             </div>
-          </div>
-        </Panel>
+          ))}
+        </div>
       </div>
 
-      {smartMode ? (
-        <div className="text-xs text-[--color-text-tertiary]">
-          Smart Mode adjusts axis thresholds based on recent surprises.
+      <SectionLabel>Section C — historical parallels & transition risk</SectionLabel>
+      <div className="mr-grid2" style={{ marginBottom: 14 }}>
+        {data.parallels.cards.map((c) => (
+          <ProseCard key={c.title} title={c.title} body={c.body} />
+        ))}
+      </div>
+      <div className="mr-card" data-testid="t2-transition-risk" style={{ padding: "18px 20px", marginBottom: 14 }}>
+        <p className="mr-card-body-text" style={{ marginBottom: 14 }}>
+          {data.transitionRisk.intro}
+        </p>
+        <ScenarioDuo
+          bull={{ label: "Bull case", title: data.transitionRisk.bull.title, body: data.transitionRisk.bull.body }}
+          bear={{ label: "Bear case", title: data.transitionRisk.bear.title, body: data.transitionRisk.bear.body }}
+        />
+        <div className="mr-card-sm" style={{ marginTop: 14 }}>
+          <div className="mr-card-title">{data.transitionRisk.keyIndicator.title}</div>
+          <div className="mr-card-body-text">{data.transitionRisk.keyIndicator.body}</div>
+        </div>
+      </div>
+
+      <SectionLabel>Section D — asset playbook</SectionLabel>
+      <div className="mr-grid4" data-testid="t2-asset-playbook" style={{ marginBottom: 14 }}>
+        {data.assetPlaybook.cards.map((c) => (
+          <AssetTile key={c.label} card={c} />
+        ))}
+      </div>
+
+      {data.notes.length > 0 ? (
+        <div className="mr-grid2" style={{ marginBottom: 14 }}>
+          {data.notes.map((n) => (
+            <ProseCard key={n.title} title={n.title} body={n.body} />
+          ))}
         </div>
       ) : null}
-    </section>
+
+      <Verdict
+        meta={
+          <>
+            T2 SYNTHESIS · DALIO FRAMEWORK <span className="dot" /> April 2026
+          </>
+        }
+        headline={data.verdict.title}
+        body={data.verdict.body}
+      />
+
+      <SrcFoot>
+        <strong>Sources · </strong>
+        {data.sources}
+      </SrcFoot>
+    </article>
+  );
+}
+
+/* ───── T2-only widgets ───── */
+
+function T2Scorecard({ rows }: { rows: T2ScorecardRow[] }): JSX.Element {
+  const cols = "minmax(0,1.6fr) minmax(0,0.9fr) minmax(0,1.0fr) 100px 110px";
+  return (
+    <div className="mr-score" data-testid="t2-scorecard">
+      <div className="head" style={{ gridTemplateColumns: cols }}>
+        <span>Indicator</span>
+        <span>Current</span>
+        <span>3-month trend</span>
+        <span>Axis signal</span>
+        <span>Direction</span>
+      </div>
+      {rows.map((r) => (
+        <T2Row key={r.name} row={r} cols={cols} />
+      ))}
+    </div>
+  );
+}
+
+function T2Row({ row, cols }: { row: T2ScorecardRow; cols: string }): JSX.Element {
+  const fillStatus = toneToStatus(row.fillTone);
+  return (
+    <div className="row" style={{ gridTemplateColumns: cols }}>
+      <div>
+        <div className="name">{row.name}</div>
+        <div className="sub">{row.sub}</div>
+        <div className="track">
+          <div className={`fill ${fillClassFromStatus(fillStatus)}`} style={{ width: `${row.fillPct}%` }} />
+        </div>
+      </div>
+      <div>
+        <div className={`val ${toneToStatus(row.currentTone)}`}>
+          {row.current}
+          <small>{row.currentMeta}</small>
+        </div>
+      </div>
+      <div className="ctx">{row.trend}</div>
+      <div>
+        <Spill status={toneToStatus(row.axisTone)}>{row.axisLabel}</Spill>
+      </div>
+      <div className={`ctx ${toneToStatus(row.directionTone)}`} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <DirectionGlyph direction={row.direction} />
+        <span>{row.directionLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function DirectionGlyph({ direction }: { direction: T2Direction }): JSX.Element {
+  const ch = direction === "up" ? "▲" : direction === "down" ? "▼" : "▬";
+  return <span aria-hidden>{ch}</span>;
+}
+
+function QuadrantMap({
+  seasons,
+  markers,
+}: {
+  seasons: FourSeasonsData["quadrant"]["seasons"];
+  markers: T2QuadrantMarker[];
+}): JSX.Element {
+  return (
+    <div className="mr-quadrant" data-testid="t2-quadrant-map">
+      <div className="mr-quadrant-axis-h" />
+      <div className="mr-quadrant-axis-v" />
+      <div className="mr-quadrant-axis-label t-top">Inflation rising</div>
+      <div className="mr-quadrant-axis-label t-bottom">Inflation falling</div>
+      <div className="mr-quadrant-axis-label t-left">Growth falling</div>
+      <div className="mr-quadrant-axis-label t-right">Growth rising</div>
+
+      <QuadrantCell season={seasons.tl} />
+      <QuadrantCell season={seasons.tr} />
+      <QuadrantCell season={seasons.bl} />
+      <QuadrantCell season={seasons.br} />
+
+      {markers.map((m) => (
+        <Marker key={m.label} marker={m} />
+      ))}
+    </div>
+  );
+}
+
+function QuadrantCell({ season }: { season: T2QuadrantSeason }): JSX.Element {
+  return (
+    <div className={`mr-quadrant-cell ${toneToStatus(season.tone)}`}>
+      <div className="name">{season.name}</div>
+      <div className="sub">{season.sub}</div>
+      <div className="pill">{season.pillLabel}</div>
+    </div>
+  );
+}
+
+function Marker({ marker }: { marker: T2QuadrantMarker }): JSX.Element {
+  const labelTop = `${Math.min(marker.yPct + 8, 96)}%`;
+  return (
+    <>
+      <div
+        className={`mr-quadrant-marker ${marker.variant === "prev" ? "is-prev" : ""}`}
+        style={{ left: `${marker.xPct}%`, top: `${marker.yPct}%` }}
+        data-testid={`t2-quadrant-marker-${marker.variant}`}
+      >
+        <div className="core" />
+      </div>
+      <div className="mr-quadrant-marker-label" style={{ left: `${marker.xPct}%`, top: labelTop }}>
+        {marker.label}
+      </div>
+    </>
+  );
+}
+
+function AssetTile({ card }: { card: T2AssetCard }): JSX.Element {
+  return (
+    <div className={`mr-asset-tile ${toneToStatus(card.tone)}`}>
+      <span className="lbl">{card.label}</span>
+      <span className="posture">{card.posture}</span>
+      <span className="body">{card.body}</span>
+    </div>
   );
 }

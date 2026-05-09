@@ -453,3 +453,13 @@ body {
     page-break-inside: avoid;
   }
 }
+
+/* Loading bar — used by route Suspense fallbacks before code chunks load. */
+.mr-suspense-bar {
+  animation: mr-suspense-slide 1.2s cubic-bezier(0.76, 0, 0.24, 1) infinite;
+  transform-origin: left center;
+}
+@keyframes mr-suspense-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
