@@ -94,6 +94,7 @@ class EquityResearchRunner:
                 department=self._dept.name,
                 mode=active.mode,
                 schema=schema_obj,
+                source_session_id=session_id,
             )
             self._db.commit()
             yield ReportSavedEvent(report_id=report_id)

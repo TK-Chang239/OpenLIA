@@ -1,149 +1,346 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  getDashboard,
-  runAssessment,
-  type DashboardResult,
-} from "../../../api/macro_research";
-import {
-  AssessmentBlock,
-  ErrorBlock,
-  FreshnessBadge,
-  LoadingBlock,
-  Panel,
-  SeverityPill,
-  SmartModeToggle,
-  tierOf,
-} from "./DashboardFrame";
+import { useEffect, useState } from "react";
 
-type T3 = {
-  wealth_shift_stage?: "early" | "mid" | "late";
-  wealth_shift_components?: {
-    institutional?: number;
-    market?: number;
-    geopolitical?: number;
-    retail?: number;
-  };
-};
+import { getDashboard } from "../../../api/macro_research";
+import { WORLD_ORDER_FALLBACK } from "../../../lib/macro_research/dalio_copy/world_order";
+import type {
+  Status,
+  T4AnalogCell,
+  T4CurrencyRow,
+  T4DalioQuote,
+  T4GoldRangeStat,
+  T4MarkerRow,
+  T4ProseCard,
+  T4ReserveChart,
+  T4ScorecardRow,
+  T4StageCell,
+  T4Tone,
+  WorldOrderData,
+} from "../../../lib/macro_research/dalio_copy/types";
+import {
+  DashHero,
+  PhaseStrip,
+  ProseCard,
+  ScoreTable,
+  SectionLabel,
+  Spill,
+  SrcFoot,
+  Verdict,
+} from "../../../components/macro_research/_shared/widgets";
+import { ReserveLineChart } from "../../../components/macro_research/_shared/visuals";
 
-const STAGE_LABEL: Record<string, string> = {
-  early: "Early — Reserve Intact",
-  mid: "Mid — Erosion Underway",
-  late: "Late — Succession Phase",
-};
+function toneToStatus(tone: T4Tone): Status {
+  switch (tone) {
+    case "red":   return "bad";
+    case "amber": return "warn";
+    case "green": return "ok";
+    case "blue":  return "info";
+  }
+}
 
 export default function WorldOrderView(): JSX.Element {
-  const [data, setData] = useState<DashboardResult | null>(null);
-  const [smartMode, setSmartMode] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-
-  const load = useCallback((sm: boolean) => {
-    getDashboard("world_order", sm)
-      .then((r) => {
-        setData(r);
-        setError(null);
-      })
-      .catch((e: unknown) => setError(String(e)));
-  }, []);
+  const [, setLive] = useState<WorldOrderData | null>(null);
 
   useEffect(() => {
-    load(smartMode);
-  }, [load, smartMode]);
+    getDashboard("world_order").catch(() => undefined);
+  }, []);
 
-  const onRun = async () => {
-    setRunning(true);
-    try {
-      await runAssessment("world_order");
-      load(smartMode);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setRunning(false);
-    }
+  void setLive;
+  const data: WorldOrderData = WORLD_ORDER_FALLBACK;
+
+  const HERO_KEYS: Record<string, string> = {
+    "USD share of global FX reserves": "USD reserve",
+    "Net central bank gold purchases": "CB gold",
+    "Foreign Treasury holdings trend": "UST held",
+    "Dollar Index (DXY)": "DXY",
   };
-
-  if (error) return <ErrorBlock message={error} />;
-  if (!data) return <LoadingBlock label="World Order" />;
-
-  const t3 = tierOf(data, "T3")?.data as T3 | undefined;
-  const t4 = tierOf(data, "T4")?.data as { assessment?: string } | undefined;
-  const components = t3?.wealth_shift_components ?? {};
+  const heroStats = data.scorecard.rows.slice(0, 4).map((r: T4ScorecardRow) => ({
+    k: HERO_KEYS[r.name] ?? r.name.split(/\s*[/(]/)[0].trim(),
+    v: r.current,
+    status: toneToStatus(r.currentTone),
+  }));
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-[--color-text-primary]">
-            World Order
-          </h2>
-          <SeverityPill severity={data.severity} />
-          <FreshnessBadge generatedAt={data.generated_at} />
-        </div>
-        <div className="flex items-center gap-3">
-          <SmartModeToggle value={smartMode} onChange={setSmartMode} />
-          <button
-            type="button"
-            disabled={running}
-            onClick={onRun}
-            className="rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-sm text-[--color-text-primary] disabled:opacity-60"
-          >
-            {running ? "Running…" : "Run assessment now"}
-          </button>
-        </div>
-      </header>
+    <article>
+      <DashHero
+        eyebrow={data.header.subtitle}
+        headline={data.header.title}
+        lede={data.empireCycle.quote.body}
+        stats={heroStats}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Empire Stage">
-          <div className="text-2xl font-semibold text-[--color-text-primary]">
-            {STAGE_LABEL[t3?.wealth_shift_stage ?? ""] ??
-              (t3?.wealth_shift_stage ?? "Unknown")}
-          </div>
-        </Panel>
-        <Panel title="Reserve Currency Health">
-          <div className="text-sm text-[--color-text-secondary]">
-            Aggregated from institutional, market, geopolitical, and retail
-            shift components. See Wealth Shift panel for per-axis tiers.
-          </div>
-        </Panel>
-        <Panel title="Wealth Shift Components" testid="wealth-shift-panel">
-          <ul className="space-y-1 text-sm text-[--color-text-primary]">
-            <li className="flex justify-between">
-              <span>Institutional</span>
-              <span className="font-mono">{components.institutional ?? "—"}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Market</span>
-              <span className="font-mono">{components.market ?? "—"}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Geopolitical</span>
-              <span className="font-mono">{components.geopolitical ?? "—"}</span>
-            </li>
-            <li className="flex justify-between">
-              <span>Retail</span>
-              <span className="font-mono">{components.retail ?? "—"}</span>
-            </li>
-          </ul>
-          <div className="mt-2 text-xs text-[--color-text-tertiary]">
-            1 = early, 2 = mid, 3 = late stage per axis.
-          </div>
-        </Panel>
-        <Panel title="Headline">
-          <div className="text-sm text-[--color-text-primary]">
-            {data.headline ?? "—"}
-          </div>
-        </Panel>
+      <SectionLabel first count={`${data.scorecard.rows.length} indicators`}>
+        {data.scorecard.label}
+      </SectionLabel>
+      <ScoreTable
+        testid="t4-scorecard"
+        headers={["Indicator", "Current", "Trend / context", "Signal"]}
+        rows={data.scorecard.rows.map((r) => ({
+          name: r.name,
+          sub: r.sub,
+          fillPct: r.fillPct,
+          fillStatus: toneToStatus(r.fillTone),
+          current: r.current,
+          currentStatus: toneToStatus(r.currentTone),
+          currentMeta: r.currentMeta,
+          ctx: r.trend,
+          status: { label: r.signalLabel, tone: toneToStatus(r.signalTone) },
+        }))}
+      />
+
+      <ReserveChartCard chart={data.reserveChart} />
+
+      <SectionLabel count={data.empireCycle.label}>
+        Section B — empire cycle position
+      </SectionLabel>
+      <div className="mr-card" data-testid="t4-empire-cycle" style={{ padding: "16px 18px", marginBottom: 14 }}>
+        <div className="mr-card-title" style={{ marginBottom: 12 }}>{data.empireCycle.stripTitle}</div>
+        <div data-testid="t4-stage-strip">
+          <PhaseStrip
+            cells={data.empireCycle.stages.map((s: T4StageCell) => ({
+              name: `${s.num} · ${s.name}`,
+              pill: s.range,
+              state: s.state,
+              weight: s.weight,
+              tone: s.state === "active" ? "warn" : undefined,
+            }))}
+          />
+        </div>
+
+        <DalioQuote quote={data.empireCycle.quote} />
+
+        <div style={{
+          fontFamily: "var(--font-mono)",
+          fontSize: 10,
+          letterSpacing: "0.12em",
+          textTransform: "uppercase",
+          color: "var(--color-text-tertiary)",
+          margin: "12px 0 6px",
+        }}>
+          {data.empireCycle.markersTitle}
+        </div>
+        <div data-testid="t4-stage-markers">
+          {data.empireCycle.markers.map((m) => (
+            <MarkerRowEl key={m.leadPhrase} row={m} />
+          ))}
+        </div>
       </div>
 
-      <AssessmentBlock
-        text={t4?.assessment ?? null}
-        generatedAt={data.generated_at}
-      />
-      {smartMode ? (
-        <div className="text-xs text-[--color-text-tertiary]">
-          Smart Mode weights wealth-shift axes by recent news-cycle volatility.
+      <SectionLabel count={data.analogs.label}>Section C — historical analog</SectionLabel>
+      <div className="mr-analog-grid" data-testid="t4-analog-grid" style={{ marginBottom: 14 }}>
+        {data.analogs.cells.map((c: T4AnalogCell) => (
+          <div key={c.era} className={`mr-analog-cell ${toneToStatus(c.tone)}`}>
+            <div className="mr-analog-head">{c.era}</div>
+            <div className="mr-analog-body">{c.body}</div>
+          </div>
+        ))}
+      </div>
+
+      <SectionLabel count={data.wealthShift.label}>
+        Section C — wealth shift assessment
+      </SectionLabel>
+      <div className="mr-card" data-testid="t4-wealth-shift" style={{ padding: "16px 18px", marginBottom: 14 }}>
+        <p className="mr-card-body-text" style={{ marginBottom: 12 }}>{data.wealthShift.intro}</p>
+        <div data-testid="t4-wealth-shift-rows">
+          {data.wealthShift.rows.map((r) => (
+            <MarkerRowEl key={r.leadPhrase} row={r} />
+          ))}
         </div>
-      ) : null}
-    </section>
+        <div className="mr-card-sm" style={{ marginTop: 12, background: "var(--color-bg-base)" }}>
+          <div className="mr-card-title">{data.wealthShift.assessment.title}</div>
+          <div className="mr-card-body-text">{data.wealthShift.assessment.body}</div>
+        </div>
+      </div>
+
+      <SectionLabel count={data.investment.label}>
+        Section D — investment implications
+      </SectionLabel>
+      <div className="mr-grid2" style={{ marginBottom: 10 }}>
+        <GoldRangeBlock
+          title={data.investment.goldRange.title}
+          stats={data.investment.goldRange.stats}
+          body={data.investment.goldRange.body}
+        />
+        <CurrencyExposureBlock
+          title={data.investment.currency.title}
+          rows={data.investment.currency.rows}
+        />
+      </div>
+      <SovereignBondPremium
+        title={data.investment.sovereignBond.title}
+        intro={data.investment.sovereignBond.intro}
+        pair={data.investment.sovereignBond.pair}
+      />
+
+      <Verdict
+        testid="t4-verdict"
+        meta={
+          <>
+            T4 SYNTHESIS · DALIO FRAMEWORK <span className="dot" /> April 2026
+          </>
+        }
+        headline={data.verdict.title}
+        body={data.verdict.body}
+        tone={toneToStatus(data.verdict.tone)}
+      />
+
+      <SrcFoot>
+        <strong>Sources · </strong>
+        {data.sources}
+      </SrcFoot>
+    </article>
+  );
+}
+
+/* ───── T4-only widgets ───── */
+
+function ReserveChartCard({ chart }: { chart: T4ReserveChart }): JSX.Element {
+  return (
+    <div className="mr-card" data-testid="t4-reserve-chart" style={{ padding: "16px 18px", margin: "16px 0 14px" }}>
+      <div className="mr-card-title" style={{ marginBottom: 10 }}>{chart.title}</div>
+      <ReserveLineChart years={chart.years} series={chart.series} />
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 10 }}>
+        {chart.series.map((s) => (
+          <span
+            key={s.label}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontFamily: "var(--font-mono)",
+              fontSize: 11,
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            <span
+              style={{
+                width: 14,
+                height: 3,
+                borderRadius: 1,
+                background:
+                  s.label === "USD" ? "var(--color-feedback-error)" :
+                  s.label === "EUR" ? "var(--color-text-secondary)" :
+                  s.label === "JPY" ? "var(--color-feedback-warning)" :
+                  s.label === "CNY" ? "var(--color-feedback-success)" :
+                  "var(--color-text-tertiary)",
+              }}
+            />
+            {s.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DalioQuote({ quote }: { quote: T4DalioQuote }): JSX.Element {
+  const tone = toneToStatus(quote.tone);
+  return (
+    <div className={`mr-quote ${tone}`} data-testid="t4-dalio-quote" style={{ marginTop: 14 }}>
+      <div className="mr-quote-title">{quote.title}</div>
+      <div className="mr-quote-body">{quote.body}</div>
+      <div className="mr-quote-attribution">{quote.attribution}</div>
+    </div>
+  );
+}
+
+function MarkerRowEl({ row }: { row: T4MarkerRow }): JSX.Element {
+  return (
+    <div className={`mr-marker-row ${toneToStatus(row.tone)}`}>
+      <span className="dot" />
+      <span className="pill">{row.pillLabel}</span>
+      <div className="body">
+        <span className="lead">{row.leadPhrase}</span>
+        {row.leadPhrase.endsWith(".") ? " " : " — "}
+        {row.body}
+      </div>
+    </div>
+  );
+}
+
+function GoldRangeBlock({
+  title,
+  stats,
+  body,
+}: {
+  title: string;
+  stats: T4GoldRangeStat[];
+  body: string;
+}): JSX.Element {
+  return (
+    <div className="mr-card" data-testid="t4-gold-range" style={{ padding: "16px 18px" }}>
+      <SectionLabel>{title}</SectionLabel>
+      <div className="mr-grid3" style={{ marginTop: 8, marginBottom: 10 }}>
+        {stats.map((s) => (
+          <div
+            key={s.label}
+            className="mr-card-sm"
+            style={{
+              background: s.highlight ? "rgba(var(--color-accent-primary-rgb), 0.10)" : "var(--color-bg-base)",
+              borderColor: s.highlight ? "var(--color-accent-primary)" : undefined,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.1em",
+                textTransform: "uppercase",
+                color: "var(--color-text-tertiary)",
+              }}
+            >
+              {s.label}
+            </div>
+            <div className="mr-card-title" style={{ fontSize: 18, fontFamily: "var(--font-mono)" }}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mr-card-body-text">{body}</div>
+    </div>
+  );
+}
+
+function CurrencyExposureBlock({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: T4CurrencyRow[];
+}): JSX.Element {
+  return (
+    <div className="mr-card" data-testid="t4-currency-exposure" style={{ padding: "16px 18px" }}>
+      <SectionLabel>{title}</SectionLabel>
+      <div className="mr-curr-table" style={{ marginTop: 8 }}>
+        {rows.map((r) => (
+          <div key={r.name} className="mr-curr-row">
+            <div className="c-name">
+              <span className="n">{r.name}</span>
+            </div>
+            <div className="c-body">{r.body}</div>
+            <Spill status={toneToStatus(r.badgeTone)}>{r.badgeLabel}</Spill>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SovereignBondPremium({
+  title,
+  intro,
+  pair,
+}: {
+  title: string;
+  intro: string;
+  pair: { left: T4ProseCard; right: T4ProseCard };
+}): JSX.Element {
+  return (
+    <div className="mr-card" data-testid="t4-sovereign-bond" style={{ padding: "16px 18px", marginBottom: 14 }}>
+      <SectionLabel>{title}</SectionLabel>
+      <p className="mr-card-body-text" style={{ marginTop: 8, marginBottom: 12 }}>{intro}</p>
+      <div className="mr-grid2">
+        <ProseCard title={pair.left.title} body={pair.left.body} />
+        <ProseCard title={pair.right.title} body={pair.right.body} />
+      </div>
+    </div>
   );
 }

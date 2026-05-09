@@ -18,7 +18,6 @@ describe("EarningsUpdatePage", () => {
     vi.restoreAllMocks();
     vi.spyOn(api, "fetchWatchlist").mockResolvedValue({ entries: [] });
     vi.spyOn(api, "fetchRecentReports").mockResolvedValue({ reports: [] });
-    vi.spyOn(api, "fetchSchedules").mockResolvedValue({ schedules: [] });
     vi.spyOn(api, "fetchConfig").mockResolvedValue({
       report_length: "normal",
       enabled_section_ids: [],
@@ -26,50 +25,84 @@ describe("EarningsUpdatePage", () => {
     });
   });
 
-  it("renders header + watchlist + reports sections", async () => {
+  it("renders topbar with Coverage and Settings buttons", async () => {
     renderPage();
-    expect(screen.getByText(/Earnings Updates/i)).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getAllByText(/Watchlist/i).length).toBeGreaterThan(0);
-      expect(screen.getByText(/Recent Reports/i)).toBeInTheDocument();
-    });
+    expect(
+      await screen.findByRole("button", { name: /coverage/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /report settings/i }),
+    ).toBeInTheDocument();
   });
 
-  it("opens on-demand modal when header button clicked", async () => {
+  it("shows full-page empty state when watchlist + reports are empty", async () => {
+    renderPage();
+    expect(await screen.findByTestId("eu-empty-page")).toBeInTheDocument();
+  });
+
+  it("opens Coverage modal from topbar button", async () => {
     renderPage();
     fireEvent.click(
-      await screen.findByRole("button", { name: /on-demand report/i }),
+      await screen.findByRole("button", { name: /^coverage$/i }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: /coverage/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("renders feed sections when reports exist", async () => {
+    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({
+      reports: [
+        {
+          id: "r1",
+          title: "Apple beats on Services",
+          subject: "AAPL",
+          report_type: "earnings_analysis",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText(/Today's/i)).toBeInTheDocument();
+    expect(screen.getByText("Earlier this week")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Apple beats on Services/i),
+    ).toBeInTheDocument();
+  });
+
+  it("opens on-demand modal from filter strip Ad-hoc button", async () => {
+    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({
+      reports: [
+        {
+          id: "r1",
+          title: "Existing report",
+          subject: "AAPL",
+          report_type: "earnings_analysis",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+    renderPage();
+    fireEvent.click(
+      await screen.findByRole("button", { name: /generate ad-hoc report/i }),
     );
     expect(
       await screen.findByText(/On-Demand Earnings Update/),
     ).toBeInTheDocument();
   });
 
-  it("renders loading skeletons while data fetches are pending", async () => {
-    vi.spyOn(api, "fetchWatchlist").mockImplementation(
-      () => new Promise(() => {}),
-    );
-    vi.spyOn(api, "fetchRecentReports").mockImplementation(
-      () => new Promise(() => {}),
-    );
-    renderPage();
-    expect(screen.getAllByTestId("eu-skeleton").length).toBeGreaterThan(0);
-  });
-
-  it("renders error banner with retry when fetch fails", async () => {
-    vi.spyOn(api, "fetchWatchlist").mockRejectedValue(new Error("boom"));
-    renderPage();
-    const banner = await screen.findByRole("alert");
-    expect(banner.textContent).toMatch(/Failed to load earnings data/i);
-
-    const fetchSpy = vi.spyOn(api, "fetchWatchlist").mockResolvedValue({
-      entries: [],
+  it("shows live big-card while on-demand stream is active", async () => {
+    vi.spyOn(api, "fetchRecentReports").mockResolvedValue({
+      reports: [
+        {
+          id: "seed",
+          title: "Seed",
+          subject: "MSFT",
+          report_type: "earnings_analysis",
+          created_at: new Date().toISOString(),
+        },
+      ],
     });
-    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
-    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
-  });
-
-  it("shows generating progress block while on-demand stream is active", async () => {
     let resolveStream: (
       v: { report_id: string; title: string },
     ) => void = () => {};
@@ -83,33 +116,33 @@ describe("EarningsUpdatePage", () => {
       );
     renderPage();
     fireEvent.click(
-      await screen.findByRole("button", { name: /on-demand report/i }),
+      await screen.findByRole("button", { name: /generate ad-hoc report/i }),
     );
-    fireEvent.change(await screen.findByPlaceholderText(/ticker/i), {
-      target: { value: "AAPL" },
-    });
+    fireEvent.change(
+      await screen.findByPlaceholderText(/ticker symbol/i),
+      { target: { value: "AAPL" } },
+    );
     fireEvent.click(screen.getByRole("button", { name: /generate report/i }));
-    expect(await screen.findByTestId("eu-generating")).toBeInTheDocument();
+    expect(await screen.findByTestId("eu-big-card")).toBeInTheDocument();
     await act(async () => {
       resolveStream({ report_id: "r1", title: "AAPL Earnings" });
     });
     await waitFor(() =>
-      expect(screen.queryByTestId("eu-generating")).toBeNull(),
+      expect(screen.getByText(/AAPL Earnings/i)).toBeInTheDocument(),
     );
     expect(startSpy).toHaveBeenCalledWith({ ticker: "AAPL" });
   });
 
-  it("shows watchlist + recent reports empty-state strings", async () => {
+  it("renders error banner with retry when fetch fails", async () => {
+    vi.spyOn(api, "fetchWatchlist").mockRejectedValue(new Error("boom"));
     renderPage();
-    expect(
-      await screen.findByText(
-        /Add companies to your watchlist to track upcoming earnings/i,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /On-Demand reports and automated reports will appear here/i,
-      ),
-    ).toBeInTheDocument();
+    const banner = await screen.findByRole("alert");
+    expect(banner.textContent).toMatch(/Failed to load earnings data/i);
+
+    const fetchSpy = vi.spyOn(api, "fetchWatchlist").mockResolvedValue({
+      entries: [],
+    });
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalled());
   });
 });

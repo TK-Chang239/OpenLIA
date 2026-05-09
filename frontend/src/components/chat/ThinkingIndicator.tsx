@@ -8,8 +8,9 @@ export function ThinkingIndicator(): JSX.Element {
         {[0, 1, 2].map((i) => (
           <span
             key={i}
+            data-i={i}
             aria-hidden="true"
-            className="h-1.5 w-1.5 rounded-full bg-[--color-accent-primary]/50"
+            className="ol-dot inline-block h-1.5 w-1.5 rounded-full bg-[--color-accent-primary]"
           />
         ))}
       </div>

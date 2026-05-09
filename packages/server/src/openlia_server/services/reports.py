@@ -93,6 +93,7 @@ def create_report(
     content_markdown: str = "",
     subject: str | None = None,
     title: str | None = None,
+    source_session_id: str | None = None,
 ) -> str:
     report_id = str(uuid.uuid4())
     row = Report(
@@ -104,6 +105,7 @@ def create_report(
         subject=subject,
         content_markdown=content_markdown,
         content_structured=schema.model_dump(mode="json"),
+        source_session_id=source_session_id,
         model_ref=model_ref,
     )
     session.add(row)

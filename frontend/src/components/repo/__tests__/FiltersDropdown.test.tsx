@@ -25,6 +25,7 @@ describe("FiltersDropdown", () => {
         savedTo=""
         onApply={onApply}
         active={false}
+        activeCount={0}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Filters" }));
@@ -50,6 +51,7 @@ describe("FiltersDropdown", () => {
         savedTo=""
         onApply={onApply}
         active={false}
+        activeCount={0}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Filters" }));
@@ -79,6 +81,7 @@ describe("FiltersDropdown", () => {
         savedTo=""
         onApply={vi.fn()}
         active={true}
+        activeCount={1}
       />,
     );
     const btn = screen.getByRole("button", { name: "Filters" });

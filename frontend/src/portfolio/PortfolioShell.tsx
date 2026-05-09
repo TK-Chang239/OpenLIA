@@ -1,56 +1,44 @@
-import { Download, Plus, Upload } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import type { JSX, ReactNode } from "react";
+import { motion } from "framer-motion";
 
 import {
   createGroup,
   createHolding,
-  deleteGroup,
-  exportCsvUrl,
   fetchGroups,
-  renameGroup,
-  updateHolding,
+  refreshPrices,
   type PortfolioHolding,
 } from "../api/portfolio";
+import { exportCsvUrl } from "../api/portfolio";
 import { ToastProvider, useToast } from "../components/primitives/Toast";
+
 import { AddEditDrawer } from "./AddEditDrawer";
-import { AnalyticsCards } from "./AnalyticsCards";
-import { EmptyState } from "./EmptyState";
-import { ALL_GROUP, GroupTabs } from "./GroupTabs";
-import { HoldingsGrid } from "./HoldingsGrid";
-import { HoldingsList } from "./HoldingsList";
+import { HoldingDetailDrawer } from "./HoldingDetailDrawer";
+import { HoldingsTable } from "./HoldingsTable";
 import { ImportCsvDialog } from "./ImportCsvDialog";
-import { PriceRefreshButton } from "./PriceRefreshButton";
-import { SearchAndAdd } from "./SearchAndAdd";
-import { SortControl } from "./SortControl";
+import { KpiBand } from "./KpiBand";
+import { LiaAlertsCard } from "./LiaAlertsCard";
+import { PerfChart } from "./PerfChart";
+import { PortfolioAllocationCard } from "./PortfolioAllocationCard";
+import {
+  PortfolioPageHeader,
+  type PerfRange,
+} from "./PortfolioPageHeader";
 import { useAnalytics } from "./useAnalytics";
 import { useHoldings } from "./useHoldings";
-import { useLocalPref } from "./useLocalPref";
-import { useSortedHoldings } from "./useSortedHoldings";
-import { ViewToggle, type ViewMode } from "./ViewToggle";
-
-function MarketClosedIndicator({ at }: { readonly at: string | null | undefined }): JSX.Element | null {
-  if (!at) return null;
-  const ts = Date.parse(at);
-  if (!Number.isFinite(ts)) return null;
-  const now = Date.now();
-  const stale = now - ts > 15 * 60 * 1000; // 15min stale → market closed
-  if (!stale) return null;
-  return (
-    <span className="text-xs text-[--color-text-tertiary]" data-testid="market-closed">
-      Market closed
-    </span>
-  );
-}
 
 function ShellInner(): JSX.Element {
   const toast = useToast();
   const { holdings, loading, reload, remove } = useHoldings();
   const { analytics, refresh } = useAnalytics();
   const [groups, setGroups] = useState<string[]>([]);
-  const [activeGroup, setActiveGroup] = useState<string>(ALL_GROUP);
-  const [view, setView] = useLocalPref<ViewMode>("portfolio:view", "list");
-  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<PortfolioHolding | null>(null);
   const [csvOpen, setCsvOpen] = useState(false);
+  const [drawer, setDrawer] = useState<PortfolioHolding | null>(null);
+  const [range, setRange] = useState<PerfRange>("1W");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     void fetchGroups()
@@ -58,35 +46,51 @@ function ShellInner(): JSX.Element {
       .catch(() => setGroups([]));
   }, []);
 
-  const filteredHoldings = useMemo(() => {
-    if (activeGroup === ALL_GROUP) return holdings;
-    return holdings.filter((h) => h.groups.includes(activeGroup));
-  }, [holdings, activeGroup]);
-
-  const analyticsByHolding = useMemo(() => {
-    const map = new Map<string, NonNullable<typeof analytics>["positions"][number] | undefined>();
-    analytics?.positions.forEach((p) => map.set(p.holding_id, p));
-    return map;
-  }, [analytics]);
-
-  const { sorted, sortKey, setSortKey } = useSortedHoldings(
-    filteredHoldings,
-    analyticsByHolding,
-    activeGroup,
-  );
-
-  const existingTickers = useMemo(
-    () => new Set(holdings.map((h) => h.ticker)),
-    [holdings],
-  );
-
-  const onAdded = async (ticker: string) => {
-    await reload();
-    toast.push({ title: `${ticker} added to Portfolio`, tone: "success" });
+  const reloadGroups = async () => {
+    try {
+      const next = await fetchGroups();
+      setGroups(next);
+    } catch {
+      /* keep prior groups */
+    }
   };
 
-  const onRemove = async (id: string) => {
-    const snapshot = await remove(id);
+  const onRefresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshPrices();
+      await refresh();
+      toast.push({ title: "Prices refreshed", tone: "success" });
+    } catch (e) {
+      const err = e as Error & { retryAfter?: number; status?: number };
+      const msg =
+        err.status === 429 && err.retryAfter
+          ? `Try again in ${err.retryAfter} seconds`
+          : err.message;
+      toast.push({ title: msg, tone: "error" });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const onCreateGroupInline = async (name: string) => {
+    const next = await createGroup(name);
+    setGroups(next);
+  };
+
+  const onRowClick = (h: PortfolioHolding) => {
+    setDrawer(h);
+  };
+
+  const onDrawerEdit = (h: PortfolioHolding) => {
+    setDrawer(null);
+    setEditTarget(h);
+  };
+
+  const onDrawerRemove = async (h: PortfolioHolding) => {
+    setDrawer(null);
+    const snapshot = await remove(h.id);
     if (!snapshot) return;
     toast.push({
       title: `${snapshot.ticker} removed`,
@@ -108,150 +112,74 @@ function ShellInner(): JSX.Element {
     });
   };
 
-  const onCreateGroup = async (name: string) => {
-    const next = await createGroup(name);
-    setGroups(next);
-  };
-
-  const onRenameGroup = async (oldName: string, newName: string) => {
-    const next = await renameGroup(oldName, newName);
-    setGroups(next);
-    await reload();
-  };
-
-  const onDeleteGroup = async (name: string) => {
-    // Snapshot members for Undo restoration of group membership.
-    const affected: PortfolioHolding[] = holdings.filter((h) =>
-      h.groups.includes(name),
-    );
-    const next = await deleteGroup(name);
-    setGroups(next);
-    await reload();
-    toast.push({
-      title: `Group '${name}' deleted`,
-      tone: "info",
-      durationMs: 5000,
-      undo: {
-        label: "Undo",
-        onClick: () => {
-          void createGroup(name).then(async () => {
-            for (const h of affected) {
-              const groups = Array.from(new Set([...h.groups, name]));
-              try {
-                await updateHolding(h.id, { groups });
-              } catch {
-                /* swallow */
-              }
-            }
-            await reload();
-            const fresh = await fetchGroups();
-            setGroups(fresh);
-          });
-        },
-      },
-    });
-  };
-
   return (
-    <div className="p-6 space-y-5" data-testid="portfolio-page">
-      <header className="flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl font-semibold text-[--color-text-primary]">Portfolio</h1>
-        <div className="flex items-center gap-2">
-          <PriceRefreshButton
-            onRefresh={refresh}
-            onSuccess={() => toast.push({ title: "Prices refreshed", tone: "success" })}
-            onRateLimited={(s) =>
-              toast.push({ title: `Try again in ${s} seconds`, tone: "error" })
-            }
-          />
-          <button
-            type="button"
-            onClick={() => setDrawerOpen(true)}
-            className="inline-flex items-center gap-1 px-3 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm]"
-            data-testid="open-drawer"
-          >
-            <Plus size={14} aria-hidden="true" /> Add
-          </button>
-          <button
-            type="button"
-            onClick={() => setCsvOpen(true)}
-            className="inline-flex items-center gap-1 px-3 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm]"
-            data-testid="open-csv"
-          >
-            <Upload size={14} aria-hidden="true" /> Import CSV
-          </button>
-          <a
-            href={exportCsvUrl()}
-            className="inline-flex items-center gap-1 px-3 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm]"
-          >
-            <Download size={14} aria-hidden="true" /> Export
-          </a>
+    <div className="min-h-full overflow-x-hidden bg-[--color-bg-base]" data-testid="portfolio-page">
+      <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-[18px] px-7 py-6 [@media(min-width:1100px)]:grid-cols-[1fr_320px]">
+        <div className="flex min-w-0 flex-col gap-[18px]">
+          <Reveal delay={0}>
+            <PortfolioPageHeader
+              holdingCount={holdings.length}
+              lastSyncedAt={analytics?.last_quote_at ?? null}
+              refreshing={refreshing}
+              onRefresh={() => void onRefresh()}
+              range={range}
+              onRangeChange={setRange}
+              exportHref={exportCsvUrl()}
+              onAddManually={() => setAddOpen(true)}
+              onImportCsv={() => setCsvOpen(true)}
+            />
+          </Reveal>
+
+          <Reveal delay={1}>
+            <KpiBand analytics={analytics} loading={loading && holdings.length === 0} />
+          </Reveal>
+
+          <Reveal delay={2}>
+            <PerfChart range={range} />
+          </Reveal>
+
+          <Reveal delay={3}>
+            <HoldingsTable
+              holdings={holdings}
+              analytics={analytics}
+              groups={groups}
+              loading={loading && holdings.length === 0}
+              selectedHoldingId={drawer?.id ?? null}
+              onRowClick={onRowClick}
+              onManageGroups={() => {
+                toast.push({
+                  title: "Group management is in the holding edit form",
+                  tone: "info",
+                  durationMs: 4000,
+                });
+              }}
+            />
+          </Reveal>
         </div>
-      </header>
 
-      <SearchAndAdd
-        groups={groups}
-        existingTickers={existingTickers}
-        onAdded={onAdded}
-      />
-
-      <AnalyticsCards analytics={analytics} />
-
-      <GroupTabs
-        groups={groups}
-        active={activeGroup}
-        onSelect={setActiveGroup}
-        onCreate={onCreateGroup}
-        onRename={onRenameGroup}
-        onDelete={onDeleteGroup}
-      />
-
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <SortControl value={sortKey} onChange={setSortKey} />
-          <MarketClosedIndicator at={analytics?.last_quote_at ?? null} />
-        </div>
-        <ViewToggle value={view} onChange={setView} />
+        <aside className="flex flex-col gap-[18px] [@media(min-width:1100px)]:sticky [@media(min-width:1100px)]:top-6 [@media(min-width:1100px)]:self-start">
+          <Reveal delay={2}>
+            <PortfolioAllocationCard holdings={holdings} analytics={analytics} />
+          </Reveal>
+          <Reveal delay={3}>
+            <LiaAlertsCard hasHoldings={holdings.length > 0} />
+          </Reveal>
+        </aside>
       </div>
 
-      <section
-        className="transition-opacity duration-150"
-        data-testid="holdings-section"
-        data-view={view}
-      >
-        {loading ? (
-          <ul aria-label="Loading" className="space-y-2" data-testid="holdings-loading">
-            {[0, 1, 2].map((i) => (
-              <li
-                key={i}
-                className="h-[60px] rounded bg-[--color-border-subtle] animate-pulse"
-              />
-            ))}
-          </ul>
-        ) : sorted.length === 0 ? (
-          <EmptyState />
-        ) : view === "list" ? (
-          <HoldingsList
-            holdings={sorted}
-            analyticsByHolding={analyticsByHolding}
-            onRemove={onRemove}
-          />
-        ) : (
-          <HoldingsGrid
-            holdings={sorted}
-            analyticsByHolding={analyticsByHolding}
-            activeGroup={activeGroup}
-            onRemove={onRemove}
-          />
-        )}
-      </section>
-
       <AddEditDrawer
-        open={drawerOpen}
-        mode="create"
-        onClose={() => setDrawerOpen(false)}
+        open={addOpen || editTarget !== null}
+        mode={editTarget ? "edit" : "create"}
+        initial={editTarget}
+        groups={groups}
+        onCreateGroup={onCreateGroupInline}
+        onClose={() => {
+          setAddOpen(false);
+          setEditTarget(null);
+        }}
         onSaved={async () => {
           await reload();
+          await reloadGroups();
           toast.push({ title: "Holding saved", tone: "success" });
         }}
       />
@@ -267,6 +195,15 @@ function ShellInner(): JSX.Element {
           });
         }}
       />
+
+      <HoldingDetailDrawer
+        open={drawer !== null}
+        holding={drawer}
+        analytics={analytics}
+        onClose={() => setDrawer(null)}
+        onEdit={onDrawerEdit}
+        onRemove={(h) => void onDrawerRemove(h)}
+      />
     </div>
   );
 }
@@ -276,5 +213,25 @@ export function PortfolioShell(): JSX.Element {
     <ToastProvider>
       <ShellInner />
     </ToastProvider>
+  );
+}
+
+const STAGGER = 0.06;
+
+function Reveal({
+  delay,
+  children,
+}: {
+  delay: number;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: "easeOut", delay: delay * STAGGER }}
+    >
+      {children}
+    </motion.div>
   );
 }

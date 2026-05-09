@@ -2,29 +2,38 @@ import { describe, it, expect } from "vitest";
 import { departmentBadgeClass, departmentLabel } from "../department-colors";
 
 describe("departmentBadgeClass", () => {
-  it("returns the spec'd tint for each known department", () => {
-    expect(departmentBadgeClass("equity_research")).toBe(
-      "bg-[--color-info]/10 text-[--color-info]",
+  it("uses blue for equity research and retail sentiment", () => {
+    expect(departmentBadgeClass("equity_research")).toMatch(/--color-dept-blue/);
+    expect(departmentBadgeClass("retail_sentiment")).toMatch(/--color-dept-blue/);
+  });
+
+  it("uses orange for macro research", () => {
+    expect(departmentBadgeClass("macro_research")).toMatch(/--color-dept-orange/);
+  });
+
+  it("uses purple for secretary", () => {
+    expect(departmentBadgeClass("secretary")).toMatch(/--color-dept-purple/);
+  });
+
+  it("uses accent yellow for earnings update and morning briefing", () => {
+    expect(departmentBadgeClass("earnings_update")).toMatch(
+      /--color-dept-accent-bg/,
     );
-    expect(departmentBadgeClass("earnings_update")).toBe(
-      "bg-[--color-success]/10 text-[--color-success]",
+    expect(departmentBadgeClass("morning_briefing")).toMatch(
+      /--color-dept-accent-bg/,
     );
-    expect(departmentBadgeClass("morning_briefing")).toBe(
-      "bg-[--color-accent-subtle] text-[--color-accent-primary]",
-    );
-    expect(departmentBadgeClass("retail_sentiment")).toBe(
-      "bg-[--color-info]/10 text-[--color-info]",
-    );
-    expect(departmentBadgeClass("secretary")).toBe(
-      "bg-[--color-surface-hover] text-[--color-text-secondary]",
-    );
-    expect(departmentBadgeClass("macro_research")).toBe(
-      "bg-[--color-warning]/10 text-[--color-warning]",
+  });
+
+  it("uses error tint for panic thermometer", () => {
+    expect(departmentBadgeClass("panic_thermometer")).toMatch(
+      /--color-dept-error/,
     );
   });
 
   it("falls back to neutral surface for unknown slug", () => {
-    expect(departmentBadgeClass("unknown_dept")).toMatch(/text-\[--color-text-secondary\]/);
+    expect(departmentBadgeClass("unknown_dept")).toMatch(
+      /text-\[--color-text-secondary\]/,
+    );
   });
 });
 

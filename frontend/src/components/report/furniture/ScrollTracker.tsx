@@ -1,30 +1,41 @@
-import { useEffect } from 'react';
-import { useInView } from 'react-intersection-observer';
+import { useEffect, useRef } from 'react';
 
 export interface ScrollTrackerProps {
   sectionIds: string[];
   onActiveId: (id: string) => void;
 }
 
-interface SentinelProps {
-  id: string;
-  onVisible: (id: string) => void;
-}
-
-function SectionSentinel({ id, onVisible }: SentinelProps) {
-  const { ref, inView } = useInView({ rootMargin: '-40% 0px -50% 0px' });
-  useEffect(() => {
-    if (inView) onVisible(id);
-  }, [id, inView, onVisible]);
-  return <span ref={ref} data-scroll-sentinel={id} style={{ display: 'block', height: 0 }} />;
-}
-
+/** Watches actual section elements (looked up by id) via IntersectionObserver
+ *  and reports which one is currently in the active band of the viewport.
+ *  Renders nothing — consumers just place this anywhere inside the report. */
 export function ScrollTracker({ sectionIds, onActiveId }: ScrollTrackerProps) {
-  return (
-    <>
-      {sectionIds.map((id) => (
-        <SectionSentinel key={id} id={id} onVisible={onActiveId} />
-      ))}
-    </>
-  );
+  const callbackRef = useRef(onActiveId);
+  callbackRef.current = onActiveId;
+
+  useEffect(() => {
+    if (sectionIds.length === 0) return;
+    const elements = sectionIds
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => el !== null);
+    if (elements.length === 0) return;
+
+    const seen = new Map<string, IntersectionObserverEntry>();
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) seen.set(e.target.id, e);
+        const active = sectionIds
+          .map((id) => seen.get(id))
+          .filter((e): e is IntersectionObserverEntry => !!e && e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (active) callbackRef.current(active.target.id);
+      },
+      { rootMargin: '-15% 0px -65% 0px', threshold: [0, 0.1, 0.5, 1] },
+    );
+
+    elements.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [sectionIds]);
+
+  return null;
 }

@@ -6,34 +6,53 @@ export interface TextBlockProps {
   content: string;
 }
 
-const SIGNED_PCT = /([+-]\d+(?:\.\d+)?%)/g;
+// Combined matcher: signed-percent (e.g., +12.4%) OR citation [n] OR [n,m].
+const TOKEN = /([+-]\d+(?:\.\d+)?%)|\[(\d+(?:\s*,\s*\d+)*)\]/g;
 
-function colorSignedNumbers(text: string): (string | JSX.Element)[] {
+function decorate(text: string): (string | JSX.Element)[] {
   const parts: (string | JSX.Element)[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
-  SIGNED_PCT.lastIndex = 0;
-  while ((match = SIGNED_PCT.exec(text)) !== null) {
+  TOKEN.lastIndex = 0;
+  while ((match = TOKEN.exec(text)) !== null) {
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    const value = match[1];
-    const cls = value.startsWith('+')
-      ? 'report-number--positive'
-      : 'report-number--negative';
-    parts.push(
-      <span key={`${match.index}-${value}`} className={cls}>
-        {value}
-      </span>,
-    );
-    lastIndex = match.index + value.length;
+    const [whole, signedPct, citeIds] = match;
+    if (signedPct) {
+      const cls = signedPct.startsWith('+')
+        ? 'report-number--positive'
+        : 'report-number--negative';
+      parts.push(
+        <span key={`${match.index}-${signedPct}`} className={cls}>
+          {signedPct}
+        </span>,
+      );
+    } else if (citeIds) {
+      const ids = citeIds.split(/\s*,\s*/);
+      parts.push(
+        <sup key={`${match.index}-cite`} className="report-cite">
+          [
+          {ids.map((id, i) => (
+            <span key={id}>
+              {i > 0 ? ',' : null}
+              <a href={`#cite-${id}`} className="report-cite__link">
+                {id}
+              </a>
+            </span>
+          ))}
+          ]
+        </sup>,
+      );
+    }
+    lastIndex = match.index + whole.length;
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex));
   return parts;
 }
 
 function renderChildren(children: React.ReactNode): React.ReactNode {
-  if (typeof children === 'string') return colorSignedNumbers(children);
+  if (typeof children === 'string') return decorate(children);
   if (Array.isArray(children)) return children.map(renderChildren);
   return children;
 }

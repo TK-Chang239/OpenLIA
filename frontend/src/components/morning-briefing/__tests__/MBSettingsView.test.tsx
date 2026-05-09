@@ -27,10 +27,7 @@ describe("MBSettingsView", () => {
     render(
       <MBSettingsView
         config={baseConfig}
-        schedule={null}
         onSaveConfig={onSaveConfig}
-        onSaveSchedule={vi.fn()}
-        onRemoveSchedule={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByTestId("section-row-global_macro-checkbox"));
@@ -47,10 +44,7 @@ describe("MBSettingsView", () => {
     render(
       <MBSettingsView
         config={baseConfig}
-        schedule={null}
         onSaveConfig={onSaveConfig}
-        onSaveSchedule={vi.fn()}
-        onRemoveSchedule={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByTestId("mb-add-custom-section"));
@@ -71,10 +65,7 @@ describe("MBSettingsView", () => {
     render(
       <MBSettingsView
         config={baseConfig}
-        schedule={null}
         onSaveConfig={onSaveConfig}
-        onSaveSchedule={vi.fn()}
-        onRemoveSchedule={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByTestId("mb-save-settings"));

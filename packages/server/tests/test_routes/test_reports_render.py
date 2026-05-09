@@ -135,7 +135,7 @@ def test_render_block_chart_emits_title_for_every_chart_type():
 
 def test_schema_to_html_renders_section_anchor_and_cover_zones():
     schema = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "department": "secretary",
         "generated_at": "2026-04-24T00:00:00+00:00",
         "page_furniture": {
@@ -149,7 +149,9 @@ def test_schema_to_html_renders_section_anchor_and_cover_zones():
             "ticker": "AAPL",
             "tagline": "Strong quarter.",
             "key_metrics": [{"label": "P", "value": "$198"}],
-            "stats_panel": [{"label": "MktCap", "value": "$3T"}],
+        },
+        "rail": {
+            "quick_stats": [{"label": "MktCap", "value": "$3T"}],
         },
         "sections": [
             {

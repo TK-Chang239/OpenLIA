@@ -27,10 +27,10 @@ describe("ReportSettingsModal", () => {
         config={baseConfig}
         onClose={() => {}}
         onSave={async () => {}}
-      />
+      />,
     );
-    expect(screen.getByLabelText("Company Overview")).toBeChecked();
-    expect(screen.getByLabelText("Industry Overview")).toBeChecked();
+    expect(screen.getByText("Company Overview")).toBeInTheDocument();
+    expect(screen.getByText("Industry Overview")).toBeInTheDocument();
   });
 
   it("switching mode replaces the visible section list", () => {
@@ -40,13 +40,13 @@ describe("ReportSettingsModal", () => {
         config={baseConfig}
         onClose={() => {}}
         onSave={async () => {}}
-      />
+      />,
     );
     fireEvent.click(screen.getByRole("radio", { name: "Stock Update" }));
     expect(
-      screen.getByLabelText("Investment Thesis / Key Takeaway")
+      screen.getByText("Investment Thesis / Key Takeaway"),
     ).toBeInTheDocument();
-    expect(screen.queryByLabelText("Company Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Company Overview")).not.toBeInTheDocument();
   });
 
   it("unchecking a section and saving calls onSave with the patched config", async () => {
@@ -57,27 +57,28 @@ describe("ReportSettingsModal", () => {
         config={baseConfig}
         onClose={() => {}}
         onSave={onSave}
-      />
+      />,
     );
-    fireEvent.click(screen.getByLabelText("Industry Overview"));
+    fireEvent.click(screen.getByText("Industry Overview"));
     fireEvent.click(screen.getByRole("button", { name: /save settings/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     const patch = onSave.mock.calls[0][0];
-    expect(patch.sections_by_mode.stock_initiation).toEqual([
-      "company_overview",
-    ]);
+    expect(patch.sections_by_mode.stock_initiation).toEqual(["company_overview"]);
   });
 
-  it("adding a custom section requires a title", () => {
+  it("clicking Add custom section reveals the title input", () => {
     render(
       <ReportSettingsModal
         open
         config={baseConfig}
         onClose={() => {}}
         onSave={async () => {}}
-      />
+      />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /\+ add/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add custom section/i }));
+    expect(
+      screen.getByLabelText("New custom section title"),
+    ).toBeInTheDocument();
     const confirm = screen.getByRole("button", { name: /add section/i });
     expect(confirm).toBeDisabled();
   });
@@ -90,7 +91,7 @@ describe("ReportSettingsModal", () => {
         config={baseConfig}
         onClose={() => {}}
         onSave={onSave}
-      />
+      />,
     );
     fireEvent.click(screen.getByRole("radio", { name: "Elaborative" }));
     fireEvent.click(screen.getByRole("button", { name: /save settings/i }));

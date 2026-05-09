@@ -1,3 +1,4 @@
+import type { JSX, MutableRefObject } from "react";
 import { Search } from "lucide-react";
 import type { RepoFacets } from "../../api/repo";
 import { FiltersDropdown } from "./FiltersDropdown";
@@ -12,6 +13,8 @@ export interface RepoFilterBarProps {
   savedFrom: string;
   savedTo: string;
   filtersActive: boolean;
+  activeFilterCount: number;
+  searchInputRef?: MutableRefObject<HTMLInputElement | null>;
   onApplyFilters: (next: {
     departments: string[];
     generated_from: string;
@@ -31,23 +34,26 @@ export function RepoFilterBar({
   savedFrom,
   savedTo,
   filtersActive,
+  activeFilterCount,
+  searchInputRef,
   onApplyFilters,
 }: RepoFilterBarProps): JSX.Element {
   return (
-    <div className="flex items-center gap-3 px-6 py-3 border-b border-[--color-border-subtle]">
-      <div className="relative flex-1">
+    <div className="flex items-center gap-3 border-b border-[--color-border-subtle] px-6 py-3">
+      <div className="relative h-9 flex-1">
         <Search
           size={14}
           strokeWidth={1.5}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-[--color-text-tertiary]"
+          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[--color-text-tertiary]"
         />
         <input
+          ref={searchInputRef}
           type="search"
           aria-label="Search filename"
-          placeholder="Search reports..."
+          placeholder="Search reports by filename..."
           value={q}
           onChange={(e) => onQChange(e.target.value)}
-          className="w-full h-9 bg-[--color-bg-input] border border-[--color-border-subtle] rounded-[--radius-md] pl-8 pr-3 text-sm text-[--color-text-primary] placeholder:text-[--color-text-tertiary] focus:border-[--color-border-secondary] outline-none"
+          className="h-full w-full rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] pl-9 pr-3 text-[13.5px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] outline-none transition-[border-color,box-shadow] focus:border-[--color-text-secondary] focus:shadow-[0_0_0_3px_rgba(212,255,0,0.10)]"
         />
       </div>
       <FiltersDropdown
@@ -58,6 +64,7 @@ export function RepoFilterBar({
         savedFrom={savedFrom}
         savedTo={savedTo}
         active={filtersActive}
+        activeCount={activeFilterCount}
         onApply={onApplyFilters}
       />
     </div>

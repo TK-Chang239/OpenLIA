@@ -10,6 +10,9 @@ import {
 export interface ChatHeaderValue {
   departmentId: string;
   activeSessionId: string | null;
+  /** Title of the active session. Rendered as an appended breadcrumb
+   *  segment with a chevron that opens the history popover. */
+  chatTitle: string | null;
   /** Switch the page to a session picked from the popover. */
   onSelect: (sessionId: string) => void;
   /** Create a fresh session and switch to it. The handler owns the

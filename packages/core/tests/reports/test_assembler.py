@@ -16,7 +16,7 @@ DEFAULT_FURNITURE = PageFurnitureConfig(
 
 def _raw() -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "department": "equity_research",
         "cover": {
             "instructions": "Fill in cover",

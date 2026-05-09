@@ -40,17 +40,17 @@ export function AddTickerPopover({ onAdd }: Props) {
       <Popover.Trigger asChild>
         <button
           type="button"
-          className="flex items-center gap-1 border border-[--color-border-secondary] text-sm text-[--color-text-secondary] rounded-[--radius-md] px-3 h-7 hover:border-[--color-border-primary]"
+          className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
           aria-label="Add ticker"
         >
-          <Plus size={14} /> Add Ticker
+          <Plus size={13} /> Add Ticker
         </button>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
           align="end"
-          sideOffset={4}
-          className="bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-md] p-3 w-[280px] shadow-md"
+          sideOffset={6}
+          className="z-[60] bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-md] p-3 w-[280px] shadow-md"
         >
           <input
             value={value}
@@ -59,7 +59,7 @@ export function AddTickerPopover({ onAdd }: Props) {
               if (e.key === "Enter") void handleSubmit();
             }}
             placeholder="Ticker symbol or company name"
-            className="w-full bg-[--color-bg-base] border border-[--color-border-subtle] rounded-[--radius-sm] px-2 h-8 text-sm text-[--color-text-primary]"
+            className="w-full bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-md px-3 h-9 text-[13.5px] text-[--color-text-primary] outline-none focus:border-[--color-text-secondary] focus:shadow-[0_0_0_3px_rgba(var(--color-accent-primary-rgb),0.10)] transition-colors"
           />
           {err ? (
             <p className="text-xs text-[--color-feedback-error] mt-2">{err}</p>
@@ -69,9 +69,9 @@ export function AddTickerPopover({ onAdd }: Props) {
               type="button"
               onClick={() => void handleSubmit()}
               disabled={submitting}
-              className="text-sm bg-[--color-accent-primary] text-white h-7 px-3 rounded-[--radius-md] hover:bg-[--color-accent-hover] disabled:opacity-50"
+              className="inline-flex items-center h-8 px-3.5 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] disabled:opacity-50 transition-colors"
             >
-              Add
+              {submitting ? "Adding..." : "Add"}
             </button>
           </div>
         </Popover.Content>

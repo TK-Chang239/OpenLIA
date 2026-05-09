@@ -1,17 +1,19 @@
+import type { JSX } from "react";
+
 const WIDTHS = ["40%", "55%", "35%", "50%", "40%", "55%", "35%", "50%"] as const;
 
 export function RepoListSkeleton(): JSX.Element {
   return (
     <ul data-testid="repo-skeleton" className="divide-y divide-[--color-border-subtle]">
       {WIDTHS.map((w, i) => (
-        <li key={i} className="flex items-center gap-4 px-4 py-3.5">
-          <div className="w-5 h-5 rounded bg-[--color-surface-hover] animate-pulse flex-shrink-0" />
-          <div className="flex flex-col flex-1">
+        <li key={i} className="flex items-center gap-[14px] px-4 py-[14px]">
+          <div className="h-9 w-9 flex-shrink-0 animate-pulse rounded-md border border-[--color-border-subtle] bg-[--color-surface-hover]" />
+          <div className="flex flex-1 flex-col gap-[6px]">
             <div
-              className="h-4 rounded bg-[--color-surface-hover] animate-pulse"
+              className="h-[14px] animate-pulse rounded bg-[--color-surface-hover]"
               style={{ width: w }}
             />
-            <div className="h-3 rounded bg-[--color-surface-hover] animate-pulse w-48 mt-1.5" />
+            <div className="h-[10px] w-56 animate-pulse rounded bg-[--color-surface-hover]" />
           </div>
         </li>
       ))}

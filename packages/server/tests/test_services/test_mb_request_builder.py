@@ -4,6 +4,7 @@ from openlia.llm.runtime.messages import ReportRequest
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import PortfolioHolding
 from openlia_server.db.models.departments import MbUserConfig
+from openlia_server.services.mb_config import MbConfigOverrides
 from openlia_server.services.mb_request_builder import MbRequestBuilderImpl
 from sqlalchemy.orm import Session
 
@@ -160,3 +161,63 @@ def test_build_user_scoped_portfolio(create_tables, db_session: Session) -> None
     req = builder.build(session=db_session, user_id="u_1", schedule_id="s_1")
     assert req.reference_portfolio is None
     assert "TSLA" not in req.user_input
+
+def test_build_applies_per_run_overrides(create_tables, db_session: Session) -> None:
+    """Per-run overrides replace saved fields without persisting."""
+    _mk_user(db_session)
+    db_session.add(
+        MbUserConfig(
+            id="c1",
+            user_id="u_1",
+            report_length="elaborative",
+            enabled_section_ids=["executive_summary", "global_macro"],
+            section_topics={},
+            custom_sections=[],
+            reference_portfolio=False,
+        )
+    )
+    db_session.commit()
+
+    overrides = MbConfigOverrides(
+        report_length="concise",
+        enabled_section_ids=["executive_summary"],
+        custom_sections=[
+            {"id": "tmp", "title": "Ad-hoc focus", "description": "this run only"}
+        ],
+    )
+
+    builder = MbRequestBuilderImpl()
+    req = builder.build(
+        session=db_session,
+        user_id="u_1",
+        schedule_id="on_demand",
+        overrides=overrides,
+    )
+
+    # Overrides win
+    assert req.length == "brief"  # concise -> brief
+    assert req.enabled_sections == ["executive_summary"]
+    assert any(cs["title"] == "Ad-hoc focus" for cs in req.custom_sections)
+
+    # Saved row must be unchanged.
+    saved = db_session.query(MbUserConfig).filter_by(user_id="u_1").one()
+    assert saved.report_length == "elaborative"
+    assert "global_macro" in saved.enabled_section_ids
+    assert saved.custom_sections == []
+
+
+def test_build_overrides_validate_unknown_section_id(create_tables, db_session: Session) -> None:
+    _mk_user(db_session)
+    builder = MbRequestBuilderImpl()
+    overrides = MbConfigOverrides(enabled_section_ids=["not_a_real_section"])
+    try:
+        builder.build(
+            session=db_session,
+            user_id="u_1",
+            schedule_id="on_demand",
+            overrides=overrides,
+        )
+    except ValueError as exc:
+        assert "unknown section" in str(exc)
+        return
+    raise AssertionError("expected ValueError for unknown section id")

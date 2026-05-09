@@ -444,7 +444,7 @@ def test_journey_repo_save_open_unsave(db_session, monkeypatch, make_user) -> No
 
     report_id = str(uuid.uuid4())
     payload = {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "department": "secretary",
         "generated_at": "2026-04-24T10:00:00Z",
         "cover": {
@@ -624,7 +624,7 @@ def test_journey_secretary_chat_stream(db_session, monkeypatch, make_user) -> No
 
 
 _ER_SCHEMA = {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "department": "equity_research",
     "generated_at": "2026-04-24T10:00:00Z",
     "cover": {"title": "AAPL Update", "subtitle": "", "tagline": ""},
@@ -693,7 +693,7 @@ def test_journey_equity_research_report(db_session, monkeypatch, make_user) -> N
 
 
 _EU_SCHEMA = {
-    "schema_version": "1.0",
+    "schema_version": "2.0",
     "department": "earnings_update",
     "generated_at": "2026-04-24T10:00:00Z",
     "cover": {"title": "AAPL Q1 FY2026", "subtitle": "", "tagline": ""},

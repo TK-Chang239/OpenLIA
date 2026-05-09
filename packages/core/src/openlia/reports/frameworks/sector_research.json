@@ -1,15 +1,14 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "department": "equity_research",
   "report_mode": "sector_research",
   "cover": {
-    "instructions": "Fill in the report cover. Title should be 'Sector Research Report'. Subtitle is the sector or industry name (e.g., 'Semiconductor Specialty Chemicals', 'Physical AI / Robotics', 'Global Technology Hardware'). Tagline is a single sentence that leads with the investment conclusion or key insight, not a description of the report contents (e.g., 'Memory supercycle poses downside risk to hardware OEM margins; downgrading Dell, HPQ, Asustek' rather than 'A report on the hardware sector'). Key metrics: sector industry view rating (Attractive/In-Line/Cautious) if applicable, key market size figure, and projected growth rate. Stats panel: number of companies covered, sector classification, region focus, key forecast metrics (market size or WFE or TAM for current year plus 2-3 forward years with CAGR), and report date.",
+    "instructions": "Fill in the report cover. Title should be 'Sector Research Report'. Subtitle is the sector or industry name. Eyebrow combines coverage type and date. Tagline leads with the investment conclusion or key insight. tldr is 1\u20133 short paragraphs; tldr_label null. Key metrics (doc-meta strip): sector industry view rating, key market size figure, projected growth rate.",
     "title": null,
     "subtitle": null,
     "sector": null,
     "tagline": null,
-    "key_metrics": [],
-    "stats_panel": []
+    "key_metrics": []
   },
   "sections": [
     {
@@ -60,5 +59,12 @@
       "instructions": "List 3-5 key risks specific to the sector thesis. Risks should address both the sector-level thesis and the stock-level implications. Common patterns: (1) Timing risk: 'We could be too early on our call, as it took 6-12 months for gross margins to begin contracting after memory prices surged in 2016-2018.' (2) Demand risk: 'Slower-than-expected adoption of [specific technology] reducing demand for [specific segment].' (3) Supply risk: 'Higher-than-expected capacity additions diluting pricing power.' (4) Policy/regulatory: 'Changes to tariff or export control policy altering competitive dynamics.' (5) Technology disruption: 'Emergence of alternative architectures reducing dependency on [current technology].' Each risk should be specific to the sector and quantifiable where possible: 'Product certification delays; advanced process wafer loading below expectations.' Also include upside risks if the thesis is bearish. Keep to 3-5 risks maximum, each 1-2 sentences. Present as a bulleted text block.",
       "blocks": []
     }
-  ]
+  ],
+  "rail": {
+    "instructions": "Populate the Rail object: rail.verdict with the sector industry rating (Attractive/In-Line/Cautious) and as_of date \u2014 leave target and upside null; rail.quick_stats with number of companies covered, region focus, and key forecast metrics (market size / WFE / TAM for current year plus 2\u20133 forward years with CAGR). No sparkline by default.",
+    "verdict": null,
+    "quick_stats": [],
+    "sparkline": null
+  },
+  "citations": []
 }

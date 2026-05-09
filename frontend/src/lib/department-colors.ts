@@ -11,17 +11,28 @@ export type DepartmentSlug =
   | "macro_research"
   | "panic_thermometer";
 
+/** Department badge tint classes. Per Repository design palette: each dept
+ *  gets a tinted bg + matching text + subtle border in the same hue family.
+ *  All three properties read from per-dept tokens so the recipe flips per
+ *  theme — see tokens.css [data-theme="dark"] block. */
+const BLUE = "bg-[--color-dept-blue-bg] text-[--color-dept-blue-text] border border-[--color-dept-blue-border]";
+const ORANGE = "bg-[--color-dept-orange-bg] text-[--color-dept-orange-text] border border-[--color-dept-orange-border]";
+const PURPLE = "bg-[--color-dept-purple-bg] text-[--color-dept-purple-text] border border-[--color-dept-purple-border]";
+const ACCENT_OLIVE = "bg-[--color-dept-accent-bg-soft] text-[--color-accent-on-tint] border border-[--color-dept-accent-border-soft]";
+const ACCENT_BRIGHT = "bg-[--color-dept-accent-bg-strong] text-[--color-accent-on-tint] border border-[--color-dept-accent-border-strong]";
+const ERROR = "bg-[--color-dept-error-bg] text-[--color-dept-error-text] border border-[--color-dept-error-border]";
+
 const BADGE_CLASS: Record<string, string> = {
-  equity_research: "bg-[--color-info]/10 text-[--color-info]",
-  earnings_update: "bg-[--color-success]/10 text-[--color-success]",
-  macro_research: "bg-[--color-warning]/10 text-[--color-warning]",
-  morning_briefing: "bg-[--color-accent-subtle] text-[--color-accent-primary]",
-  retail_sentiment: "bg-[--color-info]/10 text-[--color-info]",
-  secretary: "bg-[--color-surface-hover] text-[--color-text-secondary]",
-  panic_thermometer: "bg-[--color-feedback-error]/10 text-[--color-feedback-error]",
+  equity_research: BLUE,
+  retail_sentiment: BLUE,
+  earnings_update: ACCENT_OLIVE,
+  morning_briefing: ACCENT_BRIGHT,
+  macro_research: ORANGE,
+  secretary: PURPLE,
+  panic_thermometer: ERROR,
 };
 
-const FALLBACK = "bg-[--color-surface-hover] text-[--color-text-secondary]";
+const FALLBACK = "bg-[--color-surface-hover] text-[--color-text-secondary] border border-[--color-border-subtle]";
 
 export function departmentBadgeClass(slug: string): string {
   return BADGE_CLASS[slug] ?? FALLBACK;

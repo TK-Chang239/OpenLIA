@@ -51,14 +51,25 @@ export const fetchConfig = (): Promise<MbConfig> =>
 export const updateConfig = (cfg: MbConfig): Promise<MbConfig> =>
   fetchJson<MbConfig>(`${BASE}/config`, { method: "PUT", json: cfg });
 
-export const fetchSchedule = (): Promise<{ schedule: MbSchedule | null }> =>
-  fetchJson<{ schedule: MbSchedule | null }>(`${BASE}/schedule`);
+export const fetchSchedules = (): Promise<MbSchedule[]> =>
+  fetchJson<MbSchedule[]>(`${BASE}/schedules`);
 
-export const upsertSchedule = (payload: MbScheduleUpsert): Promise<MbSchedule> =>
-  fetchJson<MbSchedule>(`${BASE}/schedule`, { method: "PUT", json: payload });
+export const createSchedule = (payload: MbScheduleUpsert): Promise<MbSchedule> =>
+  fetchJson<MbSchedule>(`${BASE}/schedules`, { method: "POST", json: payload });
 
-export const deleteSchedule = (): Promise<void> =>
-  fetchJson<void>(`${BASE}/schedule`, { method: "DELETE" }).then(() => undefined);
+export const updateSchedule = (
+  id: string,
+  payload: MbScheduleUpsert,
+): Promise<MbSchedule> =>
+  fetchJson<MbSchedule>(`${BASE}/schedules/${id}`, {
+    method: "PATCH",
+    json: payload,
+  });
+
+export const deleteSchedule = (id: string): Promise<void> =>
+  fetchJson<void>(`${BASE}/schedules/${id}`, { method: "DELETE" }).then(
+    () => undefined,
+  );
 
 export const fetchReports = async (): Promise<RecentReportsListResponse> => {
   const { items } = await fetchJson<{ items: RecentReport[] }>(

@@ -24,6 +24,9 @@ const DEFAULTS: SettingsState = {
   },
 };
 
+const FIELD_INPUT =
+  "h-8 px-2.5 rounded-md border bg-[--color-bg-input] text-[12.5px] font-mono tabular-nums focus:outline-none focus:border-[--color-accent-primary]";
+
 export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
   const [state, setState] = useState<SettingsState>(initial ?? DEFAULTS);
   const [busy, setBusy] = useState(false);
@@ -57,79 +60,138 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
   };
 
   return (
-    <div
-      role="dialog"
-      aria-label="Retail Sentiment settings"
-      data-testid="settings-drawer"
-      className="fixed inset-y-0 right-0 z-40 flex w-[400px] max-w-full flex-col border-l border-[--color-border-subtle] bg-[--color-bg-elevated] shadow-2xl"
-    >
-      <header className="flex items-center justify-between border-b border-[--color-border-subtle] px-4 py-3">
-        <h2 className="text-sm font-semibold">Settings</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close settings"
-          className="rounded-md border border-[--color-border-secondary] px-2 py-1 text-xs"
+    <>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close settings"
+        className="fixed inset-0 z-30 bg-black/40"
+      />
+      <aside
+        role="dialog"
+        aria-label="Retail Sentiment settings"
+        data-testid="settings-drawer"
+        className="fixed inset-y-0 right-0 z-40 flex w-[420px] max-w-full flex-col border-l shadow-2xl"
+        style={{
+          background: "var(--color-bg-elevated)",
+          borderColor: "var(--color-border-subtle)",
+        }}
+      >
+        <header
+          className="flex items-center justify-between px-5"
+          style={{
+            height: 52,
+            borderBottom: "1px solid var(--color-border-subtle)",
+          }}
         >
-          Close
-        </button>
-      </header>
-      <div className="space-y-4 overflow-y-auto p-4 text-sm">
-        <section>
-          <h3 className="mb-2 text-xs uppercase text-[--color-text-secondary]">
-            Thresholds
-          </h3>
-          <label className="grid gap-1">
-            Spike z-score
-            <input
-              type="number"
-              step="0.1"
-              value={state.thresholds.spike_z}
-              onChange={(e) => setSpikeZ(Number(e.target.value))}
-              className="rounded-md border border-[--color-border-secondary] bg-[--color-bg-input] px-2 py-1"
-            />
-          </label>
-          <label className="mt-2 grid gap-1">
-            Divergence threshold
-            <input
-              type="number"
-              step="0.1"
-              value={state.thresholds.divergence}
-              onChange={(e) => setDivergence(Number(e.target.value))}
-              className="rounded-md border border-[--color-border-secondary] bg-[--color-bg-input] px-2 py-1"
-            />
-          </label>
-        </section>
-        <section>
-          <h3 className="mb-2 text-xs uppercase text-[--color-text-secondary]">
-            Cross-source weights
-          </h3>
-          {Object.entries(state.cross_source_weights).map(([key, val]) => (
-            <label key={key} className="grid gap-1">
-              {key}
+          <span
+            className="font-mono"
+            style={{
+              fontSize: 10,
+              letterSpacing: "0.14em",
+              textTransform: "uppercase",
+              color: "var(--color-text-tertiary)",
+            }}
+          >
+            Settings · Retail Sentiment
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="inline-flex items-center h-8 px-3 rounded-md border text-[12px] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
+            style={{
+              borderColor: "var(--color-border-secondary)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            Close
+          </button>
+        </header>
+        <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          <section className="space-y-3">
+            <h3
+              className="m-0 rs-mono-label"
+              style={{ color: "var(--color-text-primary)" }}
+            >
+              Thresholds
+            </h3>
+            <label className="grid gap-1">
+              <span className="rs-mono-label">Spike z-score</span>
               <input
                 type="number"
-                min={0}
-                max={1}
-                step="0.05"
-                value={val}
-                onChange={(e) => setWeight(key, Number(e.target.value))}
-                className="rounded-md border border-[--color-border-secondary] bg-[--color-bg-input] px-2 py-1"
+                step="0.1"
+                value={state.thresholds.spike_z}
+                onChange={(e) => setSpikeZ(Number(e.target.value))}
+                className={FIELD_INPUT}
+                style={{ borderColor: "var(--color-border-secondary)" }}
               />
             </label>
-          ))}
-        </section>
-      </div>
-      <footer className="border-t border-[--color-border-subtle] p-3 text-right">
-        <button
-          type="button"
-          onClick={() => void submit()}
-          disabled={busy}
-          className="rounded-md bg-[--color-accent-primary] px-3 py-1 text-xs text-[--color-accent-on] disabled:opacity-60"
+            <label className="grid gap-1">
+              <span className="rs-mono-label">Divergence threshold</span>
+              <input
+                type="number"
+                step="0.1"
+                value={state.thresholds.divergence}
+                onChange={(e) => setDivergence(Number(e.target.value))}
+                className={FIELD_INPUT}
+                style={{ borderColor: "var(--color-border-secondary)" }}
+              />
+            </label>
+          </section>
+          <section className="space-y-3">
+            <h3
+              className="m-0 rs-mono-label"
+              style={{ color: "var(--color-text-primary)" }}
+            >
+              Cross-source weights
+            </h3>
+            {Object.entries(state.cross_source_weights).map(([key, val]) => (
+              <label key={key} className="grid gap-1">
+                <span className="rs-mono-label">{key}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step="0.05"
+                  value={val}
+                  onChange={(e) => setWeight(key, Number(e.target.value))}
+                  className={FIELD_INPUT}
+                  style={{ borderColor: "var(--color-border-secondary)" }}
+                />
+              </label>
+            ))}
+          </section>
+        </div>
+        <footer
+          className="px-5 py-3 flex items-center justify-end gap-2"
+          style={{ borderTop: "1px solid var(--color-border-subtle)" }}
         >
-          {busy ? "Saving…" : "Save"}
-        </button>
-      </footer>
-    </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center h-8 px-3 rounded-md border text-[12px]"
+            style={{
+              borderColor: "var(--color-border-secondary)",
+              color: "var(--color-text-secondary)",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void submit()}
+            disabled={busy}
+            className="inline-flex items-center h-8 px-3 rounded-md text-[12px] font-medium disabled:opacity-60"
+            style={{
+              background: "var(--color-accent-primary)",
+              color: "var(--color-accent-on)",
+            }}
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </footer>
+      </aside>
+    </>
   );
 }

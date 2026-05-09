@@ -57,21 +57,21 @@ describe("RetailSentiment page", () => {
     stubAll();
   });
 
-  it("renders 3 spec tabs (Overview / Evidence / Insights)", async () => {
+  it("renders 4 spec tabs (Overview / Metrics / Evidence / Insights)", async () => {
     render(<RetailSentiment />);
     await waitFor(() => {
       expect(screen.getByTestId("tab-overview")).toBeInTheDocument();
+      expect(screen.getByTestId("tab-metrics")).toBeInTheDocument();
       expect(screen.getByTestId("tab-evidence")).toBeInTheDocument();
       expect(screen.getByTestId("tab-insights")).toBeInTheDocument();
     });
   });
 
-  it("opens metrics deep dive when ? button clicked", async () => {
+  it("Metrics Deep Dive tab uses title-case label", async () => {
     render(<RetailSentiment />);
-    fireEvent.click(
-      await screen.findByLabelText(/Open metrics deep dive/i),
-    );
-    expect(screen.getByTestId("metrics-deep-dive")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Metrics Deep Dive" }),
+    ).toBeInTheDocument();
   });
 
   it("opens settings drawer when Settings clicked", async () => {
@@ -128,7 +128,7 @@ describe("RetailSentiment page", () => {
     });
     render(<RetailSentiment />);
     await waitFor(() => {
-      expect(screen.getByTestId("rs-empty")).toBeInTheDocument();
+      expect(screen.getByTestId("rs-empty-watchlist")).toBeInTheDocument();
     });
   });
 

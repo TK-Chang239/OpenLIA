@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { JSX, ReactNode } from "react";
+import { motion } from "framer-motion";
+import { useSearchParams } from "react-router-dom";
 import { fetchRepoFacets, saveToRepo, unsaveFromRepo, type RepoFacets, type RepoRow } from "../api/repo";
 import { reportPdfUrl } from "../api/reports";
 import { useRepoList } from "../hooks/useRepoList";
-import { useFileViewer, kindFromFilename } from "../components/viewer/FileViewerContext";
+import { useFileViewer } from "../components/viewer/FileViewerContext";
 import { useToast } from "../components/primitives/Toast";
 import { departmentLabel } from "../lib/department-colors";
 import { RepoFilterBar } from "../components/repo/RepoFilterBar";
@@ -12,6 +15,26 @@ import { RepoListItem } from "../components/repo/RepoListItem";
 import { RepoListSkeleton } from "../components/repo/RepoListSkeleton";
 import { RepoEmptyState } from "../components/repo/RepoEmptyState";
 import { RemoveConfirmDialog } from "../components/repo/RemoveConfirmDialog";
+
+const STAGGER = 0.06;
+
+function Reveal({
+  delay,
+  children,
+}: {
+  delay: number;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.32, ease: "easeOut", delay: delay * STAGGER }}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 function formatDate(iso: string): string {
   try {
@@ -27,32 +50,73 @@ export default function Repository(): JSX.Element {
   const toast = useToast();
   const [facets, setFacets] = useState<RepoFacets>({ departments: [], total: 0 });
   const [pendingRemove, setPendingRemove] = useState<RepoRow | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const openParam = searchParams.get("open");
+  const openParamHandledRef = useRef<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     void fetchRepoFacets().then(setFacets).catch(() => {});
   }, []);
 
-  const filtersActive = useMemo(
-    () =>
-      list.params.q !== "" ||
-      list.params.departments.length > 0 ||
-      list.params.generated_from !== "" ||
-      list.params.generated_to !== "" ||
-      list.params.saved_from !== "" ||
-      list.params.saved_to !== "",
-    [list.params],
-  );
+  // Cmd/Ctrl+K focuses the search input. Honors the kbd hint we surface in
+  // the search field; no global command palette behind it.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (list.params.q !== "") n += 1;
+    n += list.params.departments.length;
+    if (list.params.generated_from !== "" || list.params.generated_to !== "") n += 1;
+    if (list.params.saved_from !== "" || list.params.saved_to !== "") n += 1;
+    return n;
+  }, [list.params]);
+
+  const filtersActive = activeFilterCount > 0;
 
   const handleOpen = (row: RepoRow) => {
     openViewer({
       filename: row.filename,
-      kind: kindFromFilename(row.filename),
+      kind: "report",
       metadata: `${departmentLabel(row.department)} · Generated ${formatDate(row.generated_at)} · Saved ${formatDate(row.saved_at)}`,
       source: { kind: "report", reportId: row.report_id },
       initialSaved: true,
       hideSaveToRepoButton: true,
     });
   };
+
+  // Deep-link: /repository?open=<report_id> opens the matching row in the
+  // FileViewer once the list has loaded. If the row isn't found after the
+  // first load completes, surface a toast. Param strips on resolution.
+  useEffect(() => {
+    if (!openParam) return;
+    if (openParamHandledRef.current === openParam) return;
+    if (list.loading) return;
+    const row = list.rows.find((r) => r.report_id === openParam);
+    openParamHandledRef.current = openParam;
+    if (row) {
+      handleOpen(row);
+    } else {
+      toast.push({
+        title: "Report not in your repository",
+        tone: "info",
+        durationMs: 4000,
+      });
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete("open");
+    setSearchParams(next, { replace: true });
+  }, [openParam, list.loading, list.rows, toast, searchParams, setSearchParams]);
 
   const confirmRemove = async () => {
     if (!pendingRemove) return;
@@ -95,58 +159,79 @@ export default function Repository(): JSX.Element {
   const showSkeleton = list.loading && list.rows.length === 0;
   const showEmpty = !list.loading && list.rows.length === 0;
   const emptyMode: "no-saved" | "no-match" = filtersActive ? "no-match" : "no-saved";
+  const totalLabel = facets.total === 1 ? "SAVED REPORT" : "SAVED REPORTS";
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="flex items-center h-14 flex-shrink-0 px-6 border-b border-[--color-border-subtle] bg-[--color-bg-base]">
-        <h1 className="text-xl font-semibold text-[--color-text-primary]">Repository</h1>
-        <span className="ml-auto text-sm text-[--color-text-tertiary]">
-          {facets.total} saved {facets.total === 1 ? "report" : "reports"}
-        </span>
-      </header>
+    <div className="flex h-full flex-col bg-[--color-bg-base]">
+      <Reveal delay={0}>
+        <header className="flex h-[56px] flex-shrink-0 items-center border-b border-[--color-border-subtle] bg-[--color-bg-base] px-6">
+          <h1 className="whitespace-nowrap text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
+            Repository
+            <span className="ml-3 font-mono text-[10px] font-normal tracking-[0.1em] text-[--color-text-tertiary]">
+              {facets.total} {totalLabel}
+            </span>
+          </h1>
+        </header>
+      </Reveal>
 
-      <RepoFilterBar
-        q={list.params.q}
-        onQChange={(v) => list.setParams({ q: v })}
-        facets={facets}
-        selectedDepartments={list.params.departments}
-        generatedFrom={list.params.generated_from}
-        generatedTo={list.params.generated_to}
-        savedFrom={list.params.saved_from}
-        savedTo={list.params.saved_to}
-        filtersActive={filtersActive}
-        onApplyFilters={(next) =>
-          list.setParams({
-            departments: next.departments,
-            generated_from: next.generated_from,
-            generated_to: next.generated_to,
-            saved_from: next.saved_from,
-            saved_to: next.saved_to,
-          })
-        }
-      />
+      <Reveal delay={1}>
+        <RepoFilterBar
+          q={list.params.q}
+          onQChange={(v) => list.setParams({ q: v })}
+          facets={facets}
+          selectedDepartments={list.params.departments}
+          generatedFrom={list.params.generated_from}
+          generatedTo={list.params.generated_to}
+          savedFrom={list.params.saved_from}
+          savedTo={list.params.saved_to}
+          filtersActive={filtersActive}
+          activeFilterCount={activeFilterCount}
+          searchInputRef={searchInputRef}
+          onApplyFilters={(next) =>
+            list.setParams({
+              departments: next.departments,
+              generated_from: next.generated_from,
+              generated_to: next.generated_to,
+              saved_from: next.saved_from,
+              saved_to: next.saved_to,
+            })
+          }
+        />
+      </Reveal>
 
-      <RepoFilterChips
-        q={list.params.q}
-        departments={list.params.departments}
-        generatedFrom={list.params.generated_from}
-        generatedTo={list.params.generated_to}
-        savedFrom={list.params.saved_from}
-        savedTo={list.params.saved_to}
-        onRemoveSearch={() => list.setParams({ q: "" })}
-        onRemoveDepartment={(slug) =>
-          list.setParams({ departments: list.params.departments.filter((d) => d !== slug) })
-        }
-        onRemoveGeneratedRange={() =>
-          list.setParams({ generated_from: "", generated_to: "" })
-        }
-        onRemoveSavedRange={() => list.setParams({ saved_from: "", saved_to: "" })}
-        onClearAll={list.clearFilters}
-      />
+      <Reveal delay={2}>
+        <RepoFilterChips
+          q={list.params.q}
+          departments={list.params.departments}
+          generatedFrom={list.params.generated_from}
+          generatedTo={list.params.generated_to}
+          savedFrom={list.params.saved_from}
+          savedTo={list.params.saved_to}
+          onRemoveSearch={() => list.setParams({ q: "" })}
+          onRemoveDepartment={(slug) =>
+            list.setParams({
+              departments: list.params.departments.filter((d) => d !== slug),
+            })
+          }
+          onRemoveGeneratedRange={() =>
+            list.setParams({ generated_from: "", generated_to: "" })
+          }
+          onRemoveSavedRange={() => list.setParams({ saved_from: "", saved_to: "" })}
+          onClearAll={list.clearFilters}
+        />
+      </Reveal>
 
-      <div className="flex items-center px-6 py-2">
-        <SortDropdown value={list.params.sort} onChange={(s) => list.setParams({ sort: s })} />
-      </div>
+      <Reveal delay={3}>
+        <div className="flex items-center gap-3 px-6 pb-[6px] pt-[10px]">
+          <SortDropdown value={list.params.sort} onChange={(s) => list.setParams({ sort: s })} />
+          <span className="ml-auto whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+            Showing {list.rows.length} of {facets.total}
+            {activeFilterCount > 0
+              ? ` · ${activeFilterCount} ${activeFilterCount === 1 ? "filter" : "filters"} applied`
+              : ""}
+          </span>
+        </div>
+      </Reveal>
 
       {list.error ? (
         <div role="alert" className="px-6 py-3 text-sm text-[--color-feedback-error]">
@@ -154,9 +239,9 @@ export default function Repository(): JSX.Element {
         </div>
       ) : null}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-6 pb-7 pt-1">
         {showSkeleton ? (
-          <div className="border border-[--color-border-subtle] rounded-[--radius-lg] overflow-hidden mx-6 my-2">
+          <div className="overflow-hidden rounded-[--radius-xl] border border-[--color-border-subtle] bg-[--color-bg-base]">
             <RepoListSkeleton />
           </div>
         ) : showEmpty ? (
@@ -166,7 +251,7 @@ export default function Repository(): JSX.Element {
           />
         ) : (
           <ul
-            className="divide-y divide-[--color-border-subtle] border border-[--color-border-subtle] rounded-[--radius-lg] overflow-hidden mx-6 my-2"
+            className="divide-y divide-[--color-border-subtle] overflow-hidden rounded-[--radius-xl] border border-[--color-border-subtle] bg-[--color-bg-base]"
             data-testid="repo-list"
           >
             {list.rows.map((row) => (
@@ -182,13 +267,16 @@ export default function Repository(): JSX.Element {
         )}
         <div ref={list.sentinelRef} data-testid="repo-sentinel" />
         {list.rows.length > 0 && list.loading ? (
-          <div className="text-center py-4 text-xs text-[--color-text-tertiary]" role="status">
-            Loading...
+          <div
+            className="py-[18px] pt-[18px] text-center font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]"
+            role="status"
+          >
+            — Loading more · {list.rows.length} of {facets.total} shown —
           </div>
         ) : null}
         {list.rows.length > 0 && !list.hasMore && !list.loading ? (
-          <div className="text-xs text-[--color-text-tertiary] text-center py-4">
-            All reports loaded
+          <div className="py-[18px] pt-[18px] text-center font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+            — End of results · {list.rows.length} shown —
           </div>
         ) : null}
       </div>

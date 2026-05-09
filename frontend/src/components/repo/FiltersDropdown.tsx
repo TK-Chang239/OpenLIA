@@ -19,6 +19,8 @@ export interface FiltersDropdownProps {
     saved_to: string;
   }) => void;
   active: boolean;
+  /** Count of active filter chips, rendered as a badge on the trigger. */
+  activeCount: number;
 }
 
 export function FiltersDropdown({
@@ -30,6 +32,7 @@ export function FiltersDropdown({
   savedTo,
   onApply,
   active,
+  activeCount,
 }: FiltersDropdownProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [draftDepartments, setDraftDepartments] = useState<string[]>(selectedDepartments);
@@ -67,8 +70,8 @@ export function FiltersDropdown({
   };
 
   const triggerActive = active
-    ? "border-[--color-accent-primary] text-[--color-accent-primary]"
-    : "border-[--color-border-secondary] text-[--color-text-secondary]";
+    ? "border-[--color-accent-primary] bg-[rgba(var(--color-accent-primary-rgb),0.10)] text-[--color-accent-on-tint] hover:border-[--color-accent-primary]"
+    : "border-[--color-border-subtle] bg-[--color-bg-elevated] text-[--color-text-secondary] hover:border-[--color-text-secondary] hover:text-[--color-text-primary]";
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
@@ -77,10 +80,18 @@ export function FiltersDropdown({
           type="button"
           aria-label="Filters"
           aria-pressed={active}
-          className={`flex items-center gap-1.5 h-9 px-3 rounded-[--radius-md] border text-sm hover:bg-[--color-surface-hover] ${triggerActive}`}
+          className={`inline-flex h-9 items-center gap-[6px] rounded-[--radius-md] border px-3 text-[12.5px] font-medium transition-colors ${triggerActive}`}
         >
-          <SlidersHorizontal size={14} strokeWidth={1.5} />
+          <SlidersHorizontal size={14} strokeWidth={1.6} />
           Filters
+          {activeCount > 0 ? (
+            <span
+              className="ml-[2px] inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[--color-accent-primary] px-[5px] font-mono text-[10px] font-semibold text-[--color-accent-on]"
+              data-testid="filters-badge"
+            >
+              {activeCount}
+            </span>
+          ) : null}
         </button>
       </Popover.Trigger>
       <Popover.Portal>

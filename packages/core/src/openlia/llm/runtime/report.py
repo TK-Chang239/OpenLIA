@@ -159,7 +159,7 @@ def _normalize_schema_payload(
     payload.pop("report_metadata", None)
     payload.pop("report_mode", None)
 
-    payload["schema_version"] = "1.0"
+    payload["schema_version"] = "2.0"
     payload["department"] = department_id
     payload["generated_at"] = generated_at.isoformat()
     payload.setdefault("cover", {})
@@ -167,7 +167,10 @@ def _normalize_schema_payload(
 
     cover = payload["cover"] if isinstance(payload["cover"], dict) else {}
     _coerce_metric_list(cover.get("key_metrics"))
-    _coerce_metric_list(cover.get("stats_panel"))
+    cover.pop("stats_panel", None)
+    rail = payload.get("rail")
+    if isinstance(rail, dict):
+        _coerce_metric_list(rail.get("quick_stats"))
     sections = payload["sections"] if isinstance(payload["sections"], list) else []
     for section in sections:
         if isinstance(section, dict):

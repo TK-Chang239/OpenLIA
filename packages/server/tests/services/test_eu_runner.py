@@ -30,7 +30,7 @@ def _mk_user(db: Session, user_id: str = "u_1") -> User:
 
 def _valid_schema(title: str = "AAPL Q1 FY2026") -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "department": "earnings_update",
         "generated_at": "2026-04-23T00:00:00Z",
         "cover": {"title": title, "subtitle": "", "tagline": ""},

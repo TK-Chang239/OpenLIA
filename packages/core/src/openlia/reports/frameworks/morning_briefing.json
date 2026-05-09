@@ -1,15 +1,14 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "department": "morning_briefing",
   "report_mode": "morning_briefing",
   "cover": {
-    "instructions": "Fill in the report cover. Title should be 'Morning Briefing'. Subtitle is the full date (e.g., 'Thursday, April 10, 2026'). Schedule label identifies the report timing (e.g., 'Pre-Market' or 'Post-Market'). Tagline is one sentence capturing the dominant market theme or overnight development (e.g., 'Risk-off overnight as Treasury yields spike to 4.85% on hot CPI; Asia and Europe futures down 1-2%'). Key metrics: show 6-8 headline market levels with overnight or session change — S&P 500, Nasdaq Composite, Dow Jones, US 10Y yield, VIX, DXY (US Dollar Index), WTI crude, gold spot. Each metric shows the level and percentage or basis point change with a directional indicator. Stats panel: report date, schedule label (Pre-Market / Post-Market), timezone, markets covered (e.g., 'US, Asia, Europe'), coverage sections active, generation timestamp.",
+    "instructions": "Fill in the report cover. Title should be 'Morning Briefing'. Subtitle is the full date. Eyebrow combines schedule and timezone (e.g., 'Morning Briefing \u00b7 Pre-Market \u00b7 ET'). Tagline is one sentence capturing the dominant market theme. tldr is 1\u20132 paragraphs framing the day's setup; tldr_label can be 'Setup' or null. Key metrics (doc-meta strip): show 6\u20138 headline market levels with overnight or session change \u2014 S&P 500, Nasdaq, Dow, US 10Y yield, VIX, DXY, WTI, gold. Use Metric.delta and Metric.delta_direction for the change.",
     "title": null,
     "subtitle": null,
     "schedule_label": null,
     "tagline": null,
-    "key_metrics": [],
-    "stats_panel": []
+    "key_metrics": []
   },
   "sections": [
     {
@@ -39,20 +38,27 @@
     {
       "id": "sector_news",
       "title": "Sector News",
-      "instructions": "For each sector the user has configured (e.g., semiconductors, banks, energy, healthcare), write a subsection with the sector name as a bold heading. Each subsection covers: (1) the most significant sector-level development (regulatory action, supply chain shift, industry data release, M&A), (2) the performance of the sector ETF or index relative to the broad market, and (3) any notable analyst calls or rating changes affecting the sector. Keep each subsection to 3-5 sentences — lead with the most impactful development. If no material sector-specific news occurred, note the sector's relative performance and any upcoming catalysts. Use text blocks for each sector. If covering 3+ sectors, include a sector performance comparison table showing sector ETF/index, session change, week-to-date change, and the primary driver in one phrase.",
+      "instructions": "For each sector the user has configured (e.g., semiconductors, banks, energy, healthcare), write a subsection with the sector name as a bold heading. Each subsection covers: (1) the most significant sector-level development (regulatory action, supply chain shift, industry data release, M&A), (2) the performance of the sector ETF or index relative to the broad market, and (3) any notable analyst calls or rating changes affecting the sector. Keep each subsection to 3-5 sentences \u2014 lead with the most impactful development. If no material sector-specific news occurred, note the sector's relative performance and any upcoming catalysts. Use text blocks for each sector. If covering 3+ sectors, include a sector performance comparison table showing sector ETF/index, session change, week-to-date change, and the primary driver in one phrase.",
       "blocks": []
     },
     {
       "id": "stock_news",
       "title": "Stock News",
-      "instructions": "For each stock the user has configured, write a brief subsection with the ticker and company name as a bold heading. Each subsection covers: (1) material overnight or pre-market developments — earnings releases, guidance changes, analyst rating changes, M&A news, product launches, management changes, regulatory actions, (2) the stock's after-hours or pre-market price move with volume context if notable, and (3) a one-sentence assessment of what the news means for the near-term outlook. If a stock had no material news, state that in one sentence and note the next upcoming catalyst (earnings date, ex-dividend date, product event). Use text blocks for each stock. For stocks with earnings releases, include a small metric card set showing EPS actual vs consensus, revenue actual vs consensus, and the after-hours price move.",
+      "instructions": "For each stock the user has configured, write a brief subsection with the ticker and company name as a bold heading. Each subsection covers: (1) material overnight or pre-market developments \u2014 earnings releases, guidance changes, analyst rating changes, M&A news, product launches, management changes, regulatory actions, (2) the stock's after-hours or pre-market price move with volume context if notable, and (3) a one-sentence assessment of what the news means for the near-term outlook. If a stock had no material news, state that in one sentence and note the next upcoming catalyst (earnings date, ex-dividend date, product event). Use text blocks for each stock. For stocks with earnings releases, include a small metric card set showing EPS actual vs consensus, revenue actual vs consensus, and the after-hours price move.",
       "blocks": []
     },
     {
       "id": "upcoming_preview",
       "title": "Upcoming Preview",
-      "instructions": "Provide a forward-looking calendar of events for the current day and the next 2-3 trading days. Organize into three subsections: (1) Today's Calendar: list all market-moving events with exact times and timezone — economic data releases (with consensus estimates), Fed/ECB/BOJ speaker appearances, earnings releases (with consensus EPS and revenue), and geopolitical events. Use a table with columns: Time, Event, Consensus/Expected, Prior, and Significance (High/Medium/Low). (2) This Week Ahead: bullet points for the 3-5 most important events in the remaining week. (3) Portfolio Watch (if Reference Portfolio is enabled): for each portfolio holding with an upcoming catalyst in the next 5 trading days, list the ticker, event, date, and what to watch for. Use a table for today's calendar, text blocks for the week ahead, and a separate table for portfolio watch items.",
+      "instructions": "Provide a forward-looking calendar of events for the current day and the next 2-3 trading days. Organize into three subsections: (1) Today's Calendar: list all market-moving events with exact times and timezone \u2014 economic data releases (with consensus estimates), Fed/ECB/BOJ speaker appearances, earnings releases (with consensus EPS and revenue), and geopolitical events. Use a table with columns: Time, Event, Consensus/Expected, Prior, and Significance (High/Medium/Low). (2) This Week Ahead: bullet points for the 3-5 most important events in the remaining week. (3) Portfolio Watch (if Reference Portfolio is enabled): for each portfolio holding with an upcoming catalyst in the next 5 trading days, list the ticker, event, date, and what to watch for. Use a table for today's calendar, text blocks for the week ahead, and a separate table for portfolio watch items.",
       "blocks": []
     }
-  ]
+  ],
+  "rail": {
+    "instructions": "Populate the Rail object: rail.quick_stats with report date, schedule label, timezone, markets covered, coverage sections active, generation timestamp. rail.verdict and rail.sparkline can be omitted for a market briefing.",
+    "verdict": null,
+    "quick_stats": [],
+    "sparkline": null
+  },
+  "citations": []
 }

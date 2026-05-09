@@ -48,6 +48,18 @@ export interface RsSpike {
   z_score: number;
 }
 
+export interface RsQuoteBar {
+  date: string;
+  close: number;
+  daily_change_pct: number;
+  cumulative_pct: number;
+}
+
+export interface RsQuotes {
+  ticker: string;
+  bars: RsQuoteBar[];
+}
+
 export interface RsDashboard {
   tickers: string[];
   snapshots: RsSnapshot[];
@@ -80,6 +92,12 @@ export function getDashboard(): Promise<RsDashboard> {
 
 export function getHistory(ticker: string, days = 7): Promise<{ ticker: string; snapshots: RsSnapshot[] }> {
   return fetchJson(`${BASE}/dashboard/history?ticker=${encodeURIComponent(ticker)}&days=${days}`);
+}
+
+export function getQuotes(ticker: string, days = 30): Promise<RsQuotes> {
+  return fetchJson<RsQuotes>(
+    `${BASE}/dashboard/quotes?ticker=${encodeURIComponent(ticker)}&days=${days}`,
+  );
 }
 
 export function getConfig(): Promise<RsConfig> {

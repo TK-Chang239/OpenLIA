@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  createSchedule,
   deleteSchedule,
   fetchConfig,
   fetchReports,
-  fetchSchedule,
+  fetchSchedules,
   updateConfig,
-  upsertSchedule,
+  updateSchedule,
 } from "../morning-briefing";
 
 function okJson(body: unknown, status = 200) {
@@ -65,14 +66,17 @@ describe("morning-briefing api client", () => {
     expect(JSON.parse(init.body as string).reference_portfolio).toBe(true);
   });
 
-  it("fetchSchedule GETs /schedule", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(okJson({ schedule: null }));
+  it("fetchSchedules GETs /schedules and returns the list", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(okJson([]));
     vi.stubGlobal("fetch", fetchMock);
-    const r = await fetchSchedule();
-    expect(r.schedule).toBeNull();
+    const r = await fetchSchedules();
+    expect(r).toEqual([]);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/departments/morning-briefing/schedules",
+    );
   });
 
-  it("upsertSchedule PUTs /schedule", async () => {
+  it("createSchedule POSTs /schedules", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       okJson({
         id: "s_1",
@@ -84,20 +88,48 @@ describe("morning-briefing api client", () => {
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
-    const r = await upsertSchedule({
+    const r = await createSchedule({
       time: "07:00",
       timezone: "America/New_York",
       days_of_week: ["mon"],
       label: "Pre-Market",
     });
     expect(r.id).toBe("s_1");
-    expect(fetchMock.mock.calls[0][1].method).toBe("PUT");
+    expect(fetchMock.mock.calls[0][1].method).toBe("POST");
   });
 
-  it("deleteSchedule DELETEs /schedule", async () => {
+  it("updateSchedule PATCHes /schedules/:id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      okJson({
+        id: "s_1",
+        time: "08:00",
+        timezone: "America/New_York",
+        days_of_week: ["mon"],
+        label: "Updated",
+        is_enabled: true,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const r = await updateSchedule("s_1", {
+      time: "08:00",
+      timezone: "America/New_York",
+      days_of_week: ["mon"],
+      label: "Updated",
+    });
+    expect(r.label).toBe("Updated");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/departments/morning-briefing/schedules/s_1",
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe("PATCH");
+  });
+
+  it("deleteSchedule DELETEs /schedules/:id", async () => {
     const fetchMock = vi.fn().mockResolvedValue(ok204());
     vi.stubGlobal("fetch", fetchMock);
-    await deleteSchedule();
+    await deleteSchedule("s_1");
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "/api/departments/morning-briefing/schedules/s_1",
+    );
     expect(fetchMock.mock.calls[0][1].method).toBe("DELETE");
   });
 
