@@ -1,166 +1,164 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  getDashboard,
-  runAssessment,
-  type DashboardResult,
-} from "../../../api/macro_research";
-import {
-  AssessmentBlock,
-  ErrorBlock,
-  FreshnessBadge,
-  LoadingBlock,
-  Panel,
-  SeverityPill,
-  SmartModeToggle,
-  tierOf,
-} from "./DashboardFrame";
+import { useEffect, useState } from "react";
 
-const STATUS_DOT: Record<string, string> = {
-  green: "bg-[--color-feedback-success]",
-  amber: "bg-[--color-feedback-warning]",
-  red: "bg-[--color-feedback-error]",
-};
+import { getDashboard } from "../../../api/macro_research";
+import { DEBT_CYCLE_FALLBACK } from "../../../lib/macro_research/dalio_copy/debt_cycle";
+import type {
+  DebtCycleData,
+  Status,
+  T1Tone,
+} from "../../../lib/macro_research/dalio_copy/types";
+import {
+  DashHero,
+  IndCard,
+  ProseCard,
+  ScoreTable,
+  SectionLabel,
+  Spill,
+  SrcFoot,
+  Verdict,
+} from "../../../components/macro_research/_shared/widgets";
+
+function toneToStatus(tone: T1Tone): Status {
+  switch (tone) {
+    case "red": return "bad";
+    case "amber": return "warn";
+    case "green": return "ok";
+    case "blue": return "info";
+  }
+}
 
 export default function DebtCycleView(): JSX.Element {
-  const [data, setData] = useState<DashboardResult | null>(null);
-  const [smartMode, setSmartMode] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-
-  const load = useCallback((sm: boolean) => {
-    getDashboard("debt_cycle", sm)
-      .then((r) => {
-        setData(r);
-        setError(null);
-      })
-      .catch((e: unknown) => setError(String(e)));
-  }, []);
+  const [, setLive] = useState<DebtCycleData | null>(null);
 
   useEffect(() => {
-    load(smartMode);
-  }, [load, smartMode]);
+    getDashboard("debt_cycle").catch(() => undefined);
+  }, []);
 
-  const onRun = async () => {
-    setRunning(true);
-    try {
-      await runAssessment("debt_cycle");
-      load(smartMode);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setRunning(false);
-    }
-  };
+  void setLive;
+  const data: DebtCycleData = DEBT_CYCLE_FALLBACK;
 
-  if (error) return <ErrorBlock message={error} />;
-  if (!data) return <LoadingBlock label="Debt Cycle" />;
-
-  const t3 = tierOf(data, "T3")?.data as
-    | {
-        phase?: string;
-        indicator_statuses?: Record<string, string>;
-        monetary_space?: {
-          rate_cut_headroom?: number;
-          qe_credibility?: string;
-          currency_debasement_risk?: string;
-        };
-        watchlist_triggers?: { name: string; status: string }[];
-      }
-    | undefined;
-  const t4 = tierOf(data, "T4")?.data as { assessment?: string } | undefined;
+  const heroStats = data.scorecard.rows.map((r) => ({
+    k: r.name.replace(/\s*\(.*\)/, "").split("/")[0].trim(),
+    v: r.current,
+    status: toneToStatus(r.currentTone),
+  }));
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-[--color-text-primary]">
-            Debt Cycle
-          </h2>
-          <SeverityPill severity={data.severity} />
-          <FreshnessBadge generatedAt={data.generated_at} />
-        </div>
-        <div className="flex items-center gap-3">
-          <SmartModeToggle value={smartMode} onChange={setSmartMode} />
-          <button
-            type="button"
-            disabled={running}
-            onClick={onRun}
-            className="rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-sm text-[--color-text-primary] disabled:opacity-60"
-          >
-            {running ? "Running…" : "Run assessment now"}
-          </button>
-        </div>
-      </header>
+    <article>
+      <DashHero
+        eyebrow={data.header.subtitle}
+        headline={data.header.title}
+        lede={data.phaseBox.body}
+        stats={heroStats}
+      />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Panel title="Phase">
-          <div className="text-2xl font-semibold text-[--color-text-primary]">
-            {t3?.phase ?? data.headline ?? "Unknown"}
-          </div>
-        </Panel>
-        <Panel title="Monetary Space">
-          <ul className="space-y-1 text-sm text-[--color-text-primary]">
-            <li>
-              Rate-cut headroom:{" "}
-              <span className="font-mono">
-                {typeof t3?.monetary_space?.rate_cut_headroom === "number"
-                  ? t3.monetary_space.rate_cut_headroom.toFixed(2)
-                  : "—"}
-              </span>
-            </li>
-            <li>QE credibility: {t3?.monetary_space?.qe_credibility ?? "—"}</li>
-            <li>
-              Currency debasement risk:{" "}
-              {t3?.monetary_space?.currency_debasement_risk ?? "—"}
-            </li>
-          </ul>
-        </Panel>
-        <Panel title="Indicators">
-          <ul className="space-y-1 text-sm">
-            {Object.entries(t3?.indicator_statuses ?? {}).map(([k, v]) => (
-              <li key={k} className="flex items-center justify-between">
-                <span className="text-[--color-text-primary]">{k}</span>
-                <span className="flex items-center gap-2 text-[--color-text-secondary]">
-                  <span
-                    className={`inline-block h-2.5 w-2.5 rounded-full ${
-                      STATUS_DOT[v] ?? "bg-[--color-border-subtle]"
-                    }`}
-                  />
-                  {v}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-        <Panel title="Watchlist Triggers">
-          <ul className="space-y-1 text-sm">
-            {(t3?.watchlist_triggers ?? []).map((w) => (
-              <li
-                key={w.name}
-                className="flex items-center justify-between text-[--color-text-primary]"
-              >
-                <span>{w.name}</span>
-                <span
-                  className={`inline-block h-2.5 w-2.5 rounded-full ${
-                    STATUS_DOT[w.status] ?? "bg-[--color-border-subtle]"
-                  }`}
-                />
-              </li>
-            ))}
-          </ul>
-        </Panel>
+      <SectionLabel first count={`${data.scorecard.rows.length} indicators`}>
+        Section A — headline scorecard
+      </SectionLabel>
+      <ScoreTable
+        testid="t1-scorecard"
+        headers={["Indicator", "Current", "Dalio warn threshold", "Status"]}
+        rows={data.scorecard.rows.map((r) => ({
+          name: r.name,
+          sub: r.sub,
+          fillPct: r.fillPct,
+          fillStatus: toneToStatus(r.fillTone),
+          current: r.current,
+          currentStatus: toneToStatus(r.currentTone),
+          currentMeta: r.currentMeta,
+          ctx: r.threshold,
+          status: { label: r.status, tone: toneToStatus(r.statusTone) },
+        }))}
+      />
+
+      <SectionLabel>Section B — cycle phase assessment</SectionLabel>
+      <div
+        className="mr-card-sm"
+        data-testid="t1-phase-box"
+        style={{
+          padding: "16px 18px",
+          borderRadius: 12,
+          marginBottom: 14,
+          background:
+            data.phaseBox.tone === "red"
+              ? "color-mix(in srgb, var(--color-feedback-error) 6%, var(--color-bg-elevated))"
+              : data.phaseBox.tone === "amber"
+                ? "color-mix(in srgb, var(--color-feedback-warning) 8%, var(--color-bg-elevated))"
+                : "var(--color-bg-elevated)",
+        }}
+      >
+        <div className="mr-card-title">{data.phaseBox.title}</div>
+        <div className="mr-card-body-text">{data.phaseBox.body}</div>
+      </div>
+      <div className="mr-grid2" style={{ marginBottom: 14 }}>
+        <ProseCard
+          eyebrow="Historical analog"
+          title={data.analogPair.analog.title}
+          body={data.analogPair.analog.body}
+        />
+        <ProseCard
+          eyebrow="Time-to-constraint estimate"
+          title={data.analogPair.timeToConstraint.title}
+          body={data.analogPair.timeToConstraint.body}
+        />
       </div>
 
-      <AssessmentBlock
-        text={t4?.assessment ?? null}
-        generatedAt={data.generated_at}
-      />
-      {smartMode ? (
-        <div className="text-xs text-[--color-text-tertiary]">
-          Smart Mode overlays are informational only; backend assessment is
-          unchanged.
+      <SectionLabel>Section C — monetary policy space</SectionLabel>
+      <div className="mr-grid3" style={{ marginBottom: 14 }}>
+        {data.policySpace.cards.map((c) => (
+          <IndCard
+            key={c.label}
+            name={c.label}
+            value={c.value}
+            unit={c.unit}
+            status={toneToStatus(c.valueTone)}
+            body={c.note}
+          />
+        ))}
+      </div>
+
+      <SectionLabel>Section D — asset implications</SectionLabel>
+      <div className="mr-grid2" style={{ marginBottom: 14 }}>
+        <ProseCard
+          eyebrow="Gold / real assets thesis"
+          title={data.assetThesis.gold.title}
+          body={data.assetThesis.gold.body}
+        />
+        <ProseCard
+          eyebrow="Long-duration bond risk"
+          title={data.assetThesis.longBond.title}
+          body={data.assetThesis.longBond.body}
+        />
+      </div>
+
+      <SectionLabel count={`${data.watchlist.rows.length} triggers`}>
+        Watchlist — what would change this assessment
+      </SectionLabel>
+      <div className="mr-card" data-testid="t1-watchlist" style={{ padding: "4px 18px", marginBottom: 18 }}>
+        <div className="mr-trig-list">
+          {data.watchlist.rows.map((r) => (
+            <div key={r.name} className="mr-trig">
+              <span className={`dot ${toneToStatus(r.tone)}`} />
+              <div className="name">{r.name}</div>
+              <div className="body">{r.body}</div>
+              <Spill status={toneToStatus(r.tone)}>{toneToStatus(r.tone)}</Spill>
+            </div>
+          ))}
         </div>
-      ) : null}
-    </section>
+      </div>
+
+      <Verdict
+        testid="t1-verdict"
+        meta={<>T1 SYNTHESIS · DALIO FRAMEWORK <span className="dot" /> April 2026</>}
+        headline={data.verdict.title}
+        body={data.verdict.body}
+        tone={toneToStatus(data.verdict.tone)}
+      />
+
+      <SrcFoot>
+        <strong>Sources · </strong>
+        {data.sources}
+      </SrcFoot>
+    </article>
   );
 }

@@ -1,153 +1,260 @@
-import { useCallback, useEffect, useState } from "react";
-import {
-  getDashboard,
-  runAssessment,
-  type DashboardResult,
-} from "../../../api/macro_research";
-import {
-  AssessmentBlock,
-  ErrorBlock,
-  FreshnessBadge,
-  LoadingBlock,
-  Panel,
-  SeverityPill,
-  SmartModeToggle,
-  tierOf,
-} from "./DashboardFrame";
+import { type ReactNode, useEffect, useState } from "react";
 
-type T3 = {
-  force_scores?: Record<string, number>;
-  active_force_count?: number;
-  bucket?: string;
-};
+import { getDashboard } from "../../../api/macro_research";
+import { FIVE_FORCES_FALLBACK } from "../../../lib/macro_research/dalio_copy/five_forces";
+import type {
+  FiveForcesData,
+  Status,
+  T5ActiveCount,
+  T5ForceRow,
+  T5GoldAllocation,
+  T5LoopBlock,
+  T5SignalCard,
+  T5Tone,
+} from "../../../lib/macro_research/dalio_copy/types";
+import {
+  AllocBar,
+  DashHero,
+  ScenarioDuo,
+  SectionLabel,
+  Spill,
+  SrcFoot,
+  Verdict,
+} from "../../../components/macro_research/_shared/widgets";
 
-const FORCE_LABEL: Record<string, string> = {
-  debt_money: "Debt & Money",
-  political: "Political",
-  geopolitical: "Geopolitical",
-  technology: "Technology",
-  natural: "Natural",
-};
+function toneToStatus(tone: T5Tone): Status {
+  switch (tone) {
+    case "red":   return "bad";
+    case "amber": return "warn";
+    case "green": return "ok";
+    case "blue":  return "info";
+  }
+}
+
+function fillClassFromStatus(s: Status): string {
+  switch (s) {
+    case "bad":  return "mr-fill-bad";
+    case "warn": return "mr-fill-warn";
+    case "ok":
+    case "info": return "mr-fill-ok";
+    case "acid": return "mr-fill-acid";
+    case "flat": return "mr-fill-flat";
+  }
+}
+
+function renderRich(text: string): ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) => {
+    if (p.startsWith("**") && p.endsWith("**")) {
+      return <strong key={i}>{p.slice(2, -2)}</strong>;
+    }
+    return <span key={i}>{p}</span>;
+  });
+}
 
 export default function FiveForcesView(): JSX.Element {
-  const [data, setData] = useState<DashboardResult | null>(null);
-  const [smartMode, setSmartMode] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [running, setRunning] = useState(false);
-
-  const load = useCallback((sm: boolean) => {
-    getDashboard("five_forces", sm)
-      .then((r) => {
-        setData(r);
-        setError(null);
-      })
-      .catch((e: unknown) => setError(String(e)));
-  }, []);
+  const [, setLive] = useState<FiveForcesData | null>(null);
 
   useEffect(() => {
-    load(smartMode);
-  }, [load, smartMode]);
+    getDashboard("five_forces").catch(() => undefined);
+  }, []);
 
-  const onRun = async () => {
-    setRunning(true);
-    try {
-      await runAssessment("five_forces");
-      load(smartMode);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setRunning(false);
-    }
-  };
+  void setLive;
+  const data: FiveForcesData = FIVE_FORCES_FALLBACK;
 
-  if (error) return <ErrorBlock message={error} />;
-  if (!data) return <LoadingBlock label="Five Forces" />;
+  const critical = data.scorecard.rows.filter((r) => r.scorePct >= 70).length;
+  const aggregate = data.scorecard.rows.length > 0
+    ? data.scorecard.rows.reduce((s, r) => s + r.scorePct, 0) / data.scorecard.rows.length / 10
+    : 0;
 
-  const t3 = tierOf(data, "T3")?.data as T3 | undefined;
-  const t4 = tierOf(data, "T4")?.data as { assessment?: string } | undefined;
-  const forces = t3?.force_scores ?? {};
+  const heroStats = [
+    { k: "Aggregate", v: aggregate.toFixed(1), status: aggregate >= 7 ? "bad" as Status : aggregate >= 5 ? "warn" as Status : "ok" as Status },
+    { k: "Critical", v: String(critical), status: critical >= 3 ? "bad" as Status : critical >= 1 ? "warn" as Status : "ok" as Status },
+    { k: "Forces", v: `${data.scorecard.rows.length} / 5`, status: "info" as Status },
+  ];
 
   return (
-    <section className="space-y-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h2 className="text-xl font-semibold text-[--color-text-primary]">
-            Five Forces
-          </h2>
-          <SeverityPill severity={data.severity} />
-          <FreshnessBadge generatedAt={data.generated_at} />
-        </div>
-        <div className="flex items-center gap-3">
-          <SmartModeToggle value={smartMode} onChange={setSmartMode} />
-          <button
-            type="button"
-            disabled={running}
-            onClick={onRun}
-            className="rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-sm text-[--color-text-primary] disabled:opacity-60"
-          >
-            {running ? "Running…" : "Run assessment now"}
-          </button>
-        </div>
-      </header>
-
-      <Panel title="Active Force Count" testid="active-force-panel">
-        <div className="flex items-center justify-between">
-          <div className="text-3xl font-semibold text-[--color-text-primary]">
-            {t3?.active_force_count ?? 0}
-            <span className="ml-2 text-base font-normal text-[--color-text-secondary]">
-              / 5
-            </span>
-          </div>
-          <div className="text-sm text-[--color-text-secondary]">
-            {t3?.bucket ?? "—"}
-          </div>
-        </div>
-      </Panel>
-
-      <Panel title="Force Scorecard">
-        <ul className="space-y-2 text-sm">
-          {Object.keys(FORCE_LABEL).map((key) => {
-            const score = forces[key] ?? 0;
-            const active = score >= 7;
-            return (
-              <li
-                key={key}
-                className="flex items-center gap-3"
-                data-testid={`force-row-${key}`}
-              >
-                <span className="w-36 text-[--color-text-primary]">
-                  {FORCE_LABEL[key]}
-                </span>
-                <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-[--color-border-subtle]">
-                  <div
-                    className={
-                      "absolute inset-y-0 left-0 " +
-                      (active
-                        ? "bg-[--color-feedback-error]"
-                        : "bg-[--color-accent-primary]")
-                    }
-                    style={{ width: `${Math.min(100, (score / 10) * 100)}%` }}
-                  />
-                </div>
-                <span className="w-8 text-right font-mono text-xs text-[--color-text-secondary]">
-                  {score}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </Panel>
-
-      <AssessmentBlock
-        text={t4?.assessment ?? null}
-        generatedAt={data.generated_at}
+    <article>
+      <DashHero
+        eyebrow={data.header.subtitle}
+        headline={data.header.title}
+        lede={data.cardSummary}
+        stats={heroStats}
       />
-      {smartMode ? (
-        <div className="text-xs text-[--color-text-tertiary]">
-          Smart Mode lowers the active threshold during historical turning-point
-          windows.
+
+      <SectionLabel first count={data.scorecard.label}>
+        Section A — five-force scorecard
+      </SectionLabel>
+      <div className="mr-card" data-testid="t5-scorecard" style={{ padding: "4px 18px", marginBottom: 14 }}>
+        {data.scorecard.rows.map((r) => (
+          <ForceRowEl key={r.forceLabel} row={r} />
+        ))}
+      </div>
+
+      <SectionLabel count={data.loops.label}>
+        Section B — reinforcement loops
+      </SectionLabel>
+      <div className="mr-grid2" data-testid="t5-loops" style={{ marginBottom: 14 }}>
+        {data.loops.blocks.map((b: T5LoopBlock) => (
+          <div key={b.title} className="mr-loop">
+            <div className="lt">{b.title}</div>
+            {b.arrows.map((a, i) => (
+              <div key={i} className="arr">
+                <span className="chip">{a.fromLabel}</span>
+                <span className="sym">→</span>
+                <span className="chip">{a.toLabel}</span>
+              </div>
+            ))}
+            <p>{b.body}</p>
+          </div>
+        ))}
+      </div>
+      <ActiveCount active={data.loops.active} />
+
+      <SectionLabel count={data.signals.label}>Section C — market signals</SectionLabel>
+      <div className="mr-grid3" data-testid="t5-signals" style={{ marginBottom: 14 }}>
+        {data.signals.cards.map((c: T5SignalCard) => (
+          <div key={c.label} className="mr-card-sm" style={{ background: "var(--color-bg-elevated)" }}>
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "var(--color-text-tertiary)",
+              }}
+            >
+              {c.label}
+            </div>
+            <div className="mr-card-title" style={{ fontSize: 22, fontFamily: "var(--font-mono)" }}>{c.value}</div>
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 11,
+                color: "var(--color-text-tertiary)",
+              }}
+            >
+              {c.unit}
+            </div>
+            <div className="mr-card-body-text">{c.note}</div>
+          </div>
+        ))}
+      </div>
+
+      <SectionLabel count={data.goldAllocation.label}>
+        Section D — gold allocation framework
+      </SectionLabel>
+      <GoldAllocationCard block={data.goldAllocation.block} />
+
+      <SectionLabel count={data.scenarios.label}>Section E — scenarios</SectionLabel>
+      <div data-testid="t5-scenarios" style={{ marginBottom: 14 }}>
+        {data.scenarios.cards.length >= 2 ? (
+          <ScenarioDuo
+            bull={(() => {
+              const c = data.scenarios.cards.find((x) => x.variant === "bull");
+              return { label: "Bull case", title: c?.title ?? "—", body: c?.body ?? "" };
+            })()}
+            bear={(() => {
+              const c = data.scenarios.cards.find((x) => x.variant === "bear");
+              return { label: "Bear case", title: c?.title ?? "—", body: c?.body ?? "" };
+            })()}
+          />
+        ) : null}
+      </div>
+
+      <Verdict
+        testid="t5-verdict"
+        meta={
+          <>
+            T5 SYNTHESIS · DALIO FRAMEWORK <span className="dot" /> April 2026
+          </>
+        }
+        headline={data.verdict.title}
+        body={data.verdict.body}
+      />
+
+      <SrcFoot>
+        <strong>Sources · </strong>
+        {data.sources}
+      </SrcFoot>
+    </article>
+  );
+}
+
+/* ───── T5-only widgets ───── */
+
+function ForceRowEl({ row }: { row: T5ForceRow }): JSX.Element {
+  return (
+    <div className="mr-force-row">
+      <div className="mr-force-meta">
+        <span className="fnum">{row.forceLabel}</span>
+        <span className="fname">{row.forceSub}</span>
+        <Spill status={toneToStatus(row.pillTone)}>{row.pillLabel}</Spill>
+        <div className="fbar" style={{ marginTop: 6 }}>
+          <div
+            className={`ff ${fillClassFromStatus(toneToStatus(row.scoreTone))}`}
+            style={{ width: `${row.scorePct}%` }}
+          />
         </div>
-      ) : null}
-    </section>
+        <div className="fscore">
+          <span className="num">{row.scoreValue}</span>
+        </div>
+      </div>
+      <div className="mr-force-body">{renderRich(row.body)}</div>
+      <div className="mr-force-status" />
+    </div>
+  );
+}
+
+function ActiveCount({ active }: { active: T5ActiveCount }): JSX.Element {
+  return (
+    <div className={`mr-active ${toneToStatus(active.countTone)}`} data-testid="t5-active-count" style={{ marginBottom: 14 }}>
+      <div className="mr-active-num">{active.countText}</div>
+      <div>
+        <div className="mr-active-title">{active.title}</div>
+        <div className="mr-active-body">{active.body}</div>
+      </div>
+    </div>
+  );
+}
+
+function GoldAllocationCard({ block }: { block: T5GoldAllocation }): JSX.Element {
+  return (
+    <div className="mr-card" data-testid="t5-gold-allocation" style={{ padding: "18px 22px", marginBottom: 14 }}>
+      <div className="mr-card-title" style={{ marginBottom: 14 }}>{block.title}</div>
+      <AllocBar
+        ticks={block.ticks}
+        needles={block.stats
+          .filter((s) => s.highlight)
+          .map((s) => ({ label: s.label, pct: 50, tone: "warn" as Status }))}
+      />
+      <div className="mr-grid3" style={{ marginTop: 18 }}>
+        {block.stats.map((s) => (
+          <div
+            key={s.label}
+            className="mr-card-sm"
+            style={{
+              background: s.highlight ? "rgba(var(--color-accent-primary-rgb), 0.10)" : "var(--color-bg-base)",
+              borderColor: s.highlight ? "var(--color-accent-primary)" : undefined,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "var(--font-mono)",
+                fontSize: 10,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+                color: "var(--color-text-tertiary)",
+              }}
+            >
+              {s.label}
+            </div>
+            <div className="mr-card-title" style={{ fontSize: 18, fontFamily: "var(--font-mono)" }}>{s.value}</div>
+            <div className="mr-card-body-text">{s.note}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mr-card-body-text" style={{ marginTop: 14 }}>{block.body}</p>
+    </div>
   );
 }

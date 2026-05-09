@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   getConfig,
   putThresholdOverrides,
+  runAssessment,
   type DashboardSummary,
 } from "../../../api/macro_research";
 import ScheduleEditor from "./ScheduleEditor";
@@ -51,6 +52,18 @@ export default function MRSettingsPanel({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [scheduleVisible, setScheduleVisible] = useState(true);
+  const [running, setRunning] = useState<string | null>(null);
+
+  const onRunNow = async (slug: string) => {
+    setRunning(slug);
+    try {
+      await runAssessment(slug);
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRunning(null);
+    }
+  };
 
   useEffect(() => {
     if (!activeSlug) return;
@@ -97,6 +110,26 @@ export default function MRSettingsPanel({
           Close
         </button>
       </header>
+
+      <section className="space-y-3" data-testid="mr-settings-runnow-section">
+        <h3 className="text-sm font-medium text-[--color-text-primary]">
+          Run assessment now
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          {dashboards.map((d) => (
+            <button
+              key={d.slug}
+              type="button"
+              data-testid={`mr-runnow-${d.slug}`}
+              disabled={running === d.slug}
+              onClick={() => onRunNow(d.slug)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 text-xs text-[--color-text-primary] hover:border-[--color-feedback-success] disabled:opacity-60"
+            >
+              {running === d.slug ? "Running…" : d.display_name}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section
         className="space-y-3"
