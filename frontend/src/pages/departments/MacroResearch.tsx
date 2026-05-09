@@ -86,17 +86,19 @@ export default function MacroResearch(): JSX.Element {
         transition: { duration: 0.32, ease: PAGE_EASE },
       };
 
-  /* Per-tab transition: cross-fade with a small y-translate so the
-     content feels like it slides into place. mode="wait" ensures the
-     outgoing panel finishes exiting before the new one mounts, which
-     keeps charts from overlapping during their own paint. */
+  /* Per-tab transition: opacity-only fade. The y-translate is handled
+     by per-section staggered fade-up on `.mr-scroll article > *`,
+     so wrapping the whole block in another y-translate would just
+     mask the stagger. mode="wait" ensures the outgoing panel finishes
+     exiting before the new one mounts, which keeps charts from
+     overlapping during their own paint. */
   const tabMotion = prefersReducedMotion
     ? { initial: { opacity: 0 }, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.1 } }
     : {
-        initial: { opacity: 0, y: 8 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -6 },
-        transition: { duration: 0.22, ease: PAGE_EASE },
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+        transition: { duration: 0.18, ease: PAGE_EASE },
       };
 
   return (
@@ -163,7 +165,10 @@ export default function MacroResearch(): JSX.Element {
         ))}
       </nav>
 
-      <div className="flex-1 overflow-y-auto px-8 py-7 pb-16">
+      <div
+        className="mr-scroll flex-1 overflow-y-auto px-8 py-7 pb-16"
+        style={{ scrollbarGutter: "stable" }}
+      >
         <div className="mx-auto max-w-[1200px]">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div

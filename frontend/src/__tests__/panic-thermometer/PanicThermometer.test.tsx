@@ -1,102 +1,66 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as api from "../../api/panic-thermometer";
 import PanicThermometer from "../../pages/departments/PanicThermometer";
 
-vi.mock("../../hooks/usePtDashboard", () => ({
-  usePtDashboard: () => ({
-    data: {
-      panels: {
-        oil: {
-          panel_id: "oil",
-          status: "amber",
-          label: "Above threshold",
-          resolved_values: { price: 90, price_threshold: 85 },
-          derived_scalars: {},
-          extras: {},
-          warnings: [],
-        },
-        inflation: {
-          panel_id: "inflation",
-          status: "green",
-          label: "Anchored",
-          resolved_values: { tip_price_latest: 100, tip_prev_close: 99 },
-          derived_scalars: {},
-          extras: {},
-          warnings: [],
-        },
-        fed_language: {
-          panel_id: "fed_language",
-          status: "green",
-          label: "Dovish",
-          resolved_values: {},
-          derived_scalars: {},
-          extras: {},
-          warnings: [],
-        },
-        wage_growth: {
-          panel_id: "wage_growth",
-          status: "green",
-          label: "Normal",
-          resolved_values: {},
-          derived_scalars: {},
-          extras: {},
-          warnings: [],
-        },
-        diplomacy: {
-          panel_id: "diplomacy",
-          status: "green",
-          label: "Within window",
-          resolved_values: { window_days: 30 },
-          derived_scalars: {},
-          extras: {},
-          warnings: [],
-        },
+function stubApi() {
+  vi.spyOn(api, "fetchConfig").mockResolvedValue({
+    id: "u1",
+    panel_config: [
+      {
+        panel_id: "oil",
+        rules: [],
+        params: {},
+        streak_condition: null,
+        manual_override: null,
+        milestone_date: null,
       },
-      composite: { level: "calm", score: 0, red_count: 0, mode: "count" },
-      generated_at: "2026-04-25T12:00:00Z",
-      warnings: [],
-    },
-    error: null,
-    refresh: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock("../../hooks/usePtConfig", () => ({
-  usePtConfig: () => ({
-    config: {
-      id: "u-1",
-      panel_config: [],
-      composite_settings: { mode: "count" },
-      active_preset_id: null,
-    },
-    isLoading: false,
-    error: null,
-    save: vi.fn(),
-    refresh: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock("../../hooks/usePtPresets", () => ({
-  usePtPresets: () => ({
-    presets: [],
-    isLoading: false,
-    error: null,
-    refresh: vi.fn().mockResolvedValue(undefined),
-    create: vi.fn(),
-    rename: vi.fn(),
-    remove: vi.fn(),
-    apply: vi.fn().mockResolvedValue({}),
-  }),
-}));
+    ],
+    composite_settings: { mode: "count" },
+    active_preset_id: null,
+  });
+  vi.spyOn(api, "listPresets").mockResolvedValue([]);
+}
 
 describe("PanicThermometer page", () => {
-  it("renders the five panel dashboards", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    stubApi();
+  });
+
+  it("renders the topbar with severity pill and settings button", async () => {
     render(<PanicThermometer />);
-    expect(screen.getByTestId("panel-dashboard-oil")).toBeInTheDocument();
-    expect(screen.getByTestId("panel-dashboard-inflation")).toBeInTheDocument();
-    expect(screen.getByTestId("panel-dashboard-fed_language")).toBeInTheDocument();
-    expect(screen.getByTestId("panel-dashboard-wage_growth")).toBeInTheDocument();
-    expect(screen.getByTestId("panel-dashboard-diplomacy")).toBeInTheDocument();
+    expect(screen.getAllByText("Panic Thermometer").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Severe · 3 of 5 red/).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText("Open settings")).toBeInTheDocument();
+  });
+
+  it("renders all five scorecards with anchor hrefs", async () => {
+    render(<PanicThermometer />);
+    expect(screen.getByTestId("pt-scorecard-oil")).toHaveAttribute("href", "#oil");
+    expect(screen.getByTestId("pt-scorecard-inflation")).toHaveAttribute("href", "#inflation");
+    expect(screen.getByTestId("pt-scorecard-fed")).toHaveAttribute("href", "#fed");
+    expect(screen.getByTestId("pt-scorecard-wage")).toHaveAttribute("href", "#wage");
+    expect(screen.getByTestId("pt-scorecard-diplomacy")).toHaveAttribute("href", "#diplomacy");
+  });
+
+  it("renders Hero, all 5 deep-dive panels, releases table, and verdict", () => {
+    render(<PanicThermometer />);
+    expect(screen.getByText("Three of five indicators red.")).toBeInTheDocument();
+    expect(screen.getByText("D1 · Oil price duration")).toBeInTheDocument();
+    expect(screen.getByText("D2 · Inflation expectations")).toBeInTheDocument();
+    expect(screen.getByText("D3 · Fed language tracker")).toBeInTheDocument();
+    expect(screen.getByText("D4 · Wage growth")).toBeInTheDocument();
+    expect(screen.getByText("D5 · Diplomatic progress")).toBeInTheDocument();
+    expect(screen.getByText("Macro releases · last 7 days")).toBeInTheDocument();
+    expect(screen.getByText("LIA · verdict")).toBeInTheDocument();
+  });
+
+  it("opens the settings drawer when Settings is clicked", async () => {
+    render(<PanicThermometer />);
+    fireEvent.click(screen.getByLabelText("Open settings"));
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
   });
 });

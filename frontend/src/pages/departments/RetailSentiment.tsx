@@ -348,7 +348,10 @@ export default function RetailSentiment(): JSX.Element {
       ) : null}
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto">
+      <div
+        className="flex-1 overflow-y-auto"
+        style={{ scrollbarGutter: "stable" }}
+      >
         <div
           key={tab}
           className="max-w-[1200px] mx-auto px-8 pt-7 pb-16 animate-rs-tab-enter"
