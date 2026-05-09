@@ -66,6 +66,40 @@
   color: var(--color-accent-on);
 }
 
+/* ===== Entrance stagger =====
+   Re-fires per tab swap because the tab wrapper key={location.pathname}
+   remounts the article subtree. Targets direct children of <article>
+   inside the macro-research scroll container. */
+
+@keyframes mr-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mr-scroll article > * {
+  animation: mr-fade-up 420ms var(--ease-out) both;
+}
+.mr-scroll article > *:nth-child(1)  { animation-delay: 0ms; }
+.mr-scroll article > *:nth-child(2)  { animation-delay: 50ms; }
+.mr-scroll article > *:nth-child(3)  { animation-delay: 100ms; }
+.mr-scroll article > *:nth-child(4)  { animation-delay: 150ms; }
+.mr-scroll article > *:nth-child(5)  { animation-delay: 200ms; }
+.mr-scroll article > *:nth-child(6)  { animation-delay: 250ms; }
+.mr-scroll article > *:nth-child(7)  { animation-delay: 300ms; }
+.mr-scroll article > *:nth-child(8)  { animation-delay: 350ms; }
+.mr-scroll article > *:nth-child(9)  { animation-delay: 400ms; }
+.mr-scroll article > *:nth-child(10) { animation-delay: 450ms; }
+.mr-scroll article > *:nth-child(11) { animation-delay: 500ms; }
+.mr-scroll article > *:nth-child(12) { animation-delay: 550ms; }
+.mr-scroll article > *:nth-child(13) { animation-delay: 600ms; }
+.mr-scroll article > *:nth-child(14) { animation-delay: 650ms; }
+.mr-scroll article > *:nth-child(15) { animation-delay: 700ms; }
+.mr-scroll article > *:nth-child(n+16) { animation-delay: 750ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-scroll article > * { animation: none !important; }
+}
+
 /* ===== Generic grids ===== */
 
 .mr-wrap { display: flex; flex-direction: column; gap: 0; }
