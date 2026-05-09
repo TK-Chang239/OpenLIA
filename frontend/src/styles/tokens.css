@@ -108,7 +108,54 @@
   --color-accent-hover:       #E8FF5A;
   --color-accent-subtle:      rgba(212, 255, 0, 0.08);
   --color-accent-on:          #3D4D00;
+  /* Text colour for elements that sit on a *tinted* accent background
+     (rgba(212,255,0,0.08–0.15) over the page bg) rather than the solid
+     acid-yellow. In light mode the page bg is warm beige + a faint yellow
+     wash, so dark olive (#3D4D00) reads well. In dark mode the same wash
+     sits on near-black, so the dark-olive variant becomes nearly invisible
+     and is overridden in the dark block below. */
+  --color-accent-on-tint:     #3D4D00;
   --color-accent-primary-rgb: 212, 255, 0;
+
+  /* ── Semantic — Department badge tints ───────────────────────
+     Used by Repository row badges and any other dept-keyed chip.
+     Each dept reuses a hue family — equity/retail share blue,
+     earnings shares the existing acid-yellow scale, morning uses
+     accent-primary directly. Macro and secretary add new hues.
+
+     Each dept exposes -text, -bg, -border tokens so the recipe is
+     swappable per theme (see [data-theme="dark"] block below): in
+     light mode the tint is a low-alpha overlay of the mid-tone hue
+     on warm beige, in dark mode it bumps to a higher-alpha overlay
+     of the brighter hue on near-black so the chip stays present. */
+  --color-dept-blue-text:    #2D5A8A;
+  --color-dept-blue-rgb:     60, 120, 180;
+  --color-dept-blue-bg:      rgba(60, 120, 180, 0.10);
+  --color-dept-blue-border:  rgba(60, 120, 180, 0.25);
+
+  --color-dept-orange-text:   #8A5A0F;
+  --color-dept-orange-rgb:    200, 140, 40;
+  --color-dept-orange-bg:     rgba(200, 140, 40, 0.10);
+  --color-dept-orange-border: rgba(200, 140, 40, 0.25);
+
+  --color-dept-purple-text:   #5C3D80;
+  --color-dept-purple-rgb:    120, 80, 160;
+  --color-dept-purple-bg:     rgba(120, 80, 160, 0.10);
+  --color-dept-purple-border: rgba(120, 80, 160, 0.25);
+
+  /* Panic Thermometer (red/error) — gets dedicated tokens because the
+     plain --color-feedback-error doesn't flip per theme. */
+  --color-dept-error-text:   var(--color-feedback-error);
+  --color-dept-error-bg:     rgba(224, 92, 48, 0.10);
+  --color-dept-error-border: rgba(224, 92, 48, 0.25);
+
+  /* Acid-yellow dept tints (Morning Briefing, Earnings Update). Bg/border
+     stay the same hue across themes; only the text colour swaps via
+     --color-accent-on-tint (defined above). */
+  --color-dept-accent-bg-soft:     rgba(212, 255, 0, 0.10);
+  --color-dept-accent-border-soft: rgba(212, 255, 0, 0.30);
+  --color-dept-accent-bg-strong:   rgba(212, 255, 0, 0.12);
+  --color-dept-accent-border-strong: rgba(212, 255, 0, 0.40);
 
   /* ── Semantic — Feedback ─────────────────────────────────── */
   --color-feedback-success:      #6B8200;
@@ -116,6 +163,9 @@
   --color-feedback-error-strong: #8E1F08;
   --color-feedback-warning:      #DC9614;
   --color-feedback-info:         #6B8200;
+  /* Foreground for content sitting on top of feedback-error fills. White
+     in both themes (the red doesn't flip per theme). */
+  --color-feedback-error-on:     #FFFFFF;
 
   --focus-ring-color: #D4FF00;
 
@@ -193,4 +243,37 @@
 
   --color-icon-primary: #7A7A74;
   --color-icon-muted:   #4E4E4A;
+
+  /* Brighten dept text in dark mode for legibility on dark surfaces, and
+     bump the bg/border tints to use the same brightened hue at slightly
+     higher alpha so the chip reads as a discrete tinted surface against
+     near-black instead of nearly disappearing. */
+  --color-dept-blue-text:    #7BB0E5;
+  --color-dept-blue-bg:      rgba(123, 176, 229, 0.16);
+  --color-dept-blue-border:  rgba(123, 176, 229, 0.40);
+
+  --color-dept-orange-text:   #E0B070;
+  --color-dept-orange-bg:     rgba(224, 176, 112, 0.16);
+  --color-dept-orange-border: rgba(224, 176, 112, 0.40);
+
+  --color-dept-purple-text:   #B898E0;
+  --color-dept-purple-bg:     rgba(184, 152, 224, 0.16);
+  --color-dept-purple-border: rgba(184, 152, 224, 0.40);
+
+  /* Panic Thermometer — keep the burnt-orange hue but lift it for dark mode. */
+  --color-dept-error-text:   #FF9070;
+  --color-dept-error-bg:     rgba(255, 144, 112, 0.14);
+  --color-dept-error-border: rgba(255, 144, 112, 0.38);
+
+  /* Acid-yellow tints — slightly stronger alpha in dark mode so the chip
+     registers against near-black. */
+  --color-dept-accent-bg-soft:       rgba(212, 255, 0, 0.14);
+  --color-dept-accent-border-soft:   rgba(212, 255, 0, 0.42);
+  --color-dept-accent-bg-strong:     rgba(212, 255, 0, 0.18);
+  --color-dept-accent-border-strong: rgba(212, 255, 0, 0.55);
+
+  /* Tinted-accent text needs to flip bright in dark mode — dark olive on a
+     dark background is unreadable. Solid-accent text (--color-accent-on)
+     stays at #3D4D00 because solid #D4FF00 is bright in both modes. */
+  --color-accent-on-tint: #E8FF5A;
 }

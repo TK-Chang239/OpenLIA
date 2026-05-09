@@ -44,7 +44,7 @@ describe("AuthProvider", () => {
     expect(screen.getByTestId("user-id").textContent).toBe("u1");
   });
 
-  it("401 → unauthenticated", async () => {
+  it("401 → personal mode (login pages disabled)", async () => {
     global.fetch = vi
       .fn()
       .mockResolvedValue(new Response(null, { status: 401 })) as unknown as typeof fetch;
@@ -56,9 +56,9 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
+      expect(screen.getByTestId("status").textContent).toBe("personal"),
     );
-    expect(screen.getByTestId("user-id").textContent).toBe("");
+    expect(screen.getByTestId("user-id").textContent).toBe("local");
   });
 
   it("404 → personal mode with synthetic local user", async () => {
@@ -121,7 +121,7 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
+      expect(screen.getByTestId("status").textContent).toBe("personal"),
     );
 
     await act(async () => {
@@ -133,7 +133,7 @@ describe("AuthProvider", () => {
     );
   });
 
-  it("treats unexpected ApiError like unauthenticated", async () => {
+  it("treats unexpected ApiError as personal mode (login pages disabled)", async () => {
     global.fetch = vi.fn().mockRejectedValue(new ApiError(500, "boom")) as unknown as typeof fetch;
 
     render(
@@ -143,7 +143,7 @@ describe("AuthProvider", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByTestId("status").textContent).toBe("unauthenticated"),
+      expect(screen.getByTestId("status").textContent).toBe("personal"),
     );
   });
 
@@ -183,7 +183,7 @@ describe("AuthProvider", () => {
       wrapper: ({ children }) => <AuthProvider>{children}</AuthProvider>,
     });
 
-    await waitFor(() => expect(result.current.status).toBe("unauthenticated"));
+    await waitFor(() => expect(result.current.status).toBe("personal"));
 
     await act(async () => {
       await result.current.login({
@@ -234,14 +234,14 @@ describe("AuthProvider", () => {
       await result.current.logout();
     });
     expect(result.current.mustChangePassword).toBe(false);
-    expect(result.current.status).toBe("unauthenticated");
+    expect(result.current.status).toBe("personal");
 
     // Now an explicit refresh resolving 401 keeps the flag cleared.
     await act(async () => {
       await result.current.refresh();
     });
     expect(result.current.mustChangePassword).toBe(false);
-    expect(result.current.status).toBe("unauthenticated");
+    expect(result.current.status).toBe("personal");
   });
 
   it("clearMustChangePassword() resets the flag", async () => {

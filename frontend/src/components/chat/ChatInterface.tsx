@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import type { UserBubbleAttachment } from "./UserBubble";
 import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, getSession, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
@@ -36,6 +37,9 @@ interface Props {
   inputPlaceholder: string;
   /** Optional one-shot message dispatched automatically on mount. */
   initialMessage?: string | null;
+  /** Seeds the composer's textarea on mount without auto-sending. Used by
+   *  the Home page's `?prompt=` query-param prefill flow. */
+  initialDraft?: string | null;
   /** NEW-14-01: override the default `/api/chat/sessions/{id}/stream` endpoint. */
   streamUrl?: string;
   /** NEW-14-01: extra fields merged into the JSON request body. */
@@ -73,6 +77,7 @@ export function ChatInterface({
   chips,
   inputPlaceholder,
   initialMessage,
+  initialDraft,
   streamUrl,
   bodyExtras,
   extraInlineMessages,
@@ -92,6 +97,9 @@ export function ChatInterface({
   const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
   const lastSentRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
+  const pendingAttachmentsRef = useRef<Map<string, UserBubbleAttachment[]>>(
+    new Map(),
+  );
   const { state, send, stop, reset } = useChatStream({
     sessionId,
     streamUrl,
@@ -143,15 +151,16 @@ export function ChatInterface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
-  const onSend = (text: string) => {
+  const onSend = (text: string, attachments?: File[]) => {
     if (!sessionId) return;
     lastSentRef.current = text;
     persistedStreamRef.current = null;
     setSentOnce(true);
+    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setHistory((prev) => [
       ...prev,
       {
-        id: `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: optimisticId,
         role: "user",
         content: text,
         tool_calls: null,
@@ -160,6 +169,18 @@ export function ChatInterface({
         created_at: new Date().toISOString(),
       },
     ]);
+    if (attachments && attachments.length > 0) {
+      // Cache pending attachments by optimistic message id so the UserBubble
+      // renders chips above the text. The actual upload to a session-scoped
+      // attachments endpoint is not yet implemented backend-side; once it
+      // lands, we POST here, swap pending chips for resolved AttachmentChips,
+      // and pass attachment_ids in the chat stream body.
+      // TODO: backend upload pending — POST /api/chat/sessions/:id/attachments
+      pendingAttachmentsRef.current.set(
+        optimisticId,
+        attachments.map((f) => ({ filename: f.name, sizeBytes: f.size })),
+      );
+    }
     send(text);
   };
 
@@ -280,12 +301,30 @@ export function ChatInterface({
         ) : null}
         {!showWelcome && !loadError ? (
           <MessageList autoscrollKey={autoscrollKey}>
-            {history.flatMap((m) => {
+            {history.flatMap((m, idx) => {
+              const prev = history[idx - 1];
+              const latencyMs =
+                m.role === "assistant" && prev?.role === "user"
+                  ? Math.max(
+                      0,
+                      new Date(m.created_at).getTime() -
+                        new Date(prev.created_at).getTime(),
+                    )
+                  : null;
               const node =
                 m.role === "user" ? (
-                  <UserBubble key={m.id} content={m.content} />
+                  <UserBubble
+                    key={m.id}
+                    content={m.content}
+                    attachments={pendingAttachmentsRef.current.get(m.id)}
+                  />
                 ) : (
-                  <HistoricalAssistantMessage key={m.id} message={m} />
+                  <HistoricalAssistantMessage
+                    key={m.id}
+                    message={m}
+                    departmentId={departmentId}
+                    latencyMs={latencyMs}
+                  />
                 );
               const inline = (extraInlineMessages ?? [])
                 .filter((x) => x.after === m.id)
@@ -296,13 +335,15 @@ export function ChatInterface({
             {state.toolCalls.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap gap-2">
-                  {state.toolCalls.map((c) => (
+                  {state.toolCalls.map((c, i) => (
                     <ToolCallChip
                       key={c.callId}
                       toolName={c.toolName}
                       argsPreview={c.argsPreview}
                       status={c.status}
                       summary={c.summary}
+                      structured={c.structured ?? null}
+                      index={i}
                     />
                   ))}
                 </div>
@@ -338,6 +379,9 @@ export function ChatInterface({
                 stopped={state.status === "stopped"}
                 flagChips={state.flagChips}
                 skillLoads={state.skillLoads}
+                departmentId={departmentId}
+                tokens={state.tokens}
+                latencyMs={state.latencyMs}
               />
             ) : null}
             {state.status === "error" && state.errorMessage ? (
@@ -359,6 +403,7 @@ export function ChatInterface({
         onStop={handleStop}
         isStreaming={isStreaming}
         placeholder={inputPlaceholder}
+        initialValue={initialDraft ?? undefined}
         leftSlot={
           departmentId ? (
             <div className="flex items-center gap-2">
@@ -376,28 +421,49 @@ export function ChatInterface({
   );
 }
 
-function HistoricalAssistantMessage({ message }: { message: ChatMessage }): JSX.Element {
+function HistoricalAssistantMessage({
+  message,
+  departmentId,
+  latencyMs,
+}: {
+  message: ChatMessage;
+  departmentId?: string;
+  latencyMs?: number | null;
+}): JSX.Element {
   const toolCalls = (message.tool_calls as PersistedToolCall[] | null) ?? null;
   const redirects =
     toolCalls?.filter(
       (c) => c.tool_name === "suggest_redirect" && c.status === "done" && c.structured,
     ) ?? [];
+  const tokens =
+    message.token_usage &&
+    typeof (message.token_usage as Record<string, unknown>).total_tokens === "number"
+      ? ((message.token_usage as Record<string, unknown>).total_tokens as number)
+      : null;
   return (
     <>
       {toolCalls && toolCalls.length > 0 ? (
         <div className="flex flex-wrap gap-2">
-          {toolCalls.map((c) => (
+          {toolCalls.map((c, i) => (
             <ToolCallChip
               key={c.call_id}
               toolName={c.tool_name}
               argsPreview={c.args_preview}
               status={c.status}
               summary={c.summary}
+              structured={c.structured ?? null}
+              index={i}
             />
           ))}
         </div>
       ) : null}
-      <AssistantMessage content={message.content} streaming={false} />
+      <AssistantMessage
+        content={message.content}
+        streaming={false}
+        departmentId={departmentId}
+        tokens={tokens}
+        latencyMs={latencyMs ?? null}
+      />
       {redirects.map((c) => {
         const s = c.structured as Record<string, unknown>;
         return (

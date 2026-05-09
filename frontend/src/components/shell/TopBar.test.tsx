@@ -40,7 +40,7 @@ describe("TopBar", () => {
     expect(screen.queryByText(/LIVE_FEED_ACTIVE/)).toBeNull();
   });
 
-  it("renders a clickable last-crumb trigger and a New Chat button when chat header is registered", () => {
+  it("appends the chat title as a dropdown crumb and renders a New Chat button", () => {
     const onCreate = vi.fn();
     const onSelect = vi.fn();
     render(
@@ -50,6 +50,7 @@ describe("TopBar", () => {
             value={{
               departmentId: "secretary",
               activeSessionId: "s1",
+              chatTitle: "Today's market check",
               onSelect,
               onCreate,
             }}
@@ -58,14 +59,39 @@ describe("TopBar", () => {
         </ChatHeaderProvider>
       </MemoryRouter>,
     );
-    // Last crumb becomes a button "Secretary ▾"
-    const trigger = screen.getByRole("button", { name: /secretary/i });
+    // Last department crumb stays as <strong>.
+    const dept = screen.getByText("Secretary");
+    expect(dept.tagName).toBe("STRONG");
+    // The chat title is appended as a clickable trigger.
+    const trigger = screen.getByRole("button", { name: /today's market check/i });
     expect(trigger).toBeInTheDocument();
-    expect(trigger.tagName).toBe("BUTTON");
     // "New Chat" labeled button is present.
     const newChat = screen.getByRole("button", { name: /new chat/i });
     expect(newChat).toBeInTheDocument();
     fireEvent.click(newChat);
     expect(onCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("omits the chat-title trigger when chatTitle is null (e.g. welcome state)", () => {
+    render(
+      <MemoryRouter>
+        <ChatHeaderProvider>
+          <HeaderRegistrar
+            value={{
+              departmentId: "equity_research",
+              activeSessionId: null,
+              chatTitle: null,
+              onSelect: vi.fn(),
+              onCreate: vi.fn(),
+            }}
+          />
+          <TopBar crumbs={["Home", "Equity Research"]} stamps={[]} live={false} />
+        </ChatHeaderProvider>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Equity Research").tagName).toBe("STRONG");
+    expect(
+      screen.queryByRole("button", { name: /equity research/i }),
+    ).toBeNull();
   });
 });

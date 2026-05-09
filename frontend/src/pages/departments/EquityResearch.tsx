@@ -1,39 +1,104 @@
-import { RotateCcw, Settings } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type JSX,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { createSession } from "../../api/chat";
+import {
+  type ChatMessage,
+  createSession,
+  getSession,
+  listMessages,
+} from "../../api/chat";
 import { saveReportToRepo } from "../../api/repo";
 import {
   fetchReport,
+  listReports,
   reportDocxUrl,
   reportPdfUrl,
   type ReportSchema,
 } from "../../api/reports";
-import {
-  ChatInterface,
-  type InlineExtraMessage,
-} from "../../components/chat/ChatInterface";
+import { AssistantMessage } from "../../components/chat/AssistantMessage";
+import { ErrorMessage } from "../../components/chat/ErrorMessage";
+import { MessageList } from "../../components/chat/MessageList";
+import { ModelPicker } from "../../components/chat/ModelPicker";
+import { ThinkingIndicator } from "../../components/chat/ThinkingIndicator";
+import { ToolCallChip } from "../../components/chat/ToolCallChip";
+import { ToolPicker } from "../../components/chat/ToolPicker";
+import { UserBubble } from "../../components/chat/UserBubble";
+import { useChatStream } from "../../components/chat/useChatStream";
+import { ErComposer } from "../../components/equity-research/ErComposer";
 import { ReportCard } from "../../components/equity-research/ReportCard";
+import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
-import { SuggestionChips } from "../../components/equity-research/SuggestionChips";
+import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import { useReportStream } from "../../components/report/useReportStream";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
+import { useAuth } from "../../auth/AuthContext";
+import { useChatHeaderRegistry } from "../../layouts/ChatHeaderContext";
 import { useErConfig } from "../../hooks/useErConfig";
 
-export default function EquityResearch() {
+interface PersistedToolCall {
+  call_id: string;
+  tool_name: string;
+  args_preview: string;
+  status: "running" | "done" | "failed";
+  summary?: string;
+  structured?: Record<string, unknown> | null;
+}
+
+function firstName(displayName: string | null | undefined): string {
+  if (!displayName) return "there";
+  const trimmed = displayName.trim();
+  if (!trimmed) return "there";
+  return trimmed.split(/\s+/)[0];
+}
+
+function parseTickerCompany(
+  cover: ReportSchema["cover"] | null,
+): { ticker: string | null; company: string | null } {
+  if (!cover) return { ticker: null, company: null };
+  const title = cover.title?.trim() ?? "";
+  // Patterns: "AAPL · Apple Inc.", "AAPL — Apple Inc.", "AAPL: Stock Initiation"
+  const dashMatch = title.match(/^([A-Z]{1,6})\s*[·—–\-]\s*(.+)$/);
+  if (dashMatch) {
+    return { ticker: dashMatch[1], company: dashMatch[2].trim() };
+  }
+  const allCaps = title.match(/^([A-Z]{2,6})\b/);
+  if (allCaps) return { ticker: allCaps[1], company: null };
+  return { ticker: null, company: null };
+}
+
+export default function EquityResearch(): JSX.Element {
   const { config, loading, patch } = useErConfig();
+  const { user } = useAuth();
+  const fileViewer = useFileViewer();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const tickerParam = searchParams.get("ticker");
+  const promptParam = searchParams.get("prompt");
+
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [input, setInput] = useState(tickerParam ?? "");
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
+  const [history, setHistory] = useState<ChatMessage[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [schema, setSchema] = useState<ReportSchema | null>(null);
+  const [restoredReportId, setRestoredReportId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
+  const [genDurationSec, setGenDurationSec] = useState<number | null>(null);
   const [autoStarted, setAutoStarted] = useState(false);
-  const fileViewer = useFileViewer();
+
+  const lastSentChatRef = useRef<string>("");
+  const persistedStreamRef = useRef<string | null>(null);
+
   const {
     state: reportState,
     start: startReport,
@@ -42,55 +107,139 @@ export default function EquityResearch() {
     stop: stopReport,
   } = useReportStream();
 
-  const dispatchReport = async (text: string) => {
-    if (!config) return;
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setInput("");
-    setStartError(null);
-    setSchema(null);
-    resetReport();
-    try {
-      const row = await createSession({
-        department: "equity_research",
-        title: trimmed.slice(0, 60),
-      });
-      setSessionId(row.id);
-      setSubject(trimmed);
-      startReport({
-        url: "/api/departments/equity-research/report",
-        body: {
-          mode: config.report_mode,
-          user_input: trimmed,
-          session_id: row.id,
-        },
-      });
-    } catch (err) {
-      setStartError(err instanceof Error ? err.message : "Failed to start research");
-    }
-  };
+  const chatStream = useChatStream({
+    sessionId: sessionId ?? "",
+    streamUrl: "/api/departments/equity-research/chat",
+    bodyExtras: useMemo(
+      () => (sessionId ? { session_id: sessionId } : {}),
+      [sessionId],
+    ),
+  });
 
-  const onChipSelect = (value: string) => {
-    setInput(value);
-    void dispatchReport(value);
-  };
+  // Stable refs so the chat-header callbacks below don't change identity
+  // on every render (chatStream is a fresh object literal each render).
+  const chatStreamResetRef = useRef(chatStream.reset);
+  const resetReportRef = useRef(resetReport);
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => {
+    chatStreamResetRef.current = chatStream.reset;
+    resetReportRef.current = resetReport;
+    sessionIdRef.current = sessionId;
+  });
 
-  const onSend = () => {
-    void dispatchReport(input);
-  };
+  // Pre-fill from ?prompt= and clear the query so manual edits don't re-fire.
+  useEffect(() => {
+    if (!promptParam) return;
+    setInput(promptParam);
+    const next = new URLSearchParams(searchParams);
+    next.delete("prompt");
+    setSearchParams(next, { replace: true });
+  }, [promptParam, searchParams, setSearchParams]);
 
-  // Phase 21: deep-link from Portfolio populates the input with ?ticker=SYM.
-  // We pre-fill the textarea (already done above) and clear the query param
-  // so a manual edit + send won't re-trigger on remount. Auto-dispatch is
-  // intentionally NOT wired so users can adjust the prompt before sending.
+  // Pre-fill from ?ticker= and clear the query (no auto-dispatch — user adjusts first).
   useEffect(() => {
     if (tickerParam && !autoStarted) {
       setAutoStarted(true);
-      setSearchParams({}, { replace: true });
+      const next = new URLSearchParams(searchParams);
+      next.delete("ticker");
+      setSearchParams(next, { replace: true });
     }
-  }, [tickerParam, autoStarted, setSearchParams]);
+  }, [tickerParam, autoStarted, searchParams, setSearchParams]);
 
-  // Fetch the persisted schema once the server signals `report.saved`.
+  // Hydrate session metadata + messages whenever the session id changes.
+  // Also restore the most recent report attached to this session so the
+  // ReportCard reappears after returning from another conversation.
+  useEffect(() => {
+    if (!sessionId) {
+      setHistory([]);
+      setHistoryLoaded(false);
+      setRestoredReportId(null);
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoaded(false);
+    setHistory([]);
+    setRestoredReportId(null);
+    persistedStreamRef.current = null;
+    void Promise.all([
+      getSession(sessionId).catch(() => null),
+      listMessages(sessionId).catch(() => null),
+      listReports({ department: "equity_research", session_id: sessionId }).catch(
+        () => null,
+      ),
+    ]).then(async ([sess, msgs, reports]) => {
+      if (cancelled) return;
+      if (sess) setSessionTitle(sess.title);
+      setHistory(msgs?.items ?? []);
+      setHistoryLoaded(true);
+      const latest = reports?.items?.[0];
+      if (latest) {
+        try {
+          const sch = await fetchReport(latest.id);
+          if (cancelled) return;
+          setSchema(sch);
+          setRestoredReportId(latest.id);
+        } catch {
+          // Leave the report card hidden if the schema can't be loaded.
+        }
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
+  // Snapshot streamed assistant replies into history so they persist after the
+  // next send resets the live stream state.
+  useEffect(() => {
+    if (chatStream.state.status !== "done" && chatStream.state.status !== "stopped")
+      return;
+    if (chatStream.state.chunks.length === 0 && !chatStream.state.message) return;
+    const key = `${chatStream.state.status}|${chatStream.state.message.length}|${chatStream.state.toolCalls.length}`;
+    if (persistedStreamRef.current === key) return;
+    persistedStreamRef.current = key;
+    const tool_calls =
+      chatStream.state.toolCalls.length > 0
+        ? chatStream.state.toolCalls.map((c) => ({
+            call_id: c.callId,
+            tool_name: c.toolName,
+            args_preview: c.argsPreview,
+            status: c.status,
+            summary: c.summary,
+            structured: c.structured ?? null,
+          }))
+        : null;
+    const now = new Date().toISOString();
+    setHistory((prev) => [
+      ...prev,
+      {
+        id: `streamed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        role: "assistant",
+        content: chatStream.state.message,
+        tool_calls,
+        model_ref: null,
+        token_usage: null,
+        created_at: now,
+        stopped_at: chatStream.state.status === "stopped" ? now : null,
+      },
+    ]);
+    chatStream.reset();
+  }, [
+    chatStream.state.status,
+    chatStream.state.message,
+    chatStream.state.chunks.length,
+    chatStream.state.toolCalls,
+    chatStream,
+  ]);
+
+  // Capture generation duration when the report stream completes.
+  useEffect(() => {
+    if (reportState.status !== "complete" || genStartedAt === null) return;
+    if (genDurationSec !== null) return;
+    setGenDurationSec((Date.now() - genStartedAt) / 1000);
+  }, [reportState.status, genStartedAt, genDurationSec]);
+
+  // Fetch the persisted schema once the server signals report.saved.
   useEffect(() => {
     if (reportState.status !== "complete" || !reportState.reportId) return;
     if (schema?.department === "equity_research" && schema) return;
@@ -108,12 +257,134 @@ export default function EquityResearch() {
     };
   }, [reportState.status, reportState.reportId, schema]);
 
+  const dispatchReport = useCallback(
+    async (text: string) => {
+      if (!config) return;
+      const trimmed = text.trim();
+      if (!trimmed) return;
+      setInput("");
+      setStartError(null);
+      setSchema(null);
+      setGenDurationSec(null);
+      setGenStartedAt(Date.now());
+      resetReport();
+      try {
+        const row = await createSession({
+          department: "equity_research",
+          title: trimmed.slice(0, 60),
+        });
+        setSessionId(row.id);
+        setSessionTitle(row.title);
+        setSubject(trimmed);
+        startReport({
+          url: "/api/departments/equity-research/report",
+          body: {
+            mode: config.report_mode,
+            user_input: trimmed,
+            session_id: row.id,
+          },
+        });
+      } catch (err) {
+        setStartError(err instanceof Error ? err.message : "Failed to start research");
+      }
+    },
+    [config, resetReport, startReport],
+  );
+
+  const handleComposerSubmit = (text: string) => {
+    if (!sessionId) {
+      void dispatchReport(text);
+      return;
+    }
+    // Active-session: send a follow-up chat message.
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    lastSentChatRef.current = trimmed;
+    persistedStreamRef.current = null;
+    setInput("");
+    const optimisticId = `optimistic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setHistory((prev) => [
+      ...prev,
+      {
+        id: optimisticId,
+        role: "user",
+        content: trimmed,
+        tool_calls: null,
+        model_ref: null,
+        token_usage: null,
+        created_at: new Date().toISOString(),
+      },
+    ]);
+    chatStream.send(trimmed);
+  };
+
+  const handleStop = () => {
+    if (
+      chatStream.state.status === "opening" ||
+      chatStream.state.status === "thinking" ||
+      chatStream.state.status === "streaming"
+    ) {
+      chatStream.stop();
+    }
+    if (reportState.status === "starting" || reportState.status === "writing") {
+      stopReport();
+    }
+  };
+
+  const handleSelectSession = useCallback((id: string) => {
+    if (id === sessionIdRef.current) return;
+    setSessionId(id);
+    setSchema(null);
+    setSubject("");
+    setGenDurationSec(null);
+    setGenStartedAt(null);
+    resetReportRef.current();
+    chatStreamResetRef.current();
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    setSessionId(null);
+    setSessionTitle(null);
+    setSchema(null);
+    setSubject("");
+    setHistory([]);
+    setHistoryLoaded(false);
+    setGenDurationSec(null);
+    setGenStartedAt(null);
+    setStartError(null);
+    setInput("");
+    resetReportRef.current();
+    chatStreamResetRef.current();
+  }, []);
+
+  // Publish chat-header state to the global TopBar so the breadcrumb
+  // dropdown + New Chat button render. Register on welcome state too
+  // (chatTitle null hides the chat crumb, but the New Chat button stays).
+  const { register, clear } = useChatHeaderRegistry();
+  useEffect(() => {
+    register({
+      departmentId: "equity_research",
+      activeSessionId: sessionId,
+      chatTitle: sessionId ? sessionTitle : "New chat",
+      onSelect: handleSelectSession,
+      onCreate: handleNewChat,
+    });
+    return () => clear();
+  }, [
+    sessionId,
+    sessionTitle,
+    handleSelectSession,
+    handleNewChat,
+    register,
+    clear,
+  ]);
+
   const handleDownload = (id: string, fmt: "pdf" | "docx") => {
     const url = fmt === "pdf" ? reportPdfUrl(id) : reportDocxUrl(id);
     window.open(url, "_blank", "noopener");
   };
 
-  const handleSave = async (id: string): Promise<void> => {
+  const handleSave = async (id: string) => {
     await saveReportToRepo(id);
   };
 
@@ -121,154 +392,173 @@ export default function EquityResearch() {
     if (!schema) return;
     fileViewer.open({
       filename: schema.cover.title || "Report",
-      kind: "pdf",
+      kind: "report",
       metadata: schema.cover.subtitle ?? "",
       source: { kind: "report", reportId: id },
     });
   };
 
-  const inline = useMemo<InlineExtraMessage[]>(() => {
-    const items: InlineExtraMessage[] = [];
-    if (reportState.status === "starting" || reportState.status === "writing") {
-      items.push({
-        after: "end",
-        key: "report-progress",
-        node: (
-          <ReportProgressBubble
-            phase={reportState.phase}
-            sections={reportState.sections}
-            sectionTitles={reportState.sectionTitles}
-          />
-        ),
-      });
-    }
-    if (reportState.status === "error") {
-      items.push({
-        after: "end",
-        key: "report-error",
-        node: (
-          <ReportErrorBubble
-            message={reportState.errorMessage}
-            onRetry={() => retryReport()}
-          />
-        ),
-      });
-    }
-    if (
-      reportState.status === "complete" &&
-      schema &&
-      reportState.reportId &&
-      config
-    ) {
-      items.push({
-        after: "end",
-        key: `report-card-${reportState.reportId}`,
-        node: (
-          <div data-testid="er-report-card">
-            <ReportCard
-              reportId={reportState.reportId}
-              mode={config.report_mode}
-              subject={subject}
-              companyName={null}
-              createdAt={schema.generated_at ?? new Date().toISOString()}
-              preview={schema.cover.tagline || schema.cover.subtitle || ""}
-              onOpen={openReport}
-              onDownload={handleDownload}
-              onSave={handleSave}
-            />
-          </div>
-        ),
-      });
-    }
-    return items;
-    // openReport / handleSave are stable enough for inline rendering; we
-    // rely on identity-stable refs to avoid spurious chat re-renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reportState, schema, config?.report_mode, subject]);
+  const isReportStreaming =
+    reportState.status === "starting" || reportState.status === "writing";
+  const isChatStreaming =
+    chatStream.state.status === "opening" ||
+    chatStream.state.status === "thinking" ||
+    chatStream.state.status === "streaming";
+  const isStreaming = isReportStreaming || isChatStreaming;
+
+  const autoscrollKey = useMemo(
+    () =>
+      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${schema ? "s" : "_"}`,
+    [
+      history.length,
+      chatStream.state.message.length,
+      chatStream.state.toolCalls.length,
+      reportState.status,
+      schema,
+    ],
+  );
 
   if (loading || !config) {
     return <PageSkeleton />;
   }
 
-  const active = sessionId !== null;
+  const { ticker, company } = parseTickerCompany(schema?.cover ?? null);
+  const placeholder = sessionId
+    ? "Ask a follow-up question about the company, sector, or report…"
+    : "Enter a ticker, company, or sector (e.g., AAPL, Semiconductors)…";
 
   return (
-    <div className="flex flex-col h-full">
-      <header className="h-14 flex-shrink-0 flex items-center justify-between border-b border-[--color-border-subtle] px-6">
-        <h1 className="text-xl font-semibold">Equity Research</h1>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(true)}
-          className="inline-flex items-center gap-2 h-8 px-3 text-sm border border-[--color-border-secondary] rounded-[--radius-md] text-[--color-text-secondary] hover:bg-[--color-surface-hover]"
-        >
-          <Settings size={16} /> Report Settings
-        </button>
-      </header>
-
-      {!active && (
-        <>
-          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
-            <div className="text-center">
-              <h2 className="text-2xl font-semibold">Equity Research</h2>
-              <p className="mt-2 text-md text-[--color-text-secondary]">
-                Research companies, sectors, and market trends
-              </p>
-            </div>
-            <SuggestionChips onSelect={onChipSelect} />
-            {startError ? (
-              <p className="text-sm text-[--color-text-error]">{startError}</p>
-            ) : null}
-          </div>
-
-          <div className="flex-shrink-0 px-6 py-4 border-t border-[--color-border-subtle]">
-            <div className="max-w-[680px] mx-auto flex items-end gap-2">
-              <textarea
-                ref={inputRef}
-                rows={1}
-                value={input}
-                placeholder="Enter a ticker, company, or sector (e.g., AAPL, Semiconductors)..."
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    onSend();
-                  }
-                }}
-                className="flex-1 rounded-xl border border-[--color-border-subtle] bg-[--color-bg-input] px-4 py-3 text-md resize-none"
-              />
-              <button
-                type="button"
-                onClick={onSend}
-                disabled={!input.trim()}
-                aria-label="Send"
-                className="w-8 h-8 rounded-[--radius-md] bg-[--color-accent-primary] text-white disabled:opacity-40 flex items-center justify-center"
-              >
-                <SendArrow />
-              </button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {active && sessionId && (
-        <div className="flex-1 min-h-0">
-          <ChatInterface
-            sessionId={sessionId}
-            greeting="Researching…"
-            subtext=""
-            chips={[]}
-            inputPlaceholder="Ask a follow-up question about the company, sector, or report..."
-            streamUrl="/api/departments/equity-research/chat"
-            bodyExtras={{ session_id: sessionId }}
-            extraInlineMessages={inline}
-            extraIsStreaming={
-              reportState.status === "starting" || reportState.status === "writing"
-            }
-            onExtraStop={stopReport}
-            departmentId="equity_research"
+    <div className="flex h-full flex-col bg-[--color-bg-base]">
+      <div className="relative flex flex-1 min-h-0 flex-col">
+        {!sessionId ? (
+          <WelcomeStage
+            firstName={firstName(user?.display_name)}
+            mode={config.report_mode}
+            length={config.report_length}
+            onModeRowClick={() => setSettingsOpen(true)}
           />
-        </div>
-      )}
+        ) : (
+          <div className="relative flex-1 min-h-0">
+            <MessageList autoscrollKey={autoscrollKey}>
+              {history.map((m) => (
+                <HistoricalMessage key={m.id} message={m} />
+              ))}
+
+              {isReportStreaming ? (
+                <ReportProgressIndicator
+                  startedAt={genStartedAt}
+                  mode={config.report_mode}
+                  subject={subject || sessionTitle || ""}
+                />
+              ) : null}
+
+              {reportState.status === "error" ? (
+                <ErrorMessage
+                  message={reportState.errorMessage ?? "Report generation failed."}
+                  onRetry={() => retryReport()}
+                />
+              ) : null}
+
+              {schema &&
+              (reportState.status === "complete" || restoredReportId) ? (
+                <div data-testid="er-report-card">
+                  <ReportCard
+                    reportId={reportState.reportId ?? restoredReportId ?? ""}
+                    mode={config.report_mode}
+                    ticker={ticker ?? null}
+                    companyName={company ?? null}
+                    subject={subject || sessionTitle || ""}
+                    createdAt={schema.generated_at ?? new Date().toISOString()}
+                    preview={schema.cover.tagline || schema.cover.subtitle || ""}
+                    sectionsCount={schema.sections?.length ?? 0}
+                    generatedSeconds={genDurationSec}
+                    citationsCount={schema.citations?.length ?? 0}
+                    onOpen={openReport}
+                    onDownload={handleDownload}
+                    onSave={handleSave}
+                  />
+                </div>
+              ) : null}
+
+              {chatStream.state.status === "thinking" ? <ThinkingIndicator /> : null}
+
+              {chatStream.state.toolCalls.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {chatStream.state.toolCalls.map((c, i) => (
+                    <ToolCallChip
+                      key={c.callId}
+                      toolName={c.toolName}
+                      argsPreview={c.argsPreview}
+                      status={c.status}
+                      summary={c.summary}
+                      structured={c.structured ?? null}
+                      index={i}
+                    />
+                  ))}
+                </div>
+              ) : null}
+
+              {(chatStream.state.status === "streaming" ||
+                chatStream.state.status === "done" ||
+                chatStream.state.status === "stopped") &&
+              (chatStream.state.chunks.length > 0 || chatStream.state.message) ? (
+                <AssistantMessage
+                  chunks={chatStream.state.chunks}
+                  streaming={chatStream.state.status === "streaming"}
+                  stopped={chatStream.state.status === "stopped"}
+                  flagChips={chatStream.state.flagChips}
+                  skillLoads={chatStream.state.skillLoads}
+                  departmentId="equity_research"
+                  tokens={chatStream.state.tokens}
+                  latencyMs={chatStream.state.latencyMs}
+                />
+              ) : null}
+
+              {chatStream.state.status === "error" && chatStream.state.errorMessage ? (
+                <ErrorMessage
+                  message={chatStream.state.errorMessage}
+                  onRetry={() => chatStream.send(lastSentChatRef.current)}
+                />
+              ) : null}
+
+              {!historyLoaded && history.length === 0 && !isStreaming ? (
+                <div className="py-6 text-center text-[12px] text-[--color-text-tertiary]">
+                  Loading…
+                </div>
+              ) : null}
+            </MessageList>
+          </div>
+        )}
+
+        {startError ? (
+          <p className="px-6 pb-2 text-center text-sm text-[--color-feedback-error]">
+            {startError}
+          </p>
+        ) : null}
+      </div>
+
+      <ErComposer
+        value={input}
+        onChange={setInput}
+        onSubmit={handleComposerSubmit}
+        onStop={handleStop}
+        isStreaming={isStreaming}
+        placeholder={placeholder}
+        mode={config.report_mode}
+        length={config.report_length}
+        onModeClick={() => setSettingsOpen(true)}
+        modelPicker={<ModelPicker />}
+        toolPicker={
+          sessionId ? (
+            <ToolPicker
+              sessionId={sessionId}
+              initialDisabledConnectorIds={[]}
+              initialDisabledSkillIds={[]}
+            />
+          ) : null
+        }
+        initialValue={tickerParam ?? promptParam ?? undefined}
+      />
 
       <ReportSettingsModal
         open={settingsOpen}
@@ -282,110 +572,52 @@ export default function EquityResearch() {
   );
 }
 
-function SendArrow(): JSX.Element {
+function HistoricalMessage({ message }: { message: ChatMessage }): JSX.Element {
+  if (message.role === "user") {
+    return <UserBubble content={message.content} />;
+  }
+  const toolCalls = (message.tool_calls as PersistedToolCall[] | null) ?? null;
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M12 19V5M5 12l7-7 7 7"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+    <>
+      {toolCalls && toolCalls.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {toolCalls.map((c, i) => (
+            <ToolCallChip
+              key={c.call_id}
+              toolName={c.tool_name}
+              argsPreview={c.args_preview}
+              status={c.status}
+              summary={c.summary}
+              structured={c.structured ?? null}
+              index={i}
+            />
+          ))}
+        </div>
+      ) : null}
+      <AssistantMessage
+        content={message.content}
+        streaming={false}
+        departmentId="equity_research"
       />
-    </svg>
+    </>
   );
 }
 
 function PageSkeleton(): JSX.Element {
   return (
-    <div className="flex flex-col h-full">
-      <header className="h-14 flex-shrink-0 flex items-center justify-between border-b border-[--color-border-subtle] px-6">
+    <div className="flex h-full flex-col bg-[--color-bg-base]">
+      <header className="flex h-[52px] flex-shrink-0 items-center border-b border-[--color-border-subtle] px-6">
         <div
-          className="h-5 w-40 rounded bg-[--color-border-subtle] animate-pulse"
-          aria-hidden="true"
-        />
-        <div
-          className="h-8 w-32 rounded bg-[--color-border-subtle] animate-pulse"
+          className="h-5 w-40 animate-pulse rounded bg-[--color-border-subtle]"
           aria-hidden="true"
         />
       </header>
-      <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6">
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
         <div className="space-y-3 text-center">
-          <div className="h-7 w-56 mx-auto rounded bg-[--color-border-subtle] animate-pulse" />
-          <div className="h-4 w-72 mx-auto rounded bg-[--color-border-subtle] animate-pulse" />
-        </div>
-        <div className="flex flex-wrap gap-2 justify-center">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-9 w-20 rounded-full bg-[--color-border-subtle] animate-pulse"
-            />
-          ))}
+          <div className="mx-auto h-7 w-56 animate-pulse rounded bg-[--color-border-subtle]" />
+          <div className="mx-auto h-4 w-72 animate-pulse rounded bg-[--color-border-subtle]" />
         </div>
       </div>
-    </div>
-  );
-}
-
-interface ProgressProps {
-  phase: string | null;
-  sections: { id: string; title: string; status: "pending" | "writing" | "done" }[];
-  sectionTitles: string[];
-}
-
-function ReportProgressBubble({ phase, sections, sectionTitles }: ProgressProps): JSX.Element {
-  const label =
-    phase === "fetching_data"
-      ? "Fetching data…"
-      : phase === "writing"
-        ? "Writing…"
-        : phase === "finalizing"
-          ? "Finalizing…"
-          : "Generating…";
-  const items = sections.length > 0
-    ? sections
-    : sectionTitles.map((t) => ({ id: t, title: t, status: "pending" as const }));
-  return (
-    <div
-      className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-secondary] max-w-[560px]"
-      data-testid="report-progress"
-    >
-      <div className="font-medium text-[--color-text-primary]">{label}</div>
-      {items.length > 0 ? (
-        <ul className="mt-2 space-y-0.5 text-xs">
-          {items.map((s) => (
-            <li key={`${s.id}-${s.title}`} className="flex items-center gap-2">
-              <span aria-hidden="true">
-                {s.status === "done" ? "✓" : s.status === "writing" ? "⏳" : "•"}
-              </span>
-              <span>{s.title}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
-interface ErrorProps {
-  message: string | null;
-  onRetry: () => void;
-}
-
-function ReportErrorBubble({ message, onRetry }: ErrorProps): JSX.Element {
-  return (
-    <div
-      className="rounded-[--radius-md] border border-[--color-border-subtle] p-3 text-sm text-[--color-text-error] max-w-[560px] flex items-start gap-3"
-      data-testid="report-error"
-    >
-      <div className="flex-1">{message ?? "Report generation failed."}</div>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="inline-flex items-center gap-1 px-2 h-7 rounded-[--radius-md] border border-[--color-border-subtle] text-[--color-text-secondary] hover:bg-[--color-surface-hover]"
-      >
-        <RotateCcw size={12} /> Try again
-      </button>
     </div>
   );
 }

@@ -266,10 +266,27 @@ def _render_cover(cover: dict) -> str:
         for m in key_metrics:
             parts.append(_render_metric(m, classes="metric"))
         parts.append("</div>")
-    stats_panel = cover.get("stats_panel") or []
-    if stats_panel:
-        parts.append('<div class="cover-stats-panel">')
-        for m in stats_panel:
+    return "".join(parts)
+
+
+def _render_rail(rail: dict) -> str:
+    if not rail:
+        return ""
+    parts: list[str] = ['<aside class="rail">']
+    verdict = rail.get("verdict")
+    if isinstance(verdict, dict):
+        parts.append('<div class="rail-verdict">')
+        if verdict.get("rating"):
+            parts.append(f"<span class='rail-rating'>{_esc(verdict['rating'])}</span>")
+        if verdict.get("target"):
+            parts.append(f"<span class='rail-target'>{_esc(verdict['target'])}</span>")
+        if verdict.get("upside"):
+            parts.append(f"<span class='rail-upside'>{_esc(verdict['upside'])}</span>")
+        parts.append("</div>")
+    quick_stats = rail.get("quick_stats") or []
+    if quick_stats:
+        parts.append('<div class="rail-quick-stats">')
+        for m in quick_stats:
             parts.append(
                 "<div class='stat-row'>"
                 f"<span class='stat-label'>{_esc(m.get('label', ''))}</span>"
@@ -277,12 +294,16 @@ def _render_cover(cover: dict) -> str:
                 "</div>"
             )
         parts.append("</div>")
+    parts.append("</aside>")
     return "".join(parts)
 
 
 def _schema_to_html(schema: dict) -> str:
     cover = schema.get("cover", {}) or {}
     parts: list[str] = [_render_cover(cover)]
+    rail = schema.get("rail")
+    if isinstance(rail, dict):
+        parts.append(_render_rail(rail))
     for section in schema.get("sections", []) or []:
         sid = section.get("id", "")
         anchor = f' id="{_esc(sid)}"' if sid else ""
@@ -459,6 +480,7 @@ class ReportListItem(BaseModel):
     report_type: str
     title: str
     created_at: str
+    source_session_id: str | None = None
 
 
 class ReportListOut(BaseModel):
@@ -477,12 +499,15 @@ def build_reports_router(
     @router.get("", response_model=ReportListOut)
     async def list_reports(
         department: str | None = None,
+        session_id: str | None = None,
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> ReportListOut:
         stmt = select(Report).where(Report.user_id == user.id).order_by(Report.created_at.desc())
         if department is not None:
             stmt = stmt.where(Report.department == department)
+        if session_id is not None:
+            stmt = stmt.where(Report.source_session_id == session_id)
         rows = list(session.execute(stmt).scalars())
         return ReportListOut(
             items=[
@@ -492,6 +517,7 @@ def build_reports_router(
                     report_type=r.report_type,
                     title=r.title,
                     created_at=r.created_at.isoformat() if r.created_at else "",
+                    source_session_id=r.source_session_id,
                 )
                 for r in rows
             ]

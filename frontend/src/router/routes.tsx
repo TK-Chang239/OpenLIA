@@ -1,12 +1,9 @@
+import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, type RouteObject } from "react-router-dom";
 import { AppLayout } from "../layouts/AppLayout";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { MustChangePasswordGate } from "./MustChangePasswordGate";
 import { SetupGate } from "./SetupGate";
-import { LoginPage } from "../pages/LoginPage";
-import { RegisterPage } from "../pages/RegisterPage";
-import { ForgotPasswordPage } from "../pages/ForgotPasswordPage";
-import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import Home from "../pages/Home";
 import Repository from "../pages/Repository";
 import PortfolioPage from "../pages/PortfolioPage";
@@ -18,7 +15,8 @@ import EquityResearch from "../pages/departments/EquityResearch";
 import EarningsUpdate from "../pages/departments/EarningsUpdate";
 import MorningBriefing from "../pages/departments/MorningBriefing";
 import RetailSentiment from "../pages/departments/RetailSentiment";
-import MacroResearch from "../pages/departments/MacroResearch";
+/* MacroResearch is lazy-loaded — pulls in echarts which is ~400KB gz. */
+const MacroResearch = lazy(() => import("../pages/departments/MacroResearch"));
 import PanicThermometer from "../pages/departments/PanicThermometer";
 import ReportPrintPage from "../pages/ReportPrintPage";
 import { DeptDisabledBanner } from "../components/sidebar/DeptDisabledBanner";
@@ -39,6 +37,26 @@ function WithDeptBanner({
   );
 }
 
+function MacroSuspenseFallback() {
+  return (
+    <div className="flex h-full flex-col bg-[--color-bg-base]">
+      <div className="flex h-[52px] flex-shrink-0 items-center gap-3 border-b border-[--color-border-subtle] px-6">
+        <span className="text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
+          Macro Research
+        </span>
+        <span className="ml-3 border-l border-[--color-border-subtle] pl-3 font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+          Loading dashboards…
+        </span>
+      </div>
+      <div className="flex flex-1 items-center justify-center">
+        <div className="h-1 w-32 overflow-hidden rounded-full bg-[--color-bg-code]">
+          <div className="mr-suspense-bar h-full w-1/3 rounded-full bg-[--color-accent-primary]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SecretaryRoute() {
   const { user } = useAuth();
   return (
@@ -52,10 +70,11 @@ export const routes: RouteObject[] = [
   {
     element: <SetupGate />,
     children: [
-      { path: "/login", element: <LoginPage /> },
-      { path: "/register", element: <RegisterPage /> },
-      { path: "/forgot-password", element: <ForgotPasswordPage /> },
-      { path: "/reset-password", element: <ResetPasswordPage /> },
+      // Login pages disabled — redirect any attempt back to the shell.
+      { path: "/login", element: <Navigate to="/" replace /> },
+      { path: "/register", element: <Navigate to="/" replace /> },
+      { path: "/forgot-password", element: <Navigate to="/" replace /> },
+      { path: "/reset-password", element: <Navigate to="/" replace /> },
       { path: "/setup", element: <SetupPage /> },
       // Full-bleed print/PDF page. No AppShell so backgrounds/margins are
       // controlled by the print stylesheet, and so the body of the page
@@ -74,8 +93,8 @@ export const routes: RouteObject[] = [
               {
                 element: <AppLayout />,
                 children: [
-                  { path: "/", element: <Navigate to="/secretary" replace /> },
-                  { path: "/home", element: <Home /> },
+                  { path: "/", element: <Home /> },
+                  { path: "/home", element: <Navigate to="/" replace /> },
                   { path: "/repository", element: <Repository /> },
                   { path: "/portfolio", element: <PortfolioPage /> },
                   { path: "/settings/*", element: <SettingsPage /> },
@@ -123,7 +142,9 @@ export const routes: RouteObject[] = [
                     path: "/macro-research/*",
                     element: (
                       <WithDeptBanner departmentId="macro_research">
-                        <MacroResearch />
+                        <Suspense fallback={<MacroSuspenseFallback />}>
+                          <MacroResearch />
+                        </Suspense>
                       </WithDeptBanner>
                     ),
                   },

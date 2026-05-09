@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 def _valid_schema_dict() -> dict:
     return {
-        "schema_version": "1.0",
+        "schema_version": "2.0",
         "department": "secretary",
         "generated_at": datetime(2026, 4, 24, tzinfo=UTC).isoformat(),
         "cover": {
@@ -56,7 +56,7 @@ def test_validate_report_schema_accepts_canonical_shape(create_tables) -> None:
         {"sections": []},
         {"title": "t"},
         {
-            "schema_version": "1.0",
+            "schema_version": "2.0",
             "department": "secretary",
             "cover": {"title": "t", "subtitle": "s", "tagline": "x"},
             "sections": "not-a-list",

@@ -8,6 +8,7 @@ import {
   BarChart2,
   Globe,
   Thermometer,
+  Briefcase,
   type LucideIcon,
 } from "lucide-react";
 
@@ -23,9 +24,16 @@ export interface NavEntry {
 export const CORE_NAV: readonly NavEntry[] = [
   { id: "home", label: "Home", icon: Home, path: "/", departmentId: null },
   {
+    id: "secretary",
+    label: "Secretary",
+    icon: MessageSquare,
+    path: "/secretary",
+    departmentId: "secretary",
+  },
+  {
     id: "portfolio",
     label: "Portfolio",
-    icon: BarChart2,
+    icon: Briefcase,
     path: "/portfolio",
     departmentId: null,
   },
@@ -39,13 +47,6 @@ export const CORE_NAV: readonly NavEntry[] = [
 ];
 
 export const DEPARTMENT_NAV: readonly NavEntry[] = [
-  {
-    id: "secretary",
-    label: "Secretary",
-    icon: MessageSquare,
-    path: "/secretary",
-    departmentId: "secretary",
-  },
   {
     id: "equity_research",
     label: "Equity Research",

@@ -4,44 +4,57 @@ export interface ReportCoverProps {
   cover: ReportCoverData;
 }
 
+function MetricCell({ metric }: { metric: NonNullable<ReportCoverData['key_metrics']>[number] }) {
+  const tone = metric.tag?.tone ?? metric.delta_direction;
+  const deltaClass =
+    metric.delta_direction === 'down'
+      ? 'report-cover__metric-delta--down'
+      : metric.delta_direction === 'flat'
+        ? 'report-cover__metric-delta--flat'
+        : metric.delta_direction === 'up'
+          ? 'report-cover__metric-delta--up'
+          : '';
+  return (
+    <div className={`report-cover__meta-cell${metric.highlight ? ' is-highlighted' : ''}`}>
+      <div className="report-cover__meta-label">{metric.label}</div>
+      <div className="report-cover__meta-value">{metric.value}</div>
+      {metric.delta ? (
+        <div className={`report-cover__meta-delta ${deltaClass}`} data-tone={tone ?? 'neutral'}>
+          {metric.delta}
+        </div>
+      ) : null}
+      {metric.tag ? (
+        <span className="report-cover__meta-tag" data-tone={metric.tag.tone ?? 'neutral'}>
+          {metric.tag.label}
+        </span>
+      ) : null}
+      {metric.context ? <div className="report-cover__meta-context">{metric.context}</div> : null}
+    </div>
+  );
+}
+
 export function ReportCover({ cover }: ReportCoverProps) {
+  const tldrLabel = cover.tldr_label ?? 'TL;DR';
   return (
     <header className="report-cover">
+      {cover.eyebrow ? <div className="report-cover__eyebrow">{cover.eyebrow}</div> : null}
       <h1 className="report-cover__title">{cover.title}</h1>
       <div className="report-cover__subtitle">{cover.subtitle}</div>
-      <p className="report-cover__tagline"><em>{cover.tagline}</em></p>
+      <p className="report-cover__tagline">{cover.tagline}</p>
       {cover.key_metrics && cover.key_metrics.length > 0 ? (
-        <div className="report-cover__metrics">
+        <div className="report-cover__meta-strip">
           {cover.key_metrics.map((m) => (
-            <div key={m.label} className="metric-card">
-              <div className="metric-card__label">{m.label}</div>
-              <div className="metric-card__value">{m.value}</div>
-              {m.delta ? (
-                <div
-                  className={`metric-card__delta metric-card__delta--${
-                    m.delta_direction === 'down'
-                      ? 'negative'
-                      : m.delta_direction === 'flat'
-                        ? 'neutral'
-                        : 'positive'
-                  }`}
-                >
-                  {m.delta}
-                </div>
-              ) : null}
-            </div>
+            <MetricCell key={m.label} metric={m} />
           ))}
         </div>
       ) : null}
-      {cover.stats_panel && cover.stats_panel.length > 0 ? (
-        <dl className="report-cover__stats">
-          {cover.stats_panel.map((s) => (
-            <div key={s.label} className="report-cover__stat">
-              <dt>{s.label}</dt>
-              <dd>{s.value}</dd>
-            </div>
+      {cover.tldr && cover.tldr.length > 0 ? (
+        <aside className="report-cover__tldr">
+          <div className="report-cover__tldr-label">{tldrLabel}</div>
+          {cover.tldr.map((p, i) => (
+            <p key={i} className="report-cover__tldr-paragraph">{p}</p>
           ))}
-        </dl>
+        </aside>
       ) : null}
     </header>
   );

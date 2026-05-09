@@ -84,7 +84,7 @@ def test_candlestick_has_ohlc_data():
 
 def test_full_schema_parses():
     schema = ReportSchema(
-        schema_version="1.0",
+        schema_version="2.0",
         department="equity_research",
         generated_at=datetime.now(UTC),
         page_furniture=PageFurniture(
@@ -95,10 +95,11 @@ def test_full_schema_parses():
         cover=Cover(
             title="Apple Inc.",
             subtitle="Q1 2026",
+            eyebrow="Stock Initiation · Apr 29, 2026",
             ticker="AAPL",
             tagline="Strong quarter.",
+            tldr=["Buy at $245 target.", "Services compounding drives mix."],
             key_metrics=[Metric(label="Price", value="$198.50")],
-            stats_panel=[Metric(label="Sector", value="Technology")],
         ),
         sections=[
             Section(
@@ -108,14 +109,16 @@ def test_full_schema_parses():
             )
         ],
     )
-    assert schema.schema_version == "1.0"
+    assert schema.schema_version == "2.0"
     assert schema.cover.ticker == "AAPL"
+    assert schema.cover.eyebrow.startswith("Stock Initiation")
+    assert len(schema.cover.tldr) == 2
 
 
 def test_schema_rejects_unknown_version():
     with pytest.raises(ValidationError):
         ReportSchema(
-            schema_version="2.0",
+            schema_version="1.0",
             department="equity_research",
             generated_at=datetime.now(UTC),
             cover=Cover(title="x", subtitle="x", ticker="AAPL", tagline="x"),

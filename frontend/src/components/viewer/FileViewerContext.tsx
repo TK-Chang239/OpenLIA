@@ -15,6 +15,7 @@ export type FileKind =
   | "csv"
   | "image"
   | "docx"
+  | "report"
   | "unknown";
 
 export type FileSource =
@@ -92,6 +93,13 @@ export function useFileViewer(): ContextShape {
   const ctx = useContext(FileViewerContext);
   if (!ctx) throw new Error("useFileViewer requires FileViewerProvider");
   return ctx;
+}
+
+/** Same as `useFileViewer` but returns null when no provider is mounted.
+ *  Useful for components that are sometimes rendered in isolation (tests,
+ *  storybook, embedded previews) and gracefully no-op the open() flow. */
+export function useFileViewerOptional(): ContextShape | null {
+  return useContext(FileViewerContext);
 }
 
 export function kindFromFilename(name: string): FileKind {

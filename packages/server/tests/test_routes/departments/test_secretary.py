@@ -301,7 +301,7 @@ def test_secretary_chat_save_report_to_repo_tool(secretary_app):
             department="secretary",
             mode="background",
             schema=ReportSchema(
-                schema_version="1.0",
+                schema_version="2.0",
                 department="secretary",
                 generated_at=datetime(2026, 4, 24, tzinfo=UTC),
                 page_furniture=PageFurniture(

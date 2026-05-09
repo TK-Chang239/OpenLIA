@@ -1,11 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-
-vi.mock('echarts-for-react', () => ({
-  default: ({ option }: { option: any }) => (
-    <div data-testid="echart" data-option={JSON.stringify(option)} />
-  ),
-}));
 
 import { CandlestickBlock } from '../CandlestickBlock';
 import { WaterfallBlock } from '../WaterfallBlock';
@@ -15,23 +9,24 @@ import { TreemapBlock } from '../TreemapBlock';
 import { ComboChartBlock } from '../ComboChartBlock';
 
 describe('CandlestickBlock', () => {
-  it('emits candlestick series with OHLC data', () => {
-    render(
+  it('renders one body rect + wick line per candle', () => {
+    const { container } = render(
       <CandlestickBlock
         type="candlestick_chart"
         title="AAPL"
         data={[
           { date: '2026-04-01', open: 1, high: 2, low: 0.5, close: 1.8 },
+          { date: '2026-04-02', open: 1.8, high: 2.2, low: 1.4, close: 1.5 },
         ]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    const cs = opt.series.find((s: any) => s.type === 'candlestick');
-    expect(cs.data[0]).toEqual([1, 1.8, 0.5, 2]);
+    expect(container.querySelectorAll('svg rect')).toHaveLength(2);
+    const wicks = container.querySelectorAll('svg line');
+    expect(wicks.length).toBeGreaterThanOrEqual(2);
   });
 
-  it('adds a volume bar series when volume is provided', () => {
-    render(
+  it('renders volume bars when volume is provided', () => {
+    const { container } = render(
       <CandlestickBlock
         type="candlestick_chart"
         title="AAPL"
@@ -39,14 +34,13 @@ describe('CandlestickBlock', () => {
         volume={[{ date: 'd1', value: 100 }]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series.some((s: any) => s.type === 'bar' && s.name === 'Volume')).toBe(true);
+    expect(container.querySelectorAll('svg rect').length).toBeGreaterThanOrEqual(2);
   });
 });
 
 describe('WaterfallBlock', () => {
-  it('emits bar series with totals and increments', () => {
-    render(
+  it('renders one bar per item with x-axis labels', () => {
+    const { container } = render(
       <WaterfallBlock
         type="waterfall_chart"
         title="Revenue Bridge"
@@ -57,29 +51,28 @@ describe('WaterfallBlock', () => {
         ]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.xAxis.data).toEqual(['Start', 'A', 'End']);
+    expect(container.querySelectorAll('svg rect')).toHaveLength(3);
+    expect(screen.getByText('Start')).toBeInTheDocument();
+    expect(screen.getByText('End')).toBeInTheDocument();
   });
 });
 
 describe('ScatterBlock', () => {
-  it('emits a scatter series', () => {
-    render(
+  it('renders one circle per data point', () => {
+    const { container } = render(
       <ScatterBlock
         type="scatter_plot"
         title="P/E vs Growth"
         series={[{ name: 'Peers', data: [{ x: 15.2, y: 32.1 }, { x: 22.4, y: 28.7 }] }]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].type).toBe('scatter');
-    expect(opt.series[0].data[0]).toEqual([15.2, 32.1]);
+    expect(container.querySelectorAll('svg circle')).toHaveLength(2);
   });
 });
 
 describe('HeatmapBlock', () => {
-  it('emits a heatmap series with [x,y,value] points', () => {
-    render(
+  it('renders one cell per (x, y)', () => {
+    const { container } = render(
       <HeatmapBlock
         type="heatmap"
         title="Correlation"
@@ -91,30 +84,29 @@ describe('HeatmapBlock', () => {
         ]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].type).toBe('heatmap');
-    expect(opt.series[0].data).toHaveLength(4);
+    expect(container.querySelectorAll('svg rect')).toHaveLength(4);
   });
 });
 
 describe('TreemapBlock', () => {
-  it('emits a treemap series with nested children', () => {
-    render(
+  it('renders nested rects when children are present', () => {
+    const { container } = render(
       <TreemapBlock
         type="treemap"
         title="Revenue by Segment"
-        data={[{ name: 'iPhone', value: 69.1, children: [{ name: '16', value: 42.0 }] }]}
+        data={[
+          { name: 'iPhone', value: 69.1, children: [{ name: '16', value: 42.0 }] },
+          { name: 'Services', value: 26.3 },
+        ]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(opt.series[0].type).toBe('treemap');
-    expect(opt.series[0].data[0].children[0].name).toBe('16');
+    expect(container.querySelectorAll('svg rect').length).toBeGreaterThanOrEqual(3);
   });
 });
 
 describe('ComboChartBlock', () => {
-  it('emits a bar + line series pair with two y-axes', () => {
-    render(
+  it('renders bar rects and a line polyline together', () => {
+    const { container } = render(
       <ComboChartBlock
         type="combo_chart"
         title="Rev & Margin"
@@ -123,11 +115,7 @@ describe('ComboChartBlock', () => {
         line_series={[{ name: 'Margin', values: [10, 11] }]}
       />,
     );
-    const opt = JSON.parse(screen.getByTestId('echart').dataset.option!);
-    expect(Array.isArray(opt.yAxis)).toBe(true);
-    expect(opt.yAxis).toHaveLength(2);
-    const types = opt.series.map((s: any) => s.type);
-    expect(types).toContain('bar');
-    expect(types).toContain('line');
+    expect(container.querySelectorAll('svg rect').length).toBeGreaterThanOrEqual(2);
+    expect(container.querySelectorAll('svg polyline.series-line')).toHaveLength(1);
   });
 });

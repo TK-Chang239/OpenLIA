@@ -100,7 +100,7 @@ describe("Phase 12 targeted gaps", () => {
         status="running"
       />,
     );
-    expect(screen.getByText(/get_quote\(AAPL\)…/)).toBeInTheDocument();
+    expect(screen.getByText(/market data — aapl/i)).toBeInTheDocument();
     rerender(
       <ToolCallChip
         toolName="get_quote"

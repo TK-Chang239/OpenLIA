@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import { X } from "lucide-react";
 import { departmentLabel } from "../../lib/department-colors";
 
@@ -49,7 +50,7 @@ export function RepoFilterChips(props: RepoFilterChipsProps): JSX.Element | null
   const chip = (key: string, label: string, onRemove: () => void) => (
     <span
       key={key}
-      className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[--color-accent-subtle] border border-[--color-accent-primary]/30 text-sm text-[--color-accent-primary]"
+      className="inline-flex h-[26px] items-center gap-[6px] whitespace-nowrap rounded-full border border-[rgba(168,204,0,0.45)] bg-[rgba(212,255,0,0.10)] pl-[10px] pr-2 text-[12px] font-medium text-[--color-accent-on-tint]"
       data-testid="filter-chip"
     >
       <span>{label}</span>
@@ -57,38 +58,40 @@ export function RepoFilterChips(props: RepoFilterChipsProps): JSX.Element | null
         type="button"
         aria-label={`Remove filter ${label}`}
         onClick={onRemove}
-        className="inline-flex items-center justify-center"
+        className="inline-flex h-[14px] w-[14px] items-center justify-center rounded-full opacity-70 transition-[opacity,background-color] hover:bg-[rgba(61,77,0,0.10)] hover:opacity-100"
       >
-        <X size={12} strokeWidth={1.5} />
+        <X size={9} strokeWidth={2.4} />
       </button>
     </span>
   );
 
   return (
     <div
-      className="flex items-center flex-wrap gap-2 px-6 py-2 border-b border-[--color-border-subtle]"
+      className="flex flex-wrap items-center gap-2 border-b border-[--color-border-subtle] px-6 py-[10px]"
       data-testid="filter-chips"
     >
       {q !== "" && chip("q", `Search: "${q}"`, onRemoveSearch)}
       {departments.map((d) =>
-        chip(`dept-${d}`, departmentLabel(d), () => onRemoveDepartment(d)),
+        chip(`dept-${d}`, `Department: ${departmentLabel(d)}`, () =>
+          onRemoveDepartment(d),
+        ),
       )}
       {(generatedFrom || generatedTo) &&
         chip(
           "gen-range",
-          `Generated: ${formatRange(generatedFrom, generatedTo)}`,
+          `Date Generated: ${formatRange(generatedFrom, generatedTo)}`,
           onRemoveGeneratedRange,
         )}
       {(savedFrom || savedTo) &&
         chip(
           "saved-range",
-          `Saved: ${formatRange(savedFrom, savedTo)}`,
+          `Date Saved: ${formatRange(savedFrom, savedTo)}`,
           onRemoveSavedRange,
         )}
       <button
         type="button"
         onClick={onClearAll}
-        className="text-sm text-[--color-text-secondary] hover:text-[--color-text-primary] ml-auto"
+        className="ml-auto text-[12px] text-[--color-text-secondary] transition-colors hover:text-[--color-text-primary]"
       >
         Clear all
       </button>

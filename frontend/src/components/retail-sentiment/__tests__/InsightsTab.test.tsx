@@ -49,7 +49,7 @@ describe("InsightsTab", () => {
       <InsightsTab selected="AAPL" snapshots={[empty]} spikes={[]} />,
     );
     expect(screen.getByTestId("narrative-paragraph")).toHaveTextContent(
-      /no narrative available/i,
+      /no narrative synthesis/i,
     );
   });
 

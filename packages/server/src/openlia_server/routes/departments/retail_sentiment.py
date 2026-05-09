@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from openlia.retail_sentiment.quotes import fetch_quotes
 from openlia.retail_sentiment.schemas import MetricSnapshot, SpikeEvent
 from openlia.retail_sentiment.spike_detector import detect_spike
 from pydantic import BaseModel, Field
@@ -146,6 +147,26 @@ def build_retail_sentiment_router(
         return {
             "ticker": ticker,
             "snapshots": [_snapshot_out(s) for s in history],
+        }
+
+    @router.get("/dashboard/quotes")
+    def get_quotes(
+        ticker: str,
+        days: int = 30,
+        user: User = require_auth,
+    ) -> dict[str, Any]:
+        bars = fetch_quotes(ticker=ticker, days=days)
+        return {
+            "ticker": ticker,
+            "bars": [
+                {
+                    "date": b.date,
+                    "close": b.close,
+                    "daily_change_pct": b.daily_change_pct,
+                    "cumulative_pct": b.cumulative_pct,
+                }
+                for b in bars
+            ],
         }
 
     @router.get("/config")

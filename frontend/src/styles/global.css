@@ -17,6 +17,297 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes eu-feed-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes eu-live-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes mb-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mb-tab-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mb-tab-underline {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes mb-report-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes mb-report-header-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mb-report-body-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mb-report-content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes rs-page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rs-section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rs-tab-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes rs-needle-sweep {
+  from {
+    transform: rotate(-90deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+@keyframes rs-live-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes mb-badge-pulse-once {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(212, 255, 0, 0.45);
+  }
+  60% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 6px rgba(212, 255, 0, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(212, 255, 0, 0);
+  }
+}
+
+.animate-feed-fade-up {
+  animation: eu-feed-fade-up 480ms var(--ease-out) both;
+}
+
+.animate-live-pulse {
+  animation: eu-live-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+.animate-mb-fade-in {
+  animation: mb-fade-in 200ms var(--ease-out) both;
+}
+
+.animate-mb-tab-enter {
+  animation: mb-tab-enter 280ms var(--ease-out) both;
+}
+
+.animate-mb-tab-underline {
+  animation: mb-tab-underline 240ms var(--ease-out) both;
+}
+
+.animate-mb-badge-pulse {
+  animation: mb-badge-pulse-once 1.2s var(--ease-out) both;
+}
+
+.animate-mb-report-enter {
+  animation: mb-report-enter 360ms var(--ease-out) both;
+}
+
+.animate-mb-report-header-enter {
+  animation: mb-report-header-enter 280ms var(--ease-out) both;
+  animation-delay: 40ms;
+}
+
+.animate-mb-report-body-enter {
+  animation: mb-report-body-enter 360ms var(--ease-out) both;
+  animation-delay: 80ms;
+}
+
+.animate-mb-report-content-enter {
+  animation: mb-report-content-enter 420ms var(--ease-out) both;
+}
+
+.animate-rs-page-enter {
+  animation: rs-page-enter 320ms var(--ease-out) both;
+}
+
+.animate-rs-section-enter {
+  animation: rs-section-enter 360ms var(--ease-out) both;
+}
+
+.animate-rs-tab-enter {
+  animation: rs-tab-enter 280ms var(--ease-out) both;
+}
+
+.animate-rs-live-pulse {
+  animation: rs-live-pulse 1.6s var(--ease-in-out) infinite;
+}
+
+.rs-sec-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+  margin: 28px 0 12px;
+}
+.rs-sec-label .rs-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-subtle);
+}
+.rs-sec-label.first {
+  margin-top: 0;
+}
+
+.rs-mono-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.rs-mono-value {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.rs-col-card {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.rs-col-card .rs-col-head {
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-feed-fade-up,
+  .animate-live-pulse,
+  .animate-mb-fade-in,
+  .animate-mb-tab-enter,
+  .animate-mb-tab-underline,
+  .animate-mb-badge-pulse,
+  .animate-mb-report-enter,
+  .animate-mb-report-header-enter,
+  .animate-mb-report-body-enter,
+  .animate-mb-report-content-enter,
+  .animate-rs-page-enter,
+  .animate-rs-section-enter,
+  .animate-rs-tab-enter,
+  .animate-rs-live-pulse {
+    animation: none;
+  }
+}
+
 html,
 body,
 #root {
@@ -75,6 +366,54 @@ body {
   }
 }
 
+@keyframes ol-dot-bounce {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  40% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+.ol-dot {
+  animation: ol-dot-bounce 1.2s infinite ease-in-out both;
+}
+.ol-dot[data-i="0"] {
+  animation-delay: -0.32s;
+}
+.ol-dot[data-i="1"] {
+  animation-delay: -0.16s;
+}
+.ol-dot[data-i="2"] {
+  animation-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ol-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+@keyframes ol-drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [class*="animate-[ol-drawer-in"] {
+    animation: none !important;
+  }
+}
+
 /* ----- Print / PDF route (/reports/:id/render) ----------------------- */
 .report-print-root {
   background: var(--color-bg, #ffffff);
@@ -113,4 +452,14 @@ body {
     break-inside: avoid;
     page-break-inside: avoid;
   }
+}
+
+/* Loading bar — used by route Suspense fallbacks before code chunks load. */
+.mr-suspense-bar {
+  animation: mr-suspense-slide 1.2s cubic-bezier(0.76, 0, 0.24, 1) infinite;
+  transform-origin: left center;
+}
+@keyframes mr-suspense-slide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
 }

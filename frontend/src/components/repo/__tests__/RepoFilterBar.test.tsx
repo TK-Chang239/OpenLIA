@@ -17,6 +17,7 @@ describe("RepoFilterBar", () => {
         savedFrom=""
         savedTo=""
         filtersActive={false}
+        activeFilterCount={0}
         onApplyFilters={vi.fn()}
       />,
     );
@@ -37,6 +38,7 @@ describe("RepoFilterBar", () => {
         savedFrom=""
         savedTo=""
         filtersActive={false}
+        activeFilterCount={0}
         onApplyFilters={vi.fn()}
       />,
     );

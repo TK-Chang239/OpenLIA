@@ -92,6 +92,25 @@ const config: Config = {
       ringColor: {
         focus: "var(--focus-ring-color)",
       },
+      keyframes: {
+        livePulse: {
+          "0%, 100%": { opacity: "0.5" },
+          "50%": { opacity: "1" },
+        },
+        feedFadeUp: {
+          "0%": { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        feedFadeIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+      },
+      animation: {
+        "live-pulse": "livePulse 1.6s var(--ease-in-out) infinite",
+        "feed-fade-up": "feedFadeUp 480ms var(--ease-out) both",
+        "feed-fade-in": "feedFadeIn 320ms var(--ease-out) both",
+      },
     },
   },
   plugins: [],

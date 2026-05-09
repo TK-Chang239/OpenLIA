@@ -331,7 +331,7 @@ async def test_report_run_normalizes_top_level_meta_fields(
     )
     assert isinstance(events[-1], ReportComplete)
     schema = events[-1].schema
-    assert schema["schema_version"] == "1.0"
+    assert schema["schema_version"] == "2.0"
     assert schema["department"] == "equity_research"
     assert "generated_at" in schema
     assert "report_metadata" not in schema
@@ -379,7 +379,9 @@ async def test_report_run_coerces_numeric_cover_metric_values(
                 {"label": "S&P 500", "value": 5680.42, "delta": -0.78},
                 {"label": "VIX", "value": 14},
             ],
-            "stats_panel": [
+        },
+        "rail": {
+            "quick_stats": [
                 {"label": "Date", "value": 20260505},
             ],
         },
@@ -412,7 +414,8 @@ async def test_report_run_coerces_numeric_cover_metric_values(
     assert cover["key_metrics"][0]["value"] == "5680.42"
     assert cover["key_metrics"][0]["delta"] == "-0.78"
     assert cover["key_metrics"][1]["value"] == "14"
-    assert cover["stats_panel"][0]["value"] == "20260505"
+    rail = events[-1].schema["rail"]
+    assert rail["quick_stats"][0]["value"] == "20260505"
 
 
 async def test_report_run_coerces_numeric_metric_cards_in_sections(

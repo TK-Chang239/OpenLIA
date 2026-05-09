@@ -11,7 +11,7 @@ const snap: RsSnapshot = {
   buzz_volume: 1.5,
   buzz_count: 12,
   sentiment_momentum: 0.1,
-  bull_bear_ratio: 2.0,
+  bull_bear_ratio: 0.65,
   buzz_sentiment_divergence: 0.3,
   social_velocity: 0.5,
   cross_source_agreement: 0.8,
@@ -20,25 +20,73 @@ const snap: RsSnapshot = {
   narrative_concentration: null,
   institutional_retail_gap: null,
   event_sensitivity: null,
-  source_breakdown: {},
-  narrative: null,
+  source_breakdown: { eodhd_news: 220, social_media: 1180 },
+  narrative: "Bullish lean with elevated buzz.",
 };
 
-describe("OverviewTab", () => {
-  it("renders heat map when no ticker is selected", () => {
-    render(<OverviewTab selected={null} snapshots={[snap]} />);
-    expect(screen.getByTestId("rs-heatmap")).toBeInTheDocument();
+describe("OverviewTab single-ticker", () => {
+  it("renders the hero, narrative, and compact tier", () => {
+    render(
+      <OverviewTab selected="AAPL" snapshot={snap} history={[snap]} />,
+    );
+    expect(screen.getByTestId("overview-single")).toBeInTheDocument();
+    expect(screen.getByTestId("rs-hero")).toBeInTheDocument();
+    expect(screen.getByTestId("rs-lia-take")).toHaveTextContent(
+      /Bullish lean/i,
+    );
+    expect(screen.getByTestId("rs-compact-tier")).toBeInTheDocument();
   });
 
-  it("renders empty state when ticker has no snapshot", () => {
-    render(<OverviewTab selected="MSFT" snapshots={[snap]} />);
-    expect(screen.getByTestId("overview-empty")).toBeInTheDocument();
+  it("renders the sentiment gauge", () => {
+    render(
+      <OverviewTab selected="AAPL" snapshot={snap} history={[snap]} />,
+    );
+    expect(screen.getByTestId("sentiment-gauge")).toBeInTheDocument();
   });
 
-  it("renders compact tier when snapshot is found", () => {
-    render(<OverviewTab selected="AAPL" snapshots={[snap]} />);
-    // Compact tier emits the metric label "Buzz Count" and renders the value
-    expect(screen.getByText("Buzz Count")).toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
+  it("renders the sentiment vs price overlay with quote data", () => {
+    const captured_at = "2026-05-03T12:00:00Z";
+    render(
+      <OverviewTab
+        selected="AAPL"
+        snapshot={{ ...snap, captured_at }}
+        history={[{ ...snap, captured_at }]}
+        quotes={[
+          {
+            date: "2026-05-03",
+            close: 200.5,
+            daily_change_pct: 0.5,
+            cumulative_pct: 1.2,
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("sentiment-price-overlay")).toBeInTheDocument();
+    expect(screen.getByText(/price \+1\.20%/)).toBeInTheDocument();
+  });
+
+  it("shows awaiting-key copy when quote data missing", () => {
+    render(
+      <OverviewTab
+        selected="AAPL"
+        snapshot={snap}
+        history={[snap]}
+        quotes={[]}
+      />,
+    );
+    expect(
+      screen.getByText(/price overlay awaiting EODHD key/i),
+    ).toBeInTheDocument();
+  });
+
+  it("falls back to placeholder text when snapshot has no narrative", () => {
+    render(
+      <OverviewTab
+        selected="AAPL"
+        snapshot={{ ...snap, narrative: null }}
+        history={[snap]}
+      />,
+    );
+    expect(screen.getAllByText(/No narrative/i).length).toBeGreaterThan(0);
   });
 });

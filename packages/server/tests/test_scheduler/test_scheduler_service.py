@@ -158,9 +158,9 @@ async def test_start_rehydrates_enabled_mb_and_eu_schedules(
     )
     await svc.start()
 
-    assert job_key(JobType.MB_BRIEFING, "u_1") in scheduler.jobs
+    assert job_key(JobType.MB_BRIEFING, "u_1", "sch_mb") in scheduler.jobs
     assert job_key(JobType.EU_SCAN, "u_1") in scheduler.jobs
-    assert all(k != job_key(JobType.MB_BRIEFING, "u_1_off") for k in scheduler.jobs)
+    assert job_key(JobType.MB_BRIEFING, "u_1", "sch_mb_off") not in scheduler.jobs
 
 
 @pytest.mark.asyncio
@@ -231,7 +231,7 @@ async def test_add_schedule_registers_job_with_correct_key_and_trigger(
 
     await svc.add_schedule(_mb_schedule(time="09:30", tz="America/New_York"))
 
-    key = job_key(JobType.MB_BRIEFING, "u_1")
+    key = job_key(JobType.MB_BRIEFING, "u_1", "sch_mb")
     assert key in scheduler.jobs
     job = scheduler.jobs[key]
     assert isinstance(job.trigger, CronTrigger)
@@ -259,9 +259,9 @@ async def test_modify_schedule_replaces_existing_job(session_factory) -> None:
     await svc.add_schedule(_mb_schedule(time="07:00"))
     await svc.modify_schedule(_mb_schedule(time="08:30"))
 
-    key = job_key(JobType.MB_BRIEFING, "u_1")
+    key = job_key(JobType.MB_BRIEFING, "u_1", "sch_mb")
     assert key in scheduler.jobs
-    # Trigger swap: there's still exactly one MB job for u_1.
+    # Trigger swap: there's still exactly one MB job for u_1/sch_mb.
     mb_ids = [k for k in scheduler.jobs if k.startswith("mb_briefing:")]
     assert mb_ids == [key]
 
@@ -285,8 +285,10 @@ async def test_remove_schedule_unregisters_job(session_factory) -> None:
     await svc.start()
     await svc.add_schedule(_mb_schedule())
 
-    await svc.remove_schedule(job_type=JobType.MB_BRIEFING, user_id="u_1")
-    assert job_key(JobType.MB_BRIEFING, "u_1") not in scheduler.jobs
+    await svc.remove_schedule(
+        job_type=JobType.MB_BRIEFING, user_id="u_1", schedule_id="sch_mb"
+    )
+    assert job_key(JobType.MB_BRIEFING, "u_1", "sch_mb") not in scheduler.jobs
 
 
 @pytest.mark.asyncio
@@ -332,7 +334,7 @@ async def test_dispatch_routes_call_to_registered_executor(
     await svc.add_schedule(_mb_schedule())
 
     # Fire the APScheduler callback manually.
-    key = job_key(JobType.MB_BRIEFING, "u_1")
+    key = job_key(JobType.MB_BRIEFING, "u_1", "sch_mb")
     await scheduler.fire(key)
 
     assert len(mb_exec.calls) == 1
@@ -377,9 +379,9 @@ async def test_startup_backfills_missed_tick_within_grace(
     await svc.start()
 
     # The normal cron registration.
-    assert job_key(JobType.MB_BRIEFING, "u_1") in scheduler.jobs
+    assert job_key(JobType.MB_BRIEFING, "u_1", "sch_mb") in scheduler.jobs
     # Plus a one-shot backfill with a DateTrigger.
-    backfill_key = f"{job_key(JobType.MB_BRIEFING, 'u_1')}:backfill"
+    backfill_key = f"{job_key(JobType.MB_BRIEFING, 'u_1', 'sch_mb')}:backfill"
     assert backfill_key in scheduler.jobs
     assert isinstance(scheduler.jobs[backfill_key].trigger, DateTrigger)
 
@@ -412,7 +414,10 @@ async def test_startup_does_not_backfill_when_tick_outside_grace(
     )
     await svc.start()
 
-    assert f"{job_key(JobType.MB_BRIEFING, 'u_1')}:backfill" not in scheduler.jobs
+    assert (
+        f"{job_key(JobType.MB_BRIEFING, 'u_1', 'sch_mb')}:backfill"
+        not in scheduler.jobs
+    )
 
 
 @pytest.mark.asyncio
@@ -493,7 +498,7 @@ async def test_shutdown_cancels_active_tokens_and_stops_scheduler(
     await svc.add_schedule(_mb_schedule())
 
     # Kick off a job in the background and let it reach its sleep.
-    key = job_key(JobType.MB_BRIEFING, "u_1")
+    key = job_key(JobType.MB_BRIEFING, "u_1", "sch_mb")
     task = asyncio.create_task(scheduler.fire(key))
     await asyncio.sleep(0.05)
 
@@ -527,7 +532,7 @@ async def test_add_schedule_sets_max_instances(session_factory) -> None:
     await svc.start()
 
     await svc.add_schedule(_mb_schedule())
-    key = job_key(JobType.MB_BRIEFING, "u_1")
+    key = job_key(JobType.MB_BRIEFING, "u_1", "sch_mb")
     job = scheduler.jobs[key]
     assert job.max_instances == 1
     assert job.coalesce is True

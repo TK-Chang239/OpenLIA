@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import {
   getDepartmentModelPref,
@@ -89,29 +90,49 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
   const title = usingFallback
     ? "Using your default model. Pick one to override for this department."
     : "Pick the model used for this department's reports.";
+  const current = models.find((m) => m.id === selected);
+  const triggerLabel = loading
+    ? "Loading…"
+    : current
+      ? current.label.replace(/\s*\(.*\)\s*$/, "")
+      : "Select model…";
 
   return (
-    <select
-      value={selected}
-      onChange={onChange}
-      disabled={loading || saving}
-      data-testid="mb-model-picker"
-      className={
-        "text-xs border border-border-subtle rounded-md px-2 py-1 bg-bg-elevated text-text-primary disabled:opacity-50" +
-        (usingFallback ? " italic text-muted-foreground" : "")
-      }
-      aria-label="Model for Morning Briefing reports"
-      title={title}
-    >
-      <option value="" disabled>
-        {loading ? "Loading models…" : "Select a model…"}
-      </option>
-      {models.map((m) => (
-        <option key={m.id} value={m.id}>
-          {m.label}
-          {usingFallback && m.id === selected ? " — default" : ""}
+    <div className="relative inline-flex">
+      <select
+        value={selected}
+        onChange={onChange}
+        disabled={loading || saving}
+        data-testid="mb-model-picker"
+        aria-label="Model for Morning Briefing reports"
+        title={title}
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+      >
+        <option value="" disabled>
+          {loading ? "Loading models…" : "Select a model…"}
         </option>
-      ))}
-    </select>
+        {models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.label}
+            {usingFallback && m.id === selected ? " — default" : ""}
+          </option>
+        ))}
+      </select>
+      <span
+        aria-hidden="true"
+        className={
+          "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[13px] transition-colors duration-[--duration-normal] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]" +
+          (usingFallback ? " italic" : "") +
+          (loading || saving ? " opacity-50" : "")
+        }
+        style={{
+          borderColor: "var(--color-border-secondary)",
+          color: "var(--color-text-secondary)",
+        }}
+      >
+        <ChevronDown size={13} strokeWidth={1.8} />
+        <span className="max-w-[180px] truncate">{triggerLabel}</span>
+      </span>
+    </div>
   );
 }

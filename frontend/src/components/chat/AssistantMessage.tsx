@@ -1,10 +1,13 @@
 import type { JSX } from "react";
+import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { LiaBadge } from "./LiaBadge";
-import { CodeBlock } from "./CodeBlock";
+import { MarkdownCodeRenderer } from "./MarkdownCodeRenderer";
 import { ReportThumbnail } from "./ReportThumbnail";
 import { SkillLoadedCard } from "./SkillLoadedCard";
+import { AssistantMessageTag } from "./AssistantMessageTag";
+import { useReducedMotion } from "../../hooks/useReducedMotion";
 
 export type AssistantChunk =
   | { type: "text"; text: string }
@@ -24,6 +27,12 @@ interface Props {
   stopped?: boolean;
   flagChips?: Array<{ category: string; text: string }>;
   skillLoads?: Array<{ skillId: string; displayName: string }>;
+  /** Department slug for the AssistantMessageTag (e.g., "secretary"). */
+  departmentId?: string | null;
+  /** Total token count for the response. */
+  tokens?: number | null;
+  /** Wall-clock latency from send→done, in ms. */
+  latencyMs?: number | null;
 }
 
 function MarkdownText({ text }: { text: string }): JSX.Element {
@@ -31,7 +40,7 @@ function MarkdownText({ text }: { text: string }): JSX.Element {
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       components={{
-        code: CodeBlock as never,
+        code: MarkdownCodeRenderer as never,
       }}
     >
       {text}
@@ -47,14 +56,31 @@ export function AssistantMessage({
   stopped,
   flagChips,
   skillLoads,
+  departmentId,
+  tokens,
+  latencyMs,
 }: Props): JSX.Element {
   const inlineChunks: AssistantChunk[] =
     chunks ?? (content !== undefined ? [{ type: "text", text: content }] : []);
+  const reduce = useReducedMotion();
 
   return (
-    <article aria-label="Assistant message" className="flex items-start gap-3">
+    <motion.article
+      aria-label="Assistant message"
+      initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduce ? 0 : 0.2, ease: [0.16, 1, 0.3, 1] }}
+      className="flex items-start gap-3"
+    >
       <LiaBadge />
       <div className="flex flex-col min-w-0 max-w-[600px]">
+        {!streaming ? (
+          <AssistantMessageTag
+            departmentId={departmentId}
+            tokens={tokens}
+            latencyMs={latencyMs}
+          />
+        ) : null}
         <div className="rounded-[10px] border border-border-subtle bg-bg-elevated px-4 py-[14px] text-[14.5px] leading-[1.65] font-display text-text-primary prose prose-sm dark:prose-invert max-w-none">
           {inlineChunks.map((c, i) =>
             c.type === "text" ? (
@@ -106,6 +132,6 @@ export function AssistantMessage({
           </time>
         ) : null}
       </div>
-    </article>
+    </motion.article>
   );
 }

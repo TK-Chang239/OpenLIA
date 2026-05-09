@@ -180,12 +180,15 @@ describe("Repository page", () => {
   it("filter chip dismiss removes that filter", async () => {
     renderPage("/repository?department=equity_research");
     const chip = await screen.findByRole("button", {
-      name: /Remove filter Equity Research/,
+      name: /Remove filter Department: Equity Research/,
     });
     fireEvent.click(chip);
     await waitFor(() =>
-      expect(screen.queryByText("Equity Research", { selector: "[data-testid='filter-chip'] *" }))
-        .not.toBeInTheDocument(),
+      expect(
+        screen.queryByText("Department: Equity Research", {
+          selector: "[data-testid='filter-chip'] *",
+        }),
+      ).not.toBeInTheDocument(),
     );
   });
 

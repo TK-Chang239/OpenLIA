@@ -1,3 +1,5 @@
+import { X } from "lucide-react";
+
 import type { MbSchedule } from "../../api/morning-briefing";
 
 interface Props {
@@ -6,46 +8,70 @@ interface Props {
   onDelete: () => void;
 }
 
+function formatDays(days: string[]): string {
+  if (days.length === 0) return "—";
+  const lower = days.map((d) => d.toLowerCase());
+  const mf = ["mon", "tue", "wed", "thu", "fri"];
+  if (lower.length === 5 && mf.every((d) => lower.includes(d))) {
+    return "Mon — Fri";
+  }
+  if (lower.length === 7) return "Every day";
+  return days
+    .map((d) => d.charAt(0).toUpperCase() + d.slice(1, 3).toLowerCase())
+    .join(", ");
+}
+
 export function ScheduleRow({ schedule, onEdit, onDelete }: Props) {
-  const days = schedule.days_of_week.join(", ");
+  const isPost = /post/i.test(schedule.label);
+  const labelTone = isPost
+    ? {
+        color: "var(--color-feedback-warning)",
+        background: "rgba(220,150,20,0.1)",
+      }
+    : {
+        color: "var(--color-feedback-success)",
+        background: "rgba(107,130,0,0.1)",
+      };
   return (
     <div
-      className="flex items-center gap-3 rounded-[var(--radius-lg,0.5rem)] border px-3 py-2 text-sm"
-      style={{
-        borderColor: "var(--color-border-subtle)",
-        background: "var(--color-bg-base)",
-      }}
+      className="flex items-center gap-3.5 px-5 py-3.5 border-b last:border-b-0"
+      style={{ borderColor: "var(--color-border-subtle)" }}
       data-testid={`schedule-row-${schedule.id}`}
     >
-      <div className="flex-1 min-w-0 truncate">
-        <span className="font-medium">{schedule.time}</span>
-        <span style={{ color: "var(--color-text-tertiary)" }}>
-          {` · ${schedule.timezone} · ${days}`}
-        </span>
-        {schedule.label && (
-          <span className="ml-2" style={{ color: "var(--color-text-tertiary)" }}>
-            {`— ${schedule.label}`}
-          </span>
-        )}
+      <div className="font-mono text-[16px] font-medium text-[--color-text-primary] tabular-nums min-w-[110px]">
+        {schedule.time}
       </div>
-      <button
-        type="button"
-        onClick={onEdit}
-        className="text-xs underline"
-        data-testid={`schedule-row-edit-${schedule.id}`}
-      >
-        Edit
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label="Delete schedule"
-        className="text-xs"
-        style={{ color: "var(--color-text-tertiary)" }}
-        data-testid={`schedule-row-delete-${schedule.id}`}
-      >
-        {"×"}
-      </button>
+      <div className="flex-1 min-w-0 text-[13.5px] text-[--color-text-secondary]">
+        <span>{formatDays(schedule.days_of_week)}</span>
+        <span className="text-[--color-text-tertiary]"> · {schedule.timezone}</span>
+        {schedule.label ? (
+          <span
+            className="ml-2 inline-flex font-mono text-[9.5px] tracking-[0.1em] uppercase px-2 py-0.5 rounded"
+            style={labelTone}
+          >
+            {schedule.label}
+          </span>
+        ) : null}
+      </div>
+      <div className="flex gap-1">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex items-center h-7 px-3 rounded-md text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover]"
+          data-testid={`schedule-row-edit-${schedule.id}`}
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label="Delete schedule"
+          className="inline-flex items-center justify-center h-7 w-7 rounded-md text-[--color-feedback-error] hover:bg-[rgba(224,92,48,0.08)]"
+          data-testid={`schedule-row-delete-${schedule.id}`}
+        >
+          <X size={14} strokeWidth={1.8} />
+        </button>
+      </div>
     </div>
   );
 }

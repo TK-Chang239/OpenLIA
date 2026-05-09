@@ -83,6 +83,13 @@ class _ScheduleOut(BaseModel):
 class _ReportIn(BaseModel):
     user_input: str = Field(default="", max_length=4000)
     session_id: str | None = None
+    # Per-run overrides — when present, replace the corresponding saved-config
+    # field for this single manual run only. None means "use saved config."
+    report_length: Literal["concise", "normal", "elaborative"] | None = None
+    enabled_section_ids: list[str] | None = None
+    section_topics: dict[str, list[_TopicIn]] | None = None
+    custom_sections: list[_CustomSectionIn] | None = None
+    reference_portfolio: bool | None = None
 
 
 def build_morning_briefing_router(
@@ -139,29 +146,31 @@ def build_morning_briefing_router(
             reference_portfolio=bool(cfg.reference_portfolio),
         )
 
-    # ----- Schedule -----
+    # ----- Schedules (multiple per user) -----
 
-    @router.get("/schedule")
-    def get_schedule(
+    def _dto_to_out(dto: schedules_svc.MbScheduleDTO) -> _ScheduleOut:
+        return _ScheduleOut(
+            id=dto.id,
+            time=dto.time,
+            timezone=dto.timezone,
+            days_of_week=list(dto.days_of_week),
+            label=dto.label,
+            is_enabled=dto.is_enabled,
+        )
+
+    @router.get("/schedules", response_model=list[_ScheduleOut])
+    def list_schedules(
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
-    ) -> dict:
-        dto = schedules_svc.get_schedule(db, user_id=user.id)
-        if dto is None:
-            return {"schedule": None}
-        return {
-            "schedule": _ScheduleOut(
-                id=dto.id,
-                time=dto.time,
-                timezone=dto.timezone,
-                days_of_week=list(dto.days_of_week),
-                label=dto.label,
-                is_enabled=dto.is_enabled,
-            ).model_dump()
-        }
+    ) -> list[_ScheduleOut]:
+        return [_dto_to_out(d) for d in schedules_svc.list_schedules(db, user_id=user.id)]
 
-    @router.put("/schedule", response_model=_ScheduleOut)
-    async def put_schedule(
+    @router.post(
+        "/schedules",
+        response_model=_ScheduleOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def create_schedule(
         payload: _ScheduleIn,
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
@@ -170,7 +179,7 @@ def build_morning_briefing_router(
         if scheduler is None:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")
         try:
-            dto = await schedules_svc.upsert_schedule(
+            dto = await schedules_svc.create_schedule(
                 db,
                 user_id=user.id,
                 time=payload.time,
@@ -181,24 +190,49 @@ def build_morning_briefing_router(
             )
         except ValueError as exc:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
-        return _ScheduleOut(
-            id=dto.id,
-            time=dto.time,
-            timezone=dto.timezone,
-            days_of_week=list(dto.days_of_week),
-            label=dto.label,
-            is_enabled=dto.is_enabled,
-        )
+        return _dto_to_out(dto)
 
-    @router.delete("/schedule", status_code=status.HTTP_204_NO_CONTENT)
+    @router.patch("/schedules/{schedule_id}", response_model=_ScheduleOut)
+    async def update_schedule(
+        schedule_id: str,
+        payload: _ScheduleIn,
+        user: User = require_auth,
+        db: DBSession = Depends(session_dep),
+        scheduler=Depends(_optional_scheduler),
+    ) -> _ScheduleOut:
+        if scheduler is None:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")
+        try:
+            dto = await schedules_svc.update_schedule(
+                db,
+                user_id=user.id,
+                schedule_id=schedule_id,
+                time=payload.time,
+                timezone=payload.timezone,
+                days_of_week=list(payload.days_of_week),
+                label=payload.label,
+                scheduler=scheduler,
+            )
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        if dto is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "schedule not found")
+        return _dto_to_out(dto)
+
+    @router.delete("/schedules/{schedule_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_schedule(
+        schedule_id: str,
         user: User = require_auth,
         db: DBSession = Depends(session_dep),
         scheduler=Depends(_optional_scheduler),
     ) -> None:
         if scheduler is None:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "scheduler not initialized")
-        await schedules_svc.delete_schedule(db, user_id=user.id, scheduler=scheduler)
+        deleted = await schedules_svc.delete_schedule(
+            db, user_id=user.id, schedule_id=schedule_id, scheduler=scheduler
+        )
+        if not deleted:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "schedule not found")
 
     # ----- On-demand report (SSE, named events) -----
 
@@ -216,6 +250,37 @@ def build_morning_briefing_router(
 
         cancel_token = CancellationToken()
 
+        overrides: config_svc.MbConfigOverrides | None = None
+        any_override = (
+            payload.report_length is not None
+            or payload.enabled_section_ids is not None
+            or payload.section_topics is not None
+            or payload.custom_sections is not None
+            or payload.reference_portfolio is not None
+        )
+        if any_override:
+            try:
+                overrides = config_svc.MbConfigOverrides(
+                    report_length=payload.report_length,
+                    enabled_section_ids=list(payload.enabled_section_ids)
+                    if payload.enabled_section_ids is not None
+                    else None,
+                    section_topics={
+                        sid: [t.model_dump() for t in topics]
+                        for sid, topics in payload.section_topics.items()
+                    }
+                    if payload.section_topics is not None
+                    else None,
+                    custom_sections=[cs.model_dump() for cs in payload.custom_sections]
+                    if payload.custom_sections is not None
+                    else None,
+                    reference_portfolio=payload.reference_portfolio,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+                ) from exc
+
         async def gen() -> AsyncIterator[bytes]:
             try:
                 async for event in mb_runner.run_on_demand(
@@ -223,6 +288,7 @@ def build_morning_briefing_router(
                     user_id=user_id,
                     report_runner=runner,
                     cancel_token=cancel_token,
+                    overrides=overrides,
                 ):
                     if await request.is_disconnected():
                         cancel_token.cancel()
