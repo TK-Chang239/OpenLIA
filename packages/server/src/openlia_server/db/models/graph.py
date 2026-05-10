@@ -97,7 +97,12 @@ class GraphUserConstruct(Base, TimestampMixin):
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(String(24), nullable=False)
-    status: Mapped[str] = mapped_column(String(16), nullable=False, default="confirmed")
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="confirmed",
+        server_default="confirmed",
+    )
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     entity_id: Mapped[str] = mapped_column(
         String(128),
