@@ -12,7 +12,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from openlia_server.db.models.content import ChatMessage, ChatSession
-from openlia_server.services import graph_extraction
+from openlia_server.services import (
+    graph_extraction,
+    graph_store,
+    user_constructs,
+)
 
 
 def _make_session(db_session, *, session_id: str = "s-1", user_id: str = "u-1") -> ChatSession:
@@ -114,3 +118,107 @@ def test_extract_skips_statements_with_dismissed_tombstone(db_session) -> None:
     )
 
     assert proposals == []
+
+
+def test_accept_user_construct_proposal_creates_confirmed_construct(db_session) -> None:
+    p = graph_extraction.record_proposal(
+        db_session,
+        user_id="u-1",
+        source_kind="session",
+        source_id="s-1",
+        kind="user_construct",
+        payload={
+            "construct_kind": "thesis",
+            "statement": "NVDA services-margin expansion is durable",
+            "entity_kind": "ticker",
+            "entity_value": "NVDA",
+        },
+    )
+
+    construct = graph_extraction.accept_proposal(db_session, proposal_id=p.id, user_id="u-1")
+
+    assert construct is not None
+    assert construct.status == "confirmed"
+    assert construct.kind == "thesis"
+    assert construct.entity_id == "ticker:NVDA"
+
+    # Proposal flips to accepted; visible via list.
+    db_session.refresh(p)
+    assert p.status == "accepted"
+
+    own = user_constructs.list_constructs(db_session, user_id="u-1")
+    assert any(c.id == construct.id for c in own)
+
+
+def test_accept_mention_proposal_creates_mentions_edge(db_session) -> None:
+    p = graph_extraction.record_proposal(
+        db_session,
+        user_id="u-1",
+        source_kind="session",
+        source_id="s-1",
+        kind="mention",
+        payload={
+            "entity_kind": "ticker",
+            "entity_value": "NVDA",
+            "artifact_kind": "session",
+            "artifact_id": "s-1",
+        },
+    )
+
+    result = graph_extraction.accept_proposal(db_session, proposal_id=p.id, user_id="u-1")
+
+    assert result is None  # mentions don't yield a row, only an edge.
+    db_session.refresh(p)
+    assert p.status == "accepted"
+
+    edges = graph_store.neighbors_of(
+        db_session, kind="entity", id="ticker:NVDA", edge_type="mentions"
+    )
+    assert len(edges) == 1
+    assert edges[0].dst_kind == "session"
+    assert edges[0].dst_id == "s-1"
+
+
+def test_dismiss_proposal_marks_status_dismissed(db_session) -> None:
+    p = graph_extraction.record_proposal(
+        db_session,
+        user_id="u-1",
+        source_kind="session",
+        source_id="s-1",
+        kind="user_construct",
+        payload={
+            "construct_kind": "concern",
+            "statement": "irrelevant note",
+            "entity_kind": "ticker",
+            "entity_value": "NVDA",
+        },
+    )
+
+    graph_extraction.dismiss_proposal(db_session, proposal_id=p.id, user_id="u-1")
+
+    db_session.refresh(p)
+    assert p.status == "dismissed"
+    # No construct created.
+    assert user_constructs.list_constructs(db_session, user_id="u-1") == []
+
+
+def test_accept_other_users_proposal_returns_none(db_session) -> None:
+    p = graph_extraction.record_proposal(
+        db_session,
+        user_id="u-1",
+        source_kind="session",
+        source_id="s-1",
+        kind="user_construct",
+        payload={
+            "construct_kind": "thesis",
+            "statement": "x",
+            "entity_kind": "ticker",
+            "entity_value": "NVDA",
+        },
+    )
+
+    out = graph_extraction.accept_proposal(db_session, proposal_id=p.id, user_id="u-2")
+
+    assert out is None
+    db_session.refresh(p)
+    assert p.status == "pending"  # unchanged
