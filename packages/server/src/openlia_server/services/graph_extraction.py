@@ -24,7 +24,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import ChatMessage, ChatSession
-from openlia_server.db.models.graph import GraphExtractionProposal
+from openlia_server.db.models.graph import (
+    GraphExtractionProposal,
+    GraphUserConstruct,
+)
 
 ExtractFn = Callable[[list[ChatMessage]], list[dict[str, Any]]]
 
@@ -109,6 +112,80 @@ def record_proposal(
     db.add(row)
     db.flush()
     return row
+
+
+def accept_proposal(
+    db: Session,
+    *,
+    proposal_id: str,
+    user_id: str,
+) -> GraphUserConstruct | None:
+    """Materialize a pending proposal into the graph.
+
+    For ``user_construct`` proposals: creates a ``confirmed`` construct
+    (with ``about`` edge) and returns the row. For ``mention`` proposals:
+    emits the ``entity → artifact`` ``mentions`` edge and returns
+    ``None`` (mentions are edges, not nodes). The proposal's status flips
+    to ``accepted`` either way.
+
+    Returns ``None`` (without side effects) when the proposal doesn't
+    belong to ``user_id`` or is already resolved — defensive against
+    cross-tenant access through a guessed ID.
+    """
+    from openlia_server.services import graph_store, user_constructs
+
+    p = db.get(GraphExtractionProposal, proposal_id)
+    if p is None or p.user_id != user_id or p.status != "pending":
+        return None
+
+    if p.kind == "user_construct":
+        construct = user_constructs.create_construct(
+            db,
+            user_id=user_id,
+            kind=p.payload["construct_kind"],
+            statement=p.payload["statement"],
+            entity_kind=p.payload["entity_kind"],
+            entity_value=p.payload["entity_value"],
+            status="confirmed",
+            provenance={
+                "proposal_id": p.id,
+                "source_kind": p.source_kind,
+                "source_id": p.source_id,
+                "source_excerpt": p.payload.get("source_excerpt"),
+            },
+        )
+        p.status = "accepted"
+        db.flush()
+        return construct
+
+    if p.kind == "mention":
+        graph_store.mention(
+            db,
+            entity_kind=p.payload["entity_kind"],
+            entity_value=p.payload["entity_value"],
+            artifact_kind=p.payload["artifact_kind"],
+            artifact_id=p.payload["artifact_id"],
+        )
+        p.status = "accepted"
+        db.flush()
+        return None
+
+    return None
+
+
+def dismiss_proposal(
+    db: Session,
+    *,
+    proposal_id: str,
+    user_id: str,
+) -> None:
+    """Mark a proposal dismissed. Acts as a tombstone for future
+    extractions (see ``_has_tombstone``)."""
+    p = db.get(GraphExtractionProposal, proposal_id)
+    if p is None or p.user_id != user_id or p.status != "pending":
+        return
+    p.status = "dismissed"
+    db.flush()
 
 
 def _statement_hash(payload: dict[str, Any]) -> str:
