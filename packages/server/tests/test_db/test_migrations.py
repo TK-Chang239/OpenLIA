@@ -92,6 +92,13 @@ EXPECTED_TABLES = {
     "graph_artifact_summaries",
     # --- Graph memory runtime spec (slice 4) ---
     "graph_extraction_runs",
+    # --- Graph memory runtime spec (slice 10 hybrid retrieval) ---
+    # SQLite FTS5 virtual table + four internal shadow tables it manages.
+    "graph_artifact_summaries_fts",
+    "graph_artifact_summaries_fts_config",
+    "graph_artifact_summaries_fts_data",
+    "graph_artifact_summaries_fts_docsize",
+    "graph_artifact_summaries_fts_idx",
 }
 
 
