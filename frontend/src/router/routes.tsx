@@ -9,6 +9,7 @@ import Repository from "../pages/Repository";
 import PortfolioPage from "../pages/PortfolioPage";
 import { SettingsPage } from "../pages/SettingsPage";
 import { SetupPage } from "../pages/SetupPage";
+import { MemoryPage } from "../pages/MemoryPage";
 import { useAuth } from "../auth/AuthContext";
 import { SecretaryPage } from "../pages/SecretaryPage";
 import EquityResearch from "../pages/departments/EquityResearch";
@@ -97,6 +98,7 @@ export const routes: RouteObject[] = [
                   { path: "/home", element: <Navigate to="/" replace /> },
                   { path: "/repository", element: <Repository /> },
                   { path: "/portfolio", element: <PortfolioPage /> },
+                  { path: "/memory", element: <MemoryPage /> },
                   { path: "/settings/*", element: <SettingsPage /> },
                   {
                     path: "/secretary",
