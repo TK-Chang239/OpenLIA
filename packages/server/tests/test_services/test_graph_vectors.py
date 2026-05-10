@@ -278,6 +278,294 @@ def test_upsert_artifact_summary_defaults_structured_fields_to_none(db_session) 
     assert row.horizon is None
 
 
+def _fts_row_count(db_session, summary_id: str) -> int:
+    """Count FTS rows whose docid matches the given summary's rowid.
+
+    The shadow FTS table uses ``content_rowid='rowid'`` so we look up
+    the parent row's sqlite rowid then count matches in the FTS table.
+    Returns 0 if the FTS table doesn't exist (non-SQLite backend).
+    """
+    from sqlalchemy import text
+
+    bind = db_session.get_bind()
+    if bind.dialect.name != "sqlite":
+        return 0
+    rowid = db_session.execute(
+        text("SELECT rowid FROM graph_artifact_summaries WHERE id = :sid"),
+        {"sid": summary_id},
+    ).scalar_one_or_none()
+    if rowid is None:
+        return 0
+    return int(
+        db_session.execute(
+            text(
+                "SELECT count(*) FROM graph_artifact_summaries_fts WHERE rowid = :r"
+            ),
+            {"r": rowid},
+        ).scalar_one()
+    )
+
+
+def test_upsert_populates_fts_index(db_session) -> None:
+    """Slice 10 hybrid: inserting a summary mirrors it into the FTS5
+    shadow table so keyword search can find the row."""
+    from sqlalchemy import text
+
+    bind = db_session.get_bind()
+    if bind.dialect.name != "sqlite":
+        pytest.skip("FTS5 hybrid retrieval is SQLite-only")
+
+    provider = FakeEmbeddingProvider(dim=8)
+    row = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-fts-1",
+        summary_text="NVDA datacenter momentum stays intact",
+        provider=provider,
+        model_name="fake-d8",
+        subject="NVDA",
+        tagline="Datacenter intact",
+        findings_text="Hopper sell-through strong",
+    )
+    db_session.flush()
+
+    assert _fts_row_count(db_session, row.id) == 1
+
+    # Keyword search on a distinctive token reaches the row.
+    hits = db_session.execute(
+        text(
+            "SELECT graph_artifact_summaries.id "
+            "FROM graph_artifact_summaries "
+            "JOIN graph_artifact_summaries_fts fts "
+            "  ON fts.rowid = graph_artifact_summaries.rowid "
+            "WHERE graph_artifact_summaries_fts MATCH :q"
+        ),
+        {"q": "datacenter"},
+    ).scalars().all()
+    assert row.id in hits
+
+
+def test_upsert_updates_fts_index_in_place(db_session) -> None:
+    """Updating a summary rewrites the FTS payload without duplicating rows."""
+    from sqlalchemy import text
+
+    bind = db_session.get_bind()
+    if bind.dialect.name != "sqlite":
+        pytest.skip("FTS5 hybrid retrieval is SQLite-only")
+
+    provider = FakeEmbeddingProvider(dim=8)
+    first = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-fts-upd",
+        summary_text="alpha keyword",
+        provider=provider,
+        model_name="fake-d8",
+    )
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-fts-upd",
+        summary_text="zebra keyword",
+        provider=provider,
+        model_name="fake-d8",
+    )
+    db_session.flush()
+
+    # Still exactly one FTS row for this summary.
+    assert _fts_row_count(db_session, first.id) == 1
+
+    # Old token no longer matches; new token does.
+    alpha_hits = db_session.execute(
+        text(
+            "SELECT graph_artifact_summaries.id FROM graph_artifact_summaries "
+            "JOIN graph_artifact_summaries_fts fts "
+            "  ON fts.rowid = graph_artifact_summaries.rowid "
+            "WHERE graph_artifact_summaries_fts MATCH :q"
+        ),
+        {"q": "alpha"},
+    ).scalars().all()
+    zebra_hits = db_session.execute(
+        text(
+            "SELECT graph_artifact_summaries.id FROM graph_artifact_summaries "
+            "JOIN graph_artifact_summaries_fts fts "
+            "  ON fts.rowid = graph_artifact_summaries.rowid "
+            "WHERE graph_artifact_summaries_fts MATCH :q"
+        ),
+        {"q": "zebra"},
+    ).scalars().all()
+    assert first.id not in alpha_hits
+    assert first.id in zebra_hits
+
+
+def test_delete_removes_fts_row(db_session) -> None:
+    from sqlalchemy import text
+
+    bind = db_session.get_bind()
+    if bind.dialect.name != "sqlite":
+        pytest.skip("FTS5 hybrid retrieval is SQLite-only")
+
+    provider = FakeEmbeddingProvider(dim=8)
+    row = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-fts-del",
+        summary_text="ephemeral content",
+        provider=provider,
+        model_name="fake-d8",
+    )
+    db_session.flush()
+    rowid = db_session.execute(
+        text("SELECT rowid FROM graph_artifact_summaries WHERE id = :sid"),
+        {"sid": row.id},
+    ).scalar_one()
+
+    db_session.delete(row)
+    db_session.flush()
+
+    count = db_session.execute(
+        text(
+            "SELECT count(*) FROM graph_artifact_summaries_fts WHERE rowid = :r"
+        ),
+        {"r": rowid},
+    ).scalar_one()
+    assert count == 0
+
+
+def test_recall_artifacts_finds_keyword_only_hit(db_session) -> None:
+    """A row whose summary embedding is far from the query (cosine ~0)
+    but whose tagline/findings contain a distinctive keyword should
+    still be returned by the hybrid recall."""
+    bind = db_session.get_bind()
+    if bind.dialect.name != "sqlite":
+        pytest.skip("FTS5 hybrid retrieval is SQLite-only")
+
+    provider = FakeEmbeddingProvider(dim=32)
+
+    # The keyword sits in findings_text — definitely not in the embedded
+    # summary_text. FakeEmbeddingProvider is text-hash-based so the
+    # cosine for a query against the summary_text will be near zero.
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-keyword-only",
+        summary_text="completely unrelated embedded content here",
+        provider=provider,
+        model_name="fake-d32",
+        findings_text="ZINNIA_TOKEN_XYZ appears only here",
+    )
+    # Decoy row with nothing matching either signal.
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-decoy",
+        summary_text="totally different topic about boats",
+        provider=provider,
+        model_name="fake-d32",
+    )
+
+    hits = graph_vectors.recall_artifacts(
+        db_session,
+        user_id="u-1",
+        query_text="ZINNIA_TOKEN_XYZ",
+        provider=provider,
+        top_k=2,
+    )
+
+    ids = [h[0].artifact_id for h in hits]
+    assert "rep-keyword-only" in ids
+    assert ids[0] == "rep-keyword-only"
+
+
+def test_recall_artifacts_hybrid_ranks_keyword_match_higher(db_session) -> None:
+    """Of two rows with comparable cosine signal, the one whose text
+    also matches the FTS query should rank higher under default
+    ``cosine_weight``."""
+    bind = db_session.get_bind()
+    if bind.dialect.name != "sqlite":
+        pytest.skip("FTS5 hybrid retrieval is SQLite-only")
+
+    provider = FakeEmbeddingProvider(dim=32)
+
+    # Both summaries share a common token "shared" so their cosine
+    # against the query "shared" is similar, but only one mentions the
+    # extra rare "FLAMINGO_42" token.
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-both",
+        summary_text="shared baseline summary",
+        provider=provider,
+        model_name="fake-d32",
+        findings_text="FLAMINGO_42 distinctive marker token",
+    )
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-cosine-only",
+        summary_text="shared baseline summary",
+        provider=provider,
+        model_name="fake-d32",
+    )
+
+    hits = graph_vectors.recall_artifacts(
+        db_session,
+        user_id="u-1",
+        query_text="shared FLAMINGO_42",
+        provider=provider,
+        top_k=2,
+    )
+
+    ids = [h[0].artifact_id for h in hits]
+    assert ids[0] == "rep-both"
+
+
+def test_recall_artifacts_cosine_weight_one_is_pure_cosine(db_session) -> None:
+    """``cosine_weight=1.0`` reproduces the pre-hybrid behavior."""
+    provider = FakeEmbeddingProvider(dim=32)
+
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-cw-a",
+        summary_text="NVDA Q3 earnings beat on services margin",
+        provider=provider,
+        model_name="fake-d32",
+    )
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-cw-b",
+        summary_text="totally unrelated content about coffee",
+        provider=provider,
+        model_name="fake-d32",
+    )
+
+    hits = graph_vectors.recall_artifacts(
+        db_session,
+        user_id="u-1",
+        query_text="NVDA Q3 earnings beat on services margin",
+        provider=provider,
+        top_k=2,
+        cosine_weight=1.0,
+    )
+
+    assert len(hits) == 2
+    top, score = hits[0]
+    assert top.artifact_id == "rep-cw-a"
+    assert score == pytest.approx(1.0, abs=1e-4)
+
+
 def test_recall_artifacts_filters_to_user(db_session) -> None:
     """No matter how close another user's summary is, it must not leak
     into Alice's recall."""

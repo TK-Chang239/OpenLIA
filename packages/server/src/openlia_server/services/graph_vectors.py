@@ -20,7 +20,7 @@ import struct
 import uuid
 
 from openlia.llm.embeddings import EmbeddingProvider
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.graph import GraphArtifactSummary, GraphUserConstruct
@@ -129,6 +129,62 @@ def list_artifact_summaries(
     return list(db.execute(stmt).scalars())
 
 
+def _fts_scores(
+    db: Session,
+    *,
+    user_id: str,
+    query_text: str,
+) -> dict[str, float]:
+    """Run an FTS5 MATCH and return ``{summary_id: normalized_bm25}``.
+
+    SQLite returns ``bm25()`` rank where lower is better (negative is
+    typical), so we negate and shift so higher = better, then divide by
+    the max so the top hit is ~1.0. Returns ``{}`` if the backend has no
+    FTS table (e.g. Postgres) or the query yields zero hits / is invalid
+    FTS5 syntax.
+    """
+    bind = db.get_bind()
+    if bind.dialect.name != "sqlite":
+        return {}
+
+    # FTS5 MATCH treats some chars as syntax. Quote each token to keep
+    # this robust against arbitrary user input — quoted tokens are
+    # treated as literals, and whitespace between them is implicit AND
+    # which FTS5 widens to OR via the standard quoted-prefix scheme
+    # below. We use OR explicitly so a partial match still surfaces.
+    tokens = [t for t in query_text.split() if t]
+    if not tokens:
+        return {}
+    fts_query = " OR ".join(f'"{t.replace(chr(34), chr(34) + chr(34))}"' for t in tokens)
+
+    try:
+        rows = db.execute(
+            text(
+                "SELECT s.id AS sid, bm25(graph_artifact_summaries_fts) AS rank "
+                "FROM graph_artifact_summaries s "
+                "JOIN graph_artifact_summaries_fts fts ON fts.rowid = s.rowid "
+                "WHERE s.user_id = :uid "
+                "AND graph_artifact_summaries_fts MATCH :q"
+            ),
+            {"uid": user_id, "q": fts_query},
+        ).all()
+    except Exception:
+        # Malformed FTS query or missing FTS table — degrade to no
+        # keyword signal rather than break the recall path.
+        return {}
+
+    if not rows:
+        return {}
+
+    # bm25(): lower (more negative) is more relevant. Convert to a
+    # higher-is-better score then normalize so max == 1.0.
+    raw = {r.sid: -float(r.rank) for r in rows}
+    peak = max(raw.values())
+    if peak <= 0.0:
+        return {sid: 0.0 for sid in raw}
+    return {sid: v / peak for sid, v in raw.items()}
+
+
 def recall_artifacts(
     db: Session,
     *,
@@ -136,14 +192,26 @@ def recall_artifacts(
     query_text: str,
     provider: EmbeddingProvider,
     top_k: int = 5,
+    cosine_weight: float = 0.6,
 ) -> list[tuple[GraphArtifactSummary, float]]:
-    """Brute-force cosine ranking of artifact summaries vs. the query.
+    """Hybrid keyword + cosine ranking of artifact summaries.
 
-    Loads every summary for the user, decodes each BLOB once, computes
-    cosine similarity, and returns the top-K ``(row, score)`` pairs
-    descending. Rows whose ``embedding_model`` differs from the
-    provider's current model are skipped — they were embedded with a
-    different dim and a comparison would either crash or lie.
+    Combines two signals:
+
+    1. Cosine similarity between the query embedding and each row's
+       stored summary embedding (existing brute-force path, normalized
+       to a 0..1 range by dividing by the cohort max).
+    2. FTS5 ``bm25()`` rank on the SQLite shadow table, negated so
+       higher is better and divided by the cohort max so the top hit is
+       ~1.0.
+
+    Final = ``cosine_weight * cosine + (1 - cosine_weight) * fts``.
+    Rows whose ``embedding_model`` differs from the provider's current
+    model are skipped on the cosine side; they can still surface via
+    FTS.
+
+    On non-SQLite backends (no FTS table) this degrades cleanly to
+    pure cosine, matching the pre-hybrid behavior.
     """
     import numpy as np
 
@@ -154,22 +222,46 @@ def recall_artifacts(
     [q_vec] = provider.embed([query_text])
     q = np.asarray(q_vec, dtype=np.float32)
     q_norm = float(np.linalg.norm(q))
-    if q_norm == 0.0:
+
+    cosine_raw: dict[str, float] = {}
+    if q_norm > 0.0:
+        for row in rows:
+            if row.embedding is None:
+                continue
+            v = np.frombuffer(row.embedding, dtype=np.float32)
+            if v.shape[0] != provider.dim:
+                continue
+            v_norm = float(np.linalg.norm(v))
+            if v_norm == 0.0:
+                continue
+            cosine_raw[row.id] = float(np.dot(q, v) / (q_norm * v_norm))
+
+    # Normalize cosine by its cohort max so it lives on the same ~0..1
+    # axis as the FTS score. Pure-cosine callers (cosine_weight=1.0)
+    # still want the unnormalized score so they get the historical
+    # behavior; keep both.
+    cosine_peak = max(cosine_raw.values(), default=0.0)
+
+    fts_scores = _fts_scores(db, user_id=user_id, query_text=query_text)
+
+    fts_weight = 1.0 - cosine_weight
+    candidate_ids: set[str] = set(cosine_raw) | set(fts_scores)
+    if not candidate_ids:
         return []
 
+    by_id = {row.id: row for row in rows}
     scored: list[tuple[GraphArtifactSummary, float]] = []
-    for row in rows:
-        if row.embedding is None:
-            continue
-        # ``frombuffer`` is zero-copy when the BLOB byte length matches.
-        v = np.frombuffer(row.embedding, dtype=np.float32)
-        if v.shape[0] != provider.dim:
-            continue
-        v_norm = float(np.linalg.norm(v))
-        if v_norm == 0.0:
-            continue
-        score = float(np.dot(q, v) / (q_norm * v_norm))
-        scored.append((row, score))
+    for rid in candidate_ids:
+        cos = cosine_raw.get(rid, 0.0)
+        fts = fts_scores.get(rid, 0.0)
+        if cosine_weight >= 1.0:
+            # Backward compat: pure cosine, unnormalized so a perfect
+            # match still scores 1.0.
+            score = cos
+        else:
+            cos_n = (cos / cosine_peak) if cosine_peak > 0.0 else 0.0
+            score = cosine_weight * cos_n + fts_weight * fts
+        scored.append((by_id[rid], score))
 
     scored.sort(key=lambda r: r[1], reverse=True)
     return scored[:top_k]
