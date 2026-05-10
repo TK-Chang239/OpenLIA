@@ -110,6 +110,9 @@ def create_report(
     )
     session.add(row)
     session.flush()
+    from openlia_server.services import graph_indexing
+
+    graph_indexing.index_report(session, row)
     return report_id
 
 
@@ -150,6 +153,13 @@ def save_report(
     )
     db.add(report)
     db.flush()
+    # Cross-session memory graph (slice 4): emit mentions edges from any
+    # ticker/theme carried in the report's structured fields. Local import
+    # keeps the dependency direction one-way and avoids a circular import
+    # with services that read reports.
+    from openlia_server.services import graph_indexing
+
+    graph_indexing.index_report(db, report)
     return report
 
 
