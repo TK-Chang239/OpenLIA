@@ -1,0 +1,87 @@
+# Built-in connector verification — open items
+
+## CLOSED in 498a57e (live audit fixes)
+
+### B1. {api_key} placeholder substitution
+- _build_transport now substitutes `{NAME}` → secrets[NAME] in URL
+  and headers.
+- FMP and Firecrawl templates use env-var-named placeholders.
+
+### B2. UNIQUE(dept, need) constraint blocking dual-template install
+- install_builtin replaces existing rows for each (dept, need) before
+  insert. EODHD ↔ FMP can be installed in either order.
+
+### B3. firecrawl-py / eventregistry / xdk missing from core deps
+- Added to packages/core/pyproject.toml.
+
+### B4. canary_tool never executed
+- BuiltInTemplate.canary_args added.
+- install_builtin runs canary call after VALIDATED; demotes to FAILED.
+- mcp_remote unwrap raises when CallToolResult.isError is True.
+- FMP canary set: quote(endpoint=quote, symbol=AAPL).
+
+### B6. introspect_python_lib over-exposed module surface
+- cls_name filter added; _validate_launch passes
+  instance_factory_cls so only the wrapper's surface is introspected.
+
+### B7. Firecrawl source URLs (3 of 4 returned 0)
+- usd_fx_reserve_share → en.wikipedia.org/wiki/Reserve_currency (56.77)
+- cb_gold_purchases → unchanged, already worked (1231)
+- foreign_treasury_holdings → ticdata.treasury.gov/Publish/mfh.txt
+  (need shape changed: total, not 90-day Δ)
+- interest_revenue → en.wikipedia.org/wiki/National_debt_of_the_United_States (20)
+- All four pinned in test_firecrawl_runner_spec_urls_were_live_verified.
+
+## CLOSED in 877e31b (earlier audit)
+
+### Macro list-to-float reduction
+- Reducer methods on ExtendedAPIClient: debt_to_gdp / gdp_growth_yoy /
+  cpi_yoy. EODHD specs target reducers.
+
+### MCP response unwrap
+- `_unwrap_call_result` in mcp_remote.py prefers `structured_content`,
+  falls back to JSON-parsing `content[0].text`. Applied in both
+  RemoteMcpTransport and CliMcpTransport.
+
+### Defaults from needs.yaml
+- `parse_mr_requirement('macro_indicator:<id>')` returns
+  `(<id>, {'country': 'US'})`.
+
+### firecrawl-py pip version pin — verified
+
+## CLOSED in 4b520b9 (end-to-end fetch_need audit)
+
+### Wrong-connector routing for Firecrawl scrape specs
+- Dispatcher.spec_connector_ids map honors RunnerCallableSpec.connector_id;
+  _connector_for_spec uses persisted ownership directly.
+
+### _hydrate_spec dropped result_path
+- Now reads `tuple(raw.get('result_path') or ())`.
+
+### Dispatcher passed unbound runtime args through
+- Drops args without a matching param_binding entry.
+  param_bindings + constants now fully describe each call's shape.
+
+## STILL OPEN
+
+### Pre-existing test failure (NOT this branch) — separate fix
+- `packages/server/tests/test_runner_specs_dept_service.py::test_resolve_logs_tool_call_events_when_factory_used`
+- Fails on main too: `tool_call_listener` never wired through
+  `propose_specs_for_department` → `resolve_callable_spec`.
+
+### B5. NEWSAPI_AI_API_KEY env var name
+- .env still has `NEWS_API_KEY`; template expects `NEWSAPI_AI_API_KEY`.
+- User action: rename .env var to NEWSAPI_AI_API_KEY (or add an alias).
+
+### Tool-surface narrowing for chat — FIXED in 038b11b
+- introspect_python_lib(cls_name=...) now drops methods inherited
+  from external modules. X surface dropped from 7 to 2; EODHD from
+  34 to 5; NewsAPI.ai from 48 to 1.
+
+# Templates verified
+- [x] Firecrawl (live-probe URL pin in 498a57e)
+- [x] EODHD (live-tested)
+- [x] FMP (live-tested + canary)
+- [x] NewsAPI.ai (live-tested) — env var name still NEWS_API_KEY
+- [ ] Mediastack (skipped per user)
+- [x] X (live-tested)
