@@ -151,6 +151,133 @@ def test_recall_artifacts_returns_most_similar_summary_first(db_session) -> None
     assert score == pytest.approx(1.0, abs=1e-4)
 
 
+def test_upsert_artifact_summary_persists_structured_fields(db_session) -> None:
+    """Slice 9: structured metadata (subject/tagline/findings/entities/tone/
+    horizon) is persisted alongside the embedded ``summary_text`` so
+    slice-12 retrieval can pre-filter before cosine ranking."""
+    provider = FakeEmbeddingProvider(dim=8)
+
+    row = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-structured",
+        summary_text="NVDA Q3 services margin expansion",
+        provider=provider,
+        model_name="fake-d8",
+        subject="NVDA",
+        tagline="Services margin durable",
+        findings_text="Services margin up 400bps. Data center beat.",
+        entities_mentioned=["ticker:NVDA", "sector:semis"],
+        tone="bullish",
+        horizon="medium",
+    )
+
+    db_session.refresh(row)
+    assert row.subject == "NVDA"
+    assert row.tagline == "Services margin durable"
+    assert row.findings_text == "Services margin up 400bps. Data center beat."
+    assert row.entities_mentioned == ["ticker:NVDA", "sector:semis"]
+    assert row.tone == "bullish"
+    assert row.horizon == "medium"
+
+
+def test_upsert_artifact_summary_updates_structured_fields_in_place(db_session) -> None:
+    provider = FakeEmbeddingProvider(dim=8)
+
+    first = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-update",
+        summary_text="initial",
+        provider=provider,
+        model_name="fake-d8",
+        subject="NVDA",
+        tagline="initial tagline",
+        findings_text="initial findings",
+        entities_mentioned=["ticker:NVDA"],
+        tone="neutral",
+        horizon="short",
+    )
+    second = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-update",
+        summary_text="revised",
+        provider=provider,
+        model_name="fake-d8",
+        subject="NVDA",
+        tagline="revised tagline",
+        findings_text="revised findings",
+        entities_mentioned=["ticker:NVDA", "theme:AI"],
+        tone="bearish",
+        horizon="long",
+    )
+
+    assert first.id == second.id
+    db_session.refresh(second)
+    assert second.tagline == "revised tagline"
+    assert second.findings_text == "revised findings"
+    assert second.entities_mentioned == ["ticker:NVDA", "theme:AI"]
+    assert second.tone == "bearish"
+    assert second.horizon == "long"
+
+
+def test_upsert_artifact_summary_invalid_tone_raises(db_session) -> None:
+    provider = FakeEmbeddingProvider(dim=8)
+    with pytest.raises(ValueError, match="tone"):
+        graph_vectors.upsert_artifact_summary(
+            db_session,
+            user_id="u-1",
+            artifact_kind="report",
+            artifact_id="rep-bad-tone",
+            summary_text="x",
+            provider=provider,
+            model_name="fake-d8",
+            tone="exuberant",
+        )
+
+
+def test_upsert_artifact_summary_invalid_horizon_raises(db_session) -> None:
+    provider = FakeEmbeddingProvider(dim=8)
+    with pytest.raises(ValueError, match="horizon"):
+        graph_vectors.upsert_artifact_summary(
+            db_session,
+            user_id="u-1",
+            artifact_kind="report",
+            artifact_id="rep-bad-horizon",
+            summary_text="x",
+            provider=provider,
+            model_name="fake-d8",
+            horizon="forever",
+        )
+
+
+def test_upsert_artifact_summary_defaults_structured_fields_to_none(db_session) -> None:
+    """Backwards compat: callers passing only the original args persist
+    None for every new structured column."""
+    provider = FakeEmbeddingProvider(dim=8)
+
+    row = graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="session",
+        artifact_id="s-bc",
+        summary_text="legacy summary",
+        provider=provider,
+        model_name="fake-d8",
+    )
+    db_session.refresh(row)
+    assert row.subject is None
+    assert row.tagline is None
+    assert row.findings_text is None
+    assert row.entities_mentioned is None
+    assert row.tone is None
+    assert row.horizon is None
+
+
 def test_recall_artifacts_filters_to_user(db_session) -> None:
     """No matter how close another user's summary is, it must not leak
     into Alice's recall."""

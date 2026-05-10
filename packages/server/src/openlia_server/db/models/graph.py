@@ -201,6 +201,18 @@ class GraphArtifactSummary(Base, TimestampMixin):
     summary_text: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Slice 9 — claude-mem-style structured metadata for pre-filter-then-rank
+    # retrieval. ``summary_text`` + ``embedding`` remain the canonical
+    # embedded text used for cosine. These columns add cheap SQL filters
+    # (e.g. ``WHERE tone='bullish' AND horizon='medium'``) ahead of the
+    # vector search and surface a richer hit payload without rejoining
+    # the artifact table.
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tagline: Mapped[str | None] = mapped_column(Text, nullable=True)
+    findings_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    entities_mentioned: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    tone: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    horizon: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
