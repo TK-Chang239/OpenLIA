@@ -82,9 +82,7 @@ def test_put_graph_extraction_time_persists(company_client: TestClient, auth_use
     assert body["graph_extraction_time"] == "04:30"
 
 
-def test_put_graph_extraction_time_rejects_malformed(
-    company_client: TestClient, auth_user
-) -> None:
+def test_put_graph_extraction_time_rejects_malformed(company_client: TestClient, auth_user) -> None:
     resp = company_client.put(
         "/settings/graph-extraction-time",
         json={"time": "25:99"},

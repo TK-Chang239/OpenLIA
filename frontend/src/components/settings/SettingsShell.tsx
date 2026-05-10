@@ -12,6 +12,7 @@ interface NavItem {
 const ITEMS: NavItem[] = [
   { to: '/settings/general', label: 'General' },
   { to: '/settings/models', label: 'Models' },
+  { to: '/settings/timezone', label: 'Timezone & Memory' },
   { to: '/settings/account', label: 'Account' },
   { to: '/settings/disclaimer', label: 'Compliance disclaimer' },
   { to: '/settings/guardrails', label: 'Guardrail activity' },

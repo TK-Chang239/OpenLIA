@@ -17,6 +17,9 @@ describe('GeneralSection', () => {
       display_language: 'en',
       response_language: 'en',
       report_language: 'en',
+      timezone: 'UTC',
+      timezone_source: 'auto',
+      graph_extraction_time: '03:00',
     });
     render(<GeneralSection />);
     await waitFor(() => expect(screen.getByDisplayValue('Alice')).toBeInTheDocument());
@@ -32,6 +35,9 @@ describe('GeneralSection', () => {
       display_language: 'en',
       response_language: 'en',
       report_language: 'en',
+      timezone: 'UTC',
+      timezone_source: 'auto',
+      graph_extraction_time: '03:00',
     });
     const update = vi.spyOn(settingsApi, 'updatePrefs').mockResolvedValue({
       display_name: 'Alice',
@@ -41,6 +47,9 @@ describe('GeneralSection', () => {
       display_language: 'en',
       response_language: 'en',
       report_language: 'en',
+      timezone: 'UTC',
+      timezone_source: 'auto',
+      graph_extraction_time: '03:00',
     });
     render(<GeneralSection />);
     await waitFor(() => screen.getByDisplayValue('Alice'));
