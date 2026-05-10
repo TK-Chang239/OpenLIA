@@ -47,6 +47,7 @@ class ConstructOut(BaseModel):
     entity_id: str
     created_at: datetime
     updated_at: datetime
+    provenance: dict[str, Any] | None = None
 
 
 class ConstructListOut(BaseModel):
@@ -172,6 +173,7 @@ def build_graph_router(*, db_session_factory, mode: str) -> APIRouter:
                     entity_id=r.entity_id,
                     created_at=r.created_at,
                     updated_at=r.updated_at,
+                    provenance=r.provenance,
                 )
                 for r in rows
             ]
