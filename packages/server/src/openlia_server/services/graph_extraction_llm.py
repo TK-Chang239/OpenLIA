@@ -29,12 +29,22 @@ class _ClientLike(Protocol):
     def generate(self, request: LLMRequest) -> LLMResponse: ...
 
 
-SYSTEM_PROMPT = """You are an extractor that reads a chat transcript and
-identifies durable user beliefs and entity mentions worth remembering
-across sessions. Be conservative — only extract statements that would
-matter again in a future conversation.
+_VALID_CONSTRUCT_KINDS: frozenset[str] = frozenset(
+    {"position", "thesis", "concern", "watchlist_item"}
+)
+_VALID_ENTITY_KINDS: frozenset[str] = frozenset({"ticker", "sector", "theme", "macro_regime"})
 
-Return JSON with this exact shape:
+
+SYSTEM_PROMPT = """You extract durable user beliefs and entity mentions
+from a chat transcript so a future session can reference them.
+
+CRITICAL OUTPUT CONTRACT — read carefully:
+- Your entire response MUST be a single JSON object.
+- Any prose, preamble, code fences, or trailing commentary will be
+  discarded as a protocol violation.
+- If you are uncertain, prefer emitting fewer proposals. Empty is fine.
+
+Schema:
 
 {
   "proposals": [
@@ -42,9 +52,9 @@ Return JSON with this exact shape:
       "kind": "user_construct",
       "payload": {
         "construct_kind": "position" | "thesis" | "concern" | "watchlist_item",
-        "statement": "<short canonical phrasing>",
+        "statement": "<one short sentence stating the user's belief>",
         "entity_kind": "ticker" | "sector" | "theme" | "macro_regime",
-        "entity_value": "<symbol or label>",
+        "entity_value": "<NVDA | semiconductors | ai-capex | risk-off>",
         "source_excerpt": "<verbatim line from the transcript>"
       }
     },
@@ -60,13 +70,24 @@ Return JSON with this exact shape:
   ]
 }
 
-Rules:
-- Skip casual mentions; require an explicit user belief or position for
-  user_construct.
-- Use uppercase tickers; emit each distinct ticker only once as a
-  mention per session.
-- If nothing rises to that bar, return {"proposals": []}.
-- Output JSON only — no preamble, no commentary.
+Field rules (every rejected field drops the whole proposal):
+- ``construct_kind`` MUST be one of: position, thesis, concern, watchlist_item.
+- ``entity_kind`` MUST be one of: ticker, sector, theme, macro_regime.
+- ``statement`` MUST be a complete sentence — not a fragment, not whitespace.
+- ``entity_value`` MUST be non-empty. Tickers UPPERCASE. Sectors/themes/
+  macro_regimes kebab-case (e.g. ``ai-capex``, not ``AI Capex``).
+- Emit each distinct ticker at most once per session as a ``mention``.
+
+Heuristics:
+- ``position``: user states they own / are long / short something.
+- ``thesis``: user states a directional view ("X will outperform because ...").
+- ``concern``: user states a worry or downside they're tracking.
+- ``watchlist_item``: user states they're watching / interested but not
+  yet committed.
+
+When in doubt, leave it out. The cost of a missed belief is one
+unmemoried turn; the cost of a wrong belief is a permanently misshapen
+user model.
 """
 
 
@@ -86,6 +107,10 @@ def make_extract_fn(client: _ClientLike) -> ExtractFn:
     return _extract
 
 
+def _nonempty_str(value: Any) -> bool:
+    return isinstance(value, str) and value.strip() != ""
+
+
 def _parse(text: str) -> list[dict[str, Any]]:
     try:
         data = json.loads(text)
@@ -103,11 +128,19 @@ def _parse(text: str) -> list[dict[str, Any]]:
         if not isinstance(payload, dict):
             continue
         if kind == "user_construct":
-            required = {"construct_kind", "statement", "entity_kind", "entity_value"}
-            if required.issubset(payload):
+            if (
+                payload.get("construct_kind") in _VALID_CONSTRUCT_KINDS
+                and payload.get("entity_kind") in _VALID_ENTITY_KINDS
+                and _nonempty_str(payload.get("statement"))
+                and _nonempty_str(payload.get("entity_value"))
+            ):
                 out.append({"kind": kind, "payload": payload})
         elif kind == "mention":
-            required = {"entity_kind", "entity_value", "artifact_kind", "artifact_id"}
-            if required.issubset(payload):
+            if (
+                payload.get("entity_kind") in _VALID_ENTITY_KINDS
+                and _nonempty_str(payload.get("entity_value"))
+                and _nonempty_str(payload.get("artifact_kind"))
+                and _nonempty_str(payload.get("artifact_id"))
+            ):
                 out.append({"kind": kind, "payload": payload})
     return out

@@ -140,3 +140,100 @@ def test_extract_fn_skips_malformed_entries() -> None:
 
     assert len(out) == 1
     assert out[0]["payload"]["statement"] == "ok"
+
+
+# Slice 5 (runtime spec) — claude-mem style strict validation: every
+# field is bound, no junk passes the parser. The proposal queue must
+# never carry a payload that ``user_constructs.create_construct`` will
+# later reject. Catching it at the parser keeps the audit story clean.
+
+
+def test_extract_fn_rejects_empty_statement() -> None:
+    """Whitespace-only ``statement`` is not a durable belief — drop it
+    rather than write a row the user has to dismiss."""
+    canned = json.dumps(
+        {
+            "proposals": [
+                {
+                    "kind": "user_construct",
+                    "payload": {
+                        "construct_kind": "thesis",
+                        "statement": "   ",
+                        "entity_kind": "ticker",
+                        "entity_value": "NVDA",
+                    },
+                }
+            ]
+        }
+    )
+    client = _RecordingClient(canned_text=canned)
+    out = graph_extraction_llm.make_extract_fn(client)([_msg("user", "x", 1)])
+    assert out == []
+
+
+def test_extract_fn_rejects_unknown_construct_kind() -> None:
+    """``construct_kind`` must match the enum that ``create_construct``
+    accepts — otherwise the proposal sits in pending forever, since
+    accept will fail at materialization time."""
+    canned = json.dumps(
+        {
+            "proposals": [
+                {
+                    "kind": "user_construct",
+                    "payload": {
+                        "construct_kind": "mystery_kind",
+                        "statement": "ok",
+                        "entity_kind": "ticker",
+                        "entity_value": "NVDA",
+                    },
+                }
+            ]
+        }
+    )
+    client = _RecordingClient(canned_text=canned)
+    out = graph_extraction_llm.make_extract_fn(client)([_msg("user", "x", 1)])
+    assert out == []
+
+
+def test_extract_fn_rejects_unknown_entity_kind() -> None:
+    """``entity_kind`` must match the entity taxonomy the graph supports."""
+    canned = json.dumps(
+        {
+            "proposals": [
+                {
+                    "kind": "mention",
+                    "payload": {
+                        "entity_kind": "rumor",
+                        "entity_value": "NVDA",
+                        "artifact_kind": "session",
+                        "artifact_id": "s-1",
+                    },
+                }
+            ]
+        }
+    )
+    client = _RecordingClient(canned_text=canned)
+    out = graph_extraction_llm.make_extract_fn(client)([_msg("user", "x", 1)])
+    assert out == []
+
+
+def test_extract_fn_rejects_empty_entity_value() -> None:
+    """An anchor with no value is unanchored — drop it."""
+    canned = json.dumps(
+        {
+            "proposals": [
+                {
+                    "kind": "user_construct",
+                    "payload": {
+                        "construct_kind": "thesis",
+                        "statement": "ok",
+                        "entity_kind": "ticker",
+                        "entity_value": "",
+                    },
+                }
+            ]
+        }
+    )
+    client = _RecordingClient(canned_text=canned)
+    out = graph_extraction_llm.make_extract_fn(client)([_msg("user", "x", 1)])
+    assert out == []
