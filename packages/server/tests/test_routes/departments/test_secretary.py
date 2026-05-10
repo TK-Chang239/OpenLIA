@@ -43,13 +43,14 @@ class _ScriptedRunner:
         messages,
         attachments=None,
         cancel_token=None,
-        **_,
+        **kwargs,
     ):
         self.captured = {
             "department_id": department_id,
             "user_id": user_id,
             "messages": messages,
             "cancel_token": cancel_token,
+            **kwargs,
         }
         for event in self._events:
             yield event
@@ -182,6 +183,46 @@ def test_secretary_chat_emits_suggest_redirect_tool_call(secretary_app):
         assert len(results) == 1
         assert results[0]["structured"]["department"] == "equity_research"
         assert results[0]["structured"]["prefill"] == "AAPL"
+
+
+def test_secretary_chat_threads_session_response_length_to_runner(secretary_app):
+    """End-to-end: when the session row has ``response_length="concise"``,
+    the secretary route reads it and forwards it through to the runner.
+    Closes the integration gap between the service layer and the runtime."""
+    app, session_id = secretary_app
+    with session_mod.SessionLocal() as s:
+        svc.set_session_response_length(
+            s, session_id=session_id, user_id="local", response_length="concise"
+        )
+
+    runner = _ScriptedRunner(
+        [ChatStart(message_id="m1"), ChatDone(message_id="m1", stop_reason="complete")]
+    )
+    app.state.chat_runner_factory = lambda: runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/departments/secretary/chat",
+            json={"message": "hi", "session_id": session_id},
+        )
+        assert r.status_code == 200
+    assert runner.captured.get("response_length") == "concise"
+
+
+def test_secretary_chat_passes_none_response_length_when_unset(secretary_app):
+    """Sessions without an explicit picker choice forward ``None`` so the
+    runtime renders the system prompt without a length directive."""
+    app, session_id = secretary_app
+    runner = _ScriptedRunner(
+        [ChatStart(message_id="m1"), ChatDone(message_id="m1", stop_reason="complete")]
+    )
+    app.state.chat_runner_factory = lambda: runner
+    with TestClient(app) as client:
+        r = client.post(
+            "/departments/secretary/chat",
+            json={"message": "hi", "session_id": session_id},
+        )
+        assert r.status_code == 200
+    assert runner.captured.get("response_length") is None
 
 
 def test_secretary_chat_requires_auth_in_company_mode(company_app):

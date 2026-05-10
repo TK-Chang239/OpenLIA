@@ -142,12 +142,15 @@ def render_openai_messages(messages: list[Message]) -> list[dict[str, Any]]:
 
 def render_gemini_contents(messages: list[Message]) -> list[dict[str, Any]]:
     """Gemini calls its top-level field ``contents`` (not ``messages``) and
-    its parts ``parts``. Roles map: ``user`` → ``user``, ``assistant`` →
-    ``model``."""
+    its parts ``parts``. Gemini's ``contents`` API accepts only ``user``
+    and ``model`` — anything else (``system``, ``tool``) must collapse to
+    ``user``, since system prompts are passed out-of-band via
+    ``systemInstruction`` and tool results are inlined as a follow-up
+    user turn. Returning a literal ``role=tool`` would 400 the request."""
     out: list[dict[str, Any]] = []
     for m in messages:
         blocks = tuple(getattr(m, "content_blocks", ()) or ())
-        role = "model" if m.role == "assistant" else m.role
+        role = "model" if m.role == "assistant" else "user"
         parts: list[dict[str, Any]] = [{"text": m.content}]
         for b in blocks:
             if isinstance(b, TextBlock):

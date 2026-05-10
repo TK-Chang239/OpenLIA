@@ -193,6 +193,31 @@ def test_gemini_renders_document_block_as_inline_data_pdf() -> None:
     assert inline[0]["inline_data"]["mime_type"] == "application/pdf"
 
 
+def test_gemini_maps_tool_role_to_user_for_api_compat() -> None:
+    """Gemini's ``contents`` API accepts only ``user`` and ``model`` roles.
+    Tool-result messages (emitted by ``ChatRunner`` when a tool call comes
+    back) must be flattened to ``role=user`` or the Gemini endpoint 400s."""
+    msgs = [
+        Message(role="user", content="check the weather"),
+        Message(role="assistant", content="calling tool"),
+        Message(role="tool", content='{"temp": 20}', tool_call_id="t1"),
+    ]
+    out = render_gemini_contents(msgs)
+    roles = [c["role"] for c in out]
+    assert roles == ["user", "model", "user"], (
+        "tool messages must map to role=user (Gemini rejects role=tool); got " + str(roles)
+    )
+
+
+def test_gemini_maps_system_role_to_user_for_api_compat() -> None:
+    """Gemini handles system instructions out-of-band via ``systemInstruction``.
+    A stray ``role=system`` Message in ``contents`` would 400; the renderer
+    must collapse it to ``user`` to match the legacy adapter contract."""
+    msgs = [Message(role="system", content="be helpful")]
+    out = render_gemini_contents(msgs)
+    assert out[0]["role"] == "user"
+
+
 # ─── Ollama (text-only path) ─────────────────────────────────────────────────
 
 
