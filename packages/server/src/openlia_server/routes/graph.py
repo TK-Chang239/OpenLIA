@@ -112,9 +112,7 @@ def build_graph_router(*, db_session_factory, mode: str) -> APIRouter:
                 status_code=409,
                 detail={"code": "proposal_not_pending", "message": "Proposal already resolved."},
             )
-        construct = graph_extraction.accept_proposal(
-            db, proposal_id=proposal_id, user_id=user.id
-        )
+        construct = graph_extraction.accept_proposal(db, proposal_id=proposal_id, user_id=user.id)
         if construct is None:
             return None
         return {

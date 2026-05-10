@@ -136,9 +136,7 @@ def test_list_proposals_requires_auth(client):
 # ---------- POST /graph/proposals/{id}/accept ----------
 
 
-def test_accept_user_construct_returns_construct_row(
-    client, db_session, user_factory, login_as
-):
+def test_accept_user_construct_returns_construct_row(client, db_session, user_factory, login_as):
     u = user_factory()
     login_as(u)
     p = _seed_proposal(db_session, u.id)
@@ -176,9 +174,7 @@ def test_accept_unknown_proposal_returns_404(client, user_factory, login_as):
     assert r.status_code == 404
 
 
-def test_accept_other_users_proposal_returns_404(
-    client, db_session, user_factory, login_as
-):
+def test_accept_other_users_proposal_returns_404(client, db_session, user_factory, login_as):
     a = user_factory()
     b = user_factory()
     p = _seed_proposal(db_session, a.id)
@@ -221,9 +217,7 @@ def test_dismiss_unknown_proposal_returns_404(client, user_factory, login_as):
     assert r.status_code == 404
 
 
-def test_dismiss_other_users_proposal_returns_404(
-    client, db_session, user_factory, login_as
-):
+def test_dismiss_other_users_proposal_returns_404(client, db_session, user_factory, login_as):
     a = user_factory()
     b = user_factory()
     p = _seed_proposal(db_session, a.id)
@@ -232,9 +226,7 @@ def test_dismiss_other_users_proposal_returns_404(
     assert r.status_code == 404
 
 
-def test_dismiss_already_resolved_returns_409(
-    client, db_session, user_factory, login_as
-):
+def test_dismiss_already_resolved_returns_409(client, db_session, user_factory, login_as):
     u = user_factory()
     login_as(u)
     p = _seed_proposal(db_session, u.id, status="dismissed")
@@ -245,9 +237,7 @@ def test_dismiss_already_resolved_returns_409(
 # ---------- GET /graph/constructs ----------
 
 
-def test_list_constructs_returns_confirmed_only(
-    client, db_session, user_factory, login_as
-):
+def test_list_constructs_returns_confirmed_only(client, db_session, user_factory, login_as):
     u = user_factory()
     login_as(u)
     confirmed = _seed_construct(db_session, u.id)
@@ -264,9 +254,7 @@ def test_list_constructs_returns_confirmed_only(
     assert rejected.id not in ids
 
 
-def test_list_constructs_filters_by_entity_id(
-    client, db_session, user_factory, login_as
-):
+def test_list_constructs_filters_by_entity_id(client, db_session, user_factory, login_as):
     u = user_factory()
     login_as(u)
     nvda = _seed_construct(db_session, u.id)
@@ -277,17 +265,13 @@ def test_list_constructs_filters_by_entity_id(
     assert items[0]["id"] == nvda.id
 
 
-def test_list_constructs_ordered_updated_at_desc(
-    client, db_session, user_factory, login_as
-):
+def test_list_constructs_ordered_updated_at_desc(client, db_session, user_factory, login_as):
     from datetime import UTC, datetime, timedelta
 
     u = user_factory()
     login_as(u)
     first = _seed_construct(db_session, u.id)
-    second = _seed_construct(
-        db_session, u.id, entity_value="AMD", statement="long AMD"
-    )
+    second = _seed_construct(db_session, u.id, entity_value="AMD", statement="long AMD")
     base = datetime.now(UTC)
     first.updated_at = base - timedelta(seconds=5)
     second.updated_at = base
@@ -333,9 +317,7 @@ def test_delete_unknown_construct_returns_404(client, user_factory, login_as):
     assert r.status_code == 404
 
 
-def test_delete_other_users_construct_returns_404(
-    client, db_session, user_factory, login_as
-):
+def test_delete_other_users_construct_returns_404(client, db_session, user_factory, login_as):
     a = user_factory()
     b = user_factory()
     c = _seed_construct(db_session, a.id)

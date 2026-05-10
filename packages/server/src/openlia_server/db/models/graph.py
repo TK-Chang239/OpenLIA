@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    DDL,
     JSON,
     Boolean,
     ForeignKey,
@@ -27,6 +28,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -258,3 +260,94 @@ class GraphExtractionRun(Base):
     __table_args__ = (
         Index("ix_graph_extraction_runs_user_id_started_at", "user_id", "started_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# SQLite-only FTS5 shadow of GraphArtifactSummary (slice 10 — hybrid retrieval).
+#
+# Alembic migration 20260511_0200 creates these objects in production
+# databases. The DDL listeners below ensure the same virtual table +
+# triggers exist when Base.metadata.create_all() is used (tests). Both
+# code paths are gated on the SQLite dialect — Postgres uses a separate
+# tsvector path (out of scope for this slice).
+# ---------------------------------------------------------------------------
+
+_FTS_CREATE = DDL(
+    """
+    CREATE VIRTUAL TABLE IF NOT EXISTS graph_artifact_summaries_fts USING fts5(
+        summary_text,
+        subject,
+        tagline,
+        findings_text,
+        content='graph_artifact_summaries',
+        content_rowid='rowid'
+    )
+    """
+)
+
+_FTS_TRIGGERS = [
+    DDL(
+        """
+        CREATE TRIGGER IF NOT EXISTS graph_artifact_summaries_ai
+        AFTER INSERT ON graph_artifact_summaries BEGIN
+            INSERT INTO graph_artifact_summaries_fts(
+                rowid, summary_text, subject, tagline, findings_text
+            ) VALUES (
+                new.rowid, new.summary_text, new.subject, new.tagline, new.findings_text
+            );
+        END
+        """
+    ),
+    DDL(
+        """
+        CREATE TRIGGER IF NOT EXISTS graph_artifact_summaries_ad
+        AFTER DELETE ON graph_artifact_summaries BEGIN
+            INSERT INTO graph_artifact_summaries_fts(
+                graph_artifact_summaries_fts, rowid,
+                summary_text, subject, tagline, findings_text
+            ) VALUES (
+                'delete', old.rowid,
+                old.summary_text, old.subject, old.tagline, old.findings_text
+            );
+        END
+        """
+    ),
+    DDL(
+        """
+        CREATE TRIGGER IF NOT EXISTS graph_artifact_summaries_au
+        AFTER UPDATE ON graph_artifact_summaries BEGIN
+            INSERT INTO graph_artifact_summaries_fts(
+                graph_artifact_summaries_fts, rowid,
+                summary_text, subject, tagline, findings_text
+            ) VALUES (
+                'delete', old.rowid,
+                old.summary_text, old.subject, old.tagline, old.findings_text
+            );
+            INSERT INTO graph_artifact_summaries_fts(
+                rowid, summary_text, subject, tagline, findings_text
+            ) VALUES (
+                new.rowid, new.summary_text, new.subject, new.tagline, new.findings_text
+            );
+        END
+        """
+    ),
+]
+
+
+@event.listens_for(GraphArtifactSummary.__table__, "after_create")
+def _create_artifact_summary_fts(target, connection, **kw) -> None:
+    if connection.dialect.name != "sqlite":
+        return
+    connection.execute(_FTS_CREATE)
+    for trig in _FTS_TRIGGERS:
+        connection.execute(trig)
+
+
+@event.listens_for(GraphArtifactSummary.__table__, "before_drop")
+def _drop_artifact_summary_fts(target, connection, **kw) -> None:
+    if connection.dialect.name != "sqlite":
+        return
+    connection.execute(DDL("DROP TRIGGER IF EXISTS graph_artifact_summaries_au"))
+    connection.execute(DDL("DROP TRIGGER IF EXISTS graph_artifact_summaries_ad"))
+    connection.execute(DDL("DROP TRIGGER IF EXISTS graph_artifact_summaries_ai"))
+    connection.execute(DDL("DROP TABLE IF EXISTS graph_artifact_summaries_fts"))

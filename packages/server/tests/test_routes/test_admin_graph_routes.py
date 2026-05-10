@@ -21,7 +21,6 @@ from openlia_server.middleware.auth import COOKIE_NAME
 from openlia_server.routes.admin_graph import build_admin_graph_router
 from openlia_server.services.auth import sessions
 
-
 # ---------- helpers ----------
 
 
@@ -168,9 +167,7 @@ def test_admin_force_extract_persists_proposals_and_returns_audit_row(
     assert run.finished_at is not None
 
 
-def test_admin_force_extract_skips_sessions_below_watermark(
-    db_session, monkeypatch, make_user
-):
+def test_admin_force_extract_skips_sessions_below_watermark(db_session, monkeypatch, make_user):
     target = make_user(email=f"target-{uuid.uuid4()}@example.com")
 
     # Successful prior run that establishes a watermark.
@@ -238,9 +235,7 @@ def test_admin_force_extract_unknown_user_returns_404(db_session, monkeypatch, m
     assert resp.status_code == 404
 
 
-def test_admin_force_extract_records_error_and_returns_500(
-    db_session, monkeypatch, make_user
-):
+def test_admin_force_extract_records_error_and_returns_500(db_session, monkeypatch, make_user):
     target = make_user(email=f"target-{uuid.uuid4()}@example.com")
     _seed_session(db_session, user_id=target.id, message_content="boom")
 

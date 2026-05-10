@@ -85,9 +85,7 @@ def build_admin_graph_router(
     extract_fn_factory: ExtractFnFactory | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/admin/graph", tags=["admin-graph"])
-    require_admin = build_require_active_admin(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    require_admin = build_require_active_admin(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
     factory: ExtractFnFactory = extract_fn_factory or _default_extract_fn_factory
 
@@ -112,23 +110,17 @@ def build_admin_graph_router(
                 detail={"code": "llm_not_configured", "message": str(exc)},
             ) from exc
 
-        run = graph_extraction_runs.record_run_start(
-            db, user_id=user_id, model_id=model_id
-        )
+        run = graph_extraction_runs.record_run_start(db, user_id=user_id, model_id=model_id)
         # Commit the open audit row so a downstream extractor exception
         # doesn't take it down with the rest of the transaction.
         db.commit()
         run_id = run.id
 
         try:
-            inserted, processed = _run_extraction(
-                db, user_id=user_id, extract_fn=extract_fn
-            )
-        except Exception as exc:  # noqa: BLE001 — broad catch is intentional for audit
+            inserted, processed = _run_extraction(db, user_id=user_id, extract_fn=extract_fn)
+        except Exception as exc:
             db.rollback()
-            graph_extraction_runs.record_run_finish(
-                db, run_id=run_id, error=str(exc)[:256]
-            )
+            graph_extraction_runs.record_run_finish(db, run_id=run_id, error=str(exc)[:256])
             db.commit()
             raise HTTPException(
                 status_code=500,
