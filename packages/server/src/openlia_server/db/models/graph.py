@@ -22,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -110,6 +111,8 @@ class GraphUserConstruct(Base, TimestampMixin):
         nullable=False,
     )
     provenance: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("ix_graph_user_constructs_user_id", "user_id"),
@@ -164,4 +167,40 @@ class GraphExtractionProposal(Base, TimestampMixin):
             "user_id",
             "statement_hash",
         ),
+    )
+
+
+class GraphArtifactSummary(Base, TimestampMixin):
+    """LLM-generated short summary of an artifact, with its embedding.
+
+    One row per (user, artifact). Used by slice-12 vector recall to find
+    artifacts semantically close to the user's live message. Storing the
+    summary text alongside the embedding means retrieval can return a
+    human-readable hit without joining back to the artifact's table.
+
+    ``embedding`` is a packed little-endian float32 BLOB sized at
+    ``dim * 4`` bytes; ``embedding_model`` tags the producer so a model
+    swap can trigger re-embedding rather than mixing dimensions.
+    """
+
+    __tablename__ = "graph_artifact_summaries"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    artifact_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    artifact_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    summary_text: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "artifact_kind",
+            "artifact_id",
+            name="uq_graph_artifact_summaries_user_artifact",
+        ),
+        Index("ix_graph_artifact_summaries_user_id", "user_id"),
     )
