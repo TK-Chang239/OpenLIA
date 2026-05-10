@@ -205,6 +205,7 @@ class RefreshingChatRunner:
         model_id_override: str | None = None,
         disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
         disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
+        response_length: str | None = None,
     ):
         db = self._factory()
         try:
@@ -226,6 +227,7 @@ class RefreshingChatRunner:
                 session_id=session_id,
                 model_id_override=model_id_override,
                 disabled_skill_ids=frozenset(disabled_skill_ids),
+                response_length=response_length,
             ):
                 yield event
         finally:

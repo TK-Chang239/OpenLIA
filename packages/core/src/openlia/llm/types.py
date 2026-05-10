@@ -25,6 +25,7 @@ class Capabilities:
     structured_output: bool = False
     vision: bool = False
     web_search_native: bool = False
+    pdf_native: bool = False
     max_context_tokens: int = 8192
     max_output_tokens: int = 2048
 
@@ -42,6 +43,10 @@ class Message:
     # multi-turn tool-use loops: the assistant message that emitted tool
     # calls must be replayed back to the model alongside the tool results.
     tool_calls: tuple[ToolCall, ...] = field(default_factory=tuple)
+    # Materialized attachment content blocks rendered alongside the user
+    # text. Element type is the runtime ``ContentBlock`` union; declared
+    # as ``tuple`` here to avoid an import cycle with the runtime layer.
+    content_blocks: tuple = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

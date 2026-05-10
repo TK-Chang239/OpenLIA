@@ -4,7 +4,9 @@ import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, getSession, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
 import { ModelPicker } from "./ModelPicker";
+import { ResponseLengthPicker } from "./ResponseLengthPicker";
 import { ToolPicker } from "./ToolPicker";
+import type { ResponseLength } from "../../api/chat";
 import { MessageList } from "./MessageList";
 import { UserBubble } from "./UserBubble";
 import { AssistantMessage } from "./AssistantMessage";
@@ -95,6 +97,9 @@ export function ChatInterface({
   const [sentOnce, setSentOnce] = useState(false);
   const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>([]);
   const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
+  const [responseLength, setResponseLength] = useState<ResponseLength | null>(
+    null,
+  );
   const lastSentRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
   const pendingAttachmentsRef = useRef<Map<string, UserBubbleAttachment[]>>(
@@ -122,11 +127,13 @@ export function ChatInterface({
         if (cancelled) return;
         setDisabledConnectorIds(s.disabled_connector_ids ?? []);
         setDisabledSkillIds(s.disabled_skill_ids ?? []);
+        setResponseLength(s.response_length ?? null);
       })
       .catch(() => {
         if (cancelled) return;
         setDisabledConnectorIds([]);
         setDisabledSkillIds([]);
+        setResponseLength(null);
       });
     listMessages(sessionId)
       .then((r) => {
@@ -170,18 +177,15 @@ export function ChatInterface({
       },
     ]);
     if (attachments && attachments.length > 0) {
-      // Cache pending attachments by optimistic message id so the UserBubble
-      // renders chips above the text. The actual upload to a session-scoped
-      // attachments endpoint is not yet implemented backend-side; once it
-      // lands, we POST here, swap pending chips for resolved AttachmentChips,
-      // and pass attachment_ids in the chat stream body.
-      // TODO: backend upload pending — POST /api/chat/sessions/:id/attachments
+      // Render chips on the optimistic user bubble so the user sees their
+      // attachment immediately. The chat-stream POST below carries the
+      // actual files as multipart/form-data (Phase 13/14 wiring).
       pendingAttachmentsRef.current.set(
         optimisticId,
         attachments.map((f) => ({ filename: f.name, sizeBytes: f.size })),
       );
     }
-    send(text);
+    send(text, attachments);
   };
 
   // When a stream completes, snapshot the assistant reply into the
@@ -408,6 +412,10 @@ export function ChatInterface({
           departmentId ? (
             <div className="flex items-center gap-2">
               <ModelPicker />
+              <ResponseLengthPicker
+                sessionId={sessionId}
+                initialValue={responseLength}
+              />
               <ToolPicker
                 sessionId={sessionId}
                 initialDisabledConnectorIds={disabledConnectorIds}

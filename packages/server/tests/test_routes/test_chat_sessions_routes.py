@@ -156,3 +156,36 @@ def test_create_session_accepts_all_seven_departments(client, user_factory, logi
     ):
         r = client.post("/chat/sessions", json={"department": dep, "title": dep})
         assert r.status_code == 201, dep
+
+
+def test_session_out_includes_response_length(client, user_factory, login_as):
+    login_as(user_factory())
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    r = client.get(f"/chat/sessions/{sid}")
+    assert r.status_code == 200
+    assert r.json().get("response_length") is None
+
+
+def test_patch_response_length_persists(client, user_factory, login_as):
+    login_as(user_factory())
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    assert (
+        client.patch(f"/chat/sessions/{sid}", json={"response_length": "concise"}).status_code
+        == 200
+    )
+    assert client.get(f"/chat/sessions/{sid}").json()["response_length"] == "concise"
+
+
+def test_patch_response_length_normal_clears_back_to_null(client, user_factory, login_as):
+    login_as(user_factory())
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    client.patch(f"/chat/sessions/{sid}", json={"response_length": "detailed"})
+    client.patch(f"/chat/sessions/{sid}", json={"response_length": "normal"})
+    assert client.get(f"/chat/sessions/{sid}").json()["response_length"] is None
+
+
+def test_patch_response_length_rejects_unknown_value(client, user_factory, login_as):
+    login_as(user_factory())
+    sid = client.post("/chat/sessions", json={"department": "secretary", "title": "x"}).json()["id"]
+    r = client.patch(f"/chat/sessions/{sid}", json={"response_length": "huge"})
+    assert r.status_code == 422

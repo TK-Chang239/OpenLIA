@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
+from openlia.llm.adapters._content import render_openai_messages
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -36,8 +37,12 @@ def _to_openai_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
         out.append({"role": "system", "content": req.system})
-    for m in req.messages:
-        msg: dict = {"role": m.role, "content": m.content}
+    # Use the shared renderer for the role+content shape so user messages
+    # with materialized content_blocks (images, extracted-text PDFs, …)
+    # are emitted as the OpenAI "parts" array. Tool-call plumbing is
+    # OpenAI-specific and merged onto the rendered dict afterwards.
+    rendered = render_openai_messages(list(req.messages))
+    for m, msg in zip(req.messages, rendered, strict=True):
         if m.role == "assistant" and m.tool_calls:
             msg["tool_calls"] = [
                 {

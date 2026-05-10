@@ -10,15 +10,16 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.content import ChatMessage, ChatSession
 
 
-def _inherit_disabled_lists_from_last_session(
+def _inherit_session_defaults_from_last_session(
     db: Session, *, user_id: str, department: str
-) -> tuple[list[str], list[str]]:
+) -> tuple[list[str], list[str], str | None]:
     """Look up the user's most recently updated session in `department`
-    and return its `(disabled_connector_ids, disabled_skill_ids)` pair.
+    and return its inheritable composer state:
+    ``(disabled_connector_ids, disabled_skill_ids, response_length)``.
 
-    Returns `([], [])` when no prior session exists. Per the locked
-    feature contract: per-session UX defaults inherit from the user's
-    last session in the same department, not the safe baseline.
+    Returns ``([], [], None)`` when no prior session exists. Per the
+    locked feature contract: per-session UX defaults inherit from the
+    user's last session in the same department, not the safe baseline.
     """
     stmt = (
         select(ChatSession)
@@ -34,14 +35,20 @@ def _inherit_disabled_lists_from_last_session(
     )
     last = db.execute(stmt).scalar_one_or_none()
     if last is None:
-        return ([], [])
-    return (list(last.disabled_connector_ids or []), list(last.disabled_skill_ids or []))
+        return ([], [], None)
+    return (
+        list(last.disabled_connector_ids or []),
+        list(last.disabled_skill_ids or []),
+        last.response_length,
+    )
 
 
 def create_session(db: Session, *, user_id: str, department: str, title: str) -> ChatSession:
-    inherited_connectors, inherited_skills = _inherit_disabled_lists_from_last_session(
-        db, user_id=user_id, department=department
-    )
+    (
+        inherited_connectors,
+        inherited_skills,
+        inherited_response_length,
+    ) = _inherit_session_defaults_from_last_session(db, user_id=user_id, department=department)
     row = ChatSession(
         id=str(uuid.uuid4()),
         user_id=user_id,
@@ -51,6 +58,7 @@ def create_session(db: Session, *, user_id: str, department: str, title: str) ->
         is_archived=False,
         disabled_connector_ids=inherited_connectors,
         disabled_skill_ids=inherited_skills,
+        response_length=inherited_response_length,
     )
     db.add(row)
     db.commit()
@@ -154,6 +162,33 @@ def set_session_disabled_lists(
         row.disabled_connector_ids = list(disabled_connector_ids)
     if disabled_skill_ids is not None:
         row.disabled_skill_ids = list(disabled_skill_ids)
+    db.commit()
+
+
+_VALID_RESPONSE_LENGTHS: frozenset[str] = frozenset({"concise", "normal", "detailed"})
+
+
+def set_session_response_length(
+    db: Session,
+    *,
+    session_id: str,
+    user_id: str,
+    response_length: str | None,
+) -> None:
+    """Set or clear the per-session composer response-length picker.
+
+    ``response_length=None`` clears the choice (model default discipline).
+    ``"normal"`` is also stored as ``None`` since both mean "no explicit
+    directive injected into the system prompt", keeping the column small
+    and the inheritance contract simple. Raises ``ValueError`` for any
+    other value.
+    """
+    if response_length is not None and response_length not in _VALID_RESPONSE_LENGTHS:
+        raise ValueError(
+            f"response_length must be one of {sorted(_VALID_RESPONSE_LENGTHS)} or None"
+        )
+    row = get_session(db, session_id=session_id, user_id=user_id)
+    row.response_length = None if response_length in (None, "normal") else response_length
     db.commit()
 
 

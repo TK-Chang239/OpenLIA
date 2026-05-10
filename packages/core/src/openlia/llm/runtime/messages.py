@@ -2,18 +2,26 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any
 
 _ALLOWED_LENGTHS = ("brief", "standard", "long")
 
 
 @dataclass(frozen=True)
 class Attachment:
-    """Reserved for vision inputs. v1 runners accept but never forward them."""
+    """A user-attached file as it sits server-side after upload.
 
-    kind: Literal["image", "file"]
-    url: str
+    The runtime materializer reads ``storage_path`` to load bytes for image
+    / native-PDF blocks and uses ``extracted_text`` (when present) for the
+    text-extraction path. ``id`` mirrors the ``chat_attachments`` row id.
+    """
+
+    id: str
+    filename: str
     mime_type: str
+    storage_path: str
+    size_bytes: int = 0
+    extracted_text: str | None = None
 
 
 @dataclass(frozen=True)
@@ -21,6 +29,40 @@ class ChatMessage:
     role: str
     content: str
     attachments: list[Attachment] = field(default_factory=list)
+
+
+# ─── Provider-neutral content blocks ────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class ContentBlock:
+    """Marker base for materialized content blocks. Adapters dispatch on
+    the concrete subclass (TextBlock / ImageBlock / DocumentBlock)."""
+
+
+@dataclass(frozen=True)
+class TextBlock(ContentBlock):
+    text: str
+    source_filename: str | None = None
+
+
+@dataclass(frozen=True)
+class ImageBlock(ContentBlock):
+    data: bytes
+    mime_type: str
+    source_filename: str | None = None
+
+
+@dataclass(frozen=True)
+class DocumentBlock(ContentBlock):
+    """Native document content (e.g. PDF) for providers with first-class
+    document input. Non-native providers must extract to TextBlock at the
+    materializer layer; adapters that receive a DocumentBlock anyway are
+    expected to either pass it through or fall back to a text placeholder."""
+
+    data: bytes
+    mime_type: str
+    source_filename: str | None = None
 
 
 @dataclass(frozen=True)

@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
+from openlia.llm.adapters._content import render_ollama_messages
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -27,8 +28,10 @@ def _to_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
         out.append({"role": "system", "content": req.system})
-    for m in req.messages:
-        out.append({"role": m.role, "content": m.content})
+    # Use the shared renderer so user messages with materialized text-only
+    # content_blocks get inlined into the user content. Ollama is text-only
+    # by default; the runtime already routes vision/PDF blocks elsewhere.
+    out.extend(render_ollama_messages(list(req.messages)))
     return out
 
 

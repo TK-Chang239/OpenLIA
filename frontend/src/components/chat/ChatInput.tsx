@@ -18,6 +18,37 @@ interface Props {
 const MAX_HEIGHT = 120;
 const HELPER_COPY = "Enter to send · Shift+Enter for new line";
 
+// Mirrors the server-side allowlist + caps in
+// ``openlia_server.services.attachments``. Client-side validation here is
+// for UX (immediate feedback); the server re-validates authoritatively.
+const PER_FILE_MAX_BYTES = 25 * 1024 * 1024;
+const PER_MESSAGE_MAX_FILES = 10;
+const ALLOWED_MIMES = new Set([
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/json",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]);
+
+function _validateFile(f: File): string | null {
+  if (f.size > PER_FILE_MAX_BYTES) {
+    return `${f.name}: too large (max 25 MB)`;
+  }
+  if (!ALLOWED_MIMES.has(f.type)) {
+    return `${f.name}: file type not supported`;
+  }
+  return null;
+}
+
 export function ChatInput({
   onSend,
   onStop,
@@ -28,6 +59,7 @@ export function ChatInput({
 }: Props): JSX.Element {
   const [value, setValue] = useState(initialValue ?? "");
   const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentErrors, setAttachmentErrors] = useState<string[]>([]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const helperId = useId();
@@ -62,6 +94,7 @@ export function ChatInput({
     }
     setValue("");
     setAttachments([]);
+    setAttachmentErrors([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -72,10 +105,28 @@ export function ChatInput({
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    if (files.length > 0) {
-      setAttachments((prev) => [...prev, ...files]);
+    const incoming = Array.from(e.target.files ?? []);
+    const accepted: File[] = [];
+    const errors: string[] = [];
+    for (const f of incoming) {
+      const err = _validateFile(f);
+      if (err) {
+        errors.push(err);
+      } else {
+        accepted.push(f);
+      }
     }
+    setAttachments((prev) => {
+      const combined = [...prev, ...accepted];
+      if (combined.length > PER_MESSAGE_MAX_FILES) {
+        errors.push(
+          `only ${PER_MESSAGE_MAX_FILES} files per message — extra files ignored`,
+        );
+        return combined.slice(0, PER_MESSAGE_MAX_FILES);
+      }
+      return combined;
+    });
+    setAttachmentErrors(errors);
     // Reset the input so the same file can be picked again after removal.
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -110,6 +161,17 @@ export function ChatInput({
                   sizeBytes={f.size}
                   onRemove={() => removeAttachment(i)}
                 />
+              ))}
+            </div>
+          ) : null}
+          {attachmentErrors.length > 0 ? (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="px-3 pb-2 text-xs text-status-warning"
+            >
+              {attachmentErrors.map((msg, i) => (
+                <div key={i}>{msg}</div>
               ))}
             </div>
           ) : null}

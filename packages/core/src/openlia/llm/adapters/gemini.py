@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
+from openlia.llm.adapters._content import render_gemini_contents
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -23,10 +24,6 @@ from openlia.llm.types import (
 )
 
 _BASE_URL = "https://generativelanguage.googleapis.com"
-
-
-def _role(role: str) -> str:
-    return "model" if role == "assistant" else "user"
 
 
 class GeminiAdapter(LLMProvider):
@@ -66,9 +63,7 @@ class GeminiAdapter(LLMProvider):
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload: dict = {
-            "contents": [
-                {"role": _role(m.role), "parts": [{"text": m.content}]} for m in request.messages
-            ],
+            "contents": render_gemini_contents(list(request.messages)),
             "generationConfig": {
                 "maxOutputTokens": request.max_tokens,
                 "temperature": request.temperature,
@@ -125,9 +120,7 @@ class GeminiAdapter(LLMProvider):
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
         payload: dict = {
-            "contents": [
-                {"role": _role(m.role), "parts": [{"text": m.content}]} for m in request.messages
-            ],
+            "contents": render_gemini_contents(list(request.messages)),
             "generationConfig": {
                 "maxOutputTokens": request.max_tokens,
                 "temperature": request.temperature,
