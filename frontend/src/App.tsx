@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { RouterProvider } from "react-router-dom";
 import type { createBrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
+import { useTimezoneAutoCapture } from "./auth/useTimezoneAutoCapture";
 import { router as defaultRouter } from "./router/routes";
 import { ErrorBoundary } from "./components/shell/ErrorBoundary";
 
@@ -11,11 +12,16 @@ interface AppProps {
   router?: AppRouter;
 }
 
+function AuthedShell({ router }: { router: AppRouter }): JSX.Element {
+  useTimezoneAutoCapture();
+  return <RouterProvider router={router} />;
+}
+
 export default function App({ router = defaultRouter }: AppProps = {}): JSX.Element {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <AuthedShell router={router} />
       </AuthProvider>
     </ErrorBoundary>
   );

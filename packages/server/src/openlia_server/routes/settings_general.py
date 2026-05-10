@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -10,6 +12,8 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import user_prefs as svc
+
+log = logging.getLogger(__name__)
 
 _UNSET = "__unset__"
 
@@ -121,8 +125,9 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
         return _to_out(user, prefs)
 
     @router.put("/timezone", response_model=PrefsOut)
-    def put_timezone(
+    async def put_timezone(
         payload: TimezoneIn,
+        request: Request,
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> PrefsOut:
@@ -138,23 +143,53 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"code": "invalid_pref", "message": str(exc)},
             ) from exc
+        db.commit()
+        await _reregister_graph_extraction(request, db, user.id)
         return _to_out(user, prefs)
 
     @router.put("/graph-extraction-time", response_model=PrefsOut)
-    def put_graph_extraction_time(
+    async def put_graph_extraction_time(
         payload: GraphExtractionTimeIn,
+        request: Request,
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> PrefsOut:
         try:
-            prefs = svc.set_graph_extraction_time(
-                db, user_id=user.id, time=payload.time
-            )
+            prefs = svc.set_graph_extraction_time(db, user_id=user.id, time=payload.time)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"code": "invalid_pref", "message": str(exc)},
             ) from exc
+        db.commit()
+        await _reregister_graph_extraction(request, db, user.id)
         return _to_out(user, prefs)
 
     return router
+
+
+async def _reregister_graph_extraction(request: Request, db: Session, user_id: str) -> None:
+    """Update the live APScheduler entry for this user's nightly job.
+
+    Reads the scheduler from ``request.app.state``. Skipped silently
+    when the scheduler isn't running (tests, scheduler disabled).
+    """
+    scheduler_svc = getattr(request.app.state, "scheduler", None)
+    if scheduler_svc is None:
+        return
+    inner = getattr(scheduler_svc, "scheduler", None)
+    if inner is None:
+        return
+    try:
+        from openlia_server.services.graph_extraction_schedules import (
+            ensure_schedule_registered,
+        )
+
+        await ensure_schedule_registered(
+            db=db,
+            user_id=user_id,
+            scheduler_control=inner,
+            callback=scheduler_svc._run_job,
+        )
+    except (ValueError, RuntimeError):
+        log.exception("graph-extraction reschedule failed for user %s", user_id)
