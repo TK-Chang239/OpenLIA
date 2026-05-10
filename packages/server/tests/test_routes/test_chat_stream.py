@@ -147,6 +147,58 @@ def test_stream_returns_404_for_missing_session(stream_client) -> None:
     assert r.status_code == 404
 
 
+def test_stream_emits_chat_memory_block_event_after_chat_start(stream_client) -> None:
+    """The drawer needs an SSE event surfacing the rendered memory block so
+    the user can see what beliefs the model is grounding on this turn. The
+    event must fire once per turn, immediately after ``chat.start``."""
+    from openlia_server.services import user_constructs
+
+    client, _runner, session_id = stream_client
+
+    with session_mod.SessionLocal() as s:
+        user_constructs.create_construct(
+            s,
+            user_id="local",
+            kind="thesis",
+            statement="Services margins drive the long-term NVDA story",
+            entity_kind="ticker",
+            entity_value="NVDA",
+        )
+        s.commit()
+
+    r = client.get(
+        f"/chat/sessions/{session_id}/stream",
+        params={"q": "Refresh me on NVDA"},
+    )
+    assert r.status_code == 200
+    frames = _parse_sse_frames(r.text)
+    types = [f["type"] for f in frames]
+    assert "chat.memory_block" in types, types
+    # Must come immediately after chat.start.
+    start_idx = types.index("chat.start")
+    assert types[start_idx + 1] == "chat.memory_block"
+    payload = frames[start_idx + 1]
+    assert payload["message_id"] == frames[start_idx]["message_id"]
+    assert payload["block"] is not None
+    assert "NVDA" in payload["block"]
+
+
+def test_stream_emits_chat_memory_block_event_with_null_block_when_no_match(
+    stream_client,
+) -> None:
+    """When retrieval finds nothing, the event must still fire with
+    ``block=None`` so the FE can render the empty-state in the drawer."""
+    client, _runner, session_id = stream_client
+    r = client.get(
+        f"/chat/sessions/{session_id}/stream",
+        params={"q": "hello"},
+    )
+    assert r.status_code == 200
+    frames = _parse_sse_frames(r.text)
+    mem = next(f for f in frames if f["type"] == "chat.memory_block")
+    assert mem["block"] is None
+
+
 def test_stream_route_threads_memory_block_into_runner(stream_client) -> None:
     """End-to-end wiring: a confirmed UserConstruct anchored to a ticker
     the user mentions in the live message must reach ``ChatRunner.run``

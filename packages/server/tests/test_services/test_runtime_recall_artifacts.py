@@ -53,9 +53,7 @@ async def test_handler_returns_compact_rows_with_subject_and_tagline(
 
 
 @pytest.mark.asyncio
-async def test_handler_scopes_results_per_user(
-    db_session, db_session_factory, make_user
-) -> None:
+async def test_handler_scopes_results_per_user(db_session, db_session_factory, make_user) -> None:
     """Two users with identical summaries — each user's recall returns
     only their own row, never the other's."""
     alice = make_user(email="alice@example.com")

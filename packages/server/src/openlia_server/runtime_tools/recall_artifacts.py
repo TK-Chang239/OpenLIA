@@ -62,9 +62,7 @@ def build_recall_artifacts_handler(
     """
     del top_k_default  # reserved for future plumbing; clamp lives in core
 
-    async def _handler(
-        user_id: str | None, query: str, top_k: int
-    ) -> list[RecallArtifactsResult]:
+    async def _handler(user_id: str | None, query: str, top_k: int) -> list[RecallArtifactsResult]:
         if user_id is None:
             raise _MissingUserError("recall_artifacts requires a bound user context")
         db = db_session_factory()

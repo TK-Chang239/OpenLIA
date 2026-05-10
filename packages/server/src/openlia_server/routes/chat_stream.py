@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
-from openlia.llm.runtime.events import ChatError, ChatGuardrail, to_wire
+from openlia.llm.runtime.events import ChatError, ChatGuardrail, ChatMemoryBlock, to_wire
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from openlia.safety.output_moderation import ActionTier, decide_action
 from openlia.safety.output_moderation import scan as moderation_scan
@@ -235,6 +235,16 @@ async def _event_source(
             etype = wire["type"]
             if etype == "chat.start":
                 current_message_id = wire.get("message_id", "")
+                yield _sse_frame(wire)
+                # Surface the cross-session memory block to the FE drawer.
+                # Emitted once per turn, immediately after chat.start so the
+                # frontend has the message_id to associate it with.
+                memory_event = ChatMemoryBlock(
+                    message_id=current_message_id,
+                    block=memory_block,
+                )
+                yield _sse_frame(to_wire(memory_event))
+                continue
             elif etype == "chat.token":
                 assistant_text.append(wire.get("text", ""))
             elif etype == "chat.tool_call.start":
