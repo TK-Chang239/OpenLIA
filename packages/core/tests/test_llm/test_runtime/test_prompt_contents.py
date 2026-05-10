@@ -122,3 +122,22 @@ def test_secretary_chat_system_injects_detailed_directive() -> None:
     assert "## Response length" in out
     lowered = out.lower()
     assert "thorough" in lowered or "headings" in lowered
+
+
+def test_response_length_partial_renders_without_context_var() -> None:
+    """Defense in depth: even if a caller bypasses ``PromptLoader.render``
+    and uses Jinja directly without supplying ``response_length`` in the
+    context, the partial must not raise ``UndefinedError`` under
+    ``StrictUndefined``. Models that hit this path otherwise see a runtime
+    crash instead of a quiet fallback to 'no length directive'."""
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+
+    from openlia.llm.runtime.prompts import _default_prompts_root
+
+    env = Environment(
+        loader=FileSystemLoader(str(_default_prompts_root())),
+        undefined=StrictUndefined,
+    )
+    tmpl = env.get_template("shared/response_length.yaml.j2")
+    out = tmpl.render()  # no context at all
+    assert "## Response length" not in out
