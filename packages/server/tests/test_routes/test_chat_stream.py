@@ -30,13 +30,14 @@ class _ScriptedChatRunner:
         messages,
         attachments=None,
         cancel_token=None,
-        **_,
+        **kwargs,
     ):
         self.captured = {
             "department_id": department_id,
             "user_id": user_id,
             "messages": messages,
             "cancel_token": cancel_token,
+            **kwargs,
         }
         for event in self._events:
             yield event
@@ -45,6 +46,8 @@ class _ScriptedChatRunner:
 @pytest.fixture
 def stream_client(tmp_path, monkeypatch):
     from openlia_server.app import create_app
+
+    import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
 
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{tmp_path}/stream.db")
@@ -142,3 +145,35 @@ def test_stream_returns_404_for_missing_session(stream_client) -> None:
     client, _runner, _session_id = stream_client
     r = client.get("/chat/sessions/missing/stream", params={"q": "x"})
     assert r.status_code == 404
+
+
+def test_stream_route_threads_memory_block_into_runner(stream_client) -> None:
+    """End-to-end wiring: a confirmed UserConstruct anchored to a ticker
+    the user mentions in the live message must reach ``ChatRunner.run``
+    as ``memory_block``. Without this, retrieval is dead code from the
+    Secretary route's perspective even though every unit test passes."""
+    from openlia_server.services import user_constructs
+
+    client, runner, session_id = stream_client
+
+    with session_mod.SessionLocal() as s:
+        user_constructs.create_construct(
+            s,
+            user_id="local",
+            kind="thesis",
+            statement="Services-margin expansion is the durable bull case",
+            entity_kind="ticker",
+            entity_value="NVDA",
+        )
+        s.commit()
+
+    r = client.get(
+        f"/chat/sessions/{session_id}/stream",
+        params={"q": "What's your latest on NVDA?"},
+    )
+    assert r.status_code == 200
+
+    block = runner.captured.get("memory_block")
+    assert block is not None, "memory_block was not threaded from route into runner"
+    assert "NVDA" in block
+    assert "Services-margin expansion" in block
