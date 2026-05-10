@@ -30,7 +30,11 @@ from openlia.llm.runtime.messages import (
     BatchItem,
     BatchResult,
     ChatMessage,
+    ContentBlock,
+    DocumentBlock,
+    ImageBlock,
     ReportRequest,
+    TextBlock,
 )
 from openlia.llm.runtime.prompts import PromptLoader, PromptSlotNotFound
 from openlia.llm.runtime.report import ReportRunner
@@ -61,7 +65,10 @@ __all__ = [
     "ChatToken",
     "ChatToolCallResult",
     "ChatToolCallStart",
+    "ContentBlock",
     "DataProviderDispatcher",
+    "DocumentBlock",
+    "ImageBlock",
     "PromptLoader",
     "PromptSlotNotFound",
     "ReportComplete",
@@ -72,6 +79,7 @@ __all__ = [
     "ReportStart",
     "ReportToolCall",
     "SseEvent",
+    "TextBlock",
     "ToolCallResult",
     "ToolDispatcher",
     "WebSearchAdapter",

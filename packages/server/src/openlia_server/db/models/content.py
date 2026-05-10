@@ -57,6 +57,11 @@ class ChatSession(Base, TimestampMixin):
     disabled_skill_ids: Mapped[list[str]] = mapped_column(
         JSON, nullable=False, default=list, server_default=text("'[]'")
     )
+    # Per-session composer choice: ``"concise"``, ``"normal"``, or
+    # ``"detailed"``. ``NULL`` = no explicit choice (model default
+    # discipline). The Secretary chat runtime injects a length directive
+    # into the system prompt only for ``concise`` / ``detailed``.
+    response_length: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", cascade="all, delete-orphan", passive_deletes=True
@@ -99,6 +104,12 @@ class ChatAttachment(Base):
     mime_type: Mapped[str] = mapped_column(String(128), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     storage_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Cached server-side extracted text for non-native-content paths (PDF
+    # on non-pdf_native providers, all Office docs, decoded text files).
+    # NULL when the attachment is passed to the provider as raw bytes
+    # (images, native PDFs). See composer-attachments-design.md.
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
     )

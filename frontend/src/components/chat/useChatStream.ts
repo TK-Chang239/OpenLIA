@@ -306,7 +306,11 @@ export function useChatStream({ sessionId, fetchImpl, streamUrl, bodyExtras }: O
   }, []);
 
   const runStream = useCallback(
-    async (userMessage: string, isReconnect: boolean): Promise<void> => {
+    async (
+      userMessage: string,
+      isReconnect: boolean,
+      attachments?: File[],
+    ): Promise<void> => {
       if (!fetcher) {
         dispatch({
           kind: "EVENT",
@@ -323,17 +327,39 @@ export function useChatStream({ sessionId, fetchImpl, streamUrl, bodyExtras }: O
 
       let response: Response;
       const url = streamUrl ?? `/api/chat/sessions/${sessionId}/stream`;
-      const body = streamUrl
-        ? { message: userMessage, ...(bodyExtras ?? {}) }
-        : { q: userMessage, ...(bodyExtras ?? {}) };
-      try {
-        response = await fetcher(url, {
+      const useMultipart = (attachments?.length ?? 0) > 0;
+      let init: RequestInit;
+      if (useMultipart) {
+        const fd = new FormData();
+        fd.set("message", userMessage);
+        for (const [k, v] of Object.entries(bodyExtras ?? {})) {
+          if (v == null) continue;
+          fd.set(k, String(v));
+        }
+        for (const f of attachments ?? []) {
+          fd.append("files", f, f.name);
+        }
+        init = {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { Accept: "text/event-stream" },
+          body: fd,
+          signal: controller.signal,
+        };
+      } else {
+        const body = streamUrl
+          ? { message: userMessage, ...(bodyExtras ?? {}) }
+          : { q: userMessage, ...(bodyExtras ?? {}) };
+        init = {
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
           body: JSON.stringify(body),
           signal: controller.signal,
-        });
+        };
+      }
+      try {
+        response = await fetcher(url, init);
       } catch (err) {
         if (reason.intentional) return;
         if (controller.signal.aborted) return;
@@ -414,11 +440,11 @@ export function useChatStream({ sessionId, fetchImpl, streamUrl, bodyExtras }: O
   );
 
   const send = useCallback(
-    (userMessage: string) => {
+    (userMessage: string, attachments?: File[]) => {
       closeActive(true);
       reconnectAttemptedRef.current = false;
       dispatch({ kind: "SEND" });
-      void runStream(userMessage, false);
+      void runStream(userMessage, false, attachments);
     },
     [closeActive, runStream],
   );

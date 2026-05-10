@@ -25,6 +25,7 @@ def _anthropic_opus() -> Capabilities:
         structured_output=True,
         vision=True,
         web_search_native=True,
+        pdf_native=True,
         max_context_tokens=200_000,
         max_output_tokens=32_000,
     )
@@ -37,6 +38,7 @@ def _anthropic_sonnet() -> Capabilities:
         structured_output=True,
         vision=True,
         web_search_native=True,
+        pdf_native=True,
         max_context_tokens=200_000,
         max_output_tokens=64_000,
     )
@@ -49,6 +51,7 @@ def _anthropic_haiku() -> Capabilities:
         structured_output=True,
         vision=True,
         web_search_native=False,
+        pdf_native=True,
         max_context_tokens=200_000,
         max_output_tokens=16_000,
     )
@@ -97,6 +100,7 @@ def _gemini_pro() -> Capabilities:
         structured_output=True,
         vision=True,
         web_search_native=True,
+        pdf_native=True,
         max_context_tokens=1_000_000,
         max_output_tokens=8_192,
     )
@@ -109,6 +113,7 @@ def _gemini_flash() -> Capabilities:
         structured_output=True,
         vision=True,
         web_search_native=True,
+        pdf_native=True,
         max_context_tokens=1_000_000,
         max_output_tokens=8_192,
     )
@@ -121,6 +126,7 @@ def _gemini_flash_lite() -> Capabilities:
         structured_output=True,
         vision=True,
         web_search_native=False,
+        pdf_native=True,
         max_context_tokens=500_000,
         max_output_tokens=4_096,
     )
@@ -164,7 +170,15 @@ def _lookup_base(provider_kind: str, model: str) -> Capabilities:
         # alias (e.g. ``~anthropic/claude-sonnet-latest``). Strip it so the
         # upstream-kind lookup matches a real provider.
         upstream_kind = upstream_kind.lstrip("~")
-        return _lookup_base(upstream_kind, upstream_model)
+        upstream = _lookup_base(upstream_kind, upstream_model)
+        # Issue #99 follow-up: even when the upstream model accepts native
+        # PDFs, the OpenRouter adapter renders our DocumentBlock as an
+        # OpenAI-style "[Document content not natively supported]" placeholder
+        # because OpenRouter's relay doesn't pass through Anthropic
+        # document blocks. Force ``pdf_native=False`` so the materializer
+        # uses extracted text until the adapter learns OpenRouter's
+        # PDF-file-input shape.
+        return replace(upstream, pdf_native=False)
 
     if provider_kind == "openai_compat":
         return _OPENAI_COMPAT_DEFAULT

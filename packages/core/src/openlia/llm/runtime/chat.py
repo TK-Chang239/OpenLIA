@@ -34,6 +34,10 @@ from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
+from openlia.llm.runtime.attachments import (
+    AttachmentNotSupportedError,
+    materialize_for_model,
+)
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.escalation import (
     ESCALATION_TOOL_DEFINITION,
@@ -51,7 +55,7 @@ from openlia.llm.runtime.events import (
     ChatToolCallStart,
     SseEvent,
 )
-from openlia.llm.runtime.messages import Attachment, ChatMessage
+from openlia.llm.runtime.messages import Attachment, ChatMessage, ContentBlock
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.router import LlmClient as RouterLlmClient
 from openlia.llm.runtime.router import route_tools
@@ -84,6 +88,33 @@ ProviderFactory = Callable[[ResolvedModel], LLMProvider]
 CACHE_BREAKPOINT_MARKER = "<<<openlia:cache_breakpoint>>>"
 
 
+# Issue #99: tools whose semantics overlap with "extract text from a file the
+# user attached." When the runtime has already inlined the file's text into
+# the user message, exposing these to the model invites it to call them on
+# the filename and ignore the inline content.
+_DOC_PARSER_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "firecrawl__parse",
+    }
+)
+
+
+def _has_inline_attachment(blocks: tuple[ContentBlock, ...]) -> bool:
+    """True when any materialized block carries inline file payload (text,
+    image, or native document) that the model should read directly."""
+    return len(blocks) > 0
+
+
+def _filter_doc_parsers(
+    candidate_tools: list[dict[str, Any]],
+    *,
+    blocks: tuple[ContentBlock, ...],
+) -> list[dict[str, Any]]:
+    if not _has_inline_attachment(blocks):
+        return candidate_tools
+    return [t for t in candidate_tools if t.get("name") not in _DOC_PARSER_TOOL_NAMES]
+
+
 def wrap_last_user_message(messages: list[ChatMessage]) -> list[ChatMessage]:
     """Return a new list where the LAST role='user' message has its content
     wrapped in <user_input>...</user_input>. Earlier user messages are left
@@ -97,6 +128,25 @@ def wrap_last_user_message(messages: list[ChatMessage]) -> list[ChatMessage]:
                 content=wrap_user_input(out[i].content),
             )
             break
+    return out
+
+
+def _build_conversation(
+    wrapped_messages: list[ChatMessage],
+    materialized_blocks: tuple[ContentBlock, ...],
+) -> list[Message]:
+    """Project wrapped ChatMessages into LLM Messages. The last user message
+    inherits any materialized attachment blocks; earlier user messages keep
+    empty content_blocks."""
+    out: list[Message] = []
+    last_user_idx = -1
+    for i in range(len(wrapped_messages) - 1, -1, -1):
+        if wrapped_messages[i].role == "user":
+            last_user_idx = i
+            break
+    for i, m in enumerate(wrapped_messages):
+        blocks = materialized_blocks if i == last_user_idx else ()
+        out.append(Message(role=m.role, content=m.content, content_blocks=blocks))
     return out
 
 
@@ -117,12 +167,17 @@ def build_chat_system_prompt(
     registry: SkillRegistry,
     loader: PromptLoader | None = None,
     disabled_skill_ids: frozenset[str] = frozenset(),
+    response_length: str | None = None,
 ) -> str:
     """Render the chat.system slot with the user's visible skills menu.
 
     `disabled_skill_ids` is the per-session opt-out set from the chat
     input "Tools" dropdown. Disabled skills are dropped before
     `skills_menu` is rendered so the model never knows they exist.
+
+    `response_length` is the per-session composer choice; ``"concise"`` or
+    ``"detailed"`` injects an explicit length directive into the system
+    prompt, ``None``/``"normal"`` leaves the default discipline alone.
     """
     loader = loader or PromptLoader()
     visible = registry.visible(
@@ -141,7 +196,12 @@ def build_chat_system_prompt(
         }
         for s in visible
     ]
-    return loader.render(department_id, "chat.system", skills_menu=skills_menu)
+    return loader.render(
+        department_id,
+        "chat.system",
+        skills_menu=skills_menu,
+        response_length=response_length,
+    )
 
 
 TraceRecorder = Callable[[str, str, dict[str, Any] | None], None]
@@ -223,6 +283,7 @@ class ChatRunner:
         session_id: str | None = None,
         model_id_override: str | None = None,
         disabled_skill_ids: frozenset[str] = frozenset(),
+        response_length: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -246,12 +307,39 @@ class ChatRunner:
             return
 
         provider = self._provider_factory(resolved)
+
+        # Materialize attachments into provider-neutral content blocks. The
+        # blocks ride alongside the last user message so adapters can render
+        # them as multi-modal content. See composer-attachments-design.md.
+        try:
+            materialized = materialize_for_model(
+                attachments or (),
+                capabilities=resolved.capabilities,
+                available_token_budget=max(
+                    1,
+                    resolved.capabilities.max_context_tokens
+                    - resolved.capabilities.max_output_tokens
+                    - 4_000,  # rough headroom for system prompt + tool schemas
+                ),
+            )
+        except AttachmentNotSupportedError as exc:
+            yield ChatError(
+                message_id=message_id,
+                error_class=type(exc).__name__,
+                message=str(exc),
+            )
+            return
+        materialized_blocks: tuple[ContentBlock, ...] = tuple(materialized.blocks)
+        for warning in materialized.warnings:
+            self._trace("attachment.warning", warning, None)
+
         system = build_chat_system_prompt(
             department_id=department_id,
             user_id=user_id,
             registry=self._skill_registry,
             loader=self._prompts,
             disabled_skill_ids=disabled_skill_ids,
+            response_length=response_length,
         )
         self._trace(
             "llm.resolved",
@@ -284,6 +372,7 @@ class ChatRunner:
                 dept=dept,
                 resolved=resolved,
                 messages=messages,
+                materialized_blocks=materialized_blocks,
                 cancel_token=cancel_token,
                 message_id=message_id,
                 extra_tool_specs=extra_tool_specs,
@@ -301,7 +390,7 @@ class ChatRunner:
         )
 
         wrapped_messages = wrap_last_user_message(messages)
-        conversation = [Message(role=m.role, content=m.content) for m in wrapped_messages]
+        conversation = _build_conversation(wrapped_messages, materialized_blocks)
 
         # Tool loop — bounded by MAX_TOOL_TURNS (32) as an outer runaway guard.
         # Chat exposes the same `request_additional_tools` escalation as the
@@ -507,6 +596,7 @@ class ChatRunner:
         dept: Any,
         resolved: ResolvedModel,
         messages: list[ChatMessage],
+        materialized_blocks: tuple[ContentBlock, ...] = (),
         cancel_token: CancellationToken | None,
         message_id: str,
         extra_tool_specs: tuple[dict[str, Any], ...] = (),
@@ -527,6 +617,7 @@ class ChatRunner:
         assert self._routing_context_loader is not None
 
         candidate_tools: list[dict[str, Any]] = self._dispatcher.candidate_tools()
+        candidate_tools = _filter_doc_parsers(candidate_tools, blocks=materialized_blocks)
 
         disable_routing = bool(getattr(dept, "disable_runtime_routing", False))
 
@@ -557,9 +648,6 @@ class ChatRunner:
             include_escalation = True
 
         candidate_by_name = {t["name"]: t for t in candidate_tools}
-        # When routing is enabled but the router selected nothing, fall
-        # back to a small empty subset; the escalation tool still lets
-        # the model pull tools in mid-conversation.
 
         async with self._dispatcher.in_department(department_id):
             async for event in self._v2_loop(
@@ -572,6 +660,7 @@ class ChatRunner:
                 routed_names=list(routed_names),
                 include_escalation=include_escalation,
                 messages=messages,
+                materialized_blocks=materialized_blocks,
                 cancel_token=cancel_token,
                 message_id=message_id,
                 disable_routing=disable_routing,
@@ -591,6 +680,7 @@ class ChatRunner:
         routed_names: list[str],
         include_escalation: bool,
         messages: list[ChatMessage],
+        materialized_blocks: tuple[ContentBlock, ...],
         cancel_token: CancellationToken | None,
         message_id: str,
         disable_routing: bool,
@@ -598,7 +688,7 @@ class ChatRunner:
     ) -> AsyncIterator[SseEvent]:
         assert self._dispatcher is not None
         wrapped_messages = wrap_last_user_message(messages)
-        conversation = [Message(role=m.role, content=m.content) for m in wrapped_messages]
+        conversation = _build_conversation(wrapped_messages, materialized_blocks)
 
         candidate_list = list(candidate_by_name.values())
 
@@ -862,10 +952,7 @@ class ChatRunner:
                 {
                     "error": str(exc),
                     "missing": list(exc.missing),
-                    "hint": (
-                        "Retry the call with one of the listed arguments set "
-                        "(non-empty)."
-                    ),
+                    "hint": ("Retry the call with one of the listed arguments set (non-empty)."),
                 },
                 False,
                 f"{call.name} missing required argument: {' or '.join(exc.missing)}",

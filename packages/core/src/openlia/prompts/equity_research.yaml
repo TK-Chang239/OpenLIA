@@ -13,6 +13,8 @@ chat:
 
     {% include "shared/skills_menu.yaml.j2" %}
 
+    {% include "shared/attachments_inline.yaml.j2" %}
+
 report:
   system: |
     You are the Equity Research analyst drafting a professional report.

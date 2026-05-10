@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
+from openlia.llm.adapters._content import render_openai_messages
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -30,7 +31,16 @@ def _to_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
         out.append({"role": "system", "content": req.system})
-    for m in req.messages:
+    # Pre-render user/system/assistant-without-tool-calls via the shared
+    # OpenAI-style renderer so user messages with materialized
+    # content_blocks emit as the chat-completions "parts" array
+    # (image_url, multi-text). Tool results and assistant tool-call turns
+    # need OpenRouter-specific shapes and are still handled below.
+    rendered_by_idx = {
+        i: dict_msg
+        for i, dict_msg in enumerate(render_openai_messages(list(req.messages)))
+    }
+    for i, m in enumerate(req.messages):
         if m.role == "tool":
             out.append(
                 {
@@ -59,7 +69,7 @@ def _to_messages(req: LLMRequest) -> list[dict]:
                 }
             )
             continue
-        out.append({"role": m.role, "content": m.content})
+        out.append(rendered_by_idx[i])
     return out
 
 
