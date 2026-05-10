@@ -51,6 +51,10 @@ def embed_and_store_construct(
     return construct
 
 
+_VALID_TONES: frozenset[str] = frozenset({"bullish", "bearish", "neutral"})
+_VALID_HORIZONS: frozenset[str] = frozenset({"short", "medium", "long"})
+
+
 def upsert_artifact_summary(
     db: Session,
     *,
@@ -60,7 +64,20 @@ def upsert_artifact_summary(
     summary_text: str,
     provider: EmbeddingProvider,
     model_name: str,
+    subject: str | None = None,
+    tagline: str | None = None,
+    findings_text: str | None = None,
+    entities_mentioned: list[str] | None = None,
+    tone: str | None = None,
+    horizon: str | None = None,
 ) -> GraphArtifactSummary:
+    if tone is not None and tone not in _VALID_TONES:
+        raise ValueError(f"invalid tone {tone!r}; expected one of {sorted(_VALID_TONES)} or None")
+    if horizon is not None and horizon not in _VALID_HORIZONS:
+        raise ValueError(
+            f"invalid horizon {horizon!r}; expected one of {sorted(_VALID_HORIZONS)} or None"
+        )
+
     [vec] = provider.embed([summary_text])
     blob = pack_vector(vec)
 
@@ -74,6 +91,12 @@ def upsert_artifact_summary(
         existing.summary_text = summary_text
         existing.embedding = blob
         existing.embedding_model = model_name
+        existing.subject = subject
+        existing.tagline = tagline
+        existing.findings_text = findings_text
+        existing.entities_mentioned = entities_mentioned
+        existing.tone = tone
+        existing.horizon = horizon
         db.flush()
         return existing
 
@@ -85,6 +108,12 @@ def upsert_artifact_summary(
         summary_text=summary_text,
         embedding=blob,
         embedding_model=model_name,
+        subject=subject,
+        tagline=tagline,
+        findings_text=findings_text,
+        entities_mentioned=entities_mentioned,
+        tone=tone,
+        horizon=horizon,
     )
     db.add(row)
     db.flush()
