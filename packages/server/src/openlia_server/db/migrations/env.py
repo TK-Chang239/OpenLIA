@@ -17,6 +17,28 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+# Tables managed outside the SQLAlchemy metadata graph (e.g. the SQLite
+# FTS5 shadow on graph_artifact_summaries and its four internal
+# auxiliary tables — created by the slice-10 hybrid retrieval migration
+# and by an `after_create` DDL event for tests). Autogenerate must not
+# treat their absence in `Base.metadata` as a drop-candidate.
+_FTS_SHADOW_TABLES = frozenset(
+    {
+        "graph_artifact_summaries_fts",
+        "graph_artifact_summaries_fts_config",
+        "graph_artifact_summaries_fts_data",
+        "graph_artifact_summaries_fts_docsize",
+        "graph_artifact_summaries_fts_idx",
+    }
+)
+
+
+def _include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "table" and name in _FTS_SHADOW_TABLES:
+        return False
+    return True
+
+
 def _db_url() -> str:
     return bootstrap.resolve_db_url()
 
@@ -30,6 +52,7 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         render_as_batch=True,
         compare_server_default=True,
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -51,6 +74,7 @@ def run_migrations_online() -> None:
             target_metadata=target_metadata,
             render_as_batch=True,
             compare_server_default=True,
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

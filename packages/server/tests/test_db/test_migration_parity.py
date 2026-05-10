@@ -60,6 +60,18 @@ def test_metadata_matches_alembic_head(tmp_path: Path) -> None:
     orm_tables = set(Base.metadata.tables.keys())
     db_tables = set(reflected.tables.keys())
     db_tables.discard("alembic_version")
+    # The SQLite FTS5 shadow of graph_artifact_summaries (slice 10
+    # hybrid retrieval) creates one virtual table plus four internal
+    # auxiliary tables that aren't modeled in the ORM by design — they
+    # are managed by SQLite itself.
+    _FTS_SHADOW = {
+        "graph_artifact_summaries_fts",
+        "graph_artifact_summaries_fts_config",
+        "graph_artifact_summaries_fts_data",
+        "graph_artifact_summaries_fts_docsize",
+        "graph_artifact_summaries_fts_idx",
+    }
+    db_tables -= _FTS_SHADOW
 
     assert orm_tables == db_tables, (
         f"Missing from DB: {orm_tables - db_tables}; Extra in DB: {db_tables - orm_tables}"
