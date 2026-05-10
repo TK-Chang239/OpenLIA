@@ -116,3 +116,52 @@ class GraphUserConstruct(Base, TimestampMixin):
         Index("ix_graph_user_constructs_entity_id", "entity_id"),
         Index("ix_graph_user_constructs_user_id_status", "user_id", "status"),
     )
+
+
+class GraphExtractionProposal(Base, TimestampMixin):
+    """Pending or resolved LLM-extracted graph addition (slice 6).
+
+    The async extractor (slice 8) reads chat-session transcripts, asks
+    an LLM what user constructs and entity mentions it observed, and
+    writes each as a ``pending`` proposal here. The user accepts /
+    dismisses via slice-7 routes; ``dismissed`` rows become tombstones
+    so the extractor doesn't re-propose the same statement on the next
+    run (matched via ``statement_hash``).
+
+    ``payload`` shape is kind-specific:
+    * ``user_construct``: ``{construct_kind, statement, entity_kind,
+      entity_value, source_excerpt?}``
+    * ``mention``: ``{entity_kind, entity_value, artifact_kind,
+      artifact_id}``
+    """
+
+    __tablename__ = "graph_extraction_proposals"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    source_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    statement_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default="pending",
+        server_default="pending",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_graph_extraction_proposals_user_id_status",
+            "user_id",
+            "status",
+        ),
+        Index(
+            "ix_graph_extraction_proposals_statement_hash",
+            "user_id",
+            "statement_hash",
+        ),
+    )
