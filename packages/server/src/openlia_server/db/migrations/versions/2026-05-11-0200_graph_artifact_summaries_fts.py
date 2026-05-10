@@ -65,8 +65,12 @@ def upgrade() -> None:
         f"""
         CREATE TRIGGER IF NOT EXISTS {_PARENT}_ai
         AFTER INSERT ON {_PARENT} BEGIN
-            INSERT INTO {_FTS_TABLE}(rowid, summary_text, subject, tagline, findings_text)
-            VALUES (new.rowid, new.summary_text, new.subject, new.tagline, new.findings_text);
+            INSERT INTO {_FTS_TABLE}(
+                rowid, summary_text, subject, tagline, findings_text
+            ) VALUES (
+                new.rowid, new.summary_text, new.subject,
+                new.tagline, new.findings_text
+            );
         END
         """
     )
@@ -74,8 +78,13 @@ def upgrade() -> None:
         f"""
         CREATE TRIGGER IF NOT EXISTS {_PARENT}_ad
         AFTER DELETE ON {_PARENT} BEGIN
-            INSERT INTO {_FTS_TABLE}({_FTS_TABLE}, rowid, summary_text, subject, tagline, findings_text)
-            VALUES ('delete', old.rowid, old.summary_text, old.subject, old.tagline, old.findings_text);
+            INSERT INTO {_FTS_TABLE}(
+                {_FTS_TABLE}, rowid,
+                summary_text, subject, tagline, findings_text
+            ) VALUES (
+                'delete', old.rowid,
+                old.summary_text, old.subject, old.tagline, old.findings_text
+            );
         END
         """
     )
@@ -83,10 +92,19 @@ def upgrade() -> None:
         f"""
         CREATE TRIGGER IF NOT EXISTS {_PARENT}_au
         AFTER UPDATE ON {_PARENT} BEGIN
-            INSERT INTO {_FTS_TABLE}({_FTS_TABLE}, rowid, summary_text, subject, tagline, findings_text)
-            VALUES ('delete', old.rowid, old.summary_text, old.subject, old.tagline, old.findings_text);
-            INSERT INTO {_FTS_TABLE}(rowid, summary_text, subject, tagline, findings_text)
-            VALUES (new.rowid, new.summary_text, new.subject, new.tagline, new.findings_text);
+            INSERT INTO {_FTS_TABLE}(
+                {_FTS_TABLE}, rowid,
+                summary_text, subject, tagline, findings_text
+            ) VALUES (
+                'delete', old.rowid,
+                old.summary_text, old.subject, old.tagline, old.findings_text
+            );
+            INSERT INTO {_FTS_TABLE}(
+                rowid, summary_text, subject, tagline, findings_text
+            ) VALUES (
+                new.rowid, new.summary_text, new.subject,
+                new.tagline, new.findings_text
+            );
         END
         """
     )

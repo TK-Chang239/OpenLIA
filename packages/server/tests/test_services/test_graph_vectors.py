@@ -298,9 +298,7 @@ def _fts_row_count(db_session, summary_id: str) -> int:
         return 0
     return int(
         db_session.execute(
-            text(
-                "SELECT count(*) FROM graph_artifact_summaries_fts WHERE rowid = :r"
-            ),
+            text("SELECT count(*) FROM graph_artifact_summaries_fts WHERE rowid = :r"),
             {"r": rowid},
         ).scalar_one()
     )
@@ -333,16 +331,20 @@ def test_upsert_populates_fts_index(db_session) -> None:
     assert _fts_row_count(db_session, row.id) == 1
 
     # Keyword search on a distinctive token reaches the row.
-    hits = db_session.execute(
-        text(
-            "SELECT graph_artifact_summaries.id "
-            "FROM graph_artifact_summaries "
-            "JOIN graph_artifact_summaries_fts fts "
-            "  ON fts.rowid = graph_artifact_summaries.rowid "
-            "WHERE graph_artifact_summaries_fts MATCH :q"
-        ),
-        {"q": "datacenter"},
-    ).scalars().all()
+    hits = (
+        db_session.execute(
+            text(
+                "SELECT graph_artifact_summaries.id "
+                "FROM graph_artifact_summaries "
+                "JOIN graph_artifact_summaries_fts fts "
+                "  ON fts.rowid = graph_artifact_summaries.rowid "
+                "WHERE graph_artifact_summaries_fts MATCH :q"
+            ),
+            {"q": "datacenter"},
+        )
+        .scalars()
+        .all()
+    )
     assert row.id in hits
 
 
@@ -379,24 +381,32 @@ def test_upsert_updates_fts_index_in_place(db_session) -> None:
     assert _fts_row_count(db_session, first.id) == 1
 
     # Old token no longer matches; new token does.
-    alpha_hits = db_session.execute(
-        text(
-            "SELECT graph_artifact_summaries.id FROM graph_artifact_summaries "
-            "JOIN graph_artifact_summaries_fts fts "
-            "  ON fts.rowid = graph_artifact_summaries.rowid "
-            "WHERE graph_artifact_summaries_fts MATCH :q"
-        ),
-        {"q": "alpha"},
-    ).scalars().all()
-    zebra_hits = db_session.execute(
-        text(
-            "SELECT graph_artifact_summaries.id FROM graph_artifact_summaries "
-            "JOIN graph_artifact_summaries_fts fts "
-            "  ON fts.rowid = graph_artifact_summaries.rowid "
-            "WHERE graph_artifact_summaries_fts MATCH :q"
-        ),
-        {"q": "zebra"},
-    ).scalars().all()
+    alpha_hits = (
+        db_session.execute(
+            text(
+                "SELECT graph_artifact_summaries.id FROM graph_artifact_summaries "
+                "JOIN graph_artifact_summaries_fts fts "
+                "  ON fts.rowid = graph_artifact_summaries.rowid "
+                "WHERE graph_artifact_summaries_fts MATCH :q"
+            ),
+            {"q": "alpha"},
+        )
+        .scalars()
+        .all()
+    )
+    zebra_hits = (
+        db_session.execute(
+            text(
+                "SELECT graph_artifact_summaries.id FROM graph_artifact_summaries "
+                "JOIN graph_artifact_summaries_fts fts "
+                "  ON fts.rowid = graph_artifact_summaries.rowid "
+                "WHERE graph_artifact_summaries_fts MATCH :q"
+            ),
+            {"q": "zebra"},
+        )
+        .scalars()
+        .all()
+    )
     assert first.id not in alpha_hits
     assert first.id in zebra_hits
 
@@ -428,9 +438,7 @@ def test_delete_removes_fts_row(db_session) -> None:
     db_session.flush()
 
     count = db_session.execute(
-        text(
-            "SELECT count(*) FROM graph_artifact_summaries_fts WHERE rowid = :r"
-        ),
+        text("SELECT count(*) FROM graph_artifact_summaries_fts WHERE rowid = :r"),
         {"r": rowid},
     ).scalar_one()
     assert count == 0
