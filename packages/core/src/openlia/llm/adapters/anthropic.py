@@ -4,6 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
+from openlia.llm.adapters._content import render_anthropic_messages
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -65,7 +66,7 @@ class AnthropicAdapter(LLMProvider):
     async def generate(self, request: LLMRequest) -> LLMResponse:
         payload: dict = {
             "model": self.model,
-            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "messages": render_anthropic_messages(request.messages),
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
         }
@@ -127,7 +128,7 @@ class AnthropicAdapter(LLMProvider):
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
         payload: dict = {
             "model": self.model,
-            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "messages": render_anthropic_messages(request.messages),
             "max_tokens": request.max_tokens,
             "temperature": request.temperature,
             "stream": True,

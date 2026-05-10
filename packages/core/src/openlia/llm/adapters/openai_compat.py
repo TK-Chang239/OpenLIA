@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
+from openlia.llm.adapters._content import render_openai_messages
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -32,8 +33,11 @@ def _to_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
         out.append({"role": "system", "content": req.system})
-    for m in req.messages:
-        out.append({"role": m.role, "content": m.content})
+    # Use the shared OpenAI-style renderer so user messages with
+    # materialized content_blocks emit as the chat-completions parts
+    # array (image_url + multi-text); collapses to legacy {role, content}
+    # when no blocks are present.
+    out.extend(render_openai_messages(list(req.messages)))
     return out
 
 

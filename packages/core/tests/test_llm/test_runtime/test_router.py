@@ -67,7 +67,13 @@ async def test_accepts_object_response_with_tools_key() -> None:
     assert out == ["eodhd__get_quote"]
 
 
-async def test_handles_llm_error_returns_empty() -> None:
+async def test_handles_llm_error_falls_back_to_full_candidate_pool() -> None:
+    """Issue #99: a router exception used to collapse to ``[]``, which forced
+    the main model into escalation and pulled in irrelevant tools (e.g.
+    ``firecrawl__parse``) when something simpler would do. Fall back to the
+    full validated candidate pool so the main model sees the same surface
+    routing would have exposed on its best day."""
+
     class _Boom:
         async def generate_json(self, *, prompt: str) -> Any:
             raise RuntimeError("router LLM unreachable")
@@ -79,7 +85,7 @@ async def test_handles_llm_error_returns_empty() -> None:
         candidate_tools=CANDIDATES,
         llm_client=_Boom(),
     )
-    assert out == []
+    assert sorted(out) == sorted(t["name"] for t in CANDIDATES)
 
 
 async def test_empty_candidate_pool_short_circuits() -> None:

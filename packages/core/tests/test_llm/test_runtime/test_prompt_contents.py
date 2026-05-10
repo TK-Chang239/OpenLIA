@@ -64,3 +64,61 @@ def test_missing_slot_surfaces_prompt_slot_not_found() -> None:
     loader = PromptLoader()
     with pytest.raises(PromptSlotNotFound):
         loader.render("secretary", "report.system")
+
+
+# Issue #99: chat-mode system prompts must tell the model that user messages
+# can carry inline attachment contents and must not be parsed via tools.
+
+_ATTACHMENT_GUIDANCE_PHRASES = ("attached file", "inline", "do not call")
+
+
+def _assert_inline_attachment_guidance(rendered: str) -> None:
+    lowered = rendered.lower()
+    for phrase in _ATTACHMENT_GUIDANCE_PHRASES:
+        assert phrase in lowered, f"missing attachment guidance phrase {phrase!r}"
+
+
+def test_secretary_chat_system_includes_attachment_guidance() -> None:
+    loader = PromptLoader()
+    out = loader.render("secretary", "chat.system")
+    _assert_inline_attachment_guidance(out)
+
+
+def test_equity_research_chat_system_includes_attachment_guidance() -> None:
+    loader = PromptLoader()
+    out = loader.render("equity_research", "chat.system")
+    _assert_inline_attachment_guidance(out)
+
+
+# Composer response-length picker. The Secretary system prompt must inject
+# an explicit length directive when the user has chosen "concise" or
+# "detailed", and must omit the section entirely for the default ("normal"
+# or unset) so the model uses its own discipline.
+
+
+def test_secretary_chat_system_omits_response_length_section_by_default() -> None:
+    loader = PromptLoader()
+    out = loader.render("secretary", "chat.system")
+    assert "## Response length" not in out
+
+
+def test_secretary_chat_system_omits_response_length_section_for_normal() -> None:
+    loader = PromptLoader()
+    out = loader.render("secretary", "chat.system", response_length="normal")
+    assert "## Response length" not in out
+
+
+def test_secretary_chat_system_injects_concise_directive() -> None:
+    loader = PromptLoader()
+    out = loader.render("secretary", "chat.system", response_length="concise")
+    assert "## Response length" in out
+    lowered = out.lower()
+    assert "short" in lowered or "concise" in lowered or "sentences" in lowered
+
+
+def test_secretary_chat_system_injects_detailed_directive() -> None:
+    loader = PromptLoader()
+    out = loader.render("secretary", "chat.system", response_length="detailed")
+    assert "## Response length" in out
+    lowered = out.lower()
+    assert "thorough" in lowered or "headings" in lowered

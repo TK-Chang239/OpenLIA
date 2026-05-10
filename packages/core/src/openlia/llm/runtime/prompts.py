@@ -95,6 +95,7 @@ class PromptLoader:
         merged = {
             "current_desk": DEPARTMENT_LABELS.get(department_id, department_id),
             "skills_menu": [],  # default; callers override
+            "response_length": None,  # default; callers override per-session
             **context,
         }
         template = self._env.from_string(template_src)

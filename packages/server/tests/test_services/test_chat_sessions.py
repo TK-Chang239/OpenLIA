@@ -78,6 +78,56 @@ def test_create_session_falls_back_to_empty_lists_when_no_prior_session(db_sessi
     row = svc.create_session(db_session, user_id=u.id, department="secretary", title="t")
     assert row.disabled_connector_ids == []
     assert row.disabled_skill_ids == []
+    assert row.response_length is None
+
+
+def test_create_session_inherits_response_length_from_last_session(db_session):
+    """The composer response-length picker carries to the next session in
+    the same department."""
+    u = _make_user(db_session, "rl-inh@example.com")
+    older = svc.create_session(db_session, user_id=u.id, department="secretary", title="old")
+    svc.set_session_response_length(
+        db_session,
+        session_id=older.id,
+        user_id=u.id,
+        response_length="concise",
+    )
+    new_row = svc.create_session(db_session, user_id=u.id, department="secretary", title="new")
+    assert new_row.response_length == "concise"
+
+
+def test_set_session_response_length_normal_clears_to_null(db_session):
+    """``"normal"`` is stored as ``NULL`` so the runtime treats it as
+    "no directive" without an extra branch."""
+    u = _make_user(db_session, "rl-norm@example.com")
+    row = svc.create_session(db_session, user_id=u.id, department="secretary", title="t")
+    svc.set_session_response_length(
+        db_session, session_id=row.id, user_id=u.id, response_length="detailed"
+    )
+    svc.set_session_response_length(
+        db_session, session_id=row.id, user_id=u.id, response_length="normal"
+    )
+    db_session.refresh(row)
+    assert row.response_length is None
+
+
+def test_set_session_response_length_rejects_unknown_value(db_session):
+    u = _make_user(db_session, "rl-bad@example.com")
+    row = svc.create_session(db_session, user_id=u.id, department="secretary", title="t")
+    with pytest.raises(ValueError):
+        svc.set_session_response_length(
+            db_session, session_id=row.id, user_id=u.id, response_length="huge"
+        )
+
+
+def test_set_session_response_length_rejects_other_users(db_session):
+    u1 = _make_user(db_session, "rl-owner@example.com")
+    u2 = _make_user(db_session, "rl-intruder@example.com")
+    row = svc.create_session(db_session, user_id=u1.id, department="secretary", title="t")
+    with pytest.raises(PermissionError):
+        svc.set_session_response_length(
+            db_session, session_id=row.id, user_id=u2.id, response_length="concise"
+        )
 
 
 def test_set_session_disabled_lists_persists_both(db_session):

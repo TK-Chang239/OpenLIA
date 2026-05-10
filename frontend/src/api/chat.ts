@@ -7,6 +7,8 @@ export type Department = DepartmentSlug;
 
 export type MessageRole = "user" | "assistant" | "system" | "tool";
 
+export type ResponseLength = "concise" | "normal" | "detailed";
+
 export interface ChatSession {
   id: string;
   department: DepartmentSlug;
@@ -17,6 +19,7 @@ export interface ChatSession {
   model_id?: string | null;
   disabled_connector_ids?: string[];
   disabled_skill_ids?: string[];
+  response_length?: ResponseLength | null;
 }
 
 export interface ChatMessage {
@@ -61,6 +64,7 @@ export const patchSession = (
     archived?: boolean;
     disabled_connector_ids?: string[];
     disabled_skill_ids?: string[];
+    response_length?: ResponseLength;
   },
 ) => fetchJson<{ ok: true }>(`/api/chat/sessions/${id}`, { method: "PATCH", json: patch });
 

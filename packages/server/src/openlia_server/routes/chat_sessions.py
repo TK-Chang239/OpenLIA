@@ -64,6 +64,7 @@ class SessionOut(BaseModel):
     model_id: str | None = None
     disabled_connector_ids: list[str] = Field(default_factory=list)
     disabled_skill_ids: list[str] = Field(default_factory=list)
+    response_length: str | None = None
 
 
 class SessionListOut(BaseModel):
@@ -96,6 +97,11 @@ class SessionPatchIn(BaseModel):
     archived: bool | None = None
     disabled_connector_ids: list[str] | None = None
     disabled_skill_ids: list[str] | None = None
+    # Composer response-length picker. ``None`` (key omitted) leaves the
+    # current value unchanged. To explicitly clear, send ``"normal"`` —
+    # the service treats ``"normal"`` and unset identically (no length
+    # directive injected into the system prompt).
+    response_length: str | None = None
 
 
 class SessionModelIn(BaseModel):
@@ -212,6 +218,13 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
                     user_id=user.id,
                     disabled_connector_ids=body.disabled_connector_ids,
                     disabled_skill_ids=body.disabled_skill_ids,
+                )
+            if body.response_length is not None:
+                svc.set_session_response_length(
+                    db,
+                    session_id=session_id,
+                    user_id=user.id,
+                    response_length=body.response_length,
                 )
         except PermissionError as exc:
             raise HTTPException(

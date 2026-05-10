@@ -108,15 +108,24 @@ async def route_tools(
         candidate_tools_json=_format_candidate_tools(candidate_tools),
     )
 
+    candidate_names = [t["name"] for t in candidate_tools]
+
     try:
         raw = await llm_client.generate_json(prompt=prompt)
     except Exception as exc:
+        # Issue #99: an empty fallback forces the model into escalation,
+        # which leads it to pull in irrelevant tools (e.g. firecrawl__parse)
+        # when something simpler — like reading inline attachment content —
+        # is already viable. Fall back to the full validated candidate pool
+        # instead so the main model has the same surface routing would have
+        # exposed on its best day.
         logger.warning(
-            "runtime router failed for dept %s; falling back to empty subset: %s",
+            "runtime router failed for dept %s; falling back to full candidate pool (%d tools): %s",
             department_id,
+            len(candidate_names),
             exc,
         )
-        return []
+        return list(candidate_names)
 
     proposed = _coerce_to_name_list(raw)
     valid_names = {t["name"] for t in candidate_tools}
@@ -133,6 +142,16 @@ async def route_tools(
                 department_id,
                 name,
             )
+    if not selected:
+        # Same reasoning as the exception branch: a malformed router output
+        # that produces zero valid names should fall back to the full pool.
+        logger.warning(
+            "runtime router for dept %s returned no valid names; falling back "
+            "to full candidate pool (%d tools)",
+            department_id,
+            len(candidate_names),
+        )
+        return list(candidate_names)
     return selected
 
 

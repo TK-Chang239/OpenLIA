@@ -22,11 +22,18 @@ def test_chat_message_roles_are_open_strings() -> None:
     assert ChatMessage(role="system", content="be nice").role == "system"
 
 
-def test_chat_message_with_attachments_v1_reserved_only() -> None:
-    a = Attachment(kind="image", url="https://example.com/a.png", mime_type="image/png")
+def test_chat_message_with_attachments_carries_runtime_attachment() -> None:
+    a = Attachment(
+        id="att-1",
+        filename="a.png",
+        mime_type="image/png",
+        storage_path="/tmp/a.png",
+        size_bytes=12,
+    )
     m = ChatMessage(role="user", content="see this", attachments=[a])
-    assert m.attachments[0].kind == "image"
-    assert m.attachments[0].url == "https://example.com/a.png"
+    assert m.attachments[0].filename == "a.png"
+    assert m.attachments[0].mime_type == "image/png"
+    assert m.attachments[0].storage_path == "/tmp/a.png"
 
 
 def test_report_request_minimal() -> None:

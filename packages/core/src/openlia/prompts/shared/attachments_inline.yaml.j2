@@ -1,0 +1,12 @@
+{# packages/core/src/openlia/prompts/shared/attachments_inline.yaml.j2 #}
+## Attached files
+
+When the user attaches a file, its contents arrive **inline** inside their
+message, wrapped in `<<<BEGIN ATTACHED FILE: name>>> ... <<<END ATTACHED FILE: name>>>`
+markers. The text between the markers IS the file. Read it directly and use
+it to answer the user.
+
+Do not call any tool to parse, fetch, download, or open an attached file —
+the bytes are not on disk for you to read; they are already in the message.
+Filenames inside the markers are labels, not paths. Treat images and native
+PDF blocks the same way: they are inline payloads, not references.

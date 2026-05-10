@@ -22,10 +22,11 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.events import ChatError, to_wire
+from openlia.llm.runtime.messages import Attachment as RuntimeAttachment
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
@@ -37,6 +38,11 @@ from openlia_server.db.models.content import ChatMessage
 from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.routes.chat_stream import _watch_disconnect
 from openlia_server.services import chat_sessions as chat_sessions_svc
+from openlia_server.services.attachments import (
+    FileUpload,
+    persist_attachments,
+    validate_uploads,
+)
 from openlia_server.services.secretary_chat_runner import (
     SaveReportToRepoError,
     build_secretary_persistence_handlers,
@@ -70,11 +76,13 @@ def build_secretary_router(
         user: User,
         message: str,
         session_id: str | None,
+        uploads: list[FileUpload] | None = None,
     ) -> StreamingResponse:
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         runner = factory()
         cancel_token = CancellationToken()
         messages = [RuntimeChatMessage(role="user", content=message)]
+        uploads = uploads or []
 
         dev_events.record(
             "chat.request",
@@ -90,6 +98,8 @@ def build_secretary_router(
         session_model_id: str | None = None
         disabled_connector_ids: tuple[str, ...] = ()
         disabled_skill_ids: tuple[str, ...] = ()
+        session_response_length: str | None = None
+        runtime_attachments: list[RuntimeAttachment] = []
         # Persist the user message immediately when a session is supplied.
         if session_id:
             from openlia_server.db.models.content import ChatSession as DbChatSession
@@ -99,9 +109,11 @@ def build_secretary_router(
                 session_model_id = row.model_id
                 disabled_connector_ids = tuple(row.disabled_connector_ids or ())
                 disabled_skill_ids = tuple(row.disabled_skill_ids or ())
+                session_response_length = row.response_length
+            user_message_id = str(uuid.uuid4())
             db.add(
                 ChatMessage(
-                    id=str(uuid.uuid4()),
+                    id=user_message_id,
                     session_id=session_id,
                     role="user",
                     content=message,
@@ -109,6 +121,21 @@ def build_secretary_router(
                 )
             )
             db.commit()
+            # Persist any uploaded attachments and surface them as runtime
+            # Attachment objects for the runner to materialize.
+            if uploads:
+                rows = persist_attachments(db, message_id=user_message_id, uploads=uploads)
+                runtime_attachments = [
+                    RuntimeAttachment(
+                        id=r.id,
+                        filename=r.filename,
+                        mime_type=r.mime_type,
+                        storage_path=r.storage_path,
+                        size_bytes=r.size_bytes,
+                        extracted_text=r.extracted_text,
+                    )
+                    for r in rows
+                ]
             # Auto-title the session from the first user message — no-op once
             # the title is something other than the default "New chat".
             try:
@@ -132,10 +159,12 @@ def build_secretary_router(
                     department_id="secretary",
                     user_id=user.id,
                     messages=messages,
+                    attachments=runtime_attachments or None,
                     cancel_token=cancel_token,
                     model_id_override=session_model_id,
                     disabled_connector_ids=disabled_connector_ids,
                     disabled_skill_ids=disabled_skill_ids,
+                    response_length=session_response_length,
                 ):
                     wire = to_wire(event)
                     etype = wire["type"]
@@ -263,13 +292,58 @@ def build_secretary_router(
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
         )
 
-    @router.post("/chat")
+    @router.post("/chat", response_model=None)
     async def post_chat(
-        payload: SecretaryChatPayload,
         request: Request,
         user: User = require_user,
         db: DBSession = Depends(session_dep),
-    ) -> StreamingResponse:
+    ) -> StreamingResponse | JSONResponse:
+        """Dual-mode: ``application/json`` keeps the legacy ``{message,
+        session_id}`` shape; ``multipart/form-data`` adds a ``files[]`` array
+        for composer attachments. Validation failures on the multipart path
+        return 4xx JSON before the SSE stream opens (atomic-at-send)."""
+        content_type = request.headers.get("content-type", "")
+        is_form = content_type.startswith("multipart/form-data") or content_type.startswith(
+            "application/x-www-form-urlencoded"
+        )
+        if is_form:
+            form = await request.form()
+            message = (form.get("message") or "").strip()
+            if not message:
+                return JSONResponse({"detail": "message must not be empty"}, status_code=400)
+            session_id = form.get("session_id") or None
+            uploads: list[FileUpload] = []
+            for upload in form.getlist("files"):
+                if not hasattr(upload, "read"):
+                    continue
+                content = await upload.read()
+                uploads.append(
+                    FileUpload(
+                        filename=upload.filename or "unnamed",
+                        mime_type=upload.content_type or "application/octet-stream",
+                        content=content,
+                    )
+                )
+            errors = validate_uploads(uploads)
+            if errors:
+                return JSONResponse(
+                    {"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
+                    status_code=400,
+                )
+            return await _stream(
+                request=request,
+                db=db,
+                user=user,
+                message=message,
+                session_id=session_id,
+                uploads=uploads,
+            )
+        # JSON path (legacy)
+        body = await request.json()
+        try:
+            payload = SecretaryChatPayload.model_validate(body)
+        except Exception as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422)
         return await _stream(
             request=request,
             db=db,
