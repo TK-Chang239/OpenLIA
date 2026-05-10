@@ -206,6 +206,7 @@ class RefreshingChatRunner:
         disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
         disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
         response_length: str | None = None,
+        memory_block: str | None = None,
     ):
         db = self._factory()
         try:
@@ -228,6 +229,7 @@ class RefreshingChatRunner:
                 model_id_override=model_id_override,
                 disabled_skill_ids=frozenset(disabled_skill_ids),
                 response_length=response_length,
+                memory_block=memory_block,
             ):
                 yield event
         finally:

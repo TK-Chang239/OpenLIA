@@ -168,6 +168,7 @@ def build_chat_system_prompt(
     loader: PromptLoader | None = None,
     disabled_skill_ids: frozenset[str] = frozenset(),
     response_length: str | None = None,
+    memory_block: str | None = None,
 ) -> str:
     """Render the chat.system slot with the user's visible skills menu.
 
@@ -178,6 +179,12 @@ def build_chat_system_prompt(
     `response_length` is the per-session composer choice; ``"concise"`` or
     ``"detailed"`` injects an explicit length directive into the system
     prompt, ``None``/``"normal"`` leaves the default discipline alone.
+
+    `memory_block` is a pre-rendered cross-session memory snippet
+    (slice 13). Server callers compute it via
+    ``graph_retrieval.retrieve_memory_block`` from the live user
+    message; ``None`` emits nothing so per-turn token cost stays zero
+    when nothing is relevant.
     """
     loader = loader or PromptLoader()
     visible = registry.visible(
@@ -201,6 +208,7 @@ def build_chat_system_prompt(
         "chat.system",
         skills_menu=skills_menu,
         response_length=response_length,
+        memory_block=memory_block,
     )
 
 
@@ -284,6 +292,7 @@ class ChatRunner:
         model_id_override: str | None = None,
         disabled_skill_ids: frozenset[str] = frozenset(),
         response_length: str | None = None,
+        memory_block: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -340,6 +349,7 @@ class ChatRunner:
             loader=self._prompts,
             disabled_skill_ids=disabled_skill_ids,
             response_length=response_length,
+            memory_block=memory_block,
         )
         self._trace(
             "llm.resolved",
