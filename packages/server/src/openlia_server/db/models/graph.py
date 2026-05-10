@@ -19,6 +19,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     ForeignKey,
     Index,
     Integer,
@@ -40,6 +41,12 @@ class GraphEntity(Base, TimestampMixin):
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     value: Mapped[str] = mapped_column(String(96), nullable=False)
     props: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    is_trigger_disabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="0",
+    )
 
     __table_args__ = (
         UniqueConstraint("kind", "value", name="uq_graph_entities_kind_value"),
@@ -203,4 +210,39 @@ class GraphArtifactSummary(Base, TimestampMixin):
             name="uq_graph_artifact_summaries_user_artifact",
         ),
         Index("ix_graph_artifact_summaries_user_id", "user_id"),
+    )
+
+
+class GraphExtractionRun(Base):
+    """Slice 4 — audit row for one nightly graph-extraction invocation.
+
+    Watermark for "new since last run" = the latest ``started_at`` across
+    rows where ``error IS NULL`` AND ``finished_at IS NOT NULL`` for a
+    user. Failed runs do not advance the watermark; the next attempt
+    will re-cover that window.
+    """
+
+    __tablename__ = "graph_extraction_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        # Aware UTC; project base uses UTCDateTime via type_annotation_map.
+        # Declared explicitly so Mapped[datetime] picks up the right column type.
+        nullable=False,
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    model_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    proposals_inserted: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    sessions_processed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    error: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+    __table_args__ = (
+        Index("ix_graph_extraction_runs_user_id_started_at", "user_id", "started_at"),
     )

@@ -1,15 +1,20 @@
-"""Cross-session memory retrieval (slice 11).
+"""Cross-session memory retrieval (slices 11, 13).
 
 Deterministic, no-LLM entity extraction + 1-hop graph traversal that
-produces the memory block injected into the Secretary system prompt
-(slice 13). Designed to be cheap enough to run on every chat turn:
+produces the memory block injected into the Secretary system prompt.
+Designed to be cheap enough to run on every chat turn.
 
-1. Tokenize the user's message; collect uppercase 1-5 letter candidates.
-2. Filter against ``graph_entities`` so unknown tokens (``FYI``,
-   ``TODO``) don't trigger empty traversals.
-3. Pull every confirmed ``UserConstruct`` whose ``entity_id`` matches.
-4. Render under a token-rough character budget so the system prompt
-   doesn't balloon when a user has hundreds of beliefs about one ticker.
+Two extraction paths:
+
+1. **Construct-anchored substring match (primary, slice 13)** —
+   for every entity the caller has at least one ``confirmed``
+   UserConstruct against, case-insensitive substring match against the
+   message. Skips entities with ``value`` ≤3 chars (false-positive
+   floor) and entities flagged ``is_trigger_disabled`` (user opt-out
+   for over-eager matchers like an ``ai`` theme).
+2. **Uppercase ticker regex (fallback, slice 11)** — preserved so the
+   first-ever mention of a known ticker still resolves even when the
+   user has no construct anchored to it yet.
 
 Vector recall (slice 12) is a separate entry point and is invoked by
 the model via a tool — not here on the hot path.
@@ -27,6 +32,7 @@ from openlia_server.db.models.graph import GraphEntity, GraphUserConstruct
 _TICKER_CANDIDATE = re.compile(r"\$?[A-Z][A-Z0-9]{0,4}\b")
 _MAX_CHARS = 1500
 _MAX_CONSTRUCTS_PER_ENTITY = 3
+_MIN_VALUE_LEN = 4  # values <= 3 chars false-positive everywhere
 
 
 def extract_entity_ids(
@@ -35,26 +41,54 @@ def extract_entity_ids(
     user_id: str,
     text: str,
 ) -> list[str]:
-    """Return canonical entity IDs (e.g. ``"ticker:NVDA"``) referenced
-    in ``text``. Filters against the graph so unknown uppercase tokens
-    don't trigger downstream traversals.
+    """Return canonical entity IDs (e.g. ``"ticker:NVDA"``,
+    ``"theme:ai-capex"``) referenced in ``text``.
 
-    ``user_id`` is reserved for future filtering (e.g. private themes
-    shouldn't trigger from other users' chat); today it's accepted but
-    not used since entities are global.
+    Primary path: case-insensitive substring match against every entity
+    the caller has a confirmed UserConstruct against. Secondary path:
+    uppercase-ticker regex against all ticker entities for the
+    no-construct case (keeps slice-11 behavior for first-ever mentions).
+    Results are deduplicated and sorted.
     """
-    _ = user_id
+    text_lower = text.lower()
+    matched: set[str] = set()
+
+    # Primary: substring match against construct-anchored entities for
+    # this user. ``distinct`` avoids returning the same entity once per
+    # construct.
+    anchored_stmt = (
+        select(GraphEntity.id, GraphEntity.value, GraphEntity.is_trigger_disabled)
+        .join(GraphUserConstruct, GraphUserConstruct.entity_id == GraphEntity.id)
+        .where(
+            GraphUserConstruct.user_id == user_id,
+            GraphUserConstruct.status == "confirmed",
+        )
+        .distinct()
+    )
+    for entity_id, value, trigger_disabled in db.execute(anchored_stmt):
+        if trigger_disabled:
+            continue
+        if len(value) < _MIN_VALUE_LEN:
+            continue
+        if value.lower() in text_lower:
+            matched.add(entity_id)
+
+    # Fallback: uppercase ticker regex. Keeps the slice-11 behavior so a
+    # user's first-ever ``NVDA`` mention resolves even without an
+    # anchored construct yet.
     raw_candidates: set[str] = set()
     for match in _TICKER_CANDIDATE.findall(text):
         raw_candidates.add(match.lstrip("$").upper())
-    if not raw_candidates:
-        return []
+    if raw_candidates:
+        ticker_stmt = select(GraphEntity.id).where(
+            GraphEntity.kind == "ticker",
+            GraphEntity.value.in_(raw_candidates),
+            GraphEntity.is_trigger_disabled.is_(False),
+        )
+        for entity_id in db.execute(ticker_stmt).scalars():
+            matched.add(entity_id)
 
-    stmt = select(GraphEntity.id).where(
-        GraphEntity.kind == "ticker",
-        GraphEntity.value.in_(raw_candidates),
-    )
-    return sorted(db.execute(stmt).scalars())
+    return sorted(matched)
 
 
 def retrieve_memory_block(
