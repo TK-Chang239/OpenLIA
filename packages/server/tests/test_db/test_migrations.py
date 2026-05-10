@@ -84,6 +84,8 @@ EXPECTED_TABLES = {
     # --- Cross-session memory graph (slice 1) ---
     "graph_entities",
     "graph_edges",
+    # --- Cross-session memory graph (slice 5) ---
+    "graph_user_constructs",
 }
 
 

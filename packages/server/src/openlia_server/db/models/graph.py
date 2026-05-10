@@ -19,9 +19,11 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    ForeignKey,
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -72,4 +74,40 @@ class GraphEdge(Base):
             "dst_id",
             "edge_type",
         ),
+    )
+
+
+class GraphUserConstruct(Base, TimestampMixin):
+    """User-stated belief or position anchored to an entity (slice 5).
+
+    ``status`` lifecycle: ``proposed`` (extracted by slice-6 LLM, awaiting
+    user confirmation) → ``confirmed`` (visible in retrieval) | ``rejected``
+    (tombstone so the same statement isn't re-proposed). Constructs created
+    via the explicit user-facing API short-circuit to ``confirmed``.
+
+    ``entity_id`` is the canonical ``"kind:value"`` string (e.g.
+    ``"ticker:NVDA"``) — a foreign key into ``graph_entities`` so deletes
+    cascade if an entity is ever pruned.
+    """
+
+    __tablename__ = "graph_user_constructs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="confirmed")
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("graph_entities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    provenance: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+    __table_args__ = (
+        Index("ix_graph_user_constructs_user_id", "user_id"),
+        Index("ix_graph_user_constructs_entity_id", "entity_id"),
+        Index("ix_graph_user_constructs_user_id_status", "user_id", "status"),
     )
