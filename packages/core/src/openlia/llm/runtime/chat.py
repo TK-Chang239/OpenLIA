@@ -509,9 +509,7 @@ class ChatRunner:
             for c in response.tool_calls:
                 if c.name == "load_skill":
                     load_skill_calls.append(c)
-                elif (
-                    c.name == RECALL_ARTIFACTS_TOOL_NAME and self._recall_artifacts is not None
-                ):
+                elif c.name == RECALL_ARTIFACTS_TOOL_NAME and self._recall_artifacts is not None:
                     recall_calls.append(c)
                 else:
                     other_calls.append(c)
@@ -564,9 +562,7 @@ class ChatRunner:
                 except asyncio.CancelledError:
                     return
 
-            results: list[ToolCallResult] = (
-                load_skill_results + recall_results + other_results
-            )
+            results: list[ToolCallResult] = load_skill_results + recall_results + other_results
 
             for r in results:
                 yield ChatToolCallResult(
@@ -951,10 +947,7 @@ class ChatRunner:
                     )
                     continue
 
-                if (
-                    call.name == RECALL_ARTIFACTS_TOOL_NAME
-                    and self._recall_artifacts is not None
-                ):
+                if call.name == RECALL_ARTIFACTS_TOOL_NAME and self._recall_artifacts is not None:
                     raw_args = (
                         call.arguments
                         if isinstance(call.arguments, dict)

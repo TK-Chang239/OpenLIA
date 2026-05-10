@@ -56,8 +56,7 @@ RECALL_ARTIFACTS_SCHEMA = ToolSchema(
             "top_k": {
                 "type": "integer",
                 "description": (
-                    f"Maximum number of matches to return (1..{MAX_TOP_K}). "
-                    "Defaults to 5."
+                    f"Maximum number of matches to return (1..{MAX_TOP_K}). Defaults to 5."
                 ),
                 "minimum": 1,
                 "maximum": MAX_TOP_K,

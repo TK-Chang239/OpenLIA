@@ -45,6 +45,10 @@ export type ChatStreamEvent =
   | {
       type: "chat.skill_loaded";
       data: { skill_id: string; display_name: string };
+    }
+  | {
+      type: "chat.memory_block";
+      data: { message_id: string; block: string | null };
     };
 
 export type StreamStatus =
@@ -69,6 +73,10 @@ export interface StreamState {
   reportThumbnails: Array<{ report_id: string; filename: string }>;
   flagChips: Array<{ category: string; text: string }>;
   skillLoads: Array<{ skillId: string; displayName: string }>;
+  /** Cross-session memory block injected into the system prompt for this
+   *  turn (rendered ``## Memory`` markdown). Null when the backend chose
+   *  not to inject anything, undefined until the first event fires. */
+  memoryBlock: string | null | undefined;
   errorMessage: string | null;
   /** Wall-clock timestamp (ms since epoch) when the SEND action was
    *  dispatched. null until the next send. Internal — used to compute
@@ -90,6 +98,7 @@ const INITIAL: StreamState = {
   reportThumbnails: [],
   flagChips: [],
   skillLoads: [],
+  memoryBlock: undefined,
   errorMessage: null,
   startedAt: null,
   latencyMs: null,
@@ -248,6 +257,8 @@ function reducer(state: StreamState, action: Action): StreamState {
           { skillId: ev.data.skill_id, displayName: ev.data.display_name },
         ],
       };
+    case "chat.memory_block":
+      return { ...state, memoryBlock: ev.data.block };
     default:
       return state;
   }
@@ -263,6 +274,7 @@ const KNOWN_EVENT_TYPES: ReadonlyArray<ChatStreamEvent["type"]> = [
   "chat.error",
   "chat.guardrail",
   "chat.skill_loaded",
+  "chat.memory_block",
 ];
 
 interface Options {

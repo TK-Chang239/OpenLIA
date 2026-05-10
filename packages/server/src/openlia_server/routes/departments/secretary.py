@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
-from openlia.llm.runtime.events import ChatError, to_wire
+from openlia.llm.runtime.events import ChatError, ChatMemoryBlock, to_wire
 from openlia.llm.runtime.messages import Attachment as RuntimeAttachment
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from pydantic import BaseModel, Field
@@ -182,6 +182,16 @@ def build_secretary_router(
                             "stream started",
                             {"message_id": wire.get("message_id")},
                         )
+                        # Surface the cross-session memory block to the FE
+                        # drawer — once per turn, right after chat.start so
+                        # the frontend can associate it with this message_id.
+                        yield _sse_frame(wire)
+                        memory_event = ChatMemoryBlock(
+                            message_id=str(wire.get("message_id") or ""),
+                            block=memory_block,
+                        )
+                        yield _sse_frame(to_wire(memory_event))
+                        continue
                     elif etype == "chat.tool_call.start":
                         dev_events.record(
                             "chat.tool_call",
