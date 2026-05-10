@@ -150,6 +150,9 @@ class UserPrefs(Base):
     timezone_source: Mapped[str] = mapped_column(
         String(8), nullable=False, default="auto", server_default="auto"
     )
+    graph_extraction_time: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="03:00", server_default="03:00"
+    )
 
 
 class UserDepartmentModelPref(Base, TimestampMixin):

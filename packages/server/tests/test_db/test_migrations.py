@@ -90,6 +90,8 @@ EXPECTED_TABLES = {
     "graph_extraction_proposals",
     # --- Cross-session memory graph (slice 10) ---
     "graph_artifact_summaries",
+    # --- Graph memory runtime spec (slice 4) ---
+    "graph_extraction_runs",
 }
 
 
