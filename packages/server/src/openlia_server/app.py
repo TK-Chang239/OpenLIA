@@ -721,6 +721,10 @@ def create_app(
 
     app.include_router(build_chat_sessions_router(db_session_factory=factory, mode=mode))
 
+    from openlia_server.routes.graph import build_graph_router
+
+    app.include_router(build_graph_router(db_session_factory=factory, mode=mode))
+
     from openlia_server.routes.dev import build_dev_router
 
     app.include_router(build_dev_router())
