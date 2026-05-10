@@ -374,6 +374,25 @@ def _make_lifespan(
                 except (ValueError, RuntimeError, LookupError):
                     log.exception("MR schedule rehydration failed (continuing startup)")
 
+                # Slice 6 (graph memory runtime): nightly extraction
+                # job per user. Reads user_prefs.timezone +
+                # user_prefs.graph_extraction_time.
+                try:
+                    from openlia_server.services import (
+                        graph_extraction_rehydrate as _ge_rehydrate,
+                    )
+
+                    await _ge_rehydrate.rehydrate_all(
+                        session_factory=_sm,
+                        scheduler_control=scheduler_svc.scheduler,
+                        callback=scheduler_svc._run_job,
+                    )
+                except (ValueError, RuntimeError, LookupError):
+                    log.exception(
+                        "graph extraction schedule rehydration failed "
+                        "(continuing startup)"
+                    )
+
                 app.state.scheduler = scheduler_svc
                 app.state.mr_schedule_service = mr_schedule_svc_lifespan
 
