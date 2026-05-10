@@ -74,6 +74,21 @@ def update(
     return prefs
 
 
+_HHMM_RE = __import__("re").compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def set_graph_extraction_time(db: Session, *, user_id: str, time: str) -> UserPrefs:
+    """Set the user-preferred wall-clock time (in their timezone) at
+    which the nightly graph-extraction job runs. ``time`` is ``"HH:MM"``
+    24-hour. Invalid input raises ``ValueError``."""
+    if not _HHMM_RE.match(time):
+        raise ValueError(f"invalid HH:MM time: {time!r}")
+    prefs = get_or_create(db, user_id=user_id)
+    prefs.graph_extraction_time = time
+    db.flush()
+    return prefs
+
+
 def set_timezone(
     db: Session,
     *,
