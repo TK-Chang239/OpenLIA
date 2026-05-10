@@ -103,6 +103,14 @@ def build_chat_stream_router(
         rows = svc.list_messages(db, session_id=session_id, user_id=user.id)
         messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows]
 
+        # Cross-session memory: compute auto-injectable block from the live
+        # user message. Deterministic + entity-filtered, near-zero cost when
+        # nothing matches. Applies to every chat-style department on this
+        # unified endpoint, not just Secretary.
+        from openlia_server.services import graph_retrieval
+
+        memory_block = graph_retrieval.retrieve_memory_block(db, user_id=user.id, message=q)
+
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         persist = _Persistence(db_session_factory=db_session_factory, session_id=session_id)
 
@@ -120,6 +128,7 @@ def build_chat_stream_router(
                 model_id_override=session_row.model_id,
                 disabled_connector_ids=tuple(session_row.disabled_connector_ids or ()),
                 disabled_skill_ids=tuple(session_row.disabled_skill_ids or ()),
+                memory_block=memory_block,
             ),
             media_type="text/event-stream",
         )
@@ -198,6 +207,7 @@ async def _event_source(
     model_id_override: str | None = None,
     disabled_connector_ids: tuple[str, ...] = (),
     disabled_skill_ids: tuple[str, ...] = (),
+    memory_block: str | None = None,
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
@@ -219,6 +229,7 @@ async def _event_source(
             model_id_override=model_id_override,
             disabled_connector_ids=disabled_connector_ids,
             disabled_skill_ids=disabled_skill_ids,
+            memory_block=memory_block,
         ):
             wire = to_wire(event)
             etype = wire["type"]
