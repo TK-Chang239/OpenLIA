@@ -108,3 +108,79 @@ def test_artifact_summary_scoped_per_user(db_session) -> None:
     rows_u2 = graph_vectors.list_artifact_summaries(db_session, user_id="u-2")
     assert len(rows_u1) == 1 and rows_u1[0].summary_text == "alice's summary"
     assert len(rows_u2) == 1 and rows_u2[0].summary_text == "bob's summary"
+
+
+def test_recall_artifacts_returns_most_similar_summary_first(db_session) -> None:
+    """Slice 12: brute-force cosine search ranks the artifact whose
+    summary embedding most closely matches the query vector. Since the
+    fake provider is deterministic, embedding the same text twice gives
+    identical vectors (cosine == 1.0) — so the artifact whose summary
+    matches the query verbatim must rank first."""
+    provider = FakeEmbeddingProvider(dim=32)
+
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-a",
+        summary_text="NVDA Q3 earnings beat on services margin",
+        provider=provider,
+        model_name="fake-d32",
+    )
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-b",
+        summary_text="totally unrelated content about coffee",
+        provider=provider,
+        model_name="fake-d32",
+    )
+
+    hits = graph_vectors.recall_artifacts(
+        db_session,
+        user_id="u-1",
+        query_text="NVDA Q3 earnings beat on services margin",
+        provider=provider,
+        top_k=2,
+    )
+
+    assert len(hits) == 2
+    top, score = hits[0]
+    assert top.artifact_id == "rep-a"
+    assert score == pytest.approx(1.0, abs=1e-4)
+
+
+def test_recall_artifacts_filters_to_user(db_session) -> None:
+    """No matter how close another user's summary is, it must not leak
+    into Alice's recall."""
+    provider = FakeEmbeddingProvider(dim=16)
+
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-2",
+        artifact_kind="report",
+        artifact_id="rep-bob",
+        summary_text="exact match string",
+        provider=provider,
+        model_name="fake-d16",
+    )
+    graph_vectors.upsert_artifact_summary(
+        db_session,
+        user_id="u-1",
+        artifact_kind="report",
+        artifact_id="rep-alice",
+        summary_text="alice's only summary",
+        provider=provider,
+        model_name="fake-d16",
+    )
+
+    hits = graph_vectors.recall_artifacts(
+        db_session,
+        user_id="u-1",
+        query_text="exact match string",
+        provider=provider,
+        top_k=5,
+    )
+
+    assert [h[0].artifact_id for h in hits] == ["rep-alice"]

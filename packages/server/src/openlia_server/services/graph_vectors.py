@@ -98,3 +98,49 @@ def list_artifact_summaries(
 ) -> list[GraphArtifactSummary]:
     stmt = select(GraphArtifactSummary).where(GraphArtifactSummary.user_id == user_id)
     return list(db.execute(stmt).scalars())
+
+
+def recall_artifacts(
+    db: Session,
+    *,
+    user_id: str,
+    query_text: str,
+    provider: EmbeddingProvider,
+    top_k: int = 5,
+) -> list[tuple[GraphArtifactSummary, float]]:
+    """Brute-force cosine ranking of artifact summaries vs. the query.
+
+    Loads every summary for the user, decodes each BLOB once, computes
+    cosine similarity, and returns the top-K ``(row, score)`` pairs
+    descending. Rows whose ``embedding_model`` differs from the
+    provider's current model are skipped — they were embedded with a
+    different dim and a comparison would either crash or lie.
+    """
+    import numpy as np
+
+    rows = list_artifact_summaries(db, user_id=user_id)
+    if not rows:
+        return []
+
+    [q_vec] = provider.embed([query_text])
+    q = np.asarray(q_vec, dtype=np.float32)
+    q_norm = float(np.linalg.norm(q))
+    if q_norm == 0.0:
+        return []
+
+    scored: list[tuple[GraphArtifactSummary, float]] = []
+    for row in rows:
+        if row.embedding is None:
+            continue
+        # ``frombuffer`` is zero-copy when the BLOB byte length matches.
+        v = np.frombuffer(row.embedding, dtype=np.float32)
+        if v.shape[0] != provider.dim:
+            continue
+        v_norm = float(np.linalg.norm(v))
+        if v_norm == 0.0:
+            continue
+        score = float(np.dot(q, v) / (q_norm * v_norm))
+        scored.append((row, score))
+
+    scored.sort(key=lambda r: r[1], reverse=True)
+    return scored[:top_k]
