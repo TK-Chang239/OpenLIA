@@ -81,6 +81,9 @@ EXPECTED_TABLES = {
     "report_tool_usage",
     # --- Per-(user, dept) model preference (model picker) ---
     "user_department_model_prefs",
+    # --- Cross-session memory graph (slice 1) ---
+    "graph_entities",
+    "graph_edges",
 }
 
 
