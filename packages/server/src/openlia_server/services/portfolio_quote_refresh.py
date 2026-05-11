@@ -121,7 +121,6 @@ def refresh_due_quotes(
     provider: QuoteProvider,
     now_utc: datetime,
     min_cadence_seconds: int | None = None,
-    ignore_cadence: bool = False,
 ) -> RefreshResult:
     """Fetch and upsert quotes for any ticker that has aged past its cadence.
 
@@ -134,13 +133,6 @@ def refresh_due_quotes(
       - tickers fresher than their cadence floor (cache-hit)
       - tickers whose home market is closed AND whose existing quote is
         younger than 72h (covers normal weekends)
-
-    ``ignore_cadence=True`` disables the freshness gate so the caller writes
-    a fresh tick regardless of how recent the last quote is. The closed-market
-    gate is unchanged — closed sessions still suppress fetches. Used by the
-    */15 intraday cron whose whole purpose is dense intraday rows, so the
-    user's hourly/daily cadence floor would otherwise block every sub-hour
-    fire.
 
     Provider errors degrade per-ticker without aborting the rest of the tick.
     """
@@ -159,7 +151,7 @@ def refresh_due_quotes(
         row = cached.get(ticker)
         age = now_utc - row.fetched_at if row is not None else None
 
-        if not ignore_cadence and age is not None and age.total_seconds() < effective_cadence:
+        if age is not None and age.total_seconds() < effective_cadence:
             skipped_fresh += 1
             continue
 

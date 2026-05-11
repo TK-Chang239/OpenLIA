@@ -116,12 +116,11 @@ async def test_executor_records_job_run(db_session, session_factory) -> None:
 
 
 @pytest.mark.asyncio
-async def test_intraday_schedule_id_bypasses_cadence_floor(db_session, session_factory) -> None:
-    """When the executor receives schedule_id='intraday' (set by the */15
-    sub-hour cron registration), it must fetch and write a tick even when the
-    previous quote is younger than the cadence floor. This is what allows the
-    1D chart to accumulate intraday points during open market while still
-    respecting the user's coarser cadence for the top-of-hour cron."""
+async def test_intraday_schedule_id_honors_cadence_floor(db_session, session_factory) -> None:
+    """The */15 sub-hour cron fires every 15 minutes but honors the per-ticker
+    cadence floor. A user on an hourly floor skips-fresh on sub-hour fires that
+    land inside the window; only users whose floor is <= the fire spacing (the
+    15min cadence) accumulate intraday rows on every fire."""
     from datetime import timedelta
 
     from openlia_server.db.models.content import PortfolioQuoteIntraday
@@ -133,8 +132,6 @@ async def test_intraday_schedule_id_bypasses_cadence_floor(db_session, session_f
 
     _seed_holding(db_session, "AAPL")
     now = datetime(2026, 5, 12, 14, 30, tzinfo=UTC)  # Tue 10:30 ET, market open
-    # Seed a cached quote that is only 10 min old — fresher than the 1h
-    # cadence floor, so a vanilla fire would skip.
     quotes_svc.upsert_quote(
         db_session,
         ticker="AAPL",
@@ -159,14 +156,14 @@ async def test_intraday_schedule_id_bypasses_cadence_floor(db_session, session_f
 
     await executor.execute(user_id=None, schedule_id="intraday")
 
-    assert provider.called == ["AAPL"]
+    assert provider.called == []
     with session_factory() as s:
         rows = (
             s.execute(select(PortfolioQuoteIntraday).where(PortfolioQuoteIntraday.ticker == "AAPL"))
             .scalars()
             .all()
         )
-    assert len(rows) == 1
+    assert rows == []
 
 
 @pytest.mark.asyncio

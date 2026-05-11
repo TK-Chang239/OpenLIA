@@ -303,22 +303,18 @@ def test_closed_market_subhour_ticks_do_not_accumulate_intraday_rows(
     assert rows == [], "no intraday rows should be written during a closed session"
 
 
-def test_ignore_cadence_writes_intraday_during_open_market_within_cadence(
+def test_subhour_fires_honor_cadence_floor_within_window(
     create_tables, db_session: Session
 ) -> None:
-    """The */15 intraday cron must write a fresh intraday tick even when the
-    last cached quote is younger than the user's cadence floor. Otherwise the
-    1D chart cannot accumulate ticks faster than the hourly/daily cadence
-    chosen by the user. The closed-market gate still suppresses fetches when
-    the home market is closed."""
+    """The */15 intraday cron honors the per-ticker cadence floor: a user on
+    the hourly cadence does not accumulate sub-hour intraday rows. The next
+    sub-hour fire skips-fresh until the floor elapses."""
     from openlia_server.db.models.content import PortfolioQuoteIntraday
     from openlia_server.services import portfolio_quotes as quotes_svc
     from openlia_server.services.portfolio_quote_refresh import refresh_due_quotes
     from sqlalchemy import select
 
     _create_holding(db_session, user_id="u1", ticker="AAPL")
-    # Cadence floor for u1 is "hourly" (default unless prefs say otherwise).
-    # Cached quote 10 min old — well within the 1h cadence floor.
     open_market = datetime(2026, 5, 11, 14, 30, tzinfo=UTC)  # Mon 10:30 ET
     quotes_svc.upsert_quote(
         db_session,
@@ -341,12 +337,11 @@ def test_ignore_cadence_writes_intraday_during_open_market_within_cadence(
         provider=provider,
         now_utc=open_market,
         min_cadence_seconds=3600,
-        ignore_cadence=True,
     )
 
-    assert provider.called == ["AAPL"], "ignore_cadence must bypass the freshness gate"
-    assert result.fetched == 1
-    assert result.skipped_fresh == 0
+    assert provider.called == [], "cadence floor must gate sub-hour fires"
+    assert result.fetched == 0
+    assert result.skipped_fresh == 1
     rows = (
         db_session.execute(
             select(PortfolioQuoteIntraday).where(PortfolioQuoteIntraday.ticker == "AAPL")
@@ -354,19 +349,21 @@ def test_ignore_cadence_writes_intraday_during_open_market_within_cadence(
         .scalars()
         .all()
     )
-    assert len(rows) == 1
+    assert rows == []
 
 
-def test_ignore_cadence_still_respects_closed_market_gate(
+def test_subhour_fires_write_when_cadence_is_15min(
     create_tables, db_session: Session
 ) -> None:
-    """ignore_cadence flips the freshness gate off but must leave the
-    closed-market gate intact so weekend ticks don't poll a dead session."""
+    """Users opting into the 15min cadence get a sub-hour intraday tick on
+    every */15 fire (the 900s floor elapses between fires)."""
+    from openlia_server.db.models.content import PortfolioQuoteIntraday
     from openlia_server.services import portfolio_quotes as quotes_svc
     from openlia_server.services.portfolio_quote_refresh import refresh_due_quotes
+    from sqlalchemy import select
 
     _create_holding(db_session, user_id="u1", ticker="AAPL")
-    saturday = datetime(2026, 5, 16, 15, 0, tzinfo=UTC)
+    open_market = datetime(2026, 5, 11, 14, 30, tzinfo=UTC)
     quotes_svc.upsert_quote(
         db_session,
         ticker="AAPL",
@@ -377,19 +374,26 @@ def test_ignore_cadence_still_respects_closed_market_gate(
         day_low=None,
         volume=None,
         currency="USD",
-        quote_at=saturday - timedelta(hours=10),
-        fetched_at=saturday - timedelta(hours=10),
+        quote_at=open_market - timedelta(minutes=16),
+        fetched_at=open_market - timedelta(minutes=16),
         source="fake",
     )
 
-    provider = _RecordingProvider({"AAPL": Decimal("999")})
+    provider = _RecordingProvider({"AAPL": Decimal("101")})
     result = refresh_due_quotes(
         db_session,
         provider=provider,
-        now_utc=saturday,
-        min_cadence_seconds=3600,
-        ignore_cadence=True,
+        now_utc=open_market,
+        min_cadence_seconds=900,
     )
 
-    assert provider.called == []
-    assert result.skipped_market_closed == 1
+    assert provider.called == ["AAPL"]
+    assert result.fetched == 1
+    rows = (
+        db_session.execute(
+            select(PortfolioQuoteIntraday).where(PortfolioQuoteIntraday.ticker == "AAPL")
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 1

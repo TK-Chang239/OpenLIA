@@ -55,18 +55,12 @@ class PortfolioPriceRefreshExecutor(BaseExecutor):
         cancel_token: CancellationToken | None,
     ) -> JobOutcome:
         now = self._clock()
-        # The intraday cron registers itself with schedule_id="intraday" so we
-        # can bypass the cadence floor for sub-hour fires whose whole purpose
-        # is dense intraday rows. Top-of-hour / post-close / wake-up fires
-        # pass schedule_id=None and keep cadence semantics.
-        ignore_cadence = schedule_id == "intraday"
         with self._session_factory() as session:
             result = refresh_due_quotes(
                 session,
                 provider=self._provider,
                 now_utc=now,
                 min_cadence_seconds=self._min_cadence_seconds,
-                ignore_cadence=ignore_cadence,
             )
         return JobOutcome(
             result_summary={
