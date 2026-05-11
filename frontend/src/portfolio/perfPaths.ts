@@ -229,9 +229,15 @@ export function xAxisLabels(range: PerfRange): readonly string[] {
       return ["Mon", "Tue", "Wed", "Thu", "Fri"];
     case "1M":
       return ["Wk 1", "Wk 2", "Wk 3", "Wk 4"];
+    case "3M":
+      return ["M-3", "M-2", "M-1", "Now"];
+    case "6M":
+      return ["M-6", "M-4", "M-2", "Now"];
     case "YTD":
       return ["Jan", "Mar", "May", "Jul", "Sep", "Nov"];
-    case "ALL":
+    case "1Y":
+      return ["Q1", "Q2", "Q3", "Q4"];
+    case "5Y":
       return ["'22", "'23", "'24", "'25", "'26"];
   }
 }

@@ -30,6 +30,7 @@ from openlia_server.scheduler.recovery import (
 )
 from openlia_server.scheduler.registry import (
     MAINTENANCE_JOB_KEY,
+    PORTFOLIO_PRICE_REFRESH_KEY,
     JobType,
     department_for_job_type,
     job_key,
@@ -83,6 +84,7 @@ class SchedulerService:
         self.is_running = True
 
         await self._register_maintenance_job()
+        await self._register_portfolio_price_refresh_job()
 
         with self.session_factory() as session:
             enabled_user_ids = {
@@ -362,6 +364,57 @@ class SchedulerService:
             max_instances=1,
             coalesce=True,
         )
+
+    async def _register_portfolio_price_refresh_job(self) -> None:
+        # Top-of-hour fire (UTC). The per-tick logic in refresh_due_quotes
+        # decides which tickers are actually due and skips fresh / closed
+        # markets. When no executor is configured (e.g. tests without a
+        # financial adapter) _run_job logs and returns without doing work.
+        if JobType.PORTFOLIO_PRICE_REFRESH not in self.executors:
+            log.info("portfolio price refresh executor not configured; skipping schedule")
+            return
+        trigger = CronTrigger(minute=0, timezone=UTC)
+        await self.scheduler.add_schedule(
+            self._run_job,
+            trigger,
+            id=PORTFOLIO_PRICE_REFRESH_KEY,
+            args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),
+            misfire_grace_time=self.settings.misfire_grace_seconds,
+            max_instances=1,
+            coalesce=True,
+        )
+        # Wake-up sweep: one-shot fire shortly after start so we catch up on
+        # any tickers that aged past their cadence while the server was down.
+        run_time = self.clock() + timedelta(seconds=5)
+        await self.scheduler.add_schedule(
+            self._run_job,
+            DateTrigger(run_time=run_time),
+            id=f"{PORTFOLIO_PRICE_REFRESH_KEY}:wakeup",
+            args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),
+            misfire_grace_time=self.settings.misfire_grace_seconds,
+        )
+        # Phase 3 post-close fires: capture the canonical close price into
+        # portfolio_quote_daily once each market has settled. US closes at
+        # 16:00 ET (~20:30 UTC during DST, with a 30-min buffer); TWSE
+        # closes at 13:30 Taipei (~05:30 UTC, +30-min buffer).
+        for fire_id, hour, minute in (
+            (f"{PORTFOLIO_PRICE_REFRESH_KEY}:us_close", 20, 30),
+            (f"{PORTFOLIO_PRICE_REFRESH_KEY}:twse_close", 6, 0),
+        ):
+            await self.scheduler.add_schedule(
+                self._run_job,
+                CronTrigger(
+                    hour=hour,
+                    minute=minute,
+                    day_of_week="mon,tue,wed,thu,fri",
+                    timezone=UTC,
+                ),
+                id=fire_id,
+                args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),
+                misfire_grace_time=self.settings.misfire_grace_seconds,
+                max_instances=1,
+                coalesce=True,
+            )
 
     async def _maybe_backfill(
         self,
