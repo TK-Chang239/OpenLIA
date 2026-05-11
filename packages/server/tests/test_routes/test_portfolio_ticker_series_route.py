@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 
@@ -131,3 +131,41 @@ def test_ticker_series_filters_by_market(client, user_factory, login_as) -> None
     r_tw = client.get("/portfolio/ticker-series?timeframe=1w&market=tw")
     assert r_tw.status_code == 200
     assert set(r_tw.json()["series"].keys()) == {"2330.TW"}
+
+
+def test_ticker_series_1d_returns_dense_intraday_points(client, user_factory, login_as) -> None:
+    """Per-ticker 1D sparklines must surface every intraday tick collected
+    today — one point per row, ordered ascending — so the sparkline reflects
+    the same density as the aggregate 1D value-series chart."""
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.content import PortfolioQuoteIntraday
+
+    u = user_factory()
+    login_as(u)
+    _seed_holding(u.id, "AAPL")
+
+    session_start = datetime.combine(
+        datetime.now(UTC).date(), datetime.min.time(), tzinfo=UTC
+    ) + timedelta(hours=14)
+    closes = [Decimal(c) for c in (100, 101, 102, 103, 104)]
+    with session_mod.SessionLocal() as s:
+        for i, close in enumerate(closes):
+            s.add(
+                PortfolioQuoteIntraday(
+                    ticker="AAPL",
+                    ts=session_start + timedelta(minutes=15 * i),
+                    close=close,
+                )
+            )
+        s.commit()
+
+    r = client.get("/portfolio/ticker-series?timeframe=1d")
+    assert r.status_code == 200
+    body = r.json()
+    series = body["series"]["AAPL"]
+    assert len(series) == 5
+    ts_list = [pt["ts"] for pt in series]
+    assert ts_list == sorted(ts_list)
+    assert Decimal(series[0]["close"]) == Decimal("100")
+    assert Decimal(series[-1]["close"]) == Decimal("104")
+    assert Decimal(body["period_change_pct"]["AAPL"]) == Decimal("0.04")

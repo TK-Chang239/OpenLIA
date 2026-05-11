@@ -53,9 +53,7 @@ def _create_holding(session: Session, *, user_id: str, ticker: str) -> None:
                 is_disabled=False,
             )
         )
-    session.add(
-        PortfolioHolding(id=f"h-{user_id}-{ticker}", user_id=user_id, ticker=ticker)
-    )
+    session.add(PortfolioHolding(id=f"h-{user_id}-{ticker}", user_id=user_id, ticker=ticker))
     session.commit()
 
 
@@ -67,9 +65,7 @@ def test_refresh_fetches_every_ticker_when_no_quotes_exist(
     _create_holding(db_session, user_id="u1", ticker="AAPL")
     _create_holding(db_session, user_id="u2", ticker="GOOG")
 
-    provider = _RecordingProvider(
-        {"AAPL": Decimal("150"), "GOOG": Decimal("2700")}
-    )
+    provider = _RecordingProvider({"AAPL": Decimal("150"), "GOOG": Decimal("2700")})
     # Pick a weekday during US market hours so the market-closed skip doesn't
     # fire.
     now = datetime(2026, 5, 12, 14, 30, tzinfo=UTC)
@@ -121,9 +117,7 @@ def test_refresh_skips_fresh_tickers(create_tables, db_session: Session) -> None
     assert quotes_svc.get_quote(db_session, ticker="AAPL").last_price == Decimal("100")
 
 
-def test_refresh_skips_closed_market_with_recent_quote(
-    create_tables, db_session: Session
-) -> None:
+def test_refresh_skips_closed_market_with_recent_quote(create_tables, db_session: Session) -> None:
     """A US ticker fetched < 24h ago when the market is closed is skipped."""
     from openlia_server.services import portfolio_quotes as quotes_svc
     from openlia_server.services.portfolio_quote_refresh import refresh_due_quotes
@@ -217,9 +211,7 @@ def test_refresh_ignores_groups_meta_row(create_tables, db_session: Session) -> 
             is_disabled=False,
         )
     )
-    db_session.add(
-        PortfolioHolding(id="meta-1", user_id="u1", ticker="__GROUPS__")
-    )
+    db_session.add(PortfolioHolding(id="meta-1", user_id="u1", ticker="__GROUPS__"))
     db_session.commit()
 
     provider = _RecordingProvider({})
@@ -235,9 +227,7 @@ def test_refresh_ignores_groups_meta_row(create_tables, db_session: Session) -> 
     assert result.fetched == 0
 
 
-def test_refresh_writes_quote_row_with_provider_payload(
-    create_tables, db_session: Session
-) -> None:
+def test_refresh_writes_quote_row_with_provider_payload(create_tables, db_session: Session) -> None:
     from openlia_server.services import portfolio_quotes as quotes_svc
     from openlia_server.services.portfolio_quote_refresh import refresh_due_quotes
 
@@ -257,3 +247,57 @@ def test_refresh_writes_quote_row_with_provider_payload(
     assert row.previous_close == Decimal("419.50")
     assert row.source == "fake"
     assert row.fetched_at is not None
+
+
+def test_closed_market_subhour_ticks_do_not_accumulate_intraday_rows(
+    create_tables, db_session: Session
+) -> None:
+    """The sub-hour intraday cron fires every 15 minutes regardless of whether
+    the market is open. During a closed session, the per-ticker market-hours
+    gate inside refresh_due_quotes must suppress fetches, so no new intraday
+    rows accumulate. Without this guarantee the 1D chart would drift over the
+    weekend with stale-price ticks."""
+    from openlia_server.db.models.content import PortfolioQuoteIntraday
+    from openlia_server.services import portfolio_quotes as quotes_svc
+    from openlia_server.services.portfolio_quote_refresh import refresh_due_quotes
+    from sqlalchemy import select
+
+    _create_holding(db_session, user_id="u1", ticker="AAPL")
+    # Friday close — cached quote that is fresh for the closed-market gate.
+    friday_close = datetime(2026, 5, 15, 20, 30, tzinfo=UTC)
+    quotes_svc.upsert_quote(
+        db_session,
+        ticker="AAPL",
+        last_price=Decimal("180"),
+        previous_close=None,
+        day_open=None,
+        day_high=None,
+        day_low=None,
+        volume=None,
+        currency="USD",
+        quote_at=None,
+        fetched_at=friday_close,
+        source="fake",
+    )
+
+    provider = _RecordingProvider({"AAPL": Decimal("999")})
+    # Saturday — fire four sub-hour ticks back-to-back to simulate one hour
+    # of */15 cron firing during a closed session.
+    saturday_start = datetime(2026, 5, 16, 15, 0, tzinfo=UTC)
+    for offset in (0, 15, 30, 45):
+        refresh_due_quotes(
+            db_session,
+            provider=provider,
+            now_utc=saturday_start + timedelta(minutes=offset),
+            min_cadence_seconds=900,  # 15 min — match the new sub-hour cron
+        )
+
+    assert provider.called == [], "closed-market gate must suppress all fetches"
+    rows = (
+        db_session.execute(
+            select(PortfolioQuoteIntraday).where(PortfolioQuoteIntraday.ticker == "AAPL")
+        )
+        .scalars()
+        .all()
+    )
+    assert rows == [], "no intraday rows should be written during a closed session"

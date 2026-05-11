@@ -15,6 +15,7 @@ from openlia_server.scheduler.executors.base import (
 )
 from openlia_server.scheduler.registry import (
     MAINTENANCE_JOB_KEY,
+    PORTFOLIO_PRICE_REFRESH_KEY,
     JobStatus,
     JobType,
     job_key,
@@ -285,9 +286,7 @@ async def test_remove_schedule_unregisters_job(session_factory) -> None:
     await svc.start()
     await svc.add_schedule(_mb_schedule())
 
-    await svc.remove_schedule(
-        job_type=JobType.MB_BRIEFING, user_id="u_1", schedule_id="sch_mb"
-    )
+    await svc.remove_schedule(job_type=JobType.MB_BRIEFING, user_id="u_1", schedule_id="sch_mb")
     assert job_key(JobType.MB_BRIEFING, "u_1", "sch_mb") not in scheduler.jobs
 
 
@@ -414,10 +413,7 @@ async def test_startup_does_not_backfill_when_tick_outside_grace(
     )
     await svc.start()
 
-    assert (
-        f"{job_key(JobType.MB_BRIEFING, 'u_1', 'sch_mb')}:backfill"
-        not in scheduler.jobs
-    )
+    assert f"{job_key(JobType.MB_BRIEFING, 'u_1', 'sch_mb')}:backfill" not in scheduler.jobs
 
 
 @pytest.mark.asyncio
@@ -617,3 +613,44 @@ async def test_run_now_dispatches_one_shot_with_pre_allocated_run_id(
     assert job.args[1] == "u_1"
     assert job.args[2] == "debt_cycle"
     assert job.args[3] == "run-123"
+
+
+@pytest.mark.asyncio
+async def test_start_registers_intraday_subhour_cron_for_portfolio_refresh(
+    session_factory,
+) -> None:
+    """1D charts need sub-hour intraday samples. When a portfolio refresh
+    executor is configured, the scheduler must register a cron that fires
+    at least 4x per hour (i.e. every 15 minutes or faster) in addition to
+    the top-of-hour and post-close fires.
+    """
+    from apscheduler.triggers.cron import CronTrigger
+
+    portfolio_exec = _RecordingExecutor(
+        session_factory=session_factory,
+        job_type=JobType.PORTFOLIO_PRICE_REFRESH,
+    )
+    scheduler = FakeAPScheduler()
+    svc = SchedulerService(
+        session_factory=session_factory,
+        scheduler=scheduler,
+        settings=SchedulerSettings(enabled=True),
+        executors={JobType.PORTFOLIO_PRICE_REFRESH: portfolio_exec},
+    )
+    await svc.start()
+
+    intraday_key = f"{PORTFOLIO_PRICE_REFRESH_KEY}:intraday"
+    assert intraday_key in scheduler.jobs, (
+        "expected an intraday sub-hour cron to be registered for portfolio price refresh"
+    )
+    job = scheduler.jobs[intraday_key]
+    assert isinstance(job.trigger, CronTrigger)
+
+    # Sub-hour cadence: the minute field must be an interval pattern */N
+    # with N <= 15 so we accumulate >= 4 points per market hour.
+    minute_field = str(job.trigger.minute)
+    assert minute_field.startswith("*/"), (
+        f"intraday cron minute must be an interval pattern, got {minute_field!r}"
+    )
+    interval = int(minute_field.removeprefix("*/"))
+    assert 1 <= interval <= 15, f"intraday cron interval must be in [1, 15] minutes, got {interval}"

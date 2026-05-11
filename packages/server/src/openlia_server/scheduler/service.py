@@ -151,9 +151,7 @@ class SchedulerService:
         if isinstance(schedule, MrDashboardState) and not schedule.assessment_schedule:
             raise ValueError("assessment_schedule must be set before modifying an MR schedule")
         sid = schedule.id if isinstance(schedule, MbSchedule) else None
-        await self.remove_schedule(
-            job_type=job_type, user_id=schedule.user_id, schedule_id=sid
-        )
+        await self.remove_schedule(job_type=job_type, user_id=schedule.user_id, schedule_id=sid)
         await self._register_schedule(job_type=job_type, schedule=schedule)
 
     async def remove_schedule(
@@ -233,14 +231,11 @@ class SchedulerService:
         # each by its own (user_id, schedule_id) key.
         with self.session_factory() as session:
             mb_ids = [
-                row.id
-                for row in session.query(MbSchedule).filter(MbSchedule.user_id == user_id)
+                row.id for row in session.query(MbSchedule).filter(MbSchedule.user_id == user_id)
             ]
         for sid in mb_ids:
             try:
-                await self.scheduler.remove_schedule(
-                    job_key(JobType.MB_BRIEFING, user_id, sid)
-                )
+                await self.scheduler.remove_schedule(job_key(JobType.MB_BRIEFING, user_id, sid))
             except Exception:
                 log.debug(
                     "remove_schedule failed for mb_briefing/%s/%s (may not be registered)",
@@ -378,6 +373,21 @@ class SchedulerService:
             self._run_job,
             trigger,
             id=PORTFOLIO_PRICE_REFRESH_KEY,
+            args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),
+            misfire_grace_time=self.settings.misfire_grace_seconds,
+            max_instances=1,
+            coalesce=True,
+        )
+        # Sub-hour intraday cron: fires every 15 minutes so the 1D chart
+        # and per-ticker sparklines accumulate >= 4 points per market hour
+        # (~26 across a US session, ~18 across a TWSE session). The
+        # per-ticker market_hours gate inside refresh_due_quotes still
+        # suppresses fetches for tickers whose home market is closed, so
+        # this only adds writes during open sessions.
+        await self.scheduler.add_schedule(
+            self._run_job,
+            CronTrigger(minute="*/15", timezone=UTC),
+            id=f"{PORTFOLIO_PRICE_REFRESH_KEY}:intraday",
             args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),
             misfire_grace_time=self.settings.misfire_grace_seconds,
             max_instances=1,

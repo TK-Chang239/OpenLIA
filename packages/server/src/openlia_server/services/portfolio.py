@@ -390,6 +390,9 @@ class PositionAnalytic:
     unrealized_pl_pct: Decimal | None
     weight: Decimal | None
     currency: str
+    previous_close: Decimal | None = None
+    day_change_abs: Decimal | None = None
+    day_change_pct: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -408,11 +411,15 @@ def compute_analytics(
     user_id: str,
     prices: dict[str, Decimal | None],
     market: Market | None = None,
+    previous_closes: dict[str, Decimal | None] | None = None,
 ) -> AnalyticsSummary:
     """Compute totals, per-position P&L, and allocation weights.
 
     `prices` is a caller-provided map of ticker -> last_price (or None).
-    When `market` is set, only holdings of that market contribute.
+    `previous_closes` is the same shape, providing the prior-session close
+    used to derive per-position day-change fields. When omitted, day-change
+    fields are null. When `market` is set, only holdings of that market
+    contribute.
     """
     rows = list_holdings(session, user_id=user_id, market=market)
     positions_raw: list[tuple[HoldingDTO, Decimal | None, Decimal | None, Decimal | None]] = []
@@ -444,18 +451,30 @@ def compute_analytics(
         pl_pct: Decimal | None = None
         if pl is not None and cost_total is not None and cost_total != 0:
             pl_pct = (pl / cost_total).quantize(Decimal("0.000001"))
+        last = prices.get(dto.ticker)
+        prev = previous_closes.get(dto.ticker) if previous_closes else None
+        day_abs: Decimal | None = None
+        day_pct: Decimal | None = None
+        if last is not None and prev is not None and prev != 0:
+            per_share = last - prev
+            if dto.shares is not None:
+                day_abs = (per_share * dto.shares).quantize(Decimal("0.0001"))
+            day_pct = (per_share / prev).quantize(Decimal("0.000001"))
         positions.append(
             PositionAnalytic(
                 holding_id=dto.id,
                 ticker=dto.ticker,
                 shares=dto.shares,
                 cost_basis=dto.cost_basis,
-                last_price=prices.get(dto.ticker),
+                last_price=last,
                 market_value=mv,
                 unrealized_pl=pl,
                 unrealized_pl_pct=pl_pct,
                 weight=weight,
                 currency=dto.currency,
+                previous_close=prev,
+                day_change_abs=day_abs,
+                day_change_pct=day_pct,
             )
         )
 
