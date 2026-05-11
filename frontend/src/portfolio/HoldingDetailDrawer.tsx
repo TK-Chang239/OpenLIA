@@ -62,7 +62,23 @@ export function HoldingDetailDrawer({
           }
         />
         <div className="flex-1 overflow-y-auto px-5 py-4">
-          <PositionSummary position={position} />
+          <div className="flex flex-col gap-5">
+            <PositionSummary position={position} />
+            <MiniChart />
+            <RecentActivity />
+            <RelatedReports ticker={holding.ticker} />
+            <LiaTake
+              ticker={holding.ticker}
+              onAskLia={() =>
+                navigate(
+                  `/secretary?prompt=${encodeURIComponent(`Tell me about ${holding.ticker}.`)}`,
+                )
+              }
+              onOpenEquityResearch={() =>
+                navigate(`/equity-research?ticker=${encodeURIComponent(holding.ticker)}`)
+              }
+            />
+          </div>
         </div>
         <DrawerFooter
           onEdit={() => onEdit(holding)}
@@ -165,12 +181,7 @@ function PositionSummary({ position }: { position: PositionAnalytic | null }): J
     },
   ];
   return (
-    <section className="flex flex-col gap-2">
-      <header className="flex items-baseline justify-between gap-3">
-        <h3 className="m-0 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[--color-text-primary]">
-          Position
-        </h3>
-      </header>
+    <Section title="Position">
       <div className="grid grid-cols-3 gap-2">
         {cells.map((c) => (
           <div
@@ -186,6 +197,103 @@ function PositionSummary({ position }: { position: PositionAnalytic | null }): J
           </div>
         ))}
       </div>
+    </Section>
+  );
+}
+
+function MiniChart(): JSX.Element {
+  return (
+    <Section title="Performance" subtitle="Per-holding timeseries pending">
+      <div className="flex h-[120px] items-center justify-center rounded-md border border-dashed border-[--color-border-subtle] bg-[--color-bg-elevated] p-3 font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+        No data
+      </div>
+    </Section>
+  );
+}
+
+function RecentActivity(): JSX.Element {
+  return (
+    <Section title="Recent activity" subtitle="Trade log pending">
+      <p className="rounded-md border border-dashed border-[--color-border-subtle] p-3 text-center text-[12px] text-[--color-text-tertiary]">
+        No trade history yet.
+      </p>
+    </Section>
+  );
+}
+
+function RelatedReports({ ticker }: { ticker: string }): JSX.Element {
+  return (
+    <Section title="Related reports">
+      <p className="rounded-md border border-dashed border-[--color-border-subtle] p-3 text-center text-[12px] text-[--color-text-tertiary]">
+        No reports mention {ticker} yet.
+      </p>
+    </Section>
+  );
+}
+
+function LiaTake({
+  ticker,
+  onAskLia,
+  onOpenEquityResearch,
+}: {
+  ticker: string;
+  onAskLia: () => void;
+  onOpenEquityResearch: () => void;
+}): JSX.Element {
+  return (
+    <Section title="LIA take" subtitle="Per-holding verdicts pending">
+      <div className="flex gap-3 rounded-md border-l-2 border-[--color-accent-primary] bg-[rgba(212,255,0,0.04)] px-4 py-3">
+        <span className="inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md bg-[--color-accent-primary] font-mono text-[10px] font-bold text-[--color-accent-on] shadow-[0_0_8px_rgba(212,255,0,0.35)]">
+          LIA
+        </span>
+        <div className="flex flex-1 flex-col gap-2">
+          <p className="m-0 text-[13px] leading-[1.5] text-[--color-text-tertiary]">
+            No verdict yet for {ticker}.
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onOpenEquityResearch}
+              className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1 font-mono text-[10px] tracking-[0.06em] text-[--color-text-primary] transition-colors hover:border-[--color-border-strong]"
+            >
+              Open Equity Research
+            </button>
+            <button
+              type="button"
+              onClick={onAskLia}
+              className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1 font-mono text-[10px] tracking-[0.06em] text-[--color-text-primary] transition-colors hover:border-[--color-border-strong]"
+            >
+              Ask LIA about {ticker}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}): JSX.Element {
+  return (
+    <section className="flex flex-col gap-2">
+      <header className="flex items-baseline justify-between gap-3">
+        <h3 className="m-0 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[--color-text-primary]">
+          {title}
+        </h3>
+        {subtitle ? (
+          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+            {subtitle}
+          </span>
+        ) : null}
+      </header>
+      {children}
     </section>
   );
 }
