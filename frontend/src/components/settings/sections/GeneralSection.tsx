@@ -16,6 +16,9 @@ const EMPTY: Prefs = {
   display_language: 'en',
   response_language: 'en',
   report_language: 'en',
+  timezone: 'UTC',
+  timezone_source: 'auto',
+  graph_extraction_time: '03:00',
 };
 
 export function GeneralSection(): JSX.Element {

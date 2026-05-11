@@ -33,4 +33,5 @@ from openlia_server.db.models import (  # noqa: F401
     safety,
     skills,
     report_tool_cache,
+    graph,
 )

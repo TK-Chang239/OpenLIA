@@ -105,6 +105,21 @@ class ChatSkillLoaded:
 
 
 @dataclass(frozen=True)
+class ChatMemoryBlock:
+    """Cross-session memory block injected into the system prompt this turn.
+
+    Emitted once per chat turn — before the runner begins yielding tokens —
+    so the frontend Memory drawer can display exactly what beliefs the model
+    is grounding on. ``block`` is the rendered ``## Memory`` markdown string
+    (or ``None`` when retrieval produced no matches for this message).
+    """
+
+    TYPE = "chat.memory_block"
+    message_id: str
+    block: str | None = None
+
+
+@dataclass(frozen=True)
 class ReportStart:
     TYPE = "report.start"
     report_id: str
@@ -196,6 +211,7 @@ SseEvent = (
     | ChatError
     | ChatGuardrail
     | ChatSkillLoaded
+    | ChatMemoryBlock
     | ReportStart
     | ReportPhase
     | ReportToolCallStart

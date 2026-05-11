@@ -23,7 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
-from openlia.llm.runtime.events import ChatError, ChatGuardrail, to_wire
+from openlia.llm.runtime.events import ChatError, ChatGuardrail, ChatMemoryBlock, to_wire
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from openlia.safety.output_moderation import ActionTier, decide_action
 from openlia.safety.output_moderation import scan as moderation_scan
@@ -103,6 +103,14 @@ def build_chat_stream_router(
         rows = svc.list_messages(db, session_id=session_id, user_id=user.id)
         messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows]
 
+        # Cross-session memory: compute auto-injectable block from the live
+        # user message. Deterministic + entity-filtered, near-zero cost when
+        # nothing matches. Applies to every chat-style department on this
+        # unified endpoint, not just Secretary.
+        from openlia_server.services import graph_retrieval
+
+        memory_block = graph_retrieval.retrieve_memory_block(db, user_id=user.id, message=q)
+
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         persist = _Persistence(db_session_factory=db_session_factory, session_id=session_id)
 
@@ -120,6 +128,7 @@ def build_chat_stream_router(
                 model_id_override=session_row.model_id,
                 disabled_connector_ids=tuple(session_row.disabled_connector_ids or ()),
                 disabled_skill_ids=tuple(session_row.disabled_skill_ids or ()),
+                memory_block=memory_block,
             ),
             media_type="text/event-stream",
         )
@@ -198,6 +207,7 @@ async def _event_source(
     model_id_override: str | None = None,
     disabled_connector_ids: tuple[str, ...] = (),
     disabled_skill_ids: tuple[str, ...] = (),
+    memory_block: str | None = None,
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
@@ -219,11 +229,22 @@ async def _event_source(
             model_id_override=model_id_override,
             disabled_connector_ids=disabled_connector_ids,
             disabled_skill_ids=disabled_skill_ids,
+            memory_block=memory_block,
         ):
             wire = to_wire(event)
             etype = wire["type"]
             if etype == "chat.start":
                 current_message_id = wire.get("message_id", "")
+                yield _sse_frame(wire)
+                # Surface the cross-session memory block to the FE drawer.
+                # Emitted once per turn, immediately after chat.start so the
+                # frontend has the message_id to associate it with.
+                memory_event = ChatMemoryBlock(
+                    message_id=current_message_id,
+                    block=memory_block,
+                )
+                yield _sse_frame(to_wire(memory_event))
+                continue
             elif etype == "chat.token":
                 assistant_text.append(wire.get("text", ""))
             elif etype == "chat.tool_call.start":

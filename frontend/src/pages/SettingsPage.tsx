@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { SettingsShell } from '../components/settings/SettingsShell';
 import { GeneralSection } from '../components/settings/sections/GeneralSection';
 import { ModelsSection } from '../components/settings/sections/ModelsSection';
+import { TimezoneSection } from '../components/settings/sections/TimezoneSection';
 import { AccountSection } from '../components/settings/sections/AccountSection';
 import { AdminSection } from '../components/settings/sections/AdminSection';
 import { DisclaimerSection } from '../components/settings/sections/DisclaimerSection';
@@ -29,6 +30,7 @@ export function SettingsPage(): JSX.Element {
         <Route index element={<Navigate to="general" replace />} />
         <Route path="general" element={<GeneralSection />} />
         <Route path="models" element={<ModelsSection />} />
+        <Route path="timezone" element={<TimezoneSection />} />
         <Route
           path="account"
           element={

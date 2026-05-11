@@ -81,6 +81,24 @@ EXPECTED_TABLES = {
     "report_tool_usage",
     # --- Per-(user, dept) model preference (model picker) ---
     "user_department_model_prefs",
+    # --- Cross-session memory graph (slice 1) ---
+    "graph_entities",
+    "graph_edges",
+    # --- Cross-session memory graph (slice 5) ---
+    "graph_user_constructs",
+    # --- Cross-session memory graph (slice 6) ---
+    "graph_extraction_proposals",
+    # --- Cross-session memory graph (slice 10) ---
+    "graph_artifact_summaries",
+    # --- Graph memory runtime spec (slice 4) ---
+    "graph_extraction_runs",
+    # --- Graph memory runtime spec (slice 10 hybrid retrieval) ---
+    # SQLite FTS5 virtual table + four internal shadow tables it manages.
+    "graph_artifact_summaries_fts",
+    "graph_artifact_summaries_fts_config",
+    "graph_artifact_summaries_fts_data",
+    "graph_artifact_summaries_fts_docsize",
+    "graph_artifact_summaries_fts_idx",
 }
 
 

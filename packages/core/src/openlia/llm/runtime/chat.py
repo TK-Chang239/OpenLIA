@@ -57,6 +57,12 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import Attachment, ChatMessage, ContentBlock
 from openlia.llm.runtime.prompts import PromptLoader
+from openlia.llm.runtime.recall_artifacts import (
+    RECALL_ARTIFACTS_SCHEMA,
+    RECALL_ARTIFACTS_TOOL_NAME,
+    RecallArtifactsHandler,
+    dispatch_recall_artifacts,
+)
 from openlia.llm.runtime.router import LlmClient as RouterLlmClient
 from openlia.llm.runtime.router import route_tools
 from openlia.llm.runtime.tools import (
@@ -168,6 +174,7 @@ def build_chat_system_prompt(
     loader: PromptLoader | None = None,
     disabled_skill_ids: frozenset[str] = frozenset(),
     response_length: str | None = None,
+    memory_block: str | None = None,
 ) -> str:
     """Render the chat.system slot with the user's visible skills menu.
 
@@ -178,6 +185,12 @@ def build_chat_system_prompt(
     `response_length` is the per-session composer choice; ``"concise"`` or
     ``"detailed"`` injects an explicit length directive into the system
     prompt, ``None``/``"normal"`` leaves the default discipline alone.
+
+    `memory_block` is a pre-rendered cross-session memory snippet
+    (slice 13). Server callers compute it via
+    ``graph_retrieval.retrieve_memory_block`` from the live user
+    message; ``None`` emits nothing so per-turn token cost stays zero
+    when nothing is relevant.
     """
     loader = loader or PromptLoader()
     visible = registry.visible(
@@ -201,6 +214,7 @@ def build_chat_system_prompt(
         "chat.system",
         skills_menu=skills_menu,
         response_length=response_length,
+        memory_block=memory_block,
     )
 
 
@@ -226,6 +240,7 @@ class ChatRunner:
         router_llm_client: RouterLlmClient | None = None,
         routing_context_loader: Callable[[str], str] | None = None,
         trace: TraceRecorder | None = None,
+        recall_artifacts: RecallArtifactsHandler | None = None,
     ) -> None:
         self._prompts = prompts
         self._tools = tools
@@ -243,6 +258,13 @@ class ChatRunner:
         # Optional dev-mode hook so the server can mirror per-LLM-call
         # detail (system prompt, tools, model_ref) into its event panel.
         self._trace: TraceRecorder = trace or _no_trace
+        # Slice 12: cross-session report recall. When wired, the runner
+        # exposes ``recall_artifacts`` to the model and intercepts the
+        # tool call to invoke this server-side handler. The handler
+        # itself owns DB + embedding-provider dependencies; the runner
+        # only threads ``user_id`` from its request context (never from
+        # LLM-supplied args — that would be a tenant-isolation hole).
+        self._recall_artifacts = recall_artifacts
 
     def _v2_routing_enabled(self) -> bool:
         return (
@@ -272,6 +294,11 @@ class ChatRunner:
             return [*tools, LOAD_SKILL_SCHEMA]
         return tools
 
+    def _maybe_with_recall_tool(self, tools: list[ToolSchema]) -> list[ToolSchema]:
+        if self._recall_artifacts is None:
+            return tools
+        return [*tools, RECALL_ARTIFACTS_SCHEMA]
+
     async def run(
         self,
         *,
@@ -284,6 +311,7 @@ class ChatRunner:
         model_id_override: str | None = None,
         disabled_skill_ids: frozenset[str] = frozenset(),
         response_length: str | None = None,
+        memory_block: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -340,6 +368,7 @@ class ChatRunner:
             loader=self._prompts,
             disabled_skill_ids=disabled_skill_ids,
             response_length=response_length,
+            memory_block=memory_block,
         )
         self._trace(
             "llm.resolved",
@@ -376,17 +405,20 @@ class ChatRunner:
                 cancel_token=cancel_token,
                 message_id=message_id,
                 extra_tool_specs=extra_tool_specs,
+                user_id=user_id,
             ):
                 yield event
             return
 
-        tools = self._maybe_with_skill_tool(
-            await self._tools.build(
-                department_id, has_web_search=True, extra_tools=extra_tool_specs
-            ),
-            department_id=department_id,
-            user_id=user_id,
-            disabled_skill_ids=disabled_skill_ids,
+        tools = self._maybe_with_recall_tool(
+            self._maybe_with_skill_tool(
+                await self._tools.build(
+                    department_id, has_web_search=True, extra_tools=extra_tool_specs
+                ),
+                department_id=department_id,
+                user_id=user_id,
+                disabled_skill_ids=disabled_skill_ids,
+            )
         )
 
         wrapped_messages = wrap_last_user_message(messages)
@@ -467,13 +499,18 @@ class ChatRunner:
                     args_preview=args_preview,
                 )
 
-            # Split load_skill calls from other calls — skills are dispatched
-            # directly through the SkillRegistry, not through ToolDispatcher.
+            # Split load_skill / recall_artifacts calls from other calls
+            # — both are dispatched directly through injected handlers,
+            # not through the ToolDispatcher (which only knows about
+            # connector / web-search tools).
             load_skill_calls: list[ToolCall] = []
+            recall_calls: list[ToolCall] = []
             other_calls: list[ToolCall] = []
             for c in response.tool_calls:
                 if c.name == "load_skill":
                     load_skill_calls.append(c)
+                elif c.name == RECALL_ARTIFACTS_TOOL_NAME and self._recall_artifacts is not None:
+                    recall_calls.append(c)
                 else:
                     other_calls.append(c)
 
@@ -492,6 +529,24 @@ class ChatRunner:
             except asyncio.CancelledError:
                 return
 
+            # Dispatch recall_artifacts calls via the injected handler.
+            # user_id is taken from the runtime context — the LLM cannot
+            # supply it.
+            recall_results: list[ToolCallResult] = []
+            try:
+                for c in recall_calls:
+                    args = c.arguments if isinstance(c.arguments, dict) else json.loads(c.arguments)
+                    assert self._recall_artifacts is not None
+                    r = await dispatch_recall_artifacts(
+                        self._recall_artifacts,
+                        user_id=user_id,
+                        arguments=args,
+                        call_id=c.id,
+                    )
+                    recall_results.append(r)
+            except asyncio.CancelledError:
+                return
+
             # Dispatch all other calls through ToolDispatcher.
             other_results: list[ToolCallResult] = []
             if other_calls:
@@ -507,7 +562,7 @@ class ChatRunner:
                 except asyncio.CancelledError:
                     return
 
-            results: list[ToolCallResult] = load_skill_results + other_results
+            results: list[ToolCallResult] = load_skill_results + recall_results + other_results
 
             for r in results:
                 yield ChatToolCallResult(
@@ -529,13 +584,15 @@ class ChatRunner:
 
             for r in results:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
-            tools = self._maybe_with_skill_tool(
-                await self._tools.build(
-                    department_id, has_web_search=True, extra_tools=extra_tool_specs
-                ),
-                department_id=department_id,
-                user_id=user_id,
-                disabled_skill_ids=disabled_skill_ids,
+            tools = self._maybe_with_recall_tool(
+                self._maybe_with_skill_tool(
+                    await self._tools.build(
+                        department_id, has_web_search=True, extra_tools=extra_tool_specs
+                    ),
+                    department_id=department_id,
+                    user_id=user_id,
+                    disabled_skill_ids=disabled_skill_ids,
+                )
             )
 
         # Final text turn — stream tokens.
@@ -600,6 +657,7 @@ class ChatRunner:
         cancel_token: CancellationToken | None,
         message_id: str,
         extra_tool_specs: tuple[dict[str, Any], ...] = (),
+        user_id: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         """Route + escalate per spec §8.
 
@@ -665,6 +723,7 @@ class ChatRunner:
                 message_id=message_id,
                 disable_routing=disable_routing,
                 extra_tool_specs=extra_tool_specs,
+                user_id=user_id,
             ):
                 yield event
 
@@ -685,6 +744,7 @@ class ChatRunner:
         message_id: str,
         disable_routing: bool,
         extra_tool_specs: tuple[dict[str, Any], ...] = (),
+        user_id: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         assert self._dispatcher is not None
         wrapped_messages = wrap_last_user_message(messages)
@@ -723,6 +783,10 @@ class ChatRunner:
                         parameters=spec.get("parameters", {"type": "object", "properties": {}}),
                     )
                 )
+            # Slice 12: expose recall_artifacts to chat-style depts when
+            # a handler has been wired by the server.
+            if self._recall_artifacts is not None:
+                schemas.append(RECALL_ARTIFACTS_SCHEMA)
             return schemas
 
         def _build_system(names: list[str]) -> str:
@@ -878,6 +942,34 @@ class ChatRunner:
                         Message(
                             role="tool",
                             content=json.dumps({"ack": True}),
+                            tool_call_id=call.id,
+                        )
+                    )
+                    continue
+
+                if call.name == RECALL_ARTIFACTS_TOOL_NAME and self._recall_artifacts is not None:
+                    raw_args = (
+                        call.arguments
+                        if isinstance(call.arguments, dict)
+                        else json.loads(call.arguments)
+                    )
+                    recall_result = await dispatch_recall_artifacts(
+                        self._recall_artifacts,
+                        user_id=user_id,
+                        arguments=raw_args,
+                        call_id=call.id,
+                    )
+                    yield ChatToolCallResult(
+                        message_id=message_id,
+                        call_id=call.id,
+                        ok=recall_result.ok,
+                        summary=recall_result.summary,
+                        structured=None,
+                    )
+                    conversation.append(
+                        Message(
+                            role="tool",
+                            content=json.dumps(recall_result.payload),
                             tool_call_id=call.id,
                         )
                     )

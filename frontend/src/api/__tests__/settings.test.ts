@@ -1,5 +1,14 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { getPrefs, updatePrefs, updateEmail, getModelPreferences, putModelPreference, deleteModelPreference } from '../settings';
+import {
+  getPrefs,
+  updatePrefs,
+  updateEmail,
+  getModelPreferences,
+  putModelPreference,
+  deleteModelPreference,
+  updateTimezone,
+  updateGraphExtractionTime,
+} from '../settings';
 
 describe('settings api', () => {
   beforeEach(() => {
@@ -68,5 +77,26 @@ describe('settings api', () => {
     const [url, init] = (fetch as any).mock.calls[0];
     expect(url).toBe('/api/settings/models/preferences/quick');
     expect(init.method).toBe('DELETE');
+  });
+
+  it('PUT /settings/timezone with timezone+source body', async () => {
+    (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await updateTimezone({ timezone: 'Asia/Taipei', source: 'manual' });
+    const [url, init] = (fetch as any).mock.calls[0];
+    expect(url).toBe('/api/settings/timezone');
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body)).toEqual({
+      timezone: 'Asia/Taipei',
+      source: 'manual',
+    });
+  });
+
+  it('PUT /settings/graph-extraction-time with time body', async () => {
+    (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    await updateGraphExtractionTime({ time: '04:30' });
+    const [url, init] = (fetch as any).mock.calls[0];
+    expect(url).toBe('/api/settings/graph-extraction-time');
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body)).toEqual({ time: '04:30' });
   });
 });

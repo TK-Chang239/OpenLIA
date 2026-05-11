@@ -47,6 +47,7 @@ async def test_build_scheduler_service_wires_all_executors(
     assert JobType.EU_SCAN in svc.executors
     assert JobType.MR_ASSESSMENT in svc.executors
     assert JobType.SYSTEM_MAINTENANCE in svc.executors
+    assert JobType.GRAPH_EXTRACTION in svc.executors
 
 
 def test_build_requires_real_builders(session_factory) -> None:

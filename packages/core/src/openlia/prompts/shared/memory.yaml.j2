@@ -1,0 +1,8 @@
+{# packages/core/src/openlia/prompts/shared/memory.yaml.j2 #}
+{# Auto-injected cross-session memory: confirmed UserConstructs whose #}
+{# entity was mentioned in the live message. ``memory_block`` is a #}
+{# pre-rendered string from graph_retrieval.retrieve_memory_block. #}
+{# Defaults to None so omitting the context var emits nothing. #}
+{% if memory_block is defined and memory_block %}
+{{ memory_block }}
+{% endif %}

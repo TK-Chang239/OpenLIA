@@ -1,6 +1,7 @@
 export type Theme = 'system' | 'light' | 'dark';
 export type LangCode = 'en' | 'zh-TW' | 'both';
 export type Tier = 'everyday' | 'quick' | 'thinking';
+export type TimezoneSource = 'auto' | 'manual';
 
 export interface Prefs {
   display_name: string;
@@ -11,6 +12,9 @@ export interface Prefs {
   response_language: LangCode;
   report_language: LangCode;
   preferred_model_id?: string | null;
+  timezone: string;
+  timezone_source: TimezoneSource;
+  graph_extraction_time: string;
 }
 
 export interface PrefsPatch {
@@ -22,6 +26,15 @@ export interface PrefsPatch {
   response_language?: LangCode;
   report_language?: LangCode;
   preferred_model_id?: string | null;
+}
+
+export interface TimezoneIn {
+  timezone: string;
+  source: TimezoneSource;
+}
+
+export interface GraphExtractionTimeIn {
+  time: string;
 }
 
 export interface EmailUpdateIn {
@@ -97,3 +110,15 @@ export interface DepartmentDefaults {
 
 export const getDepartmentDefaults = () =>
   request<DepartmentDefaults>('/api/settings/models/department-defaults');
+
+export const updateTimezone = (body: TimezoneIn) =>
+  request<Prefs>('/api/settings/timezone', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+
+export const updateGraphExtractionTime = (body: GraphExtractionTimeIn) =>
+  request<Prefs>('/api/settings/graph-extraction-time', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });

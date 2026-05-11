@@ -114,6 +114,10 @@ class UserPrefs(Base):
             "AND report_language IN ('en','zh-TW','both')",
             name="ck_user_prefs_language",
         ),
+        CheckConstraint(
+            "timezone_source IN ('auto','manual')",
+            name="ck_user_prefs_timezone_source",
+        ),
     )
 
     user_id: Mapped[str] = mapped_column(
@@ -139,6 +143,15 @@ class UserPrefs(Base):
     )
     preferred_model_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("llm_models.id", ondelete="SET NULL"), nullable=True
+    )
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
+    timezone_source: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="auto", server_default="auto"
+    )
+    graph_extraction_time: Mapped[str] = mapped_column(
+        String(5), nullable=False, default="03:00", server_default="03:00"
     )
 
 

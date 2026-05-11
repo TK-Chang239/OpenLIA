@@ -12,6 +12,9 @@ from typing import Any
 
 from openlia_server.scheduler.executors.base import SessionFactory
 from openlia_server.scheduler.executors.eu import EUScanExecutor
+from openlia_server.scheduler.executors.graph_extraction import (
+    GraphExtractionExecutor,
+)
 from openlia_server.scheduler.executors.maintenance import MaintenanceExecutor
 from openlia_server.scheduler.executors.mb import MBBriefingExecutor
 from openlia_server.scheduler.executors.mr import MRAssessmentExecutor
@@ -67,6 +70,9 @@ def build_scheduler_service(
             mr_cache_store=mr_cache_store,
         ),
         JobType.SYSTEM_MAINTENANCE: MaintenanceExecutor(
+            session_factory=session_factory,
+        ),
+        JobType.GRAPH_EXTRACTION: GraphExtractionExecutor(
             session_factory=session_factory,
         ),
     }

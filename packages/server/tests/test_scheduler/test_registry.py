@@ -18,6 +18,7 @@ def test_job_types_match_spec() -> None:
         "eu_scan",
         "mr_assessment",
         "rs_snapshot",
+        "graph_extraction",
         "system_maintenance",
     }
 
@@ -66,6 +67,7 @@ def test_department_mapping() -> None:
     assert department_for_job_type(JobType.EU_SCAN) == "earnings_update"
     assert department_for_job_type(JobType.MR_ASSESSMENT) == "macro_research"
     assert department_for_job_type(JobType.RS_SNAPSHOT) == "retail_sentiment"
+    assert department_for_job_type(JobType.GRAPH_EXTRACTION) == "secretary"
 
 
 def test_department_mapping_rejects_maintenance() -> None:
