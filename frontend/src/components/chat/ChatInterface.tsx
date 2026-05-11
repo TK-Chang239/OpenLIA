@@ -16,6 +16,7 @@ import { ErrorMessage } from "./ErrorMessage";
 import { WelcomeOverlay } from "./WelcomeOverlay";
 import { useChatStream } from "./useChatStream";
 import { RedirectCard, type RedirectDepartment } from "./RedirectCard";
+import { MemoryDrawer, MemoryDrawerToggle } from "./MemoryDrawer";
 import { useDisclaimerGate } from "../../hooks/useDisclaimerGate";
 import { AboutLiaModal } from "../safety/AboutLiaModal";
 
@@ -90,6 +91,9 @@ export function ChatInterface({
 }: Props): JSX.Element {
   const aboutGate = useDisclaimerGate(mode);
   const [aboutOpen, setAboutOpen] = useState(false);
+  // Drawer state lives per-component-instance — re-mounts (e.g. session
+  // switches) reset it to closed by design. No localStorage.
+  const [memoryDrawerOpen, setMemoryDrawerOpen] = useState(false);
 
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -273,7 +277,11 @@ export function ChatInterface({
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="flex justify-end px-4 pt-2">
+      <div className="flex items-center justify-end gap-3 px-4 pt-2">
+        <MemoryDrawerToggle
+          open={memoryDrawerOpen}
+          onClick={() => setMemoryDrawerOpen((v) => !v)}
+        />
         <button
           onClick={() => setAboutOpen(true)}
           className="text-xs text-slate-500 underline"
@@ -401,6 +409,11 @@ export function ChatInterface({
               ))}
           </MessageList>
         ) : null}
+        <MemoryDrawer
+          open={memoryDrawerOpen}
+          onClose={() => setMemoryDrawerOpen(false)}
+          memoryBlock={state.memoryBlock}
+        />
       </div>
       <ChatInput
         onSend={onSend}

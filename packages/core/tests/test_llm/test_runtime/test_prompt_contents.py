@@ -124,6 +124,40 @@ def test_secretary_chat_system_injects_detailed_directive() -> None:
     assert "thorough" in lowered or "headings" in lowered
 
 
+def test_secretary_chat_system_omits_memory_section_by_default() -> None:
+    """Default ``memory_block=None`` keeps the system prompt clean on
+    turns where the user didn't mention any tracked entity."""
+    loader = PromptLoader()
+    out = loader.render("secretary", "chat.system")
+    assert "## Memory" not in out
+
+
+def test_secretary_chat_system_injects_memory_block_verbatim() -> None:
+    """When the route supplies a pre-rendered memory block (slice 11),
+    the system prompt embeds it verbatim under the existing partials."""
+    loader = PromptLoader()
+    block = "## Memory\n- NVDA:\n  - (thesis) Services-margin expansion"
+    out = loader.render("secretary", "chat.system", memory_block=block)
+    assert "## Memory" in out
+    assert "Services-margin expansion" in out
+
+
+def test_memory_partial_renders_without_context_var() -> None:
+    """Defense in depth, parallel to the response_length partial:
+    bypassing PromptLoader.render with raw Jinja and no context var
+    must not raise UndefinedError under StrictUndefined."""
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+    from openlia.llm.runtime.prompts import _default_prompts_root
+
+    env = Environment(
+        loader=FileSystemLoader(str(_default_prompts_root())),
+        undefined=StrictUndefined,
+    )
+    tmpl = env.get_template("shared/memory.yaml.j2")
+    out = tmpl.render()
+    assert "## Memory" not in out
+
+
 def test_response_length_partial_renders_without_context_var() -> None:
     """Defense in depth: even if a caller bypasses ``PromptLoader.render``
     and uses Jinja directly without supplying ``response_length`` in the
@@ -131,7 +165,6 @@ def test_response_length_partial_renders_without_context_var() -> None:
     ``StrictUndefined``. Models that hit this path otherwise see a runtime
     crash instead of a quiet fallback to 'no length directive'."""
     from jinja2 import Environment, FileSystemLoader, StrictUndefined
-
     from openlia.llm.runtime.prompts import _default_prompts_root
 
     env = Environment(

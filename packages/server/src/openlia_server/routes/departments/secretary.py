@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
-from openlia.llm.runtime.events import ChatError, to_wire
+from openlia.llm.runtime.events import ChatError, ChatMemoryBlock, to_wire
 from openlia.llm.runtime.messages import Attachment as RuntimeAttachment
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from pydantic import BaseModel, Field
@@ -100,6 +100,13 @@ def build_secretary_router(
         disabled_skill_ids: tuple[str, ...] = ()
         session_response_length: str | None = None
         runtime_attachments: list[RuntimeAttachment] = []
+
+        # Cross-session memory: compute auto-injectable block from the live
+        # user message. Deterministic + entity-filtered, so per-turn cost
+        # stays near zero when nothing matches.
+        from openlia_server.services import graph_retrieval
+
+        memory_block = graph_retrieval.retrieve_memory_block(db, user_id=user.id, message=message)
         # Persist the user message immediately when a session is supplied.
         if session_id:
             from openlia_server.db.models.content import ChatSession as DbChatSession
@@ -165,6 +172,7 @@ def build_secretary_router(
                     disabled_connector_ids=disabled_connector_ids,
                     disabled_skill_ids=disabled_skill_ids,
                     response_length=session_response_length,
+                    memory_block=memory_block,
                 ):
                     wire = to_wire(event)
                     etype = wire["type"]
@@ -174,6 +182,16 @@ def build_secretary_router(
                             "stream started",
                             {"message_id": wire.get("message_id")},
                         )
+                        # Surface the cross-session memory block to the FE
+                        # drawer — once per turn, right after chat.start so
+                        # the frontend can associate it with this message_id.
+                        yield _sse_frame(wire)
+                        memory_event = ChatMemoryBlock(
+                            message_id=str(wire.get("message_id") or ""),
+                            block=memory_block,
+                        )
+                        yield _sse_frame(to_wire(memory_event))
+                        continue
                     elif etype == "chat.tool_call.start":
                         dev_events.record(
                             "chat.tool_call",

@@ -9,6 +9,7 @@ import {
   Globe,
   Thermometer,
   Briefcase,
+  Brain,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,6 +43,13 @@ export const CORE_NAV: readonly NavEntry[] = [
     label: "Repository",
     icon: FolderOpen,
     path: "/repository",
+    departmentId: null,
+  },
+  {
+    id: "memory",
+    label: "Memory",
+    icon: Brain,
+    path: "/memory",
     departmentId: null,
   },
 ];

@@ -22,11 +22,13 @@ from typing import Any, Literal
 from openlia.departments import get_department
 from openlia.departments.loader import load_routing_context
 from openlia.llm.adapters import build_adapter
+from openlia.llm.embeddings import EmbeddingProvider
 from openlia.llm.exceptions import TierNotConfiguredError
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.batch import BatchRunner
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
+from openlia.llm.runtime.recall_artifacts import RecallArtifactsHandler
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
@@ -34,6 +36,7 @@ from openlia.llm.types import ModelTier
 from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
+from openlia_server.runtime_tools.recall_artifacts import build_recall_artifacts_handler
 from openlia_server.services.chat_router_client import RouterLlmJsonClient
 from openlia_server.services.dispatcher_factory import build_dispatcher
 from openlia_server.services.llm_registry import SQLModelRegistry
@@ -50,6 +53,21 @@ _ROUTER_TIERS: tuple[ModelTier, ...] = (
 _ROUTER_DEPARTMENT_ID = "_chat_router"
 
 RuntimeMode = Literal["chat", "deterministic", "scheduled_chat"]
+
+
+# Slice 12: factory that resolves the user's configured
+# ``EmbeddingProvider`` (+ model name). Matches the seam the scheduler
+# graph-extraction executor uses so future production wiring can
+# share a single resolver. Until the embedding-provider choice is
+# persisted (slice-9 wizard step), the default returns a fake provider
+# so the rest of the chat path stays exercisable end-to-end.
+EmbeddingFactory = Callable[[], tuple[EmbeddingProvider, str]]
+
+
+def _default_embedding_factory() -> tuple[EmbeddingProvider, str]:
+    from openlia.llm.embeddings import FakeEmbeddingProvider
+
+    return FakeEmbeddingProvider(), "fake-embedding"
 
 
 class _EmptyDataDispatcher:
@@ -130,6 +148,7 @@ def _build_chat_runner_with_registry(
     skill_registry: SkillRegistry | None = None,
     db: DBSession | None = None,
     disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
+    recall_artifacts: RecallArtifactsHandler | None = None,
 ) -> ChatRunner:
     prompts = PromptLoader()
     tools = ToolDispatcher(
@@ -174,6 +193,7 @@ def _build_chat_runner_with_registry(
         dispatcher=dispatcher,
         router_llm_client=router_llm_client,
         routing_context_loader=load_routing_context,
+        recall_artifacts=recall_artifacts,
     )
 
 
@@ -189,9 +209,17 @@ class RefreshingChatRunner:
         self,
         db_session_factory: Callable[[], DBSession],
         skill_registry: SkillRegistry | None = None,
+        embedding_factory: EmbeddingFactory | None = None,
     ) -> None:
         self._factory = db_session_factory
         self._skill_registry = skill_registry
+        # Slice 12: factory for the embedding provider that powers
+        # cross-session report recall. Defaults to the same fake
+        # provider the nightly extraction job uses until the user's
+        # configured choice is persisted (slice 9 wizard).
+        self._embedding_factory: EmbeddingFactory = (
+            embedding_factory if embedding_factory is not None else _default_embedding_factory
+        )
 
     async def run(
         self,
@@ -206,17 +234,29 @@ class RefreshingChatRunner:
         disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
         disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
         response_length: str | None = None,
+        memory_block: str | None = None,
     ):
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
             web_search = _resolve_configured_search(db)
+            # Build the recall_artifacts handler with a session factory
+            # bound to the same DB the runner uses. The handler opens a
+            # fresh session per call so it never reuses a session
+            # across turns (matching the per-call pattern used for
+            # secretary persistence handlers).
+            embed_provider, _embed_model = self._embedding_factory()
+            recall_handler = build_recall_artifacts_handler(
+                db_session_factory=self._factory,
+                provider=embed_provider,
+            )
             runner = _build_chat_runner_with_registry(
                 registry,
                 web_search=web_search,
                 skill_registry=self._skill_registry,
                 db=db,
                 disabled_connector_ids=disabled_connector_ids,
+                recall_artifacts=recall_handler,
             )
             async for event in runner.run(
                 department_id=department_id,
@@ -228,6 +268,7 @@ class RefreshingChatRunner:
                 model_id_override=model_id_override,
                 disabled_skill_ids=frozenset(disabled_skill_ids),
                 response_length=response_length,
+                memory_block=memory_block,
             ):
                 yield event
         finally:
@@ -238,9 +279,20 @@ def build_chat_runner(
     *,
     db_session_factory: Callable[[], DBSession],
     skill_registry: SkillRegistry | None = None,
+    embedding_factory: EmbeddingFactory | None = None,
 ) -> RefreshingChatRunner:
-    """Return a refreshing chat runner that opens a fresh DB session per run."""
-    return RefreshingChatRunner(db_session_factory, skill_registry=skill_registry)
+    """Return a refreshing chat runner that opens a fresh DB session per run.
+
+    ``embedding_factory`` resolves the user's embedding provider for the
+    cross-session ``recall_artifacts`` tool (slice 12). Defaults to the
+    fake provider so the chat path stays bootable before the user has
+    configured a real embedding source.
+    """
+    return RefreshingChatRunner(
+        db_session_factory,
+        skill_registry=skill_registry,
+        embedding_factory=embedding_factory,
+    )
 
 
 def _build_report_runner_with_registry(

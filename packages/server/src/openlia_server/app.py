@@ -374,6 +374,25 @@ def _make_lifespan(
                 except (ValueError, RuntimeError, LookupError):
                     log.exception("MR schedule rehydration failed (continuing startup)")
 
+                # Slice 6 (graph memory runtime): nightly extraction
+                # job per user. Reads user_prefs.timezone +
+                # user_prefs.graph_extraction_time.
+                try:
+                    from openlia_server.services import (
+                        graph_extraction_rehydrate as _ge_rehydrate,
+                    )
+
+                    await _ge_rehydrate.rehydrate_all(
+                        session_factory=_sm,
+                        scheduler_control=scheduler_svc.scheduler,
+                        callback=scheduler_svc._run_job,
+                    )
+                except (ValueError, RuntimeError, LookupError):
+                    log.exception(
+                        "graph extraction schedule rehydration failed "
+                        "(continuing startup)"
+                    )
+
                 app.state.scheduler = scheduler_svc
                 app.state.mr_schedule_service = mr_schedule_svc_lifespan
 
@@ -720,6 +739,14 @@ def create_app(
     from openlia_server.routes.chat_sessions import build_chat_sessions_router
 
     app.include_router(build_chat_sessions_router(db_session_factory=factory, mode=mode))
+
+    from openlia_server.routes.graph import build_graph_router
+
+    app.include_router(build_graph_router(db_session_factory=factory, mode=mode))
+
+    from openlia_server.routes.admin_graph import build_admin_graph_router
+
+    app.include_router(build_admin_graph_router(db_session_factory=factory, mode=mode))
 
     from openlia_server.routes.dev import build_dev_router
 
