@@ -18,7 +18,12 @@ from openlia_server.services import portfolio as svc
 from openlia_server.services import portfolio_prefs as prefs_svc
 from openlia_server.services import portfolio_quotes as quotes_svc
 from openlia_server.services.market_hours import Market
-
+from openlia_server.services.portfolio_prices import (
+    PortfolioPriceProvider,
+    PriceCache,
+    get_default_cache,
+    get_default_provider,
+)
 
 _MARKET_DISPLAY_CURRENCY: dict[Market, str] = {"us": "USD", "twse": "TWD"}
 
@@ -37,12 +42,7 @@ def _resolve_market(raw: str | None) -> Market | None:
     if v == "tw":
         return "twse"
     raise HTTPException(status_code=400, detail=f"unknown market {raw!r}")
-from openlia_server.services.portfolio_prices import (
-    PortfolioPriceProvider,
-    PriceCache,
-    get_default_cache,
-    get_default_provider,
-)
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +55,7 @@ class HoldingIn(BaseModel):
     currency: str | None = "USD"
     notes: str | None = None
     groups: list[str] | None = None
+    added_at_date: str | None = None
 
 
 class HoldingPatch(BaseModel):
@@ -151,7 +152,7 @@ def _run_backfill(
         provider = AdapterDailyHistoryProvider(adapter)
         with db_session_factory() as session:
             backfill_daily_history(session, ticker=ticker, provider=provider, years=5)
-    except Exception as exc:  # noqa: BLE001 — background task swallows errors
+    except Exception as exc:
         logger.warning("portfolio backfill background task failed for %s: %s", ticker, exc)
 
 
@@ -194,14 +195,11 @@ def build_portfolio_router(
         return db_session_factory()
 
     @router.get("/holdings", response_model=list[HoldingOut])
-    def list_holdings(
-        market: str | None = None, user: User = require_user
-    ) -> list[HoldingOut]:
+    def list_holdings(market: str | None = None, user: User = require_user) -> list[HoldingOut]:
         market_filter = _resolve_market(market)
         with _session() as s:
             return [
-                _dto_to_out(d)
-                for d in svc.list_holdings(s, user_id=user.id, market=market_filter)
+                _dto_to_out(d) for d in svc.list_holdings(s, user_id=user.id, market=market_filter)
             ]
 
     @router.post("/holdings", response_model=HoldingOut, status_code=201)
@@ -212,16 +210,42 @@ def build_portfolio_router(
         market: str | None = None,
         user: User = require_user,
     ) -> HoldingOut:
+        from datetime import UTC, datetime
+        from datetime import date as date_cls
+        from zoneinfo import ZoneInfo
+
         from openlia_server.services.market_hours import classify_market
+
+        if body.shares is None:
+            raise HTTPException(status_code=400, detail="shares is required")
 
         market_hint = _resolve_market(market)
         if market_hint is not None and classify_market(body.ticker) != market_hint:
             raise HTTPException(
                 status_code=400,
-                detail=(
-                    f"ticker {body.ticker!r} does not belong to market {market!r}"
-                ),
+                detail=(f"ticker {body.ticker!r} does not belong to market {market!r}"),
             )
+
+        added_at_utc: datetime | None = None
+        if body.added_at_date is not None:
+            try:
+                d = date_cls.fromisoformat(body.added_at_date)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(f"added_at_date must be YYYY-MM-DD, got {body.added_at_date!r}"),
+                ) from exc
+            if d > datetime.now(UTC).date():
+                raise HTTPException(status_code=400, detail="added_at_date cannot be in the future")
+            ticker_market = classify_market(body.ticker)
+            if ticker_market == "twse":
+                tz = ZoneInfo("Asia/Taipei")
+            elif ticker_market == "us":
+                tz = ZoneInfo("America/New_York")
+            else:
+                tz = UTC
+            added_at_utc = datetime(d.year, d.month, d.day, 0, 0, tzinfo=tz).astimezone(UTC)
+
         with _session() as s:
             try:
                 dto = svc.create_holding(
@@ -233,6 +257,7 @@ def build_portfolio_router(
                     currency=body.currency,
                     notes=body.notes,
                     groups=body.groups,
+                    added_at=added_at_utc,
                 )
             except svc.DuplicateTickerError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -297,9 +322,7 @@ def build_portfolio_router(
                 t: (quote_rows[t].last_price if t in quote_rows else None)
                 for t in (raw.upper() for raw in tickers)
             }
-            result = svc.compute_analytics(
-                s, user_id=user.id, prices=prices, market=market_filter
-            )
+            result = svc.compute_analytics(s, user_id=user.id, prices=prices, market=market_filter)
             last_quote_at = max(
                 (r.fetched_at for r in quote_rows.values()),
                 default=None,
@@ -312,17 +335,12 @@ def build_portfolio_router(
         currencies_present = {h.currency for h in holdings if h.currency}
         needs_fx = market_filter is None and (
             len(currencies_present) > 1
-            or (
-                len(currencies_present) == 1
-                and display_currency not in currencies_present
-            )
+            or (len(currencies_present) == 1 and display_currency not in currencies_present)
         )
         adapter = _resolve_financial_adapter(request)
         fx_unavailable = needs_fx and adapter is None
         return {
-            "last_quote_at": (
-                last_quote_at.isoformat() if last_quote_at is not None else None
-            ),
+            "last_quote_at": (last_quote_at.isoformat() if last_quote_at is not None else None),
             "display_currency": display_currency,
             "currencies_present": sorted(currencies_present),
             "needs_fx": needs_fx,
@@ -358,9 +376,7 @@ def build_portfolio_router(
         }
 
     @router.post("/refresh-prices")
-    def refresh_prices(
-        market: str | None = None, user: User = require_user
-    ) -> dict:
+    def refresh_prices(market: str | None = None, user: User = require_user) -> dict:
         from datetime import UTC, datetime
 
         market_filter = _resolve_market(market)
@@ -383,8 +399,7 @@ def build_portfolio_router(
         now = datetime.now(UTC)
         with _session() as s:
             holdings_by_ticker = {
-                h.ticker: h
-                for h in svc.list_holdings(s, user_id=user.id, market=market_filter)
+                h.ticker: h for h in svc.list_holdings(s, user_id=user.id, market=market_filter)
             }
             from openlia_server.db.models.content import PortfolioQuoteIntraday
 
@@ -400,16 +415,12 @@ def build_portfolio_router(
                     day_high=None,
                     day_low=None,
                     volume=None,
-                    currency=(
-                        holdings_by_ticker[t].currency if t in holdings_by_ticker else None
-                    ),
+                    currency=(holdings_by_ticker[t].currency if t in holdings_by_ticker else None),
                     quote_at=now,
                     fetched_at=now,
                     source=source_id,
                 )
-                s.add(
-                    PortfolioQuoteIntraday(ticker=t, ts=now, close=price)
-                )
+                s.add(PortfolioQuoteIntraday(ticker=t, ts=now, close=price))
             s.commit()
         cache.mark_refresh(user.id)
         return {"prices": {t: (str(p) if p is not None else None) for t, p in prices.items()}}
@@ -556,38 +567,41 @@ def build_portfolio_router(
                 for p in result.points
             ],
             "period_return_abs": (
-                str(result.period_return_abs)
-                if result.period_return_abs is not None
-                else None
+                str(result.period_return_abs) if result.period_return_abs is not None else None
             ),
             "period_return_pct": (
-                str(result.period_return_pct)
-                if result.period_return_pct is not None
-                else None
+                str(result.period_return_pct) if result.period_return_pct is not None else None
             ),
         }
 
     # ---------- Ticker series (Phase 4) ------------------------------------
 
     @router.get("/ticker-series")
-    def ticker_series(timeframe: str = "1d", user: User = require_user) -> dict:
+    def ticker_series(
+        timeframe: str = "1d",
+        market: str | None = None,
+        user: User = require_user,
+    ) -> dict:
         from datetime import UTC, datetime
 
         from openlia_server.services.portfolio_ticker_series import (
             compute_ticker_series,
         )
 
+        market_filter = _resolve_market(market)
         today = datetime.now(UTC).date()
         with _session() as s:
             result = compute_ticker_series(
-                s, user_id=user.id, timeframe=timeframe, today=today
+                s,
+                user_id=user.id,
+                timeframe=timeframe,
+                today=today,
+                market=market_filter,
             )
         return {
             "timeframe": result.timeframe,
             "series": {
-                ticker: [
-                    {"ts": p.ts, "close": str(p.close)} for p in points
-                ]
+                ticker: [{"ts": p.ts, "close": str(p.close)} for p in points]
                 for ticker, points in result.series.items()
             },
             "period_change_pct": {
@@ -611,9 +625,7 @@ def build_portfolio_router(
         with _session() as s:
             if body.refresh_cadence is not None:
                 try:
-                    prefs_svc.set_refresh_cadence(
-                        s, user_id=user.id, cadence=body.refresh_cadence
-                    )
+                    prefs_svc.set_refresh_cadence(s, user_id=user.id, cadence=body.refresh_cadence)
                 except prefs_svc.InvalidCadenceError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
             if body.display_currency is not None:

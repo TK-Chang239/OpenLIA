@@ -65,6 +65,9 @@ describe("AddEditDrawer", () => {
     fireEvent.change(screen.getByTestId("drawer-ticker"), {
       target: { value: "MSFT" },
     });
+    fireEvent.change(screen.getByTestId("drawer-shares"), {
+      target: { value: "5" },
+    });
     fireEvent.click(screen.getByTestId("drawer-save"));
     await new Promise((r) => setTimeout(r, 0));
     expect(api.createHolding).toHaveBeenCalled();

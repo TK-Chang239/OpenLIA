@@ -2,12 +2,19 @@ import { useId, useMemo, useRef, useState } from "react";
 import type { JSX, MouseEvent as ReactMouseEvent } from "react";
 import { motion } from "framer-motion";
 import type { ValueSeriesResponse } from "../api/portfolio";
+import type { Market } from "./marketTypes";
 import type { PerfRange } from "./PortfolioPageHeader";
+
+const MARKET_TIMEZONE: Record<Market, string> = {
+  us: "America/New_York",
+  tw: "Asia/Taipei",
+};
 
 export interface PerfChartProps {
   readonly range: PerfRange;
   readonly series: ValueSeriesResponse | null;
   readonly loading: boolean;
+  readonly market?: Market;
 }
 
 interface HoverState {
@@ -28,13 +35,20 @@ function fmtUsd(n: number): string {
   return `${n < 0 ? "-" : ""}$${abs.toFixed(2)}`;
 }
 
-function formatLabel(p: { date: string; ts: string | null }): string {
+function formatLabel(
+  p: { date: string; ts: string | null },
+  market?: Market,
+): string {
   if (p.ts) {
     const d = new Date(p.ts);
     if (!Number.isNaN(d.getTime())) {
-      const hh = String(d.getHours()).padStart(2, "0");
-      const mm = String(d.getMinutes()).padStart(2, "0");
-      return `${hh}:${mm}`;
+      const timeZone = market ? MARKET_TIMEZONE[market] : undefined;
+      return new Intl.DateTimeFormat("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone,
+      }).format(d);
     }
   }
   return p.date;
@@ -43,17 +57,19 @@ function formatLabel(p: { date: string; ts: string | null }): string {
 function pickXLabels(
   points: { date: string; ts: string | null }[],
   count: number,
+  market?: Market,
 ): string[] {
   if (points.length === 0) return [];
   const out: string[] = [];
   const step = Math.max(1, Math.floor((points.length - 1) / (count - 1)));
-  for (let i = 0; i < points.length; i += step) out.push(formatLabel(points[i]));
+  for (let i = 0; i < points.length; i += step)
+    out.push(formatLabel(points[i], market));
   if (out.length < count && points.length > 1)
-    out.push(formatLabel(points[points.length - 1]));
+    out.push(formatLabel(points[points.length - 1], market));
   return out.slice(0, count);
 }
 
-export function PerfChart({ range, series, loading }: PerfChartProps): JSX.Element {
+export function PerfChart({ range, series, loading, market }: PerfChartProps): JSX.Element {
   const gradId = useId();
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -106,7 +122,7 @@ export function PerfChart({ range, series, loading }: PerfChartProps): JSX.Eleme
     return [fmtUsd(maxV), fmtUsd((minV + maxV) / 2), fmtUsd(minV)] as const;
   }, [points]);
 
-  const xLabels = useMemo(() => pickXLabels(points, 5), [points]);
+  const xLabels = useMemo(() => pickXLabels(points, 5, market), [points, market]);
 
   const findNearest = (xViewBox: number) => {
     if (points.length === 0) return null;
@@ -133,7 +149,7 @@ export function PerfChart({ range, series, loading }: PerfChartProps): JSX.Eleme
     setHover({
       x: nearest.x,
       y: nearest.y,
-      date: formatLabel(nearest),
+      date: formatLabel(nearest, market),
       value: fmtUsd(nearest.value),
     });
   };

@@ -163,7 +163,7 @@ def test_search_marks_already_added(client, user_factory, login_as) -> None:
     try:
         u = user_factory()
         login_as(u)
-        client.post("/portfolio/holdings", json={"ticker": "AAPL"})
+        client.post("/portfolio/holdings", json={"ticker": "AAPL", "shares": "1"})
         r = client.get("/portfolio/search?q=aapl")
         body = r.json()
         assert body["results"][0]["already_added"] is True
@@ -235,9 +235,7 @@ def test_groups_endpoints_require_auth(client) -> None:
 # ----------------------------------------------------------------------
 
 
-def test_analytics_reads_from_portfolio_quotes_table(
-    client, user_factory, login_as
-) -> None:
+def test_analytics_reads_from_portfolio_quotes_table(client, user_factory, login_as) -> None:
     """After upserting a row into portfolio_quotes, /analytics reflects the
     last_price and surfaces last_quote_at."""
     from datetime import UTC, datetime
@@ -283,9 +281,7 @@ def test_analytics_reads_from_portfolio_quotes_table(
     assert Decimal(pos["last_price"]) == Decimal("200")
 
 
-def test_analytics_last_quote_at_null_when_no_quotes(
-    client, user_factory, login_as
-) -> None:
+def test_analytics_last_quote_at_null_when_no_quotes(client, user_factory, login_as) -> None:
     u = user_factory()
     login_as(u)
     client.post("/portfolio/holdings", json={"ticker": "ZZZZ"})
@@ -295,9 +291,7 @@ def test_analytics_last_quote_at_null_when_no_quotes(
     assert body["last_quote_at"] is None
 
 
-def test_refresh_prices_persists_to_portfolio_quotes(
-    client, user_factory, login_as
-) -> None:
+def test_refresh_prices_persists_to_portfolio_quotes(client, user_factory, login_as) -> None:
     """Manual refresh must populate the portfolio_quotes table so subsequent
     /analytics calls reflect the just-fetched prices."""
     from decimal import Decimal
@@ -334,3 +328,102 @@ def test_refresh_prices_persists_to_portfolio_quotes(
         assert row.source != ""
     finally:
         client.app.state.financial_adapter = None
+
+
+def test_create_holding_requires_shares(client, user_factory, login_as) -> None:
+    u = user_factory()
+    login_as(u)
+    r = client.post(
+        "/portfolio/holdings",
+        json={"ticker": "AAPL", "currency": "USD"},
+    )
+    assert r.status_code == 400
+    assert "shares" in r.json()["detail"].lower()
+
+
+def test_create_holding_with_added_at_date_market_local_midnight(
+    client, user_factory, login_as
+) -> None:
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.content import PortfolioHolding
+
+    u = user_factory()
+    login_as(u)
+    r = client.post(
+        "/portfolio/holdings?market=us",
+        json={
+            "ticker": "AAPL",
+            "shares": "10",
+            "currency": "USD",
+            "added_at_date": "2026-01-15",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    expected = datetime(2026, 1, 15, 0, 0, tzinfo=ZoneInfo("America/New_York")).astimezone(UTC)
+    with session_mod.SessionLocal() as s:
+        row = s.query(PortfolioHolding).filter_by(user_id=u.id, ticker="AAPL").one()
+    assert row.added_at == expected
+
+
+def test_create_holding_with_added_at_date_tw_market_timezone(
+    client, user_factory, login_as
+) -> None:
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.content import PortfolioHolding
+
+    u = user_factory()
+    login_as(u)
+    r = client.post(
+        "/portfolio/holdings?market=tw",
+        json={
+            "ticker": "2330.TW",
+            "shares": "100",
+            "currency": "TWD",
+            "added_at_date": "2026-02-20",
+        },
+    )
+    assert r.status_code == 201, r.text
+
+    expected = datetime(2026, 2, 20, 0, 0, tzinfo=ZoneInfo("Asia/Taipei")).astimezone(UTC)
+    with session_mod.SessionLocal() as s:
+        row = s.query(PortfolioHolding).filter_by(user_id=u.id, ticker="2330.TW").one()
+    assert row.added_at == expected
+
+
+def test_create_holding_rejects_future_added_at(client, user_factory, login_as) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    u = user_factory()
+    login_as(u)
+    future = (datetime.now(UTC).date() + timedelta(days=7)).isoformat()
+    r = client.post(
+        "/portfolio/holdings?market=us",
+        json={
+            "ticker": "AAPL",
+            "shares": "10",
+            "added_at_date": future,
+        },
+    )
+    assert r.status_code == 400
+    assert "future" in r.json()["detail"].lower()
+
+
+def test_create_holding_rejects_invalid_added_at_format(client, user_factory, login_as) -> None:
+    u = user_factory()
+    login_as(u)
+    r = client.post(
+        "/portfolio/holdings?market=us",
+        json={
+            "ticker": "AAPL",
+            "shares": "10",
+            "added_at_date": "01/15/2026",
+        },
+    )
+    assert r.status_code == 400

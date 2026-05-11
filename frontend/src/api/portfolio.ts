@@ -26,6 +26,7 @@ export interface HoldingInput {
   currency?: string;
   notes?: string | null;
   groups?: string[];
+  added_at_date?: string | null;
 }
 
 export interface HoldingPatch {
@@ -213,11 +214,15 @@ export async function fetchValueSeries(
   return jsonOrThrow<ValueSeriesResponse>(res);
 }
 
-export async function fetchTickerSeries(timeframe: string): Promise<TickerSeriesResponse> {
-  const res = await fetch(
-    `/api/portfolio/ticker-series?timeframe=${encodeURIComponent(timeframe)}`,
-    { credentials: "include" },
-  );
+export async function fetchTickerSeries(
+  timeframe: string,
+  market?: string,
+): Promise<TickerSeriesResponse> {
+  const qs = new URLSearchParams({ timeframe });
+  if (market) qs.set("market", market);
+  const res = await fetch(`/api/portfolio/ticker-series?${qs.toString()}`, {
+    credentials: "include",
+  });
   return jsonOrThrow<TickerSeriesResponse>(res);
 }
 
