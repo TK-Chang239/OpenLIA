@@ -17,6 +17,26 @@ from openlia_server.middleware.auth import build_require_active_user
 from openlia_server.services import portfolio as svc
 from openlia_server.services import portfolio_prefs as prefs_svc
 from openlia_server.services import portfolio_quotes as quotes_svc
+from openlia_server.services.market_hours import Market
+
+
+_MARKET_DISPLAY_CURRENCY: dict[Market, str] = {"us": "USD", "twse": "TWD"}
+
+
+def _resolve_market(raw: str | None) -> Market | None:
+    """Translate the public query value ('us' | 'tw') into internal Market.
+
+    Returns None for unset (no filter applied). Raises HTTPException(400)
+    for unknown values so we fail loudly on typos.
+    """
+    if raw is None:
+        return None
+    v = raw.strip().lower()
+    if v == "us":
+        return "us"
+    if v == "tw":
+        return "twse"
+    raise HTTPException(status_code=400, detail=f"unknown market {raw!r}")
 from openlia_server.services.portfolio_prices import (
     PortfolioPriceProvider,
     PriceCache,
@@ -174,17 +194,34 @@ def build_portfolio_router(
         return db_session_factory()
 
     @router.get("/holdings", response_model=list[HoldingOut])
-    def list_holdings(user: User = require_user) -> list[HoldingOut]:
+    def list_holdings(
+        market: str | None = None, user: User = require_user
+    ) -> list[HoldingOut]:
+        market_filter = _resolve_market(market)
         with _session() as s:
-            return [_dto_to_out(d) for d in svc.list_holdings(s, user_id=user.id)]
+            return [
+                _dto_to_out(d)
+                for d in svc.list_holdings(s, user_id=user.id, market=market_filter)
+            ]
 
     @router.post("/holdings", response_model=HoldingOut, status_code=201)
     def create_holding(
         body: HoldingIn,
         background: BackgroundTasks,
         request: Request,
+        market: str | None = None,
         user: User = require_user,
     ) -> HoldingOut:
+        from openlia_server.services.market_hours import classify_market
+
+        market_hint = _resolve_market(market)
+        if market_hint is not None and classify_market(body.ticker) != market_hint:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"ticker {body.ticker!r} does not belong to market {market!r}"
+                ),
+            )
         with _session() as s:
             try:
                 dto = svc.create_holding(
@@ -246,31 +283,39 @@ def build_portfolio_router(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/analytics")
-    def analytics(request: Request, user: User = require_user) -> dict:
+    def analytics(
+        request: Request,
+        market: str | None = None,
+        user: User = require_user,
+    ) -> dict:
+        market_filter = _resolve_market(market)
         with _session() as s:
-            holdings = svc.list_holdings(s, user_id=user.id)
+            holdings = svc.list_holdings(s, user_id=user.id, market=market_filter)
             tickers = [h.ticker for h in holdings]
-            # Phase 1: read prices from portfolio_quotes (DB) instead of the
-            # in-memory PriceCache. The scheduler keeps this table fresh; the
-            # cache is kept around only for the manual /refresh-prices path.
             quote_rows = quotes_svc.get_quotes_bulk(s, tickers=tickers)
             prices: dict[str, Decimal | None] = {
                 t: (quote_rows[t].last_price if t in quote_rows else None)
                 for t in (raw.upper() for raw in tickers)
             }
-            result = svc.compute_analytics(s, user_id=user.id, prices=prices)
+            result = svc.compute_analytics(
+                s, user_id=user.id, prices=prices, market=market_filter
+            )
             last_quote_at = max(
                 (r.fetched_at for r in quote_rows.values()),
                 default=None,
             )
-            display_currency = prefs_svc.get_display_currency(s, user_id=user.id)
-        # Phase 5: detect multi-currency portfolios. The aggregate value chart
-        # + donut need an FX-capable connector when holdings span >1 currency;
-        # otherwise the frontend falls back to per-currency tiles.
+            display_currency = (
+                _MARKET_DISPLAY_CURRENCY[market_filter]
+                if market_filter is not None
+                else prefs_svc.get_display_currency(s, user_id=user.id)
+            )
         currencies_present = {h.currency for h in holdings if h.currency}
-        needs_fx = len(currencies_present) > 1 or (
-            len(currencies_present) == 1
-            and display_currency not in currencies_present
+        needs_fx = market_filter is None and (
+            len(currencies_present) > 1
+            or (
+                len(currencies_present) == 1
+                and display_currency not in currencies_present
+            )
         )
         adapter = _resolve_financial_adapter(request)
         fx_unavailable = needs_fx and adapter is None
@@ -313,9 +358,12 @@ def build_portfolio_router(
         }
 
     @router.post("/refresh-prices")
-    def refresh_prices(user: User = require_user) -> dict:
+    def refresh_prices(
+        market: str | None = None, user: User = require_user
+    ) -> dict:
         from datetime import UTC, datetime
 
+        market_filter = _resolve_market(market)
         remaining = cache.refresh_cooldown_remaining(user.id)
         if remaining > 0:
             raise HTTPException(
@@ -323,7 +371,7 @@ def build_portfolio_router(
                 detail={"retry_after": int(remaining) + 1},
             )
         with _session() as s:
-            holdings = svc.list_holdings(s, user_id=user.id)
+            holdings = svc.list_holdings(s, user_id=user.id, market=market_filter)
         provider = provider_factory()
         tickers = [h.ticker for h in holdings]
         # Force-refresh: drop these tickers from the in-memory cache and
@@ -334,7 +382,12 @@ def build_portfolio_router(
         source_id = getattr(provider, "source_id", None) or "unknown"
         now = datetime.now(UTC)
         with _session() as s:
-            holdings_by_ticker = {h.ticker: h for h in svc.list_holdings(s, user_id=user.id)}
+            holdings_by_ticker = {
+                h.ticker: h
+                for h in svc.list_holdings(s, user_id=user.id, market=market_filter)
+            }
+            from openlia_server.db.models.content import PortfolioQuoteIntraday
+
             for t, price in prices.items():
                 if price is None:
                     continue
@@ -354,6 +407,10 @@ def build_portfolio_router(
                     fetched_at=now,
                     source=source_id,
                 )
+                s.add(
+                    PortfolioQuoteIntraday(ticker=t, ts=now, close=price)
+                )
+            s.commit()
         cache.mark_refresh(user.id)
         return {"prices": {t: (str(p) if p is not None else None) for t, p in prices.items()}}
 
@@ -453,18 +510,33 @@ def build_portfolio_router(
     # ---------- Value series (Phase 3) -------------------------------------
 
     @router.get("/value-series")
-    def value_series(timeframe: str = "1m", user: User = require_user) -> dict:
+    def value_series(
+        timeframe: str = "1m",
+        market: str | None = None,
+        user: User = require_user,
+    ) -> dict:
         from datetime import UTC, datetime
 
         from openlia_server.services.portfolio_value_series import (
             compute_value_series,
+            compute_value_series_intraday,
         )
 
+        market_filter = _resolve_market(market)
         today = datetime.now(UTC).date()
         with _session() as s:
-            result = compute_value_series(
-                s, user_id=user.id, timeframe=timeframe, today=today
-            )
+            if timeframe.lower() == "1d":
+                result = compute_value_series_intraday(
+                    s, user_id=user.id, today=today, market=market_filter
+                )
+            else:
+                result = compute_value_series(
+                    s,
+                    user_id=user.id,
+                    timeframe=timeframe,
+                    today=today,
+                    market=market_filter,
+                )
         return {
             "timeframe": result.timeframe,
             "actual_span": (
@@ -476,7 +548,11 @@ def build_portfolio_router(
                 else None
             ),
             "points": [
-                {"date": p.date.isoformat(), "value": str(p.value)}
+                {
+                    "date": p.date.isoformat(),
+                    "value": str(p.value),
+                    "ts": p.ts.isoformat() if p.ts is not None else None,
+                }
                 for p in result.points
             ],
             "period_return_abs": (

@@ -1,24 +1,18 @@
-import { useId, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import type { JSX, MouseEvent as ReactMouseEvent } from "react";
 import { motion } from "framer-motion";
-import {
-  PERF_PATHS,
-  PERF_TABS,
-  formatY,
-  type PerfTab,
-  type PerfPoint,
-  xToLabel,
-  xAxisLabels,
-  yAxisLabels,
-} from "./perfPaths";
+import type { ValueSeriesResponse } from "../api/portfolio";
 import type { PerfRange } from "./PortfolioPageHeader";
 
 export interface PerfChartProps {
   readonly range: PerfRange;
+  readonly series: ValueSeriesResponse | null;
+  readonly loading: boolean;
 }
 
 interface HoverState {
-  point: PerfPoint;
+  x: number;
+  y: number;
   date: string;
   value: string;
 }
@@ -26,25 +20,99 @@ interface HoverState {
 const VIEWBOX_W = 800;
 const VIEWBOX_H = 110;
 
-/** The Portfolio page-level performance chart card.
- *  Tabs swap path geometries; range pills (driven by parent) seed the
- *  caption only — until PORTFOLIO_NAV_TIMESERIES_API ships, the same path
- *  geometry is reused across ranges. */
-export function PerfChart({ range }: PerfChartProps): JSX.Element {
-  const [tab, setTab] = useState<PerfTab>("NAV");
-  const p = PERF_PATHS[tab];
+function fmtUsd(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `${n < 0 ? "-" : ""}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${n < 0 ? "-" : ""}$${(abs / 1_000).toFixed(2)}k`;
+  return `${n < 0 ? "-" : ""}$${abs.toFixed(2)}`;
+}
+
+function formatLabel(p: { date: string; ts: string | null }): string {
+  if (p.ts) {
+    const d = new Date(p.ts);
+    if (!Number.isNaN(d.getTime())) {
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      return `${hh}:${mm}`;
+    }
+  }
+  return p.date;
+}
+
+function pickXLabels(
+  points: { date: string; ts: string | null }[],
+  count: number,
+): string[] {
+  if (points.length === 0) return [];
+  const out: string[] = [];
+  const step = Math.max(1, Math.floor((points.length - 1) / (count - 1)));
+  for (let i = 0; i < points.length; i += step) out.push(formatLabel(points[i]));
+  if (out.length < count && points.length > 1)
+    out.push(formatLabel(points[points.length - 1]));
+  return out.slice(0, count);
+}
+
+export function PerfChart({ range, series, loading }: PerfChartProps): JSX.Element {
   const gradId = useId();
   const clipId = useId();
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [hover, setHover] = useState<HoverState | null>(null);
 
-  const yLabels = yAxisLabels(tab);
-  const xLabels = xAxisLabels(range);
+  const points = useMemo(() => {
+    if (!series || series.points.length === 0)
+      return [] as {
+        date: string;
+        ts: string | null;
+        value: number;
+        x: number;
+        y: number;
+      }[];
+    const values = series.points.map((p) => Number(p.value));
+    const minV = Math.min(...values);
+    const maxV = Math.max(...values);
+    const span = maxV - minV || 1;
+    const n = series.points.length;
+    return series.points.map((p, i) => {
+      const v = Number(p.value);
+      return {
+        date: p.date,
+        ts: p.ts,
+        value: v,
+        x: n === 1 ? VIEWBOX_W / 2 : (i / (n - 1)) * VIEWBOX_W,
+        y: VIEWBOX_H - 8 - ((v - minV) / span) * (VIEWBOX_H - 16),
+      };
+    });
+  }, [series]);
 
-  const findNearest = (xViewBox: number): PerfPoint => {
-    let nearest = p.points[0];
-    let minDist = Math.abs(p.points[0].x - xViewBox);
-    for (const pt of p.points) {
+  const linePath = useMemo(() => {
+    if (points.length === 0) return "";
+    return points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+  }, [points]);
+
+  const areaPath = useMemo(() => {
+    if (points.length === 0) return "";
+    const head = linePath;
+    const last = points[points.length - 1];
+    const first = points[0];
+    return `${head} L${last.x.toFixed(2)},${VIEWBOX_H} L${first.x.toFixed(2)},${VIEWBOX_H} Z`;
+  }, [points, linePath]);
+
+  const yLabels = useMemo(() => {
+    if (points.length === 0) return ["—", "—", "—"] as const;
+    const vals = points.map((p) => p.value);
+    const minV = Math.min(...vals);
+    const maxV = Math.max(...vals);
+    return [fmtUsd(maxV), fmtUsd((minV + maxV) / 2), fmtUsd(minV)] as const;
+  }, [points]);
+
+  const xLabels = useMemo(() => pickXLabels(points, 5), [points]);
+
+  const findNearest = (xViewBox: number) => {
+    if (points.length === 0) return null;
+    let nearest = points[0];
+    let minDist = Math.abs(points[0].x - xViewBox);
+    for (const pt of points) {
       const d = Math.abs(pt.x - xViewBox);
       if (d < minDist) {
         minDist = d;
@@ -56,17 +124,21 @@ export function PerfChart({ range }: PerfChartProps): JSX.Element {
 
   const onMove = (e: ReactMouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
-    if (!svg) return;
+    if (!svg || points.length === 0) return;
     const rect = svg.getBoundingClientRect();
     if (rect.width === 0) return;
     const xViewBox = ((e.clientX - rect.left) / rect.width) * VIEWBOX_W;
     const nearest = findNearest(xViewBox);
+    if (!nearest) return;
     setHover({
-      point: nearest,
-      date: xToLabel(nearest.x, range),
-      value: formatY(tab, nearest.y),
+      x: nearest.x,
+      y: nearest.y,
+      date: formatLabel(nearest),
+      value: fmtUsd(nearest.value),
     });
   };
+
+  const empty = !loading && points.length === 0;
 
   return (
     <section
@@ -75,124 +147,86 @@ export function PerfChart({ range }: PerfChartProps): JSX.Element {
       data-testid="perf-chart"
     >
       <div className="mb-2 flex items-center gap-[14px]">
-        {PERF_TABS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`cursor-pointer border-b pb-1 font-mono text-[10px] tracking-[0.08em] transition-colors ${
-              tab === t
-                ? "border-[--color-accent-primary] text-[--color-text-primary]"
-                : "border-transparent text-[--color-text-tertiary] hover:text-[--color-text-secondary]"
-            }`}
-            aria-pressed={tab === t}
-            data-testid={`perf-tab-${t}`}
-          >
-            {t}
-          </button>
-        ))}
+        <span className="font-mono text-[10px] tracking-[0.08em] text-[--color-text-primary]">NAV</span>
         <span className="ml-auto cursor-default font-mono text-[10px] tracking-[0.08em] text-[--color-text-tertiary]">
-          {range} · placeholder series
+          {range}
+          {series?.actual_span ? ` · ${series.actual_span.start} → ${series.actual_span.end}` : ""}
         </span>
       </div>
 
-      <div className="grid grid-cols-[40px_1fr] gap-x-2">
+      <div className="grid grid-cols-[50px_1fr] gap-x-2">
         <div
           className="flex flex-col justify-between py-[2px] text-right font-mono text-[9px] tracking-[0.04em] text-[--color-text-tertiary]"
           aria-hidden="true"
         >
-          {yLabels.map((label) => (
-            <span key={label}>{label}</span>
+          {yLabels.map((label, i) => (
+            <span key={i}>{label}</span>
           ))}
         </div>
 
         <div>
           <div className="relative h-[110px]">
-            <svg
-              ref={svgRef}
-              viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
-              preserveAspectRatio="none"
-              className="block h-full w-full"
-              onMouseMove={onMove}
-              onMouseLeave={() => setHover(null)}
-            >
-              <defs>
-                <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    style={{
-                      stopColor: "var(--color-accent-primary)",
-                      stopOpacity: 0.32,
-                    }}
-                  />
-                  <stop
-                    offset="100%"
-                    style={{
-                      stopColor: "var(--color-accent-primary)",
-                      stopOpacity: 0,
-                    }}
-                  />
-                </linearGradient>
-                <clipPath id={clipId}>
-                  <motion.rect
-                    key={`${tab}-${range}`}
-                    x={0}
-                    y={0}
-                    height={VIEWBOX_H}
-                    initial={{ width: 0 }}
-                    animate={{ width: VIEWBOX_W }}
-                    transition={{ duration: 0.9, ease: "easeOut" }}
-                  />
-                </clipPath>
-              </defs>
-
-              <g
-                style={{ stroke: "var(--color-border-subtle)" }}
-                strokeWidth="1"
-                strokeDasharray="2 4"
+            {empty ? (
+              <div className="flex h-full items-center justify-center font-mono text-[11px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+                No data for {range}
+              </div>
+            ) : loading ? (
+              <div className="h-full w-full animate-pulse rounded bg-[--color-border-subtle]/30" />
+            ) : (
+              <svg
+                ref={svgRef}
+                viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`}
+                preserveAspectRatio="none"
+                className="block h-full w-full"
+                onMouseMove={onMove}
+                onMouseLeave={() => setHover(null)}
               >
-                <line x1="0" y1="22" x2={VIEWBOX_W} y2="22" />
-                <line x1="0" y1="55" x2={VIEWBOX_W} y2="55" />
-                <line x1="0" y1="88" x2={VIEWBOX_W} y2="88" />
-              </g>
+                <defs>
+                  <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" style={{ stopColor: "var(--color-accent-primary)", stopOpacity: 0.32 }} />
+                    <stop offset="100%" style={{ stopColor: "var(--color-accent-primary)", stopOpacity: 0 }} />
+                  </linearGradient>
+                  <clipPath id={clipId}>
+                    <motion.rect
+                      key={`${range}-${points.length}`}
+                      x={0}
+                      y={0}
+                      height={VIEWBOX_H}
+                      initial={{ width: 0 }}
+                      animate={{ width: VIEWBOX_W }}
+                      transition={{ duration: 0.9, ease: "easeOut" }}
+                    />
+                  </clipPath>
+                </defs>
 
-              <g clipPath={`url(#${clipId})`}>
-                <path d={p.area} fill={`url(#${gradId})`} />
-                <path
-                  d={p.line}
-                  fill="none"
-                  style={{ stroke: "var(--yellow-600)" }}
-                  strokeWidth="1.6"
-                />
-                <path
-                  d={p.bench}
-                  fill="none"
-                  style={{ stroke: "var(--neutral-400)" }}
-                  strokeWidth="1.2"
-                  strokeDasharray="3 3"
-                />
-              </g>
+                <g style={{ stroke: "var(--color-border-subtle)" }} strokeWidth="1" strokeDasharray="2 4">
+                  <line x1="0" y1="22" x2={VIEWBOX_W} y2="22" />
+                  <line x1="0" y1="55" x2={VIEWBOX_W} y2="55" />
+                  <line x1="0" y1="88" x2={VIEWBOX_W} y2="88" />
+                </g>
 
-              {hover ? (
-                <line
-                  x1={hover.point.x}
-                  x2={hover.point.x}
-                  y1={0}
-                  y2={VIEWBOX_H}
-                  style={{ stroke: "var(--color-text-tertiary)" }}
-                  strokeWidth="1"
-                  strokeDasharray="2 3"
-                  pointerEvents="none"
-                />
-              ) : null}
-            </svg>
+                <g clipPath={`url(#${clipId})`}>
+                  <path d={areaPath} fill={`url(#${gradId})`} />
+                  <path d={linePath} fill="none" style={{ stroke: "var(--yellow-600)" }} strokeWidth="1.6" />
+                </g>
 
-            {hover ? (
-              <HoverDotAndTooltip
-                point={hover.point}
-                date={hover.date}
-                value={hover.value}
-              />
+                {hover ? (
+                  <line
+                    x1={hover.x}
+                    x2={hover.x}
+                    y1={0}
+                    y2={VIEWBOX_H}
+                    style={{ stroke: "var(--color-text-tertiary)" }}
+                    strokeWidth="1"
+                    strokeDasharray="2 3"
+                    pointerEvents="none"
+                  />
+                ) : null}
+              </svg>
+            )}
+
+            {hover && !empty && !loading ? (
+              <HoverDotAndTooltip x={hover.x} y={hover.y} date={hover.date} value={hover.value} />
             ) : null}
           </div>
 
@@ -200,9 +234,9 @@ export function PerfChart({ range }: PerfChartProps): JSX.Element {
             className="mt-2 flex justify-between font-mono text-[9px] tracking-[0.04em] text-[--color-text-tertiary]"
             aria-hidden="true"
           >
-            {xLabels.map((label) => (
-              <span key={label}>{label}</span>
-            ))}
+            {xLabels.length > 0
+              ? xLabels.map((label, i) => <span key={`${label}-${i}`}>{label}</span>)
+              : null}
           </div>
         </div>
       </div>
@@ -210,17 +244,19 @@ export function PerfChart({ range }: PerfChartProps): JSX.Element {
   );
 }
 
-interface HoverDotProps {
-  point: PerfPoint;
+function HoverDotAndTooltip({
+  x,
+  y,
+  date,
+  value,
+}: {
+  x: number;
+  y: number;
   date: string;
   value: string;
-}
-
-/** Renders the dot + tooltip in HTML space so neither is squished by the
- *  SVG's `preserveAspectRatio="none"`. */
-function HoverDotAndTooltip({ point, date, value }: HoverDotProps): JSX.Element {
-  const leftPct = (point.x / VIEWBOX_W) * 100;
-  const topPct = (point.y / VIEWBOX_H) * 100;
+}): JSX.Element {
+  const leftPct = (x / VIEWBOX_W) * 100;
+  const topPct = (y / VIEWBOX_H) * 100;
   const tooltipOnRight = leftPct < 18;
   return (
     <>

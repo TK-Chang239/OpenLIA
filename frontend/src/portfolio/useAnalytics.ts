@@ -15,7 +15,7 @@ export interface UseAnalyticsResult {
 }
 
 /** useAnalytics — analytics + refresh with rate-limit error surfacing. */
-export function useAnalytics(): UseAnalyticsResult {
+export function useAnalytics(market?: string): UseAnalyticsResult {
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,13 +24,13 @@ export function useAnalytics(): UseAnalyticsResult {
     setLoading(true);
     setError(null);
     try {
-      setAnalytics(await fetchAnalytics());
+      setAnalytics(await fetchAnalytics(market));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [market]);
 
   useEffect(() => {
     void reload();
@@ -38,9 +38,9 @@ export function useAnalytics(): UseAnalyticsResult {
 
   const refresh = useCallback(async () => {
     setError(null);
-    await refreshPrices();
+    await refreshPrices(market);
     await reload();
-  }, [reload]);
+  }, [reload, market]);
 
   return { analytics, loading, error, reload, refresh } as const;
 }

@@ -18,7 +18,7 @@ export interface UseHoldingsResult {
 }
 
 /** useHoldings — list, add, remove with optimistic snapshot for Undo. */
-export function useHoldings(): UseHoldingsResult {
+export function useHoldings(market?: string): UseHoldingsResult {
   const [holdings, setHoldings] = useState<PortfolioHolding[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -27,13 +27,13 @@ export function useHoldings(): UseHoldingsResult {
     setLoading(true);
     setError(null);
     try {
-      setHoldings(await fetchHoldings());
+      setHoldings(await fetchHoldings(market));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [market]);
 
   useEffect(() => {
     void reload();
@@ -41,11 +41,11 @@ export function useHoldings(): UseHoldingsResult {
 
   const add = useCallback(
     async (input: HoldingInput) => {
-      const created = await createHolding(input);
+      const created = await createHolding(input, market);
       setHoldings((prev) => [...prev, created]);
       return created;
     },
-    [],
+    [market],
   );
 
   const remove = useCallback(

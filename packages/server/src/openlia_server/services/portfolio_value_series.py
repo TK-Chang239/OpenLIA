@@ -14,7 +14,7 @@ falling back to per-currency display.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -23,7 +23,9 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.content import (
     PortfolioHolding,
     PortfolioQuoteDaily,
+    PortfolioQuoteIntraday,
 )
+from openlia_server.services.market_hours import Market, classify_market
 
 _GROUPS_META_TICKER = "__GROUPS__"
 
@@ -32,6 +34,7 @@ _GROUPS_META_TICKER = "__GROUPS__"
 class ValuePoint:
     date: date
     value: Decimal
+    ts: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -76,7 +79,7 @@ def resolve_window(timeframe: str, today: date) -> date:
 
 
 def _holdings_for_user(
-    session: Session, user_id: str
+    session: Session, user_id: str, market: Market | None = None
 ) -> list[PortfolioHolding]:
     rows = (
         session.execute(
@@ -91,7 +94,10 @@ def _holdings_for_user(
         .all()
     )
     # Only holdings with a share count contribute to the value chart.
-    return [h for h in rows if h.shares is not None]
+    contributing = [h for h in rows if h.shares is not None]
+    if market is None:
+        return contributing
+    return [h for h in contributing if classify_market(h.ticker) == market]
 
 
 def compute_value_series(
@@ -100,8 +106,9 @@ def compute_value_series(
     user_id: str,
     timeframe: str,
     today: date,
+    market: Market | None = None,
 ) -> ValueSeries:
-    holdings = _holdings_for_user(session, user_id)
+    holdings = _holdings_for_user(session, user_id, market=market)
     if not holdings:
         return ValueSeries(
             timeframe=timeframe,
@@ -168,6 +175,118 @@ def compute_value_series(
     return ValueSeries(
         timeframe=timeframe,
         actual_span=span,
+        points=points,
+        period_return_abs=period_return_abs,
+        period_return_pct=period_return_pct,
+    )
+
+
+_INTRADAY_FALLBACK_LIMIT_DAYS = 14
+
+
+def compute_value_series_intraday(
+    session: Session,
+    *,
+    user_id: str,
+    today: date,
+    market: Market | None = None,
+) -> ValueSeries:
+    """Build a one-day intraday value series.
+
+    Finds the most recent UTC date with any intraday rows for the user's
+    tickers (up to ``_INTRADAY_FALLBACK_LIMIT_DAYS`` back), then emits one
+    point per unique tick timestamp. Each point sums
+    ``sharesᵢ × last-known-priceᵢ`` over holdings whose ``added_at <= ts``.
+
+    Returns an empty series if no eligible intraday data exists.
+    """
+    holdings = _holdings_for_user(session, user_id, market=market)
+    if not holdings:
+        return ValueSeries(
+            timeframe="1d",
+            actual_span=None,
+            points=[],
+            period_return_abs=None,
+            period_return_pct=None,
+        )
+
+    tickers = [h.ticker for h in holdings]
+    earliest = today - timedelta(days=_INTRADAY_FALLBACK_LIMIT_DAYS)
+    rows = (
+        session.execute(
+            select(
+                PortfolioQuoteIntraday.ticker,
+                PortfolioQuoteIntraday.ts,
+                PortfolioQuoteIntraday.close,
+            )
+            .where(
+                PortfolioQuoteIntraday.ticker.in_(tickers),
+                PortfolioQuoteIntraday.ts
+                >= datetime(earliest.year, earliest.month, earliest.day, tzinfo=UTC),
+            )
+            .order_by(PortfolioQuoteIntraday.ts)
+        )
+        .all()
+    )
+    if not rows:
+        return ValueSeries(
+            timeframe="1d",
+            actual_span=None,
+            points=[],
+            period_return_abs=None,
+            period_return_pct=None,
+        )
+
+    # Pick most recent UTC date with any row (data-driven trading day).
+    most_recent = max(r.ts.date() for r in rows)
+    day_rows = [r for r in rows if r.ts.date() == most_recent]
+
+    # Build per-ticker price-walk: at each unique ts, use latest known price.
+    unique_ts = sorted({r.ts for r in day_rows})
+    by_ticker: dict[str, list[tuple[datetime, Decimal]]] = {}
+    for r in day_rows:
+        by_ticker.setdefault(r.ticker, []).append((r.ts, r.close))
+
+    def latest_price_at(ticker: str, at: datetime) -> Decimal | None:
+        series = by_ticker.get(ticker)
+        if not series:
+            return None
+        last: Decimal | None = None
+        for ts, close in series:
+            if ts > at:
+                break
+            last = close
+        return last
+
+    points: list[ValuePoint] = []
+    for ts in unique_ts:
+        value = Decimal("0")
+        contributed = False
+        for h in holdings:
+            if h.added_at > ts:
+                continue
+            price = latest_price_at(h.ticker, ts)
+            if price is None or h.shares is None:
+                continue
+            value += h.shares * price
+            contributed = True
+        if contributed:
+            points.append(ValuePoint(date=ts.date(), value=value, ts=ts))
+
+    period_return_abs: Decimal | None = None
+    period_return_pct: Decimal | None = None
+    if len(points) >= 2:
+        start_val = points[0].value
+        end_val = points[-1].value
+        period_return_abs = end_val - start_val
+        if start_val != 0:
+            period_return_pct = (period_return_abs / start_val).quantize(
+                Decimal("0.0001")
+            )
+
+    return ValueSeries(
+        timeframe="1d",
+        actual_span=ActualSpan(start=most_recent, end=most_recent),
         points=points,
         period_return_abs=period_return_abs,
         period_return_pct=period_return_pct,

@@ -596,10 +596,16 @@ def create_app(
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
 
-    # Portfolio — production price provider wraps app.state.financial_adapter
-    # (a configured Plan 3 ProviderAdapter exposing stock_quote). When no
-    # adapter is registered we fall back to a no-op provider so the page
-    # degrades gracefully (sparkline/price render as `—`) instead of 5xx-ing.
+    # Portfolio — bind the connector dispatcher behind a fetch(need_id, params)
+    # surface so the price provider can pull live quotes. Skipping this leaves
+    # the page in graceful-degradation mode (prices render as `—`).
+    from openlia_server.services.connector_financial_adapter import (
+        ConnectorFinancialAdapter,
+    )
+
+    if getattr(app.state, "financial_adapter", None) is None:
+        app.state.financial_adapter = ConnectorFinancialAdapter(factory)
+
     def _portfolio_price_provider_factory() -> Any:
         from openlia_server.services.portfolio_prices import (
             AdapterPriceProvider,

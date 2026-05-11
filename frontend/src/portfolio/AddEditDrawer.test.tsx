@@ -32,7 +32,7 @@ describe("AddEditDrawer", () => {
       <AddEditDrawer
         open={false}
         mode="create"
-        onClose={() => {}}
+        market="us" onClose={() => {}}
         onSaved={() => {}}
       />,
     );
@@ -45,7 +45,7 @@ describe("AddEditDrawer", () => {
         open
         mode="edit"
         initial={sample}
-        onClose={() => {}}
+        market="us" onClose={() => {}}
         onSaved={() => {}}
       />,
     );
@@ -58,7 +58,7 @@ describe("AddEditDrawer", () => {
       <AddEditDrawer
         open
         mode="create"
-        onClose={() => {}}
+        market="us" onClose={() => {}}
         onSaved={onSaved}
       />,
     );

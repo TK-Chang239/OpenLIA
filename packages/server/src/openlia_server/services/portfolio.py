@@ -19,6 +19,7 @@ from typing import TypedDict
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import PortfolioHolding
+from openlia_server.services.market_hours import Market, classify_market
 
 
 class DuplicateTickerError(ValueError):
@@ -135,14 +136,19 @@ def create_holding(
     return _row_to_dto(row)
 
 
-def list_holdings(session: Session, *, user_id: str) -> list[HoldingDTO]:
+def list_holdings(
+    session: Session, *, user_id: str, market: Market | None = None
+) -> list[HoldingDTO]:
     rows = (
         session.query(PortfolioHolding)
         .filter_by(user_id=user_id)
         .order_by(PortfolioHolding.ticker.asc())
         .all()
     )
-    return [_row_to_dto(r) for r in rows if r.ticker != _GROUPS_META_TICKER]
+    dtos = [_row_to_dto(r) for r in rows if r.ticker != _GROUPS_META_TICKER]
+    if market is None:
+        return dtos
+    return [d for d in dtos if classify_market(d.ticker) == market]
 
 
 def get_holding(session: Session, *, user_id: str, holding_id: str) -> HoldingDTO:
@@ -397,12 +403,14 @@ def compute_analytics(
     *,
     user_id: str,
     prices: dict[str, Decimal | None],
+    market: Market | None = None,
 ) -> AnalyticsSummary:
     """Compute totals, per-position P&L, and allocation weights.
 
     `prices` is a caller-provided map of ticker -> last_price (or None).
+    When `market` is set, only holdings of that market contribute.
     """
-    rows = list_holdings(session, user_id=user_id)
+    rows = list_holdings(session, user_id=user_id, market=market)
     positions_raw: list[tuple[HoldingDTO, Decimal | None, Decimal | None, Decimal | None]] = []
     total_mv = Decimal("0")
     total_cost = Decimal("0")

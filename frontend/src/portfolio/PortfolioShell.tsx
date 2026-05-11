@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { JSX, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
 import {
@@ -12,6 +13,8 @@ import {
   type PortfolioHolding,
   type RefreshCadence,
 } from "../api/portfolio";
+import type { Market } from "./marketTypes";
+import { MARKET_LABELS } from "./marketTypes";
 import { exportCsvUrl } from "../api/portfolio";
 import { ToastProvider, useToast } from "../components/primitives/Toast";
 
@@ -31,10 +34,11 @@ import { useAnalytics } from "./useAnalytics";
 import { useHoldings } from "./useHoldings";
 import { useValueSeries } from "./useValueSeries";
 
-function ShellInner(): JSX.Element {
+function ShellInner({ market }: { market: Market }): JSX.Element {
   const toast = useToast();
-  const { holdings, loading, reload, remove } = useHoldings();
-  const { analytics, refresh } = useAnalytics();
+  const navigate = useNavigate();
+  const { holdings, loading, reload, remove } = useHoldings(market);
+  const { analytics, refresh } = useAnalytics(market);
   const [groups, setGroups] = useState<string[]>([]);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -42,7 +46,10 @@ function ShellInner(): JSX.Element {
   const [csvOpen, setCsvOpen] = useState(false);
   const [drawer, setDrawer] = useState<PortfolioHolding | null>(null);
   const [range, setRange] = useState<PerfRange>("1W");
-  const { series: valueSeries } = useValueSeries(range);
+  const { series: valueSeries, loading: valueSeriesLoading } = useValueSeries(
+    range,
+    market,
+  );
   const [refreshing, setRefreshing] = useState(false);
   const [refreshCadence, setRefreshCadence] = useState<RefreshCadence>("daily");
 
@@ -80,7 +87,7 @@ function ShellInner(): JSX.Element {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await refreshPrices();
+      await refreshPrices(market);
       await refresh();
       toast.push({ title: "Prices refreshed", tone: "success" });
     } catch (e) {
@@ -120,14 +127,17 @@ function ShellInner(): JSX.Element {
       undo: {
         label: "Undo",
         onClick: () => {
-          void createHolding({
-            ticker: snapshot.ticker,
-            shares: snapshot.shares ?? null,
-            cost_basis: snapshot.cost_basis ?? null,
-            currency: snapshot.currency,
-            notes: snapshot.notes_text ?? null,
-            groups: snapshot.groups,
-          }).then(() => reload());
+          void createHolding(
+            {
+              ticker: snapshot.ticker,
+              shares: snapshot.shares ?? null,
+              cost_basis: snapshot.cost_basis ?? null,
+              currency: snapshot.currency,
+              notes: snapshot.notes_text ?? null,
+              groups: snapshot.groups,
+            },
+            market,
+          ).then(() => reload());
         },
       },
     });
@@ -150,6 +160,9 @@ function ShellInner(): JSX.Element {
               onImportCsv={() => setCsvOpen(true)}
               refreshCadence={refreshCadence}
               onRefreshCadenceChange={onCadenceChange}
+              market={market}
+              marketLabel={MARKET_LABELS[market]}
+              onMarketChange={(next) => navigate(`/portfolio/${next}`)}
             />
           </Reveal>
 
@@ -172,7 +185,7 @@ function ShellInner(): JSX.Element {
           ) : null}
 
           <Reveal delay={2}>
-            <PerfChart range={range} />
+            <PerfChart range={range} series={valueSeries} loading={valueSeriesLoading} />
           </Reveal>
 
           {valueSeries && valueSeries.period_return_pct !== null ? (
@@ -235,6 +248,7 @@ function ShellInner(): JSX.Element {
         mode={editTarget ? "edit" : "create"}
         initial={editTarget}
         groups={groups}
+        market={market}
         onCreateGroup={onCreateGroupInline}
         onClose={() => {
           setAddOpen(false);
@@ -271,10 +285,10 @@ function ShellInner(): JSX.Element {
   );
 }
 
-export function PortfolioShell(): JSX.Element {
+export function PortfolioShell({ market }: { market: Market }): JSX.Element {
   return (
     <ToastProvider>
-      <ShellInner />
+      <ShellInner key={market} market={market} />
     </ToastProvider>
   );
 }
