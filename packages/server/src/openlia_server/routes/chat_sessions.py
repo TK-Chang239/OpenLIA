@@ -8,11 +8,12 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import ChatMessage, Report
+from openlia_server.db.models.content import ChatAttachment, ChatMessage, Report
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
 
@@ -110,6 +111,11 @@ class SessionModelIn(BaseModel):
     model_id: str | None = None
 
 
+class AttachmentOut(BaseModel):
+    filename: str
+    size_bytes: int
+
+
 class MessageOut(BaseModel):
     id: str
     role: str
@@ -119,6 +125,7 @@ class MessageOut(BaseModel):
     token_usage: dict | None = None
     created_at: datetime
     stopped_at: datetime | None = None
+    attachments: list[AttachmentOut] = Field(default_factory=list)
 
 
 class MessageListOut(BaseModel):
@@ -303,6 +310,18 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
             raise HTTPException(
                 status_code=404, detail={"code": "not_found", "message": str(exc)}
             ) from exc
+        message_ids = [r.id for r in rows]
+        attachments_by_message: dict[str, list[AttachmentOut]] = {}
+        if message_ids:
+            att_stmt = (
+                select(ChatAttachment)
+                .where(ChatAttachment.message_id.in_(message_ids))
+                .order_by(ChatAttachment.created_at.asc(), ChatAttachment.id.asc())
+            )
+            for a in db.execute(att_stmt).scalars():
+                attachments_by_message.setdefault(a.message_id, []).append(
+                    AttachmentOut(filename=a.filename, size_bytes=a.size_bytes)
+                )
         return MessageListOut(
             items=[
                 MessageOut(
@@ -314,6 +333,7 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
                     token_usage=r.token_usage,
                     created_at=r.created_at,
                     stopped_at=r.stopped_at,
+                    attachments=attachments_by_message.get(r.id, []),
                 )
                 for r in rows
             ]
