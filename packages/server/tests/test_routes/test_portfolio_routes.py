@@ -427,3 +427,151 @@ def test_create_holding_rejects_invalid_added_at_format(client, user_factory, lo
         },
     )
     assert r.status_code == 400
+
+
+def test_analytics_surfaces_day_change_from_portfolio_quotes(
+    client, user_factory, login_as
+) -> None:
+    """When portfolio_quotes carries previous_close, /analytics must surface
+    per-position previous_close, day_change_abs (per-share x shares), and
+    day_change_pct so the HoldingsTable can render a DAY column."""
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.services import portfolio_quotes as quotes_svc
+
+    u = user_factory()
+    login_as(u)
+    client.post(
+        "/portfolio/holdings",
+        json={"ticker": "AAPL", "shares": "10", "cost_basis": "150"},
+    )
+
+    quote_at = datetime(2026, 5, 11, 1, 30, tzinfo=UTC)
+    with session_mod.SessionLocal() as s:
+        quotes_svc.upsert_quote(
+            s,
+            ticker="AAPL",
+            last_price=Decimal("200"),
+            previous_close=Decimal("195"),
+            day_open=Decimal("196"),
+            day_high=Decimal("202"),
+            day_low=Decimal("195.5"),
+            volume=42,
+            currency="USD",
+            quote_at=quote_at,
+            fetched_at=quote_at,
+            source="eodhd",
+        )
+
+    r = client.get("/portfolio/analytics")
+    assert r.status_code == 200
+    pos = r.json()["positions"][0]
+    assert Decimal(pos["previous_close"]) == Decimal("195")
+    # (200 - 195) * 10 shares = 50
+    assert Decimal(pos["day_change_abs"]) == Decimal("50")
+    # (200 - 195) / 195 ≈ 0.025641
+    pct = Decimal(pos["day_change_pct"])
+    assert Decimal("0.0256") < pct < Decimal("0.0257")
+
+
+def test_analytics_day_change_falls_back_to_daily_history(client, user_factory, login_as) -> None:
+    """When portfolio_quotes.previous_close is null but portfolio_quote_daily
+    has at least one row strictly before today, the second-most-recent close
+    serves as the previous-day baseline. Today's last_price is taken from
+    portfolio_quotes."""
+    from datetime import UTC, date, datetime, timedelta
+    from decimal import Decimal
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.content import PortfolioQuoteDaily
+    from openlia_server.services import portfolio_quotes as quotes_svc
+
+    u = user_factory()
+    login_as(u)
+    client.post(
+        "/portfolio/holdings",
+        json={"ticker": "AAPL", "shares": "10", "cost_basis": "150"},
+    )
+
+    now = datetime.now(UTC)
+    with session_mod.SessionLocal() as s:
+        quotes_svc.upsert_quote(
+            s,
+            ticker="AAPL",
+            last_price=Decimal("110"),
+            previous_close=None,
+            day_open=None,
+            day_high=None,
+            day_low=None,
+            volume=None,
+            currency="USD",
+            quote_at=now,
+            fetched_at=now,
+            source="fake",
+        )
+        today: date = now.date()
+        s.add(
+            PortfolioQuoteDaily(
+                ticker="AAPL",
+                trade_date=today - timedelta(days=2),
+                close=Decimal("100"),
+            )
+        )
+        s.add(
+            PortfolioQuoteDaily(
+                ticker="AAPL",
+                trade_date=today - timedelta(days=1),
+                close=Decimal("105"),
+            )
+        )
+        s.commit()
+
+    r = client.get("/portfolio/analytics")
+    assert r.status_code == 200
+    pos = r.json()["positions"][0]
+    assert Decimal(pos["previous_close"]) == Decimal("105")
+    assert Decimal(pos["day_change_abs"]) == Decimal("50")  # (110-105)*10
+    pct = Decimal(pos["day_change_pct"])
+    assert Decimal("0.0476") < pct < Decimal("0.0477")
+
+
+def test_analytics_day_change_null_when_no_baseline(client, user_factory, login_as) -> None:
+    """Without any previous_close source, day_change fields are null."""
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.services import portfolio_quotes as quotes_svc
+
+    u = user_factory()
+    login_as(u)
+    client.post(
+        "/portfolio/holdings",
+        json={"ticker": "AAPL", "shares": "10", "cost_basis": "150"},
+    )
+
+    now = datetime.now(UTC)
+    with session_mod.SessionLocal() as s:
+        quotes_svc.upsert_quote(
+            s,
+            ticker="AAPL",
+            last_price=Decimal("110"),
+            previous_close=None,
+            day_open=None,
+            day_high=None,
+            day_low=None,
+            volume=None,
+            currency="USD",
+            quote_at=now,
+            fetched_at=now,
+            source="fake",
+        )
+
+    r = client.get("/portfolio/analytics")
+    assert r.status_code == 200
+    pos = r.json()["positions"][0]
+    assert pos["previous_close"] is None
+    assert pos["day_change_abs"] is None
+    assert pos["day_change_pct"] is None

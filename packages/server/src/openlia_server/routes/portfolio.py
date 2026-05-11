@@ -28,6 +28,62 @@ from openlia_server.services.portfolio_prices import (
 _MARKET_DISPLAY_CURRENCY: dict[Market, str] = {"us": "USD", "twse": "TWD"}
 
 
+def _resolve_previous_closes(
+    session: DBSession,
+    *,
+    tickers: list[str],
+    quote_rows: dict[str, Any],
+) -> dict[str, Decimal | None]:
+    """Per-ticker previous-session close.
+
+    Prefer ``portfolio_quotes.previous_close`` (set by the live provider).
+    Fall back to the most recent ``portfolio_quote_daily`` close strictly
+    earlier than today, so a holding that never received a provider-supplied
+    previous_close still drives a meaningful day-change calculation.
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import func, select
+
+    from openlia_server.db.models.content import PortfolioQuoteDaily
+
+    out: dict[str, Decimal | None] = {}
+    missing: list[str] = []
+    for t in tickers:
+        row = quote_rows.get(t)
+        prev = getattr(row, "previous_close", None) if row is not None else None
+        if prev is not None:
+            out[t] = prev
+        else:
+            out[t] = None
+            missing.append(t)
+
+    if missing:
+        today = datetime.now(UTC).date()
+        sub = (
+            select(
+                PortfolioQuoteDaily.ticker,
+                func.max(PortfolioQuoteDaily.trade_date).label("trade_date"),
+            )
+            .where(
+                PortfolioQuoteDaily.ticker.in_(missing),
+                PortfolioQuoteDaily.trade_date < today,
+            )
+            .group_by(PortfolioQuoteDaily.ticker)
+            .subquery()
+        )
+        rows = session.execute(
+            select(PortfolioQuoteDaily.ticker, PortfolioQuoteDaily.close).join(
+                sub,
+                (PortfolioQuoteDaily.ticker == sub.c.ticker)
+                & (PortfolioQuoteDaily.trade_date == sub.c.trade_date),
+            )
+        ).all()
+        for ticker, close in rows:
+            out[ticker] = close
+    return out
+
+
 def _resolve_market(raw: str | None) -> Market | None:
     """Translate the public query value ('us' | 'tw') into internal Market.
 
@@ -318,11 +374,20 @@ def build_portfolio_router(
             holdings = svc.list_holdings(s, user_id=user.id, market=market_filter)
             tickers = [h.ticker for h in holdings]
             quote_rows = quotes_svc.get_quotes_bulk(s, tickers=tickers)
+            upper_tickers = [raw.upper() for raw in tickers]
             prices: dict[str, Decimal | None] = {
-                t: (quote_rows[t].last_price if t in quote_rows else None)
-                for t in (raw.upper() for raw in tickers)
+                t: (quote_rows[t].last_price if t in quote_rows else None) for t in upper_tickers
             }
-            result = svc.compute_analytics(s, user_id=user.id, prices=prices, market=market_filter)
+            previous_closes = _resolve_previous_closes(
+                s, tickers=upper_tickers, quote_rows=quote_rows
+            )
+            result = svc.compute_analytics(
+                s,
+                user_id=user.id,
+                prices=prices,
+                market=market_filter,
+                previous_closes=previous_closes,
+            )
             last_quote_at = max(
                 (r.fetched_at for r in quote_rows.values()),
                 default=None,
@@ -369,6 +434,15 @@ def build_portfolio_router(
                     ),
                     "weight": str(p.weight) if p.weight is not None else None,
                     "currency": p.currency,
+                    "previous_close": (
+                        str(p.previous_close) if p.previous_close is not None else None
+                    ),
+                    "day_change_abs": (
+                        str(p.day_change_abs) if p.day_change_abs is not None else None
+                    ),
+                    "day_change_pct": (
+                        str(p.day_change_pct) if p.day_change_pct is not None else None
+                    ),
                 }
                 for p in result.positions
             ],

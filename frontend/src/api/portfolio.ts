@@ -48,6 +48,9 @@ export interface PositionAnalytic {
   unrealized_pl_pct: string | null;
   weight: string | null;
   currency: string;
+  previous_close: string | null;
+  day_change_abs: string | null;
+  day_change_pct: string | null;
 }
 
 export interface AnalyticsResponse {

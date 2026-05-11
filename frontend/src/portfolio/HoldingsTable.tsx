@@ -16,6 +16,7 @@ export type SortKey =
   | "SHARES"
   | "AVG_COST"
   | "PRICE"
+  | "DAY_CHANGE"
   | "MKT_VALUE"
   | "POS_PL"
   | "WEIGHT";
@@ -27,6 +28,7 @@ interface SortState {
 }
 
 interface ColumnVis {
+  day_change: boolean;
   pos_pl: boolean;
   weight: boolean;
   spark: boolean;
@@ -37,7 +39,12 @@ interface FilterState {
 }
 
 const DEFAULT_SORT: SortState = { key: "MKT_VALUE", dir: "desc" };
-const DEFAULT_COLUMNS: ColumnVis = { pos_pl: true, weight: true, spark: true };
+const DEFAULT_COLUMNS: ColumnVis = {
+  day_change: true,
+  pos_pl: true,
+  weight: true,
+  spark: true,
+};
 const DEFAULT_FILTER: FilterState = { groups: [] };
 const UNTAGGED_KEY = "__UNTAGGED__";
 
@@ -63,10 +70,11 @@ export function HoldingsTable({
   onManageGroups,
 }: HoldingsTableProps): JSX.Element {
   const [sort, setSort] = useLocalJsonPref<SortState>("portfolio:sort", DEFAULT_SORT);
-  const [columns, setColumns] = useLocalJsonPref<ColumnVis>(
+  const [storedColumns, setColumns] = useLocalJsonPref<Partial<ColumnVis>>(
     "portfolio:columns",
     DEFAULT_COLUMNS,
   );
+  const columns: ColumnVis = { ...DEFAULT_COLUMNS, ...storedColumns };
   const [filter, setFilter] = useLocalJsonPref<FilterState>(
     "portfolio:filter",
     DEFAULT_FILTER,
@@ -178,6 +186,15 @@ export function HoldingsTable({
                 onClick={() => onHeaderClick("PRICE")}
                 align="right"
               />
+              {columns.day_change ? (
+                <SortHeader
+                  label="DAY ±"
+                  column="DAY_CHANGE"
+                  sort={sort}
+                  onClick={() => onHeaderClick("DAY_CHANGE")}
+                  align="right"
+                />
+              ) : null}
               <SortHeader
                 label="MKT VALUE"
                 column="MKT_VALUE"
@@ -254,6 +271,8 @@ function sortValue(
       return p?.cost_basis ? Number(p.cost_basis) : 0;
     case "PRICE":
       return p?.last_price ? Number(p.last_price) : 0;
+    case "DAY_CHANGE":
+      return p?.day_change_abs ? Number(p.day_change_abs) : 0;
     case "MKT_VALUE":
       return p?.market_value ? Number(p.market_value) : 0;
     case "POS_PL":
@@ -318,6 +337,14 @@ function HoldingRow({
   const priceN = position?.last_price ? Number(position.last_price) : null;
   const mktValueN = position?.market_value ? Number(position.market_value) : null;
   const posPlN = position?.unrealized_pl ? Number(position.unrealized_pl) : null;
+  const dayAbsN =
+    position?.day_change_abs !== null && position?.day_change_abs !== undefined
+      ? Number(position.day_change_abs)
+      : null;
+  const dayPctN =
+    position?.day_change_pct !== null && position?.day_change_pct !== undefined
+      ? Number(position.day_change_pct)
+      : null;
   const weight =
     position?.weight !== null && position?.weight !== undefined
       ? `${(Number(position.weight) * 100).toFixed(1)}%`
@@ -354,6 +381,23 @@ function HoldingRow({
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
         {formatCurrency(priceN, ccy)}
       </td>
+      {columns.day_change ? (
+        <td
+          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${dayAbsN !== null && dayAbsN >= 0 ? "text-[--color-feedback-success]" : dayAbsN !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
+          data-testid={`holding-day-change-${holding.ticker}`}
+        >
+          {dayAbsN === null || dayPctN === null ? (
+            "—"
+          ) : (
+            <span className="inline-flex items-center justify-end gap-[6px]">
+              <span>{formatCurrency(dayAbsN, ccy, { signed: true })}</span>
+              <span className="text-[10px] opacity-80">
+                {`${dayPctN >= 0 ? "+" : ""}${(dayPctN * 100).toFixed(2)}%`}
+              </span>
+            </span>
+          )}
+        </td>
+      ) : null}
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
         {formatCurrency(mktValueN, ccy)}
       </td>
@@ -516,6 +560,7 @@ function ColumnsFlyout({
   };
 
   const items: { key: keyof ColumnVis; label: string }[] = [
+    { key: "day_change", label: "DAY ±" },
     { key: "pos_pl", label: "POS P/L" },
     { key: "weight", label: "WEIGHT" },
     { key: "spark", label: "7D" },
