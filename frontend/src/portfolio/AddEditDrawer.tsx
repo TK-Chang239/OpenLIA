@@ -253,6 +253,20 @@ export function AddEditDrawer({
           ) : null}
         </label>
 
+        {mode === "edit" && initial ? (
+          <AdjustPositionSection
+            currentShares={parseDecimal(form.shares)}
+            currentCostBasis={parseDecimal(form.cost_basis)}
+            onApply={(newShares, newCostBasis) =>
+              setForm((f) => ({
+                ...f,
+                shares: newShares,
+                cost_basis: newCostBasis ?? "",
+              }))
+            }
+          />
+        ) : null}
+
         <label className="block text-xs text-[--color-text-tertiary] mt-3">
           Shares <span className="text-[--color-feedback-error]">*</span>
           <input
@@ -353,6 +367,164 @@ export function AddEditDrawer({
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+type AdjustAction = "buy" | "sell";
+
+interface AdjustPositionSectionProps {
+  readonly currentShares: number | null;
+  readonly currentCostBasis: number | null;
+  readonly onApply: (newShares: string, newCostBasis: string | null) => void;
+}
+
+function AdjustPositionSection({
+  currentShares,
+  currentCostBasis,
+  onApply,
+}: AdjustPositionSectionProps): JSX.Element {
+  const [action, setAction] = useState<AdjustAction>("buy");
+  const [qty, setQty] = useState("");
+  const [price, setPrice] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const qtyNum = parseDecimal(qty);
+  const priceNum = parseDecimal(price);
+  const canPreview = qtyNum !== null && priceNum !== null;
+
+  let previewText: string | null = null;
+  let previewError: string | null = null;
+  if (canPreview) {
+    if (action === "sell" && currentShares === null) {
+      previewError = "Set current shares first.";
+    } else if (action === "sell" && qtyNum! > (currentShares ?? 0)) {
+      previewError = `Cannot sell more than current shares (${formatDecimal(currentShares ?? 0)}).`;
+    } else {
+      const { newShares, newCostBasis } = computeBlend({
+        action,
+        currentShares,
+        currentCostBasis,
+        qty: qtyNum!,
+        price: priceNum!,
+      });
+      const costPart =
+        newCostBasis === null ? "" : ` @ avg $${formatDecimal(newCostBasis)}`;
+      previewText = `-> ${formatDecimal(newShares)} shares${costPart}`;
+    }
+  }
+
+  const onApplyClick = () => {
+    setError(null);
+    if (qtyNum === null) {
+      setError("Enter a positive share count.");
+      return;
+    }
+    if (priceNum === null) {
+      setError("Enter a positive price.");
+      return;
+    }
+    if (action === "sell" && currentShares === null) {
+      setError("Set current shares first.");
+      return;
+    }
+    if (action === "sell" && qtyNum > (currentShares ?? 0)) {
+      setError(
+        `Cannot sell more than current shares (${formatDecimal(currentShares ?? 0)}).`,
+      );
+      return;
+    }
+    const { newShares, newCostBasis } = computeBlend({
+      action,
+      currentShares,
+      currentCostBasis,
+      qty: qtyNum,
+      price: priceNum,
+    });
+    onApply(
+      formatDecimal(newShares),
+      newCostBasis === null ? null : formatDecimal(newCostBasis),
+    );
+    setQty("");
+    setPrice("");
+  };
+
+  const applyDisabled = qtyNum === null || priceNum === null;
+
+  return (
+    <div
+      data-testid="adjust-section"
+      className="mt-3 rounded-[--radius-sm] border border-[--color-border-subtle] p-3"
+    >
+      <div className="text-xs font-semibold text-[--color-text-secondary] mb-2">
+        Adjust position
+      </div>
+      <div
+        role="tablist"
+        aria-label="Adjustment action"
+        className="inline-flex rounded-[--radius-sm] border border-[--color-border-subtle] overflow-hidden mb-2"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={action === "buy"}
+          data-testid="adjust-buy"
+          onClick={() => setAction("buy")}
+          className={`px-3 py-1 text-xs ${action === "buy" ? "bg-[--color-accent-primary] text-white" : "bg-transparent text-[--color-text-secondary]"}`}
+        >
+          Buy
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={action === "sell"}
+          data-testid="adjust-sell"
+          onClick={() => setAction("sell")}
+          className={`px-3 py-1 text-xs ${action === "sell" ? "bg-[--color-accent-primary] text-white" : "bg-transparent text-[--color-text-secondary]"}`}
+        >
+          Sell
+        </button>
+      </div>
+      <div className="flex gap-2 items-end">
+        <label className="block text-xs text-[--color-text-tertiary] flex-1">
+          Shares
+          <input
+            value={qty}
+            onChange={(e) => setQty(e.target.value)}
+            data-testid="adjust-qty"
+            className="block w-full mt-1 px-2 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm] bg-[--color-bg-input]"
+            placeholder="e.g. 10"
+          />
+        </label>
+        <label className="block text-xs text-[--color-text-tertiary] flex-1">
+          Price per share
+          <input
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            data-testid="adjust-price"
+            className="block w-full mt-1 px-2 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm] bg-[--color-bg-input]"
+            placeholder="e.g. 145.00"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={onApplyClick}
+          disabled={applyDisabled}
+          data-testid="adjust-apply"
+          className="px-3 py-1 text-sm rounded-[--radius-sm] border border-[--color-border-subtle] disabled:opacity-40"
+        >
+          Apply
+        </button>
+      </div>
+      <div className="mt-2 text-[11px] min-h-[14px]" data-testid="adjust-preview">
+        {error ? (
+          <span className="text-[--color-feedback-error]">{error}</span>
+        ) : previewError ? (
+          <span className="text-[--color-feedback-error]">{previewError}</span>
+        ) : previewText ? (
+          <span className="text-[--color-text-tertiary]">{previewText}</span>
+        ) : null}
+      </div>
     </div>
   );
 }

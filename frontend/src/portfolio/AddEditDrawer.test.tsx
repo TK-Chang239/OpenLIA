@@ -72,6 +72,33 @@ describe("AddEditDrawer", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(api.createHolding).toHaveBeenCalled();
   });
+
+  it("renders AdjustPositionSection in edit mode", () => {
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={sample}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("adjust-section")).toBeInTheDocument();
+  });
+
+  it("does not render AdjustPositionSection in create mode", () => {
+    render(
+      <AddEditDrawer
+        open
+        mode="create"
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId("adjust-section")).toBeNull();
+  });
 });
 
 describe("AddEditDrawer helpers", () => {
