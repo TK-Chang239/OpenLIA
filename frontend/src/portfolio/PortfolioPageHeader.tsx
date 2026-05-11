@@ -267,6 +267,7 @@ function AddSplitButton({
 }
 
 const CADENCE_OPTIONS: { value: RefreshCadence; label: string; hint: string }[] = [
+  { value: "15min", label: "Every 15 min", hint: "Refresh every 15 minutes during market hours" },
   { value: "hourly", label: "Hourly", hint: "Refresh every hour during market hours" },
   { value: "daily", label: "Daily", hint: "Refresh once a day after market close" },
   { value: "weekly", label: "Weekly", hint: "Refresh once a week" },

@@ -119,7 +119,7 @@ class UserPrefs(Base):
             name="ck_user_prefs_timezone_source",
         ),
         CheckConstraint(
-            "portfolio_refresh_cadence IN ('hourly','daily','weekly','manual')",
+            "portfolio_refresh_cadence IN ('15min','hourly','daily','weekly','manual')",
             name="ck_user_prefs_portfolio_cadence",
         ),
     )

@@ -231,7 +231,7 @@ export async function fetchTickerSeries(
 
 // ---------- Preferences (Phase 2) ------------------------------------------
 
-export type RefreshCadence = "hourly" | "daily" | "weekly" | "manual";
+export type RefreshCadence = "15min" | "hourly" | "daily" | "weekly" | "manual";
 
 export interface PortfolioPrefs {
   refresh_cadence: RefreshCadence;

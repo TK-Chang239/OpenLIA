@@ -53,7 +53,7 @@ def test_accepts_all_four_values(create_tables, db_session) -> None:
     )
     db_session.commit()
 
-    for cadence in ("hourly", "daily", "weekly", "manual"):
+    for cadence in ("15min", "hourly", "daily", "weekly", "manual"):
         row = db_session.get(UserPrefs, "u1")
         if row is None:
             row = UserPrefs(user_id="u1")
