@@ -99,6 +99,191 @@ describe("AddEditDrawer", () => {
     );
     expect(screen.queryByTestId("adjust-section")).toBeNull();
   });
+
+  it("Buy: blends cost basis and updates raw fields", () => {
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={sample}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+
+    const sharesField = screen.getByTestId("drawer-shares") as HTMLInputElement;
+    const costField = screen.getByTestId("drawer-cost") as HTMLInputElement;
+    expect(sharesField.value).toBe("10");
+    expect(costField.value).toBe("150");
+
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "145" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    expect(sharesField.value).toBe("20");
+    expect(costField.value).toBe("147.5");
+    expect((screen.getByTestId("adjust-qty") as HTMLInputElement).value).toBe(
+      "",
+    );
+    expect((screen.getByTestId("adjust-price") as HTMLInputElement).value).toBe(
+      "",
+    );
+  });
+
+  it("Sell: decrements shares, cost basis unchanged", () => {
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={sample}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("adjust-sell"));
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "3" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "200" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    expect(
+      (screen.getByTestId("drawer-shares") as HTMLInputElement).value,
+    ).toBe("7");
+    expect((screen.getByTestId("drawer-cost") as HTMLInputElement).value).toBe(
+      "150",
+    );
+  });
+
+  it("Sell: blocked when qty exceeds current shares", () => {
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={sample}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("adjust-sell"));
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "999" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "200" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    expect(
+      (screen.getByTestId("drawer-shares") as HTMLInputElement).value,
+    ).toBe("10");
+    expect(screen.getByTestId("adjust-preview").textContent).toMatch(
+      /Cannot sell more than current shares/,
+    );
+  });
+
+  it("Sell: blocked when current shares is null", () => {
+    const noShares: api.PortfolioHolding = { ...sample, shares: null };
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={noShares}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("adjust-sell"));
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "1" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "200" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    expect(
+      (screen.getByTestId("drawer-shares") as HTMLInputElement).value,
+    ).toBe("");
+    expect(screen.getByTestId("adjust-preview").textContent).toMatch(
+      /Set current shares first/,
+    );
+  });
+
+  it("Buy: stacks two applies, blending each time", () => {
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={sample}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "10" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "145" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "5" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "160" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    expect(
+      (screen.getByTestId("drawer-shares") as HTMLInputElement).value,
+    ).toBe("25");
+    expect((screen.getByTestId("drawer-cost") as HTMLInputElement).value).toBe(
+      "150",
+    );
+  });
+
+  it("Buy: with null current cost basis sets cost = price", () => {
+    const noCost: api.PortfolioHolding = { ...sample, cost_basis: null };
+    render(
+      <AddEditDrawer
+        open
+        mode="edit"
+        initial={noCost}
+        market="us"
+        onClose={() => {}}
+        onSaved={() => {}}
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("adjust-qty"), {
+      target: { value: "5" },
+    });
+    fireEvent.change(screen.getByTestId("adjust-price"), {
+      target: { value: "120" },
+    });
+    fireEvent.click(screen.getByTestId("adjust-apply"));
+
+    expect(
+      (screen.getByTestId("drawer-shares") as HTMLInputElement).value,
+    ).toBe("15");
+    expect((screen.getByTestId("drawer-cost") as HTMLInputElement).value).toBe(
+      "120",
+    );
+  });
 });
 
 describe("AddEditDrawer helpers", () => {
