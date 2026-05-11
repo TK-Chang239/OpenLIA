@@ -104,14 +104,29 @@ class _AdapterQuoteProvider:
 
     def fetch_quote(self, ticker: str) -> dict | None:
         import asyncio
+        import concurrent.futures
 
         from openlia_server.services.portfolio_prices import _coerce_price
 
         adapter = self._adapter_provider()
         if adapter is None:
             return None
+        # APScheduler fires this from inside its own running event loop, so
+        # a bare ``asyncio.run`` raises ``RuntimeError: asyncio.run() cannot be
+        # called from a running event loop`` and the whole tick silently
+        # returns None for every ticker. Detect that case and dispatch the
+        # coroutine onto a worker thread that owns a fresh loop.
+        def _run() -> Any:
+            return asyncio.run(adapter.fetch("stock_quote", {"ticker": ticker.upper()}))
+
         try:
-            result = asyncio.run(adapter.fetch("stock_quote", {"ticker": ticker.upper()}))
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                result = _run()
+            else:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    result = pool.submit(_run).result()
         except Exception:
             return None
         payload = getattr(result, "payload", None)

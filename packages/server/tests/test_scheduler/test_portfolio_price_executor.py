@@ -167,3 +167,36 @@ async def test_intraday_schedule_id_bypasses_cadence_floor(db_session, session_f
             .all()
         )
     assert len(rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_adapter_quote_provider_works_inside_running_event_loop() -> None:
+    """The production QuoteProvider wraps an async adapter. APScheduler fires
+    jobs inside its own event loop, so the provider's adapter call must work
+    when invoked from async context. A naive ``asyncio.run(adapter.fetch(...))``
+    raises ``RuntimeError: asyncio.run() cannot be called from a running event
+    loop`` and the wrapping ``except`` would silently return None — producing
+    'failed' on every scheduled fire and zero intraday rows."""
+    from openlia_server.scheduler.executors.portfolio_prices import (
+        _AdapterQuoteProvider,
+    )
+
+    class _FakeResult:
+        def __init__(self, payload: dict) -> None:
+            self.payload = payload
+
+    class _FakeAsyncAdapter:
+        async def fetch(self, capability: str, params: dict) -> _FakeResult:
+            assert capability == "stock_quote"
+            return _FakeResult({"close": "123.45", "previousClose": "120.00"})
+
+    provider = _AdapterQuoteProvider(lambda: _FakeAsyncAdapter())
+    # We are inside an async test, so the executor's runtime context matches
+    # APScheduler's. If the provider mishandles this, fetch_quote returns None.
+    result = provider.fetch_quote("AAPL")
+    assert result is not None, (
+        "fetch_quote returned None inside a running event loop — "
+        "asyncio.run() is being called from async context"
+    )
+    assert str(result["last_price"]) == "123.45"
+    assert str(result["previous_close"]) == "120.00"
