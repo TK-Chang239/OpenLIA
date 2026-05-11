@@ -323,12 +323,21 @@ export function ChatInterface({
                         new Date(prev.created_at).getTime(),
                     )
                   : null;
+              const persistedAttachments = m.attachments?.length
+                ? m.attachments.map((a) => ({
+                    filename: a.filename,
+                    sizeBytes: a.size_bytes,
+                  }))
+                : undefined;
               const node =
                 m.role === "user" ? (
                   <UserBubble
                     key={m.id}
                     content={m.content}
-                    attachments={pendingAttachmentsRef.current.get(m.id)}
+                    attachments={
+                      persistedAttachments ??
+                      pendingAttachmentsRef.current.get(m.id)
+                    }
                   />
                 ) : (
                   <HistoricalAssistantMessage
