@@ -378,19 +378,14 @@ class SchedulerService:
             max_instances=1,
             coalesce=True,
         )
-        # Sub-hour intraday cron: fires every 15 minutes so the 1D chart
-        # and per-ticker sparklines accumulate >= 4 points per market hour
-        # (~26 across a US session, ~18 across a TWSE session). The
-        # per-ticker market_hours gate inside refresh_due_quotes still
-        # suppresses fetches for tickers whose home market is closed, so
-        # this only adds writes during open sessions.
+        # Sub-hour intraday cron: fires every 15 minutes. Every fire honors
+        # the per-ticker cadence floor, so only users on the ``15min``
+        # cadence accumulate sub-hour intraday rows; ``hourly``/``daily``/
+        # ``weekly`` users skip-fresh until their floor elapses.
         await self.scheduler.add_schedule(
             self._run_job,
             CronTrigger(minute="*/15", timezone=UTC),
             id=f"{PORTFOLIO_PRICE_REFRESH_KEY}:intraday",
-            # schedule_id="intraday" routes the executor into the cadence-bypass
-            # path so sub-hour fires actually write ticks instead of hitting
-            # the user's hourly/daily freshness floor.
             args=(JobType.PORTFOLIO_PRICE_REFRESH, None, "intraday"),
             misfire_grace_time=self.settings.misfire_grace_seconds,
             max_instances=1,
