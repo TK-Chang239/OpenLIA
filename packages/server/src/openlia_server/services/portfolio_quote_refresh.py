@@ -84,14 +84,11 @@ def scheduler_union(session: Session) -> list[tuple[str, int]]:
     floor). Tickers held only by ``manual`` users are excluded — the
     manual-refresh button is their only fetch path.
     """
-    rows = (
-        session.execute(
-            select(PortfolioHolding.user_id, PortfolioHolding.ticker).where(
-                PortfolioHolding.ticker != _GROUPS_META_TICKER
-            )
+    rows = session.execute(
+        select(PortfolioHolding.user_id, PortfolioHolding.ticker).where(
+            PortfolioHolding.ticker != _GROUPS_META_TICKER
         )
-        .all()
-    )
+    ).all()
     if not rows:
         return []
 
@@ -124,6 +121,7 @@ def refresh_due_quotes(
     provider: QuoteProvider,
     now_utc: datetime,
     min_cadence_seconds: int | None = None,
+    ignore_cadence: bool = False,
 ) -> RefreshResult:
     """Fetch and upsert quotes for any ticker that has aged past its cadence.
 
@@ -136,6 +134,13 @@ def refresh_due_quotes(
       - tickers fresher than their cadence floor (cache-hit)
       - tickers whose home market is closed AND whose existing quote is
         younger than 72h (covers normal weekends)
+
+    ``ignore_cadence=True`` disables the freshness gate so the caller writes
+    a fresh tick regardless of how recent the last quote is. The closed-market
+    gate is unchanged — closed sessions still suppress fetches. Used by the
+    */15 intraday cron whose whole purpose is dense intraday rows, so the
+    user's hourly/daily cadence floor would otherwise block every sub-hour
+    fire.
 
     Provider errors degrade per-ticker without aborting the rest of the tick.
     """
@@ -154,16 +159,12 @@ def refresh_due_quotes(
         row = cached.get(ticker)
         age = now_utc - row.fetched_at if row is not None else None
 
-        if age is not None and age.total_seconds() < effective_cadence:
+        if not ignore_cadence and age is not None and age.total_seconds() < effective_cadence:
             skipped_fresh += 1
             continue
 
         market_open = is_market_open(ticker, now_utc)
-        if (
-            not market_open
-            and age is not None
-            and age < _CLOSED_MARKET_GRACE
-        ):
+        if not market_open and age is not None and age < _CLOSED_MARKET_GRACE:
             skipped_market_closed += 1
             continue
 
@@ -210,11 +211,7 @@ def refresh_due_quotes(
             # Scheduler-tick-as-points: one row per refresh into the
             # intraday table. Resolution scales with the user's cadence
             # (Hourly → ~7 points/session; Weekly → ~0-1).
-            session.add(
-                PortfolioQuoteIntraday(
-                    ticker=ticker, ts=now_utc, close=last_price
-                )
-            )
+            session.add(PortfolioQuoteIntraday(ticker=ticker, ts=now_utc, close=last_price))
             session.commit()
         fetched += 1
 
