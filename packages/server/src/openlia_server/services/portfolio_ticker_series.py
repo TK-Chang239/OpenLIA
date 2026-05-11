@@ -21,6 +21,7 @@ from openlia_server.db.models.content import (
     PortfolioQuoteDaily,
     PortfolioQuoteIntraday,
 )
+from openlia_server.services.market_hours import Market, classify_market
 from openlia_server.services.portfolio_value_series import resolve_window
 
 _GROUPS_META_TICKER = "__GROUPS__"
@@ -39,7 +40,7 @@ class TickerSeries:
     period_change_pct: dict[str, Decimal | None]
 
 
-def _user_tickers(session: Session, user_id: str) -> list[str]:
+def _user_tickers(session: Session, user_id: str, *, market: Market | None = None) -> list[str]:
     rows = (
         session.execute(
             select(PortfolioHolding.ticker).where(
@@ -50,7 +51,10 @@ def _user_tickers(session: Session, user_id: str) -> list[str]:
         .scalars()
         .all()
     )
-    return sorted({t.upper() for t in rows if t})
+    tickers = {t.upper() for t in rows if t}
+    if market is not None:
+        tickers = {t for t in tickers if classify_market(t) == market}
+    return sorted(tickers)
 
 
 def compute_ticker_series(
@@ -59,8 +63,9 @@ def compute_ticker_series(
     user_id: str,
     timeframe: str,
     today: date,
+    market: Market | None = None,
 ) -> TickerSeries:
-    tickers = _user_tickers(session, user_id)
+    tickers = _user_tickers(session, user_id, market=market)
     if not tickers:
         return TickerSeries(timeframe=timeframe, series={}, period_change_pct={})
 
@@ -68,47 +73,37 @@ def compute_ticker_series(
 
     if timeframe.lower() == "1d":
         cutoff = datetime.combine(today, datetime.min.time(), tzinfo=UTC)
-        rows = (
-            session.execute(
-                select(
-                    PortfolioQuoteIntraday.ticker,
-                    PortfolioQuoteIntraday.ts,
-                    PortfolioQuoteIntraday.close,
-                )
-                .where(
-                    PortfolioQuoteIntraday.ticker.in_(tickers),
-                    PortfolioQuoteIntraday.ts >= cutoff,
-                )
-                .order_by(PortfolioQuoteIntraday.ts.asc())
+        rows = session.execute(
+            select(
+                PortfolioQuoteIntraday.ticker,
+                PortfolioQuoteIntraday.ts,
+                PortfolioQuoteIntraday.close,
             )
-            .all()
-        )
+            .where(
+                PortfolioQuoteIntraday.ticker.in_(tickers),
+                PortfolioQuoteIntraday.ts >= cutoff,
+            )
+            .order_by(PortfolioQuoteIntraday.ts.asc())
+        ).all()
         for ticker, ts, close in rows:
-            series[ticker].append(
-                TickerSeriesPoint(ts=ts.isoformat(), close=close)
-            )
+            series[ticker].append(TickerSeriesPoint(ts=ts.isoformat(), close=close))
     else:
         start = resolve_window(timeframe, today)
-        rows = (
-            session.execute(
-                select(
-                    PortfolioQuoteDaily.ticker,
-                    PortfolioQuoteDaily.trade_date,
-                    PortfolioQuoteDaily.close,
-                )
-                .where(
-                    PortfolioQuoteDaily.ticker.in_(tickers),
-                    PortfolioQuoteDaily.trade_date >= start,
-                    PortfolioQuoteDaily.trade_date <= today,
-                )
-                .order_by(PortfolioQuoteDaily.trade_date.asc())
+        rows = session.execute(
+            select(
+                PortfolioQuoteDaily.ticker,
+                PortfolioQuoteDaily.trade_date,
+                PortfolioQuoteDaily.close,
             )
-            .all()
-        )
+            .where(
+                PortfolioQuoteDaily.ticker.in_(tickers),
+                PortfolioQuoteDaily.trade_date >= start,
+                PortfolioQuoteDaily.trade_date <= today,
+            )
+            .order_by(PortfolioQuoteDaily.trade_date.asc())
+        ).all()
         for ticker, d, close in rows:
-            series[ticker].append(
-                TickerSeriesPoint(ts=d.isoformat(), close=close)
-            )
+            series[ticker].append(TickerSeriesPoint(ts=d.isoformat(), close=close))
 
     period_change: dict[str, Decimal | None] = {}
     for ticker, points in series.items():
@@ -122,6 +117,4 @@ def compute_ticker_series(
         else:
             period_change[ticker] = ((last - first) / first).quantize(Decimal("0.0001"))
 
-    return TickerSeries(
-        timeframe=timeframe, series=series, period_change_pct=period_change
-    )
+    return TickerSeries(timeframe=timeframe, series=series, period_change_pct=period_change)

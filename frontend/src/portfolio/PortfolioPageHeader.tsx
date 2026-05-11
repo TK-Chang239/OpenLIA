@@ -240,7 +240,7 @@ function AddSplitButton({
             className="cursor-pointer px-3 py-2 text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
             data-testid="menu-add-manually"
           >
-            Add manually
+            Add Position manually
           </li>
           <li
             role="menuitem"
@@ -258,7 +258,7 @@ function AddSplitButton({
             className="cursor-pointer px-3 py-2 text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
             data-testid="menu-import-csv"
           >
-            Import CSV…
+            Import Positions CSV…
           </li>
         </ul>
       ) : null}

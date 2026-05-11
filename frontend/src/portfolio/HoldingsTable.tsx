@@ -5,10 +5,20 @@ import type {
   AnalyticsResponse,
   PortfolioHolding,
   PositionAnalytic,
+  TickerSeriesResponse,
 } from "../api/portfolio";
+import { formatCurrency } from "./formatCurrency";
+import { Sparkline, type SparklinePoint } from "./Sparkline";
 import { useLocalJsonPref } from "./useLocalJsonPref";
 
-export type SortKey = "TICKER" | "WEIGHT" | "PRICE" | "POS_PL";
+export type SortKey =
+  | "TICKER"
+  | "SHARES"
+  | "AVG_COST"
+  | "PRICE"
+  | "MKT_VALUE"
+  | "POS_PL"
+  | "WEIGHT";
 export type SortDir = "asc" | "desc";
 
 interface SortState {
@@ -18,14 +28,16 @@ interface SortState {
 
 interface ColumnVis {
   pos_pl: boolean;
+  weight: boolean;
+  spark: boolean;
 }
 
 interface FilterState {
   groups: string[];
 }
 
-const DEFAULT_SORT: SortState = { key: "WEIGHT", dir: "desc" };
-const DEFAULT_COLUMNS: ColumnVis = { pos_pl: true };
+const DEFAULT_SORT: SortState = { key: "MKT_VALUE", dir: "desc" };
+const DEFAULT_COLUMNS: ColumnVis = { pos_pl: true, weight: true, spark: true };
 const DEFAULT_FILTER: FilterState = { groups: [] };
 const UNTAGGED_KEY = "__UNTAGGED__";
 
@@ -35,6 +47,7 @@ export interface HoldingsTableProps {
   readonly groups: readonly string[];
   readonly loading: boolean;
   readonly selectedHoldingId: string | null;
+  readonly sparklines: TickerSeriesResponse | null;
   readonly onRowClick: (holding: PortfolioHolding) => void;
   readonly onManageGroups: () => void;
 }
@@ -45,6 +58,7 @@ export function HoldingsTable({
   groups,
   loading,
   selectedHoldingId,
+  sparklines,
   onRowClick,
   onManageGroups,
 }: HoldingsTableProps): JSX.Element {
@@ -141,13 +155,20 @@ export function HoldingsTable({
                 onClick={() => onHeaderClick("TICKER")}
               />
               <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-left text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                NAME
+                GROUP
               </th>
               <SortHeader
-                label="WEIGHT"
-                column="WEIGHT"
+                label="SHARES"
+                column="SHARES"
                 sort={sort}
-                onClick={() => onHeaderClick("WEIGHT")}
+                onClick={() => onHeaderClick("SHARES")}
+                align="right"
+              />
+              <SortHeader
+                label="AVG COST"
+                column="AVG_COST"
+                sort={sort}
+                onClick={() => onHeaderClick("AVG_COST")}
                 align="right"
               />
               <SortHeader
@@ -155,6 +176,13 @@ export function HoldingsTable({
                 column="PRICE"
                 sort={sort}
                 onClick={() => onHeaderClick("PRICE")}
+                align="right"
+              />
+              <SortHeader
+                label="MKT VALUE"
+                column="MKT_VALUE"
+                sort={sort}
+                onClick={() => onHeaderClick("MKT_VALUE")}
                 align="right"
               />
               {columns.pos_pl ? (
@@ -166,6 +194,20 @@ export function HoldingsTable({
                   align="right"
                 />
               ) : null}
+              {columns.weight ? (
+                <SortHeader
+                  label="WEIGHT"
+                  column="WEIGHT"
+                  sort={sort}
+                  onClick={() => onHeaderClick("WEIGHT")}
+                  align="right"
+                />
+              ) : null}
+              {columns.spark ? (
+                <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-right text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
+                  7D
+                </th>
+              ) : null}
             </tr>
           </thead>
           <tbody>
@@ -176,6 +218,7 @@ export function HoldingsTable({
                 position={positionsByHolding.get(h.id)}
                 columns={columns}
                 selected={h.id === selectedHoldingId}
+                sparkPoints={getSparkPoints(sparklines, h.ticker)}
                 onClick={() => onRowClick(h)}
               />
             ))}
@@ -184,6 +227,16 @@ export function HoldingsTable({
       )}
     </section>
   );
+}
+
+function getSparkPoints(
+  sparklines: TickerSeriesResponse | null,
+  ticker: string,
+): SparklinePoint[] {
+  if (!sparklines) return [];
+  const series = sparklines.series[ticker.toUpperCase()];
+  if (!series) return [];
+  return series.map((p) => ({ ts: p.ts, value: Number(p.close) }));
 }
 
 function sortValue(
@@ -195,12 +248,18 @@ function sortValue(
   switch (key) {
     case "TICKER":
       return h.ticker;
-    case "WEIGHT":
-      return p?.weight ? Number(p.weight) : 0;
+    case "SHARES":
+      return p?.shares ? Number(p.shares) : 0;
+    case "AVG_COST":
+      return p?.cost_basis ? Number(p.cost_basis) : 0;
     case "PRICE":
       return p?.last_price ? Number(p.last_price) : 0;
+    case "MKT_VALUE":
+      return p?.market_value ? Number(p.market_value) : 0;
     case "POS_PL":
       return p?.unrealized_pl ? Number(p.unrealized_pl) : 0;
+    case "WEIGHT":
+      return p?.weight ? Number(p.weight) : 0;
   }
 }
 
@@ -243,24 +302,33 @@ function HoldingRow({
   position,
   columns,
   selected,
+  sparkPoints,
   onClick,
 }: {
   holding: PortfolioHolding;
   position: PositionAnalytic | undefined;
   columns: ColumnVis;
   selected: boolean;
+  sparkPoints: SparklinePoint[];
   onClick: () => void;
 }): JSX.Element {
+  const ccy = (position?.currency ?? holding.currency ?? "USD").toUpperCase();
+  const sharesN = position?.shares ? Number(position.shares) : null;
+  const avgCostN = position?.cost_basis ? Number(position.cost_basis) : null;
+  const priceN = position?.last_price ? Number(position.last_price) : null;
+  const mktValueN = position?.market_value ? Number(position.market_value) : null;
+  const posPlN = position?.unrealized_pl ? Number(position.unrealized_pl) : null;
   const weight =
     position?.weight !== null && position?.weight !== undefined
       ? `${(Number(position.weight) * 100).toFixed(1)}%`
       : "—";
-  const price = position?.last_price ? `$${Number(position.last_price).toFixed(2)}` : "—";
-  const posPl = position?.unrealized_pl ? Number(position.unrealized_pl) : null;
-  const posPlStr =
-    posPl === null
+
+  const sharesStr =
+    sharesN === null
       ? "—"
-      : `${posPl >= 0 ? "+" : "-"}$${Math.abs(posPl).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+      : sharesN.toLocaleString("en-US", { maximumFractionDigits: 4 });
+
+  const group = holding.groups[0] ?? "—";
 
   return (
     <tr
@@ -275,19 +343,44 @@ function HoldingRow({
         {holding.ticker}
       </td>
       <td className="font-display border-b border-[--color-border-subtle] px-[14px] py-[11px] text-[12px] text-[--color-text-secondary]">
-        {holding.name ?? "—"}
+        {group}
       </td>
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
-        {weight}
+        {sharesStr}
       </td>
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
-        {price}
+        {formatCurrency(avgCostN, ccy)}
+      </td>
+      <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
+        {formatCurrency(priceN, ccy)}
+      </td>
+      <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
+        {formatCurrency(mktValueN, ccy)}
       </td>
       {columns.pos_pl ? (
         <td
-          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${posPl !== null && posPl >= 0 ? "text-[--color-feedback-success]" : posPl !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
+          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${posPlN !== null && posPlN >= 0 ? "text-[--color-feedback-success]" : posPlN !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
         >
-          {posPlStr}
+          {posPlN === null ? "—" : formatCurrency(posPlN, ccy, { signed: true })}
+        </td>
+      ) : null}
+      {columns.weight ? (
+        <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
+          {weight}
+        </td>
+      ) : null}
+      {columns.spark ? (
+        <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right">
+          <Sparkline
+            points={sparkPoints}
+            formatTooltip={(p) => {
+              const d = new Date(p.ts);
+              const label = Number.isNaN(d.getTime())
+                ? p.ts
+                : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              return `${label} · ${formatCurrency(p.value, ccy)}`;
+            }}
+          />
         </td>
       ) : null}
     </tr>
@@ -424,6 +517,8 @@ function ColumnsFlyout({
 
   const items: { key: keyof ColumnVis; label: string }[] = [
     { key: "pos_pl", label: "POS P/L" },
+    { key: "weight", label: "WEIGHT" },
+    { key: "spark", label: "7D" },
   ];
 
   return (
@@ -456,7 +551,7 @@ function ColumnsFlyout({
             ))}
           </ul>
           <div className="border-t border-[--color-border-subtle] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            Locked: TICKER · NAME · WEIGHT · PRICE
+            Locked: TICKER · GROUP · SHARES · AVG COST · PRICE · MKT VALUE
           </div>
         </div>
       ) : null}

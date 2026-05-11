@@ -13,6 +13,7 @@ import io
 import json
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict
 
@@ -109,6 +110,7 @@ def create_holding(
     currency: str | None,
     notes: str | None,
     groups: list[str] | None,
+    added_at: datetime | None = None,
 ) -> HoldingDTO:
     ticker = ticker.strip().upper()
     if not ticker:
@@ -130,6 +132,8 @@ def create_holding(
         currency=(currency or "USD").upper(),
         notes=_encode_notes(groups, notes),
     )
+    if added_at is not None:
+        row.added_at = added_at
     session.add(row)
     session.commit()
     session.refresh(row)

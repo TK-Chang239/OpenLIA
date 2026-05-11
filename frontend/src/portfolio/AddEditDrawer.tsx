@@ -30,7 +30,18 @@ interface FormState {
   currency: string;
   notes: string;
   group: string | null;
+  added_at_date: string;
 }
+
+function todayLocalIso(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
 const blank: FormState = {
   ticker: "",
@@ -39,6 +50,7 @@ const blank: FormState = {
   currency: "USD",
   notes: "",
   group: null,
+  added_at_date: "",
 };
 
 export function AddEditDrawer({
@@ -54,6 +66,7 @@ export function AddEditDrawer({
   const [form, setForm] = useState<FormState>(blank);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     if (open && initial) {
@@ -64,12 +77,30 @@ export function AddEditDrawer({
         currency: initial.currency,
         notes: initial.notes_text ?? "",
         group: initial.groups[0] ?? null,
+        added_at_date: "",
       });
     } else if (open) {
-      setForm({ ...blank, currency: MARKET_CURRENCIES[market] });
+      setForm({
+        ...blank,
+        currency: MARKET_CURRENCIES[market],
+        added_at_date: todayLocalIso(),
+      });
     }
     setError(null);
+    if (open) setClosing(false);
   }, [open, initial, market]);
+
+  const beginClose = () => {
+    if (closing) return;
+    setClosing(true);
+  };
+
+  const onFormAnimationEnd = (e: React.AnimationEvent<HTMLFormElement>) => {
+    if (closing && e.animationName === "ol-drawer-out") {
+      onClose();
+      setClosing(false);
+    }
+  };
 
   if (!open) return null;
 
@@ -80,19 +111,38 @@ export function AddEditDrawer({
     try {
       const groupsArray = form.group ? [form.group] : [];
       if (mode === "create") {
+        if (!form.shares.trim()) {
+          setError("Shares is required");
+          setSubmitting(false);
+          return;
+        }
         const normalized = normalizeTicker(form.ticker, market);
         if (!normalized.ok || !normalized.ticker) {
           setError(normalized.error ?? "Invalid ticker");
           setSubmitting(false);
           return;
         }
+        const dateStr = form.added_at_date.trim();
+        if (dateStr) {
+          if (!DATE_REGEX.test(dateStr)) {
+            setError("Date must be YYYY-MM-DD");
+            setSubmitting(false);
+            return;
+          }
+          if (dateStr > todayLocalIso()) {
+            setError("Date cannot be in the future");
+            setSubmitting(false);
+            return;
+          }
+        }
         const input: HoldingInput = {
           ticker: normalized.ticker,
-          shares: form.shares || null,
+          shares: form.shares,
           cost_basis: form.cost_basis || null,
           currency: form.currency || MARKET_CURRENCIES[market],
           notes: form.notes || null,
           groups: groupsArray,
+          added_at_date: dateStr || null,
         };
         const created = await createHolding(input, market);
         onSaved(created);
@@ -107,7 +157,7 @@ export function AddEditDrawer({
         const updated = await updateHolding(initial.id, patch);
         onSaved(updated);
       }
-      onClose();
+      beginClose();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -119,22 +169,23 @@ export function AddEditDrawer({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={mode === "create" ? "Add holding" : "Edit holding"}
+      aria-label={mode === "create" ? "Add position" : "Edit position"}
       className="fixed inset-0 z-40 flex justify-end"
       data-testid="add-edit-drawer"
     >
       <button
         type="button"
         aria-label="Close drawer"
-        className="absolute inset-0 cursor-default bg-black/30 backdrop-blur-[2px]"
-        onClick={onClose}
+        className={`absolute inset-0 cursor-default bg-black/30 backdrop-blur-[2px] transition-opacity duration-200 ${closing ? "opacity-0" : "opacity-100"}`}
+        onClick={beginClose}
       />
       <form
         onSubmit={submit}
-        className="relative ml-auto flex h-full w-[400px] flex-col overflow-y-auto border-l border-[--color-border-subtle] bg-[--color-bg-elevated] p-6 shadow-[-12px_0_40px_rgba(0,0,0,0.16)] motion-safe:animate-[ol-drawer-in_240ms_ease-out]"
+        onAnimationEnd={onFormAnimationEnd}
+        className={`relative ml-auto flex h-full w-[400px] flex-col overflow-y-auto border-l border-[--color-border-subtle] bg-[--color-bg-elevated] p-6 shadow-[-12px_0_40px_rgba(0,0,0,0.16)] ${closing ? "motion-safe:animate-[ol-drawer-out_200ms_ease-in_forwards]" : "motion-safe:animate-[ol-drawer-in_240ms_ease-out]"}`}
       >
         <h2 className="text-lg font-semibold mb-4">
-          {mode === "create" ? "Add holding" : "Edit holding"}
+          {mode === "create" ? "Add Position" : "Edit Position"}
         </h2>
 
         <label className="block text-xs text-[--color-text-tertiary]">
@@ -157,22 +208,24 @@ export function AddEditDrawer({
         </label>
 
         <label className="block text-xs text-[--color-text-tertiary] mt-3">
-          Shares
+          Shares <span className="text-[--color-feedback-error]">*</span>
           <input
             value={form.shares ?? ""}
             onChange={(e) => setForm({ ...form, shares: e.target.value })}
             className="block w-full mt-1 px-2 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm] bg-[--color-bg-input]"
             data-testid="drawer-shares"
+            placeholder="e.g. 100"
           />
         </label>
 
         <label className="block text-xs text-[--color-text-tertiary] mt-3">
-          Cost Basis
+          Cost Basis (per share)
           <input
             value={form.cost_basis ?? ""}
             onChange={(e) => setForm({ ...form, cost_basis: e.target.value })}
             className="block w-full mt-1 px-2 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm] bg-[--color-bg-input]"
             data-testid="drawer-cost"
+            placeholder="optional"
           />
         </label>
 
@@ -185,6 +238,26 @@ export function AddEditDrawer({
             data-testid="drawer-currency"
           />
         </label>
+
+        {mode === "create" ? (
+          <label className="block text-xs text-[--color-text-tertiary] mt-3">
+            Date Acquired
+            <input
+              value={form.added_at_date}
+              onChange={(e) =>
+                setForm({ ...form, added_at_date: e.target.value })
+              }
+              className="block w-full mt-1 px-2 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm] bg-[--color-bg-input]"
+              data-testid="drawer-added-at"
+              placeholder="YYYY-MM-DD"
+              maxLength={10}
+            />
+            <span className="mt-1 block text-[10px] leading-tight text-[--color-text-tertiary]">
+              Defaults to today. Past dates included in historical NAV from that
+              day forward.
+            </span>
+          </label>
+        ) : null}
 
         <div className="block text-xs text-[--color-text-tertiary] mt-3">
           Group
@@ -219,7 +292,7 @@ export function AddEditDrawer({
         <div className="flex justify-end gap-2 mt-5">
           <button
             type="button"
-            onClick={onClose}
+            onClick={beginClose}
             className="px-3 py-1 text-sm rounded-[--radius-sm] border border-[--color-border-subtle]"
           >
             Cancel

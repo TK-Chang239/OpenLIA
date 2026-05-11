@@ -32,6 +32,7 @@ import {
 } from "./PortfolioPageHeader";
 import { useAnalytics } from "./useAnalytics";
 import { useHoldings } from "./useHoldings";
+import { useSparklines } from "./useSparklines";
 import { useValueSeries } from "./useValueSeries";
 
 function ShellInner({ market }: { market: Market }): JSX.Element {
@@ -50,6 +51,7 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
     range,
     market,
   );
+  const { data: sparklines } = useSparklines(market);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshCadence, setRefreshCadence] = useState<RefreshCadence>("daily");
 
@@ -185,7 +187,7 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
           ) : null}
 
           <Reveal delay={2}>
-            <PerfChart range={range} series={valueSeries} loading={valueSeriesLoading} />
+            <PerfChart range={range} series={valueSeries} loading={valueSeriesLoading} market={market} />
           </Reveal>
 
           {valueSeries && valueSeries.period_return_pct !== null ? (
@@ -221,6 +223,7 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
               groups={groups}
               loading={loading && holdings.length === 0}
               selectedHoldingId={drawer?.id ?? null}
+              sparklines={sparklines}
               onRowClick={onRowClick}
               onManageGroups={() => {
                 toast.push({

@@ -32,9 +32,7 @@ def test_ticker_series_1d_reads_intraday(client, user_factory, login_as) -> None
     login_as(u)
     _seed_holding(u.id, "AAPL")
 
-    today_start = datetime.combine(
-        datetime.now(UTC).date(), datetime.min.time(), tzinfo=UTC
-    )
+    today_start = datetime.combine(datetime.now(UTC).date(), datetime.min.time(), tzinfo=UTC)
     with session_mod.SessionLocal() as s:
         s.add(
             PortfolioQuoteIntraday(
@@ -96,3 +94,40 @@ def test_ticker_series_empty_portfolio(client, user_factory, login_as) -> None:
 def test_ticker_series_requires_auth(client) -> None:
     r = client.get("/portfolio/ticker-series?timeframe=1d")
     assert r.status_code in (401, 403)
+
+
+def test_ticker_series_filters_by_market(client, user_factory, login_as) -> None:
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.content import PortfolioQuoteDaily
+
+    u = user_factory()
+    login_as(u)
+    _seed_holding(u.id, "AAPL")
+    _seed_holding(u.id, "2330.TW")
+
+    today = datetime.now(UTC).date()
+    with session_mod.SessionLocal() as s:
+        for ticker, close in (("AAPL", "100"), ("2330.TW", "600")):
+            s.add(
+                PortfolioQuoteDaily(
+                    ticker=ticker,
+                    trade_date=today - timedelta(days=1),
+                    close=Decimal(close),
+                )
+            )
+            s.add(
+                PortfolioQuoteDaily(
+                    ticker=ticker,
+                    trade_date=today,
+                    close=Decimal(close),
+                )
+            )
+        s.commit()
+
+    r_us = client.get("/portfolio/ticker-series?timeframe=1w&market=us")
+    assert r_us.status_code == 200
+    assert set(r_us.json()["series"].keys()) == {"AAPL"}
+
+    r_tw = client.get("/portfolio/ticker-series?timeframe=1w&market=tw")
+    assert r_tw.status_code == 200
+    assert set(r_tw.json()["series"].keys()) == {"2330.TW"}
