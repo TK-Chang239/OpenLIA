@@ -57,6 +57,10 @@ export interface AnalyticsResponse {
   positions: PositionAnalytic[];
   allocations: Record<string, string>;
   last_quote_at?: string | null;
+  display_currency?: string;
+  currencies_present?: string[];
+  needs_fx?: boolean;
+  fx_unavailable?: boolean;
 }
 
 export interface CsvImportResponse {
@@ -159,6 +163,74 @@ export async function importCsv(text: string): Promise<CsvImportResponse> {
 
 export function exportCsvUrl(): string {
   return "/api/portfolio/export-csv";
+}
+
+// ---------- Time series (Phase 3 + 4) --------------------------------------
+
+export interface ValueSeriesPoint {
+  date: string;
+  value: string;
+}
+
+export interface ValueSeriesResponse {
+  timeframe: string;
+  actual_span: { start: string; end: string } | null;
+  points: ValueSeriesPoint[];
+  period_return_abs: string | null;
+  period_return_pct: string | null;
+}
+
+export interface TickerSeriesPoint {
+  ts: string;
+  close: string;
+}
+
+export interface TickerSeriesResponse {
+  timeframe: string;
+  series: Record<string, TickerSeriesPoint[]>;
+  period_change_pct: Record<string, string | null>;
+}
+
+export async function fetchValueSeries(timeframe: string): Promise<ValueSeriesResponse> {
+  const res = await fetch(
+    `/api/portfolio/value-series?timeframe=${encodeURIComponent(timeframe)}`,
+    { credentials: "include" },
+  );
+  return jsonOrThrow<ValueSeriesResponse>(res);
+}
+
+export async function fetchTickerSeries(timeframe: string): Promise<TickerSeriesResponse> {
+  const res = await fetch(
+    `/api/portfolio/ticker-series?timeframe=${encodeURIComponent(timeframe)}`,
+    { credentials: "include" },
+  );
+  return jsonOrThrow<TickerSeriesResponse>(res);
+}
+
+// ---------- Preferences (Phase 2) ------------------------------------------
+
+export type RefreshCadence = "hourly" | "daily" | "weekly" | "manual";
+
+export interface PortfolioPrefs {
+  refresh_cadence: RefreshCadence;
+  display_currency?: string;
+}
+
+export async function fetchPortfolioPrefs(): Promise<PortfolioPrefs> {
+  const res = await fetch("/api/portfolio/prefs", { credentials: "include" });
+  return jsonOrThrow<PortfolioPrefs>(res);
+}
+
+export async function updatePortfolioPrefs(
+  patch: Partial<PortfolioPrefs>,
+): Promise<PortfolioPrefs> {
+  const res = await fetch("/api/portfolio/prefs", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return jsonOrThrow<PortfolioPrefs>(res);
 }
 
 export async function searchTickers(q: string): Promise<SearchResult[]> {

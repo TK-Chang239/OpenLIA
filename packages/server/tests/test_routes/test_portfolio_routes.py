@@ -228,3 +228,109 @@ def test_groups_rename_unknown_returns_404(client, user_factory, login_as) -> No
 def test_groups_endpoints_require_auth(client) -> None:
     r = client.get("/portfolio/groups")
     assert r.status_code in (401, 403)
+
+
+# ----------------------------------------------------------------------
+# Phase 1 (portfolio live data) — analytics reads from portfolio_quotes
+# ----------------------------------------------------------------------
+
+
+def test_analytics_reads_from_portfolio_quotes_table(
+    client, user_factory, login_as
+) -> None:
+    """After upserting a row into portfolio_quotes, /analytics reflects the
+    last_price and surfaces last_quote_at."""
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.services import portfolio_quotes as quotes_svc
+
+    u = user_factory()
+    login_as(u)
+    client.post(
+        "/portfolio/holdings",
+        json={"ticker": "AAPL", "shares": "10", "cost_basis": "150"},
+    )
+
+    quote_at = datetime(2026, 5, 11, 1, 30, tzinfo=UTC)
+    with session_mod.SessionLocal() as s:
+        quotes_svc.upsert_quote(
+            s,
+            ticker="AAPL",
+            last_price=Decimal("200"),
+            previous_close=Decimal("195"),
+            day_open=Decimal("196"),
+            day_high=Decimal("202"),
+            day_low=Decimal("195.5"),
+            volume=42,
+            currency="USD",
+            quote_at=quote_at,
+            fetched_at=quote_at,
+            source="eodhd",
+        )
+
+    r = client.get("/portfolio/analytics")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["last_quote_at"] is not None
+    assert "2026-05-11" in body["last_quote_at"]
+    # 10 * 200 = 2000 market value
+    assert body["total_market_value"].startswith("2000")
+    # Position last_price reflects the DB row, not the legacy in-memory cache.
+    pos = body["positions"][0]
+    assert pos["ticker"] == "AAPL"
+    assert Decimal(pos["last_price"]) == Decimal("200")
+
+
+def test_analytics_last_quote_at_null_when_no_quotes(
+    client, user_factory, login_as
+) -> None:
+    u = user_factory()
+    login_as(u)
+    client.post("/portfolio/holdings", json={"ticker": "ZZZZ"})
+    r = client.get("/portfolio/analytics")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["last_quote_at"] is None
+
+
+def test_refresh_prices_persists_to_portfolio_quotes(
+    client, user_factory, login_as
+) -> None:
+    """Manual refresh must populate the portfolio_quotes table so subsequent
+    /analytics calls reflect the just-fetched prices."""
+    from decimal import Decimal
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.services import portfolio_quotes as quotes_svc
+
+    class _ToolResult:
+        def __init__(self, payload: dict) -> None:
+            self.payload = payload
+
+    class _FakeAdapter:
+        async def fetch(self, capability: str, params: dict) -> _ToolResult:
+            assert capability == "stock_quote"
+            return _ToolResult({"close": "321.50"})
+
+    client.app.state.financial_adapter = _FakeAdapter()
+    try:
+        u = user_factory()
+        login_as(u)
+        client.post(
+            "/portfolio/holdings",
+            json={"ticker": "MSFT", "shares": "5"},
+        )
+
+        r = client.post("/portfolio/refresh-prices")
+        assert r.status_code == 200
+
+        with session_mod.SessionLocal() as s:
+            row = quotes_svc.get_quote(s, ticker="MSFT")
+
+        assert row is not None
+        assert row.last_price == Decimal("321.50")
+        assert row.source != ""
+    finally:
+        client.app.state.financial_adapter = None

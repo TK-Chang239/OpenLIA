@@ -355,6 +355,11 @@ def _make_lifespan(
                     mr_builder=mr_builder,
                     report_store=report_store_impl,
                     mr_cache_store=mr_cache_store_lifespan,
+                    # Phase 1 portfolio live data: scheduled price refresh
+                    # against app.state.financial_adapter at fire time.
+                    financial_adapter_provider=lambda: getattr(
+                        app.state, "financial_adapter", None
+                    ),
                 )
                 # Phase 10: scheduler skip-on-disabled. Reads the live cache
                 # off app.state at fire time so invalidation-driven recomputes

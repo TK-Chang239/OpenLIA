@@ -8,6 +8,7 @@ dependency raises TypeError at boot. Test-only fakes live in
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from openlia_server.scheduler.executors.base import SessionFactory
@@ -18,6 +19,9 @@ from openlia_server.scheduler.executors.graph_extraction import (
 from openlia_server.scheduler.executors.maintenance import MaintenanceExecutor
 from openlia_server.scheduler.executors.mb import MBBriefingExecutor
 from openlia_server.scheduler.executors.mr import MRAssessmentExecutor
+from openlia_server.scheduler.executors.portfolio_prices import (
+    production_executor as portfolio_executor_factory,
+)
 from openlia_server.scheduler.executors.rs import RSSnapshotExecutor
 from openlia_server.scheduler.payloads import (
     EUScanPlanner,
@@ -45,6 +49,7 @@ def build_scheduler_service(
     report_store: ReportStore,
     mr_cache_store: MRCacheStore,
     rs_runner: RSSnapshotRunner | None = None,
+    financial_adapter_provider: Callable[[], Any] | None = None,
 ) -> SchedulerService:
     if batch_runner is None:
         raise TypeError("batch_runner is required (got None)")
@@ -81,6 +86,12 @@ def build_scheduler_service(
         executors[JobType.RS_SNAPSHOT] = RSSnapshotExecutor(
             session_factory=session_factory,
             rs_runner=rs_runner,
+        )
+
+    if financial_adapter_provider is not None:
+        executors[JobType.PORTFOLIO_PRICE_REFRESH] = portfolio_executor_factory(
+            session_factory=session_factory,
+            financial_adapter_provider=financial_adapter_provider,
         )
 
     return SchedulerService(

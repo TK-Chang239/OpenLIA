@@ -6,8 +6,11 @@ import {
   createGroup,
   createHolding,
   fetchGroups,
+  fetchPortfolioPrefs,
   refreshPrices,
+  updatePortfolioPrefs,
   type PortfolioHolding,
+  type RefreshCadence,
 } from "../api/portfolio";
 import { exportCsvUrl } from "../api/portfolio";
 import { ToastProvider, useToast } from "../components/primitives/Toast";
@@ -26,6 +29,7 @@ import {
 } from "./PortfolioPageHeader";
 import { useAnalytics } from "./useAnalytics";
 import { useHoldings } from "./useHoldings";
+import { useValueSeries } from "./useValueSeries";
 
 function ShellInner(): JSX.Element {
   const toast = useToast();
@@ -38,13 +42,30 @@ function ShellInner(): JSX.Element {
   const [csvOpen, setCsvOpen] = useState(false);
   const [drawer, setDrawer] = useState<PortfolioHolding | null>(null);
   const [range, setRange] = useState<PerfRange>("1W");
+  const { series: valueSeries } = useValueSeries(range);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshCadence, setRefreshCadence] = useState<RefreshCadence>("daily");
 
   useEffect(() => {
     void fetchGroups()
       .then(setGroups)
       .catch(() => setGroups([]));
+    void fetchPortfolioPrefs()
+      .then((p) => setRefreshCadence(p.refresh_cadence))
+      .catch(() => {
+        /* keep default */
+      });
   }, []);
+
+  const onCadenceChange = (next: RefreshCadence) => {
+    setRefreshCadence(next);
+    void updatePortfolioPrefs({ refresh_cadence: next }).catch((e) => {
+      toast.push({
+        title: `Failed to save cadence: ${(e as Error).message}`,
+        tone: "error",
+      });
+    });
+  };
 
   const reloadGroups = async () => {
     try {
@@ -127,6 +148,8 @@ function ShellInner(): JSX.Element {
               exportHref={exportCsvUrl()}
               onAddManually={() => setAddOpen(true)}
               onImportCsv={() => setCsvOpen(true)}
+              refreshCadence={refreshCadence}
+              onRefreshCadenceChange={onCadenceChange}
             />
           </Reveal>
 
@@ -134,9 +157,49 @@ function ShellInner(): JSX.Element {
             <KpiBand analytics={analytics} loading={loading && holdings.length === 0} />
           </Reveal>
 
+          {analytics?.fx_unavailable ? (
+            <Reveal delay={1}>
+              <div
+                className="rounded-md border border-[--color-feedback-error] bg-[--color-bg-elevated] px-4 py-2 text-xs text-[--color-text-secondary]"
+                data-testid="fx-unavailable-banner"
+              >
+                Multi-currency totals unavailable — configure an FX-capable
+                connector to aggregate{" "}
+                {analytics.currencies_present?.join(", ") ?? ""} into{" "}
+                {analytics.display_currency ?? "USD"}.
+              </div>
+            </Reveal>
+          ) : null}
+
           <Reveal delay={2}>
             <PerfChart range={range} />
           </Reveal>
+
+          {valueSeries && valueSeries.period_return_pct !== null ? (
+            <Reveal delay={2}>
+              <div
+                className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-4 py-2 text-sm text-[--color-text-secondary]"
+                data-testid="period-return-banner"
+              >
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+                  {range} RETURN ·{" "}
+                  {valueSeries.actual_span
+                    ? `since ${valueSeries.actual_span.start}`
+                    : ""}
+                </span>{" "}
+                <span
+                  className={
+                    Number(valueSeries.period_return_pct) >= 0
+                      ? "text-[--color-feedback-success]"
+                      : "text-[--color-feedback-error]"
+                  }
+                >
+                  {Number(valueSeries.period_return_pct) >= 0 ? "+" : ""}
+                  {(Number(valueSeries.period_return_pct) * 100).toFixed(2)}%
+                </span>
+              </div>
+            </Reveal>
+          ) : null}
 
           <Reveal delay={3}>
             <HoldingsTable
