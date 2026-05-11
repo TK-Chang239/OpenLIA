@@ -13,13 +13,15 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.models.config import UserPrefs
 
-RefreshCadence = Literal["hourly", "daily", "weekly", "manual"]
-_VALID_CADENCES: frozenset[str] = frozenset({"hourly", "daily", "weekly", "manual"})
+RefreshCadence = Literal["15min", "hourly", "daily", "weekly", "manual"]
+_VALID_CADENCES: frozenset[str] = frozenset({"15min", "hourly", "daily", "weekly", "manual"})
 
 # Cadence -> floor seconds. ``manual`` has no floor (returns None) and the
 # scheduler excludes those tickers from its union unless some other holder
-# picks a polling cadence.
+# picks a polling cadence. ``15min`` matches the intraday */15 cron so every
+# fire produces a row for that user's tickers.
 _CADENCE_SECONDS: dict[str, int] = {
+    "15min": 900,
     "hourly": 3_600,
     "daily": 86_400,
     "weekly": 604_800,
