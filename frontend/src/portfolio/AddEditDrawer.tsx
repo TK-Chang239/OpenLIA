@@ -12,6 +12,52 @@ import type { Market } from "./marketTypes";
 import { MARKET_CURRENCIES } from "./marketTypes";
 import { normalizeTicker } from "./tickerNormalize";
 
+function parseDecimal(raw: string): number | null {
+  const t = raw.trim();
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n)) return null;
+  if (n <= 0) return null;
+  return n;
+}
+
+function formatDecimal(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  const fixed = n.toFixed(4);
+  const trimmed = fixed.replace(/\.?0+$/, "");
+  return trimmed === "" || trimmed === "-" ? "0" : trimmed;
+}
+
+interface BlendInput {
+  action: "buy" | "sell";
+  currentShares: number | null;
+  currentCostBasis: number | null;
+  qty: number;
+  price: number;
+}
+
+interface BlendOutput {
+  newShares: number;
+  newCostBasis: number | null;
+}
+
+function computeBlend(input: BlendInput): BlendOutput {
+  const { action, currentShares, currentCostBasis, qty, price } = input;
+  if (action === "buy") {
+    const s0 = currentShares ?? 0;
+    const newShares = s0 + qty;
+    if (s0 === 0 || currentCostBasis === null) {
+      return { newShares, newCostBasis: price };
+    }
+    const newCostBasis = (s0 * currentCostBasis + qty * price) / newShares;
+    return { newShares, newCostBasis };
+  }
+  const s0 = currentShares ?? 0;
+  return { newShares: s0 - qty, newCostBasis: currentCostBasis };
+}
+
+export const __test = { parseDecimal, formatDecimal, computeBlend };
+
 export interface AddEditDrawerProps {
   readonly open: boolean;
   readonly mode: "create" | "edit";
