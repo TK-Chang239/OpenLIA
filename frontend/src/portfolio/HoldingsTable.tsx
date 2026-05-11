@@ -6,10 +6,9 @@ import type {
   PortfolioHolding,
   PositionAnalytic,
 } from "../api/portfolio";
-import { sparkFor, sparkPath } from "./sparkline";
 import { useLocalJsonPref } from "./useLocalJsonPref";
 
-export type SortKey = "TICKER" | "WEIGHT" | "PRICE" | "DAY_DELTA" | "POS_PL";
+export type SortKey = "TICKER" | "WEIGHT" | "PRICE" | "POS_PL";
 export type SortDir = "asc" | "desc";
 
 interface SortState {
@@ -18,24 +17,15 @@ interface SortState {
 }
 
 interface ColumnVis {
-  day_delta: boolean;
   pos_pl: boolean;
-  week: boolean;
-  flag: boolean;
 }
 
 interface FilterState {
-  groups: string[]; // [] = all (no filter); "__UNTAGGED__" = holdings with no group
-  // Flag dimension is reserved for the verdicts API; not active.
+  groups: string[];
 }
 
 const DEFAULT_SORT: SortState = { key: "WEIGHT", dir: "desc" };
-const DEFAULT_COLUMNS: ColumnVis = {
-  day_delta: true,
-  pos_pl: true,
-  week: true,
-  flag: true,
-};
+const DEFAULT_COLUMNS: ColumnVis = { pos_pl: true };
 const DEFAULT_FILTER: FilterState = { groups: [] };
 const UNTAGGED_KEY = "__UNTAGGED__";
 
@@ -167,15 +157,6 @@ export function HoldingsTable({
                 onClick={() => onHeaderClick("PRICE")}
                 align="right"
               />
-              {columns.day_delta ? (
-                <SortHeader
-                  label="DAY Δ"
-                  column="DAY_DELTA"
-                  sort={sort}
-                  onClick={() => onHeaderClick("DAY_DELTA")}
-                  align="right"
-                />
-              ) : null}
               {columns.pos_pl ? (
                 <SortHeader
                   label="POS P/L"
@@ -184,16 +165,6 @@ export function HoldingsTable({
                   onClick={() => onHeaderClick("POS_PL")}
                   align="right"
                 />
-              ) : null}
-              {columns.week ? (
-                <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-right text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                  7D
-                </th>
-              ) : null}
-              {columns.flag ? (
-                <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-right text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                  FLAG
-                </th>
               ) : null}
             </tr>
           </thead>
@@ -228,11 +199,6 @@ function sortValue(
       return p?.weight ? Number(p.weight) : 0;
     case "PRICE":
       return p?.last_price ? Number(p.last_price) : 0;
-    case "DAY_DELTA": {
-      // Placeholder: use a deterministic per-ticker pseudo-delta for sort stability.
-      const spark = sparkFor(h.ticker);
-      return spark.points[spark.points.length - 1] - spark.points[0];
-    }
     case "POS_PL":
       return p?.unrealized_pl ? Number(p.unrealized_pl) : 0;
   }
@@ -285,7 +251,6 @@ function HoldingRow({
   selected: boolean;
   onClick: () => void;
 }): JSX.Element {
-  const spark = sparkFor(holding.ticker);
   const weight =
     position?.weight !== null && position?.weight !== undefined
       ? `${(Number(position.weight) * 100).toFixed(1)}%`
@@ -296,19 +261,6 @@ function HoldingRow({
     posPl === null
       ? "—"
       : `${posPl >= 0 ? "+" : "-"}$${Math.abs(posPl).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-
-  // Placeholder day delta from deterministic sparkline.
-  const dayDelta = spark.points[spark.points.length - 1] - spark.points[0];
-  const dayPct = dayDelta * 0.4; // arbitrary scale that keeps numbers small
-  const dayPos = dayPct >= 0;
-  const dayStr = `${dayPos ? "+" : ""}${dayPct.toFixed(2)}%`;
-
-  const sparkStroke =
-    spark.sign === "down"
-      ? "var(--color-feedback-error)"
-      : spark.sign === "flat"
-        ? "var(--neutral-400)"
-        : "var(--yellow-600)";
 
   return (
     <tr
@@ -331,42 +283,11 @@ function HoldingRow({
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
         {price}
       </td>
-      {columns.day_delta ? (
-        <td
-          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${dayPos ? "text-[--color-feedback-success]" : "text-[--color-feedback-error]"}`}
-        >
-          {dayStr}
-        </td>
-      ) : null}
       {columns.pos_pl ? (
         <td
           className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${posPl !== null && posPl >= 0 ? "text-[--color-feedback-success]" : posPl !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
         >
           {posPlStr}
-        </td>
-      ) : null}
-      {columns.week ? (
-        <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right">
-          <svg
-            viewBox="0 0 64 22"
-            preserveAspectRatio="none"
-            className="inline-block h-[22px] w-[64px] align-middle"
-            aria-hidden="true"
-          >
-            <path
-              d={sparkPath(spark.points, 64)}
-              fill="none"
-              style={{ stroke: sparkStroke }}
-              strokeWidth="1.4"
-            />
-          </svg>
-        </td>
-      ) : null}
-      {columns.flag ? (
-        <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right">
-          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-            —
-          </span>
         </td>
       ) : null}
     </tr>
@@ -452,14 +373,6 @@ function FilterFlyout({
               </label>
             </li>
           </ul>
-          <div className="border-t border-[--color-border-subtle] px-3 py-2">
-            <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-              Flag
-            </span>
-            <p className="m-0 text-[11px] text-[--color-text-tertiary]">
-              Available once LIA per-holding verdicts ship.
-            </p>
-          </div>
           <div className="flex items-center justify-between border-t border-[--color-border-subtle] px-3 py-2">
             <button
               type="button"
@@ -510,10 +423,7 @@ function ColumnsFlyout({
   };
 
   const items: { key: keyof ColumnVis; label: string }[] = [
-    { key: "day_delta", label: "DAY Δ" },
     { key: "pos_pl", label: "POS P/L" },
-    { key: "week", label: "7D" },
-    { key: "flag", label: "FLAG" },
   ];
 
   return (

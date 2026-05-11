@@ -195,6 +195,183 @@ def test_value_series_empty_portfolio_returns_empty(
     assert result.period_return_abs is None
 
 
+def test_value_series_filters_by_market(create_tables, db_session: Session) -> None:
+    """When market='us' is passed, only US holdings contribute; .TW is ignored."""
+    from openlia_server.services.portfolio_value_series import compute_value_series
+
+    _seed_user(db_session)
+    _add_holding(
+        db_session,
+        "u-vs",
+        "AAPL",
+        Decimal("10"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    _add_holding(
+        db_session,
+        "u-vs",
+        "2330.TW",
+        Decimal("5"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    _add_daily(
+        db_session,
+        "AAPL",
+        [(date(2026, 5, 1), Decimal("100")), (date(2026, 5, 2), Decimal("110"))],
+    )
+    _add_daily(
+        db_session,
+        "2330.TW",
+        [(date(2026, 5, 1), Decimal("500")), (date(2026, 5, 2), Decimal("550"))],
+    )
+
+    today = date(2026, 5, 2)
+    us = compute_value_series(
+        db_session, user_id="u-vs", timeframe="1w", today=today, market="us"
+    )
+    tw = compute_value_series(
+        db_session, user_id="u-vs", timeframe="1w", today=today, market="twse"
+    )
+
+    # US only: 10 × AAPL prices
+    assert {(p.date, p.value) for p in us.points} == {
+        (date(2026, 5, 1), Decimal("1000")),
+        (date(2026, 5, 2), Decimal("1100")),
+    }
+    # TWSE only: 5 × 2330.TW prices
+    assert {(p.date, p.value) for p in tw.points} == {
+        (date(2026, 5, 1), Decimal("2500")),
+        (date(2026, 5, 2), Decimal("2750")),
+    }
+
+
+def _add_intraday(
+    db_session, ticker: str, ts_close: list[tuple[datetime, Decimal]]
+) -> None:
+    from openlia_server.db.models.content import PortfolioQuoteIntraday
+
+    for ts, close in ts_close:
+        db_session.add(PortfolioQuoteIntraday(ticker=ticker, ts=ts, close=close))
+    db_session.commit()
+
+
+def test_intraday_value_series_aggregates_per_tick(
+    create_tables, db_session: Session
+) -> None:
+    """Each unique tick timestamp produces one point using last-known price per ticker."""
+    from openlia_server.services.portfolio_value_series import (
+        compute_value_series_intraday,
+    )
+
+    _seed_user(db_session)
+    _add_holding(
+        db_session,
+        "u-vs",
+        "AAPL",
+        Decimal("10"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    _add_holding(
+        db_session,
+        "u-vs",
+        "NVDA",
+        Decimal("5"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    t10 = datetime(2026, 5, 11, 14, 0, tzinfo=UTC)
+    t11 = datetime(2026, 5, 11, 15, 0, tzinfo=UTC)
+    _add_intraday(
+        db_session,
+        "AAPL",
+        [(t10, Decimal("100")), (t11, Decimal("105"))],
+    )
+    _add_intraday(
+        db_session,
+        "NVDA",
+        [(t10, Decimal("200")), (t11, Decimal("210"))],
+    )
+
+    today = date(2026, 5, 11)
+    result = compute_value_series_intraday(
+        db_session, user_id="u-vs", today=today
+    )
+
+    assert result.timeframe == "1d"
+    assert [p.ts for p in result.points] == [t10, t11]
+    # t10: 10*100 + 5*200 = 2000; t11: 10*105 + 5*210 = 2100
+    assert [p.value for p in result.points] == [Decimal("2000"), Decimal("2100")]
+    assert result.period_return_abs == Decimal("100")
+
+
+def test_intraday_value_series_falls_back_to_prior_trading_day(
+    create_tables, db_session: Session
+) -> None:
+    """When today has no intraday rows (weekend/holiday), fall back to most
+    recent UTC date with rows."""
+    from openlia_server.services.portfolio_value_series import (
+        compute_value_series_intraday,
+    )
+
+    _seed_user(db_session)
+    _add_holding(
+        db_session,
+        "u-vs",
+        "AAPL",
+        Decimal("10"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    friday = datetime(2026, 5, 8, 20, 0, tzinfo=UTC)
+    _add_intraday(db_session, "AAPL", [(friday, Decimal("100"))])
+
+    sunday = date(2026, 5, 10)
+    result = compute_value_series_intraday(
+        db_session, user_id="u-vs", today=sunday
+    )
+
+    assert len(result.points) == 1
+    assert result.points[0].ts == friday
+    assert result.points[0].value == Decimal("1000")
+
+
+def test_intraday_value_series_market_filter(
+    create_tables, db_session: Session
+) -> None:
+    """market='us' only aggregates US tickers; .TW intraday rows ignored."""
+    from openlia_server.services.portfolio_value_series import (
+        compute_value_series_intraday,
+    )
+
+    _seed_user(db_session)
+    _add_holding(
+        db_session,
+        "u-vs",
+        "AAPL",
+        Decimal("10"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    _add_holding(
+        db_session,
+        "u-vs",
+        "2330.TW",
+        Decimal("5"),
+        added_at=datetime(2026, 5, 1, tzinfo=UTC),
+    )
+    t = datetime(2026, 5, 11, 14, 0, tzinfo=UTC)
+    _add_intraday(db_session, "AAPL", [(t, Decimal("100"))])
+    _add_intraday(db_session, "2330.TW", [(t, Decimal("500"))])
+
+    today = date(2026, 5, 11)
+    us = compute_value_series_intraday(
+        db_session, user_id="u-vs", today=today, market="us"
+    )
+    tw = compute_value_series_intraday(
+        db_session, user_id="u-vs", today=today, market="twse"
+    )
+
+    assert [p.value for p in us.points] == [Decimal("1000")]
+    assert [p.value for p in tw.points] == [Decimal("2500")]
+
+
 def test_timeframe_decoding() -> None:
     from openlia_server.services.portfolio_value_series import resolve_window
 

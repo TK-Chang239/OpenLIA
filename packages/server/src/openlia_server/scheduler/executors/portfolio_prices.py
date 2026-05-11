@@ -106,7 +106,7 @@ class _AdapterQuoteProvider:
             return None
         try:
             result = asyncio.run(
-                adapter.fetch("stock_quote", {"symbol": ticker.upper()})
+                adapter.fetch("stock_quote", {"ticker": ticker.upper()})
             )
         except Exception:
             return None

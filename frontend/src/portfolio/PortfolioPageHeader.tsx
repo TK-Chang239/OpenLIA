@@ -3,6 +3,8 @@ import type { JSX } from "react";
 import { ChevronDown, Download, Plus, RotateCw, Settings } from "lucide-react";
 
 import type { RefreshCadence } from "../api/portfolio";
+import type { Market } from "./marketTypes";
+import { MARKET_CURRENCIES, MARKET_LABELS } from "./marketTypes";
 
 export const PERF_RANGES = [
   "1D",
@@ -28,6 +30,9 @@ export interface PortfolioPageHeaderProps {
   readonly onImportCsv: () => void;
   readonly refreshCadence: RefreshCadence;
   readonly onRefreshCadenceChange: (next: RefreshCadence) => void;
+  readonly market: Market;
+  readonly marketLabel: string;
+  readonly onMarketChange: (next: Market) => void;
 }
 
 function formatSync(at: string | null): string {
@@ -52,13 +57,16 @@ export function PortfolioPageHeader({
   onImportCsv,
   refreshCadence,
   onRefreshCadenceChange,
+  market,
+  marketLabel,
+  onMarketChange,
 }: PortfolioPageHeaderProps): JSX.Element {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col gap-[6px]">
         <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[--color-text-tertiary]">
           <span aria-hidden="true" className="h-px w-[18px] bg-[--color-border-strong]" />
-          PERSONAL · USD · LAST SYNCED {formatSync(lastSyncedAt)}
+          PERSONAL · {marketLabel} · {MARKET_CURRENCIES[market]} · LAST SYNCED {formatSync(lastSyncedAt)}
           <button
             type="button"
             onClick={onRefresh}
@@ -80,6 +88,7 @@ export function PortfolioPageHeader({
       </div>
 
       <div className="flex items-center gap-2">
+        <MarketToggle value={market} onChange={onMarketChange} />
         <RangePicker value={range} onChange={onRangeChange} />
         <CadenceGearPopover
           value={refreshCadence}
@@ -96,6 +105,43 @@ export function PortfolioPageHeader({
         <AddSplitButton onAddManually={onAddManually} onImportCsv={onImportCsv} />
       </div>
     </header>
+  );
+}
+
+const MARKETS: readonly Market[] = ["us", "tw"];
+
+function MarketToggle({
+  value,
+  onChange,
+}: {
+  value: Market;
+  onChange: (next: Market) => void;
+}): JSX.Element {
+  return (
+    <span
+      role="tablist"
+      aria-label="Portfolio market"
+      className="inline-flex overflow-hidden rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated]"
+      data-testid="market-toggle"
+    >
+      {MARKETS.map((m) => (
+        <button
+          key={m}
+          role="tab"
+          aria-selected={value === m}
+          type="button"
+          onClick={() => onChange(m)}
+          className={`border-r border-[--color-border-subtle] px-3 py-[6px] font-mono text-[10px] tracking-[0.08em] last:border-r-0 ${
+            value === m
+              ? "bg-[--color-text-primary] text-[--color-bg-base]"
+              : "text-[--color-text-secondary] hover:text-[--color-text-primary]"
+          }`}
+          data-testid={`market-${m}`}
+        >
+          {MARKET_LABELS[m]}
+        </button>
+      ))}
+    </span>
   );
 }
 

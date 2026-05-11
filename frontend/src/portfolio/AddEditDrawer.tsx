@@ -8,12 +8,16 @@ import {
   type PortfolioHolding,
 } from "../api/portfolio";
 import { GroupCombobox } from "./GroupCombobox";
+import type { Market } from "./marketTypes";
+import { MARKET_CURRENCIES } from "./marketTypes";
+import { normalizeTicker } from "./tickerNormalize";
 
 export interface AddEditDrawerProps {
   readonly open: boolean;
   readonly mode: "create" | "edit";
   readonly initial?: PortfolioHolding | null;
   readonly groups?: readonly string[];
+  readonly market: Market;
   readonly onCreateGroup?: (name: string) => Promise<void> | void;
   readonly onClose: () => void;
   readonly onSaved: (h: PortfolioHolding) => void;
@@ -42,6 +46,7 @@ export function AddEditDrawer({
   mode,
   initial,
   groups = [],
+  market,
   onCreateGroup,
   onClose,
   onSaved,
@@ -61,10 +66,10 @@ export function AddEditDrawer({
         group: initial.groups[0] ?? null,
       });
     } else if (open) {
-      setForm(blank);
+      setForm({ ...blank, currency: MARKET_CURRENCIES[market] });
     }
     setError(null);
-  }, [open, initial]);
+  }, [open, initial, market]);
 
   if (!open) return null;
 
@@ -75,15 +80,21 @@ export function AddEditDrawer({
     try {
       const groupsArray = form.group ? [form.group] : [];
       if (mode === "create") {
+        const normalized = normalizeTicker(form.ticker, market);
+        if (!normalized.ok || !normalized.ticker) {
+          setError(normalized.error ?? "Invalid ticker");
+          setSubmitting(false);
+          return;
+        }
         const input: HoldingInput = {
-          ticker: form.ticker.trim(),
+          ticker: normalized.ticker,
           shares: form.shares || null,
           cost_basis: form.cost_basis || null,
-          currency: form.currency || "USD",
+          currency: form.currency || MARKET_CURRENCIES[market],
           notes: form.notes || null,
           groups: groupsArray,
         };
-        const created = await createHolding(input);
+        const created = await createHolding(input, market);
         onSaved(created);
       } else if (initial) {
         const patch: HoldingPatch = {
@@ -134,7 +145,15 @@ export function AddEditDrawer({
             onChange={(e) => setForm({ ...form, ticker: e.target.value })}
             className="block w-full mt-1 px-2 py-1 text-sm border border-[--color-border-subtle] rounded-[--radius-sm] bg-[--color-bg-input]"
             data-testid="drawer-ticker"
+            placeholder={market === "tw" ? "e.g. 2330" : "e.g. AAPL"}
           />
+          {mode === "create" ? (
+            <span className="mt-1 block text-[10px] leading-tight text-[--color-text-tertiary]">
+              {market === "tw"
+                ? "TW portfolio — 3-6 digit code, auto-suffixed with .TW."
+                : "US portfolio — bare ticker (AAPL); reject .TW symbols."}
+            </span>
+          ) : null}
         </label>
 
         <label className="block text-xs text-[--color-text-tertiary] mt-3">

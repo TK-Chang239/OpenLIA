@@ -87,15 +87,22 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function fetchHoldings(): Promise<PortfolioHolding[]> {
-  const res = await fetch("/api/portfolio/holdings", { credentials: "include" });
+function withMarket(path: string, market?: string): string {
+  return market ? `${path}?market=${encodeURIComponent(market)}` : path;
+}
+
+export async function fetchHoldings(market?: string): Promise<PortfolioHolding[]> {
+  const res = await fetch(withMarket("/api/portfolio/holdings", market), {
+    credentials: "include",
+  });
   return jsonOrThrow<PortfolioHolding[]>(res);
 }
 
 export async function createHolding(
   input: HoldingInput,
+  market?: string,
 ): Promise<PortfolioHolding> {
-  const res = await fetch("/api/portfolio/holdings", {
+  const res = await fetch(withMarket("/api/portfolio/holdings", market), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -127,13 +134,15 @@ export async function deleteHolding(id: string): Promise<void> {
   }
 }
 
-export async function fetchAnalytics(): Promise<AnalyticsResponse> {
-  const res = await fetch("/api/portfolio/analytics", { credentials: "include" });
+export async function fetchAnalytics(market?: string): Promise<AnalyticsResponse> {
+  const res = await fetch(withMarket("/api/portfolio/analytics", market), {
+    credentials: "include",
+  });
   return jsonOrThrow<AnalyticsResponse>(res);
 }
 
-export async function refreshPrices(): Promise<RefreshPricesResponse> {
-  const res = await fetch("/api/portfolio/refresh-prices", {
+export async function refreshPrices(market?: string): Promise<RefreshPricesResponse> {
+  const res = await fetch(withMarket("/api/portfolio/refresh-prices", market), {
     method: "POST",
     credentials: "include",
   });
@@ -170,6 +179,7 @@ export function exportCsvUrl(): string {
 export interface ValueSeriesPoint {
   date: string;
   value: string;
+  ts: string | null;
 }
 
 export interface ValueSeriesResponse {
@@ -191,11 +201,15 @@ export interface TickerSeriesResponse {
   period_change_pct: Record<string, string | null>;
 }
 
-export async function fetchValueSeries(timeframe: string): Promise<ValueSeriesResponse> {
-  const res = await fetch(
-    `/api/portfolio/value-series?timeframe=${encodeURIComponent(timeframe)}`,
-    { credentials: "include" },
-  );
+export async function fetchValueSeries(
+  timeframe: string,
+  market?: string,
+): Promise<ValueSeriesResponse> {
+  const qs = new URLSearchParams({ timeframe });
+  if (market) qs.set("market", market);
+  const res = await fetch(`/api/portfolio/value-series?${qs.toString()}`, {
+    credentials: "include",
+  });
   return jsonOrThrow<ValueSeriesResponse>(res);
 }
 

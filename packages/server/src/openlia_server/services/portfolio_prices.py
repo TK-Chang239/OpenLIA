@@ -160,7 +160,7 @@ class AdapterPriceProvider:
 
     def get_price(self, ticker: str) -> Decimal | None:
         try:
-            result = asyncio.run(self._adapter.fetch("stock_quote", {"symbol": ticker.upper()}))
+            result = asyncio.run(self._adapter.fetch("stock_quote", {"ticker": ticker.upper()}))
         except Exception as exc:
             logger.debug("portfolio price fetch failed for %s: %s", ticker, exc)
             return None

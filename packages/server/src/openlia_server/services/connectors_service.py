@@ -393,6 +393,8 @@ _NEED_DEPARTMENT_MAP: dict[str, str] = {
     "geopolitical_news": "macro_research",
     # retail_sentiment
     "social_posts": "retail_sentiment",
+    # portfolio
+    "eod_history": "portfolio",
 }
 
 

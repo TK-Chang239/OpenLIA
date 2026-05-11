@@ -1,24 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { fetchValueSeries, type ValueSeriesResponse } from "../api/portfolio";
 import type { PerfRange } from "./PortfolioPageHeader";
-
-export interface ValueSeriesPoint {
-  date: string;
-  value: string;
-}
-
-export interface ActualSpan {
-  start: string;
-  end: string;
-}
-
-export interface ValueSeriesResponse {
-  timeframe: string;
-  actual_span: ActualSpan | null;
-  points: ValueSeriesPoint[];
-  period_return_abs: string | null;
-  period_return_pct: string | null;
-}
 
 const RANGE_TO_PARAM: Record<PerfRange, string> = {
   "1D": "1d",
@@ -31,18 +14,12 @@ const RANGE_TO_PARAM: Record<PerfRange, string> = {
   "5Y": "5y",
 };
 
-async function fetchValueSeries(range: PerfRange): Promise<ValueSeriesResponse> {
-  const tf = RANGE_TO_PARAM[range] ?? "1m";
-  const res = await fetch(`/api/portfolio/value-series?timeframe=${tf}`, {
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`value-series: ${res.status}`);
-  return (await res.json()) as ValueSeriesResponse;
-}
-
 /** Subscribe to the portfolio value series for the picker-selected range.
  *  Re-fetches on range change. */
-export function useValueSeries(range: PerfRange): {
+export function useValueSeries(
+  range: PerfRange,
+  market?: string,
+): {
   readonly series: ValueSeriesResponse | null;
   readonly loading: boolean;
 } {
@@ -52,13 +29,13 @@ export function useValueSeries(range: PerfRange): {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setSeries(await fetchValueSeries(range));
+      setSeries(await fetchValueSeries(RANGE_TO_PARAM[range] ?? "1m", market));
     } catch {
       setSeries(null);
     } finally {
       setLoading(false);
     }
-  }, [range]);
+  }, [range, market]);
 
   useEffect(() => {
     void reload();
