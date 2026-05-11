@@ -55,12 +55,18 @@ class PortfolioPriceRefreshExecutor(BaseExecutor):
         cancel_token: CancellationToken | None,
     ) -> JobOutcome:
         now = self._clock()
+        # The intraday cron registers itself with schedule_id="intraday" so we
+        # can bypass the cadence floor for sub-hour fires whose whole purpose
+        # is dense intraday rows. Top-of-hour / post-close / wake-up fires
+        # pass schedule_id=None and keep cadence semantics.
+        ignore_cadence = schedule_id == "intraday"
         with self._session_factory() as session:
             result = refresh_due_quotes(
                 session,
                 provider=self._provider,
                 now_utc=now,
                 min_cadence_seconds=self._min_cadence_seconds,
+                ignore_cadence=ignore_cadence,
             )
         return JobOutcome(
             result_summary={
@@ -105,9 +111,7 @@ class _AdapterQuoteProvider:
         if adapter is None:
             return None
         try:
-            result = asyncio.run(
-                adapter.fetch("stock_quote", {"ticker": ticker.upper()})
-            )
+            result = asyncio.run(adapter.fetch("stock_quote", {"ticker": ticker.upper()}))
         except Exception:
             return None
         payload = getattr(result, "payload", None)
@@ -123,7 +127,9 @@ class _AdapterQuoteProvider:
             "day_open": _coerce_price(raw.get("open")),
             "day_high": _coerce_price(raw.get("high")),
             "day_low": _coerce_price(raw.get("low")),
-            "volume": int(raw["volume"]) if "volume" in raw and raw["volume"] not in (None, "", "NA") else None,
+            "volume": int(raw["volume"])
+            if "volume" in raw and raw["volume"] not in (None, "", "NA")
+            else None,
             "currency": raw.get("currency"),
             "quote_at": None,
             "source": "eodhd",

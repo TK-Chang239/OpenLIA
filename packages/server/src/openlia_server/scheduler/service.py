@@ -388,7 +388,10 @@ class SchedulerService:
             self._run_job,
             CronTrigger(minute="*/15", timezone=UTC),
             id=f"{PORTFOLIO_PRICE_REFRESH_KEY}:intraday",
-            args=(JobType.PORTFOLIO_PRICE_REFRESH, None, None),
+            # schedule_id="intraday" routes the executor into the cadence-bypass
+            # path so sub-hour fires actually write ticks instead of hitting
+            # the user's hourly/daily freshness floor.
+            args=(JobType.PORTFOLIO_PRICE_REFRESH, None, "intraday"),
             misfire_grace_time=self.settings.misfire_grace_seconds,
             max_instances=1,
             coalesce=True,
