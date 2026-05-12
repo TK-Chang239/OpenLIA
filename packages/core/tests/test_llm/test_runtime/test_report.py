@@ -110,14 +110,14 @@ class _Registry:
 
 
 def _always(resolved):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
         return resolved
 
     return _r
 
 
 def _raises(exc):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
         raise exc
 
     return _r
@@ -1352,9 +1352,7 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
             }
         }
     }
-    data = FakeDataDispatcher(
-        manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}}
-    )
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
         tools=ToolDispatcher(
@@ -1380,9 +1378,9 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
     second = provider.captured_requests[1]
     assistant_msgs = [m for m in second.messages if m.role == "assistant"]
     assert assistant_msgs, "assistant tool-call message must be replayed"
-    assert any(
-        any(tc.id == "c_99" for tc in m.tool_calls) for m in assistant_msgs
-    ), "assistant message must carry the original tool_calls"
+    assert any(any(tc.id == "c_99" for tc in m.tool_calls) for m in assistant_msgs), (
+        "assistant message must carry the original tool_calls"
+    )
     tool_msgs = [m for m in second.messages if m.role == "tool"]
     assert tool_msgs, "tool-result message must be present"
     assert all(m.tool_call_id for m in tool_msgs), (

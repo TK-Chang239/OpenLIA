@@ -9,11 +9,12 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from openlia.departments.equity_research import EquityResearchDepartment
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.events import to_wire
+from openlia.llm.runtime.messages import Attachment as RuntimeAttachment
 from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session as DBSession
@@ -23,6 +24,11 @@ from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import ChatMessage as DbChatMessage
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as chat_sessions_svc
+from openlia_server.services.attachments import (
+    FileUpload,
+    persist_attachments,
+    validate_uploads,
+)
 from openlia_server.services.equity_research_config import (
     CustomSectionDTO,
     EquityResearchConfigService,
@@ -123,26 +129,61 @@ def build_equity_research_router(
 
     _VALID_MODES = EquityResearchDepartment().valid_modes
 
-    @router.post("/report")
-    async def post_report(
-        payload: ReportPayload,
+    async def _stream_report(
+        *,
         request: Request,
-        user: User = require_auth,
-        session: DBSession = Depends(session_dep),
+        db: DBSession,
+        user: User,
+        mode: str,
+        user_input: str,
+        session_id: str | None,
+        uploads: list[FileUpload] | None,
     ) -> StreamingResponse:
-        if payload.mode not in _VALID_MODES:
-            raise HTTPException(status_code=400, detail=f"unknown mode: {payload.mode!r}")
+        if mode not in _VALID_MODES:
+            raise HTTPException(status_code=400, detail=f"unknown mode: {mode!r}")
+
+        runtime_attachments: list[RuntimeAttachment] = []
+        if uploads:
+            if session_id is None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="session_id is required when uploading attachments",
+                )
+            holder_id = str(uuid.uuid4())
+            db.add(
+                DbChatMessage(
+                    id=holder_id,
+                    session_id=session_id,
+                    role="user",
+                    content=user_input,
+                    created_at=datetime.now(UTC),
+                )
+            )
+            db.commit()
+            rows = persist_attachments(db, message_id=holder_id, uploads=uploads)
+            runtime_attachments = [
+                RuntimeAttachment(
+                    id=r.id,
+                    filename=r.filename,
+                    mime_type=r.mime_type,
+                    storage_path=r.storage_path,
+                    size_bytes=r.size_bytes,
+                    extracted_text=r.extracted_text,
+                )
+                for r in rows
+            ]
 
         inner_factory = request.app.state.equity_research_inner_factory
         inner = inner_factory()
-        runner = EquityResearchRunner(db_session=session, inner=inner)
+        runner = EquityResearchRunner(db_session=db, inner=inner)
 
         async def stream() -> AsyncIterator[bytes]:
             async for ev in runner.run_report(
                 user_id=user.id,
-                mode=payload.mode,
-                user_input=payload.user_input,
-                session_id=payload.session_id,
+                mode=mode,
+                user_input=user_input,
+                session_id=session_id,
+                attachments=runtime_attachments or None,
             ):
                 wire = _serialize_event(ev)
                 yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
@@ -153,49 +194,137 @@ def build_equity_research_router(
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
         )
 
-    @router.post("/chat")
-    async def post_chat(
-        payload: ChatPayload,
+    @router.post("/report", response_model=None)
+    async def post_report(
         request: Request,
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
+    ) -> StreamingResponse | JSONResponse:
+        """Dual-mode: ``application/json`` keeps the legacy
+        ``{mode, user_input, session_id}`` shape; ``multipart/form-data``
+        adds a ``files[]`` array for composer attachments."""
+        content_type = request.headers.get("content-type", "")
+        is_form = content_type.startswith("multipart/form-data") or content_type.startswith(
+            "application/x-www-form-urlencoded"
+        )
+        if is_form:
+            form = await request.form()
+            mode = (form.get("mode") or "").strip()
+            user_input = (form.get("user_input") or "").strip()
+            session_id = form.get("session_id") or None
+            uploads: list[FileUpload] = []
+            for upload in form.getlist("files"):
+                if not hasattr(upload, "read"):
+                    continue
+                content = await upload.read()
+                uploads.append(
+                    FileUpload(
+                        filename=upload.filename or "unnamed",
+                        mime_type=upload.content_type or "application/octet-stream",
+                        content=content,
+                    )
+                )
+            errors = validate_uploads(uploads)
+            if errors:
+                return JSONResponse(
+                    {"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
+                    status_code=400,
+                )
+            return await _stream_report(
+                request=request,
+                db=session,
+                user=user,
+                mode=mode,
+                user_input=user_input,
+                session_id=session_id,
+                uploads=uploads,
+            )
+        body = await request.json()
+        try:
+            payload = ReportPayload.model_validate(body)
+        except Exception as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422)
+        return await _stream_report(
+            request=request,
+            db=session,
+            user=user,
+            mode=payload.mode,
+            user_input=payload.user_input,
+            session_id=payload.session_id,
+            uploads=None,
+        )
+
+    async def _stream_chat(
+        *,
+        request: Request,
+        db: DBSession,
+        user: User,
+        message: str,
+        session_id: str | None,
+        uploads: list[FileUpload] | None,
     ) -> StreamingResponse:
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         runner = factory()
         cancel_token = CancellationToken()
 
-        session_id = payload.session_id
         session_model_id: str | None = None
+        disabled_connector_ids: tuple[str, ...] = ()
+        disabled_skill_ids: tuple[str, ...] = ()
+        session_response_length: str | None = None
+        runtime_attachments: list[RuntimeAttachment] = []
+
         if session_id is not None:
             try:
                 session_row = chat_sessions_svc.get_session(
-                    session, session_id=session_id, user_id=user.id
+                    db, session_id=session_id, user_id=user.id
                 )
             except (LookupError, PermissionError) as exc:
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
             session_model_id = session_row.model_id
-            session.add(
+            disabled_connector_ids = tuple(session_row.disabled_connector_ids or ())
+            disabled_skill_ids = tuple(session_row.disabled_skill_ids or ())
+            session_response_length = session_row.response_length
+            user_message_id = str(uuid.uuid4())
+            db.add(
                 DbChatMessage(
-                    id=str(uuid.uuid4()),
+                    id=user_message_id,
                     session_id=session_id,
                     role="user",
-                    content=payload.message,
+                    content=message,
                     created_at=datetime.now(UTC),
                 )
             )
-            session.commit()
+            db.commit()
+            if uploads:
+                rows = persist_attachments(db, message_id=user_message_id, uploads=uploads)
+                runtime_attachments = [
+                    RuntimeAttachment(
+                        id=r.id,
+                        filename=r.filename,
+                        mime_type=r.mime_type,
+                        storage_path=r.storage_path,
+                        size_bytes=r.size_bytes,
+                        extracted_text=r.extracted_text,
+                    )
+                    for r in rows
+                ]
             try:
                 chat_sessions_svc.ensure_titled(
-                    session,
+                    db,
                     session_id=session_id,
-                    first_user_text=payload.message,
+                    first_user_text=message,
                 )
             except Exception:
                 pass
-            rows = chat_sessions_svc.list_messages(session, session_id=session_id, user_id=user.id)
-            messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows]
+            rows_msgs = chat_sessions_svc.list_messages(db, session_id=session_id, user_id=user.id)
+            messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows_msgs]
         else:
-            messages = [RuntimeChatMessage(role="user", content=payload.message)]
+            if uploads:
+                raise HTTPException(
+                    status_code=400,
+                    detail="session_id is required when uploading attachments",
+                )
+            messages = [RuntimeChatMessage(role="user", content=message)]
 
         assistant_text: list[str] = []
         tool_calls_log: list[dict[str, Any]] = []
@@ -205,9 +334,13 @@ def build_equity_research_router(
                 department_id="equity_research",
                 user_id=user.id,
                 messages=messages,
+                attachments=runtime_attachments or None,
                 cancel_token=cancel_token,
                 session_id=session_id,
                 model_id_override=session_model_id,
+                disabled_connector_ids=disabled_connector_ids,
+                disabled_skill_ids=disabled_skill_ids,
+                response_length=session_response_length,
             ):
                 wire = to_wire(event)
                 etype = wire["type"]
@@ -233,7 +366,7 @@ def build_equity_research_router(
                 yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
             if session_id is not None and (assistant_text or tool_calls_log):
                 content = "".join(assistant_text)
-                session.add(
+                db.add(
                     DbChatMessage(
                         id=str(uuid.uuid4()),
                         session_id=session_id,
@@ -243,12 +376,71 @@ def build_equity_research_router(
                         created_at=datetime.now(UTC),
                     )
                 )
-                session.commit()
+                db.commit()
 
         return StreamingResponse(
             stream(),
             media_type="text/event-stream",
             headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+        )
+
+    @router.post("/chat", response_model=None)
+    async def post_chat(
+        request: Request,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> StreamingResponse | JSONResponse:
+        """Dual-mode: ``application/json`` keeps the legacy
+        ``{message, session_id}`` shape; ``multipart/form-data`` adds a
+        ``files[]`` array for composer attachments."""
+        content_type = request.headers.get("content-type", "")
+        is_form = content_type.startswith("multipart/form-data") or content_type.startswith(
+            "application/x-www-form-urlencoded"
+        )
+        if is_form:
+            form = await request.form()
+            message = (form.get("message") or "").strip()
+            if not message:
+                return JSONResponse({"detail": "message must not be empty"}, status_code=400)
+            session_id = form.get("session_id") or None
+            uploads: list[FileUpload] = []
+            for upload in form.getlist("files"):
+                if not hasattr(upload, "read"):
+                    continue
+                content = await upload.read()
+                uploads.append(
+                    FileUpload(
+                        filename=upload.filename or "unnamed",
+                        mime_type=upload.content_type or "application/octet-stream",
+                        content=content,
+                    )
+                )
+            errors = validate_uploads(uploads)
+            if errors:
+                return JSONResponse(
+                    {"errors": [{"filename": e.filename, "reason": e.reason} for e in errors]},
+                    status_code=400,
+                )
+            return await _stream_chat(
+                request=request,
+                db=session,
+                user=user,
+                message=message,
+                session_id=session_id,
+                uploads=uploads,
+            )
+        body = await request.json()
+        try:
+            payload = ChatPayload.model_validate(body)
+        except Exception as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=422)
+        return await _stream_chat(
+            request=request,
+            db=session,
+            user=user,
+            message=payload.message,
+            session_id=payload.session_id,
+            uploads=None,
         )
 
     return router

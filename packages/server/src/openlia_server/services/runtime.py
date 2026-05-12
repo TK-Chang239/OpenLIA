@@ -384,6 +384,8 @@ class RefreshingReportRunner:
         user_id: str,
         request,
         cancel_token=None,
+        attachments=None,
+        model_id_override: str | None = None,
     ):
         import uuid as _uuid
         from datetime import UTC as _UTC
@@ -411,6 +413,8 @@ class RefreshingReportRunner:
                 user_id=user_id,
                 request=request,
                 cancel_token=cancel_token,
+                attachments=attachments,
+                model_id_override=model_id_override,
             ):
                 yield event
             db.commit()
