@@ -50,9 +50,7 @@ _REQUEST_ADDITIONAL_TOOLS_SCHEMA = ToolSchema(
             },
             "category_hint": {
                 "type": "string",
-                "description": (
-                    "Optional connector category hint (financial, news, social, ...)."
-                ),
+                "description": ("Optional connector category hint (financial, news, social, ...)."),
             },
         },
         "required": ["reason"],

@@ -21,7 +21,6 @@ from openlia_server.scheduler.registry import JobStatus
 from openlia_server.services.adapter_llm_client import AdapterLlmNotConfigured
 from sqlalchemy import select
 
-
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
@@ -31,7 +30,9 @@ class _FakeProvider:
     model = "fake-quick"
 
     async def generate(self, request):  # pragma: no cover - not used directly
-        raise AssertionError("FakeProvider.generate should not be called; tests stub extract/summarize fns")
+        raise AssertionError(
+            "FakeProvider.generate should not be called; tests stub extract/summarize fns"
+        )
 
 
 def _resolve_fake_provider(_db) -> Any:

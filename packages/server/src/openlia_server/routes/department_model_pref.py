@@ -48,9 +48,7 @@ class _ModelPrefIn(BaseModel):
     model_id: str
 
 
-def _resolve_effective_model_id(
-    db: DBSession, *, user_id: str, department_id: str
-) -> str | None:
+def _resolve_effective_model_id(db: DBSession, *, user_id: str, department_id: str) -> str | None:
     """Return the model_id the resolver would pick today.
 
     Mirrors the chain in ``openlia.llm.resolver.resolve``:

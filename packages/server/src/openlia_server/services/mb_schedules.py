@@ -75,9 +75,7 @@ def list_schedules(db: Session, *, user_id: str) -> list[MbScheduleDTO]:
     return [_to_dto(r) for r in rows]
 
 
-def get_schedule_by_id(
-    db: Session, *, user_id: str, schedule_id: str
-) -> MbScheduleDTO | None:
+def get_schedule_by_id(db: Session, *, user_id: str, schedule_id: str) -> MbScheduleDTO | None:
     row = db.query(MbSchedule).filter_by(id=schedule_id, user_id=user_id).one_or_none()
     if row is None:
         return None

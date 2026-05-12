@@ -45,9 +45,7 @@ def get_refresh_cadence(session: Session, *, user_id: str) -> RefreshCadence:
     return _row(session, user_id).portfolio_refresh_cadence  # type: ignore[return-value]
 
 
-def set_refresh_cadence(
-    session: Session, *, user_id: str, cadence: str
-) -> RefreshCadence:
+def set_refresh_cadence(session: Session, *, user_id: str, cadence: str) -> RefreshCadence:
     if cadence not in _VALID_CADENCES:
         raise InvalidCadenceError(
             f"cadence must be one of {sorted(_VALID_CADENCES)}; got {cadence!r}"

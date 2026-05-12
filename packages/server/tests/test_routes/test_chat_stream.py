@@ -45,9 +45,8 @@ class _ScriptedChatRunner:
 
 @pytest.fixture
 def stream_client(tmp_path, monkeypatch):
-    from openlia_server.app import create_app
-
     import openlia_server.db.models.register_all  # noqa: F401 — register every ORM model on Base.metadata
+    from openlia_server.app import create_app
 
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{tmp_path}/stream.db")

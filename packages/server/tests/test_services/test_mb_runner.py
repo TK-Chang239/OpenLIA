@@ -121,12 +121,8 @@ async def test_on_demand_titles_report_with_date_and_session(
     derived from local time, not whatever the LLM put in cover.title."""
     _mk_user(db_session)
     fixed_local = datetime(2026, 5, 5, 8, 30, tzinfo=ZoneInfo("America/Los_Angeles"))
-    monkeypatch.setattr(
-        "openlia_server.services.mb_runner._now_local", lambda: fixed_local
-    )
-    fake_report_runner.queue_events(
-        [ReportComplete(report_id="pending_r", schema=MINIMAL_SCHEMA)]
-    )
+    monkeypatch.setattr("openlia_server.services.mb_runner._now_local", lambda: fixed_local)
+    fake_report_runner.queue_events([ReportComplete(report_id="pending_r", schema=MINIMAL_SCHEMA)])
     async for _ in run_on_demand(
         session=db_session, user_id="u_1", report_runner=fake_report_runner
     ):
@@ -152,12 +148,8 @@ async def test_on_demand_session_label_buckets_hours(
 ) -> None:
     _mk_user(db_session)
     fixed_local = datetime(2026, 5, 5, hour, 0, tzinfo=ZoneInfo("America/Los_Angeles"))
-    monkeypatch.setattr(
-        "openlia_server.services.mb_runner._now_local", lambda: fixed_local
-    )
-    fake_report_runner.queue_events(
-        [ReportComplete(report_id="pending_r", schema=MINIMAL_SCHEMA)]
-    )
+    monkeypatch.setattr("openlia_server.services.mb_runner._now_local", lambda: fixed_local)
+    fake_report_runner.queue_events([ReportComplete(report_id="pending_r", schema=MINIMAL_SCHEMA)])
     async for _ in run_on_demand(
         session=db_session, user_id="u_1", report_runner=fake_report_runner
     ):
