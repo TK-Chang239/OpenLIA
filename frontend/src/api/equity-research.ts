@@ -71,7 +71,12 @@ export async function updateErConfig(patch: ErConfigPatch): Promise<ErConfig> {
 }
 
 export async function listErTemplates(): Promise<ErTemplate[]> {
-  const r = await fetchJson<ErTemplateListResponse>(TEMPLATES_PATH);
+  const r = await fetchJson<ErTemplateListResponse | null>(TEMPLATES_PATH);
+  if (!r || !Array.isArray(r.templates)) {
+    throw new Error(
+      "Templates endpoint returned no JSON. Restart the backend (and run alembic upgrade head) to pick up the new /templates routes.",
+    );
+  }
   return r.templates;
 }
 
