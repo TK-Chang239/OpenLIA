@@ -17,6 +17,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -41,6 +42,9 @@ class ErUserConfig(Base, TimestampMixin):
     report_length: Mapped[str] = mapped_column(String(16), nullable=False)
     sections_by_mode: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     custom_sections_by_mode: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    selected_template_id_by_mode: Mapped[dict] = mapped_column(
+        JSON, nullable=False, default=dict, server_default=text("'{}'")
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -52,6 +56,53 @@ class ErUserConfig(Base, TimestampMixin):
             name="ck_er_user_configs_report_length",
         ),
         Index("ix_er_user_configs_user_id", "user_id"),
+    )
+
+
+class ErTemplate(Base, TimestampMixin):
+    """User-uploaded or admin-published Equity Research report template.
+
+    Bytes are immutable once persisted (re-uploading creates a new row).
+    Metadata (name, compatible_modes) is mutable via metadata-only edits.
+    """
+
+    __tablename__ = "er_templates"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner_scope: Mapped[str] = mapped_column(String(16), nullable=False)
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    created_by_user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    compatible_modes: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    raw_filename: Mapped[str] = mapped_column(String(512), nullable=False)
+    raw_mime: Mapped[str] = mapped_column(String(128), nullable=False)
+    raw_size_bytes: Mapped[int] = mapped_column(nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    extracted_text: Mapped[str] = mapped_column(Text, nullable=False)
+    char_count: Mapped[int] = mapped_column(nullable=False)
+    estimated_tokens: Mapped[int] = mapped_column(nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "owner_scope IN ('global','user')",
+            name="ck_er_templates_owner_scope",
+        ),
+        CheckConstraint(
+            "(owner_scope = 'global' AND owner_user_id IS NULL) OR "
+            "(owner_scope = 'user' AND owner_user_id IS NOT NULL)",
+            name="ck_er_templates_scope_owner_consistency",
+        ),
+        Index("ix_er_templates_owner_scope_user", "owner_scope", "owner_user_id"),
     )
 
 

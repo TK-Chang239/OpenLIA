@@ -9,8 +9,10 @@ import {
   type ReportLength,
   type ReportMode,
 } from "../../api/equity-research";
+import { useCurrentUser } from "../../auth/useCurrentUser";
 import { SECTION_CATALOG } from "../../lib/equity-research/section-catalog";
 import { CustomSectionRow } from "./CustomSectionRow";
+import { TemplatePickerSection } from "./TemplatePickerSection";
 
 const MODE_LABELS: Record<ReportMode, string> = {
   stock_initiation: "Stock Initiation",
@@ -89,6 +91,11 @@ export function ReportSettingsModal({
   const [sections, setSections] = useState(config.sections_by_mode);
   const [customs, setCustoms] = useState(config.custom_sections_by_mode);
   const [pendingCustom, setPendingCustom] = useState<CustomSection | null>(null);
+  const [selectedTemplateByMode, setSelectedTemplateByMode] = useState<
+    Record<ReportMode, string>
+  >(() => normalizeSelected(config.selected_template_id_by_mode));
+  const currentUser = useCurrentUser();
+  const isAdmin = currentUser?.role === "admin";
 
   useEffect(() => {
     if (!open) return;
@@ -97,7 +104,10 @@ export function ReportSettingsModal({
     setSections(config.sections_by_mode);
     setCustoms(config.custom_sections_by_mode);
     setPendingCustom(null);
+    setSelectedTemplateByMode(normalizeSelected(config.selected_template_id_by_mode));
   }, [open, config]);
+
+  const templateActive = (selectedTemplateByMode[mode] ?? "default") !== "default";
 
   const toggleSection = (id: string) => {
     const current = new Set(sections[mode]);
@@ -128,6 +138,7 @@ export function ReportSettingsModal({
       report_length: length,
       sections_by_mode: sections,
       custom_sections_by_mode: customs,
+      selected_template_id_by_mode: selectedTemplateByMode,
     });
     onClose();
   };
@@ -184,12 +195,35 @@ export function ReportSettingsModal({
               />
             </section>
 
-            <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
+            <TemplatePickerSection
+              mode={mode}
+              selectedId={selectedTemplateByMode[mode] ?? "default"}
+              onSelectedIdChange={(id) =>
+                setSelectedTemplateByMode({
+                  ...selectedTemplateByMode,
+                  [mode]: id,
+                })
+              }
+              isAdmin={isAdmin}
+            />
+
+            <section
+              className={[
+                "border-b border-[--color-border-subtle] px-[22px] py-[18px]",
+                templateActive ? "opacity-50 pointer-events-none" : "",
+              ].join(" ")}
+              aria-disabled={templateActive}
+            >
               <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
                 Sections ·{" "}
                 <strong className="font-medium text-[--color-text-primary]">
                   {MODE_FULL_LABEL[mode]}
                 </strong>
+                {templateActive ? (
+                  <span className="ml-2 normal-case tracking-normal text-[10px] text-[--color-text-tertiary]">
+                    (controlled by selected template)
+                  </span>
+                ) : null}
               </span>
               <ul className="m-0 mt-1 flex list-none flex-col p-0">
                 {SECTION_CATALOG[mode].map((s, idx) => {
@@ -331,4 +365,20 @@ export function ReportSettingsModal({
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function normalizeSelected(
+  raw: ErConfig["selected_template_id_by_mode"] | undefined,
+): Record<ReportMode, string> {
+  const out: Record<ReportMode, string> = {
+    stock_initiation: "default",
+    stock_update: "default",
+    sector_research: "default",
+  };
+  if (!raw) return out;
+  for (const m of Object.keys(out) as ReportMode[]) {
+    const v = raw[m];
+    if (typeof v === "string" && v) out[m] = v;
+  }
+  return out;
 }

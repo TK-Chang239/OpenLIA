@@ -64,7 +64,7 @@ class EquityResearchRunner:
             raise ValueError(f"unknown equity_research mode: {mode!r}")
 
         cfg = self._config.get_config(user_id)
-        active = self._config.resolve_active(cfg, mode=mode)
+        active = self._config.resolve_active(cfg, mode=mode, user_id=user_id)
 
         custom_section_dicts = [
             {
@@ -82,6 +82,8 @@ class EquityResearchRunner:
             enabled_sections=list(active.enabled_section_ids),
             custom_sections=custom_section_dicts,
             length=_LENGTH_MAP.get(active.report_length, "standard"),
+            user_template_text=active.template_text,
+            user_template_name=active.template_name,
         )
 
         last_complete: ReportComplete | None = None
