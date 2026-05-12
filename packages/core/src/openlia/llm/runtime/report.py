@@ -30,6 +30,10 @@ from typing import Any
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.resolver import ModelRegistry
+from openlia.llm.runtime.attachments import (
+    AttachmentNotSupportedError,
+    materialize_for_model,
+)
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.events import (
     ReportComplete,
@@ -42,7 +46,7 @@ from openlia.llm.runtime.events import (
     ReportToolCallStart,
     SseEvent,
 )
-from openlia.llm.runtime.messages import ReportRequest
+from openlia.llm.runtime.messages import Attachment, ContentBlock, ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolDispatcher
 from openlia.llm.types import (
@@ -334,6 +338,8 @@ class ReportRunner:
         user_id: str | None,
         request: ReportRequest,
         cancel_token: CancellationToken | None = None,
+        attachments: list[Attachment] | None = None,
+        model_id_override: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
@@ -366,6 +372,7 @@ class ReportRunner:
                 department_id=department_id,
                 user_id=user_id,
                 registry=self._registry,
+                model_id_override=model_id_override,
             )
         except LLMProviderError as exc:
             self._trace(
@@ -379,6 +386,28 @@ class ReportRunner:
                 message=str(exc),
             )
             return
+
+        try:
+            materialized = materialize_for_model(
+                attachments or (),
+                capabilities=resolved.capabilities,
+                available_token_budget=max(
+                    1,
+                    resolved.capabilities.max_context_tokens
+                    - resolved.capabilities.max_output_tokens
+                    - 4_000,
+                ),
+            )
+        except AttachmentNotSupportedError as exc:
+            yield ReportError(
+                report_id=report_id,
+                error_class=type(exc).__name__,
+                message=str(exc),
+            )
+            return
+        materialized_blocks: tuple[ContentBlock, ...] = tuple(materialized.blocks)
+        for warning in materialized.warnings:
+            self._trace("attachment.warning", warning, None)
 
         self._trace(
             "llm.resolved",
@@ -418,7 +447,7 @@ class ReportRunner:
             has_tools=bool(tools),
         )
 
-        conversation = [Message(role="user", content=user_msg)]
+        conversation = [Message(role="user", content=user_msg, content_blocks=materialized_blocks)]
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 

@@ -146,6 +146,10 @@ function reducer(state: ReportStreamState, action: Action): ReportStreamState {
 export interface StartOptions {
   url: string;
   body: unknown;
+  /** When non-empty, the request is sent as multipart/form-data with the
+   *  body's primitive fields as form fields and these files appended as
+   *  ``files[]`` entries. JSON path stays in use when omitted/empty. */
+  attachments?: File[];
 }
 
 export function useReportStream() {
@@ -153,15 +157,16 @@ export function useReportStream() {
   const abortRef = useRef<AbortController | null>(null);
   const lastOptionsRef = useRef<StartOptions | null>(null);
 
-  const start = useCallback(({ url, body }: StartOptions) => {
+  const start = useCallback(({ url, body, attachments }: StartOptions) => {
     abortRef.current?.abort();
-    lastOptionsRef.current = { url, body };
+    lastOptionsRef.current = { url, body, attachments };
     dispatch({ kind: "START" });
     const controller = new AbortController();
     abortRef.current = controller;
     void consume({
       url,
       body,
+      attachments,
       signal: controller.signal,
       onEvent: (event, data) => dispatch({ kind: "EVENT", event, data }),
       onError: (message) =>
@@ -199,20 +204,47 @@ export function useReportStream() {
 interface ConsumeArgs {
   url: string;
   body: unknown;
+  attachments?: File[];
   signal: AbortSignal;
   onEvent: (event: string, data: Record<string, unknown>) => void;
   onError: (message: string) => void;
 }
 
-async function consume({ url, body, signal, onEvent, onError }: ConsumeArgs) {
+async function consume({
+  url,
+  body,
+  attachments,
+  signal,
+  onEvent,
+  onError,
+}: ConsumeArgs) {
   try {
-    const res = await fetch(url, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json", accept: "text/event-stream" },
-      body: JSON.stringify(body),
-      signal,
-    });
+    const useMultipart = (attachments?.length ?? 0) > 0;
+    let init: RequestInit;
+    if (useMultipart) {
+      const fd = new FormData();
+      for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+        if (v == null) continue;
+        fd.set(k, String(v));
+      }
+      for (const f of attachments ?? []) fd.append("files", f, f.name);
+      init = {
+        method: "POST",
+        credentials: "include",
+        headers: { accept: "text/event-stream" },
+        body: fd,
+        signal,
+      };
+    } else {
+      init = {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json", accept: "text/event-stream" },
+        body: JSON.stringify(body),
+        signal,
+      };
+    }
+    const res = await fetch(url, init);
     if (!res.ok || !res.body) {
       onError(`report stream HTTP ${res.status}`);
       return;

@@ -109,6 +109,8 @@ class FakeReportRunner:
     def __init__(self) -> None:
         self._queue: list = []
         self.last_request: _CapturedReportRequest | None = None
+        self.last_attachments: Any = None
+        self.last_model_id_override: str | None = None
 
     def queue_events(self, events: list) -> None:
         self._queue = list(events)
@@ -126,6 +128,8 @@ class FakeReportRunner:
                 list(req.reference_portfolio) if req.reference_portfolio else None
             ),
         )
+        self.last_attachments = kwargs.get("attachments")
+        self.last_model_id_override = kwargs.get("model_id_override")
         for e in self._queue:
             yield e
 

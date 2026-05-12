@@ -86,3 +86,47 @@ def test_report_route_requires_auth(company_client_anon):
         json={"mode": "stock_update", "user_input": "x"},
     )
     assert r.status_code == 401
+
+
+class _AttachmentCapturingInner:
+    def __init__(self, queue):
+        self._queue = queue
+        self.last_kwargs = None
+
+    async def run(self, **kwargs):
+        self.last_kwargs = kwargs
+        for e in self._queue:
+            yield e
+
+
+def test_report_route_accepts_multipart_with_files(company_client, auth_user, db_session):
+    from openlia_server.services import chat_sessions as chat_sessions_svc
+
+    queue = [ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA)]
+    inner = _AttachmentCapturingInner(queue)
+    company_client.app.state.equity_research_inner_factory = lambda: inner
+
+    sess = chat_sessions_svc.create_session(
+        db_session, user_id=auth_user.id, department="equity_research", title="t"
+    )
+    r = company_client.post(
+        "/departments/equity-research/report",
+        data={"mode": "stock_update", "user_input": "AAPL Q4", "session_id": sess.id},
+        files=[("files", ("note.txt", b"company-supplied note", "text/plain"))],
+    )
+    assert r.status_code == 200
+    list(r.iter_lines())
+    assert inner.last_kwargs is not None
+    attachments = inner.last_kwargs.get("attachments")
+    assert attachments is not None and len(attachments) == 1
+    assert attachments[0].filename == "note.txt"
+
+
+def test_report_route_rejects_multipart_without_session(company_client, auth_user):
+    company_client.app.state.equity_research_inner_factory = lambda: _AttachmentCapturingInner([])
+    r = company_client.post(
+        "/departments/equity-research/report",
+        data={"mode": "stock_update", "user_input": "x"},
+        files=[("files", ("a.txt", b"abc", "text/plain"))],
+    )
+    assert r.status_code == 400
