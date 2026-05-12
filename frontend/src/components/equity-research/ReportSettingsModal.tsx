@@ -1,5 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { Check, Plus, X } from "lucide-react";
+import { Check, Layers, Lock, Plus, X } from "lucide-react";
 import { type JSX, useEffect, useState } from "react";
 
 import {
@@ -208,24 +208,52 @@ export function ReportSettingsModal({
             />
 
             <section
-              className={[
-                "border-b border-[--color-border-subtle] px-[22px] py-[18px]",
-                templateActive ? "opacity-50 pointer-events-none" : "",
-              ].join(" ")}
+              className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
               aria-disabled={templateActive}
             >
-              <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                Sections ·{" "}
-                <strong className="font-medium text-[--color-text-primary]">
-                  {MODE_FULL_LABEL[mode]}
-                </strong>
-                {templateActive ? (
-                  <span className="ml-2 normal-case tracking-normal text-[10px] text-[--color-text-tertiary]">
-                    (controlled by selected template)
+              <div className="mb-[10px] flex items-center justify-between gap-[10px]">
+                <span className="block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                  Sections ·{" "}
+                  <strong className="font-medium text-[--color-text-primary]">
+                    {MODE_FULL_LABEL[mode]}
+                  </strong>
+                </span>
+                <span className="inline-flex items-center gap-[5px] font-mono text-[10px] tracking-[0.08em] text-[--color-text-tertiary]">
+                  <Layers size={10} strokeWidth={1.9} />
+                  {String(SECTION_CATALOG[mode].length).padStart(2, "0")}
+                </span>
+              </div>
+
+              {templateActive ? (
+                <div className="mb-[12px] flex items-start gap-[10px] rounded-md border border-dashed border-[--color-border-strong] bg-[--color-bg-base] px-[12px] py-[10px]">
+                  <span className="mt-[1px] inline-flex h-[20px] w-[20px] items-center justify-center rounded-sm border border-[--color-border-subtle] bg-[--color-bg-elevated] text-[--color-text-tertiary]">
+                    <Lock size={11} strokeWidth={1.9} />
                   </span>
-                ) : null}
-              </span>
-              <ul className="m-0 mt-1 flex list-none flex-col p-0">
+                  <span className="flex-1">
+                    <span className="block font-mono text-[9.5px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                      sections locked
+                    </span>
+                    <span className="mt-[2px] block text-[12px] leading-[1.45] text-[--color-text-secondary]">
+                      Structure is controlled by the selected template. Switch
+                      Report Template back to{" "}
+                      <strong className="font-medium text-[--color-text-primary]">
+                        Default
+                      </strong>{" "}
+                      to edit sections.
+                    </span>
+                  </span>
+                </div>
+              ) : null}
+
+              <ul
+                className={[
+                  "m-0 mt-1 flex list-none flex-col p-0 transition-opacity",
+                  templateActive
+                    ? "pointer-events-none opacity-45 select-none"
+                    : "",
+                ].join(" ")}
+                aria-hidden={templateActive}
+              >
                 {SECTION_CATALOG[mode].map((s, idx) => {
                   const checked = sections[mode].includes(s.id);
                   const last = idx === SECTION_CATALOG[mode].length - 1;
@@ -233,12 +261,15 @@ export function ReportSettingsModal({
                     <li
                       key={s.id}
                       className={[
-                        "group flex cursor-pointer items-center gap-[10px] py-[9px]",
+                        "group flex items-center gap-[10px] py-[9px]",
+                        templateActive ? "" : "cursor-pointer",
                         last
                           ? ""
                           : "border-b border-dashed border-[--color-border-subtle]",
                       ].join(" ")}
-                      onClick={() => toggleSection(s.id)}
+                      onClick={
+                        templateActive ? undefined : () => toggleSection(s.id)
+                      }
                     >
                       <span
                         aria-hidden="true"
@@ -256,7 +287,14 @@ export function ReportSettingsModal({
                       <span className="w-5 font-mono text-[10px] tracking-[0.04em] text-[--color-text-tertiary]">
                         {String(idx + 1).padStart(2, "0")}
                       </span>
-                      <span className="flex-1 text-[13.5px] text-[--color-text-primary] transition-colors group-hover:text-[--color-feedback-success]">
+                      <span
+                        className={[
+                          "flex-1 text-[13.5px] text-[--color-text-primary] transition-colors",
+                          templateActive
+                            ? ""
+                            : "group-hover:text-[--color-feedback-success]",
+                        ].join(" ")}
+                      >
                         {s.title}
                       </span>
                     </li>
