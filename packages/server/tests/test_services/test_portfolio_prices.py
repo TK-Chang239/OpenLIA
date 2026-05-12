@@ -78,7 +78,7 @@ class _FakeAdapter:
 
     async def fetch(self, capability: str, params: dict) -> _ToolResult:
         self.calls.append((capability, params))
-        symbol = params["symbol"]
+        symbol = params["ticker"]
         return _ToolResult(self.payloads[symbol])
 
 
@@ -91,7 +91,7 @@ def test_adapter_provider_dispatches_stock_quote() -> None:
     adapter = _FakeAdapter({"AAPL": {"close": "150.0"}})
     provider = AdapterPriceProvider(adapter)
     assert provider.get_price("aapl") == Decimal("150.0")
-    assert adapter.calls == [("stock_quote", {"symbol": "AAPL"})]
+    assert adapter.calls == [("stock_quote", {"ticker": "AAPL"})]
 
 
 def test_adapter_provider_returns_none_on_error() -> None:

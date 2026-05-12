@@ -26,6 +26,7 @@ export interface HoldingInput {
   currency?: string;
   notes?: string | null;
   groups?: string[];
+  added_at_date?: string | null;
 }
 
 export interface HoldingPatch {
@@ -47,6 +48,9 @@ export interface PositionAnalytic {
   unrealized_pl_pct: string | null;
   weight: string | null;
   currency: string;
+  previous_close: string | null;
+  day_change_abs: string | null;
+  day_change_pct: string | null;
 }
 
 export interface AnalyticsResponse {
@@ -57,6 +61,10 @@ export interface AnalyticsResponse {
   positions: PositionAnalytic[];
   allocations: Record<string, string>;
   last_quote_at?: string | null;
+  display_currency?: string;
+  currencies_present?: string[];
+  needs_fx?: boolean;
+  fx_unavailable?: boolean;
 }
 
 export interface CsvImportResponse {
@@ -83,15 +91,22 @@ async function jsonOrThrow<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function fetchHoldings(): Promise<PortfolioHolding[]> {
-  const res = await fetch("/api/portfolio/holdings", { credentials: "include" });
+function withMarket(path: string, market?: string): string {
+  return market ? `${path}?market=${encodeURIComponent(market)}` : path;
+}
+
+export async function fetchHoldings(market?: string): Promise<PortfolioHolding[]> {
+  const res = await fetch(withMarket("/api/portfolio/holdings", market), {
+    credentials: "include",
+  });
   return jsonOrThrow<PortfolioHolding[]>(res);
 }
 
 export async function createHolding(
   input: HoldingInput,
+  market?: string,
 ): Promise<PortfolioHolding> {
-  const res = await fetch("/api/portfolio/holdings", {
+  const res = await fetch(withMarket("/api/portfolio/holdings", market), {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -123,13 +138,15 @@ export async function deleteHolding(id: string): Promise<void> {
   }
 }
 
-export async function fetchAnalytics(): Promise<AnalyticsResponse> {
-  const res = await fetch("/api/portfolio/analytics", { credentials: "include" });
+export async function fetchAnalytics(market?: string): Promise<AnalyticsResponse> {
+  const res = await fetch(withMarket("/api/portfolio/analytics", market), {
+    credentials: "include",
+  });
   return jsonOrThrow<AnalyticsResponse>(res);
 }
 
-export async function refreshPrices(): Promise<RefreshPricesResponse> {
-  const res = await fetch("/api/portfolio/refresh-prices", {
+export async function refreshPrices(market?: string): Promise<RefreshPricesResponse> {
+  const res = await fetch(withMarket("/api/portfolio/refresh-prices", market), {
     method: "POST",
     credentials: "include",
   });
@@ -159,6 +176,83 @@ export async function importCsv(text: string): Promise<CsvImportResponse> {
 
 export function exportCsvUrl(): string {
   return "/api/portfolio/export-csv";
+}
+
+// ---------- Time series (Phase 3 + 4) --------------------------------------
+
+export interface ValueSeriesPoint {
+  date: string;
+  value: string;
+  ts: string | null;
+}
+
+export interface ValueSeriesResponse {
+  timeframe: string;
+  actual_span: { start: string; end: string } | null;
+  points: ValueSeriesPoint[];
+  period_return_abs: string | null;
+  period_return_pct: string | null;
+}
+
+export interface TickerSeriesPoint {
+  ts: string;
+  close: string;
+}
+
+export interface TickerSeriesResponse {
+  timeframe: string;
+  series: Record<string, TickerSeriesPoint[]>;
+  period_change_pct: Record<string, string | null>;
+}
+
+export async function fetchValueSeries(
+  timeframe: string,
+  market?: string,
+): Promise<ValueSeriesResponse> {
+  const qs = new URLSearchParams({ timeframe });
+  if (market) qs.set("market", market);
+  const res = await fetch(`/api/portfolio/value-series?${qs.toString()}`, {
+    credentials: "include",
+  });
+  return jsonOrThrow<ValueSeriesResponse>(res);
+}
+
+export async function fetchTickerSeries(
+  timeframe: string,
+  market?: string,
+): Promise<TickerSeriesResponse> {
+  const qs = new URLSearchParams({ timeframe });
+  if (market) qs.set("market", market);
+  const res = await fetch(`/api/portfolio/ticker-series?${qs.toString()}`, {
+    credentials: "include",
+  });
+  return jsonOrThrow<TickerSeriesResponse>(res);
+}
+
+// ---------- Preferences (Phase 2) ------------------------------------------
+
+export type RefreshCadence = "15min" | "hourly" | "daily" | "weekly" | "manual";
+
+export interface PortfolioPrefs {
+  refresh_cadence: RefreshCadence;
+  display_currency?: string;
+}
+
+export async function fetchPortfolioPrefs(): Promise<PortfolioPrefs> {
+  const res = await fetch("/api/portfolio/prefs", { credentials: "include" });
+  return jsonOrThrow<PortfolioPrefs>(res);
+}
+
+export async function updatePortfolioPrefs(
+  patch: Partial<PortfolioPrefs>,
+): Promise<PortfolioPrefs> {
+  const res = await fetch("/api/portfolio/prefs", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return jsonOrThrow<PortfolioPrefs>(res);
 }
 
 export async function searchTickers(q: string): Promise<SearchResult[]> {

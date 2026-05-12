@@ -22,6 +22,11 @@ export interface ChatSession {
   response_length?: ResponseLength | null;
 }
 
+export interface MessageAttachment {
+  filename: string;
+  size_bytes: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: MessageRole;
@@ -31,6 +36,7 @@ export interface ChatMessage {
   token_usage: Record<string, unknown> | null;
   created_at: string;
   stopped_at?: string | null;
+  attachments?: MessageAttachment[];
 }
 
 export interface ListSessionsOptions {

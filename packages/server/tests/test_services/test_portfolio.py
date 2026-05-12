@@ -335,3 +335,69 @@ def test_csv_import_reports_duplicates(db_session, user) -> None:
     assert result.created == []
     assert len(result.errors) == 1
     assert result.errors[0]["row"] == "1"
+
+
+def test_list_holdings_market_filter(db_session, user) -> None:
+    """list_holdings(market='us') returns only US tickers; ('twse') returns only .TW."""
+    for t in ("AAPL", "NVDA"):
+        svc.create_holding(
+            db_session,
+            user_id=user.id,
+            ticker=t,
+            shares=Decimal("1"),
+            cost_basis=Decimal("100"),
+            currency="USD",
+            notes=None,
+            groups=None,
+        )
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="2330.TW",
+        shares=Decimal("10"),
+        cost_basis=Decimal("500"),
+        currency="TWD",
+        notes=None,
+        groups=None,
+    )
+
+    us_only = svc.list_holdings(db_session, user_id=user.id, market="us")
+    tw_only = svc.list_holdings(db_session, user_id=user.id, market="twse")
+    all_h = svc.list_holdings(db_session, user_id=user.id)
+
+    assert sorted(h.ticker for h in us_only) == ["AAPL", "NVDA"]
+    assert [h.ticker for h in tw_only] == ["2330.TW"]
+    assert sorted(h.ticker for h in all_h) == ["2330.TW", "AAPL", "NVDA"]
+
+
+def test_compute_analytics_market_filter(db_session, user) -> None:
+    """compute_analytics(market=...) only aggregates that market's holdings."""
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="AAPL",
+        shares=Decimal("10"),
+        cost_basis=Decimal("100"),
+        currency="USD",
+        notes=None,
+        groups=None,
+    )
+    svc.create_holding(
+        db_session,
+        user_id=user.id,
+        ticker="2330.TW",
+        shares=Decimal("5"),
+        cost_basis=Decimal("500"),
+        currency="TWD",
+        notes=None,
+        groups=None,
+    )
+    prices = {"AAPL": Decimal("150"), "2330.TW": Decimal("600")}
+
+    us = svc.compute_analytics(db_session, user_id=user.id, prices=prices, market="us")
+    tw = svc.compute_analytics(db_session, user_id=user.id, prices=prices, market="twse")
+
+    assert us.total_market_value == Decimal("1500.0000")
+    assert [p.ticker for p in us.positions] == ["AAPL"]
+    assert tw.total_market_value == Decimal("3000.0000")
+    assert [p.ticker for p in tw.positions] == ["2330.TW"]

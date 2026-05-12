@@ -1,14 +1,20 @@
 import { useEffect, useState } from "react";
 import type { JSX, ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 
 import {
   createGroup,
   createHolding,
   fetchGroups,
+  fetchPortfolioPrefs,
   refreshPrices,
+  updatePortfolioPrefs,
   type PortfolioHolding,
+  type RefreshCadence,
 } from "../api/portfolio";
+import type { Market } from "./marketTypes";
+import { MARKET_LABELS } from "./marketTypes";
 import { exportCsvUrl } from "../api/portfolio";
 import { ToastProvider, useToast } from "../components/primitives/Toast";
 
@@ -26,11 +32,14 @@ import {
 } from "./PortfolioPageHeader";
 import { useAnalytics } from "./useAnalytics";
 import { useHoldings } from "./useHoldings";
+import { useSparklines } from "./useSparklines";
+import { useValueSeries } from "./useValueSeries";
 
-function ShellInner(): JSX.Element {
+function ShellInner({ market }: { market: Market }): JSX.Element {
   const toast = useToast();
-  const { holdings, loading, reload, remove } = useHoldings();
-  const { analytics, refresh } = useAnalytics();
+  const navigate = useNavigate();
+  const { holdings, loading, reload, remove } = useHoldings(market);
+  const { analytics, refresh } = useAnalytics(market);
   const [groups, setGroups] = useState<string[]>([]);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -38,13 +47,34 @@ function ShellInner(): JSX.Element {
   const [csvOpen, setCsvOpen] = useState(false);
   const [drawer, setDrawer] = useState<PortfolioHolding | null>(null);
   const [range, setRange] = useState<PerfRange>("1W");
+  const { series: valueSeries, loading: valueSeriesLoading } = useValueSeries(
+    range,
+    market,
+  );
+  const { data: sparklines } = useSparklines(market);
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshCadence, setRefreshCadence] = useState<RefreshCadence>("daily");
 
   useEffect(() => {
     void fetchGroups()
       .then(setGroups)
       .catch(() => setGroups([]));
+    void fetchPortfolioPrefs()
+      .then((p) => setRefreshCadence(p.refresh_cadence))
+      .catch(() => {
+        /* keep default */
+      });
   }, []);
+
+  const onCadenceChange = (next: RefreshCadence) => {
+    setRefreshCadence(next);
+    void updatePortfolioPrefs({ refresh_cadence: next }).catch((e) => {
+      toast.push({
+        title: `Failed to save cadence: ${(e as Error).message}`,
+        tone: "error",
+      });
+    });
+  };
 
   const reloadGroups = async () => {
     try {
@@ -59,7 +89,7 @@ function ShellInner(): JSX.Element {
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await refreshPrices();
+      await refreshPrices(market);
       await refresh();
       toast.push({ title: "Prices refreshed", tone: "success" });
     } catch (e) {
@@ -99,14 +129,17 @@ function ShellInner(): JSX.Element {
       undo: {
         label: "Undo",
         onClick: () => {
-          void createHolding({
-            ticker: snapshot.ticker,
-            shares: snapshot.shares ?? null,
-            cost_basis: snapshot.cost_basis ?? null,
-            currency: snapshot.currency,
-            notes: snapshot.notes_text ?? null,
-            groups: snapshot.groups,
-          }).then(() => reload());
+          void createHolding(
+            {
+              ticker: snapshot.ticker,
+              shares: snapshot.shares ?? null,
+              cost_basis: snapshot.cost_basis ?? null,
+              currency: snapshot.currency,
+              notes: snapshot.notes_text ?? null,
+              groups: snapshot.groups,
+            },
+            market,
+          ).then(() => reload());
         },
       },
     });
@@ -127,6 +160,11 @@ function ShellInner(): JSX.Element {
               exportHref={exportCsvUrl()}
               onAddManually={() => setAddOpen(true)}
               onImportCsv={() => setCsvOpen(true)}
+              refreshCadence={refreshCadence}
+              onRefreshCadenceChange={onCadenceChange}
+              market={market}
+              marketLabel={MARKET_LABELS[market]}
+              onMarketChange={(next) => navigate(`/portfolio/${next}`)}
             />
           </Reveal>
 
@@ -134,9 +172,49 @@ function ShellInner(): JSX.Element {
             <KpiBand analytics={analytics} loading={loading && holdings.length === 0} />
           </Reveal>
 
+          {analytics?.fx_unavailable ? (
+            <Reveal delay={1}>
+              <div
+                className="rounded-md border border-[--color-feedback-error] bg-[--color-bg-elevated] px-4 py-2 text-xs text-[--color-text-secondary]"
+                data-testid="fx-unavailable-banner"
+              >
+                Multi-currency totals unavailable — configure an FX-capable
+                connector to aggregate{" "}
+                {analytics.currencies_present?.join(", ") ?? ""} into{" "}
+                {analytics.display_currency ?? "USD"}.
+              </div>
+            </Reveal>
+          ) : null}
+
           <Reveal delay={2}>
-            <PerfChart range={range} />
+            <PerfChart range={range} series={valueSeries} loading={valueSeriesLoading} market={market} />
           </Reveal>
+
+          {valueSeries && valueSeries.period_return_pct !== null ? (
+            <Reveal delay={2}>
+              <div
+                className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-4 py-2 text-sm text-[--color-text-secondary]"
+                data-testid="period-return-banner"
+              >
+                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+                  {range} RETURN ·{" "}
+                  {valueSeries.actual_span
+                    ? `since ${valueSeries.actual_span.start}`
+                    : ""}
+                </span>{" "}
+                <span
+                  className={
+                    Number(valueSeries.period_return_pct) >= 0
+                      ? "text-[--color-feedback-success]"
+                      : "text-[--color-feedback-error]"
+                  }
+                >
+                  {Number(valueSeries.period_return_pct) >= 0 ? "+" : ""}
+                  {(Number(valueSeries.period_return_pct) * 100).toFixed(2)}%
+                </span>
+              </div>
+            </Reveal>
+          ) : null}
 
           <Reveal delay={3}>
             <HoldingsTable
@@ -145,6 +223,7 @@ function ShellInner(): JSX.Element {
               groups={groups}
               loading={loading && holdings.length === 0}
               selectedHoldingId={drawer?.id ?? null}
+              sparklines={sparklines}
               onRowClick={onRowClick}
               onManageGroups={() => {
                 toast.push({
@@ -172,6 +251,7 @@ function ShellInner(): JSX.Element {
         mode={editTarget ? "edit" : "create"}
         initial={editTarget}
         groups={groups}
+        market={market}
         onCreateGroup={onCreateGroupInline}
         onClose={() => {
           setAddOpen(false);
@@ -208,10 +288,10 @@ function ShellInner(): JSX.Element {
   );
 }
 
-export function PortfolioShell(): JSX.Element {
+export function PortfolioShell({ market }: { market: Market }): JSX.Element {
   return (
     <ToastProvider>
-      <ShellInner />
+      <ShellInner key={market} market={market} />
     </ToastProvider>
   );
 }
