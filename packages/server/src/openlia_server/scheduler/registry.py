@@ -18,6 +18,7 @@ class JobType(StrEnum):
     RS_SNAPSHOT = "rs_snapshot"
     GRAPH_EXTRACTION = "graph_extraction"
     SYSTEM_MAINTENANCE = "system_maintenance"
+    PORTFOLIO_PRICE_REFRESH = "portfolio_price_refresh"
 
 
 class JobStatus(StrEnum):
@@ -35,6 +36,7 @@ class NotificationType(StrEnum):
 
 
 MAINTENANCE_JOB_KEY = "system_maintenance"
+PORTFOLIO_PRICE_REFRESH_KEY = "portfolio_price_refresh"
 
 
 _DEPARTMENT_BY_JOB: dict[JobType, str] = {
@@ -43,6 +45,7 @@ _DEPARTMENT_BY_JOB: dict[JobType, str] = {
     JobType.MR_ASSESSMENT: "macro_research",
     JobType.RS_SNAPSHOT: "retail_sentiment",
     JobType.GRAPH_EXTRACTION: "secretary",
+    JobType.PORTFOLIO_PRICE_REFRESH: "portfolio",
 }
 
 
@@ -60,6 +63,9 @@ def job_key(
 ) -> str:
     if job_type is JobType.SYSTEM_MAINTENANCE:
         return MAINTENANCE_JOB_KEY
+    if job_type is JobType.PORTFOLIO_PRICE_REFRESH:
+        # Global job — no per-user keying.
+        return PORTFOLIO_PRICE_REFRESH_KEY
     if not user_id:
         raise ValueError(f"user_id required for job_type={job_type.value}")
     base = f"{job_type.value}:{user_id}"
@@ -73,6 +79,8 @@ def parse_job_key(key: str) -> tuple[JobType, str | None]:
     stripped — callers that need the schedule_id should keep it themselves."""
     if key == MAINTENANCE_JOB_KEY:
         return (JobType.SYSTEM_MAINTENANCE, None)
+    if key == PORTFOLIO_PRICE_REFRESH_KEY:
+        return (JobType.PORTFOLIO_PRICE_REFRESH, None)
     prefix, _, rest = key.partition(":")
     try:
         job_type = JobType(prefix)

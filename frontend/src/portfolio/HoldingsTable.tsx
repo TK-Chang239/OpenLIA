@@ -5,11 +5,21 @@ import type {
   AnalyticsResponse,
   PortfolioHolding,
   PositionAnalytic,
+  TickerSeriesResponse,
 } from "../api/portfolio";
-import { sparkFor, sparkPath } from "./sparkline";
+import { formatCurrency } from "./formatCurrency";
+import { Sparkline, type SparklinePoint } from "./Sparkline";
 import { useLocalJsonPref } from "./useLocalJsonPref";
 
-export type SortKey = "TICKER" | "WEIGHT" | "PRICE" | "DAY_DELTA" | "POS_PL";
+export type SortKey =
+  | "TICKER"
+  | "SHARES"
+  | "AVG_COST"
+  | "PRICE"
+  | "DAY_CHANGE"
+  | "MKT_VALUE"
+  | "POS_PL"
+  | "WEIGHT";
 export type SortDir = "asc" | "desc";
 
 interface SortState {
@@ -18,23 +28,22 @@ interface SortState {
 }
 
 interface ColumnVis {
-  day_delta: boolean;
+  day_change: boolean;
   pos_pl: boolean;
-  week: boolean;
-  flag: boolean;
+  weight: boolean;
+  spark: boolean;
 }
 
 interface FilterState {
-  groups: string[]; // [] = all (no filter); "__UNTAGGED__" = holdings with no group
-  // Flag dimension is reserved for the verdicts API; not active.
+  groups: string[];
 }
 
-const DEFAULT_SORT: SortState = { key: "WEIGHT", dir: "desc" };
+const DEFAULT_SORT: SortState = { key: "MKT_VALUE", dir: "desc" };
 const DEFAULT_COLUMNS: ColumnVis = {
-  day_delta: true,
+  day_change: true,
   pos_pl: true,
-  week: true,
-  flag: true,
+  weight: true,
+  spark: true,
 };
 const DEFAULT_FILTER: FilterState = { groups: [] };
 const UNTAGGED_KEY = "__UNTAGGED__";
@@ -45,6 +54,7 @@ export interface HoldingsTableProps {
   readonly groups: readonly string[];
   readonly loading: boolean;
   readonly selectedHoldingId: string | null;
+  readonly sparklines: TickerSeriesResponse | null;
   readonly onRowClick: (holding: PortfolioHolding) => void;
   readonly onManageGroups: () => void;
 }
@@ -55,14 +65,16 @@ export function HoldingsTable({
   groups,
   loading,
   selectedHoldingId,
+  sparklines,
   onRowClick,
   onManageGroups,
 }: HoldingsTableProps): JSX.Element {
   const [sort, setSort] = useLocalJsonPref<SortState>("portfolio:sort", DEFAULT_SORT);
-  const [columns, setColumns] = useLocalJsonPref<ColumnVis>(
+  const [storedColumns, setColumns] = useLocalJsonPref<Partial<ColumnVis>>(
     "portfolio:columns",
     DEFAULT_COLUMNS,
   );
+  const columns: ColumnVis = { ...DEFAULT_COLUMNS, ...storedColumns };
   const [filter, setFilter] = useLocalJsonPref<FilterState>(
     "portfolio:filter",
     DEFAULT_FILTER,
@@ -151,13 +163,20 @@ export function HoldingsTable({
                 onClick={() => onHeaderClick("TICKER")}
               />
               <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-left text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                NAME
+                GROUP
               </th>
               <SortHeader
-                label="WEIGHT"
-                column="WEIGHT"
+                label="SHARES"
+                column="SHARES"
                 sort={sort}
-                onClick={() => onHeaderClick("WEIGHT")}
+                onClick={() => onHeaderClick("SHARES")}
+                align="right"
+              />
+              <SortHeader
+                label="AVG COST"
+                column="AVG_COST"
+                sort={sort}
+                onClick={() => onHeaderClick("AVG_COST")}
                 align="right"
               />
               <SortHeader
@@ -167,15 +186,22 @@ export function HoldingsTable({
                 onClick={() => onHeaderClick("PRICE")}
                 align="right"
               />
-              {columns.day_delta ? (
+              {columns.day_change ? (
                 <SortHeader
-                  label="DAY Δ"
-                  column="DAY_DELTA"
+                  label="DAY ±"
+                  column="DAY_CHANGE"
                   sort={sort}
-                  onClick={() => onHeaderClick("DAY_DELTA")}
+                  onClick={() => onHeaderClick("DAY_CHANGE")}
                   align="right"
                 />
               ) : null}
+              <SortHeader
+                label="MKT VALUE"
+                column="MKT_VALUE"
+                sort={sort}
+                onClick={() => onHeaderClick("MKT_VALUE")}
+                align="right"
+              />
               {columns.pos_pl ? (
                 <SortHeader
                   label="POS P/L"
@@ -185,14 +211,18 @@ export function HoldingsTable({
                   align="right"
                 />
               ) : null}
-              {columns.week ? (
+              {columns.weight ? (
+                <SortHeader
+                  label="WEIGHT"
+                  column="WEIGHT"
+                  sort={sort}
+                  onClick={() => onHeaderClick("WEIGHT")}
+                  align="right"
+                />
+              ) : null}
+              {columns.spark ? (
                 <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-right text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
                   7D
-                </th>
-              ) : null}
-              {columns.flag ? (
-                <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-right text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                  FLAG
                 </th>
               ) : null}
             </tr>
@@ -205,6 +235,7 @@ export function HoldingsTable({
                 position={positionsByHolding.get(h.id)}
                 columns={columns}
                 selected={h.id === selectedHoldingId}
+                sparkPoints={getSparkPoints(sparklines, h.ticker)}
                 onClick={() => onRowClick(h)}
               />
             ))}
@@ -213,6 +244,16 @@ export function HoldingsTable({
       )}
     </section>
   );
+}
+
+function getSparkPoints(
+  sparklines: TickerSeriesResponse | null,
+  ticker: string,
+): SparklinePoint[] {
+  if (!sparklines) return [];
+  const series = sparklines.series[ticker.toUpperCase()];
+  if (!series) return [];
+  return series.map((p) => ({ ts: p.ts, value: Number(p.close) }));
 }
 
 function sortValue(
@@ -224,17 +265,20 @@ function sortValue(
   switch (key) {
     case "TICKER":
       return h.ticker;
-    case "WEIGHT":
-      return p?.weight ? Number(p.weight) : 0;
+    case "SHARES":
+      return p?.shares ? Number(p.shares) : 0;
+    case "AVG_COST":
+      return p?.cost_basis ? Number(p.cost_basis) : 0;
     case "PRICE":
       return p?.last_price ? Number(p.last_price) : 0;
-    case "DAY_DELTA": {
-      // Placeholder: use a deterministic per-ticker pseudo-delta for sort stability.
-      const spark = sparkFor(h.ticker);
-      return spark.points[spark.points.length - 1] - spark.points[0];
-    }
+    case "DAY_CHANGE":
+      return p?.day_change_abs ? Number(p.day_change_abs) : 0;
+    case "MKT_VALUE":
+      return p?.market_value ? Number(p.market_value) : 0;
     case "POS_PL":
       return p?.unrealized_pl ? Number(p.unrealized_pl) : 0;
+    case "WEIGHT":
+      return p?.weight ? Number(p.weight) : 0;
   }
 }
 
@@ -277,38 +321,41 @@ function HoldingRow({
   position,
   columns,
   selected,
+  sparkPoints,
   onClick,
 }: {
   holding: PortfolioHolding;
   position: PositionAnalytic | undefined;
   columns: ColumnVis;
   selected: boolean;
+  sparkPoints: SparklinePoint[];
   onClick: () => void;
 }): JSX.Element {
-  const spark = sparkFor(holding.ticker);
+  const ccy = (position?.currency ?? holding.currency ?? "USD").toUpperCase();
+  const sharesN = position?.shares ? Number(position.shares) : null;
+  const avgCostN = position?.cost_basis ? Number(position.cost_basis) : null;
+  const priceN = position?.last_price ? Number(position.last_price) : null;
+  const mktValueN = position?.market_value ? Number(position.market_value) : null;
+  const posPlN = position?.unrealized_pl ? Number(position.unrealized_pl) : null;
+  const dayAbsN =
+    position?.day_change_abs !== null && position?.day_change_abs !== undefined
+      ? Number(position.day_change_abs)
+      : null;
+  const dayPctN =
+    position?.day_change_pct !== null && position?.day_change_pct !== undefined
+      ? Number(position.day_change_pct)
+      : null;
   const weight =
     position?.weight !== null && position?.weight !== undefined
       ? `${(Number(position.weight) * 100).toFixed(1)}%`
       : "—";
-  const price = position?.last_price ? `$${Number(position.last_price).toFixed(2)}` : "—";
-  const posPl = position?.unrealized_pl ? Number(position.unrealized_pl) : null;
-  const posPlStr =
-    posPl === null
+
+  const sharesStr =
+    sharesN === null
       ? "—"
-      : `${posPl >= 0 ? "+" : "-"}$${Math.abs(posPl).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+      : sharesN.toLocaleString("en-US", { maximumFractionDigits: 4 });
 
-  // Placeholder day delta from deterministic sparkline.
-  const dayDelta = spark.points[spark.points.length - 1] - spark.points[0];
-  const dayPct = dayDelta * 0.4; // arbitrary scale that keeps numbers small
-  const dayPos = dayPct >= 0;
-  const dayStr = `${dayPos ? "+" : ""}${dayPct.toFixed(2)}%`;
-
-  const sparkStroke =
-    spark.sign === "down"
-      ? "var(--color-feedback-error)"
-      : spark.sign === "flat"
-        ? "var(--neutral-400)"
-        : "var(--yellow-600)";
+  const group = holding.groups[0] ?? "—";
 
   return (
     <tr
@@ -323,50 +370,61 @@ function HoldingRow({
         {holding.ticker}
       </td>
       <td className="font-display border-b border-[--color-border-subtle] px-[14px] py-[11px] text-[12px] text-[--color-text-secondary]">
-        {holding.name ?? "—"}
+        {group}
       </td>
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
-        {weight}
+        {sharesStr}
       </td>
       <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
-        {price}
+        {formatCurrency(avgCostN, ccy)}
       </td>
-      {columns.day_delta ? (
+      <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
+        {formatCurrency(priceN, ccy)}
+      </td>
+      {columns.day_change ? (
         <td
-          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${dayPos ? "text-[--color-feedback-success]" : "text-[--color-feedback-error]"}`}
+          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${dayAbsN !== null && dayAbsN >= 0 ? "text-[--color-feedback-success]" : dayAbsN !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
+          data-testid={`holding-day-change-${holding.ticker}`}
         >
-          {dayStr}
+          {dayAbsN === null || dayPctN === null ? (
+            "—"
+          ) : (
+            <span className="inline-flex items-center justify-end gap-[6px]">
+              <span>{formatCurrency(dayAbsN, ccy, { signed: true })}</span>
+              <span className="text-[10px] opacity-80">
+                {`${dayPctN >= 0 ? "+" : ""}${(dayPctN * 100).toFixed(2)}%`}
+              </span>
+            </span>
+          )}
         </td>
       ) : null}
+      <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
+        {formatCurrency(mktValueN, ccy)}
+      </td>
       {columns.pos_pl ? (
         <td
-          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${posPl !== null && posPl >= 0 ? "text-[--color-feedback-success]" : posPl !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
+          className={`border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right ${posPlN !== null && posPlN >= 0 ? "text-[--color-feedback-success]" : posPlN !== null ? "text-[--color-feedback-error]" : "text-[--color-text-tertiary]"}`}
         >
-          {posPlStr}
+          {posPlN === null ? "—" : formatCurrency(posPlN, ccy, { signed: true })}
         </td>
       ) : null}
-      {columns.week ? (
-        <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right">
-          <svg
-            viewBox="0 0 64 22"
-            preserveAspectRatio="none"
-            className="inline-block h-[22px] w-[64px] align-middle"
-            aria-hidden="true"
-          >
-            <path
-              d={sparkPath(spark.points, 64)}
-              fill="none"
-              style={{ stroke: sparkStroke }}
-              strokeWidth="1.4"
-            />
-          </svg>
+      {columns.weight ? (
+        <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right text-[--color-text-primary]">
+          {weight}
         </td>
       ) : null}
-      {columns.flag ? (
+      {columns.spark ? (
         <td className="border-b border-[--color-border-subtle] px-[14px] py-[11px] text-right">
-          <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-            —
-          </span>
+          <Sparkline
+            points={sparkPoints}
+            formatTooltip={(p) => {
+              const d = new Date(p.ts);
+              const label = Number.isNaN(d.getTime())
+                ? p.ts
+                : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+              return `${label} · ${formatCurrency(p.value, ccy)}`;
+            }}
+          />
         </td>
       ) : null}
     </tr>
@@ -452,14 +510,6 @@ function FilterFlyout({
               </label>
             </li>
           </ul>
-          <div className="border-t border-[--color-border-subtle] px-3 py-2">
-            <span className="mb-1 block font-mono text-[9px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-              Flag
-            </span>
-            <p className="m-0 text-[11px] text-[--color-text-tertiary]">
-              Available once LIA per-holding verdicts ship.
-            </p>
-          </div>
           <div className="flex items-center justify-between border-t border-[--color-border-subtle] px-3 py-2">
             <button
               type="button"
@@ -510,10 +560,10 @@ function ColumnsFlyout({
   };
 
   const items: { key: keyof ColumnVis; label: string }[] = [
-    { key: "day_delta", label: "DAY Δ" },
+    { key: "day_change", label: "DAY ±" },
     { key: "pos_pl", label: "POS P/L" },
-    { key: "week", label: "7D" },
-    { key: "flag", label: "FLAG" },
+    { key: "weight", label: "WEIGHT" },
+    { key: "spark", label: "7D" },
   ];
 
   return (
@@ -546,7 +596,7 @@ function ColumnsFlyout({
             ))}
           </ul>
           <div className="border-t border-[--color-border-subtle] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            Locked: TICKER · NAME · WEIGHT · PRICE
+            Locked: TICKER · GROUP · SHARES · AVG COST · PRICE · MKT VALUE
           </div>
         </div>
       ) : null}

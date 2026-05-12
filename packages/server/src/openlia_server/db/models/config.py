@@ -118,6 +118,10 @@ class UserPrefs(Base):
             "timezone_source IN ('auto','manual')",
             name="ck_user_prefs_timezone_source",
         ),
+        CheckConstraint(
+            "portfolio_refresh_cadence IN ('15min','hourly','daily','weekly','manual')",
+            name="ck_user_prefs_portfolio_cadence",
+        ),
     )
 
     user_id: Mapped[str] = mapped_column(
@@ -152,6 +156,12 @@ class UserPrefs(Base):
     )
     graph_extraction_time: Mapped[str] = mapped_column(
         String(5), nullable=False, default="03:00", server_default="03:00"
+    )
+    portfolio_refresh_cadence: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="daily", server_default="daily"
+    )
+    portfolio_display_currency: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="USD", server_default="USD"
     )
 
 

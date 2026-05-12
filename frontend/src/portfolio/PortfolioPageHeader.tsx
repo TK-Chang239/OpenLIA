@@ -1,8 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
-import { ChevronDown, Download, Plus, RotateCw } from "lucide-react";
+import { ChevronDown, Download, Plus, RotateCw, Settings } from "lucide-react";
 
-export const PERF_RANGES = ["1D", "1W", "1M", "YTD", "ALL"] as const;
+import type { RefreshCadence } from "../api/portfolio";
+import type { Market } from "./marketTypes";
+import { MARKET_CURRENCIES, MARKET_LABELS } from "./marketTypes";
+
+export const PERF_RANGES = [
+  "1D",
+  "1W",
+  "1M",
+  "3M",
+  "6M",
+  "YTD",
+  "1Y",
+  "5Y",
+] as const;
 export type PerfRange = (typeof PERF_RANGES)[number];
 
 export interface PortfolioPageHeaderProps {
@@ -15,6 +28,11 @@ export interface PortfolioPageHeaderProps {
   readonly exportHref: string;
   readonly onAddManually: () => void;
   readonly onImportCsv: () => void;
+  readonly refreshCadence: RefreshCadence;
+  readonly onRefreshCadenceChange: (next: RefreshCadence) => void;
+  readonly market: Market;
+  readonly marketLabel: string;
+  readonly onMarketChange: (next: Market) => void;
 }
 
 function formatSync(at: string | null): string {
@@ -37,13 +55,18 @@ export function PortfolioPageHeader({
   exportHref,
   onAddManually,
   onImportCsv,
+  refreshCadence,
+  onRefreshCadenceChange,
+  market,
+  marketLabel,
+  onMarketChange,
 }: PortfolioPageHeaderProps): JSX.Element {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col gap-[6px]">
         <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[--color-text-tertiary]">
           <span aria-hidden="true" className="h-px w-[18px] bg-[--color-border-strong]" />
-          PERSONAL · USD · LAST SYNCED {formatSync(lastSyncedAt)}
+          PERSONAL · {marketLabel} · {MARKET_CURRENCIES[market]} · LAST SYNCED {formatSync(lastSyncedAt)}
           <button
             type="button"
             onClick={onRefresh}
@@ -65,7 +88,12 @@ export function PortfolioPageHeader({
       </div>
 
       <div className="flex items-center gap-2">
+        <MarketToggle value={market} onChange={onMarketChange} />
         <RangePicker value={range} onChange={onRangeChange} />
+        <CadenceGearPopover
+          value={refreshCadence}
+          onChange={onRefreshCadenceChange}
+        />
         <a
           href={exportHref}
           className="inline-flex items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-[6px] font-mono text-[10px] tracking-[0.08em] text-[--color-text-secondary] no-underline transition-colors hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
@@ -77,6 +105,43 @@ export function PortfolioPageHeader({
         <AddSplitButton onAddManually={onAddManually} onImportCsv={onImportCsv} />
       </div>
     </header>
+  );
+}
+
+const MARKETS: readonly Market[] = ["us", "tw"];
+
+function MarketToggle({
+  value,
+  onChange,
+}: {
+  value: Market;
+  onChange: (next: Market) => void;
+}): JSX.Element {
+  return (
+    <span
+      role="tablist"
+      aria-label="Portfolio market"
+      className="inline-flex overflow-hidden rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated]"
+      data-testid="market-toggle"
+    >
+      {MARKETS.map((m) => (
+        <button
+          key={m}
+          role="tab"
+          aria-selected={value === m}
+          type="button"
+          onClick={() => onChange(m)}
+          className={`border-r border-[--color-border-subtle] px-3 py-[6px] font-mono text-[10px] tracking-[0.08em] last:border-r-0 ${
+            value === m
+              ? "bg-[--color-text-primary] text-[--color-bg-base]"
+              : "text-[--color-text-secondary] hover:text-[--color-text-primary]"
+          }`}
+          data-testid={`market-${m}`}
+        >
+          {MARKET_LABELS[m]}
+        </button>
+      ))}
+    </span>
   );
 }
 
@@ -175,7 +240,7 @@ function AddSplitButton({
             className="cursor-pointer px-3 py-2 text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
             data-testid="menu-add-manually"
           >
-            Add manually
+            Add Position manually
           </li>
           <li
             role="menuitem"
@@ -193,9 +258,89 @@ function AddSplitButton({
             className="cursor-pointer px-3 py-2 text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
             data-testid="menu-import-csv"
           >
-            Import CSV…
+            Import Positions CSV…
           </li>
         </ul>
+      ) : null}
+    </span>
+  );
+}
+
+const CADENCE_OPTIONS: { value: RefreshCadence; label: string; hint: string }[] = [
+  { value: "15min", label: "Every 15 min", hint: "Refresh every 15 minutes during market hours" },
+  { value: "hourly", label: "Hourly", hint: "Refresh every hour during market hours" },
+  { value: "daily", label: "Daily", hint: "Refresh once a day after market close" },
+  { value: "weekly", label: "Weekly", hint: "Refresh once a week" },
+  { value: "manual", label: "No Auto-refresh", hint: "Only refresh when you click Refresh" },
+];
+
+function CadenceGearPopover({
+  value,
+  onChange,
+}: {
+  value: RefreshCadence;
+  onChange: (next: RefreshCadence) => void;
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  return (
+    <span ref={wrapRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Portfolio settings"
+        aria-expanded={open}
+        className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] text-[--color-text-secondary] transition-colors hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
+        data-testid="portfolio-settings-gear"
+      >
+        <Settings size={13} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div
+          role="dialog"
+          aria-label="Portfolio settings"
+          className="absolute right-0 top-full z-20 mt-1 w-[260px] overflow-hidden rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-3 shadow-lg"
+        >
+          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+            Refresh cadence
+          </div>
+          <fieldset className="flex flex-col gap-1">
+            {CADENCE_OPTIONS.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex cursor-pointer items-start gap-2 rounded px-2 py-[6px] text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
+                data-testid={`cadence-option-${opt.value}`}
+              >
+                <input
+                  type="radio"
+                  name="portfolio-cadence"
+                  value={opt.value}
+                  checked={value === opt.value}
+                  onChange={() => onChange(opt.value)}
+                  className="mt-[2px]"
+                />
+                <span className="flex flex-col gap-[2px]">
+                  <span className="font-medium">{opt.label}</span>
+                  <span className="text-xs text-[--color-text-tertiary]">{opt.hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <p className="mt-2 text-[11px] text-[--color-text-tertiary]">
+            Cadence sets your freshness floor. Prices may update sooner if another
+            user holding the same ticker requests it.
+          </p>
+        </div>
       ) : null}
     </span>
   );

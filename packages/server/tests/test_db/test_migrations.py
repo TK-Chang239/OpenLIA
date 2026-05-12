@@ -99,6 +99,10 @@ EXPECTED_TABLES = {
     "graph_artifact_summaries_fts_data",
     "graph_artifact_summaries_fts_docsize",
     "graph_artifact_summaries_fts_idx",
+    # --- Portfolio live data (Phase 1) ---
+    "portfolio_quotes",
+    "portfolio_quote_intraday",
+    "portfolio_quote_daily",
 }
 
 

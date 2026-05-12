@@ -16,7 +16,9 @@ from decimal import Decimal
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
+    Date,
     ForeignKey,
     Index,
     Integer,
@@ -238,4 +240,58 @@ class RepoItem(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "report_id", name="uq_repo_items_user_report"),
         Index("ix_repo_items_user_id_created_at", "user_id", "created_at"),
+    )
+
+
+class PortfolioQuote(Base):
+    """Latest quote per ticker, deduped across all users.
+
+    Populated by JobType.PORTFOLIO_PRICE_REFRESH and the manual refresh
+    route. Day-change is computed on read from ``last_price - previous_close``.
+    """
+
+    __tablename__ = "portfolio_quotes"
+
+    ticker: Mapped[str] = mapped_column(String(32), primary_key=True)
+    last_price: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    previous_close: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    day_open: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    day_high: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    day_low: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    volume: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    quote_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    fetched_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+
+
+class PortfolioQuoteIntraday(Base):
+    """Intraday tick points captured by the scheduler. Wiped at session start."""
+
+    __tablename__ = "portfolio_quote_intraday"
+
+    ticker: Mapped[str] = mapped_column(String(32), primary_key=True)
+    ts: Mapped[datetime] = mapped_column(UTCDateTime(), primary_key=True)
+    close: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+
+    __table_args__ = (
+        Index("ix_portfolio_quote_intraday_ticker_ts", "ticker", "ts"),
+    )
+
+
+class PortfolioQuoteDaily(Base):
+    """Canonical daily OHLCV series, populated by post-close fires and 5Y backfill."""
+
+    __tablename__ = "portfolio_quote_daily"
+
+    ticker: Mapped[str] = mapped_column(String(32), primary_key=True)
+    trade_date: Mapped[datetime] = mapped_column(Date, primary_key=True)
+    open: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    high: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    low: Mapped[Decimal | None] = mapped_column(Numeric(20, 6), nullable=True)
+    close: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
+    volume: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+    __table_args__ = (
+        Index("ix_portfolio_quote_daily_ticker_date", "ticker", "trade_date"),
     )

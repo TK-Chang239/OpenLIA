@@ -408,8 +408,18 @@ body {
   }
 }
 
+@keyframes ol-drawer-out {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  [class*="animate-[ol-drawer-in"] {
+  [class*="animate-[ol-drawer-in"],
+  [class*="animate-[ol-drawer-out"] {
     animation: none !important;
   }
 }

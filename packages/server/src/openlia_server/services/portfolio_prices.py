@@ -146,14 +146,21 @@ class AdapterPriceProvider:
     set. ``DataNotAvailable`` and any other adapter error degrades to ``None``
     so the cache stores the sentinel and the route returns 200 with null
     prices rather than 5xx.
+
+    The ``source_id`` attribute reflects the connector that fulfilled the
+    request and is recorded in the ``portfolio_quotes.source`` column.
     """
 
-    def __init__(self, adapter: Any) -> None:
+    source_id: str = "eodhd"
+
+    def __init__(self, adapter: Any, *, source_id: str | None = None) -> None:
         self._adapter = adapter
+        if source_id is not None:
+            self.source_id = source_id
 
     def get_price(self, ticker: str) -> Decimal | None:
         try:
-            result = asyncio.run(self._adapter.fetch("stock_quote", {"symbol": ticker.upper()}))
+            result = asyncio.run(self._adapter.fetch("stock_quote", {"ticker": ticker.upper()}))
         except Exception as exc:
             logger.debug("portfolio price fetch failed for %s: %s", ticker, exc)
             return None

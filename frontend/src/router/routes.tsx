@@ -97,7 +97,8 @@ export const routes: RouteObject[] = [
                   { path: "/", element: <Home /> },
                   { path: "/home", element: <Navigate to="/" replace /> },
                   { path: "/repository", element: <Repository /> },
-                  { path: "/portfolio", element: <PortfolioPage /> },
+                  { path: "/portfolio", element: <Navigate to="/portfolio/us" replace /> },
+                  { path: "/portfolio/:market", element: <PortfolioPage /> },
                   { path: "/memory", element: <MemoryPage /> },
                   { path: "/settings/*", element: <SettingsPage /> },
                   {

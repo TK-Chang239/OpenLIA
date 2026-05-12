@@ -13,12 +13,14 @@ import io
 import json
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict
 
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import PortfolioHolding
+from openlia_server.services.market_hours import Market, classify_market
 
 
 class DuplicateTickerError(ValueError):
@@ -108,6 +110,7 @@ def create_holding(
     currency: str | None,
     notes: str | None,
     groups: list[str] | None,
+    added_at: datetime | None = None,
 ) -> HoldingDTO:
     ticker = ticker.strip().upper()
     if not ticker:
@@ -129,20 +132,27 @@ def create_holding(
         currency=(currency or "USD").upper(),
         notes=_encode_notes(groups, notes),
     )
+    if added_at is not None:
+        row.added_at = added_at
     session.add(row)
     session.commit()
     session.refresh(row)
     return _row_to_dto(row)
 
 
-def list_holdings(session: Session, *, user_id: str) -> list[HoldingDTO]:
+def list_holdings(
+    session: Session, *, user_id: str, market: Market | None = None
+) -> list[HoldingDTO]:
     rows = (
         session.query(PortfolioHolding)
         .filter_by(user_id=user_id)
         .order_by(PortfolioHolding.ticker.asc())
         .all()
     )
-    return [_row_to_dto(r) for r in rows if r.ticker != _GROUPS_META_TICKER]
+    dtos = [_row_to_dto(r) for r in rows if r.ticker != _GROUPS_META_TICKER]
+    if market is None:
+        return dtos
+    return [d for d in dtos if classify_market(d.ticker) == market]
 
 
 def get_holding(session: Session, *, user_id: str, holding_id: str) -> HoldingDTO:
@@ -380,6 +390,9 @@ class PositionAnalytic:
     unrealized_pl_pct: Decimal | None
     weight: Decimal | None
     currency: str
+    previous_close: Decimal | None = None
+    day_change_abs: Decimal | None = None
+    day_change_pct: Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -397,12 +410,18 @@ def compute_analytics(
     *,
     user_id: str,
     prices: dict[str, Decimal | None],
+    market: Market | None = None,
+    previous_closes: dict[str, Decimal | None] | None = None,
 ) -> AnalyticsSummary:
     """Compute totals, per-position P&L, and allocation weights.
 
     `prices` is a caller-provided map of ticker -> last_price (or None).
+    `previous_closes` is the same shape, providing the prior-session close
+    used to derive per-position day-change fields. When omitted, day-change
+    fields are null. When `market` is set, only holdings of that market
+    contribute.
     """
-    rows = list_holdings(session, user_id=user_id)
+    rows = list_holdings(session, user_id=user_id, market=market)
     positions_raw: list[tuple[HoldingDTO, Decimal | None, Decimal | None, Decimal | None]] = []
     total_mv = Decimal("0")
     total_cost = Decimal("0")
@@ -432,18 +451,30 @@ def compute_analytics(
         pl_pct: Decimal | None = None
         if pl is not None and cost_total is not None and cost_total != 0:
             pl_pct = (pl / cost_total).quantize(Decimal("0.000001"))
+        last = prices.get(dto.ticker)
+        prev = previous_closes.get(dto.ticker) if previous_closes else None
+        day_abs: Decimal | None = None
+        day_pct: Decimal | None = None
+        if last is not None and prev is not None and prev != 0:
+            per_share = last - prev
+            if dto.shares is not None:
+                day_abs = (per_share * dto.shares).quantize(Decimal("0.0001"))
+            day_pct = (per_share / prev).quantize(Decimal("0.000001"))
         positions.append(
             PositionAnalytic(
                 holding_id=dto.id,
                 ticker=dto.ticker,
                 shares=dto.shares,
                 cost_basis=dto.cost_basis,
-                last_price=prices.get(dto.ticker),
+                last_price=last,
                 market_value=mv,
                 unrealized_pl=pl,
                 unrealized_pl_pct=pl_pct,
                 weight=weight,
                 currency=dto.currency,
+                previous_close=prev,
+                day_change_abs=day_abs,
+                day_change_pct=day_pct,
             )
         )
 
