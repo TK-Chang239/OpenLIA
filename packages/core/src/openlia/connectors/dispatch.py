@@ -177,9 +177,7 @@ class Dispatcher:
     chat-input "Tools" dropdown."""
     tool_argument_constraints: dict[
         str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]
-    ] = field(  # noqa: E501
-        default_factory=dict
-    )
+    ] = field(default_factory=dict)
     """Per-provider pre-dispatch argument constraints. Keyed by
     `provider_id`, each entry is a tuple of
     `(tool_name, kind, payload)` triples. Today only `kind="require_one_of"`

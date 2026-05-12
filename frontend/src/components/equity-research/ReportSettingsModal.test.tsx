@@ -4,6 +4,30 @@ import { describe, expect, it, vi } from "vitest";
 import { ReportSettingsModal } from "./ReportSettingsModal";
 import type { ErConfig } from "../../api/equity-research";
 
+vi.mock("../../auth/useCurrentUser", () => ({
+  useCurrentUser: () => ({
+    id: "u1",
+    email: "u1@example.com",
+    display_name: "u1",
+    role: "user" as const,
+    must_change_password: false,
+  }),
+}));
+
+vi.mock("../../api/equity-research", async () => {
+  const actual = await vi.importActual<typeof import("../../api/equity-research")>(
+    "../../api/equity-research",
+  );
+  return {
+    ...actual,
+    listErTemplates: vi.fn().mockResolvedValue([]),
+    uploadErTemplate: vi.fn(),
+    patchErTemplate: vi.fn(),
+    deleteErTemplate: vi.fn(),
+    fetchErTemplateExtractedText: vi.fn(),
+  };
+});
+
 const baseConfig: ErConfig = {
   report_mode: "stock_initiation",
   report_length: "normal",
@@ -16,6 +40,11 @@ const baseConfig: ErConfig = {
     stock_initiation: [],
     stock_update: [],
     sector_research: [],
+  },
+  selected_template_id_by_mode: {
+    stock_initiation: "default",
+    stock_update: "default",
+    sector_research: "default",
   },
 };
 

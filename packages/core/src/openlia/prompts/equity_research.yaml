@@ -71,3 +71,24 @@ report:
       --- FRAMEWORK ---
       {{ framework | tojson(indent=2) }}
       --- END FRAMEWORK ---
+
+  user_template:
+    user: |
+      Generate a {{ mode_label }} for {{ user_input }} following the user's
+      uploaded template below. Treat the template as authoritative: it owns
+      the role framing, methodology, section structure, and any conditional
+      branches. Do not invent additional sections or skip ones the template
+      requires.
+
+      - Length preference: {{ length }}
+      - Template name: {{ template_name }}
+
+      --- USER TEMPLATE ---
+      {{ user_template_text }}
+      --- END USER TEMPLATE ---
+
+      Output the final report via the `submit_report` tool. Each chapter or
+      section the template defines becomes one entry in the `sections` array
+      (use a short snake_case `id` derived from the chapter heading; reuse
+      the heading as the `title`). Populate `cover` with title and subtitle
+      based on the template's framing.

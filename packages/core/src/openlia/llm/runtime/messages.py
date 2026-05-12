@@ -74,6 +74,8 @@ class ReportRequest:
     length: str = "standard"
     section_topics: Mapping[str, list[dict[str, Any]]] | None = None
     reference_portfolio: list[dict[str, Any]] | None = None
+    user_template_text: str | None = None
+    user_template_name: str | None = None
 
     def __post_init__(self) -> None:
         if self.length not in _ALLOWED_LENGTHS:

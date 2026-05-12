@@ -12,7 +12,7 @@ from uuid import uuid4
 from openlia.reports.frameworks.loader import CustomSection, load_framework
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.departments import ErUserConfig
+from openlia_server.db.models.departments import ErTemplate, ErUserConfig
 
 ReportMode = Literal["stock_initiation", "stock_update", "sector_research"]
 ReportLength = Literal["concise", "normal", "elaborative"]
@@ -38,6 +38,7 @@ class ErConfigDTO:
     report_length: ReportLength
     sections_by_mode: dict[ReportMode, list[str]]
     custom_sections_by_mode: dict[ReportMode, list[CustomSectionDTO]]
+    selected_template_id_by_mode: dict[ReportMode, str]
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,9 @@ class ActiveReportConfig:
     report_length: ReportLength
     enabled_section_ids: tuple[str, ...]
     custom_sections: tuple[CustomSection, ...]
+    template_id: str | None = None
+    template_name: str | None = None
+    template_text: str | None = None
 
 
 def _framework_section_ids(mode: ReportMode) -> set[str]:
@@ -90,11 +94,17 @@ def _row_to_dto(row: ErUserConfig) -> ErConfigDTO:
             for item in items
         ]
 
+    raw_selected = row.selected_template_id_by_mode or {}
+    selected_by_mode: dict[ReportMode, str] = {}
+    for mode in _VALID_MODES:
+        selected_by_mode[mode] = str(raw_selected.get(mode, "default") or "default")
+
     return ErConfigDTO(
         report_mode=row.report_mode,  # type: ignore[arg-type]
         report_length=row.report_length,  # type: ignore[arg-type]
         sections_by_mode=sections_by_mode,
         custom_sections_by_mode=custom_by_mode,
+        selected_template_id_by_mode=selected_by_mode,
     )
 
 
@@ -137,6 +147,7 @@ class EquityResearchConfigService:
         report_length: ReportLength | None = None,
         sections_by_mode: dict[str, list[str]] | None = None,
         custom_sections_by_mode: dict[str, list[CustomSectionDTO]] | None = None,
+        selected_template_id_by_mode: dict[str, str] | None = None,
     ) -> ErConfigDTO:
         if report_mode is not None and report_mode not in _VALID_MODES:
             raise ValueError(f"unknown mode {report_mode!r}")
@@ -174,11 +185,38 @@ class EquityResearchConfigService:
                 merged_custom[mode_key] = _custom_dto_to_json(items)
             row.custom_sections_by_mode = merged_custom
 
+        if selected_template_id_by_mode is not None:
+            merged_selected = dict(row.selected_template_id_by_mode or {})
+            for mode_key, sel in selected_template_id_by_mode.items():
+                _validate_mode_key(mode_key)
+                merged_selected[mode_key] = sel or "default"
+            row.selected_template_id_by_mode = merged_selected
+
         self._db.flush()
         return _row_to_dto(row)
 
-    def resolve_active(self, cfg: ErConfigDTO, *, mode: ReportMode) -> ActiveReportConfig:
+    def resolve_active(
+        self,
+        cfg: ErConfigDTO,
+        *,
+        mode: ReportMode,
+        user_id: str | None = None,
+    ) -> ActiveReportConfig:
         _validate_mode_key(mode)
+        selected_id = cfg.selected_template_id_by_mode.get(mode, "default")
+        if selected_id and selected_id != "default":
+            row = self._db.get(ErTemplate, selected_id)
+            if row is not None and _user_can_see(row, user_id):
+                return ActiveReportConfig(
+                    mode=mode,
+                    report_length=cfg.report_length,
+                    enabled_section_ids=(),
+                    custom_sections=(),
+                    template_id=row.id,
+                    template_name=row.name,
+                    template_text=row.extracted_text,
+                )
+
         enabled = tuple(cfg.sections_by_mode.get(mode, []))
         customs = tuple(
             CustomSection(id=c.id, title=c.title, description=c.description)
@@ -190,3 +228,9 @@ class EquityResearchConfigService:
             enabled_section_ids=enabled,
             custom_sections=customs,
         )
+
+
+def _user_can_see(row: ErTemplate, user_id: str | None) -> bool:
+    if row.owner_scope == "global":
+        return True
+    return row.owner_scope == "user" and row.owner_user_id == user_id
