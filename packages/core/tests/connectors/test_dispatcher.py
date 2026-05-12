@@ -133,9 +133,7 @@ async def test_dispatch_raises_missing_required_arg_when_no_alternative_supplied
     eod.tools["financial_news"] = _td("financial_news")
     d = Dispatcher(
         connectors={"c1": eod},
-        tool_argument_constraints={
-            "eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)
-        },
+        tool_argument_constraints={"eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)},
     )
     with pytest.raises(MissingRequiredArgumentError) as exc_info:
         await d.dispatch_tool_use("eodhd__financial_news", {})
@@ -151,9 +149,7 @@ async def test_dispatch_constraint_treats_empty_string_and_none_as_missing():
     eod.tools["financial_news"] = _td("financial_news")
     d = Dispatcher(
         connectors={"c1": eod},
-        tool_argument_constraints={
-            "eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)
-        },
+        tool_argument_constraints={"eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)},
     )
     with pytest.raises(MissingRequiredArgumentError):
         await d.dispatch_tool_use("eodhd__financial_news", {"s": "", "t": None})
@@ -164,9 +160,7 @@ async def test_dispatch_constraint_passes_when_one_alternative_supplied():
     eod.tools["financial_news"] = _td("financial_news")
     d = Dispatcher(
         connectors={"c1": eod},
-        tool_argument_constraints={
-            "eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)
-        },
+        tool_argument_constraints={"eodhd": (("financial_news", "require_one_of", (("s", "t"),)),)},
     )
     # `s` set: should pass through to transport with no error.
     await d.dispatch_tool_use("eodhd__financial_news", {"s": "AAPL.US"})

@@ -126,9 +126,7 @@ class GraphExtractionExecutor(BaseExecutor):
         self._provider_factory = provider_factory or _default_provider_factory
         self._embedding_factory = embedding_factory or _default_embedding_factory
         self._extract_fn_builder = extract_fn_builder or graph_extraction_llm.make_extract_fn
-        self._summarize_fn_builder = (
-            summarize_fn_builder or graph_summarization.make_summarize_fn
-        )
+        self._summarize_fn_builder = summarize_fn_builder or graph_summarization.make_summarize_fn
 
     async def _do_work(
         self,

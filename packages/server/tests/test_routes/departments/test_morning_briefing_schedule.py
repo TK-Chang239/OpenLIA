@@ -49,9 +49,7 @@ def test_post_schedule_rejects_invalid_day(company_client, auth_user):
 
 
 def test_delete_unknown_schedule_returns_503_or_404(company_client, auth_user):
-    r = company_client.delete(
-        "/departments/morning-briefing/schedules/does-not-exist"
-    )
+    r = company_client.delete("/departments/morning-briefing/schedules/does-not-exist")
     assert r.status_code in (503, 404)
 
 

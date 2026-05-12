@@ -105,6 +105,7 @@ class _AdapterQuoteProvider:
         adapter = self._adapter_provider()
         if adapter is None:
             return None
+
         # APScheduler fires this from inside its own running event loop, so
         # a bare ``asyncio.run`` raises ``RuntimeError: asyncio.run() cannot be
         # called from a running event loop`` and the whole tick silently

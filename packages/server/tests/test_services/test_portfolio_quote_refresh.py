@@ -352,9 +352,7 @@ def test_subhour_fires_honor_cadence_floor_within_window(
     assert rows == []
 
 
-def test_subhour_fires_write_when_cadence_is_15min(
-    create_tables, db_session: Session
-) -> None:
+def test_subhour_fires_write_when_cadence_is_15min(create_tables, db_session: Session) -> None:
     """Users opting into the 15min cadence get a sub-hour intraday tick on
     every */15 fire (the 900s floor elapses between fires)."""
     from openlia_server.db.models.content import PortfolioQuoteIntraday

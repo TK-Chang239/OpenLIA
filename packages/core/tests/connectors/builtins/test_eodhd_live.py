@@ -39,9 +39,7 @@ from openlia.connectors.types import (
 pytestmark = [
     pytest.mark.live_api,
     pytest.mark.asyncio,
-    pytest.mark.skipif(
-        not os.environ.get("EODHD_API_KEY"), reason="EODHD_API_KEY not set"
-    ),
+    pytest.mark.skipif(not os.environ.get("EODHD_API_KEY"), reason="EODHD_API_KEY not set"),
 ]
 
 
@@ -101,9 +99,7 @@ _TOOL_ARGS: dict[str, dict[str, Any]] = {
     "get_stock_market_tick_data": {
         "symbol": "AAPL.US",
         # EODHD wants seconds-since-epoch ints for tick endpoints.
-        "from_timestamp": int(
-            (datetime.now(UTC) - timedelta(hours=2)).timestamp()
-        ),
+        "from_timestamp": int((datetime.now(UTC) - timedelta(hours=2)).timestamp()),
         "to_timestamp": int(datetime.now(UTC).timestamp()),
         "limit": 10,
     },
@@ -140,9 +136,7 @@ async def _build_live_dispatcher() -> tuple[Dispatcher, list[str]]:
     `list_tools`. Tools are populated on the PreparedConnector so the
     dispatcher's `candidate_tools()` and constraint check both work.
     """
-    instance_factory = InstanceFactory(
-        cls="ExtendedAPIClient", args={"api_key": "$EODHD_API_KEY"}
-    )
+    instance_factory = InstanceFactory(cls="ExtendedAPIClient", args={"api_key": "$EODHD_API_KEY"})
     transport = PythonLibTransport(
         module="openlia.data.eodhd_extended",
         instance_factory=instance_factory,
@@ -217,9 +211,7 @@ async def test_eodhd_tool_round_trip_returns_json_serializable_result(
     prefixed = f"eodhd__{tool_name}"
 
     if tool_name in _PAID_OR_FLAKY_TOOLS:
-        pytest.skip(
-            f"{tool_name}: paid / plan-gated endpoint — exclude from default live run"
-        )
+        pytest.skip(f"{tool_name}: paid / plan-gated endpoint — exclude from default live run")
 
     try:
         raw = await dispatcher.dispatch_tool_use(prefixed, args)
@@ -254,9 +246,7 @@ async def test_eodhd_financial_news_no_args_short_circuits_via_constraint() -> N
 async def test_eodhd_financial_news_with_ticker_returns_results() -> None:
     """Sanity: the override + constraint don't break the happy path."""
     dispatcher, _ = await _build_live_dispatcher()
-    raw = await dispatcher.dispatch_tool_use(
-        "eodhd__financial_news", {"s": "AAPL.US", "limit": 3}
-    )
+    raw = await dispatcher.dispatch_tool_use("eodhd__financial_news", {"s": "AAPL.US", "limit": 3})
     coerced = to_jsonable(raw)
     json.dumps(coerced)
     # Should be a list of news items.

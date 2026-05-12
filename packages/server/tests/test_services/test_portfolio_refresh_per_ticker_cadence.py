@@ -15,17 +15,21 @@ class _RecordingProvider:
 
     def fetch_quote(self, ticker: str) -> dict | None:
         self.called.append(ticker.upper())
-        return {
-            "last_price": self.prices.get(ticker.upper()),
-            "previous_close": None,
-            "day_open": None,
-            "day_high": None,
-            "day_low": None,
-            "volume": None,
-            "currency": "USD",
-            "quote_at": None,
-            "source": "fake",
-        } if ticker.upper() in self.prices else None
+        return (
+            {
+                "last_price": self.prices.get(ticker.upper()),
+                "previous_close": None,
+                "day_open": None,
+                "day_high": None,
+                "day_low": None,
+                "volume": None,
+                "currency": "USD",
+                "quote_at": None,
+                "source": "fake",
+            }
+            if ticker.upper() in self.prices
+            else None
+        )
 
 
 def _seed_user(db_session, uid: str, cadence: str) -> None:
@@ -50,9 +54,7 @@ def _seed_user(db_session, uid: str, cadence: str) -> None:
 def _add_holding(db_session, uid: str, ticker: str) -> None:
     from openlia_server.db.models.content import PortfolioHolding
 
-    db_session.add(
-        PortfolioHolding(id=f"h-{uid}-{ticker}", user_id=uid, ticker=ticker)
-    )
+    db_session.add(PortfolioHolding(id=f"h-{uid}-{ticker}", user_id=uid, ticker=ticker))
     db_session.commit()
 
 
@@ -92,9 +94,7 @@ def test_refresh_skips_ticker_within_its_own_cadence_window(
     assert result.skipped_fresh == 1
 
 
-def test_refresh_uses_min_cadence_when_multiple_holders(
-    create_tables, db_session: Session
-) -> None:
+def test_refresh_uses_min_cadence_when_multiple_holders(create_tables, db_session: Session) -> None:
     """AAPL held by an Hourly user and a Weekly user → effective cadence
     is 1h, so a 90-minute-old fetch triggers a refresh."""
     from openlia_server.services import portfolio_quotes as quotes_svc

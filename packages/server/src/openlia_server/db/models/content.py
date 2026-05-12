@@ -274,9 +274,7 @@ class PortfolioQuoteIntraday(Base):
     ts: Mapped[datetime] = mapped_column(UTCDateTime(), primary_key=True)
     close: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
 
-    __table_args__ = (
-        Index("ix_portfolio_quote_intraday_ticker_ts", "ticker", "ts"),
-    )
+    __table_args__ = (Index("ix_portfolio_quote_intraday_ticker_ts", "ticker", "ts"),)
 
 
 class PortfolioQuoteDaily(Base):
@@ -292,6 +290,4 @@ class PortfolioQuoteDaily(Base):
     close: Mapped[Decimal] = mapped_column(Numeric(20, 6), nullable=False)
     volume: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    __table_args__ = (
-        Index("ix_portfolio_quote_daily_ticker_date", "ticker", "trade_date"),
-    )
+    __table_args__ = (Index("ix_portfolio_quote_daily_ticker_date", "ticker", "trade_date"),)

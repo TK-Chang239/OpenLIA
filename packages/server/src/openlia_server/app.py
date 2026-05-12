@@ -394,8 +394,7 @@ def _make_lifespan(
                     )
                 except (ValueError, RuntimeError, LookupError):
                     log.exception(
-                        "graph extraction schedule rehydration failed "
-                        "(continuing startup)"
+                        "graph extraction schedule rehydration failed (continuing startup)"
                     )
 
                 app.state.scheduler = scheduler_svc

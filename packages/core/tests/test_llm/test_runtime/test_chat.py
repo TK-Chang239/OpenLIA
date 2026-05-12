@@ -914,9 +914,7 @@ async def test_v2_dispatch_serializes_pydantic_style_tool_results(
         def model_dump(self) -> dict:
             return {"web": list(self.web)}
 
-    quote_call = ToolCall(
-        id="qc_1", name="firecrawl__search", arguments={"query": "openai"}
-    )
+    quote_call = ToolCall(id="qc_1", name="firecrawl__search", arguments={"query": "openai"})
     provider = FakeProvider(
         script=FakeProviderScript(
             turns=[
