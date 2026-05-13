@@ -23,6 +23,18 @@ function humanize(id: string): string {
   return id.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const SYSTEM_ROLE_DESCRIPTIONS: Record<string, string> = {
+  ai_review: "Reviews your wizard configuration and flags risks before saving.",
+  connector_agentic_resolver:
+    "Multi-step agent that identifies the right connector when no spec is on file.",
+  connector_spec_adapter:
+    "Translates a connector spec into the exact request and response shape at runtime.",
+  graph_extraction:
+    "Pulls entities and relationships from your sessions into the memory graph.",
+  graph_summarization:
+    "Condenses memory-graph clusters into short summaries used for recall.",
+};
+
 export function AssignDefaultsScreen({
   totalSteps,
   enabledDepartmentIds,
@@ -109,6 +121,7 @@ export function AssignDefaultsScreen({
               key={r}
               id={`role-${r}`}
               label={humanize(r)}
+              description={SYSTEM_ROLE_DESCRIPTIONS[r]}
               value={roleDefaults[r] ?? ""}
               registeredModels={registeredModels}
               onChange={(v) => setRoleDefaults({ ...roleDefaults, [r]: v })}
@@ -127,24 +140,30 @@ export function AssignDefaultsScreen({
 function SlotRow({
   id,
   label,
+  description,
   value,
   registeredModels,
   onChange,
 }: {
   id: string;
   label: string;
+  description?: string;
   value: string;
   registeredModels: ModelEntry[];
   onChange: (v: string) => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2 border border-[--color-border-subtle] rounded-[--radius-md] bg-[--color-bg-base]">
-      <label
-        htmlFor={id}
-        className="text-sm text-[--color-text-primary] truncate flex-1 min-w-0"
-      >
-        {label}
-      </label>
+      <div className="flex flex-col flex-1 min-w-0">
+        <label htmlFor={id} className="text-sm text-[--color-text-primary] truncate">
+          {label}
+        </label>
+        {description ? (
+          <span className="text-xs text-[--color-text-tertiary] mt-0.5">
+            {description}
+          </span>
+        ) : null}
+      </div>
       <select
         id={id}
         value={value}
