@@ -33,7 +33,9 @@ vi.mock('../../../../api/settings', () => ({
 }));
 
 describe('SystemRolesPanel', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('lists all five system roles with current assignment preselected', async () => {
     render(<SystemRolesPanel />);
