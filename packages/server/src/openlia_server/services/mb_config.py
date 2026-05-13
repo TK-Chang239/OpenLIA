@@ -70,9 +70,7 @@ def apply_overrides(cfg: MbConfigDTO, overrides: MbConfigOverrides) -> MbConfigD
                 raise ValueError(f"unknown section id in topics: {sid!r}")
             for t in topics:
                 if not isinstance(t, dict) or not t.get("topic"):
-                    raise ValueError(
-                        f"topic entry requires non-empty 'topic' in section {sid!r}"
-                    )
+                    raise ValueError(f"topic entry requires non-empty 'topic' in section {sid!r}")
 
     if overrides.custom_sections is not None:
         for cs in overrides.custom_sections:

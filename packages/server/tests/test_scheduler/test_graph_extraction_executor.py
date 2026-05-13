@@ -30,7 +30,9 @@ class _FakeProvider:
     model = "fake-quick"
 
     async def generate(self, request):  # pragma: no cover - not used directly
-        raise AssertionError("FakeProvider.generate should not be called; tests stub extract/summarize fns")
+        raise AssertionError(
+            "FakeProvider.generate should not be called; tests stub extract/summarize fns"
+        )
 
 
 def _resolve_fake_provider(_db) -> Any:

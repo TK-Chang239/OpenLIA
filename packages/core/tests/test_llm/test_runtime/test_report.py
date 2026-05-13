@@ -911,9 +911,7 @@ async def test_report_model_not_configured_emits_report_error(
             data_dispatcher=data,
             web_search=WebSearchResolution(False, None, None),
         ),
-        resolve=_raises(
-            ModelNotConfiguredError(slot_kind="department", slot_id="equity_research")
-        ),
+        resolve=_raises(ModelNotConfiguredError(slot_kind="department", slot_id="equity_research")),
         registry=_Registry(),
         provider_factory=lambda r: provider,
         skill_registry=_empty_skill_registry(tmp_path),
@@ -1342,9 +1340,7 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
             }
         }
     }
-    data = FakeDataDispatcher(
-        manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}}
-    )
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
         tools=ToolDispatcher(
@@ -1370,9 +1366,9 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
     second = provider.captured_requests[1]
     assistant_msgs = [m for m in second.messages if m.role == "assistant"]
     assert assistant_msgs, "assistant tool-call message must be replayed"
-    assert any(
-        any(tc.id == "c_99" for tc in m.tool_calls) for m in assistant_msgs
-    ), "assistant message must carry the original tool_calls"
+    assert any(any(tc.id == "c_99" for tc in m.tool_calls) for m in assistant_msgs), (
+        "assistant message must carry the original tool_calls"
+    )
     tool_msgs = [m for m in second.messages if m.role == "tool"]
     assert tool_msgs, "tool-result message must be present"
     assert all(m.tool_call_id for m in tool_msgs), (

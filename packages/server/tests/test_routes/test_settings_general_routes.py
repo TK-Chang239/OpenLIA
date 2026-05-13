@@ -51,9 +51,7 @@ def test_get_enabled_models_returns_flat_list(
 ) -> None:
     from openlia_server.db.models.config import LLMModel, LLMProvider
 
-    prov = LLMProvider(
-        id="p-test", kind="openai", label="Test", api_key=None, is_enabled=True
-    )
+    prov = LLMProvider(id="p-test", kind="openai", label="Test", api_key=None, is_enabled=True)
     db_session.add(prov)
     db_session.flush()
     db_session.add(

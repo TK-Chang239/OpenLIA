@@ -402,9 +402,5 @@ async def test_install_builtin_rejects_second_install_of_same_template(
         await install_builtin(db_session, template_id="firecrawl", api_key="k2")
     assert exc.value.existing_id == first.id
 
-    rows = (
-        db_session.query(Connector)
-        .filter(Connector.provider_id == "firecrawl")
-        .all()
-    )
+    rows = db_session.query(Connector).filter(Connector.provider_id == "firecrawl").all()
     assert len(rows) == 1

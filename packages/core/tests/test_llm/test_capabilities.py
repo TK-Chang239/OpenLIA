@@ -49,23 +49,15 @@ def test_openrouter_tilde_provider_alias_resolves() -> None:
     resolving capabilities so the upstream's real cap is used (otherwise
     we fall back to the 2048 default and report writing trips
     OutputLimitReached on every run)."""
-    caps = capabilities_for(
-        provider_kind="openrouter", model="~anthropic/claude-sonnet-latest"
-    )
+    caps = capabilities_for(provider_kind="openrouter", model="~anthropic/claude-sonnet-latest")
     assert caps.tool_calling is True
     assert caps.max_output_tokens >= 8_192
 
 
 def test_openrouter_anthropic_latest_aliases_resolve() -> None:
-    sonnet = capabilities_for(
-        provider_kind="openrouter", model="anthropic/claude-sonnet-latest"
-    )
-    opus = capabilities_for(
-        provider_kind="openrouter", model="anthropic/claude-opus-latest"
-    )
-    haiku = capabilities_for(
-        provider_kind="openrouter", model="anthropic/claude-haiku-latest"
-    )
+    sonnet = capabilities_for(provider_kind="openrouter", model="anthropic/claude-sonnet-latest")
+    opus = capabilities_for(provider_kind="openrouter", model="anthropic/claude-opus-latest")
+    haiku = capabilities_for(provider_kind="openrouter", model="anthropic/claude-haiku-latest")
     assert sonnet.max_output_tokens >= 8_192
     assert opus.max_output_tokens >= 8_192
     assert haiku.max_output_tokens >= 4_096

@@ -53,8 +53,7 @@ class ModelNotConfiguredError(Exception):
         self.slot_kind = slot_kind
         self.slot_id = slot_id
         super().__init__(
-            f"No model is configured for {slot_kind}={slot_id!r}. "
-            f"Assign one in Settings → Models."
+            f"No model is configured for {slot_kind}={slot_id!r}. Assign one in Settings → Models."
         )
 
 

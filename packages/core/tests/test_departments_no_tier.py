@@ -29,4 +29,5 @@ def test_department_has_no_tier_attr(cls):
 
 def test_get_enabled_default_tiers_removed():
     import openlia.departments as dpt
+
     assert not hasattr(dpt, "get_enabled_default_tiers")

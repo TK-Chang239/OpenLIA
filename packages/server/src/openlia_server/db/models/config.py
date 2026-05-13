@@ -61,9 +61,7 @@ class LLMModel(Base, TimestampMixin):
 
     provider: Mapped[LLMProvider] = relationship("LLMProvider")
 
-    __table_args__ = (
-        Index("ix_llm_models_provider_id", "provider_id"),
-    )
+    __table_args__ = (Index("ix_llm_models_provider_id", "provider_id"),)
 
 
 class LLMSlotDefault(Base):

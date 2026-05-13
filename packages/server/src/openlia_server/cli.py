@@ -776,8 +776,7 @@ def wizard_reset(
             llm_model_count = db.query(LLMModel).delete()
             llm_provider_count = db.query(LLMProvider).delete()
             purged_summary = (
-                f" Purged {llm_model_count} LLM model(s) and {llm_provider_count} "
-                f"LLM provider(s)."
+                f" Purged {llm_model_count} LLM model(s) and {llm_provider_count} LLM provider(s)."
             )
 
         db.commit()

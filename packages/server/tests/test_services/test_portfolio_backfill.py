@@ -29,15 +29,25 @@ def test_backfill_inserts_all_rows(create_tables, db_session: Session) -> None:
 
     provider = _FakeDailyProvider(
         [
-            {"date": date(2026, 5, 1), "open": Decimal("100"), "high": Decimal("102"),
-             "low": Decimal("99"), "close": Decimal("101"), "volume": 1_000_000},
-            {"date": date(2026, 5, 2), "open": Decimal("101"), "high": Decimal("105"),
-             "low": Decimal("100"), "close": Decimal("104"), "volume": 1_200_000},
+            {
+                "date": date(2026, 5, 1),
+                "open": Decimal("100"),
+                "high": Decimal("102"),
+                "low": Decimal("99"),
+                "close": Decimal("101"),
+                "volume": 1_000_000,
+            },
+            {
+                "date": date(2026, 5, 2),
+                "open": Decimal("101"),
+                "high": Decimal("105"),
+                "low": Decimal("100"),
+                "close": Decimal("104"),
+                "volume": 1_200_000,
+            },
         ]
     )
-    inserted = backfill_daily_history(
-        db_session, ticker="aapl", provider=provider, years=5
-    )
+    inserted = backfill_daily_history(db_session, ticker="aapl", provider=provider, years=5)
 
     rows = (
         db_session.execute(select(PortfolioQuoteDaily).order_by(PortfolioQuoteDaily.trade_date))
@@ -57,16 +67,18 @@ def test_backfill_is_idempotent(create_tables, db_session: Session) -> None:
 
     provider = _FakeDailyProvider(
         [
-            {"date": date(2026, 5, 1), "open": None, "high": None, "low": None,
-             "close": Decimal("101"), "volume": None},
+            {
+                "date": date(2026, 5, 1),
+                "open": None,
+                "high": None,
+                "low": None,
+                "close": Decimal("101"),
+                "volume": None,
+            },
         ]
     )
-    inserted_first = backfill_daily_history(
-        db_session, ticker="AAPL", provider=provider, years=5
-    )
-    inserted_second = backfill_daily_history(
-        db_session, ticker="AAPL", provider=provider, years=5
-    )
+    inserted_first = backfill_daily_history(db_session, ticker="AAPL", provider=provider, years=5)
+    inserted_second = backfill_daily_history(db_session, ticker="AAPL", provider=provider, years=5)
 
     assert inserted_first == 1
     assert inserted_second == 0

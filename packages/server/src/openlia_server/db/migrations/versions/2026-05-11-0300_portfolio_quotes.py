@@ -76,12 +76,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_portfolio_quote_daily_ticker_date", table_name="portfolio_quote_daily"
-    )
+    op.drop_index("ix_portfolio_quote_daily_ticker_date", table_name="portfolio_quote_daily")
     op.drop_table("portfolio_quote_daily")
-    op.drop_index(
-        "ix_portfolio_quote_intraday_ticker_ts", table_name="portfolio_quote_intraday"
-    )
+    op.drop_index("ix_portfolio_quote_intraday_ticker_ts", table_name="portfolio_quote_intraday")
     op.drop_table("portfolio_quote_intraday")
     op.drop_table("portfolio_quotes")
