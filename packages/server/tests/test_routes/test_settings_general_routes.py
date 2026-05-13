@@ -31,3 +31,16 @@ def test_patch_prefs_rejects_invalid(company_client: TestClient, auth_user) -> N
 def test_get_prefs_requires_auth(company_client_anon: TestClient) -> None:
     resp = company_client_anon.get("/settings/prefs")
     assert resp.status_code == 401
+
+
+def test_get_registered_departments(company_client: TestClient, auth_user) -> None:
+    resp = company_client.get("/settings/departments")
+    assert resp.status_code == 200
+    deps = resp.json()["departments"]
+    assert "secretary" in deps
+    assert "equity_research" in deps
+
+
+def test_get_registered_departments_requires_auth(company_client_anon: TestClient) -> None:
+    resp = company_client_anon.get("/settings/departments")
+    assert resp.status_code == 401
