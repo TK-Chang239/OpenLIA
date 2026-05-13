@@ -174,6 +174,29 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
             for m in rows
         ]
 
+    @router.get("/preferences/market-basket")
+    def get_market_basket(
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, list[str]]:
+        return svc.get_market_basket(db, user_id=user.id)
+
+    @router.put("/preferences/market-basket")
+    def put_market_basket(
+        payload: dict[str, list[str]],
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, list[str]]:
+        try:
+            svc.set_market_basket(db, user_id=user.id, basket=payload)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "invalid_basket", "message": str(exc)},
+            ) from exc
+        db.commit()
+        return svc.get_market_basket(db, user_id=user.id)
+
     @router.put("/graph-extraction-time", response_model=PrefsOut)
     async def put_graph_extraction_time(
         payload: GraphExtractionTimeIn,

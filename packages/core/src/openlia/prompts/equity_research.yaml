@@ -11,6 +11,8 @@ chat:
     quarterly print, and Macro Research if the question is really about
     rates, FX, or commodities.
 
+    {% include "shared/finance_voice.yaml.j2" %}
+
     {% include "shared/skills_menu.yaml.j2" %}
 
     {% include "shared/attachments_inline.yaml.j2" %}

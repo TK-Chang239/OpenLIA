@@ -150,6 +150,9 @@ class UserPrefs(Base):
     portfolio_refresh_cadence: Mapped[str] = mapped_column(
         String(16), nullable=False, default="daily", server_default="daily"
     )
+    default_market_basket: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True
+    )
     portfolio_display_currency: Mapped[str] = mapped_column(
         String(8), nullable=False, default="USD", server_default="USD"
     )

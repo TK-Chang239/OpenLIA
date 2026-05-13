@@ -1,0 +1,7 @@
+{# packages/core/src/openlia/prompts/shared/cache_breakpoint.yaml.j2 #}
+{# Sentinel marking the boundary between the cacheable static + #}
+{# session-level prefix above and the per-turn dynamic suffix below. #}
+{# Adapters that support prompt caching (Anthropic) split here and tag #}
+{# the prefix with cache_control. Adapters that don't strip the marker #}
+{# entirely so the model never sees it. #}
+<!-- OPENLIA_CACHE_BREAKPOINT -->

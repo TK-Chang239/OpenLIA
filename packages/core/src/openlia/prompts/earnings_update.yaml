@@ -9,6 +9,8 @@ chat:
     last quarter, and versus guide. Hand off to: Equity Research for full
     coverage questions, and Macro Research for sector-wide read-throughs.
 
+    {% include "shared/finance_voice.yaml.j2" %}
+
     {% include "shared/skills_menu.yaml.j2" %}
 
 report:
