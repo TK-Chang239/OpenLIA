@@ -59,7 +59,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                 "center": "Page {page}",
                 "right": "Internal — not investment advice",
             },
-            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",
+            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",  # noqa: E501
         },
         "cover": {
             "title": "Apple Inc. — Initiating at Buy",
@@ -101,7 +101,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                 {"label": "EV/Sales", "value": "7.9x"},
                 {"label": "FCF Yield", "value": "3.5%"},
                 {"label": "Net Cash", "value": "$165B"},
-                {"label": "52W Range", "value": "$164–$220"},
+                {"label": "52W Range", "value": "$164-$220"},
             ],
             "sparkline": {
                 "label": "Last 60 days",
@@ -131,7 +131,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                         "content": (
                             "We see three under-appreciated factors driving a re-rating: "
                             "(1) Services mix continuing to lift consolidated gross margin into "
-                            "the 47–48% range, (2) a credible AI-on-device thesis as Apple "
+                            "the 47-48% range, (2) a credible AI-on-device thesis as Apple "
                             "Intelligence matures into a paid tier in late FY26, and "
                             "(3) capital return remains a floor — buybacks reduced share count "
                             "by 3.1% in FY25 alone. [4]"
@@ -252,7 +252,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                     },
                     {
                         "type": "line_chart",
-                        "title": "Services revenue, $B (FY20–FY25)",
+                        "title": "Services revenue, $B (FY20-FY25)",
                         "x_label": "Fiscal year",
                         "y_label": "Revenue ($B)",
                         "series": [
@@ -282,26 +282,26 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                             {
                                 "when": "Jun 2026 · WWDC",
                                 "what": "Apple Intelligence Pro tier announced",
-                                "impact": "Confirms AI-on-device monetization step-up; our model uses 15% attach.",
+                                "impact": "Confirms AI-on-device monetization step-up; our model uses 15% attach.",  # noqa: E501
                                 "impact_tag": {"label": "+$245 → $258", "tone": "positive"},
                                 "highlight": True,
                             },
                             {
                                 "when": "Jul 2026",
                                 "what": "FQ3 print + first Vision Pro 2 disclosures",
-                                "impact": "Watch installed-base growth, services exiting +14%, and any guide on Vision Pro 2 launch window.",
-                                "impact_tag": {"label": "+/−$8", "tone": "neutral"},
+                                "impact": "Watch installed-base growth, services exiting +14%, and any guide on Vision Pro 2 launch window.",  # noqa: E501
+                                "impact_tag": {"label": "+/-$8", "tone": "neutral"},
                             },
                             {
                                 "when": "Sep 2026",
                                 "what": "iPhone 17 launch",
-                                "impact": "Channel checks suggest +3% builds y/y; sell-side at +1%.",
+                                "impact": "Channel checks suggest +3% builds y/y; sell-side at +1%.",  # noqa: E501
                                 "impact_tag": {"label": "Constructive", "tone": "positive"},
                             },
                             {
                                 "when": "Oct 2026",
                                 "what": "FQ4 print",
-                                "impact": "First quarter to reflect Apple Intelligence Pro attach rates.",
+                                "impact": "First quarter to reflect Apple Intelligence Pro attach rates.",  # noqa: E501
                             },
                         ],
                     },
@@ -326,15 +326,15 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                             "title": "▼ Downside",
                             "tone": "negative",
                             "items": [
-                                "Google TAC — DOJ remedy ruling expected late June; worst case $20B annualized headwind.",
-                                "FX — JPY weakness already in guide; further EUR slip drags Q3 revenue 30bp.",
-                                "EU DMA — alt-app-store enforcement compresses App Store take rate.",
+                                "Google TAC — DOJ remedy ruling expected late June; worst case $20B annualized headwind.",  # noqa: E501
+                                "FX — JPY weakness already in guide; further EUR slip drags Q3 revenue 30bp.",  # noqa: E501
+                                "EU DMA — alt-app-store enforcement compresses App Store take rate.",  # noqa: E501
                             ],
                         },
                     },
                     {
                         "type": "pull_quote",
-                        "text": "We see Services as the durable engine; hardware is the cyclic damper.",
+                        "text": "We see Services as the durable engine; hardware is the cyclic damper.",  # noqa: E501
                         "attribution": "OpenLIA Equity Research",
                     },
                 ],
@@ -372,7 +372,7 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                 "center": "Page {page}",
                 "right": "Internal — not investment advice",
             },
-            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",
+            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",  # noqa: E501
         },
         "cover": {
             "title": "AAPL · Q1 FY26 — Beat on Services, In-Line on iPhone",
@@ -576,16 +576,16 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                         "metrics": [
                             {
                                 "label": "Q3 Revenue",
-                                "value": "$87–90B",
+                                "value": "$87-90B",
                                 "context": "+3% to +6% y/y · cons. $88.4B",
                                 "highlight": True,
                             },
                             {
                                 "label": "Q3 Gross Margin",
-                                "value": "47.0–48.0%",
+                                "value": "47.0-48.0%",
                                 "context": "cons. 47.1% · midpoint +40bp",
                             },
-                            {"label": "Q3 OpEx", "value": "$14.6–14.8B"},
+                            {"label": "Q3 OpEx", "value": "$14.6-14.8B"},
                             {"label": "Tax Rate", "value": "~16.0%"},
                             {"label": "OI&E", "value": "~$50M"},
                             {
@@ -651,7 +651,7 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                             "tone": "positive",
                             "items": [
                                 "WWDC · Jun 8. Apple Intelligence Pro tier monetization framework.",
-                                "iPhone 17 channel checks. Foxconn April reads suggest +3% builds y/y.",
+                                "iPhone 17 channel checks. Foxconn April reads suggest +3% builds y/y.",  # noqa: E501
                                 "Services GM stability at 74% in a higher-content quarter.",
                             ],
                         },
@@ -659,9 +659,9 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                             "title": "▼ Downside watch",
                             "tone": "negative",
                             "items": [
-                                "Google TAC — DOJ remedy ruling expected late June. Worst case $20B annualized.",
-                                "FX — JPY weakness already in guide; further EUR slip would drag Q3 revenue 30bp.",
-                                "EU DMA — alt-app-store enforcement could compress App Store take rate.",
+                                "Google TAC — DOJ remedy ruling expected late June. Worst case $20B annualized.",  # noqa: E501
+                                "FX — JPY weakness already in guide; further EUR slip would drag Q3 revenue 30bp.",  # noqa: E501
+                                "EU DMA — alt-app-store enforcement could compress App Store take rate.",  # noqa: E501
                             ],
                         },
                     },

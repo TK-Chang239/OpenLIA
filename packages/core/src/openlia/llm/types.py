@@ -71,7 +71,9 @@ class LLMRequest:
     # the upstream's expected shape:
     #   OpenAI / OpenRouter (chat.completions): {"type": "function", "function": {"name": "..."}}
     #   Anthropic (messages):                   {"type": "tool", "name": "..."}
-    #   Gemini (generateContent):               {"function_calling_config": {"mode": "ANY"|"AUTO"|"NONE", "allowed_function_names": [...]}}
+    #   Gemini (generateContent):
+    #     {"function_calling_config":
+    #       {"mode": "ANY"|"AUTO"|"NONE", "allowed_function_names": [...]}}
     # `None` means no constraint (model decides).
     tool_choice: dict | None = None
 
