@@ -782,10 +782,6 @@ def create_app(
 
     app.include_router(build_settings_email_router(db_session_factory=factory, mode=mode))
 
-    from openlia_server.routes.settings_llm_user import build_llm_user_router
-
-    app.include_router(build_llm_user_router(db_session_factory=factory, mode=mode))
-
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok", "mode": mode}
