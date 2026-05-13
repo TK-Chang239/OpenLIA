@@ -1,47 +1,84 @@
 # Market snapshot — locked format
 
-When the user asks for a market read — "snapshot", "tape", "movers",
-"what's the market doing", "what's leading", "what's lagging", "premarket",
-"afterhours" — render this exact structure and act on it without asking
-the user to pick tickers or specify a format.
+When the user asks for a market read — "snapshot", "tape", "movers", "what's the market doing", "what's leading", "what's lagging", "premarket", "afterhours" — render this exact structure and act on it without asking the user to pick tickers or specify a format.
 
 ## Default basket
 
 Use this basket unless the user supplied their own:
 
 - **Tape:** SPY, QQQ, DIA, IWM
-- **Risk:** VIX, HYG, TLT
-- **Macro:** DXY, GLD, USO
-- **Crypto:** BTC
+- **Risk / Cross-asset:** VIX, HYG, TLT, DXY, GLD, USO, BTC
 
-## Top movers
+## Top movers / sector tape
 
-Pull the 11 SPDR sector ETFs (XLK, XLF, XLE, XLV, XLP, XLY, XLU, XLI, XLB, XLRE, XLC). Report the top 2 and bottom 2 by percent change for the session.
+Pull the 11 SPDR sector ETFs (XLK, XLF, XLE, XLV, XLP, XLY, XLU, XLI, XLB, XLRE, XLC). Use the top 2-4 and bottom 2-4 by percent change. Where you know the single-stock or policy driver behind a sector move, name it.
 
-## Output structure (use exactly this shape)
+## Output structure
+
+Render this shape, in this order. Every section earns its place — skip a section only when the data is genuinely unavailable, and say so plainly.
+
+### Title
+
+`Market Snapshot — <Weekday>, <Month Day, Year>`
+
+### Bottom line
+
+One to two sentences. Name the regime, the tension, and what looks mispriced. This is the TL;DR — a portfolio manager scanning the note should know the read before the data.
+
+### Index check (intraday, ~15-min delayed)
+
+Markdown table. Then one short paragraph on leadership and breadth.
 
 ```
-**Tape**
-- SPY <%>, QQQ <%>, DIA <%>, IWM <%>
-
-**Risk**
-- VIX <level> (<delta>), HYG <%>, TLT <%>
-
-**Macro**
-- DXY <%>, GLD <%>, USO <%>
-
-**Crypto**
-- BTC <price> (<%>)
-
-**Top movers**
-- Leaders: <ticker> <%>, <ticker> <%>
-- Laggards: <ticker> <%>, <ticker> <%>
-
-**Read-through**
-- 1-3 short bullets. Name the regime (risk-on / risk-off / mixed) and call out which signals confirm it and which diverge.
-
-**Watch next**
-- One line. What level or print would confirm or break this read.
+| Index | Last | Chg   | %Chg  |
+|-------|------|-------|-------|
+| SPY   | ...  | ...   | ...   |
+| QQQ   | ...  | ...   | ...   |
+| DIA   | ...  | ...   | ...   |
+| IWM   | ...  | ...   | ...   |
 ```
 
-Numbers over adjectives. Every percent gets cited, not described. Skip a row only if a connector is genuinely unavailable — then say so plainly rather than padding with prose.
+### Sector tape
+
+- **Leadership:** top 2-4 SPDR sectors with %; name the single-stock or policy driver where you know it (e.g., "SMH +2.4% — Huang on Air Force One trade").
+- **Laggards:** bottom 2-4 SPDR sectors with %; same — name the driver (e.g., "XLF -1.1% — credit-spread risk-off under Iran-war headlines").
+
+### Cross-asset
+
+Markdown table. Then a "**A few things stand out:**" bullet list of 3-5 short analytical observations linking the moves (rates vs credit, dollar vs gold, vol regime).
+
+```
+| Asset | Last | %Chg  |
+|-------|------|-------|
+| TLT   | ...  | ...   |
+| GLD   | ...  | ...   |
+| USO   | ...  | ...   |
+| BTC   | ...  | ...   |
+| VIX   | ...  | ...   |
+```
+
+### What's driving it
+
+Multi-paragraph or numbered list. Cover, in any order that earns its weight:
+
+- **Data prints** (CPI, PPI, jobs, retail sales) with specifics — the print, the consensus, the surprise.
+- **Central bank reaction function** (Fed / ECB / BoJ / BoE / PBoC). Quote named officials when their words moved the tape.
+- **Geopolitics / policy** — sanctions, tariffs, summits, conflict, executive orders.
+- **Single-asset catalysts** — earnings of size, major guidance, M&A, single-stock blowups that dragged a sector.
+- **Earnings backdrop** — beat rate, blended growth, capex commentary, the bull-case anchor.
+- **Forward calendar** — the next print, event, or large earnings that resets the read.
+
+Inline citations are welcome where the source is concrete and named (CNBC, Bloomberg, the company's own release, the agency's release). Cite the source, not the URL.
+
+### Trading desk take
+
+- One paragraph stating the **bull case** and the **bear case** as honestly as you can write them. The user is paying for the tension, not for a one-sided thesis.
+- Then a four-line quadrant of practical implications:
+  - **Long bias:** what you'd hold and what you'd tighten stops on.
+  - **Hedge:** the cheapest convex hedge for the next catalyst.
+  - **Avoid:** the sectors or instruments under structural pressure right now.
+  - **Watch:** the leading-indicator name or ETF that would confirm or deny the read.
+
+### Two-sided close
+
+One line. Both tails. Name what would push the tape higher and what would crack it.

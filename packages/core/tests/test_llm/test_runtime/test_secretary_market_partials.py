@@ -43,18 +43,30 @@ def test_secretary_includes_market_conventions_partial() -> None:
 
 
 def test_secretary_includes_snapshot_format_partial() -> None:
-    """snapshot_format: all 7 section headers present in the rendered prompt."""
+    """snapshot_format: all section anchors present in the rendered prompt.
+
+    Format upgraded per user direction to richer research-note shape:
+    Bottom line / Index check / Sector tape / Cross-asset /
+    "A few things stand out" / What's driving it / Trading desk take /
+    Two-sided close.
+    """
     out = _render_secretary()
-    for header in (
-        "**Tape**",
-        "**Risk**",
-        "**Macro**",
-        "**Crypto**",
-        "**Top movers**",
-        "**Read-through**",
-        "**Watch next**",
+    for anchor in (
+        "Bottom line",
+        "Index check",
+        "Sector tape",
+        "Cross-asset",
+        "What's driving it",
+        "Trading desk take",
     ):
-        assert header in out, f"snapshot_format missing header {header}"
+        assert anchor in out, f"snapshot_format missing anchor: {anchor}"
+
+
+def test_secretary_snapshot_includes_trading_desk_quadrant() -> None:
+    """Trading desk take must enumerate the Long / Hedge / Avoid / Watch quadrant."""
+    out = _render_secretary()
+    for label in ("Long bias", "Hedge", "Avoid", "Watch"):
+        assert label in out, f"trading desk quadrant missing label: {label}"
 
 
 def test_secretary_snapshot_default_basket_listed() -> None:
