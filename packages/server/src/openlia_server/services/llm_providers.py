@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.config import LLMModel, LLMProvider, UserLLMPreference
+from openlia_server.db.models.config import LLMModel, LLMProvider
 from openlia_server.db.models.infrastructure import ConfigStore
 
 
@@ -264,45 +264,6 @@ def delete_model(session: Session, model_id: str) -> None:
     row = get_model(session, model_id)
     session.delete(row)
     session.flush()
-
-
-# ---------------------------------------------------------------------------
-# User preferences
-# ---------------------------------------------------------------------------
-
-
-def set_user_preference(
-    session: Session,
-    *,
-    user_id: str,
-    tier: str,
-    model_id: str,
-) -> None:
-    """Upsert a user's preferred model for a given tier."""
-    row = session.get(UserLLMPreference, (user_id, tier))
-    if row is None:
-        row = UserLLMPreference(user_id=user_id, tier=tier, model_id=model_id)
-        session.add(row)
-    else:
-        row.model_id = model_id
-    session.flush()
-
-
-def get_user_preference(session: Session, user_id: str, tier: str) -> UserLLMPreference | None:
-    return session.get(UserLLMPreference, (user_id, tier))
-
-
-def list_user_preferences(session: Session, user_id: str) -> list[UserLLMPreference]:
-    return list(
-        session.scalars(select(UserLLMPreference).where(UserLLMPreference.user_id == user_id)).all()
-    )
-
-
-def clear_user_preference(session: Session, user_id: str, tier: str) -> None:
-    row = session.get(UserLLMPreference, (user_id, tier))
-    if row is not None:
-        session.delete(row)
-        session.flush()
 
 
 # ---------------------------------------------------------------------------
