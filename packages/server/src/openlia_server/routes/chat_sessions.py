@@ -106,7 +106,7 @@ class SessionPatchIn(BaseModel):
 
 
 class SessionModelIn(BaseModel):
-    """``model_id=null`` clears the override and reverts to tier resolution."""
+    """``model_id=null`` clears the override and reverts to slot-based resolution."""
 
     model_id: str | None = None
 
