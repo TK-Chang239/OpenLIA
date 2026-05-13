@@ -3,7 +3,7 @@
 Mounted under ``/api/departments/{department}/model-pref``. The
 ``{department}`` slug is the dash-form (e.g. ``morning-briefing``);
 internally normalized to underscore form for storage. Wins over the
-user-level preferred model and tier defaults — see
+user-level preferred model and server slot default — see
 ``openlia.llm.resolver.resolve``.
 """
 
@@ -13,7 +13,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from openlia.llm.exceptions import TierNotConfiguredError
+from openlia.llm.exceptions import ModelNotConfiguredError
 from openlia.llm.resolver import resolve as resolve_model
 from openlia.prompts import DEPARTMENT_LABELS
 from pydantic import BaseModel
@@ -48,14 +48,13 @@ class _ModelPrefIn(BaseModel):
     model_id: str
 
 
-def _resolve_effective_model_id(
-    db: DBSession, *, user_id: str, department_id: str
-) -> str | None:
+def _resolve_effective_model_id(db: DBSession, *, user_id: str, department_id: str) -> str | None:
     """Return the model_id the resolver would pick today.
 
     Mirrors the chain in ``openlia.llm.resolver.resolve``:
-    dept user override → user-level pref → tier default. Used so the picker
-    can show what's actually in use even when no per-dept override is set.
+    dept user override → user-level pref → server slot default. Used so the
+    picker can show what's actually in use even when no per-dept override is
+    set.
     """
     try:
         resolved = resolve_model(
@@ -63,7 +62,7 @@ def _resolve_effective_model_id(
             registry=SQLModelRegistry(db),
             user_id=user_id,
         )
-    except TierNotConfiguredError:
+    except ModelNotConfiguredError:
         return None
     return resolved.model_id
 
