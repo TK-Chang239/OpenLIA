@@ -263,31 +263,36 @@ def test_finish_company_mode_redirects_to_login(wizard_company_client: TestClien
 
 
 def _ollama_payload() -> dict:
+    """Three Ollama models, with department + system-role defaults wired."""
+    from openlia.departments import get_registered_department_ids
+    from openlia.llm.system_roles import SYSTEM_ROLE_IDS
+
+    models = [
+        {
+            "provider_kind": "ollama",
+            "base_url": "http://localhost:11434",
+            "model_ref": "llama3.1:70b",
+            "display_name": "Llama 3.1 70B",
+        },
+        {
+            "provider_kind": "ollama",
+            "base_url": "http://localhost:11434",
+            "model_ref": "llama3.1:8b",
+            "display_name": "Llama 3.1 8B",
+        },
+        {
+            "provider_kind": "ollama",
+            "base_url": "http://localhost:11434",
+            "model_ref": "qwen2.5:7b",
+            "display_name": "Qwen 2.5 7B",
+        },
+    ]
+    dept_defaults = {dept_id: "llama3.1:70b" for dept_id in get_registered_department_ids()}
+    role_defaults = {role_id: "llama3.1:8b" for role_id in SYSTEM_ROLE_IDS}
     return {
-        "thinking": [
-            {
-                "provider": "ollama",
-                "model": "llama3.1:70b",
-                "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
-        "everyday": [
-            {
-                "provider": "ollama",
-                "model": "llama3.1:8b",
-                "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
-        "quick": [
-            {
-                "provider": "ollama",
-                "model": "qwen2.5:7b",
-                "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
+        "models": models,
+        "department_defaults": dept_defaults,
+        "system_role_defaults": role_defaults,
     }
 
 
@@ -298,7 +303,9 @@ def test_post_models_roundtrip(wizard_personal_client: TestClient, db_session) -
     resp = wizard_personal_client.post("/setup/models", json=_ollama_payload())
     assert resp.status_code == 200, resp.text
     db_session.expire_all()
-    assert db_session.query(LLMProvider).count() == 3
+    # All three Ollama models share the same (kind, api_key, base_url, env) tuple,
+    # so they collapse to a single LLMProvider row.
+    assert db_session.query(LLMProvider).count() == 1
     assert db_session.query(LLMModel).count() == 3
 
 
@@ -309,11 +316,11 @@ def test_post_models_idempotent_on_second_post(
 
     wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
     wizard_personal_client.post("/setup/models", json=_ollama_payload())
-    # Second POST replaces wizard-staged models — same row counts, no constraint clash.
+    # Second POST upserts the same providers/models — counts stay constant.
     resp = wizard_personal_client.post("/setup/models", json=_ollama_payload())
     assert resp.status_code == 200, resp.text
     db_session.expire_all()
-    assert db_session.query(LLMProvider).count() == 3
+    assert db_session.query(LLMProvider).count() == 1
     assert db_session.query(LLMModel).count() == 3
 
 
@@ -442,25 +449,47 @@ def test_post_models_test_failure(wizard_personal_client: TestClient, monkeypatc
     assert body["error"] == "could not reach host"
 
 
-def test_post_models_rejects_unknown_provider(wizard_personal_client: TestClient) -> None:
+def test_post_models_rejects_unknown_department_default(
+    wizard_personal_client: TestClient,
+) -> None:
     wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
     payload = {
-        "thinking": [
+        "models": [
             {
-                "provider": "imaginary_kind",
-                "model": "x",
-                "base_url": "http://localhost",
-                "is_tier_default": True,
+                "provider_kind": "ollama",
+                "base_url": "http://localhost:11434",
+                "model_ref": "llama3.1:8b",
+                "display_name": "Llama 3.1 8B",
             }
         ],
-        "everyday": [],
-        "quick": [],
+        "department_defaults": {"not_a_real_department": "llama3.1:8b"},
+        "system_role_defaults": {},
     }
     resp = wizard_personal_client.post("/setup/models", json=payload)
-    # `services.llm_providers.create_provider` raises on unknown kind; the
-    # request rolls back and returns 500 — the wizard treats that as a
-    # validation error in the UI. We accept 4xx OR 5xx but assert non-200.
-    assert resp.status_code != 200
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "invalid_slot"
+
+
+def test_post_models_rejects_unknown_model_ref(wizard_personal_client: TestClient) -> None:
+    from openlia.departments import get_registered_department_ids
+
+    wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
+    dept_id = get_registered_department_ids()[0]
+    payload = {
+        "models": [
+            {
+                "provider_kind": "ollama",
+                "base_url": "http://localhost:11434",
+                "model_ref": "llama3.1:8b",
+                "display_name": "Llama 3.1 8B",
+            }
+        ],
+        "department_defaults": {dept_id: "does-not-exist"},
+        "system_role_defaults": {},
+    }
+    resp = wizard_personal_client.post("/setup/models", json=payload)
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["code"] == "unknown_model_ref"
 
 
 def test_post_models_loopback_required(db_session) -> None:
@@ -479,15 +508,14 @@ def test_post_models_loopback_required(db_session) -> None:
 
 
 # ---------------------------------------------------------------------------
-# NEW-10-02: GET /setup/required_tiers
+# GET /setup/state
 # ---------------------------------------------------------------------------
 
 
-def test_required_tiers_reads_from_registry(wizard_personal_client: TestClient) -> None:
-    resp = wizard_personal_client.get("/setup/required_tiers")
+def test_state_returns_department_and_role_ids(wizard_personal_client: TestClient) -> None:
+    resp = wizard_personal_client.get("/setup/state")
     assert resp.status_code == 200
     body = resp.json()
-    assert set(body["required_tiers"]) <= {"thinking", "everyday", "quick"}
-    assert "secretary" in body["enabled_departments"]
-    # Real registry has thinking + everyday + quick across departments.
-    assert "thinking" in body["required_tiers"]
+    assert "secretary" in body["enabled_department_ids"]
+    assert isinstance(body["system_role_ids"], list)
+    assert len(body["system_role_ids"]) > 0
