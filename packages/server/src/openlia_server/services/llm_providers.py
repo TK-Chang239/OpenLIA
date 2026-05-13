@@ -180,27 +180,17 @@ def create_model(
     session: Session,
     *,
     provider_id: str,
-    tier: str,
     model_ref: str,
     display_name: str,
-    is_tier_default: bool = False,
     is_enabled: bool = True,
     overrides: dict | None = None,
 ) -> ModelCreated:
-    if is_tier_default:
-        # Clear existing tier default for this tier before setting the new one.
-        session.query(LLMModel).filter(
-            LLMModel.tier == tier, LLMModel.is_tier_default.is_(True)
-        ).update({"is_tier_default": False}, synchronize_session="fetch")
-
     new_id = str(uuid.uuid4())
     row = LLMModel(
         id=new_id,
         provider_id=provider_id,
-        tier=tier,
         model_ref=model_ref,
         display_name=display_name,
-        is_tier_default=is_tier_default,
         is_enabled=is_enabled,
         overrides=overrides or None,
     )
@@ -229,10 +219,8 @@ def update_model(
     model_id: str,
     *,
     provider_id: str | None = None,
-    tier: str | None = None,
     model_ref: str | None = None,
     display_name: str | None = None,
-    is_tier_default: bool | None = None,
     is_enabled: bool | None = None,
     overrides: dict | None = None,
 ) -> None:
@@ -241,18 +229,8 @@ def update_model(
         row.provider_id = provider_id
     if model_ref is not None:
         row.model_ref = model_ref
-    if tier is not None:
-        row.tier = tier
     if display_name is not None:
         row.display_name = display_name
-    if is_tier_default is not None:
-        if is_tier_default:
-            session.query(LLMModel).filter(
-                LLMModel.tier == row.tier,
-                LLMModel.id != model_id,
-                LLMModel.is_tier_default.is_(True),
-            ).update({"is_tier_default": False}, synchronize_session="fetch")
-        row.is_tier_default = is_tier_default
     if is_enabled is not None:
         row.is_enabled = is_enabled
     if overrides is not None:
@@ -271,15 +249,10 @@ def delete_model(session: Session, model_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 _CAP_KEY_PREFIX = "llm.capability_override"
-_DEPT_KEY_PREFIX = "llm.department"
 
 
 def _cap_key(provider_kind: str, model: str) -> str:
     return f"{_CAP_KEY_PREFIX}.{provider_kind}.{model}"
-
-
-def _dept_key(department: str) -> str:
-    return f"{_DEPT_KEY_PREFIX}.{department}.tier"
 
 
 def _config_set(session: Session, key: str, value: object) -> None:
@@ -331,16 +304,3 @@ def clear_capability_override(
     model: str,
 ) -> None:
     _config_delete(session, _cap_key(provider_kind, model))
-
-
-def set_department_tier_override(session: Session, department: str, tier: str) -> None:
-    _config_set(session, _dept_key(department), tier)
-
-
-def get_department_tier_override(session: Session, department: str) -> str | None:
-    val = _config_get(session, _dept_key(department))
-    return val if isinstance(val, str) else None
-
-
-def clear_department_tier_override(session: Session, department: str) -> None:
-    _config_delete(session, _dept_key(department))
