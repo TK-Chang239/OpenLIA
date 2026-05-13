@@ -1,10 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Optional
 
 import pytest
-
 from openlia.llm.exceptions import ModelNotConfiguredError
-from openlia.llm.resolver import ModelRegistry, ResolvedModelRow, resolve, resolve_system_role
+from openlia.llm.resolver import ResolvedModelRow, resolve, resolve_system_role
 from openlia.llm.types import ProviderCredentials
 
 
@@ -27,16 +25,18 @@ class FakeRegistry:
     dept_slot_default: dict[str, ResolvedModelRow] = field(default_factory=dict)
     system_role_default: dict[str, ResolvedModelRow] = field(default_factory=dict)
 
-    def get_by_id(self, mid: str) -> Optional[ResolvedModelRow]:
+    def get_by_id(self, mid: str) -> ResolvedModelRow | None:
         return self.by_id.get(mid)
 
-    def get_department_user_override(self, user_id: str, department_id: str) -> Optional[ResolvedModelRow]:
+    def get_department_user_override(
+        self, user_id: str, department_id: str
+    ) -> ResolvedModelRow | None:
         return self.dept_user_override.get((user_id, department_id))
 
-    def get_department_slot_default(self, department_id: str) -> Optional[ResolvedModelRow]:
+    def get_department_slot_default(self, department_id: str) -> ResolvedModelRow | None:
         return self.dept_slot_default.get(department_id)
 
-    def get_system_role_default(self, role_id: str) -> Optional[ResolvedModelRow]:
+    def get_system_role_default(self, role_id: str) -> ResolvedModelRow | None:
         return self.system_role_default.get(role_id)
 
 
