@@ -4,57 +4,33 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from openlia.llm.capabilities import capabilities_for
-from openlia.llm.department_defaults import DEPARTMENT_DEFAULT_TIERS
-from openlia.llm.types import (
-    ModelTier,
-    ProviderCredentials,
-    ResolvedModel,
-)
+from openlia.llm.exceptions import ModelNotConfiguredError
+from openlia.llm.types import ProviderCredentials, ResolvedModel
 
 
 @dataclass(frozen=True)
 class ResolvedModelRow:
     model_id: str
     model_ref: str
-    tier: ModelTier
     overrides: dict
-
     provider_id: str
     provider_kind: str
     credentials: ProviderCredentials
-
     capability_override: dict | None
 
 
 class ModelRegistry(Protocol):
-    def get_department_tier_override(self, department_id: str) -> ModelTier | None: ...
-
-    def get_user_preference(self, user_id: str, tier: ModelTier) -> ResolvedModelRow | None: ...
-
-    def get_tier_default(self, tier: ModelTier) -> ResolvedModelRow | None: ...
-
-    def get_any_in_tier(self, tier: ModelTier) -> ResolvedModelRow | None: ...
-
     def get_by_id(self, model_id: str) -> ResolvedModelRow | None: ...
-
-    def get_user_preferred_model(self, user_id: str) -> ResolvedModelRow | None: ...
 
     def get_department_user_override(
         self, user_id: str, department_id: str
     ) -> ResolvedModelRow | None: ...
 
+    def get_department_slot_default(
+        self, department_id: str
+    ) -> ResolvedModelRow | None: ...
 
-def resolve_tier(
-    department_id: str,
-    tier_override: ModelTier | None,
-    registry: ModelRegistry,
-) -> ModelTier:
-    if tier_override is not None:
-        return tier_override
-    dept_override = registry.get_department_tier_override(department_id)
-    if dept_override is not None:
-        return dept_override
-    return DEPARTMENT_DEFAULT_TIERS.get(department_id, ModelTier.EVERYDAY)
+    def get_system_role_default(self, role_id: str) -> ResolvedModelRow | None: ...
 
 
 def _to_resolved(row: ResolvedModelRow) -> ResolvedModel:
@@ -68,7 +44,6 @@ def _to_resolved(row: ResolvedModelRow) -> ResolvedModel:
         provider_id=row.provider_id,
         model_id=row.model_id,
         model_ref=row.model_ref,
-        tier=row.tier,
         credentials=row.credentials,
         capabilities=caps,
         overrides=row.overrides or {},
@@ -80,45 +55,35 @@ def resolve(
     department_id: str,
     registry: ModelRegistry,
     user_id: str | None,
-    tier_override: ModelTier | None = None,
     model_id_override: str | None = None,
 ) -> ResolvedModel:
+    """Department-scoped resolution chain:
+    explicit model_id_override -> per-user-per-department pref -> admin
+    slot default for the department. Raises `ModelNotConfiguredError`
+    when nothing matches.
+    """
     if model_id_override is not None:
         row = registry.get_by_id(model_id_override)
         if row is not None:
             return _to_resolved(row)
-        # Fall through to tier-based resolution if the explicit pick is no
-        # longer available (model deleted or disabled).
-
-    # Per-(user, department) override — set via the per-page model picker
-    # (e.g., the dropdown next to "Generate Report" on the MB page).
-    # Wins over the user-level preferred model and tier defaults.
-    if user_id is not None:
-        dept_override = registry.get_department_user_override(user_id, department_id)
-        if dept_override is not None:
-            return _to_resolved(dept_override)
-
-    # User-level preferred model — set globally via Settings/preferences;
-    # cross-cuts every department for that user. Wins over tier resolution
-    # but loses to the per-department pick above.
-    if user_id is not None:
-        preferred = registry.get_user_preferred_model(user_id)
-        if preferred is not None:
-            return _to_resolved(preferred)
-
-    tier = resolve_tier(department_id, tier_override, registry)
 
     if user_id is not None:
-        pref = registry.get_user_preference(user_id, tier)
-        if pref is not None:
-            return _to_resolved(pref)
+        over = registry.get_department_user_override(user_id, department_id)
+        if over is not None:
+            return _to_resolved(over)
 
-    tier_default = registry.get_tier_default(tier)
-    if tier_default is not None:
-        return _to_resolved(tier_default)
+    slot = registry.get_department_slot_default(department_id)
+    if slot is not None:
+        return _to_resolved(slot)
 
-    any_row = registry.get_any_in_tier(tier)
-    if any_row is not None:
-        return _to_resolved(any_row)
+    raise ModelNotConfiguredError(slot_kind="department", slot_id=department_id)
 
-    raise ValueError(f"No model configured for tier: {tier.value}")
+
+def resolve_system_role(
+    *, role_id: str, registry: ModelRegistry
+) -> ResolvedModel:
+    """System-role resolution: no user override, direct slot lookup."""
+    row = registry.get_system_role_default(role_id)
+    if row is None:
+        raise ModelNotConfiguredError(slot_kind="system_role", slot_id=role_id)
+    return _to_resolved(row)

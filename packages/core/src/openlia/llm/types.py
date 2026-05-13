@@ -4,12 +4,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
-class ModelTier(StrEnum):
-    THINKING = "thinking"
-    EVERYDAY = "everyday"
-    QUICK = "quick"
-
-
 class Capability(StrEnum):
     STREAMING = "streaming"
     TOOL_CALLING = "tool_calling"
@@ -115,6 +109,7 @@ class ModelInfo:
 class ProviderCredentials:
     api_key: str | None
     base_url: str | None
+    env_var_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,7 +134,6 @@ class ResolvedModel:
     provider_id: str
     model_id: str
     model_ref: str
-    tier: ModelTier
     credentials: ProviderCredentials
     capabilities: Capabilities
     overrides: dict
