@@ -2,42 +2,59 @@ import { useState } from "react";
 import { saveModels } from "../../api/setup";
 import { KeysScreen } from "./KeysScreen";
 import type { ApiKey } from "./KeysScreen";
-import { TiersScreen } from "./TiersScreen";
-import type { TierEntry, TierMap, TierName } from "./TiersScreen";
+import { RegisterModelsScreen } from "./RegisterModelsScreen";
+import type { ModelEntry } from "./RegisterModelsScreen";
+import { AssignDefaultsScreen } from "./AssignDefaultsScreen";
 import { inferProvider } from "./inferProvider";
 import { useWizardField } from "../storage";
 
-type Screen = "keys" | "tiers";
+type Screen = "keys" | "register" | "assign";
 
 interface PersistedState {
   screen: Screen;
   keys: ApiKey[];
-  tiers: TierMap;
+  entries: ModelEntry[];
+  department_defaults: Record<string, string>;
+  system_role_defaults: Record<string, string>;
 }
 
 const MODELS_DEFAULTS: PersistedState = {
   screen: "keys",
   keys: [],
-  tiers: { thinking: [], everyday: [], quick: [] },
+  entries: [],
+  department_defaults: {},
+  system_role_defaults: {},
 };
 
 function parseModels(raw: unknown): PersistedState {
   const r = (raw ?? {}) as Partial<PersistedState>;
+  const screen: Screen =
+    r.screen === "assign" ? "assign" : r.screen === "register" ? "register" : "keys";
   return {
-    screen: r.screen === "tiers" ? "tiers" : "keys",
+    screen,
     keys: Array.isArray(r.keys) ? r.keys : [],
-    tiers: r.tiers ?? MODELS_DEFAULTS.tiers,
+    entries: Array.isArray(r.entries) ? r.entries : [],
+    department_defaults:
+      r.department_defaults && typeof r.department_defaults === "object"
+        ? r.department_defaults
+        : {},
+    system_role_defaults:
+      r.system_role_defaults && typeof r.system_role_defaults === "object"
+        ? r.system_role_defaults
+        : {},
   };
 }
 
 export function ModelsStep({
   totalSteps,
-  requiredTiers,
+  enabledDepartmentIds,
+  systemRoleIds,
   onBack,
   onSaved,
 }: {
   totalSteps: number;
-  requiredTiers: TierName[];
+  enabledDepartmentIds: string[];
+  systemRoleIds: string[];
   onBack: () => void;
   onSaved: () => void;
 }) {
@@ -46,13 +63,8 @@ export function ModelsStep({
     MODELS_DEFAULTS,
     parseModels,
   );
-  const { screen, keys, tiers } = state;
+  const { screen, keys, entries, department_defaults, system_role_defaults } = state;
   const setScreen = (value: Screen) => setState((s) => ({ ...s, screen: value }));
-  const setTiers = (next: TierMap | ((prev: TierMap) => TierMap)) =>
-    setState((s) => ({
-      ...s,
-      tiers: typeof next === "function" ? next(s.tiers) : next,
-    }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,36 +73,52 @@ export function ModelsStep({
     setState((s) => ({
       ...s,
       keys: next,
-      tiers: {
-        thinking: s.tiers.thinking.filter((e) => validIds.has(e.key_id)),
-        everyday: s.tiers.everyday.filter((e) => validIds.has(e.key_id)),
-        quick: s.tiers.quick.filter((e) => validIds.has(e.key_id)),
-      },
+      entries: s.entries.filter((e) => validIds.has(e.key_id)),
     }));
   };
 
-  const onSave = async () => {
+  const updateEntries = (next: ModelEntry[]) => {
+    const validRefs = new Set(next.map((e) => e.model_ref));
+    setState((s) => {
+      const filterDefaults = (d: Record<string, string>) =>
+        Object.fromEntries(Object.entries(d).filter(([, v]) => validRefs.has(v)));
+      return {
+        ...s,
+        entries: next,
+        department_defaults: filterDefaults(s.department_defaults),
+        system_role_defaults: filterDefaults(s.system_role_defaults),
+      };
+    });
+  };
+
+  const onSubmitAssign = async (payload: {
+    department_defaults: Record<string, string>;
+    system_role_defaults: Record<string, string>;
+  }) => {
     setLoading(true);
     setError(null);
     try {
-      const expand = (entries: TierEntry[]) =>
-        entries
-          .filter((e) => e.status === "ok")
-          .map((e) => {
-            const key = keys.find((k) => k.id === e.key_id)!;
-            return {
-              provider: inferProvider(e.model, key.api_key, key.base_url),
-              model: e.model,
-              api_key: key.api_key,
-              base_url: key.base_url,
-            };
-          });
-      await saveModels({
-        thinking: expand(tiers.thinking),
-        everyday: expand(tiers.everyday),
-        quick: expand(tiers.quick),
+      setState((s) => ({
+        ...s,
+        department_defaults: payload.department_defaults,
+        system_role_defaults: payload.system_role_defaults,
+      }));
+      const models = entries.map((e) => {
+        const key = keys.find((k) => k.id === e.key_id)!;
+        return {
+          provider_kind: inferProvider(e.model_ref, key.api_key, key.base_url),
+          api_key: key.api_key,
+          base_url: key.base_url ?? null,
+          env_var_name: null,
+          model_ref: e.model_ref,
+          display_name: e.display_name,
+        };
       });
-      // Persist past Next; the wizard-wide clear runs after /setup/finish.
+      await saveModels({
+        models,
+        department_defaults: payload.department_defaults,
+        system_role_defaults: payload.system_role_defaults,
+      });
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save models.");
@@ -106,20 +134,34 @@ export function ModelsStep({
         keys={keys}
         onChange={updateKeys}
         onBack={onBack}
-        onNext={() => setScreen("tiers")}
+        onNext={() => setScreen("register")}
+      />
+    );
+  }
+
+  if (screen === "register") {
+    return (
+      <RegisterModelsScreen
+        totalSteps={totalSteps}
+        keys={keys}
+        entries={entries}
+        onChange={updateEntries}
+        onBack={() => setScreen("keys")}
+        onNext={() => setScreen("assign")}
       />
     );
   }
 
   return (
-    <TiersScreen
+    <AssignDefaultsScreen
       totalSteps={totalSteps}
-      requiredTiers={requiredTiers}
-      keys={keys}
-      tiers={tiers}
-      onChange={setTiers}
-      onBack={() => setScreen("keys")}
-      onNext={onSave}
+      enabledDepartmentIds={enabledDepartmentIds}
+      systemRoleIds={systemRoleIds}
+      registeredModels={entries}
+      initialDepartmentDefaults={department_defaults}
+      initialSystemRoleDefaults={system_role_defaults}
+      onBack={() => setScreen("register")}
+      onSubmit={onSubmitAssign}
       loading={loading}
       submitError={error}
     />
