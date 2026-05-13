@@ -177,7 +177,7 @@ class Dispatcher:
     chat-input "Tools" dropdown."""
     tool_argument_constraints: dict[
         str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]
-    ] = field(  # noqa: E501
+    ] = field(
         default_factory=dict
     )
     """Per-provider pre-dispatch argument constraints. Keyed by
