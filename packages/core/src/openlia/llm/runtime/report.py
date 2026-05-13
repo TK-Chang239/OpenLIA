@@ -291,6 +291,19 @@ def _section_titles(framework: dict[str, Any]) -> list[str]:
     return [s.get("title", s.get("id", "Section")) for s in framework.get("sections", [])]
 
 
+_MODE_LABELS = {
+    "stock_initiation": "Stock Initiation Report",
+    "stock_update": "Stock Update Report",
+    "sector_research": "Sector Research Report",
+    "earnings_update": "Earnings Update",
+    "morning_briefing": "Morning Briefing",
+}
+
+
+def _mode_label(mode: str) -> str:
+    return _MODE_LABELS.get(mode, "Report")
+
+
 def _tool_name_for_result(response: Any, call_id: str) -> str:
     for call in response.tool_calls:
         if call.id == call_id:
@@ -343,9 +356,14 @@ class ReportRunner:
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
-        framework_raw = _load_framework(self._frameworks_root, request.mode)
-        framework = _customize_framework(framework_raw, request)
-        style_guide = _load_style_guide(self._frameworks_root, request.mode)
+        using_user_template = bool(request.user_template_text)
+        if using_user_template:
+            framework: dict[str, Any] = {"sections": [], "length_preference": request.length}
+            style_guide = ""
+        else:
+            framework_raw = _load_framework(self._frameworks_root, request.mode)
+            framework = _customize_framework(framework_raw, request)
+            style_guide = _load_style_guide(self._frameworks_root, request.mode)
 
         self._trace(
             "report.request",
@@ -432,20 +450,34 @@ class ReportRunner:
         now = datetime.now(UTC)
         current_date = now.date().isoformat()
         current_date_long = f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
-        user_msg = self._prompts.render(
-            department_id,
-            f"report.{request.mode}.user",
-            user_input=request.user_input,
-            framework=framework,
-            length=request.length,
-            enabled_sections=request.enabled_sections,
-            custom_sections=request.custom_sections,
-            section_topics=request.section_topics,
-            reference_portfolio=request.reference_portfolio,
-            current_date=current_date,
-            current_date_long=current_date_long,
-            has_tools=bool(tools),
-        )
+        if using_user_template:
+            user_msg = self._prompts.render(
+                department_id,
+                "report.user_template.user",
+                user_input=request.user_input,
+                length=request.length,
+                user_template_text=request.user_template_text or "",
+                template_name=request.user_template_name or "(unnamed)",
+                mode_label=_mode_label(request.mode),
+                current_date=current_date,
+                current_date_long=current_date_long,
+                has_tools=bool(tools),
+            )
+        else:
+            user_msg = self._prompts.render(
+                department_id,
+                f"report.{request.mode}.user",
+                user_input=request.user_input,
+                framework=framework,
+                length=request.length,
+                enabled_sections=request.enabled_sections,
+                custom_sections=request.custom_sections,
+                section_topics=request.section_topics,
+                reference_portfolio=request.reference_portfolio,
+                current_date=current_date,
+                current_date_long=current_date_long,
+                has_tools=bool(tools),
+            )
 
         conversation = [Message(role="user", content=user_msg, content_blocks=materialized_blocks)]
 
