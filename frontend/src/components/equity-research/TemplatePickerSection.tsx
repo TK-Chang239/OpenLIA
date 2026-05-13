@@ -246,7 +246,7 @@ export function TemplatePickerSection({
       className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
       aria-labelledby="er-template-section"
     >
-      <div className="mb-[10px] flex items-center justify-between gap-[10px]">
+      <div className="mb-[10px]">
         <span
           id="er-template-section"
           className="block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]"
@@ -256,16 +256,6 @@ export function TemplatePickerSection({
             {MODE_LABELS[mode]}
           </strong>
         </span>
-        {view.kind === "list" ? (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="inline-flex h-[28px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-[11px] font-display text-[12px] text-[--color-text-secondary] transition-colors hover:border-[--color-border-strong] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
-          >
-            <Upload size={12} strokeWidth={2} />
-            Upload template
-          </button>
-        ) : null}
       </div>
 
       {error ? (

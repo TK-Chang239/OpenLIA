@@ -117,7 +117,9 @@ describe("TemplatePickerSection", () => {
         isAdmin={false}
       />,
     );
-    await waitFor(() => screen.getByText("Upload template"));
+    await waitFor(() =>
+      screen.getByText("Drop a file here or click to upload your own template"),
+    );
     expect(screen.queryByText(/Global \(admin\)/)).toBeNull();
   });
 });
