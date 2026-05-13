@@ -4,8 +4,8 @@ Runs nightly per user at their preferred local-clock time. Two phases:
 
 1. **Extraction**: walk every ``ChatSession`` the user has updated since
    the last successful run (the audit-table watermark) and ask the
-   user's quick-tier LLM to produce ``user_construct`` / ``mention``
-   proposals. Each session writes its proposals through
+   ``graph_extraction``-role LLM to produce ``user_construct`` /
+   ``mention`` proposals. Each session writes its proposals through
    ``graph_extraction.extract_proposals_from_session``.
 2. **Summary indexing**: walk every ``Report`` the user has saved since
    the watermark and embed its structured summary into
@@ -35,7 +35,7 @@ from typing import Any, ClassVar, Protocol
 from openlia.llm.base import LLMProvider
 from openlia.llm.embeddings import EmbeddingProvider
 from openlia.llm.runtime.cancellation import CancellationToken
-from openlia.llm.types import LLMRequest, LLMResponse, ModelTier
+from openlia.llm.types import LLMRequest, LLMResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
@@ -56,7 +56,7 @@ from openlia_server.services import (
 )
 from openlia_server.services.adapter_llm_client import (
     AdapterLlmNotConfigured,
-    _resolve_provider,
+    _resolve_provider_for_role,
 )
 
 DEPARTMENT = "secretary"
@@ -78,10 +78,10 @@ class _SyncProviderAdapter:
 
 
 class _ProviderFactory(Protocol):
-    """Resolve a quick-tier ``LLMProvider`` from the DB session.
+    """Resolve a ``graph_extraction``-role ``LLMProvider`` from the DB session.
 
-    Default factory uses ``_resolve_provider``; tests pass a fake that
-    returns a deterministic provider.
+    Default factory uses ``_resolve_provider_for_role``; tests pass a fake
+    that returns a deterministic provider.
     """
 
     def __call__(self, db: DBSession) -> LLMProvider: ...
@@ -100,7 +100,7 @@ class _EmbeddingProviderFactory(Protocol):
 
 
 def _default_provider_factory(db: DBSession) -> LLMProvider:
-    return _resolve_provider(db, (ModelTier.QUICK,))
+    return _resolve_provider_for_role(db, "graph_extraction")
 
 
 def _default_embedding_factory() -> tuple[EmbeddingProvider, str]:

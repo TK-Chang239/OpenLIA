@@ -22,7 +22,7 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
 from openlia.llm.base import LLMProvider
-from openlia.llm.types import LLMRequest, LLMResponse, ModelTier
+from openlia.llm.types import LLMRequest, LLMResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
@@ -38,7 +38,7 @@ from openlia_server.services import (
 )
 from openlia_server.services.adapter_llm_client import (
     AdapterLlmNotConfigured,
-    _resolve_provider,
+    _resolve_provider_for_role,
 )
 
 
@@ -72,7 +72,7 @@ class _SyncProviderAdapter:
 def _default_extract_fn_factory(
     db: DBSession, user_id: str
 ) -> tuple[graph_extraction.ExtractFn, str]:
-    provider = _resolve_provider(db, (ModelTier.QUICK,))
+    provider = _resolve_provider_for_role(db, "graph_extraction")
     client = _SyncProviderAdapter(provider)
     extract_fn = graph_extraction_llm.make_extract_fn(client)
     return extract_fn, provider.model
