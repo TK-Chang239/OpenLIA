@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from openlia.llm.base import LLMProvider
-from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.exceptions import LLMProviderError, ModelNotConfiguredError
 from openlia.llm.resolver import ModelRegistry
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.events import (
@@ -367,7 +367,7 @@ class ReportRunner:
                 user_id=user_id,
                 registry=self._registry,
             )
-        except LLMProviderError as exc:
+        except (LLMProviderError, ModelNotConfiguredError) as exc:
             self._trace(
                 "report.error",
                 f"resolve failed: {exc}",
@@ -387,7 +387,6 @@ class ReportRunner:
                 "report_id": report_id,
                 "provider_kind": resolved.provider_kind,
                 "model_ref": resolved.model_ref,
-                "tier": str(resolved.tier),
             },
         )
         provider = self._provider_factory(resolved)
