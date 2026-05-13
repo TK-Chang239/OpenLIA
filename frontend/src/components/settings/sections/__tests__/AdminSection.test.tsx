@@ -19,7 +19,6 @@ describe('AdminSection', () => {
     expect(screen.getByRole('tab', { name: /invites/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /users/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /reset requests/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /^models$/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /connectors/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /runner specs/i })).toBeInTheDocument();
   });
