@@ -23,8 +23,8 @@ from openlia.departments import get_department
 from openlia.departments.loader import load_routing_context
 from openlia.llm.adapters import build_adapter
 from openlia.llm.embeddings import EmbeddingProvider
-from openlia.llm.exceptions import TierNotConfiguredError
-from openlia.llm.resolver import resolve
+from openlia.llm.exceptions import ModelNotConfiguredError
+from openlia.llm.resolver import resolve, resolve_system_role
 from openlia.llm.runtime.batch import BatchRunner
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
@@ -32,7 +32,6 @@ from openlia.llm.runtime.recall_artifacts import RecallArtifactsHandler
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
-from openlia.llm.types import ModelTier
 from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
@@ -43,14 +42,7 @@ from openlia_server.services.llm_registry import SQLModelRegistry
 
 logger = logging.getLogger(__name__)
 
-# Tier the runtime tool router asks for; falls back through these in order
-# so a partial install (only Everyday or Thinking configured) still routes.
-_ROUTER_TIERS: tuple[ModelTier, ...] = (
-    ModelTier.QUICK,
-    ModelTier.EVERYDAY,
-    ModelTier.THINKING,
-)
-_ROUTER_DEPARTMENT_ID = "_chat_router"
+_ROUTER_SYSTEM_ROLE_ID = "connector_agentic_resolver"
 
 RuntimeMode = Literal["chat", "deterministic", "scheduled_chat"]
 
@@ -111,34 +103,28 @@ def _empty_skill_registry() -> SkillRegistry:
 
 def _build_router_llm_client(db: DBSession) -> RouterLlmJsonClient | None:
     """Resolve a model for the runtime tool router. Returns None when no
-    tier is configured so the caller can fall through to the legacy
-    (non-routed) chat path.
+    slot default is configured so the caller can fall through to the
+    legacy (non-routed) chat path.
     """
     registry = SQLModelRegistry(db)
-    last_error: TierNotConfiguredError | None = None
-    for tier in _ROUTER_TIERS:
-        try:
-            resolved = resolve(
-                department_id=_ROUTER_DEPARTMENT_ID,
-                registry=registry,
-                user_id=None,
-                tier_override=tier,
-            )
-        except TierNotConfiguredError as exc:
-            last_error = exc
-            continue
-        provider = build_adapter(
-            kind=resolved.provider_kind,
-            credentials=resolved.credentials,
-            model=resolved.model_ref,
-            capabilities=resolved.capabilities,
+    try:
+        resolved = resolve_system_role(
+            role_id=_ROUTER_SYSTEM_ROLE_ID,
+            registry=registry,
         )
-        return RouterLlmJsonClient(provider=provider)
-    logger.warning(
-        "no LLM tier configured for chat tool router; v2 routing disabled (%s)",
-        last_error,
+    except ModelNotConfiguredError as exc:
+        logger.warning(
+            "no LLM configured for chat tool router; v2 routing disabled (%s)",
+            exc,
+        )
+        return None
+    provider = build_adapter(
+        kind=resolved.provider_kind,
+        credentials=resolved.credentials,
+        model=resolved.model_ref,
+        capabilities=resolved.capabilities,
     )
-    return None
+    return RouterLlmJsonClient(provider=provider)
 
 
 def _build_chat_runner_with_registry(
@@ -235,6 +221,8 @@ class RefreshingChatRunner:
         disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
         response_length: str | None = None,
         memory_block: str | None = None,
+        selected_exemplars: list[str] | None = None,
+        market_basket: dict[str, list[str]] | None = None,
     ):
         db = self._factory()
         try:
@@ -269,6 +257,8 @@ class RefreshingChatRunner:
                 disabled_skill_ids=frozenset(disabled_skill_ids),
                 response_length=response_length,
                 memory_block=memory_block,
+                selected_exemplars=selected_exemplars,
+                market_basket=market_basket,
             ):
                 yield event
         finally:

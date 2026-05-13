@@ -4,7 +4,10 @@ import json
 import time
 from collections.abc import AsyncIterator
 
-from openlia.llm.adapters._content import render_anthropic_messages
+from openlia.llm.adapters._content import (
+    render_anthropic_messages,
+    split_at_cache_breakpoint,
+)
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -26,6 +29,24 @@ from openlia.llm.types import (
 
 _BASE_URL = "https://api.anthropic.com"
 _API_VERSION = "2023-06-01"
+
+
+def _build_system_with_cache_control(system: str) -> str | list[dict]:
+    """Return Anthropic ``system`` payload, splitting at the cache breakpoint.
+
+    When the rendered system prompt embeds the cache-breakpoint marker, return
+    a two-block list with ``cache_control: {"type": "ephemeral"}`` on the
+    static prefix so Anthropic caches everything up through that block across
+    the 5-minute TTL. Otherwise return the original string unchanged so the
+    payload stays backward-compatible.
+    """
+    static, dynamic = split_at_cache_breakpoint(system)
+    if dynamic is None:
+        return system
+    return [
+        {"type": "text", "text": static, "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": dynamic},
+    ]
 
 
 class AnthropicAdapter(LLMProvider):
@@ -71,7 +92,7 @@ class AnthropicAdapter(LLMProvider):
             "temperature": request.temperature,
         }
         if request.system:
-            payload["system"] = request.system
+            payload["system"] = _build_system_with_cache_control(request.system)
         if request.stop:
             payload["stop_sequences"] = request.stop
         if request.tools:
@@ -134,7 +155,7 @@ class AnthropicAdapter(LLMProvider):
             "stream": True,
         }
         if request.system:
-            payload["system"] = request.system
+            payload["system"] = _build_system_with_cache_control(request.system)
         if request.stop:
             payload["stop_sequences"] = request.stop
         if request.tools:

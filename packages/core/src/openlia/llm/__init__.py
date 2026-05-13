@@ -16,10 +16,6 @@ from openlia.llm.capabilities import (
     capabilities_for,
     evaluate_requirements,
 )
-from openlia.llm.department_defaults import (
-    DEPARTMENT_DEFAULT_TIERS,
-    DEPARTMENT_TIER_REASONS,
-)
 from openlia.llm.department_requirements import (
     DEPARTMENT_REQUIREMENTS,
     requirements_for,
@@ -29,19 +25,18 @@ from openlia.llm.exceptions import (
     CapabilityError,
     ContextLengthError,
     LLMProviderError,
+    ModelNotConfiguredError,
     ModelNotFoundError,
     ProviderOutageError,
     RateLimitError,
-    TierNotConfiguredError,
     TransportError,
     is_transient,
 )
-from openlia.llm.model_defaults import SHIPPED_TIER_DEFAULTS
 from openlia.llm.resolver import (
     ModelRegistry,
     ResolvedModelRow,
     resolve,
-    resolve_tier,
+    resolve_system_role,
 )
 from openlia.llm.retry import with_retries
 from openlia.llm.types import (
@@ -53,7 +48,6 @@ from openlia.llm.types import (
     LLMResponse,
     Message,
     ModelInfo,
-    ModelTier,
     ProviderCredentials,
     ResolvedModel,
     ResponseFormat,
@@ -64,10 +58,7 @@ from openlia.llm.types import (
 
 __all__ = [
     "ADAPTERS",
-    "DEPARTMENT_DEFAULT_TIERS",
     "DEPARTMENT_REQUIREMENTS",
-    "DEPARTMENT_TIER_REASONS",
-    "SHIPPED_TIER_DEFAULTS",
     "AnthropicAdapter",
     "AuthError",
     "Capabilities",
@@ -84,9 +75,9 @@ __all__ = [
     "LLMResponse",
     "Message",
     "ModelInfo",
+    "ModelNotConfiguredError",
     "ModelNotFoundError",
     "ModelRegistry",
-    "ModelTier",
     "OllamaAdapter",
     "OpenAIAdapter",
     "OpenAICompatAdapter",
@@ -98,7 +89,6 @@ __all__ = [
     "ResolvedModelRow",
     "ResponseFormat",
     "TestResult",
-    "TierNotConfiguredError",
     "ToolCall",
     "ToolSchema",
     "TransportError",
@@ -108,6 +98,6 @@ __all__ = [
     "is_transient",
     "requirements_for",
     "resolve",
-    "resolve_tier",
+    "resolve_system_role",
     "with_retries",
 ]

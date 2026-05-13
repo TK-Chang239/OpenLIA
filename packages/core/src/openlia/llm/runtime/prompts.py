@@ -97,6 +97,8 @@ class PromptLoader:
             "skills_menu": [],  # default; callers override
             "response_length": None,  # default; callers override per-session
             "memory_block": None,  # default; slice-13 graph memory hook overrides
+            "selected_exemplars": [],  # default; fix-chats exemplar_selector overrides
+            "market_basket": None,  # default; fix-chats user_prefs.get_market_basket overrides
             **context,
         }
         template = self._env.from_string(template_src)

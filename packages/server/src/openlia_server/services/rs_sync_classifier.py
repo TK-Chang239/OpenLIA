@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from openlia.llm.adapters import build_adapter
-from openlia.llm.exceptions import TierNotConfiguredError
+from openlia.llm.exceptions import ModelNotConfiguredError
 from openlia.llm.resolver import resolve
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.retail_sentiment.classifier import DEPARTMENT_ID, LlmClassifier
@@ -85,7 +85,7 @@ class RefreshingSyncLlmClassifier:
                     registry=registry,
                     user_id=None,
                 )
-            except TierNotConfiguredError:
+            except ModelNotConfiguredError:
                 return _neutral_result(posts)
 
             provider = build_adapter(

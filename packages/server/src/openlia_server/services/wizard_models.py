@@ -1,106 +1,127 @@
 """Setup-wizard Step 3 (Models) helpers.
 
-Wraps `services.llm_providers` so /setup/models can:
-  - upsert provider rows + tiered models in one shot;
-  - replace prior wizard-staged models on a second POST (idempotent);
-  - leave tier-default uniqueness intact via the existing
-    `uq_llm_models_tier_default` constraint.
+Persists the wizard's models step under the slot-defaults model:
+  - Upsert one LLMProvider per (kind, api_key, base_url, env_var_name).
+  - Upsert one LLMModel per (provider_id, model_ref).
+  - Write department + system-role slot defaults.
 
-A "wizard-staged" model is any LLMModel created before the wizard's
-`wizard.completed` config flag flips true. We use that as the deletion
-filter — once the wizard is done, this code never runs again because the
-410-gate above the route blocks it.
+Idempotent on replay — re-POSTing the same payload upserts in place
+instead of duplicating rows.
 """
 
 from __future__ import annotations
 
-from typing import Any
+import uuid
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.config import LLMModel, LLMProvider
-from openlia_server.db.models.infrastructure import ConfigStore
-from openlia_server.services import llm_providers as llm_svc
+from openlia_server.services.slot_defaults import set_slot_default
 
 
-def _is_wizard_completed(db: Session) -> bool:
-    row = db.get(ConfigStore, "wizard.completed")
-    if row is None:
-        return False
-    v = row.value
-    if isinstance(v, bool):
-        return v
-    return (v or "").lower() == "true"
+class RegisterModelInput(BaseModel):
+    provider_kind: str
+    api_key: str | None = None
+    base_url: str | None = None
+    env_var_name: str | None = None
+    model_ref: str
+    display_name: str
 
 
-def _wipe_existing_models_and_providers(db: Session) -> None:
-    """Idempotency: clear all LLM models + providers before re-staging.
+class WizardModelsPayload(BaseModel):
+    models: list[RegisterModelInput]
+    department_defaults: dict[str, str]  # dept_id -> model_ref
+    system_role_defaults: dict[str, str]  # role_id -> model_ref
 
-    Called only when the wizard is still in progress. Once the wizard is
-    completed, the 410 gate prevents this code path entirely.
-    """
-    db.query(LLMModel).delete()
+
+class UnknownModelRefError(ValueError):
+    """Raised when a slot default points at a model_ref not in `models`."""
+
+
+def _upsert_provider(db: Session, entry: RegisterModelInput) -> LLMProvider:
+    row = (
+        db.query(LLMProvider)
+        .filter(
+            LLMProvider.kind == entry.provider_kind,
+            LLMProvider.api_key.is_(entry.api_key)
+            if entry.api_key is None
+            else LLMProvider.api_key == entry.api_key,
+            LLMProvider.base_url.is_(entry.base_url)
+            if entry.base_url is None
+            else LLMProvider.base_url == entry.base_url,
+            LLMProvider.env_var_name.is_(entry.env_var_name)
+            if entry.env_var_name is None
+            else LLMProvider.env_var_name == entry.env_var_name,
+        )
+        .one_or_none()
+    )
+    if row is not None:
+        return row
+    hint = entry.api_key[:4] + "..." if entry.api_key else entry.env_var_name or "no-key"
+    row = LLMProvider(
+        id=str(uuid.uuid4()),
+        kind=entry.provider_kind,
+        label=f"{entry.provider_kind} ({hint})",
+        api_key=entry.api_key,
+        base_url=entry.base_url,
+        env_var_name=entry.env_var_name,
+        is_enabled=True,
+    )
+    db.add(row)
     db.flush()
-    db.query(LLMProvider).delete()
+    return row
+
+
+def _upsert_model(db: Session, provider_id: str, entry: RegisterModelInput) -> LLMModel:
+    row = (
+        db.query(LLMModel)
+        .filter(LLMModel.provider_id == provider_id, LLMModel.model_ref == entry.model_ref)
+        .one_or_none()
+    )
+    if row is not None:
+        if row.display_name != entry.display_name:
+            row.display_name = entry.display_name
+            db.flush()
+        return row
+    row = LLMModel(
+        id=str(uuid.uuid4()),
+        provider_id=provider_id,
+        model_ref=entry.model_ref,
+        display_name=entry.display_name,
+        is_enabled=True,
+    )
+    db.add(row)
     db.flush()
+    return row
 
 
-_KNOWN_LLM_KINDS = {"openai", "anthropic", "gemini", "openrouter", "openai_compat", "ollama"}
+def save_wizard_models(db: Session, payload: WizardModelsPayload) -> None:
+    """Persist the wizard's models step.
 
-
-class UnknownLLMKindError(ValueError):
-    """Raised when a wizard payload references an unknown LLM provider kind."""
-
-
-def save_models(db: Session, payload: Any) -> dict[str, bool]:
-    """Persist tiered models for the wizard.
-
-    `payload` is a Pydantic model with `.thinking`, `.everyday`, `.quick`
-    lists of entries; each entry has `provider`, `model`, `api_key`,
-    `base_url`, `env_var_name`, `capabilities`, `is_tier_default`.
-
-    Idempotent — a second POST replaces any wizard-staged providers/models.
-    Refuses to delete anything if the wizard has already completed.
+    - Upsert one LLMProvider per (provider_kind, api_key, base_url, env_var_name).
+    - Upsert one LLMModel per (provider, model_ref) with display_name.
+    - For each department_defaults entry, set slot_default('department', dept_id, model_id).
+    - For each system_role_defaults entry, set slot_default('system_role', role_id, model_id).
     """
-    if _is_wizard_completed(db):
-        # Caller (route) is already 410-gated; this is defensive.
-        raise RuntimeError("wizard already completed; refusing to mutate llm models")
+    ref_to_model_id: dict[str, str] = {}
+    for entry in payload.models:
+        provider = _upsert_provider(db, entry)
+        model = _upsert_model(db, provider.id, entry)
+        ref_to_model_id[entry.model_ref] = model.id
 
-    # Validate kinds up-front so a partial write doesn't end with a half-staged DB.
-    for tier_name in ("thinking", "everyday", "quick"):
-        for entry in getattr(payload, tier_name):
-            if entry.provider not in _KNOWN_LLM_KINDS:
-                raise UnknownLLMKindError(
-                    f"unknown LLM provider kind {entry.provider!r}; "
-                    f"known: {sorted(_KNOWN_LLM_KINDS)}"
-                )
-
-    _wipe_existing_models_and_providers(db)
-
-    for tier_name in ("thinking", "everyday", "quick"):
-        entries = getattr(payload, tier_name)
-        for entry in entries:
-            created = llm_svc.create_provider(
-                db,
-                kind=entry.provider,
-                label=f"{entry.provider} ({tier_name})",
-                api_key=entry.api_key,
-                base_url=entry.base_url,
-                env_var_name=entry.env_var_name,
+    for dept_id, model_ref in payload.department_defaults.items():
+        model_id = ref_to_model_id.get(model_ref)
+        if model_id is None:
+            raise UnknownModelRefError(
+                f"department_defaults references unknown model_ref {model_ref!r}"
             )
-            llm_svc.create_model(
-                db,
-                provider_id=created.id,
-                tier=tier_name,
-                model_ref=entry.model,
-                display_name=entry.model,
-                is_tier_default=bool(entry.is_tier_default),
+        set_slot_default(db, slot_kind="department", slot_id=dept_id, model_id=model_id)
+
+    for role_id, model_ref in payload.system_role_defaults.items():
+        model_id = ref_to_model_id.get(model_ref)
+        if model_id is None:
+            raise UnknownModelRefError(
+                f"system_role_defaults references unknown model_ref {model_ref!r}"
             )
-            if entry.provider == "openai_compat" and entry.capabilities:
-                llm_svc.set_capability_override(
-                    db,
-                    provider_kind="openai_compat",
-                    model=entry.model,
-                    override=entry.capabilities,
-                )
-    return {"ok": True}
+        set_slot_default(db, slot_kind="system_role", slot_id=role_id, model_id=model_id)

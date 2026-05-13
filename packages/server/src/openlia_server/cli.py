@@ -771,15 +771,12 @@ def wizard_reset(
             from openlia_server.db.models.config import (
                 LLMModel,
                 LLMProvider,
-                UserLLMPreference,
             )
 
-            user_pref_count = db.query(UserLLMPreference).delete()
             llm_model_count = db.query(LLMModel).delete()
             llm_provider_count = db.query(LLMProvider).delete()
             purged_summary = (
-                f" Purged {llm_model_count} LLM model(s), {llm_provider_count} "
-                f"LLM provider(s), and {user_pref_count} user LLM preference(s)."
+                f" Purged {llm_model_count} LLM model(s) and {llm_provider_count} LLM provider(s)."
             )
 
         db.commit()

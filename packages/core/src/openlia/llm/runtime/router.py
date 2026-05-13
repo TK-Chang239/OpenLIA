@@ -2,7 +2,7 @@
 
 Spec: docs/superpowers/specsv2/2026-04-27-connector-dataflow-design.md §8.
 
-The router is a small (Haiku-tier) LLM call. It runs once at conversation
+The router is a small LLM call. It runs once at conversation
 start and again on every escalation. Inputs:
 
   - `routing_context`: the dept's `<dept>.routing_context.md` body.

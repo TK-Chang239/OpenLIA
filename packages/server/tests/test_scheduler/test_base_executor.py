@@ -7,8 +7,8 @@ import pytest
 from _scheduler_fakes import FakeSleep
 from openlia.llm.exceptions import (
     AuthError,
+    ModelNotConfiguredError,
     RateLimitError,
-    TierNotConfiguredError,
 )
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia_server.db.models.auth import User
@@ -146,13 +146,13 @@ async def test_non_transient_error_fails_immediately_without_retry(
 
 
 @pytest.mark.asyncio
-async def test_tier_not_configured_fails_and_inserts_job_failed_notification(
+async def test_model_not_configured_fails_and_inserts_job_failed_notification(
     session_factory,
 ) -> None:
     with session_factory() as s:
         _make_user(s)
     ex = _ScriptedExecutor(
-        script=[TierNotConfiguredError("thinking")],
+        script=[ModelNotConfiguredError(slot_kind="department", slot_id="secretary")],
         session_factory=session_factory,
         sleep=FakeSleep(),
     )
@@ -163,7 +163,7 @@ async def test_tier_not_configured_fails_and_inserts_job_failed_notification(
         assert row.status == JobStatus.FAILED.value
         notifs = s.query(UserNotification).all()
         assert notifs[0].type == "job_failed"
-        assert "TierNotConfigured" in notifs[0].message
+        assert "ModelNotConfigured" in notifs[0].message
 
 
 @pytest.mark.asyncio

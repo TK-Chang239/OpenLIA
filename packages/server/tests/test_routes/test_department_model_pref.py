@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def model_id(db_session):
-    from openlia_server.db.models.config import LLMModel, LLMProvider
+    from openlia_server.db.models.config import LLMModel, LLMProvider, LLMSlotDefault
 
     provider_id = str(uuid.uuid4())
     db_session.add(
@@ -29,13 +29,19 @@ def model_id(db_session):
         LLMModel(
             id=mid,
             provider_id=provider_id,
-            tier="everyday",
             model_ref="gpt-5.4",
             display_name="GPT-5.4",
-            is_tier_default=True,
             is_enabled=True,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        LLMSlotDefault(
+            slot_kind="department",
+            slot_id="morning_briefing",
+            model_id=mid,
         )
     )
     db_session.commit()
@@ -51,7 +57,7 @@ def test_get_model_pref_returns_null_when_unset(company_client: TestClient, auth
     assert "effective_model_id" in body
 
 
-def test_get_model_pref_effective_falls_back_to_tier_default(
+def test_get_model_pref_effective_falls_back_to_slot_default(
     company_client: TestClient, auth_user, model_id
 ) -> None:
     """When no dept override and no user-global pref, GET surfaces the

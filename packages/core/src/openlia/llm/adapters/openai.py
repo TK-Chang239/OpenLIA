@@ -4,7 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
-from openlia.llm.adapters._content import render_openai_messages
+from openlia.llm.adapters._content import render_openai_messages, strip_cache_breakpoint
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -36,7 +36,7 @@ def _is_reasoning_model(model: str) -> bool:
 def _to_openai_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
-        out.append({"role": "system", "content": req.system})
+        out.append({"role": "system", "content": strip_cache_breakpoint(req.system)})
     # Use the shared renderer for the role+content shape so user messages
     # with materialized content_blocks (images, extracted-text PDFs, …)
     # are emitted as the OpenAI "parts" array. Tool-call plumbing is

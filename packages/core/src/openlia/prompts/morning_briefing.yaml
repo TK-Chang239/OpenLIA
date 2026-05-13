@@ -13,7 +13,11 @@ chat:
     skim-reading. Hand off to: any specialist desk when the user wants
     depth on a single thread.
 
+    {% include "shared/finance_voice.yaml.j2" %}
+
     {% include "shared/skills_menu.yaml.j2" %}
+
+    {% include "shared/chat_formatting.yaml.j2" %}
 
 report:
   system: |

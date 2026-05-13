@@ -147,6 +147,56 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
         await _reregister_graph_extraction(request, db, user.id)
         return _to_out(user, prefs)
 
+    @router.get("/departments")
+    def list_departments(_user: User = require_auth) -> dict:
+        from openlia.departments import get_registered_department_ids
+
+        return {"departments": get_registered_department_ids()}
+
+    @router.get("/models")
+    def list_enabled_models(
+        db: Session = Depends(session_dep),
+        _user: User = require_auth,
+    ) -> list[dict]:
+        """Flat list of enabled models for the picker UI."""
+        from openlia_server.db.models.config import LLMModel
+
+        rows = db.query(LLMModel).filter_by(is_enabled=True).all()
+        return [
+            {
+                "id": m.id,
+                "display_name": m.display_name,
+                "provider_id": m.provider_id,
+                "provider_kind": m.provider.kind,
+                "model_ref": m.model_ref,
+                "is_enabled": m.is_enabled,
+            }
+            for m in rows
+        ]
+
+    @router.get("/preferences/market-basket")
+    def get_market_basket(
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, list[str]]:
+        return svc.get_market_basket(db, user_id=user.id)
+
+    @router.put("/preferences/market-basket")
+    def put_market_basket(
+        payload: dict[str, list[str]],
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, list[str]]:
+        try:
+            svc.set_market_basket(db, user_id=user.id, basket=payload)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"code": "invalid_basket", "message": str(exc)},
+            ) from exc
+        db.commit()
+        return svc.get_market_basket(db, user_id=user.id)
+
     @router.put("/graph-extraction-time", response_model=PrefsOut)
     async def put_graph_extraction_time(
         payload: GraphExtractionTimeIn,
