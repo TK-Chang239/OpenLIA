@@ -18,6 +18,42 @@ from typing import Any
 from openlia.llm.runtime.messages import DocumentBlock, ImageBlock, TextBlock
 from openlia.llm.types import Message
 
+# Prompt-cache breakpoint marker. Embedded in the rendered system prompt by
+# shared/cache_breakpoint.yaml.j2 between the static prefix (cacheable across
+# turns) and the per-turn dynamic suffix (memory_block, exemplars_block,
+# anything else that varies). Adapters that support prompt caching split on
+# this marker; adapters that don't strip it so the model never sees it.
+CACHE_BREAKPOINT_MARKER = "<!-- OPENLIA_CACHE_BREAKPOINT -->"
+
+
+def split_at_cache_breakpoint(system: str | None) -> tuple[str, str | None]:
+    """Split a system prompt at the cache breakpoint marker.
+
+    Returns (static_prefix, dynamic_suffix). dynamic_suffix is None when the
+    marker is absent so the adapter can skip the multi-block code path.
+    """
+    if not system:
+        return "", None
+    if CACHE_BREAKPOINT_MARKER not in system:
+        return system, None
+    static, dynamic = system.split(CACHE_BREAKPOINT_MARKER, 1)
+    return static.strip(), dynamic.strip()
+
+
+def strip_cache_breakpoint(system: str | None) -> str | None:
+    """Remove the cache breakpoint marker entirely.
+
+    Used by adapters that don't support prompt caching. The marker is a
+    line-comment so leaking it would be cosmetically ugly but not breaking;
+    we still strip for cleanliness and to avoid the model ever pattern-
+    matching on the sentinel.
+    """
+    if system is None:
+        return None
+    if CACHE_BREAKPOINT_MARKER not in system:
+        return system
+    return system.replace(CACHE_BREAKPOINT_MARKER, "").strip()
+
 
 def _b64(data: bytes) -> str:
     return base64.standard_b64encode(data).decode()

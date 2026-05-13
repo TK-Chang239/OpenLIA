@@ -175,6 +175,8 @@ def build_chat_system_prompt(
     disabled_skill_ids: frozenset[str] = frozenset(),
     response_length: str | None = None,
     memory_block: str | None = None,
+    selected_exemplars: list[str] | None = None,
+    market_basket: dict[str, list[str]] | None = None,
 ) -> str:
     """Render the chat.system slot with the user's visible skills menu.
 
@@ -215,6 +217,8 @@ def build_chat_system_prompt(
         skills_menu=skills_menu,
         response_length=response_length,
         memory_block=memory_block,
+        selected_exemplars=list(selected_exemplars) if selected_exemplars else [],
+        market_basket=market_basket,
     )
 
 
@@ -312,6 +316,8 @@ class ChatRunner:
         disabled_skill_ids: frozenset[str] = frozenset(),
         response_length: str | None = None,
         memory_block: str | None = None,
+        selected_exemplars: list[str] | None = None,
+        market_basket: dict[str, list[str]] | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -369,6 +375,8 @@ class ChatRunner:
             disabled_skill_ids=disabled_skill_ids,
             response_length=response_length,
             memory_block=memory_block,
+            selected_exemplars=selected_exemplars,
+            market_basket=market_basket,
         )
         self._trace(
             "llm.resolved",

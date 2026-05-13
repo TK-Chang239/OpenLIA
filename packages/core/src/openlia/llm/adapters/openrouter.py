@@ -4,7 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
-from openlia.llm.adapters._content import render_openai_messages
+from openlia.llm.adapters._content import render_openai_messages, strip_cache_breakpoint
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -30,7 +30,7 @@ _BASE_URL = "https://openrouter.ai/api"
 def _to_messages(req: LLMRequest) -> list[dict]:
     out: list[dict] = []
     if req.system:
-        out.append({"role": "system", "content": req.system})
+        out.append({"role": "system", "content": strip_cache_breakpoint(req.system)})
     # Pre-render user/system/assistant-without-tool-calls via the shared
     # OpenAI-style renderer so user messages with materialized
     # content_blocks emit as the chat-completions "parts" array

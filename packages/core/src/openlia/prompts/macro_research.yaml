@@ -9,6 +9,8 @@ chat:
     cross-asset terms. Hand off to: Equity Research when the question
     becomes single-name.
 
+    {% include "shared/finance_voice.yaml.j2" %}
+
     {% include "shared/skills_menu.yaml.j2" %}
 
 batch:
