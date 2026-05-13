@@ -46,7 +46,9 @@ vi.mock('../../../../api/llm_slots', () => ({
 const DEPTS = ['secretary', 'equity_research'];
 
 describe('ProviderCatalog', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('renders providers and models read-only for non-admin', async () => {
     render(<ProviderCatalog departments={DEPTS} isAdmin={false} />);

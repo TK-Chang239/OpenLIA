@@ -28,7 +28,9 @@ vi.mock('../../../../api/settings', () => ({
 const DEPTS = ['secretary', 'equity_research'];
 
 describe('UserOverridesPanel', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('lists every department row', async () => {
     render(<UserOverridesPanel departments={DEPTS} />);
