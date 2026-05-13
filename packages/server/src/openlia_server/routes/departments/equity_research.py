@@ -37,6 +37,10 @@ from openlia_server.services.equity_research_runner import (
     EquityResearchRunner,
     ReportSavedEvent,
 )
+from openlia_server.services.equity_research_templates import (
+    EquityResearchTemplateService,
+    TemplateValidationError,
+)
 
 
 class CustomSectionPayload(BaseModel):
@@ -50,6 +54,12 @@ class ErConfigPatch(BaseModel):
     report_length: str | None = None
     sections_by_mode: dict[str, list[str]] | None = None
     custom_sections_by_mode: dict[str, list[CustomSectionPayload]] | None = None
+    selected_template_id_by_mode: dict[str, str] | None = None
+
+
+class TemplatePatch(BaseModel):
+    name: str | None = None
+    compatible_modes: list[str] | None = None
 
 
 class ReportPayload(BaseModel):
@@ -78,6 +88,25 @@ def _serialize(cfg) -> dict:
             mode: [{"id": c.id, "title": c.title, "description": c.description} for c in customs]
             for mode, customs in cfg.custom_sections_by_mode.items()
         },
+        "selected_template_id_by_mode": dict(cfg.selected_template_id_by_mode),
+    }
+
+
+def _serialize_template(t) -> dict:
+    return {
+        "id": t.id,
+        "owner_scope": t.owner_scope,
+        "owner_user_id": t.owner_user_id,
+        "created_by_user_id": t.created_by_user_id,
+        "name": t.name,
+        "compatible_modes": list(t.compatible_modes),
+        "raw_filename": t.raw_filename,
+        "raw_mime": t.raw_mime,
+        "raw_size_bytes": t.raw_size_bytes,
+        "char_count": t.char_count,
+        "estimated_tokens": t.estimated_tokens,
+        "created_at": t.created_at,
+        "updated_at": t.updated_at,
     }
 
 
@@ -122,6 +151,7 @@ def build_equity_research_router(
                     if patch.custom_sections_by_mode is not None
                     else None
                 ),
+                selected_template_id_by_mode=patch.selected_template_id_by_mode,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -178,15 +208,19 @@ def build_equity_research_router(
         runner = EquityResearchRunner(db_session=db, inner=inner)
 
         async def stream() -> AsyncIterator[bytes]:
-            async for ev in runner.run_report(
-                user_id=user.id,
-                mode=mode,
-                user_input=user_input,
-                session_id=session_id,
-                attachments=runtime_attachments or None,
-            ):
-                wire = _serialize_event(ev)
-                yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
+            try:
+                async for ev in runner.run_report(
+                    user_id=user.id,
+                    mode=mode,
+                    user_input=user_input,
+                    session_id=session_id,
+                    attachments=runtime_attachments or None,
+                ):
+                    wire = _serialize_event(ev)
+                    yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
+            except Exception as exc:
+                err = {"type": "report.error", "message": str(exc) or exc.__class__.__name__}
+                yield f"event: report.error\ndata: {json.dumps(err)}\n\n".encode()
 
         return StreamingResponse(
             stream(),
@@ -442,5 +476,144 @@ def build_equity_research_router(
             session_id=payload.session_id,
             uploads=None,
         )
+
+    # ─── Templates ──────────────────────────────────────────────────────────
+
+    @router.get("/templates")
+    def list_templates(
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchTemplateService(session)
+        return {"templates": [_serialize_template(t) for t in svc.list_visible(user.id)]}
+
+    @router.post("/templates", response_model=None)
+    async def upload_template(
+        request: Request,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> JSONResponse:
+        content_type = request.headers.get("content-type", "")
+        if not content_type.startswith("multipart/form-data"):
+            return JSONResponse({"detail": "expected multipart/form-data"}, status_code=400)
+        form = await request.form()
+        file_field = form.get("file")
+        if file_field is None or not hasattr(file_field, "read"):
+            return JSONResponse({"detail": "missing 'file' field"}, status_code=400)
+        content: bytes = await file_field.read()  # type: ignore[union-attr]
+        filename = getattr(file_field, "filename", "") or "template"
+        client_mime = getattr(file_field, "content_type", None)
+        name = (form.get("name") or "").strip() or None
+        modes_raw = form.get("compatible_modes") or ""
+        compatible_modes = [m for m in str(modes_raw).split(",") if m]
+        scope = (form.get("scope") or "user").strip()
+        if scope == "global" and not user.is_admin:
+            return JSONResponse({"detail": "admin required"}, status_code=403)
+        if scope not in {"user", "global"}:
+            return JSONResponse({"detail": "invalid scope"}, status_code=400)
+        svc = EquityResearchTemplateService(session)
+        try:
+            dto = svc.upload(
+                actor_user_id=user.id,
+                owner_scope=scope,  # type: ignore[arg-type]
+                content=content,
+                filename=filename,
+                mime_type=client_mime,
+                name=name,
+                compatible_modes=compatible_modes,
+            )
+        except TemplateValidationError as exc:
+            return JSONResponse({"detail": str(exc)}, status_code=400)
+        return JSONResponse(_serialize_template(dto), status_code=201)
+
+    @router.get("/templates/{template_id}")
+    def get_template(
+        template_id: str,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchTemplateService(session)
+        row = svc.get_for_user(user.id, template_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="template not found")
+        return _serialize_template(row)
+
+    @router.get("/templates/{template_id}/extracted_text")
+    def get_template_extracted_text(
+        template_id: str,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchTemplateService(session)
+        row = svc.get_for_user(user.id, template_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="template not found")
+        return {"id": row.id, "extracted_text": row.extracted_text}
+
+    @router.get("/templates/{template_id}/raw")
+    def download_template_raw(
+        template_id: str,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ):
+        from fastapi.responses import Response
+
+        svc = EquityResearchTemplateService(session)
+        row = svc.get_for_user(user.id, template_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="template not found")
+        try:
+            data = svc.read_raw_bytes(template_id)
+        except (KeyError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="template file missing") from exc
+        return Response(
+            content=data,
+            media_type=row.raw_mime,
+            headers={
+                "content-disposition": f'attachment; filename="{row.raw_filename}"',
+            },
+        )
+
+    @router.patch("/templates/{template_id}")
+    def patch_template(
+        template_id: str,
+        patch: TemplatePatch,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchTemplateService(session)
+        row = svc.get(template_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="template not found")
+        if row.owner_scope == "global" and not user.is_admin:
+            raise HTTPException(status_code=403, detail="admin required")
+        if row.owner_scope == "user" and row.owner_user_id != user.id:
+            raise HTTPException(status_code=403, detail="not your template")
+        try:
+            dto = svc.update_metadata(
+                template_id=template_id,
+                name=patch.name,
+                compatible_modes=patch.compatible_modes,
+            )
+        except TemplateValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return _serialize_template(dto)
+
+    @router.delete("/templates/{template_id}")
+    def delete_template(
+        template_id: str,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        svc = EquityResearchTemplateService(session)
+        row = svc.get(template_id)
+        if row is None:
+            return {"ok": True}
+        if row.owner_scope == "global" and not user.is_admin:
+            raise HTTPException(status_code=403, detail="admin required")
+        if row.owner_scope == "user" and row.owner_user_id != user.id:
+            raise HTTPException(status_code=403, detail="not your template")
+        svc.delete(template_id)
+        return {"ok": True}
 
     return router
