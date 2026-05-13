@@ -1,7 +1,7 @@
 # packages/core/tests/test_system_roles.py
 from openlia.llm.system_roles import (
-    SystemRole,
     SYSTEM_ROLE_IDS,
+    SystemRole,
     get_system_role_label,
 )
 
