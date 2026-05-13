@@ -12,6 +12,8 @@ chat:
 
     {% include "shared/skills_menu.yaml.j2" %}
 
+    {% include "shared/chat_formatting.yaml.j2" %}
+
 batch:
   classify_sentiment:
     system: |
