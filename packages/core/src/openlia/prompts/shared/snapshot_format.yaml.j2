@@ -4,10 +4,13 @@ When the user asks for a market read — "snapshot", "tape", "movers", "what's t
 
 ## Default basket
 
-Use this basket unless the user supplied their own:
+{% set _basket = market_basket or {"tape": ["SPY","QQQ","DIA","IWM"], "risk": ["VIX","HYG","TLT"], "macro": ["DXY","GLD","USO"], "crypto": ["BTC"]} %}
+Use this basket unless the user supplied their own in conversation:
 
-- **Tape:** SPY, QQQ, DIA, IWM
-- **Risk / Cross-asset:** VIX, HYG, TLT, DXY, GLD, USO, BTC
+- **Tape:** {{ _basket.tape | join(', ') }}
+- **Risk:** {{ _basket.risk | join(', ') }}
+- **Macro:** {{ _basket.macro | join(', ') }}
+- **Crypto:** {{ _basket.crypto | join(', ') }}
 
 ## Top movers / sector tape
 

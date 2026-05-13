@@ -104,11 +104,12 @@ def build_secretary_router(
         # Cross-session memory: compute auto-injectable block from the live
         # user message. Deterministic + entity-filtered, so per-turn cost
         # stays near zero when nothing matches.
-        from openlia_server.services import graph_retrieval
+        from openlia_server.services import graph_retrieval, user_prefs
         from openlia_server.services.exemplar_selector import select_exemplars
 
         memory_block = graph_retrieval.retrieve_memory_block(db, user_id=user.id, message=message)
         selected_exemplars = select_exemplars(message)
+        market_basket = user_prefs.get_market_basket(db, user_id=user.id)
         # Persist the user message immediately when a session is supplied.
         if session_id:
             from openlia_server.db.models.content import ChatSession as DbChatSession
@@ -176,6 +177,7 @@ def build_secretary_router(
                     response_length=session_response_length,
                     memory_block=memory_block,
                     selected_exemplars=selected_exemplars,
+                    market_basket=market_basket,
                 ):
                     wire = to_wire(event)
                     etype = wire["type"]

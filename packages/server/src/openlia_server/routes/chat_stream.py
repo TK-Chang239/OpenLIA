@@ -107,11 +107,12 @@ def build_chat_stream_router(
         # user message. Deterministic + entity-filtered, near-zero cost when
         # nothing matches. Applies to every chat-style department on this
         # unified endpoint, not just Secretary.
-        from openlia_server.services import graph_retrieval
+        from openlia_server.services import graph_retrieval, user_prefs
         from openlia_server.services.exemplar_selector import select_exemplars
 
         memory_block = graph_retrieval.retrieve_memory_block(db, user_id=user.id, message=q)
         selected_exemplars = select_exemplars(q)
+        market_basket = user_prefs.get_market_basket(db, user_id=user.id)
 
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         persist = _Persistence(db_session_factory=db_session_factory, session_id=session_id)
@@ -132,6 +133,7 @@ def build_chat_stream_router(
                 disabled_skill_ids=tuple(session_row.disabled_skill_ids or ()),
                 memory_block=memory_block,
                 selected_exemplars=selected_exemplars,
+                market_basket=market_basket,
             ),
             media_type="text/event-stream",
         )
@@ -212,6 +214,7 @@ async def _event_source(
     disabled_skill_ids: tuple[str, ...] = (),
     memory_block: str | None = None,
     selected_exemplars: list[str] | None = None,
+    market_basket: dict[str, list[str]] | None = None,
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
@@ -235,6 +238,7 @@ async def _event_source(
             disabled_skill_ids=disabled_skill_ids,
             memory_block=memory_block,
             selected_exemplars=selected_exemplars,
+            market_basket=market_basket,
         ):
             wire = to_wire(event)
             etype = wire["type"]
