@@ -8,15 +8,18 @@ Drops the per-tier resolution system. Adds llm_slot_defaults to store the
 admin-assigned model for each user-facing department and each internal
 system role. No data backfill - this project is pre-production.
 """
+
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "20260513_0000_remove_tiers"
-down_revision = "20260511_0600_user_prefs_cadence_15min"
-branch_labels = None
-depends_on = None
+revision: str = "20260513_0000_remove_tiers"
+down_revision: str | Sequence[str] | None = "20260511_0600_user_prefs_cadence_15min"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -51,9 +54,7 @@ def upgrade() -> None:
             name=op.f("ck_llm_slot_defaults_slot_kind"),
         ),
     )
-    op.create_index(
-        "ix_llm_slot_defaults_model_id", "llm_slot_defaults", ["model_id"]
-    )
+    op.create_index("ix_llm_slot_defaults_model_id", "llm_slot_defaults", ["model_id"])
 
 
 def downgrade() -> None:
@@ -112,9 +113,7 @@ def downgrade() -> None:
             name=op.f("fk_user_llm_preferences_user_id_users"),
             ondelete="CASCADE",
         ),
-        sa.PrimaryKeyConstraint(
-            "user_id", "tier", name=op.f("pk_user_llm_preferences")
-        ),
+        sa.PrimaryKeyConstraint("user_id", "tier", name=op.f("pk_user_llm_preferences")),
         sa.CheckConstraint(
             "tier IN ('thinking', 'everyday', 'quick')",
             name=op.f("ck_user_llm_preferences_tier_enum"),
