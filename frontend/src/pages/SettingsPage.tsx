@@ -29,7 +29,7 @@ export function SettingsPage(): JSX.Element {
       <Route element={<SettingsShell userRole={user.role} />}>
         <Route index element={<Navigate to="general" replace />} />
         <Route path="general" element={<GeneralSection />} />
-        <Route path="models" element={<ModelsSection />} />
+        <Route path="models" element={<ModelsSection userRole={user.role} />} />
         <Route path="timezone" element={<TimezoneSection />} />
         <Route
           path="account"
