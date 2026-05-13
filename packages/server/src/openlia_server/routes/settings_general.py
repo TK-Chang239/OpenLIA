@@ -147,6 +147,12 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
         await _reregister_graph_extraction(request, db, user.id)
         return _to_out(user, prefs)
 
+    @router.get("/departments")
+    def list_departments(_user: User = require_auth) -> dict:
+        from openlia.departments import get_registered_department_ids
+
+        return {"departments": get_registered_department_ids()}
+
     @router.put("/graph-extraction-time", response_model=PrefsOut)
     async def put_graph_extraction_time(
         payload: GraphExtractionTimeIn,
