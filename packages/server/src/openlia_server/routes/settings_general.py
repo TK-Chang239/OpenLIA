@@ -153,6 +153,27 @@ def build_settings_general_router(*, db_session_factory, mode: str) -> APIRouter
 
         return {"departments": get_registered_department_ids()}
 
+    @router.get("/models")
+    def list_enabled_models(
+        db: Session = Depends(session_dep),
+        _user: User = require_auth,
+    ) -> list[dict]:
+        """Flat list of enabled models for the picker UI."""
+        from openlia_server.db.models.config import LLMModel
+
+        rows = db.query(LLMModel).filter_by(is_enabled=True).all()
+        return [
+            {
+                "id": m.id,
+                "display_name": m.display_name,
+                "provider_id": m.provider_id,
+                "provider_kind": m.provider.kind,
+                "model_ref": m.model_ref,
+                "is_enabled": m.is_enabled,
+            }
+            for m in rows
+        ]
+
     @router.put("/graph-extraction-time", response_model=PrefsOut)
     async def put_graph_extraction_time(
         payload: GraphExtractionTimeIn,
