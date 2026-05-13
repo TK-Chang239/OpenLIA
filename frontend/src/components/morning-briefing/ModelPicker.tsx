@@ -1,46 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import {
   getDepartmentModelPref,
   setDepartmentModelPref,
 } from "../../api/department-model-pref";
-import { getModelsRoster, type RosterEntry } from "../../api/settings";
+import { getEnabledModels, type RosterEntry } from "../../api/settings";
 
 interface Props {
   departmentSlug: string;
   onError?: (msg: string) => void;
 }
 
-interface FlatModel {
-  id: string;
-  label: string;
-  tier: string;
-  providerKind: string;
-}
-
-function flattenRoster(roster: {
-  thinking: RosterEntry[];
-  everyday: RosterEntry[];
-  quick: RosterEntry[];
-}): FlatModel[] {
-  const out: FlatModel[] = [];
-  for (const tier of ["thinking", "everyday", "quick"] as const) {
-    for (const m of roster[tier]) {
-      if (!m.is_enabled) continue;
-      out.push({
-        id: m.id,
-        label: `${m.display_name} (${tier})`,
-        tier,
-        providerKind: m.provider_kind,
-      });
-    }
-  }
-  return out;
-}
-
 export function ModelPicker({ departmentSlug, onError }: Props) {
-  const [models, setModels] = useState<FlatModel[]>([]);
+  const [models, setModels] = useState<RosterEntry[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [hasOverride, setHasOverride] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -49,12 +22,12 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      getModelsRoster(),
+      getEnabledModels(),
       getDepartmentModelPref(departmentSlug),
     ])
       .then(([roster, pref]) => {
         if (cancelled) return;
-        setModels(flattenRoster(roster));
+        setModels(roster.filter((m) => m.is_enabled));
         setSelected(pref.model_id ?? pref.effective_model_id ?? "");
         setHasOverride(pref.model_id !== null);
         setLoading(false);
@@ -69,6 +42,16 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
       cancelled = true;
     };
   }, [departmentSlug, onError]);
+
+  const grouped = useMemo(() => {
+    const byKind = new Map<string, RosterEntry[]>();
+    for (const m of models) {
+      const arr = byKind.get(m.provider_kind) ?? [];
+      arr.push(m);
+      byKind.set(m.provider_kind, arr);
+    }
+    return Array.from(byKind.entries()).map(([kind, items]) => ({ kind, items }));
+  }, [models]);
 
   const onChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = e.target.value;
@@ -94,7 +77,7 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
   const triggerLabel = loading
     ? "Loading…"
     : current
-      ? current.label.replace(/\s*\(.*\)\s*$/, "")
+      ? current.display_name
       : "Select model…";
 
   return (
@@ -111,11 +94,15 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
         <option value="" disabled>
           {loading ? "Loading models…" : "Select a model…"}
         </option>
-        {models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.label}
-            {usingFallback && m.id === selected ? " — default" : ""}
-          </option>
+        {grouped.map((g) => (
+          <optgroup key={g.kind} label={g.kind}>
+            {g.items.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.display_name}
+                {usingFallback && m.id === selected ? " — default" : ""}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <span
