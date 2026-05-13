@@ -9,44 +9,37 @@ vi.mock("../../../api/department-model-pref", () => ({
 }));
 
 vi.mock("../../../api/settings", () => ({
-  getModelsRoster: vi.fn(),
+  getEnabledModels: vi.fn(),
 }));
 
 import {
   getDepartmentModelPref,
   setDepartmentModelPref,
 } from "../../../api/department-model-pref";
-import { getModelsRoster, type ModelsRoster } from "../../../api/settings";
+import { getEnabledModels, type RosterEntry } from "../../../api/settings";
 
-const ROSTER: ModelsRoster = {
-  thinking: [
-    {
-      id: "opus",
-      provider_id: "p1",
-      provider_kind: "anthropic",
-      model_ref: "claude-opus-4",
-      display_name: "Opus",
-      is_tier_default: true,
-      is_enabled: true,
-    },
-  ],
-  everyday: [
-    {
-      id: "sonnet",
-      provider_id: "p1",
-      provider_kind: "anthropic",
-      model_ref: "claude-sonnet-4",
-      display_name: "Sonnet",
-      is_tier_default: true,
-      is_enabled: true,
-    },
-  ],
-  quick: [],
-};
+const MODELS: RosterEntry[] = [
+  {
+    id: "opus",
+    provider_id: "p1",
+    provider_kind: "anthropic",
+    model_ref: "claude-opus-4",
+    display_name: "Opus",
+    is_enabled: true,
+  },
+  {
+    id: "sonnet",
+    provider_id: "p1",
+    provider_kind: "anthropic",
+    model_ref: "claude-sonnet-4",
+    display_name: "Sonnet",
+    is_enabled: true,
+  },
+];
 
 describe("ModelPicker", () => {
   beforeEach(() => {
-    vi.mocked(getModelsRoster).mockResolvedValue(ROSTER);
+    vi.mocked(getEnabledModels).mockResolvedValue(MODELS);
     vi.mocked(setDepartmentModelPref).mockResolvedValue({
       department_id: "morning_briefing",
       model_id: "opus",

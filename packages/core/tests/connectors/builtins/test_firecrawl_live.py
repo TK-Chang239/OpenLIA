@@ -42,9 +42,7 @@ pytestmark = [
 async def _build_dispatcher() -> Dispatcher:
     transport = PythonLibTransport(
         module="firecrawl",
-        instance_factory=InstanceFactory(
-            cls="Firecrawl", args={"api_key": "$FIRECRAWL_API_KEY"}
-        ),
+        instance_factory=InstanceFactory(cls="Firecrawl", args={"api_key": "$FIRECRAWL_API_KEY"}),
         secrets={"FIRECRAWL_API_KEY": os.environ["FIRECRAWL_API_KEY"]},
     )
     discovered = await transport.list_tools()
@@ -72,9 +70,7 @@ async def test_firecrawl_search_result_is_json_serializable_via_dispatch() -> No
     dispatch boundary. Without the to_jsonable fix this would die with
     `TypeError: Object of type SearchData is not JSON serializable`."""
     dispatcher = await _build_dispatcher()
-    raw = await dispatcher.dispatch_tool_use(
-        "firecrawl__search", {"query": "openai", "limit": 3}
-    )
+    raw = await dispatcher.dispatch_tool_use("firecrawl__search", {"query": "openai", "limit": 3})
     coerced = to_jsonable(raw)
     # If this raises, the dispatch path would have crashed in production.
     json.dumps(coerced)
@@ -83,8 +79,6 @@ async def test_firecrawl_search_result_is_json_serializable_via_dispatch() -> No
 async def test_firecrawl_scrape_result_is_json_serializable_via_dispatch() -> None:
     """`scrape` returns a `Document` object — also pydantic-shaped."""
     dispatcher = await _build_dispatcher()
-    raw = await dispatcher.dispatch_tool_use(
-        "firecrawl__scrape", {"url": "https://example.com"}
-    )
+    raw = await dispatcher.dispatch_tool_use("firecrawl__scrape", {"url": "https://example.com"})
     coerced = to_jsonable(raw)
     json.dumps(coerced)

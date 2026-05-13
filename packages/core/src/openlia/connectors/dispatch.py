@@ -64,9 +64,7 @@ class MissingRequiredArgumentError(DispatchError):
         self.tool_name = tool_name
         self.missing = missing
         joined = " or ".join(f"`{m}`" for m in missing)
-        super().__init__(
-            f"{tool_name} requires one of {joined}; none were supplied."
-        )
+        super().__init__(f"{tool_name} requires one of {joined}; none were supplied.")
 
 
 class NeedNotResolved(DispatchError):
@@ -177,9 +175,9 @@ class Dispatcher:
     `candidate_tools()` (chat-routing surface) but remain available to
     `fetch_need` so deterministic dept runs are unaffected. Backs the
     chat-input "Tools" dropdown."""
-    tool_argument_constraints: dict[str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]] = field(  # noqa: E501
-        default_factory=dict
-    )
+    tool_argument_constraints: dict[
+        str, tuple[tuple[str, str, tuple[tuple[str, ...], ...]], ...]
+    ] = field(default_factory=dict)
     """Per-provider pre-dispatch argument constraints. Keyed by
     `provider_id`, each entry is a tuple of
     `(tool_name, kind, payload)` triples. Today only `kind="require_one_of"`

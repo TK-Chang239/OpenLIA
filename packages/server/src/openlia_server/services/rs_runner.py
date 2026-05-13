@@ -1,7 +1,7 @@
 """Retail Sentiment pipeline orchestrator.
 
 Fetches raw posts, produces classifications (via an injected classifier),
-computes the metric snapshot, persists it, and (when a Quick-tier model
+computes the metric snapshot, persists it, and (when a narrative model
 is configured) synthesizes a narrative paragraph for the Insights tab.
 
 Classifiers return a `BatchClassifyResult` (items + audits). For the

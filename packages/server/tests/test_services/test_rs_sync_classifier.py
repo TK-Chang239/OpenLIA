@@ -1,9 +1,9 @@
 """Tests for the Retail Sentiment sync classifier wiring.
 
 Covers both branches:
-  - No LLM tier configured → neutral fallback, no audits.
-  - Tier configured → resolves, builds adapter, emits classified items + one
-    ClassificationAudit per batch.
+  - No LLM configured → neutral fallback, no audits.
+  - Model configured via slot default → resolves, builds adapter, emits
+    classified items + one ClassificationAudit per batch.
 
 Also asserts that the app factory installs `RefreshingSyncLlmClassifier` on
 `app.state.rs_runner._classifier` (replacing the `NeutralClassifier` default).
@@ -20,6 +20,7 @@ from openlia.llm.types import LLMResponse
 from openlia.retail_sentiment.schemas import RawSocialPost
 from openlia_server.services import llm_providers as svc
 from openlia_server.services.rs_sync_classifier import RefreshingSyncLlmClassifier
+from openlia_server.services.slot_defaults import set_slot_default
 
 
 @pytest.fixture
@@ -39,7 +40,7 @@ def _post(pid: str, text: str) -> RawSocialPost:
     )
 
 
-def test_refreshing_classifier_falls_back_to_neutral_when_no_tier_configured(
+def test_refreshing_classifier_falls_back_to_neutral_when_no_model_configured(
     _env_secret, db_session_factory, create_tables
 ) -> None:
     classifier = RefreshingSyncLlmClassifier(db_session_factory=db_session_factory)
@@ -63,13 +64,14 @@ def test_refreshing_classifier_uses_configured_model(
         env_var_name=None,
         extra_config=None,
     )
-    svc.create_model(
+    model = svc.create_model(
         db_session,
         provider_id=provider.id,
-        tier="quick",
         model_ref="gpt-5.4-nano",
         display_name="Nano",
-        is_tier_default=True,
+    )
+    set_slot_default(
+        db_session, slot_kind="department", slot_id="retail_sentiment", model_id=model.id
     )
     db_session.commit()
 
@@ -124,13 +126,14 @@ def test_refreshing_classifier_provider_exception_falls_back_to_neutral(
         env_var_name=None,
         extra_config=None,
     )
-    svc.create_model(
+    model = svc.create_model(
         db_session,
         provider_id=provider.id,
-        tier="quick",
         model_ref="gpt-5.4-nano",
         display_name="Nano",
-        is_tier_default=True,
+    )
+    set_slot_default(
+        db_session, slot_kind="department", slot_id="retail_sentiment", model_id=model.id
     )
     db_session.commit()
 

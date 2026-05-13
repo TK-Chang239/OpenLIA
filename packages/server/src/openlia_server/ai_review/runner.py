@@ -1,4 +1,9 @@
-"""AI review orchestrator — calls Quick-tier LLM + parses JSON response."""
+"""AI review orchestrator.
+
+Calls the model assigned to the ``ai_review`` system role (resolved by
+the caller via ``_resolve_provider_for_role(db, "ai_review")``) and
+parses the JSON response.
+"""
 
 from __future__ import annotations
 

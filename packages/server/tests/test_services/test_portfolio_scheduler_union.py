@@ -34,9 +34,7 @@ def _seed_user(db_session, uid: str, cadence: str) -> None:
 def _add_holding(db_session, uid: str, ticker: str) -> None:
     from openlia_server.db.models.content import PortfolioHolding
 
-    db_session.add(
-        PortfolioHolding(id=f"h-{uid}-{ticker}", user_id=uid, ticker=ticker)
-    )
+    db_session.add(PortfolioHolding(id=f"h-{uid}-{ticker}", user_id=uid, ticker=ticker))
     db_session.commit()
 
 
@@ -50,9 +48,7 @@ def test_single_user_hourly_holds_one_ticker(create_tables, db_session: Session)
     assert union == [("AAPL", 3600)]
 
 
-def test_floor_takes_minimum_cadence_across_holders(
-    create_tables, db_session: Session
-) -> None:
+def test_floor_takes_minimum_cadence_across_holders(create_tables, db_session: Session) -> None:
     from openlia_server.services.portfolio_quote_refresh import scheduler_union
 
     _seed_user(db_session, "u1", "weekly")
@@ -74,9 +70,7 @@ def test_manual_only_ticker_excluded(create_tables, db_session: Session) -> None
     assert union == []
 
 
-def test_manual_user_free_rides_on_polling_user(
-    create_tables, db_session: Session
-) -> None:
+def test_manual_user_free_rides_on_polling_user(create_tables, db_session: Session) -> None:
     from openlia_server.services.portfolio_quote_refresh import scheduler_union
 
     _seed_user(db_session, "u1", "manual")
@@ -93,9 +87,7 @@ def test_skips_groups_meta_pseudo_holding(create_tables, db_session: Session) ->
     from openlia_server.services.portfolio_quote_refresh import scheduler_union
 
     _seed_user(db_session, "u1", "hourly")
-    db_session.add(
-        PortfolioHolding(id="meta-1", user_id="u1", ticker="__GROUPS__")
-    )
+    db_session.add(PortfolioHolding(id="meta-1", user_id="u1", ticker="__GROUPS__"))
     db_session.commit()
 
     assert scheduler_union(db_session) == []

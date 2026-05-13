@@ -30,9 +30,7 @@ def test_portfolio_price_refresh_job_key_is_global() -> None:
     from openlia_server.scheduler.registry import PORTFOLIO_PRICE_REFRESH_KEY
 
     assert PORTFOLIO_PRICE_REFRESH_KEY == "portfolio_price_refresh"
-    assert job_key(JobType.PORTFOLIO_PRICE_REFRESH, user_id=None) == (
-        "portfolio_price_refresh"
-    )
+    assert job_key(JobType.PORTFOLIO_PRICE_REFRESH, user_id=None) == ("portfolio_price_refresh")
 
 
 def test_job_statuses_match_spec() -> None:

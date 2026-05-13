@@ -62,13 +62,13 @@ def test_chat_done_carries_stop_reason() -> None:
 def test_chat_error_includes_class_and_message() -> None:
     e = ChatError(
         message_id="m_1",
-        error_class="TierNotConfiguredError",
-        message="No enabled models configured in tier 'thinking'.",
+        error_class="ModelNotConfiguredError",
+        message="No model is configured for department='equity_research'.",
     )
     d = to_wire(e)
     assert d["type"] == "chat.error"
-    assert d["error_class"] == "TierNotConfiguredError"
-    assert "thinking" in d["message"]
+    assert d["error_class"] == "ModelNotConfiguredError"
+    assert "equity_research" in d["message"]
 
 
 def test_chat_report_thumbnail_links_report_id() -> None:

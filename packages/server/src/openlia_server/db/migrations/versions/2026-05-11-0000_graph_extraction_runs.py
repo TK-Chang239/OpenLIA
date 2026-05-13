@@ -57,7 +57,9 @@ def upgrade() -> None:
         ),
         sa.Column("error", sa.String(length=256), nullable=True),
         sa.ForeignKeyConstraint(
-            ["user_id"], ["users.id"], ondelete="CASCADE",
+            ["user_id"],
+            ["users.id"],
+            ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
     )

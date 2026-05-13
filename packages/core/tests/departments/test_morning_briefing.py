@@ -37,7 +37,3 @@ def test_mb_does_not_require_runner():
 
 def test_mb_has_no_extra_tools():
     assert MorningBriefingDepartment().extra_tools == ()
-
-
-def test_mb_tier_is_everyday():
-    assert MorningBriefingDepartment().tier == "everyday"

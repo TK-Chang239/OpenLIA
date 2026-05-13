@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-from openlia.llm.exceptions import TierNotConfiguredError
+from openlia.llm.exceptions import ModelNotConfiguredError
 from openlia_server.db import session as session_mod
 from openlia_server.db.base import Base
 from openlia_server.db.models.auth import User
@@ -18,7 +18,7 @@ class _RaisingChatRunner:
     async def run(
         self, *, department_id, user_id, messages, attachments=None, cancel_token=None, **_
     ):
-        raise TierNotConfiguredError("everyday")
+        raise ModelNotConfiguredError(slot_kind="department", slot_id="secretary")
         yield  # unreachable; makes this an async generator
 
 
@@ -68,7 +68,7 @@ def test_raising_runner_emits_single_terminal_error_frame(stream_client) -> None
     frames = _frames_from(r.text)
     assert len(frames) == 1
     assert frames[0]["type"] == "chat.error"
-    assert frames[0]["error_class"] == "TierNotConfiguredError"
+    assert frames[0]["error_class"] == "ModelNotConfiguredError"
     # Error frames must still be named so the client's `error` listener fires.
     assert "event: chat.error" in r.text
 

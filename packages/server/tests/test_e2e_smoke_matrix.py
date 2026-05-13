@@ -149,33 +149,31 @@ def test_journey_personal_full_setup_models_and_providers(db_session, monkeypatc
     assert client.post("/setup/mode", json={"mode": "personal"}).status_code == 200
     assert client.post("/setup/identity", json={"display_name": "TK"}).status_code == 200
 
+    from openlia.departments import get_registered_department_ids
+    from openlia.llm.system_roles import SYSTEM_ROLE_IDS
+
     models = {
-        "thinking": [
+        "models": [
             {
-                "provider": "ollama",
-                "model": "llama3.1:70b",
+                "provider_kind": "ollama",
                 "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
-        "everyday": [
+                "model_ref": "llama3.1:70b",
+                "display_name": "Llama 3.1 70B",
+            },
             {
-                "provider": "ollama",
-                "model": "llama3.1:8b",
+                "provider_kind": "ollama",
                 "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
+                "model_ref": "llama3.1:8b",
+                "display_name": "Llama 3.1 8B",
+            },
         ],
-        "quick": [
-            {
-                "provider": "ollama",
-                "model": "qwen2.5:7b",
-                "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
+        "department_defaults": {
+            dept_id: "llama3.1:70b" for dept_id in get_registered_department_ids()
+        },
+        "system_role_defaults": {role_id: "llama3.1:8b" for role_id in SYSTEM_ROLE_IDS},
     }
-    assert client.post("/setup/models", json=models).status_code == 200
+    resp = client.post("/setup/models", json=models)
+    assert resp.status_code == 200, resp.text
 
     # v2 connectors flow — single category-financial CLI MCP connector.
     fin = client.post(

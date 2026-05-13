@@ -162,6 +162,7 @@ def test_build_user_scoped_portfolio(create_tables, db_session: Session) -> None
     assert req.reference_portfolio is None
     assert "TSLA" not in req.user_input
 
+
 def test_build_applies_per_run_overrides(create_tables, db_session: Session) -> None:
     """Per-run overrides replace saved fields without persisting."""
     _mk_user(db_session)
@@ -181,9 +182,7 @@ def test_build_applies_per_run_overrides(create_tables, db_session: Session) -> 
     overrides = MbConfigOverrides(
         report_length="concise",
         enabled_section_ids=["executive_summary"],
-        custom_sections=[
-            {"id": "tmp", "title": "Ad-hoc focus", "description": "this run only"}
-        ],
+        custom_sections=[{"id": "tmp", "title": "Ad-hoc focus", "description": "this run only"}],
     )
 
     builder = MbRequestBuilderImpl()

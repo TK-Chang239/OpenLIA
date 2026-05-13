@@ -28,9 +28,6 @@ vi.mock('../../components/settings/admin/UsersPanel', () => ({
 vi.mock('../../components/settings/admin/ResetRequestsPanel', () => ({
   ResetRequestsPanel: () => <p>resets body</p>,
 }));
-vi.mock('../../components/settings/admin/ModelsAdminPanel', () => ({
-  ModelsAdminPanel: () => <p>admin models body</p>,
-}));
 
 import * as currentUserModule from '../../auth/useCurrentUser';
 

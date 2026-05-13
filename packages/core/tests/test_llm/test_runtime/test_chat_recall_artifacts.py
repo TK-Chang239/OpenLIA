@@ -27,7 +27,6 @@ from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     Capabilities,
-    ModelTier,
     ProviderCredentials,
     ResolvedModel,
     ToolCall,
@@ -63,7 +62,6 @@ def _resolved() -> ResolvedModel:
         provider_id="p1",
         model_id="m1",
         model_ref="fake-1",
-        tier=ModelTier.EVERYDAY,
         credentials=ProviderCredentials(api_key="k", base_url=None),
         capabilities=Capabilities(streaming=True, tool_calling=True, structured_output=True),
         overrides={},
@@ -71,23 +69,13 @@ def _resolved() -> ResolvedModel:
 
 
 class _Registry:
-    def get_department_tier_override(self, department_id: str):
-        return None
-
-    def get_user_preference(self, user_id, tier):
-        return None
-
-    def get_tier_default(self, tier):
-        return None
-
-    def get_any_in_tier(self, tier):
-        return None
+    pass
 
 
 def _always_resolved():
     resolved = _resolved()
 
-    def _resolve(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
+    def _resolve(*, department_id, user_id, registry, model_id_override=None):
         return resolved
 
     return _resolve

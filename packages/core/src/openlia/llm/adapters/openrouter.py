@@ -37,8 +37,7 @@ def _to_messages(req: LLMRequest) -> list[dict]:
     # (image_url, multi-text). Tool results and assistant tool-call turns
     # need OpenRouter-specific shapes and are still handled below.
     rendered_by_idx = {
-        i: dict_msg
-        for i, dict_msg in enumerate(render_openai_messages(list(req.messages)))
+        i: dict_msg for i, dict_msg in enumerate(render_openai_messages(list(req.messages)))
     }
     for i, m in enumerate(req.messages):
         if m.role == "tool":

@@ -277,9 +277,7 @@ def build_morning_briefing_router(
                     reference_portfolio=payload.reference_portfolio,
                 )
             except ValueError as exc:
-                raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
-                ) from exc
+                raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
         async def gen() -> AsyncIterator[bytes]:
             try:

@@ -41,9 +41,7 @@ def test_set_graph_extraction_time_persists(create_tables, db_session: Session) 
     assert prefs.graph_extraction_time == "04:30"
 
 
-def test_set_graph_extraction_time_rejects_malformed(
-    create_tables, db_session: Session
-) -> None:
+def test_set_graph_extraction_time_rejects_malformed(create_tables, db_session: Session) -> None:
     u = _user(db_session)
     with pytest.raises(ValueError):
         user_prefs.set_graph_extraction_time(db_session, user_id=u.id, time="25:99")
@@ -84,9 +82,7 @@ def test_finish_run_records_error(create_tables, db_session: Session) -> None:
     assert refreshed.finished_at is not None
 
 
-def test_high_watermark_returns_latest_successful(
-    create_tables, db_session: Session
-) -> None:
+def test_high_watermark_returns_latest_successful(create_tables, db_session: Session) -> None:
     """Watermark = the start time of the most recent successful run.
     Failed runs (error != None) must not advance it — otherwise an
     LLM outage silently drops yesterday's chat from the next extraction."""
