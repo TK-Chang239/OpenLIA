@@ -27,6 +27,11 @@ describe("equity-research api", () => {
         stock_update: [],
         sector_research: [],
       },
+      selected_template_id_by_mode: {
+        stock_initiation: "default",
+        stock_update: "default",
+        sector_research: "default",
+      },
     };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

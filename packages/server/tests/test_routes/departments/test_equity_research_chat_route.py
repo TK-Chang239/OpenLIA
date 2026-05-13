@@ -138,3 +138,71 @@ def test_chat_route_rejects_unknown_session(company_client, auth_user):
         json={"message": "hi", "session_id": "missing"},
     )
     assert r.status_code == 404
+
+
+class _AttachmentCapturingRunner:
+    def __init__(self, events: list[Any]) -> None:
+        self._events = events
+        self.last_kwargs: dict[str, Any] | None = None
+
+    async def run(self, **kwargs: Any):
+        self.last_kwargs = kwargs
+        for event in self._events:
+            yield event
+
+
+def test_chat_route_accepts_multipart_with_files(company_client, auth_user, db_session):
+    runner = _AttachmentCapturingRunner(_scripted_events())
+    company_client.app.state.chat_runner_factory = lambda: runner
+
+    sess = chat_sessions_svc.create_session(
+        db_session, user_id=auth_user.id, department="equity_research", title="t"
+    )
+    r = company_client.post(
+        "/departments/equity-research/chat",
+        data={"message": "analyze this brief", "session_id": sess.id},
+        files=[("files", ("brief.txt", b"AAPL Q4 brief contents", "text/plain"))],
+    )
+    assert r.status_code == 200
+    list(r.iter_lines())
+    assert runner.last_kwargs is not None
+    attachments = runner.last_kwargs.get("attachments")
+    assert attachments is not None and len(attachments) == 1
+    assert attachments[0].filename == "brief.txt"
+    assert attachments[0].extracted_text == "AAPL Q4 brief contents"
+
+
+def test_chat_route_threads_session_disabled_lists_and_response_length(
+    company_client, auth_user, db_session
+):
+    runner = _AttachmentCapturingRunner(_scripted_events())
+    company_client.app.state.chat_runner_factory = lambda: runner
+
+    sess = chat_sessions_svc.create_session(
+        db_session, user_id=auth_user.id, department="equity_research", title="t"
+    )
+    sess.disabled_connector_ids = ["financial:fmp"]
+    sess.disabled_skill_ids = ["macro_outlook"]
+    sess.response_length = "concise"
+    db_session.commit()
+
+    r = company_client.post(
+        "/departments/equity-research/chat",
+        json={"message": "summary?", "session_id": sess.id},
+    )
+    assert r.status_code == 200
+    list(r.iter_lines())
+    assert runner.last_kwargs is not None
+    assert runner.last_kwargs.get("disabled_connector_ids") == ("financial:fmp",)
+    assert runner.last_kwargs.get("disabled_skill_ids") == ("macro_outlook",)
+    assert runner.last_kwargs.get("response_length") == "concise"
+
+
+def test_chat_route_rejects_multipart_without_session(company_client, auth_user):
+    company_client.app.state.chat_runner_factory = lambda: _ScriptedChatRunner(_scripted_events())
+    r = company_client.post(
+        "/departments/equity-research/chat",
+        data={"message": "x"},
+        files=[("files", ("a.txt", b"abc", "text/plain"))],
+    )
+    assert r.status_code == 400

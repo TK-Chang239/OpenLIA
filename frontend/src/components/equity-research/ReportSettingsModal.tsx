@@ -1,16 +1,19 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Plus, X } from "lucide-react";
-import { type JSX, useEffect, useState } from "react";
+import { type JSX, useCallback, useEffect, useState } from "react";
 
 import {
   type CustomSection,
   type ErConfig,
   type ErConfigPatch,
+  type ErTemplate,
   type ReportLength,
   type ReportMode,
 } from "../../api/equity-research";
+import { useCurrentUser } from "../../auth/useCurrentUser";
 import { SECTION_CATALOG } from "../../lib/equity-research/section-catalog";
 import { CustomSectionRow } from "./CustomSectionRow";
+import { TemplateInfoCard, TemplatePickerSection } from "./TemplatePickerSection";
 
 const MODE_LABELS: Record<ReportMode, string> = {
   stock_initiation: "Stock Initiation",
@@ -89,6 +92,16 @@ export function ReportSettingsModal({
   const [sections, setSections] = useState(config.sections_by_mode);
   const [customs, setCustoms] = useState(config.custom_sections_by_mode);
   const [pendingCustom, setPendingCustom] = useState<CustomSection | null>(null);
+  const [selectedTemplateByMode, setSelectedTemplateByMode] = useState<
+    Record<ReportMode, string>
+  >(() => normalizeSelected(config.selected_template_id_by_mode));
+  const [activeTemplate, setActiveTemplate] = useState<ErTemplate | null>(null);
+  const currentUser = useCurrentUser();
+  const isAdmin = currentUser?.role === "admin";
+  const handleActiveTemplateChange = useCallback(
+    (t: ErTemplate | null) => setActiveTemplate(t),
+    [],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -97,7 +110,10 @@ export function ReportSettingsModal({
     setSections(config.sections_by_mode);
     setCustoms(config.custom_sections_by_mode);
     setPendingCustom(null);
+    setSelectedTemplateByMode(normalizeSelected(config.selected_template_id_by_mode));
   }, [open, config]);
+
+  const templateActive = (selectedTemplateByMode[mode] ?? "default") !== "default";
 
   const toggleSection = (id: string) => {
     const current = new Set(sections[mode]);
@@ -128,6 +144,7 @@ export function ReportSettingsModal({
       report_length: length,
       sections_by_mode: sections,
       custom_sections_by_mode: customs,
+      selected_template_id_by_mode: selectedTemplateByMode,
     });
     onClose();
   };
@@ -184,131 +201,155 @@ export function ReportSettingsModal({
               />
             </section>
 
-            <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
-              <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                Sections ·{" "}
-                <strong className="font-medium text-[--color-text-primary]">
-                  {MODE_FULL_LABEL[mode]}
-                </strong>
-              </span>
-              <ul className="m-0 mt-1 flex list-none flex-col p-0">
-                {SECTION_CATALOG[mode].map((s, idx) => {
-                  const checked = sections[mode].includes(s.id);
-                  const last = idx === SECTION_CATALOG[mode].length - 1;
-                  return (
-                    <li
-                      key={s.id}
-                      className={[
-                        "group flex cursor-pointer items-center gap-[10px] py-[9px]",
-                        last
-                          ? ""
-                          : "border-b border-dashed border-[--color-border-subtle]",
-                      ].join(" ")}
-                      onClick={() => toggleSection(s.id)}
-                    >
-                      <span
-                        aria-hidden="true"
-                        className={[
-                          "inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[4px] border-[1.5px] transition-colors",
-                          checked
-                            ? "border-[--color-accent-primary] bg-[--color-accent-primary] text-[--color-accent-on]"
-                            : "border-[--color-border-strong]",
-                        ].join(" ")}
-                      >
-                        {checked ? (
-                          <Check size={10} strokeWidth={3} />
-                        ) : null}
-                      </span>
-                      <span className="w-5 font-mono text-[10px] tracking-[0.04em] text-[--color-text-tertiary]">
-                        {String(idx + 1).padStart(2, "0")}
-                      </span>
-                      <span className="flex-1 text-[13.5px] text-[--color-text-primary] transition-colors group-hover:text-[--color-feedback-success]">
-                        {s.title}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+            <TemplatePickerSection
+              mode={mode}
+              selectedId={selectedTemplateByMode[mode] ?? "default"}
+              onSelectedIdChange={(id) =>
+                setSelectedTemplateByMode({
+                  ...selectedTemplateByMode,
+                  [mode]: id,
+                })
+              }
+              isAdmin={isAdmin}
+              onActiveTemplateChange={handleActiveTemplateChange}
+            />
 
-            <section className="px-[22px] py-[18px]">
-              <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                Custom Sections
-              </span>
-              {customs[mode].map((c, i) => (
-                <CustomSectionRow
-                  key={c.id}
-                  section={c}
-                  onChange={(next) => {
-                    const copy = [...customs[mode]];
-                    copy[i] = next;
-                    setCustoms({ ...customs, [mode]: copy });
-                  }}
-                  onRemove={() => {
-                    const copy = customs[mode].filter((_, j) => j !== i);
-                    setCustoms({ ...customs, [mode]: copy });
-                  }}
-                />
-              ))}
-              {pendingCustom ? (
-                <div className="mb-2 space-y-2 rounded-md border border-[--color-border-subtle] p-2">
-                  <input
-                    aria-label="New custom section title"
-                    placeholder="Title"
-                    autoFocus
-                    className="w-full rounded-sm border border-[--color-border-subtle] bg-[--color-bg-input] px-2 py-1 text-sm"
-                    value={pendingCustom.title}
-                    onChange={(e) =>
-                      setPendingCustom({
-                        ...pendingCustom,
-                        title: e.target.value,
-                      })
-                    }
-                  />
-                  <textarea
-                    aria-label="New custom section description"
-                    placeholder="Description (optional)"
-                    rows={2}
-                    className="w-full rounded-sm border border-[--color-border-subtle] bg-[--color-bg-input] px-2 py-1 text-xs"
-                    value={pendingCustom.description ?? ""}
-                    onChange={(e) =>
-                      setPendingCustom({
-                        ...pendingCustom,
-                        description: e.target.value || null,
-                      })
-                    }
-                  />
-                  <div className="flex justify-end gap-2">
+            {templateActive && activeTemplate ? (
+              <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
+                <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                  Template Structure
+                </span>
+                <TemplateInfoCard template={activeTemplate} />
+              </section>
+            ) : (
+              <>
+                <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
+                  <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                    Sections ·{" "}
+                    <strong className="font-medium text-[--color-text-primary]">
+                      {MODE_FULL_LABEL[mode]}
+                    </strong>
+                  </span>
+                  <ul className="m-0 mt-1 flex list-none flex-col p-0">
+                    {SECTION_CATALOG[mode].map((s, idx) => {
+                      const checked = sections[mode].includes(s.id);
+                      const last = idx === SECTION_CATALOG[mode].length - 1;
+                      return (
+                        <li
+                          key={s.id}
+                          className={[
+                            "group flex cursor-pointer items-center gap-[10px] py-[9px]",
+                            last
+                              ? ""
+                              : "border-b border-dashed border-[--color-border-subtle]",
+                          ].join(" ")}
+                          onClick={() => toggleSection(s.id)}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={[
+                              "inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-[4px] border-[1.5px] transition-colors",
+                              checked
+                                ? "border-[--color-accent-primary] bg-[--color-accent-primary] text-[--color-accent-on]"
+                                : "border-[--color-border-strong]",
+                            ].join(" ")}
+                          >
+                            {checked ? (
+                              <Check size={10} strokeWidth={3} />
+                            ) : null}
+                          </span>
+                          <span className="w-5 font-mono text-[10px] tracking-[0.04em] text-[--color-text-tertiary]">
+                            {String(idx + 1).padStart(2, "0")}
+                          </span>
+                          <span className="flex-1 text-[13.5px] text-[--color-text-primary] transition-colors group-hover:text-[--color-feedback-success]">
+                            {s.title}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+
+                <section className="px-[22px] py-[18px]">
+                  <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                    Custom Sections
+                  </span>
+                  {customs[mode].map((c, i) => (
+                    <CustomSectionRow
+                      key={c.id}
+                      section={c}
+                      onChange={(next) => {
+                        const copy = [...customs[mode]];
+                        copy[i] = next;
+                        setCustoms({ ...customs, [mode]: copy });
+                      }}
+                      onRemove={() => {
+                        const copy = customs[mode].filter((_, j) => j !== i);
+                        setCustoms({ ...customs, [mode]: copy });
+                      }}
+                    />
+                  ))}
+                  {pendingCustom ? (
+                    <div className="mb-2 space-y-2 rounded-md border border-[--color-border-subtle] p-2">
+                      <input
+                        aria-label="New custom section title"
+                        placeholder="Title"
+                        autoFocus
+                        className="w-full rounded-sm border border-[--color-border-subtle] bg-[--color-bg-input] px-2 py-1 text-sm"
+                        value={pendingCustom.title}
+                        onChange={(e) =>
+                          setPendingCustom({
+                            ...pendingCustom,
+                            title: e.target.value,
+                          })
+                        }
+                      />
+                      <textarea
+                        aria-label="New custom section description"
+                        placeholder="Description (optional)"
+                        rows={2}
+                        className="w-full rounded-sm border border-[--color-border-subtle] bg-[--color-bg-input] px-2 py-1 text-xs"
+                        value={pendingCustom.description ?? ""}
+                        onChange={(e) =>
+                          setPendingCustom({
+                            ...pendingCustom,
+                            description: e.target.value || null,
+                          })
+                        }
+                      />
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPendingCustom(null)}
+                          className="h-7 px-2 text-sm text-[--color-text-secondary] hover:text-[--color-text-primary]"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={addCustom}
+                          disabled={!pendingCustom.title}
+                          className="h-7 rounded-sm bg-[--color-accent-primary] px-2 text-sm text-[--color-accent-on] disabled:opacity-40"
+                        >
+                          Add section
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      onClick={() => setPendingCustom(null)}
-                      className="h-7 px-2 text-sm text-[--color-text-secondary] hover:text-[--color-text-primary]"
+                      onClick={() =>
+                        setPendingCustom({ id: "", title: "", description: null })
+                      }
+                      className="inline-flex h-7 items-center gap-[6px] rounded-md border border-dashed border-[--color-border-strong] bg-transparent px-[11px] font-display text-[12px] text-[--color-text-secondary] transition-all hover:border-solid hover:border-[--color-feedback-success] hover:bg-[rgba(212,255,0,0.05)] hover:text-[--color-feedback-success]"
                     >
-                      Cancel
+                      <Plus size={11} strokeWidth={2} />
+                      Add custom section
                     </button>
-                    <button
-                      type="button"
-                      onClick={addCustom}
-                      disabled={!pendingCustom.title}
-                      className="h-7 rounded-sm bg-[--color-accent-primary] px-2 text-sm text-[--color-accent-on] disabled:opacity-40"
-                    >
-                      Add section
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPendingCustom({ id: "", title: "", description: null })
-                  }
-                  className="inline-flex h-7 items-center gap-[6px] rounded-md border border-dashed border-[--color-border-strong] bg-transparent px-[11px] font-display text-[12px] text-[--color-text-secondary] transition-all hover:border-solid hover:border-[--color-feedback-success] hover:bg-[rgba(212,255,0,0.05)] hover:text-[--color-feedback-success]"
-                >
-                  <Plus size={11} strokeWidth={2} />
-                  Add custom section
-                </button>
-              )}
-            </section>
+                  )}
+                </section>
+              </>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[14px]">
@@ -331,4 +372,20 @@ export function ReportSettingsModal({
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function normalizeSelected(
+  raw: ErConfig["selected_template_id_by_mode"] | undefined,
+): Record<ReportMode, string> {
+  const out: Record<ReportMode, string> = {
+    stock_initiation: "default",
+    stock_update: "default",
+    sector_research: "default",
+  };
+  if (!raw) return out;
+  for (const m of Object.keys(out) as ReportMode[]) {
+    const v = raw[m];
+    if (typeof v === "string" && v) out[m] = v;
+  }
+  return out;
 }

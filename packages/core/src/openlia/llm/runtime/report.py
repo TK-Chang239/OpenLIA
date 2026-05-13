@@ -30,6 +30,10 @@ from typing import Any
 from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError, ModelNotConfiguredError
 from openlia.llm.resolver import ModelRegistry
+from openlia.llm.runtime.attachments import (
+    AttachmentNotSupportedError,
+    materialize_for_model,
+)
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.events import (
     ReportComplete,
@@ -42,7 +46,7 @@ from openlia.llm.runtime.events import (
     ReportToolCallStart,
     SseEvent,
 )
-from openlia.llm.runtime.messages import ReportRequest
+from openlia.llm.runtime.messages import Attachment, ContentBlock, ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolDispatcher
 from openlia.llm.types import (
@@ -287,6 +291,19 @@ def _section_titles(framework: dict[str, Any]) -> list[str]:
     return [s.get("title", s.get("id", "Section")) for s in framework.get("sections", [])]
 
 
+_MODE_LABELS = {
+    "stock_initiation": "Stock Initiation Report",
+    "stock_update": "Stock Update Report",
+    "sector_research": "Sector Research Report",
+    "earnings_update": "Earnings Update",
+    "morning_briefing": "Morning Briefing",
+}
+
+
+def _mode_label(mode: str) -> str:
+    return _MODE_LABELS.get(mode, "Report")
+
+
 def _tool_name_for_result(response: Any, call_id: str) -> str:
     for call in response.tool_calls:
         if call.id == call_id:
@@ -334,12 +351,19 @@ class ReportRunner:
         user_id: str | None,
         request: ReportRequest,
         cancel_token: CancellationToken | None = None,
+        attachments: list[Attachment] | None = None,
+        model_id_override: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
-        framework_raw = _load_framework(self._frameworks_root, request.mode)
-        framework = _customize_framework(framework_raw, request)
-        style_guide = _load_style_guide(self._frameworks_root, request.mode)
+        using_user_template = bool(request.user_template_text)
+        if using_user_template:
+            framework: dict[str, Any] = {"sections": [], "length_preference": request.length}
+            style_guide = ""
+        else:
+            framework_raw = _load_framework(self._frameworks_root, request.mode)
+            framework = _customize_framework(framework_raw, request)
+            style_guide = _load_style_guide(self._frameworks_root, request.mode)
 
         self._trace(
             "report.request",
@@ -366,6 +390,7 @@ class ReportRunner:
                 department_id=department_id,
                 user_id=user_id,
                 registry=self._registry,
+                model_id_override=model_id_override,
             )
         except (LLMProviderError, ModelNotConfiguredError) as exc:
             self._trace(
@@ -379,6 +404,28 @@ class ReportRunner:
                 message=str(exc),
             )
             return
+
+        try:
+            materialized = materialize_for_model(
+                attachments or (),
+                capabilities=resolved.capabilities,
+                available_token_budget=max(
+                    1,
+                    resolved.capabilities.max_context_tokens
+                    - resolved.capabilities.max_output_tokens
+                    - 4_000,
+                ),
+            )
+        except AttachmentNotSupportedError as exc:
+            yield ReportError(
+                report_id=report_id,
+                error_class=type(exc).__name__,
+                message=str(exc),
+            )
+            return
+        materialized_blocks: tuple[ContentBlock, ...] = tuple(materialized.blocks)
+        for warning in materialized.warnings:
+            self._trace("attachment.warning", warning, None)
 
         self._trace(
             "llm.resolved",
@@ -402,22 +449,36 @@ class ReportRunner:
         now = datetime.now(UTC)
         current_date = now.date().isoformat()
         current_date_long = f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
-        user_msg = self._prompts.render(
-            department_id,
-            f"report.{request.mode}.user",
-            user_input=request.user_input,
-            framework=framework,
-            length=request.length,
-            enabled_sections=request.enabled_sections,
-            custom_sections=request.custom_sections,
-            section_topics=request.section_topics,
-            reference_portfolio=request.reference_portfolio,
-            current_date=current_date,
-            current_date_long=current_date_long,
-            has_tools=bool(tools),
-        )
+        if using_user_template:
+            user_msg = self._prompts.render(
+                department_id,
+                "report.user_template.user",
+                user_input=request.user_input,
+                length=request.length,
+                user_template_text=request.user_template_text or "",
+                template_name=request.user_template_name or "(unnamed)",
+                mode_label=_mode_label(request.mode),
+                current_date=current_date,
+                current_date_long=current_date_long,
+                has_tools=bool(tools),
+            )
+        else:
+            user_msg = self._prompts.render(
+                department_id,
+                f"report.{request.mode}.user",
+                user_input=request.user_input,
+                framework=framework,
+                length=request.length,
+                enabled_sections=request.enabled_sections,
+                custom_sections=request.custom_sections,
+                section_topics=request.section_topics,
+                reference_portfolio=request.reference_portfolio,
+                current_date=current_date,
+                current_date_long=current_date_long,
+                has_tools=bool(tools),
+            )
 
-        conversation = [Message(role="user", content=user_msg)]
+        conversation = [Message(role="user", content=user_msg, content_blocks=materialized_blocks)]
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
