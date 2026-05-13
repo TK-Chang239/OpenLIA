@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from openlia.connectors.types import Category
-from openlia.departments.base import Tier
 
 
 @dataclass(frozen=True)
@@ -15,7 +14,6 @@ class RetailSentimentDepartment:
     display_name: str = "Retail Sentiment"
     prompt_name: str = "retail_sentiment"
     department_type: str = "dashboard"
-    tier: Tier = "quick"
 
     # Connector dependencies (spec §10.1, §9.5).
     # RS pulls social posts via the financial connectors' sentiment endpoints

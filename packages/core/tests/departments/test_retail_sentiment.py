@@ -9,10 +9,6 @@ def test_rs_identifies_itself():
     assert d.prompt_name == "retail_sentiment"
 
 
-def test_rs_tier_is_quick():
-    assert RetailSentimentDepartment().tier == "quick"
-
-
 def test_rs_required_categories():
     # Spec §10.1, §9.5: RS pulls social posts via the financial connectors'
     # sentiment endpoints; required category is `financial`, not `social`.
