@@ -15,8 +15,8 @@ from typing import Any
 
 from sqlalchemy.orm import sessionmaker
 
-from openlia_server.services.dispatcher_factory import build_dispatcher
 from openlia_server.services.connectors_service import _NEED_DEPARTMENT_MAP
+from openlia_server.services.dispatcher_factory import build_dispatcher
 
 
 class ConnectorFinancialAdapter:
