@@ -10,3 +10,5 @@ chat:
     driving it? Hand off to: Macro Research for the underlying narrative.
 
     {% include "shared/skills_menu.yaml.j2" %}
+
+    {% include "shared/chat_formatting.yaml.j2" %}
