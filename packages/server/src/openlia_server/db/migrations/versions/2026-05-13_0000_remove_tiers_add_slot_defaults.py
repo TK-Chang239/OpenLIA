@@ -47,7 +47,8 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("slot_kind", "slot_id"),
         sa.CheckConstraint(
-            "slot_kind IN ('department','system_role')", name="slot_kind_enum"
+            "slot_kind IN ('department','system_role')",
+            name=op.f("ck_llm_slot_defaults_slot_kind"),
         ),
     )
     op.create_index(
@@ -59,6 +60,10 @@ def downgrade() -> None:
     op.drop_index("ix_llm_slot_defaults_model_id", table_name="llm_slot_defaults")
     op.drop_table("llm_slot_defaults")
 
+    # Pre-prod note: original baseline created these columns with no
+    # server_default; we use one here to satisfy SQLite ALTER ADD NOT NULL.
+    # The divergence is intentional (per plan Q12, no consumers depend on
+    # the absence of a default).
     with op.batch_alter_table("llm_models") as batch:
         batch.add_column(
             sa.Column("tier", sa.String(16), nullable=False, server_default="everyday")
@@ -72,7 +77,8 @@ def downgrade() -> None:
             )
         )
         batch.create_check_constraint(
-            "tier_enum", "tier IN ('thinking', 'everyday', 'quick')"
+            op.f("ck_llm_models_tier_enum"),
+            "tier IN ('thinking', 'everyday', 'quick')",
         )
         batch.create_index(
             "uq_llm_models_tier_default",
@@ -85,26 +91,32 @@ def downgrade() -> None:
 
     op.create_table(
         "user_llm_preferences",
-        sa.Column(
-            "user_id",
-            sa.String(36),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            primary_key=True,
-        ),
-        sa.Column("tier", sa.String(16), primary_key=True),
-        sa.Column(
-            "model_id",
-            sa.String(36),
-            sa.ForeignKey("llm_models.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
+        sa.Column("user_id", sa.String(length=36), nullable=False),
+        sa.Column("tier", sa.String(length=16), nullable=False),
+        sa.Column("model_id", sa.String(length=36), nullable=False),
         sa.Column(
             "updated_at",
             sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
+            server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
+        sa.ForeignKeyConstraint(
+            ["model_id"],
+            ["llm_models.id"],
+            name=op.f("fk_user_llm_preferences_model_id_llm_models"),
+            ondelete="CASCADE",
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            name=op.f("fk_user_llm_preferences_user_id_users"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint(
+            "user_id", "tier", name=op.f("pk_user_llm_preferences")
+        ),
         sa.CheckConstraint(
-            "tier IN ('thinking', 'everyday', 'quick')", name="tier_enum"
+            "tier IN ('thinking', 'everyday', 'quick')",
+            name=op.f("ck_user_llm_preferences_tier_enum"),
         ),
     )
