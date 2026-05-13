@@ -13,6 +13,8 @@ chat:
 
     {% include "shared/skills_menu.yaml.j2" %}
 
+    {% include "shared/chat_formatting.yaml.j2" %}
+
 report:
   system: |
     You are the Earnings Update analyst. Produce a scorecard-focused
