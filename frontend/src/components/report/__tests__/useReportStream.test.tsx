@@ -89,6 +89,46 @@ describe("useReportStream", () => {
     expect(result.current.state.errorMessage).toMatch(/500/);
   });
 
+  it("sends multipart/form-data when attachments are provided", async () => {
+    const body =
+      sseFrame("report.start", {
+        report_id: "r_1",
+        department: "equity_research",
+        mode: "stock_initiation",
+        section_titles: [],
+      }) +
+      sseFrame("report.complete", { report_id: "r_1", schema: {} }) +
+      sseFrame("report.saved", { report_id: "r_1" });
+
+    const fetchMock = mockFetchStream(body);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useReportStream());
+    const file = new File(["hello"], "brief.txt", { type: "text/plain" });
+    act(() => {
+      result.current.start({
+        url: "/api/r",
+        body: {
+          mode: "stock_initiation",
+          user_input: "AAPL",
+          session_id: "s1",
+        },
+        attachments: [file],
+      });
+    });
+
+    await waitFor(() => expect(result.current.state.status).toBe("complete"));
+    const call = fetchMock.mock.calls[0];
+    const init = call[1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    const fd = init.body as FormData;
+    expect(fd.get("mode")).toBe("stock_initiation");
+    expect(fd.get("user_input")).toBe("AAPL");
+    expect(fd.get("session_id")).toBe("s1");
+    expect(fd.getAll("files")).toHaveLength(1);
+    expect((init.headers as Record<string, string>)["content-type"]).toBeUndefined();
+  });
+
   it("section.start / section.complete drive section state (NEW-14-06)", async () => {
     const body =
       sseFrame("report.start", {

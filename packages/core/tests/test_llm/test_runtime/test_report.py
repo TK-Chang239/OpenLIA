@@ -1376,3 +1376,85 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
         "tool_use_id regex rejects empty strings)"
     )
     assert any(m.tool_call_id == "c_99" for m in tool_msgs)
+
+
+async def test_report_run_uses_user_template_branch_when_provided(
+    tmp_path: Path, frameworks_root: Path
+) -> None:
+    """When ReportRequest carries user_template_text, the runner renders the
+    user_template prompt slot, skips the framework JSON, and emits no
+    pre-emptive ReportSectionStart events."""
+    prompts_root = tmp_path / "prompts_template"
+    shared = prompts_root / "shared"
+    shared.mkdir(parents=True)
+    (shared / "output_discipline.yaml.j2").write_text("discipline.\n")
+    (prompts_root / "equity_research.yaml").write_text(
+        dedent(
+            """\
+            report:
+              system: |
+                Style: {{ style_guide }}
+              stock_initiation:
+                user: |
+                  default framework path; should NOT be used.
+              user_template:
+                user: |
+                  USE_TEMPLATE name={{ template_name }} mode={{ mode_label }}
+                  ticker={{ user_input }} length={{ length }}
+                  ---
+                  {{ user_template_text }}
+                  ---
+            """
+        )
+    )
+
+    captured: dict[str, Any] = {}
+
+    class _CaptureProvider(FakeProvider):
+        async def generate(self, request):  # type: ignore[override]
+            captured["user_msg"] = request.messages[-1].content
+            return await super().generate(request)
+
+    filled = {"title": "X", "sections": [{"id": "s1", "title": "S1", "blocks": []}]}
+    provider = _CaptureProvider(
+        script=FakeProviderScript(turns=[("final_json", json.dumps(filled))])
+    )
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(manifest={"equity_research": {}}),
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_always(_resolved()),
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_t",
+    )
+
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(
+                mode="stock_initiation",
+                user_input="AAPL",
+                user_template_text="MY CUSTOM TEMPLATE BODY",
+                user_template_name="V1",
+            ),
+        )
+    )
+
+    msg = captured["user_msg"]
+    assert "USE_TEMPLATE name=V1" in msg
+    assert "ticker=AAPL" in msg
+    assert "MY CUSTOM TEMPLATE BODY" in msg
+    assert "default framework path" not in msg
+
+    # The user-template branch suppresses framework-derived section starts;
+    # only the LLM-output sections produce ReportSectionComplete events.
+    start = next(e for e in events if isinstance(e, ReportStart))
+    assert start.section_titles == []
+    section_starts = [e for e in events if isinstance(e, ReportSectionStart)]
+    assert section_starts == []

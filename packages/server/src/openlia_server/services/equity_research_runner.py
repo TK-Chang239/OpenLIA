@@ -8,7 +8,7 @@ from typing import Protocol
 
 from openlia.departments.equity_research import EquityResearchDepartment
 from openlia.llm.runtime.events import ReportComplete, SseEvent
-from openlia.llm.runtime.messages import ReportRequest
+from openlia.llm.runtime.messages import Attachment, ReportRequest
 from openlia.reports.validator import validate_report_payload
 from sqlalchemy.orm import Session
 
@@ -28,7 +28,13 @@ class ReportSavedEvent:
 
 class _InnerRunner(Protocol):
     def run(
-        self, *, department_id: str, user_id: str, request: ReportRequest
+        self,
+        *,
+        department_id: str,
+        user_id: str,
+        request: ReportRequest,
+        attachments: list[Attachment] | None = ...,
+        model_id_override: str | None = ...,
     ) -> AsyncIterator[SseEvent]: ...
 
 
@@ -51,12 +57,14 @@ class EquityResearchRunner:
         mode: str,
         user_input: str,
         session_id: str | None,
+        attachments: list[Attachment] | None = None,
+        model_id_override: str | None = None,
     ) -> AsyncIterator[SseEvent | ReportSavedEvent]:
         if mode not in self._dept.valid_modes:
             raise ValueError(f"unknown equity_research mode: {mode!r}")
 
         cfg = self._config.get_config(user_id)
-        active = self._config.resolve_active(cfg, mode=mode)
+        active = self._config.resolve_active(cfg, mode=mode, user_id=user_id)
 
         custom_section_dicts = [
             {
@@ -74,6 +82,8 @@ class EquityResearchRunner:
             enabled_sections=list(active.enabled_section_ids),
             custom_sections=custom_section_dicts,
             length=_LENGTH_MAP.get(active.report_length, "standard"),
+            user_template_text=active.template_text,
+            user_template_name=active.template_name,
         )
 
         last_complete: ReportComplete | None = None
@@ -81,6 +91,8 @@ class EquityResearchRunner:
             department_id=self._dept.name,
             user_id=user_id,
             request=request,
+            attachments=attachments,
+            model_id_override=model_id_override,
         ):
             if isinstance(ev, ReportComplete):
                 last_complete = ev

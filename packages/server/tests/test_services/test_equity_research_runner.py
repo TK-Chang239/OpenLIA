@@ -93,6 +93,35 @@ async def test_runner_forwards_active_config_to_inner(db_session, user, fake_rep
 
 
 @pytest.mark.asyncio
+async def test_runner_forwards_attachments_and_model_override(db_session, user, fake_report_runner):
+    from openlia.llm.runtime.messages import Attachment
+
+    fake_report_runner.queue_events([ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA)])
+    runner = EquityResearchRunner(db_session=db_session, inner=fake_report_runner)
+    att = [
+        Attachment(
+            id="a1",
+            filename="brief.txt",
+            mime_type="text/plain",
+            storage_path="/tmp/a1.txt",
+            size_bytes=12,
+            extracted_text="hello world",
+        )
+    ]
+    async for _ in runner.run_report(
+        user_id=user,
+        mode="stock_update",
+        user_input="AAPL",
+        session_id=None,
+        attachments=att,
+        model_id_override="m_anthropic_sonnet",
+    ):
+        pass
+    assert fake_report_runner.last_attachments == att
+    assert fake_report_runner.last_model_id_override == "m_anthropic_sonnet"
+
+
+@pytest.mark.asyncio
 async def test_runner_threads_report_length_via_resolve_active(
     db_session, user, fake_report_runner
 ):

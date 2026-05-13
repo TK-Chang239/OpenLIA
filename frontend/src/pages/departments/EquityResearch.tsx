@@ -258,7 +258,7 @@ export default function EquityResearch(): JSX.Element {
   }, [reportState.status, reportState.reportId, schema]);
 
   const dispatchReport = useCallback(
-    async (text: string) => {
+    async (text: string, attachments?: File[]) => {
       if (!config) return;
       const trimmed = text.trim();
       if (!trimmed) return;
@@ -283,6 +283,7 @@ export default function EquityResearch(): JSX.Element {
             user_input: trimmed,
             session_id: row.id,
           },
+          attachments,
         });
       } catch (err) {
         setStartError(err instanceof Error ? err.message : "Failed to start research");
@@ -291,9 +292,9 @@ export default function EquityResearch(): JSX.Element {
     [config, resetReport, startReport],
   );
 
-  const handleComposerSubmit = (text: string) => {
+  const handleComposerSubmit = (text: string, attachments?: File[]) => {
     if (!sessionId) {
-      void dispatchReport(text);
+      void dispatchReport(text, attachments);
       return;
     }
     // Active-session: send a follow-up chat message.
@@ -315,7 +316,7 @@ export default function EquityResearch(): JSX.Element {
         created_at: new Date().toISOString(),
       },
     ]);
-    chatStream.send(trimmed);
+    chatStream.send(trimmed, attachments);
   };
 
   const handleStop = () => {
