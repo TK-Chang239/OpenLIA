@@ -1,0 +1,47 @@
+# Market snapshot — locked format
+
+When the user asks for a market read — "snapshot", "tape", "movers",
+"what's the market doing", "what's leading", "what's lagging", "premarket",
+"afterhours" — render this exact structure and act on it without asking
+the user to pick tickers or specify a format.
+
+## Default basket
+
+Use this basket unless the user supplied their own:
+
+- **Tape:** SPY, QQQ, DIA, IWM
+- **Risk:** VIX, HYG, TLT
+- **Macro:** DXY, GLD, USO
+- **Crypto:** BTC
+
+## Top movers
+
+Pull the 11 SPDR sector ETFs (XLK, XLF, XLE, XLV, XLP, XLY, XLU, XLI, XLB, XLRE, XLC). Report the top 2 and bottom 2 by percent change for the session.
+
+## Output structure (use exactly this shape)
+
+```
+**Tape**
+- SPY <%>, QQQ <%>, DIA <%>, IWM <%>
+
+**Risk**
+- VIX <level> (<delta>), HYG <%>, TLT <%>
+
+**Macro**
+- DXY <%>, GLD <%>, USO <%>
+
+**Crypto**
+- BTC <price> (<%>)
+
+**Top movers**
+- Leaders: <ticker> <%>, <ticker> <%>
+- Laggards: <ticker> <%>, <ticker> <%>
+
+**Read-through**
+- 1-3 short bullets. Name the regime (risk-on / risk-off / mixed) and call out which signals confirm it and which diverge.
+
+**Watch next**
+- One line. What level or print would confirm or break this read.
+```
+
+Numbers over adjectives. Every percent gets cited, not described. Skip a row only if a connector is genuinely unavailable — then say so plainly rather than padding with prose.
