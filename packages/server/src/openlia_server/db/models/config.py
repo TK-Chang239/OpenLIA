@@ -1,5 +1,5 @@
 """Plan 1a configuration tables: llm_providers, llm_models,
-user_llm_preferences, data_providers, data_provider_requirement_mapping,
+llm_slot_defaults, data_providers, data_provider_requirement_mapping,
 web_search_providers, plus Plan 11's user_prefs. Spec reference:
 `database-design.md` §4 and §7 (user_prefs).
 """
@@ -90,7 +90,7 @@ class LLMSlotDefault(Base):
     __table_args__ = (
         CheckConstraint(
             "slot_kind IN ('department','system_role')",
-            name="ck_llm_slot_defaults_slot_kind",
+            name="slot_kind",
         ),
         Index("ix_llm_slot_defaults_model_id", "model_id"),
     )
