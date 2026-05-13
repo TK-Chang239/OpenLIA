@@ -4,7 +4,7 @@ When the user asks for a market read — "snapshot", "tape", "movers", "what's t
 
 ## Default basket
 
-{% set _basket = market_basket or {"tape": ["SPY","QQQ","DIA","IWM"], "risk": ["VIX","HYG","TLT"], "macro": ["DXY","GLD","USO"], "crypto": ["BTC"]} %}
+{% set _basket = (market_basket|default(None)) or {"tape": ["SPY","QQQ","DIA","IWM"], "risk": ["VIX","HYG","TLT"], "macro": ["DXY","GLD","USO"], "crypto": ["BTC"]} %}
 Use this basket unless the user supplied their own in conversation:
 
 - **Tape:** {{ _basket.tape | join(', ') }}
