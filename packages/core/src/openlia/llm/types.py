@@ -4,12 +4,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
-class ModelTier(StrEnum):
-    THINKING = "thinking"
-    EVERYDAY = "everyday"
-    QUICK = "quick"
-
-
 class Capability(StrEnum):
     STREAMING = "streaming"
     TOOL_CALLING = "tool_calling"
@@ -77,7 +71,9 @@ class LLMRequest:
     # the upstream's expected shape:
     #   OpenAI / OpenRouter (chat.completions): {"type": "function", "function": {"name": "..."}}
     #   Anthropic (messages):                   {"type": "tool", "name": "..."}
-    #   Gemini (generateContent):               {"function_calling_config": {"mode": "ANY"|"AUTO"|"NONE", "allowed_function_names": [...]}}
+    #   Gemini (generateContent):
+    #     {"function_calling_config":
+    #       {"mode": "ANY"|"AUTO"|"NONE", "allowed_function_names": [...]}}
     # `None` means no constraint (model decides).
     tool_choice: dict | None = None
 
@@ -115,6 +111,7 @@ class ModelInfo:
 class ProviderCredentials:
     api_key: str | None
     base_url: str | None
+    env_var_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,7 +136,6 @@ class ResolvedModel:
     provider_id: str
     model_id: str
     model_ref: str
-    tier: ModelTier
     credentials: ProviderCredentials
     capabilities: Capabilities
     overrides: dict

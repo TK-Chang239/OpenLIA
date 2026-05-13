@@ -1,5 +1,5 @@
 """Plan 1a configuration tables: llm_providers, llm_models,
-user_llm_preferences, data_providers, data_provider_requirement_mapping,
+llm_slot_defaults, data_providers, data_provider_requirement_mapping,
 web_search_providers, plus Plan 11's user_prefs. Spec reference:
 `database-design.md` §4 and §7 (user_prefs).
 """
@@ -12,6 +12,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -22,7 +23,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from openlia_server.db.base import Base, TimestampMixin, UTCDateTime
+from openlia_server.db.base import Base, TimestampMixin
 
 
 class LLMProvider(Base, TimestampMixin):
@@ -53,54 +54,43 @@ class LLMModel(Base, TimestampMixin):
     provider_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("llm_providers.id", ondelete="RESTRICT"), nullable=False
     )
-    tier: Mapped[str] = mapped_column(String(16), nullable=False)
     model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     display_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    is_tier_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     overrides: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     provider: Mapped[LLMProvider] = relationship("LLMProvider")
 
-    __table_args__ = (
-        Index("ix_llm_models_tier_is_enabled", "tier", "is_enabled"),
-        Index("ix_llm_models_provider_id", "provider_id"),
-        Index(
-            "uq_llm_models_tier_default",
-            "tier",
-            unique=True,
-            sqlite_where=text("is_tier_default = 1"),
-            postgresql_where=text("is_tier_default"),
-        ),
-        CheckConstraint(
-            "tier IN ('thinking', 'everyday', 'quick')",
-            name="tier_enum",
-        ),
-    )
+    __table_args__ = (Index("ix_llm_models_provider_id", "provider_id"),)
 
 
-class UserLLMPreference(Base):
-    __tablename__ = "user_llm_preferences"
+class LLMSlotDefault(Base):
+    """Admin-assigned model per (slot_kind, slot_id) pair.
 
-    user_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    tier: Mapped[str] = mapped_column(String(16), primary_key=True)
+    slot_kind is 'department' (e.g. 'secretary', 'equity_research') or
+    'system_role' (e.g. 'ai_review', 'graph_extraction'). Replaces the
+    per-tier default model mechanism.
+    """
+
+    __tablename__ = "llm_slot_defaults"
+
+    slot_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    slot_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     model_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("llm_models.id", ondelete="CASCADE"), nullable=False
+        String(36),
+        ForeignKey("llm_models.id", ondelete="CASCADE"),
+        nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        UTCDateTime(),
-        nullable=False,
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     __table_args__ = (
         CheckConstraint(
-            "tier IN ('thinking', 'everyday', 'quick')",
-            name="tier_enum",
+            "slot_kind IN ('department','system_role')",
+            name="slot_kind",
         ),
+        Index("ix_llm_slot_defaults_model_id", "model_id"),
     )
 
 

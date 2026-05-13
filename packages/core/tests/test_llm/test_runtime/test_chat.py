@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
-from openlia.llm.exceptions import TierNotConfiguredError
+from openlia.llm.exceptions import ModelNotConfiguredError
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.events import (
@@ -23,7 +23,6 @@ from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     Capabilities,
-    ModelTier,
     ProviderCredentials,
     ResolvedModel,
     ToolCall,
@@ -59,7 +58,6 @@ def _resolved() -> ResolvedModel:
         provider_id="p1",
         model_id="m1",
         model_ref="fake-1",
-        tier=ModelTier.EVERYDAY,
         credentials=ProviderCredentials(api_key="k", base_url=None),
         capabilities=Capabilities(streaming=True, tool_calling=True, structured_output=True),
         overrides={},
@@ -70,29 +68,17 @@ class _Registry:
     def __init__(self, *, raises: bool = False) -> None:
         self._raises = raises
 
-    def get_department_tier_override(self, department_id: str):
-        return None
-
-    def get_user_preference(self, user_id, tier):
-        return None
-
-    def get_tier_default(self, tier):
-        return None
-
-    def get_any_in_tier(self, tier):
-        return None
-
 
 def _always_resolved(*, resolved: ResolvedModel):
-    def _resolve(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
+    def _resolve(*, department_id, user_id, registry, model_id_override=None):
         return resolved
 
     return _resolve
 
 
 def _always_raises():
-    def _resolve(*, department_id, user_id, registry, tier_override=None, model_id_override=None):
-        raise TierNotConfiguredError("everyday")
+    def _resolve(*, department_id, user_id, registry, model_id_override=None):
+        raise ModelNotConfiguredError(slot_kind="department", slot_id="secretary")
 
     return _resolve
 
@@ -188,7 +174,7 @@ async def test_tool_calling_turn_emits_tool_events(prompts_root: Path) -> None:
     assert ChatDone in types
 
 
-async def test_tier_not_configured_emits_chat_error_and_stops(prompts_root: Path) -> None:
+async def test_model_not_configured_emits_chat_error_and_stops(prompts_root: Path) -> None:
     provider = FakeProvider(script=FakeProviderScript(turns=[]))
     data = FakeDataDispatcher(manifest={"secretary": {}})
     runner = ChatRunner(
@@ -214,8 +200,8 @@ async def test_tier_not_configured_emits_chat_error_and_stops(prompts_root: Path
     assert types == [ChatStart, ChatError]
     err = events[-1]
     assert isinstance(err, ChatError)
-    assert err.error_class == "TierNotConfiguredError"
-    assert "everyday" in err.message
+    assert err.error_class == "ModelNotConfiguredError"
+    assert "secretary" in err.message
 
 
 async def test_cancellation_stops_yielding_without_terminal_event(
@@ -914,9 +900,7 @@ async def test_v2_dispatch_serializes_pydantic_style_tool_results(
         def model_dump(self) -> dict:
             return {"web": list(self.web)}
 
-    quote_call = ToolCall(
-        id="qc_1", name="firecrawl__search", arguments={"query": "openai"}
-    )
+    quote_call = ToolCall(id="qc_1", name="firecrawl__search", arguments={"query": "openai"})
     provider = FakeProvider(
         script=FakeProviderScript(
             turns=[

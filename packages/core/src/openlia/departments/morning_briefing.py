@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from openlia.connectors.types import Category
-from openlia.departments.base import Tier
 
 
 @dataclass(frozen=True)
@@ -14,7 +13,6 @@ class MorningBriefingDepartment:
     name: str = "morning_briefing"
     display_name: str = "Morning Briefings"
     prompt_name: str = "morning_briefing"
-    tier: Tier = "everyday"
 
     # Connector dependencies (spec §10.1).
     # Headlines may come from a NEWS provider OR a WEB_SEARCH provider

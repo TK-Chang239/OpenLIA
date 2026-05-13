@@ -29,7 +29,3 @@ def test_eu_does_not_require_runner():
 
 def test_eu_has_no_extra_tools():
     assert EarningsUpdateDepartment().extra_tools == ()
-
-
-def test_eu_tier_is_everyday():
-    assert EarningsUpdateDepartment().tier == "everyday"

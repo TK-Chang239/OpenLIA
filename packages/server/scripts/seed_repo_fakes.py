@@ -21,11 +21,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from dotenv import load_dotenv
-from sqlalchemy import select
-
-from openlia_server.db import bootstrap, session as session_mod
+from openlia_server.db import bootstrap
+from openlia_server.db import session as session_mod
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import RepoItem, Report
+from sqlalchemy import select
 
 SEED_SUBJECT = "__seed_fakes__"
 
@@ -59,7 +59,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                 "center": "Page {page}",
                 "right": "Internal — not investment advice",
             },
-            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",
+            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",  # noqa: E501
         },
         "cover": {
             "title": "Apple Inc. — Initiating at Buy",
@@ -101,7 +101,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                 {"label": "EV/Sales", "value": "7.9x"},
                 {"label": "FCF Yield", "value": "3.5%"},
                 {"label": "Net Cash", "value": "$165B"},
-                {"label": "52W Range", "value": "$164–$220"},
+                {"label": "52W Range", "value": "$164-$220"},
             ],
             "sparkline": {
                 "label": "Last 60 days",
@@ -131,7 +131,7 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                         "content": (
                             "We see three under-appreciated factors driving a re-rating: "
                             "(1) Services mix continuing to lift consolidated gross margin into "
-                            "the 47–48% range, (2) a credible AI-on-device thesis as Apple "
+                            "the 47-48% range, (2) a credible AI-on-device thesis as Apple "
                             "Intelligence matures into a paid tier in late FY26, and "
                             "(3) capital return remains a floor — buybacks reduced share count "
                             "by 3.1% in FY25 alone. [4]"
@@ -200,17 +200,59 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                             {"key": "fy25", "label": "FY25", "align": "right"},
                         ],
                         "rows": [
-                            {"metric": "Revenue", "fy21": "365.8", "fy22": "394.3", "fy23": "383.3", "fy24": "391.0", "fy25": "420.6"},
-                            {"metric": "Gross profit", "fy21": "152.8", "fy22": "170.8", "fy23": "169.1", "fy24": "180.7", "fy25": "198.4"},
-                            {"metric": "Operating income", "fy21": "108.9", "fy22": "119.4", "fy23": "114.3", "fy24": "123.2", "fy25": "134.7"},
-                            {"metric": "Net income", "fy21": "94.7", "fy22": "99.8", "fy23": "97.0", "fy24": "103.9", "fy25": "112.2"},
-                            {"metric": "EPS, diluted", "fy21": "5.61", "fy22": "6.11", "fy23": "6.13", "fy24": "6.71", "fy25": "7.40"},
-                            {"metric": "GM %", "fy21": "41.8", "fy22": "43.3", "fy23": "44.1", "fy24": "46.2", "fy25": "47.2"},
+                            {
+                                "metric": "Revenue",
+                                "fy21": "365.8",
+                                "fy22": "394.3",
+                                "fy23": "383.3",
+                                "fy24": "391.0",
+                                "fy25": "420.6",
+                            },
+                            {
+                                "metric": "Gross profit",
+                                "fy21": "152.8",
+                                "fy22": "170.8",
+                                "fy23": "169.1",
+                                "fy24": "180.7",
+                                "fy25": "198.4",
+                            },
+                            {
+                                "metric": "Operating income",
+                                "fy21": "108.9",
+                                "fy22": "119.4",
+                                "fy23": "114.3",
+                                "fy24": "123.2",
+                                "fy25": "134.7",
+                            },
+                            {
+                                "metric": "Net income",
+                                "fy21": "94.7",
+                                "fy22": "99.8",
+                                "fy23": "97.0",
+                                "fy24": "103.9",
+                                "fy25": "112.2",
+                            },
+                            {
+                                "metric": "EPS, diluted",
+                                "fy21": "5.61",
+                                "fy22": "6.11",
+                                "fy23": "6.13",
+                                "fy24": "6.71",
+                                "fy25": "7.40",
+                            },
+                            {
+                                "metric": "GM %",
+                                "fy21": "41.8",
+                                "fy22": "43.3",
+                                "fy23": "44.1",
+                                "fy24": "46.2",
+                                "fy25": "47.2",
+                            },
                         ],
                     },
                     {
                         "type": "line_chart",
-                        "title": "Services revenue, $B (FY20–FY25)",
+                        "title": "Services revenue, $B (FY20-FY25)",
                         "x_label": "Fiscal year",
                         "y_label": "Revenue ($B)",
                         "series": [
@@ -240,26 +282,26 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                             {
                                 "when": "Jun 2026 · WWDC",
                                 "what": "Apple Intelligence Pro tier announced",
-                                "impact": "Confirms AI-on-device monetization step-up; our model uses 15% attach.",
+                                "impact": "Confirms AI-on-device monetization step-up; our model uses 15% attach.",  # noqa: E501
                                 "impact_tag": {"label": "+$245 → $258", "tone": "positive"},
                                 "highlight": True,
                             },
                             {
                                 "when": "Jul 2026",
                                 "what": "FQ3 print + first Vision Pro 2 disclosures",
-                                "impact": "Watch installed-base growth, services exiting +14%, and any guide on Vision Pro 2 launch window.",
-                                "impact_tag": {"label": "+/−$8", "tone": "neutral"},
+                                "impact": "Watch installed-base growth, services exiting +14%, and any guide on Vision Pro 2 launch window.",  # noqa: E501
+                                "impact_tag": {"label": "+/-$8", "tone": "neutral"},
                             },
                             {
                                 "when": "Sep 2026",
                                 "what": "iPhone 17 launch",
-                                "impact": "Channel checks suggest +3% builds y/y; sell-side at +1%.",
+                                "impact": "Channel checks suggest +3% builds y/y; sell-side at +1%.",  # noqa: E501
                                 "impact_tag": {"label": "Constructive", "tone": "positive"},
                             },
                             {
                                 "when": "Oct 2026",
                                 "what": "FQ4 print",
-                                "impact": "First quarter to reflect Apple Intelligence Pro attach rates.",
+                                "impact": "First quarter to reflect Apple Intelligence Pro attach rates.",  # noqa: E501
                             },
                         ],
                     },
@@ -284,15 +326,15 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
                             "title": "▼ Downside",
                             "tone": "negative",
                             "items": [
-                                "Google TAC — DOJ remedy ruling expected late June; worst case $20B annualized headwind.",
-                                "FX — JPY weakness already in guide; further EUR slip drags Q3 revenue 30bp.",
-                                "EU DMA — alt-app-store enforcement compresses App Store take rate.",
+                                "Google TAC — DOJ remedy ruling expected late June; worst case $20B annualized headwind.",  # noqa: E501
+                                "FX — JPY weakness already in guide; further EUR slip drags Q3 revenue 30bp.",  # noqa: E501
+                                "EU DMA — alt-app-store enforcement compresses App Store take rate.",  # noqa: E501
                             ],
                         },
                     },
                     {
                         "type": "pull_quote",
-                        "text": "We see Services as the durable engine; hardware is the cyclic damper.",
+                        "text": "We see Services as the durable engine; hardware is the cyclic damper.",  # noqa: E501
                         "attribution": "OpenLIA Equity Research",
                     },
                 ],
@@ -301,8 +343,17 @@ def _aapl_initiation_payload(generated: datetime) -> dict[str, Any]:
         "citations": [
             {"id": "1", "title": "Apple Q2 FY26 10-Q", "source": "SEC", "date": "2026-04-30"},
             {"id": "2", "title": "Vision Pro unit estimates — internal model", "source": "OpenLIA"},
-            {"id": "3", "title": "Apple installed base disclosures (FY21 → FY25 10-Ks)", "source": "SEC"},
-            {"id": "4", "title": "Apple capital return program", "source": "Apple IR", "date": "2026-04-30"},
+            {
+                "id": "3",
+                "title": "Apple installed base disclosures (FY21 → FY25 10-Ks)",
+                "source": "SEC",
+            },
+            {
+                "id": "4",
+                "title": "Apple capital return program",
+                "source": "Apple IR",
+                "date": "2026-04-30",
+            },
             {"id": "5", "title": "Visible Alpha consensus — AAPL", "source": "Visible Alpha"},
         ],
     }
@@ -321,7 +372,7 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                 "center": "Page {page}",
                 "right": "Internal — not investment advice",
             },
-            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",
+            "disclaimer": "This is a placeholder report seeded for UI testing. Not investment advice.",  # noqa: E501
         },
         "cover": {
             "title": "AAPL · Q1 FY26 — Beat on Services, In-Line on iPhone",
@@ -380,15 +431,22 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                 {"label": "Beats", "value": "7 of 10", "tag": {"label": "+", "tone": "positive"}},
                 {"label": "Misses", "value": "2 of 10", "tag": {"label": "-", "tone": "negative"}},
                 {"label": "In-line", "value": "1 of 10"},
-                {"label": "EPS surprise", "value": "+3.5%", "tag": {"label": "+", "tone": "positive"}},
-                {"label": "Rev. surprise", "value": "+0.7%", "tag": {"label": "+", "tone": "positive"}},
+                {
+                    "label": "EPS surprise",
+                    "value": "+3.5%",
+                    "tag": {"label": "+", "tone": "positive"},
+                },
+                {
+                    "label": "Rev. surprise",
+                    "value": "+0.7%",
+                    "tag": {"label": "+", "tone": "positive"},
+                },
                 {"label": "Lia signal", "value": "82 / 100"},
             ],
             "sparkline": {
                 "label": "After-hours · AAPL",
                 "points": [
-                    {"x": i, "y": 207.6 if i < 12 else 209 + (i - 12) * 0.18}
-                    for i in range(40)
+                    {"x": i, "y": 207.6 if i < 12 else 209 + (i - 12) * 0.18} for i in range(40)
                 ],
             },
         },
@@ -433,15 +491,78 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                             {"key": "tag", "label": "Tag", "align": "right"},
                         ],
                         "rows": [
-                            {"line": "Total revenue", "actual": "94.2", "cons": "93.5", "delta_pct": "+0.7%", "yoy": "+5.4%", "tag": "Beat"},
-                            {"line": "iPhone", "actual": "45.1", "cons": "45.4", "delta_pct": "-0.7%", "yoy": "+1.0%", "tag": "In-line"},
-                            {"line": "Services", "actual": "26.8", "cons": "26.0", "delta_pct": "+3.0%", "yoy": "+15.2%", "tag": "Beat"},
-                            {"line": "Wearables, Home & Acc.", "actual": "8.4", "cons": "8.6", "delta_pct": "-2.5%", "yoy": "-1.0%", "tag": "Miss"},
-                            {"line": "Mac", "actual": "7.9", "cons": "7.5", "delta_pct": "+5.7%", "yoy": "+10.4%", "tag": "Beat"},
-                            {"line": "Gross profit", "actual": "44.6", "cons": "44.1", "delta_pct": "+1.1%", "yoy": "+7.2%", "tag": "Beat"},
-                            {"line": "Operating income", "actual": "30.1", "cons": "29.4", "delta_pct": "+2.4%", "yoy": "+8.3%", "tag": "Beat"},
-                            {"line": "Net income", "actual": "26.4", "cons": "25.5", "delta_pct": "+3.6%", "yoy": "+8.6%", "tag": "Beat"},
-                            {"line": "EPS, diluted ($)", "actual": "1.78", "cons": "1.72", "delta_pct": "+3.5%", "yoy": "+9.9%", "tag": "Beat"},
+                            {
+                                "line": "Total revenue",
+                                "actual": "94.2",
+                                "cons": "93.5",
+                                "delta_pct": "+0.7%",
+                                "yoy": "+5.4%",
+                                "tag": "Beat",
+                            },
+                            {
+                                "line": "iPhone",
+                                "actual": "45.1",
+                                "cons": "45.4",
+                                "delta_pct": "-0.7%",
+                                "yoy": "+1.0%",
+                                "tag": "In-line",
+                            },
+                            {
+                                "line": "Services",
+                                "actual": "26.8",
+                                "cons": "26.0",
+                                "delta_pct": "+3.0%",
+                                "yoy": "+15.2%",
+                                "tag": "Beat",
+                            },
+                            {
+                                "line": "Wearables, Home & Acc.",
+                                "actual": "8.4",
+                                "cons": "8.6",
+                                "delta_pct": "-2.5%",
+                                "yoy": "-1.0%",
+                                "tag": "Miss",
+                            },
+                            {
+                                "line": "Mac",
+                                "actual": "7.9",
+                                "cons": "7.5",
+                                "delta_pct": "+5.7%",
+                                "yoy": "+10.4%",
+                                "tag": "Beat",
+                            },
+                            {
+                                "line": "Gross profit",
+                                "actual": "44.6",
+                                "cons": "44.1",
+                                "delta_pct": "+1.1%",
+                                "yoy": "+7.2%",
+                                "tag": "Beat",
+                            },
+                            {
+                                "line": "Operating income",
+                                "actual": "30.1",
+                                "cons": "29.4",
+                                "delta_pct": "+2.4%",
+                                "yoy": "+8.3%",
+                                "tag": "Beat",
+                            },
+                            {
+                                "line": "Net income",
+                                "actual": "26.4",
+                                "cons": "25.5",
+                                "delta_pct": "+3.6%",
+                                "yoy": "+8.6%",
+                                "tag": "Beat",
+                            },
+                            {
+                                "line": "EPS, diluted ($)",
+                                "actual": "1.78",
+                                "cons": "1.72",
+                                "delta_pct": "+3.5%",
+                                "yoy": "+9.9%",
+                                "tag": "Beat",
+                            },
                         ],
                     },
                 ],
@@ -455,16 +576,16 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                         "metrics": [
                             {
                                 "label": "Q3 Revenue",
-                                "value": "$87–90B",
+                                "value": "$87-90B",
                                 "context": "+3% to +6% y/y · cons. $88.4B",
                                 "highlight": True,
                             },
                             {
                                 "label": "Q3 Gross Margin",
-                                "value": "47.0–48.0%",
+                                "value": "47.0-48.0%",
                                 "context": "cons. 47.1% · midpoint +40bp",
                             },
-                            {"label": "Q3 OpEx", "value": "$14.6–14.8B"},
+                            {"label": "Q3 OpEx", "value": "$14.6-14.8B"},
                             {"label": "Tax Rate", "value": "~16.0%"},
                             {"label": "OI&E", "value": "~$50M"},
                             {
@@ -530,7 +651,7 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                             "tone": "positive",
                             "items": [
                                 "WWDC · Jun 8. Apple Intelligence Pro tier monetization framework.",
-                                "iPhone 17 channel checks. Foxconn April reads suggest +3% builds y/y.",
+                                "iPhone 17 channel checks. Foxconn April reads suggest +3% builds y/y.",  # noqa: E501
                                 "Services GM stability at 74% in a higher-content quarter.",
                             ],
                         },
@@ -538,9 +659,9 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
                             "title": "▼ Downside watch",
                             "tone": "negative",
                             "items": [
-                                "Google TAC — DOJ remedy ruling expected late June. Worst case $20B annualized.",
-                                "FX — JPY weakness already in guide; further EUR slip would drag Q3 revenue 30bp.",
-                                "EU DMA — alt-app-store enforcement could compress App Store take rate.",
+                                "Google TAC — DOJ remedy ruling expected late June. Worst case $20B annualized.",  # noqa: E501
+                                "FX — JPY weakness already in guide; further EUR slip would drag Q3 revenue 30bp.",  # noqa: E501
+                                "EU DMA — alt-app-store enforcement could compress App Store take rate.",  # noqa: E501
                             ],
                         },
                     },
@@ -548,10 +669,28 @@ def _aapl_earnings_payload(generated: datetime) -> dict[str, Any]:
             },
         ],
         "citations": [
-            {"id": "1", "title": "Apple Q2 FY26 Press Release & Data Summary", "source": "apple.com", "date": "2026-04-30 · 16:30 ET"},
-            {"id": "2", "title": "Q2 FY26 Earnings Conference Call · live transcript", "source": "internal"},
-            {"id": "3", "title": "Visible Alpha consensus — AAPL Q2 FY26 (frozen 16:00 ET)", "source": "Visible Alpha"},
-            {"id": "4", "title": "Form 8-K — Q2 FY26 Financial Statements & Notes", "source": "SEC", "date": "2026-04-30 · 16:33 ET"},
+            {
+                "id": "1",
+                "title": "Apple Q2 FY26 Press Release & Data Summary",
+                "source": "apple.com",
+                "date": "2026-04-30 · 16:30 ET",
+            },
+            {
+                "id": "2",
+                "title": "Q2 FY26 Earnings Conference Call · live transcript",
+                "source": "internal",
+            },
+            {
+                "id": "3",
+                "title": "Visible Alpha consensus — AAPL Q2 FY26 (frozen 16:00 ET)",
+                "source": "Visible Alpha",
+            },
+            {
+                "id": "4",
+                "title": "Form 8-K — Q2 FY26 Financial Statements & Notes",
+                "source": "SEC",
+                "date": "2026-04-30 · 16:33 ET",
+            },
             {"id": "5", "title": "OpenLia — AAPL Initiation Report (Apr 29)", "source": "internal"},
         ],
     }
@@ -605,8 +744,12 @@ def _dt(month: int, day: int) -> datetime:
 
 # Titles + dates lifted from the OpenLIAv3 repository.html design rows.
 FAKES: list[FakeReport] = [
-    FakeReport("AAPL-initiation-coverage", "equity_research", _dt(4, 3), _dt(4, 5), payload="aapl_init"),
-    FakeReport("AAPL-earnings-q1-2026", "earnings_update", _dt(4, 2), _dt(4, 4), payload="aapl_earnings"),
+    FakeReport(
+        "AAPL-initiation-coverage", "equity_research", _dt(4, 3), _dt(4, 5), payload="aapl_init"
+    ),
+    FakeReport(
+        "AAPL-earnings-q1-2026", "earnings_update", _dt(4, 2), _dt(4, 4), payload="aapl_earnings"
+    ),
     FakeReport("morning-briefing-apr-04", "morning_briefing", _dt(4, 4), _dt(4, 4)),
     FakeReport("morning-briefing-apr-03", "morning_briefing", _dt(4, 3), _dt(4, 3)),
     FakeReport("q1-macro-briefing", "macro_research", _dt(4, 1), _dt(4, 1)),
@@ -646,11 +789,11 @@ def _resolve_user(db, email: str | None) -> User:
 
 
 def _delete_existing_seed(db, user_id: str) -> int:
-    rows = db.execute(
-        select(Report).where(
-            Report.user_id == user_id, Report.subject == SEED_SUBJECT
-        )
-    ).scalars().all()
+    rows = (
+        db.execute(select(Report).where(Report.user_id == user_id, Report.subject == SEED_SUBJECT))
+        .scalars()
+        .all()
+    )
     n = len(rows)
     for r in rows:
         db.delete(r)
@@ -672,7 +815,9 @@ def _build_payload(fake: FakeReport) -> tuple[dict[str, Any], str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--user-email", help="Seed for this user (default: first user)")
-    parser.add_argument("--reset", action="store_true", help="Delete previously seeded fakes before inserting")
+    parser.add_argument(
+        "--reset", action="store_true", help="Delete previously seeded fakes before inserting"
+    )
     args = parser.parse_args()
 
     db = _open_session()

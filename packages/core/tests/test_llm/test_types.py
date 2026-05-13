@@ -9,18 +9,10 @@ from openlia.llm.types import (
     LLMResponse,
     Message,
     ModelInfo,
-    ModelTier,
     ProviderCredentials,
     ResolvedModel,
     TestResult,
 )
-
-
-def test_model_tier_values() -> None:
-    assert ModelTier.THINKING.value == "thinking"
-    assert ModelTier.EVERYDAY.value == "everyday"
-    assert ModelTier.QUICK.value == "quick"
-    assert {t.value for t in ModelTier} == {"thinking", "everyday", "quick"}
 
 
 def test_capabilities_defaults_are_conservative() -> None:
@@ -125,10 +117,9 @@ def test_resolved_model_shape() -> None:
         provider_id="p1",
         model_id="m1",
         model_ref="gpt-5.4",
-        tier=ModelTier.EVERYDAY,
         credentials=ProviderCredentials(api_key="sk-...", base_url=None),
         capabilities=Capabilities(),
         overrides={"temperature": 0.3},
     )
     assert rm.model_ref == "gpt-5.4"
-    assert rm.tier is ModelTier.EVERYDAY
+    assert rm.model_id == "m1"

@@ -127,20 +127,17 @@ def compute_value_series(
     span = ActualSpan(start=actual_start, end=actual_end)
 
     tickers = [h.ticker for h in holdings]
-    daily_rows = (
-        session.execute(
-            select(
-                PortfolioQuoteDaily.ticker,
-                PortfolioQuoteDaily.trade_date,
-                PortfolioQuoteDaily.close,
-            ).where(
-                PortfolioQuoteDaily.ticker.in_(tickers),
-                PortfolioQuoteDaily.trade_date >= actual_start,
-                PortfolioQuoteDaily.trade_date <= actual_end,
-            )
+    daily_rows = session.execute(
+        select(
+            PortfolioQuoteDaily.ticker,
+            PortfolioQuoteDaily.trade_date,
+            PortfolioQuoteDaily.close,
+        ).where(
+            PortfolioQuoteDaily.ticker.in_(tickers),
+            PortfolioQuoteDaily.trade_date >= actual_start,
+            PortfolioQuoteDaily.trade_date <= actual_end,
         )
-        .all()
-    )
+    ).all()
 
     # date -> ticker -> close
     closes: dict[date, dict[str, Decimal]] = {}
@@ -168,9 +165,7 @@ def compute_value_series(
         end_val = points[-1].value
         period_return_abs = end_val - start_val
         if start_val != 0:
-            period_return_pct = (period_return_abs / start_val).quantize(
-                Decimal("0.0001")
-            )
+            period_return_pct = (period_return_abs / start_val).quantize(Decimal("0.0001"))
 
     return ValueSeries(
         timeframe=timeframe,
@@ -196,7 +191,7 @@ def compute_value_series_intraday(
     Finds the most recent UTC date with any intraday rows for the user's
     tickers (up to ``_INTRADAY_FALLBACK_LIMIT_DAYS`` back), then emits one
     point per unique tick timestamp. Each point sums
-    ``sharesᵢ × last-known-priceᵢ`` over holdings whose ``added_at <= ts``.
+    ``shares_i * last-known-price_i`` over holdings whose ``added_at <= ts``.
 
     Returns an empty series if no eligible intraday data exists.
     """
@@ -212,22 +207,19 @@ def compute_value_series_intraday(
 
     tickers = [h.ticker for h in holdings]
     earliest = today - timedelta(days=_INTRADAY_FALLBACK_LIMIT_DAYS)
-    rows = (
-        session.execute(
-            select(
-                PortfolioQuoteIntraday.ticker,
-                PortfolioQuoteIntraday.ts,
-                PortfolioQuoteIntraday.close,
-            )
-            .where(
-                PortfolioQuoteIntraday.ticker.in_(tickers),
-                PortfolioQuoteIntraday.ts
-                >= datetime(earliest.year, earliest.month, earliest.day, tzinfo=UTC),
-            )
-            .order_by(PortfolioQuoteIntraday.ts)
+    rows = session.execute(
+        select(
+            PortfolioQuoteIntraday.ticker,
+            PortfolioQuoteIntraday.ts,
+            PortfolioQuoteIntraday.close,
         )
-        .all()
-    )
+        .where(
+            PortfolioQuoteIntraday.ticker.in_(tickers),
+            PortfolioQuoteIntraday.ts
+            >= datetime(earliest.year, earliest.month, earliest.day, tzinfo=UTC),
+        )
+        .order_by(PortfolioQuoteIntraday.ts)
+    ).all()
     if not rows:
         return ValueSeries(
             timeframe="1d",
@@ -280,9 +272,7 @@ def compute_value_series_intraday(
         end_val = points[-1].value
         period_return_abs = end_val - start_val
         if start_val != 0:
-            period_return_pct = (period_return_abs / start_val).quantize(
-                Decimal("0.0001")
-            )
+            period_return_pct = (period_return_abs / start_val).quantize(Decimal("0.0001"))
 
     return ValueSeries(
         timeframe="1d",

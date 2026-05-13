@@ -60,9 +60,7 @@ def get_quote(session: Session, *, ticker: str) -> PortfolioQuote | None:
     return session.get(PortfolioQuote, ticker.strip().upper())
 
 
-def get_quotes_bulk(
-    session: Session, *, tickers: list[str]
-) -> dict[str, PortfolioQuote]:
+def get_quotes_bulk(session: Session, *, tickers: list[str]) -> dict[str, PortfolioQuote]:
     """Return a map of upper-cased ticker -> row for the rows that exist.
 
     Missing tickers are absent from the result (not present with a ``None``
@@ -75,9 +73,7 @@ def get_quotes_bulk(
     if not cleaned:
         return {}
     rows = (
-        session.execute(
-            select(PortfolioQuote).where(PortfolioQuote.ticker.in_(cleaned))
-        )
+        session.execute(select(PortfolioQuote).where(PortfolioQuote.ticker.in_(cleaned)))
         .scalars()
         .all()
     )

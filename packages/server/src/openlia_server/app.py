@@ -81,6 +81,9 @@ from openlia_server.routes.reports import build_reports_router
 from openlia_server.routes.settings import (
     build_llm_providers_admin_router,
 )
+from openlia_server.routes.settings_llm_slots import (
+    build_llm_slot_defaults_router,
+)
 from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
@@ -394,8 +397,7 @@ def _make_lifespan(
                     )
                 except (ValueError, RuntimeError, LookupError):
                     log.exception(
-                        "graph extraction schedule rehydration failed "
-                        "(continuing startup)"
+                        "graph extraction schedule rehydration failed (continuing startup)"
                     )
 
                 app.state.scheduler = scheduler_svc
@@ -547,6 +549,7 @@ def create_app(
         )
     )
     app.include_router(build_llm_providers_admin_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_llm_slot_defaults_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
@@ -778,10 +781,6 @@ def create_app(
     from openlia_server.routes.settings_email import build_settings_email_router
 
     app.include_router(build_settings_email_router(db_session_factory=factory, mode=mode))
-
-    from openlia_server.routes.settings_llm_user import build_llm_user_router
-
-    app.include_router(build_llm_user_router(db_session_factory=factory, mode=mode))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

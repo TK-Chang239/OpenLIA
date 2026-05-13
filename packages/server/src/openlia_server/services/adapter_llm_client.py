@@ -24,20 +24,10 @@ from typing import Any
 from openlia.connectors.adapter import LlmClient, ResolverError
 from openlia.llm.adapters import build_adapter
 from openlia.llm.base import LLMProvider
-from openlia.llm.exceptions import TierNotConfiguredError
-from openlia.llm.resolver import resolve
-from openlia.llm.types import LLMRequest, Message, ModelTier, ResponseFormat
+from openlia.llm.types import LLMRequest, Message, ResponseFormat
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.services.llm_registry import SQLModelRegistry
-
-# Synthetic department id used when resolving a model for the adapter LLM
-# itself (it is not a real department). Falls through to tier-default.
-_ADAPTER_DEPARTMENT_ID = "_wizard_adapter"
-
-# The adapter task is structured-JSON binding — quick tier is the right
-# default. If quick is not configured the factory falls back to everyday.
-_PREFERRED_TIERS: tuple[ModelTier, ...] = (ModelTier.QUICK, ModelTier.EVERYDAY, ModelTier.THINKING)
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
 
@@ -85,86 +75,52 @@ def _strip_fence(text: str) -> str:
     return match.group(1).strip()
 
 
+def _resolve_provider_for_role(db: DBSession, role_id: str) -> LLMProvider:
+    """Resolve an `LLMProvider` for an internal system role.
+
+    Looks up the admin-assigned model for the given role via
+    `resolve_system_role`. Raises `AdapterLlmNotConfigured` if no
+    model is assigned, pointing the operator at Settings → Models.
+    """
+    from openlia.llm.exceptions import ModelNotConfiguredError
+    from openlia.llm.resolver import resolve_system_role
+
+    registry = SQLModelRegistry(db)
+    try:
+        resolved = resolve_system_role(role_id=role_id, registry=registry)
+    except ModelNotConfiguredError as exc:
+        raise AdapterLlmNotConfigured(
+            f"System role {role_id!r} has no model assigned. "
+            f"Set one in Settings → Models → System roles."
+        ) from exc
+    return build_adapter(
+        kind=resolved.provider_kind,
+        credentials=resolved.credentials,
+        model=resolved.model_ref,
+        capabilities=resolved.capabilities,
+    )
+
+
 def make_adapter_llm_client_factory(
     db_session_factory: Callable[[], DBSession],
 ) -> Callable[[], LlmClient]:
     """Build the per-call factory the proposed-specs route hands the resolver.
 
-    Each call opens a fresh DB session, resolves a model via `SQLModelRegistry`,
-    and returns a wrapped `LLMProvider`. Raises `AdapterLlmNotConfigured` if
-    no enabled model exists in any preferred tier.
+    Each call opens a fresh DB session, resolves the
+    `connector_spec_adapter` system role, and returns a wrapped
+    `LLMProvider`. Raises `AdapterLlmNotConfigured` if no model is
+    assigned to the role.
     """
 
     def _factory() -> LlmClient:
         db = db_session_factory()
         try:
-            registry = SQLModelRegistry(db)
-            resolved = None
-            last_error: TierNotConfiguredError | None = None
-            for tier in _PREFERRED_TIERS:
-                try:
-                    resolved = resolve(
-                        department_id=_ADAPTER_DEPARTMENT_ID,
-                        registry=registry,
-                        user_id=None,
-                        tier_override=tier,
-                    )
-                    break
-                except TierNotConfiguredError as exc:
-                    last_error = exc
-                    continue
-            if resolved is None:
-                raise AdapterLlmNotConfigured(
-                    "No LLM model is configured. Add a provider and model in "
-                    "Settings → Models before running connector resolve."
-                ) from last_error
-
-            provider = build_adapter(
-                kind=resolved.provider_kind,
-                credentials=resolved.credentials,
-                model=resolved.model_ref,
-                capabilities=resolved.capabilities,
-            )
-            return AdapterLlmJsonClient(provider=provider)
+            provider = _resolve_provider_for_role(db, "connector_spec_adapter")
         finally:
             db.close()
+        return AdapterLlmJsonClient(provider=provider)
 
     return _factory
-
-
-# Agentic resolver: prefer the thinking tier so the LLM has the headroom
-# to navigate large repos via filesystem tools (per the grounding plan).
-_AGENTIC_TIERS: tuple[ModelTier, ...] = (
-    ModelTier.THINKING,
-    ModelTier.EVERYDAY,
-    ModelTier.QUICK,
-)
-
-
-def _resolve_provider(db: DBSession, tiers: tuple[ModelTier, ...]) -> LLMProvider:
-    registry = SQLModelRegistry(db)
-    last_error: TierNotConfiguredError | None = None
-    for tier in tiers:
-        try:
-            resolved = resolve(
-                department_id=_ADAPTER_DEPARTMENT_ID,
-                registry=registry,
-                user_id=None,
-                tier_override=tier,
-            )
-        except TierNotConfiguredError as exc:
-            last_error = exc
-            continue
-        return build_adapter(
-            kind=resolved.provider_kind,
-            credentials=resolved.credentials,
-            model=resolved.model_ref,
-            capabilities=resolved.capabilities,
-        )
-    raise AdapterLlmNotConfigured(
-        "No LLM model is configured. Add a provider and model in "
-        "Settings → Models before running connector resolve."
-    ) from last_error
 
 
 def make_agentic_resolver_factory(
@@ -194,7 +150,7 @@ def make_agentic_resolver_factory(
     ) -> LlmClient:
         db = db_session_factory()
         try:
-            provider = _resolve_provider(db, _AGENTIC_TIERS)
+            provider = _resolve_provider_for_role(db, "connector_agentic_resolver")
         finally:
             db.close()
         return AgenticResolverClient(

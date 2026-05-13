@@ -4,8 +4,8 @@ Runs nightly per user at their preferred local-clock time. Two phases:
 
 1. **Extraction**: walk every ``ChatSession`` the user has updated since
    the last successful run (the audit-table watermark) and ask the
-   user's quick-tier LLM to produce ``user_construct`` / ``mention``
-   proposals. Each session writes its proposals through
+   ``graph_extraction``-role LLM to produce ``user_construct`` /
+   ``mention`` proposals. Each session writes its proposals through
    ``graph_extraction.extract_proposals_from_session``.
 2. **Summary indexing**: walk every ``Report`` the user has saved since
    the watermark and embed its structured summary into
@@ -35,7 +35,7 @@ from typing import Any, ClassVar, Protocol
 from openlia.llm.base import LLMProvider
 from openlia.llm.embeddings import EmbeddingProvider
 from openlia.llm.runtime.cancellation import CancellationToken
-from openlia.llm.types import LLMRequest, LLMResponse, ModelTier
+from openlia.llm.types import LLMRequest, LLMResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
@@ -56,7 +56,7 @@ from openlia_server.services import (
 )
 from openlia_server.services.adapter_llm_client import (
     AdapterLlmNotConfigured,
-    _resolve_provider,
+    _resolve_provider_for_role,
 )
 
 DEPARTMENT = "secretary"
@@ -78,10 +78,11 @@ class _SyncProviderAdapter:
 
 
 class _ProviderFactory(Protocol):
-    """Resolve a quick-tier ``LLMProvider`` from the DB session.
+    """Resolve an ``LLMProvider`` from the DB session for a system role.
 
-    Default factory uses ``_resolve_provider``; tests pass a fake that
-    returns a deterministic provider.
+    Default factories use ``_resolve_provider_for_role`` against the
+    ``graph_extraction`` and ``graph_summarization`` role slots; tests
+    pass fakes that return deterministic providers.
     """
 
     def __call__(self, db: DBSession) -> LLMProvider: ...
@@ -100,7 +101,11 @@ class _EmbeddingProviderFactory(Protocol):
 
 
 def _default_provider_factory(db: DBSession) -> LLMProvider:
-    return _resolve_provider(db, (ModelTier.QUICK,))
+    return _resolve_provider_for_role(db, "graph_extraction")
+
+
+def _default_summary_provider_factory(db: DBSession) -> LLMProvider:
+    return _resolve_provider_for_role(db, "graph_summarization")
 
 
 def _default_embedding_factory() -> tuple[EmbeddingProvider, str]:
@@ -118,17 +123,19 @@ class GraphExtractionExecutor(BaseExecutor):
         session_factory: SessionFactory,
         sleep: AsyncSleep | None = None,
         provider_factory: _ProviderFactory | None = None,
+        summary_provider_factory: _ProviderFactory | None = None,
         embedding_factory: _EmbeddingProviderFactory | None = None,
         extract_fn_builder: Callable[[Any], graph_extraction.ExtractFn] | None = None,
         summarize_fn_builder: Callable[[Any], graph_summarization.SummarizeFn] | None = None,
     ) -> None:
         super().__init__(session_factory=session_factory, sleep=sleep)
         self._provider_factory = provider_factory or _default_provider_factory
+        self._summary_provider_factory = (
+            summary_provider_factory or _default_summary_provider_factory
+        )
         self._embedding_factory = embedding_factory or _default_embedding_factory
         self._extract_fn_builder = extract_fn_builder or graph_extraction_llm.make_extract_fn
-        self._summarize_fn_builder = (
-            summarize_fn_builder or graph_summarization.make_summarize_fn
-        )
+        self._summarize_fn_builder = summarize_fn_builder or graph_summarization.make_summarize_fn
 
     async def _do_work(
         self,
@@ -140,10 +147,14 @@ class GraphExtractionExecutor(BaseExecutor):
     ) -> JobOutcome:
         assert user_id is not None
 
-        # 1. Resolve provider. Missing config → clean failure with audit row.
+        # 1. Resolve providers. Missing config → clean failure with audit row.
+        # Extraction and summarization resolve via distinct system_role
+        # slots so admins can pin a heavier model for one phase and a
+        # lighter one for the other.
         with self._session_factory() as session:
             try:
                 provider = self._provider_factory(session)
+                summary_provider = self._summary_provider_factory(session)
             except AdapterLlmNotConfigured as exc:
                 # Record an audit row noting the misconfiguration so the
                 # admin UI can surface it, then re-raise so the executor
@@ -158,9 +169,10 @@ class GraphExtractionExecutor(BaseExecutor):
                 raise
             model_id = provider.model
 
-        client = _SyncProviderAdapter(provider)
-        extract_fn = self._extract_fn_builder(client)
-        summarize_fn = self._summarize_fn_builder(client)
+        extract_client = _SyncProviderAdapter(provider)
+        summary_client = _SyncProviderAdapter(summary_provider)
+        extract_fn = self._extract_fn_builder(extract_client)
+        summarize_fn = self._summarize_fn_builder(summary_client)
         embed_provider, embed_model_name = self._embedding_factory()
 
         # 2. Open audit row. Commit before any work so a crash can't

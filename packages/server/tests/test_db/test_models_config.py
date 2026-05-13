@@ -35,43 +35,27 @@ def test_llm_providers_columns(create_tables) -> None:
     }
 
 
-def test_llm_models_tier_default_partial_unique(create_tables, db_session: Session) -> None:
-    from openlia_server.db.models.config import LLMModel, LLMProvider
+def test_llm_model_has_no_tier_attrs() -> None:
+    from openlia_server.db.models.config import LLMModel
 
-    p = LLMProvider(id="p1", kind="openai", label="p")
-    db_session.add(p)
-    db_session.commit()
-
-    db_session.add(
-        LLMModel(
-            id="m1",
-            provider_id="p1",
-            tier="thinking",
-            model_ref="a",
-            display_name="A",
-            is_tier_default=True,
-        )
-    )
-    db_session.commit()
-    db_session.add(
-        LLMModel(
-            id="m2",
-            provider_id="p1",
-            tier="thinking",
-            model_ref="b",
-            display_name="B",
-            is_tier_default=True,
-        )
-    )
-    with pytest.raises(IntegrityError):
-        db_session.commit()
+    assert not hasattr(LLMModel, "tier")
+    assert not hasattr(LLMModel, "is_tier_default")
 
 
-def test_user_llm_preferences_composite_pk(create_tables) -> None:
-    from openlia_server.db.models.config import UserLLMPreference
+def test_llm_slot_default_model_exists(create_tables) -> None:
+    from openlia_server.db.models.config import LLMSlotDefault
 
-    pk_cols = {c.name for c in UserLLMPreference.__table__.primary_key}
-    assert pk_cols == {"user_id", "tier"}
+    assert LLMSlotDefault.__tablename__ == "llm_slot_defaults"
+    cols = {c.name for c in LLMSlotDefault.__table__.columns}
+    assert cols == {"slot_kind", "slot_id", "model_id", "updated_at"}
+    pk_cols = {c.name for c in LLMSlotDefault.__table__.primary_key}
+    assert pk_cols == {"slot_kind", "slot_id"}
+
+
+def test_user_llm_preference_removed() -> None:
+    import openlia_server.db.models.config as cfg
+
+    assert not hasattr(cfg, "UserLLMPreference")
 
 
 def test_web_search_providers_priority_default(create_tables, db_session: Session) -> None:
@@ -89,7 +73,7 @@ def test_llm_model_provider_restrict_delete(create_tables, db_session: Session) 
     from openlia_server.db.models.config import LLMModel, LLMProvider
 
     p = LLMProvider(id="p1", kind="openai", label="p")
-    m = LLMModel(id="m1", provider_id="p1", tier="thinking", model_ref="a", display_name="A")
+    m = LLMModel(id="m1", provider_id="p1", model_ref="a", display_name="A")
     db_session.add_all([p, m])
     db_session.commit()
 

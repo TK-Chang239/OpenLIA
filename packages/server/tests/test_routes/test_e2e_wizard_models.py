@@ -1,19 +1,17 @@
-"""NEW-4-38: End-to-end wizard Step 3 -> DB -> resolver round-trip.
+"""NEW-4-38: End-to-end wizard Step 3 -> DB round-trip.
 
-Drives the wizard through `/setup/models` against an in-memory respx-mocked
-Ollama backend, then asserts the persisted llm_providers + llm_models rows and
-calls `resolve()` through `SQLModelRegistry`.
+Drives the wizard through `/setup/models` and asserts the persisted
+llm_providers + llm_models rows plus the wired slot_defaults entries.
 """
 
 from __future__ import annotations
 
-from openlia.llm.resolver import resolve
-from openlia.llm.types import ModelTier
-from openlia_server.db.models.config import LLMModel, LLMProvider
-from openlia_server.services.llm_registry import SQLModelRegistry
+from openlia.departments import get_registered_department_ids
+from openlia.llm.system_roles import SYSTEM_ROLE_IDS
+from openlia_server.db.models.config import LLMModel, LLMProvider, LLMSlotDefault
 
 
-def test_wizard_models_post_persists_three_tiers_and_resolver_returns_thinking(
+def test_wizard_models_post_persists_models_and_slot_defaults(
     wizard_personal_client, db_session, monkeypatch
 ) -> None:
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
@@ -21,31 +19,25 @@ def test_wizard_models_post_persists_three_tiers_and_resolver_returns_thinking(
     # Bootstrap wizard cookie via /setup/mode.
     wizard_personal_client.post("/setup/mode", json={"mode": "personal"})
 
+    dept_ids = get_registered_department_ids()
+    role_ids = list(SYSTEM_ROLE_IDS)
     payload = {
-        "thinking": [
+        "models": [
             {
-                "provider": "ollama",
-                "model": "llama3.1:70b",
+                "provider_kind": "ollama",
                 "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
-        "everyday": [
+                "model_ref": "llama3.1:70b",
+                "display_name": "Llama 3.1 70B",
+            },
             {
-                "provider": "ollama",
-                "model": "llama3.1:8b",
+                "provider_kind": "ollama",
                 "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
+                "model_ref": "llama3.1:8b",
+                "display_name": "Llama 3.1 8B",
+            },
         ],
-        "quick": [
-            {
-                "provider": "ollama",
-                "model": "qwen2.5:7b",
-                "base_url": "http://localhost:11434",
-                "is_tier_default": True,
-            }
-        ],
+        "department_defaults": {dept_id: "llama3.1:70b" for dept_id in dept_ids},
+        "system_role_defaults": {role_id: "llama3.1:8b" for role_id in role_ids},
     }
     resp = wizard_personal_client.post("/setup/models", json=payload)
     assert resp.status_code == 200, resp.text
@@ -53,17 +45,16 @@ def test_wizard_models_post_persists_three_tiers_and_resolver_returns_thinking(
     db_session.expire_all()
     providers = db_session.query(LLMProvider).all()
     models = db_session.query(LLMModel).all()
-    assert len(providers) == 3
-    assert len(models) == 3
+    assert len(providers) == 1  # single (kind, api_key, base_url, env) tuple
+    assert len(models) == 2
     refs = {m.model_ref for m in models}
-    assert refs == {"llama3.1:70b", "llama3.1:8b", "qwen2.5:7b"}
+    assert refs == {"llama3.1:70b", "llama3.1:8b"}
 
-    registry = SQLModelRegistry(db_session)
-    resolved = resolve(
-        department_id="equity_research",
-        registry=registry,
-        user_id=None,
-    )
-    assert resolved.tier == ModelTier.THINKING
-    assert resolved.model_ref == "llama3.1:70b"
-    assert resolved.provider_kind == "ollama"
+    # Slot defaults are wired for every department + system role we sent.
+    slot_rows = db_session.query(LLMSlotDefault).all()
+    by_slot = {(r.slot_kind, r.slot_id): r.model_id for r in slot_rows}
+    model_by_ref = {m.model_ref: m.id for m in models}
+    for dept_id in dept_ids:
+        assert by_slot[("department", dept_id)] == model_by_ref["llama3.1:70b"]
+    for role_id in role_ids:
+        assert by_slot[("system_role", role_id)] == model_by_ref["llama3.1:8b"]

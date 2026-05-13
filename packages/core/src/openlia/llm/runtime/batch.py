@@ -14,7 +14,7 @@ from collections.abc import Callable
 from pydantic import BaseModel, ValidationError
 
 from openlia.llm.base import LLMProvider
-from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.exceptions import LLMProviderError, ModelNotConfiguredError
 from openlia.llm.resolver import ModelRegistry
 from openlia.llm.runtime.cancellation import CancellationToken, await_with_grace
 from openlia.llm.runtime.messages import BatchItem, BatchResult
@@ -61,7 +61,7 @@ class BatchRunner:
                 user_id=user_id,
                 registry=self._registry,
             )
-        except LLMProviderError as exc:
+        except (LLMProviderError, ModelNotConfiguredError) as exc:
             msg = f"{type(exc).__name__}: {exc!s}"
             return [BatchResult(id=it.id, ok=False, data=None, error=msg) for it in items]
 

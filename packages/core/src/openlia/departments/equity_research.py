@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, ClassVar, Literal
 
 from openlia.connectors.types import Category
-from openlia.departments.base import Tier
 
 EquityResearchMode = Literal["stock_initiation", "stock_update", "sector_research"]
 
@@ -14,7 +13,6 @@ class EquityResearchDepartment:
     name: str = "equity_research"
     display_name: str = "Equity Research"
     prompt_name: str = "equity_research"
-    tier: Tier = "thinking"
 
     # Connector dependencies (spec §10.1).
     required_categories: ClassVar[tuple[Category, ...]] = (Category.FINANCIAL,)

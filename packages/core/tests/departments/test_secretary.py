@@ -9,10 +9,6 @@ def test_secretary_identifies_itself():
     assert d.prompt_name == "secretary"
 
 
-def test_secretary_uses_everyday_tier():
-    assert SecretaryDepartment().tier == "everyday"
-
-
 def test_secretary_has_no_required_categories():
     # Spec §10.1: Secretary is zero-config; it never disables.
     assert SecretaryDepartment.required_categories == ()

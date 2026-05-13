@@ -54,9 +54,7 @@ def backfill_daily_history(
     existing = {
         d
         for (d,) in session.execute(
-            select(PortfolioQuoteDaily.trade_date).where(
-                PortfolioQuoteDaily.ticker == ticker
-            )
+            select(PortfolioQuoteDaily.trade_date).where(PortfolioQuoteDaily.ticker == ticker)
         ).all()
     }
 
@@ -117,7 +115,7 @@ class AdapterDailyHistoryProvider:
 
         if self._adapter is None:
             return []
-        from_date = (datetime.now(UTC).date() - timedelta(days=int(365 * years)))
+        from_date = datetime.now(UTC).date() - timedelta(days=int(365 * years))
         try:
             result = asyncio.run(
                 self._adapter.fetch(

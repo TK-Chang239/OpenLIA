@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
-from openlia.llm.exceptions import CapabilityError, LLMProviderError, TierNotConfiguredError
+from openlia.llm.exceptions import CapabilityError, LLMProviderError, ModelNotConfiguredError
 from openlia.llm.runtime.cancellation import CancellationToken
 from openlia.llm.runtime.events import (
     ReportComplete,
@@ -25,7 +25,6 @@ from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     Capabilities,
-    ModelTier,
     ProviderCredentials,
     ResolvedModel,
     ToolCall,
@@ -88,7 +87,6 @@ def _resolved() -> ResolvedModel:
         provider_id="p1",
         model_id="m1",
         model_ref="fake-1",
-        tier=ModelTier.THINKING,
         credentials=ProviderCredentials(api_key="k", base_url=None),
         capabilities=Capabilities(streaming=True, tool_calling=True, structured_output=True),
         overrides={},
@@ -96,28 +94,18 @@ def _resolved() -> ResolvedModel:
 
 
 class _Registry:
-    def get_department_tier_override(self, department_id: str):
-        return None
-
-    def get_user_preference(self, user_id, tier):
-        return None
-
-    def get_tier_default(self, tier):
-        return None
-
-    def get_any_in_tier(self, tier):
-        return None
+    pass
 
 
 def _always(resolved):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry):
         return resolved
 
     return _r
 
 
 def _raises(exc):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry):
         raise exc
 
     return _r
@@ -912,7 +900,7 @@ async def test_report_tool_loop_emits_tool_events(
     assert any(isinstance(e, ReportToolCall) for e in events)
 
 
-async def test_report_tier_not_configured_emits_report_error(
+async def test_report_model_not_configured_emits_report_error(
     prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
     provider = FakeProvider(script=FakeProviderScript(turns=[]))
@@ -923,7 +911,7 @@ async def test_report_tier_not_configured_emits_report_error(
             data_dispatcher=data,
             web_search=WebSearchResolution(False, None, None),
         ),
-        resolve=_raises(TierNotConfiguredError("thinking")),
+        resolve=_raises(ModelNotConfiguredError(slot_kind="department", slot_id="equity_research")),
         registry=_Registry(),
         provider_factory=lambda r: provider,
         skill_registry=_empty_skill_registry(tmp_path),
@@ -938,7 +926,7 @@ async def test_report_tier_not_configured_emits_report_error(
         )
     )
     assert isinstance(events[-1], ReportError)
-    assert events[-1].error_class == "TierNotConfiguredError"
+    assert events[-1].error_class == "ModelNotConfiguredError"
 
 
 async def test_report_capability_error_terminates(
@@ -1352,9 +1340,7 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
             }
         }
     }
-    data = FakeDataDispatcher(
-        manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}}
-    )
+    data = FakeDataDispatcher(manifest=manifest, results={"stock_quote": {"symbol": "AAPL"}})
     runner = ReportRunner(
         prompts=PromptLoader(root=prompts_root),
         tools=ToolDispatcher(
@@ -1380,9 +1366,9 @@ async def test_report_replays_assistant_tool_calls_and_tool_call_id(
     second = provider.captured_requests[1]
     assistant_msgs = [m for m in second.messages if m.role == "assistant"]
     assert assistant_msgs, "assistant tool-call message must be replayed"
-    assert any(
-        any(tc.id == "c_99" for tc in m.tool_calls) for m in assistant_msgs
-    ), "assistant message must carry the original tool_calls"
+    assert any(any(tc.id == "c_99" for tc in m.tool_calls) for m in assistant_msgs), (
+        "assistant message must carry the original tool_calls"
+    )
     tool_msgs = [m for m in second.messages if m.role == "tool"]
     assert tool_msgs, "tool-result message must be present"
     assert all(m.tool_call_id for m in tool_msgs), (

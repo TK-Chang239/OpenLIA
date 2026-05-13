@@ -19,8 +19,7 @@ def test_named_check_constraints_present() -> None:
         "users": {"ck_users_failed_login_attempts_nonneg"},
         "signup_policy": {"ck_signup_policy_mode_enum"},
         "wizard_state": {"ck_wizard_state_status_enum"},
-        "llm_models": {"ck_llm_models_tier_enum"},
-        "user_llm_preferences": {"ck_user_llm_preferences_tier_enum"},
+        "llm_slot_defaults": {"ck_llm_slot_defaults_slot_kind"},
     }
     for table_name, want in expected.items():
         constraints = Base.metadata.tables[table_name].constraints
@@ -62,21 +61,27 @@ def test_users_failed_login_rejects_negative(create_tables, db_session: Session)
         db_session.flush()
 
 
-def test_llm_models_tier_rejects_unknown(create_tables, db_session: Session) -> None:
+def test_llm_slot_defaults_slot_kind_rejects_unknown(create_tables, db_session: Session) -> None:
     db_session.execute(
         text(
             "INSERT INTO llm_providers (id, kind, label, is_enabled, created_at, updated_at) "
             "VALUES ('p1', 'openai', 'OAI', 1, datetime('now'), datetime('now'))"
         )
     )
+    db_session.execute(
+        text(
+            "INSERT INTO llm_models (id, provider_id, model_ref, display_name, "
+            "is_enabled, created_at, updated_at) "
+            "VALUES ('m1', 'p1', 'gpt-x', 'X', 1, "
+            "datetime('now'), datetime('now'))"
+        )
+    )
     db_session.flush()
     with pytest.raises(IntegrityError):
         db_session.execute(
             text(
-                "INSERT INTO llm_models (id, provider_id, tier, model_ref, display_name, "
-                "is_tier_default, is_enabled, created_at, updated_at) "
-                "VALUES ('m1', 'p1', 'reasoning', 'gpt-x', 'X', 0, 1, "
-                "datetime('now'), datetime('now'))"
+                "INSERT INTO llm_slot_defaults (slot_kind, slot_id, model_id, updated_at) "
+                "VALUES ('bogus', 'secretary', 'm1', datetime('now'))"
             )
         )
         db_session.flush()
