@@ -7,9 +7,7 @@ def test_get_department_slot_default_returns_row(db_session, llm_model_factory):
     from openlia_server.services.slot_defaults import set_slot_default
 
     m = llm_model_factory()
-    set_slot_default(
-        db_session, slot_kind="department", slot_id="secretary", model_id=m.id
-    )
+    set_slot_default(db_session, slot_kind="department", slot_id="secretary", model_id=m.id)
     reg = SQLModelRegistry(db_session)
     row = reg.get_department_slot_default("secretary")
     assert row is not None
@@ -20,9 +18,7 @@ def test_get_system_role_default_returns_row(db_session, llm_model_factory):
     from openlia_server.services.slot_defaults import set_slot_default
 
     m = llm_model_factory()
-    set_slot_default(
-        db_session, slot_kind="system_role", slot_id="ai_review", model_id=m.id
-    )
+    set_slot_default(db_session, slot_kind="system_role", slot_id="ai_review", model_id=m.id)
     reg = SQLModelRegistry(db_session)
     row = reg.get_system_role_default("ai_review")
     assert row is not None

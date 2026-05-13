@@ -2,6 +2,7 @@
 assigned model. Each role is a slot in `llm_slot_defaults` with
 `slot_kind='system_role'` and `slot_id` equal to the SystemRole value.
 """
+
 from __future__ import annotations
 
 from enum import StrEnum

@@ -30,9 +30,7 @@ def _validate_slot(slot_kind: str, slot_id: str) -> None:
         raise InvalidSlotError(f"Unknown system role {slot_id!r}")
 
 
-def set_slot_default(
-    db: Session, *, slot_kind: str, slot_id: str, model_id: str
-) -> LLMSlotDefault:
+def set_slot_default(db: Session, *, slot_kind: str, slot_id: str, model_id: str) -> LLMSlotDefault:
     _validate_slot(slot_kind, slot_id)
     row = db.get(LLMSlotDefault, (slot_kind, slot_id))
     if row is None:
@@ -45,9 +43,7 @@ def set_slot_default(
     return row
 
 
-def get_slot_default_model_id(
-    db: Session, slot_kind: str, slot_id: str
-) -> str | None:
+def get_slot_default_model_id(db: Session, slot_kind: str, slot_id: str) -> str | None:
     row = db.get(LLMSlotDefault, (slot_kind, slot_id))
     return row.model_id if row is not None else None
 
@@ -73,9 +69,7 @@ class SlotDefaultsService:
         return get_slot_default_model_id(self._db, slot_kind, slot_id)
 
     def set(self, slot_kind: str, slot_id: str, model_id: str) -> LLMSlotDefault:
-        return set_slot_default(
-            self._db, slot_kind=slot_kind, slot_id=slot_id, model_id=model_id
-        )
+        return set_slot_default(self._db, slot_kind=slot_kind, slot_id=slot_id, model_id=model_id)
 
     def delete(self, slot_kind: str, slot_id: str) -> None:
         delete_slot_default(self._db, slot_kind=slot_kind, slot_id=slot_id)

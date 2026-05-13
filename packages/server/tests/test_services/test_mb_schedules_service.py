@@ -41,17 +41,13 @@ class FakeScheduler:
 
 
 @pytest.mark.asyncio
-async def test_list_returns_empty_when_no_schedules(
-    create_tables, db_session: Session
-) -> None:
+async def test_list_returns_empty_when_no_schedules(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     assert svc.list_schedules(db_session, user_id="u_1") == []
 
 
 @pytest.mark.asyncio
-async def test_create_inserts_row_and_registers(
-    create_tables, db_session: Session
-) -> None:
+async def test_create_inserts_row_and_registers(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     dto = await svc.create_schedule(
@@ -104,9 +100,7 @@ async def test_create_allows_multiple_schedules_per_user(
 
 
 @pytest.mark.asyncio
-async def test_update_modifies_existing_row(
-    create_tables, db_session: Session
-) -> None:
+async def test_update_modifies_existing_row(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     a = await svc.create_schedule(
@@ -137,9 +131,7 @@ async def test_update_modifies_existing_row(
 
 
 @pytest.mark.asyncio
-async def test_update_returns_none_for_unknown_id(
-    create_tables, db_session: Session
-) -> None:
+async def test_update_returns_none_for_unknown_id(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     out = await svc.update_schedule(
@@ -173,9 +165,7 @@ async def test_create_validates_time(create_tables, db_session: Session) -> None
 
 
 @pytest.mark.asyncio
-async def test_create_validates_timezone(
-    create_tables, db_session: Session
-) -> None:
+async def test_create_validates_timezone(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     with pytest.raises(ValueError, match="timezone"):
@@ -191,9 +181,7 @@ async def test_create_validates_timezone(
 
 
 @pytest.mark.asyncio
-async def test_create_validates_days_of_week(
-    create_tables, db_session: Session
-) -> None:
+async def test_create_validates_days_of_week(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     with pytest.raises(ValueError, match="days_of_week"):
@@ -209,9 +197,7 @@ async def test_create_validates_days_of_week(
 
 
 @pytest.mark.asyncio
-async def test_delete_removes_row_and_unregisters(
-    create_tables, db_session: Session
-) -> None:
+async def test_delete_removes_row_and_unregisters(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     a = await svc.create_schedule(
@@ -232,9 +218,7 @@ async def test_delete_removes_row_and_unregisters(
 
 
 @pytest.mark.asyncio
-async def test_delete_returns_false_when_missing(
-    create_tables, db_session: Session
-) -> None:
+async def test_delete_returns_false_when_missing(create_tables, db_session: Session) -> None:
     _mk_user(db_session)
     sched = FakeScheduler()
     deleted = await svc.delete_schedule(

@@ -26,5 +26,6 @@ def test_get_system_role_label_returns_human_string():
 
 def test_get_system_role_label_unknown_raises():
     import pytest
+
     with pytest.raises(KeyError):
         get_system_role_label("not_a_role")

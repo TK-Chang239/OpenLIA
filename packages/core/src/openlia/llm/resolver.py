@@ -26,9 +26,7 @@ class ModelRegistry(Protocol):
         self, user_id: str, department_id: str
     ) -> ResolvedModelRow | None: ...
 
-    def get_department_slot_default(
-        self, department_id: str
-    ) -> ResolvedModelRow | None: ...
+    def get_department_slot_default(self, department_id: str) -> ResolvedModelRow | None: ...
 
     def get_system_role_default(self, role_id: str) -> ResolvedModelRow | None: ...
 
@@ -79,9 +77,7 @@ def resolve(
     raise ModelNotConfiguredError(slot_kind="department", slot_id=department_id)
 
 
-def resolve_system_role(
-    *, role_id: str, registry: ModelRegistry
-) -> ResolvedModel:
+def resolve_system_role(*, role_id: str, registry: ModelRegistry) -> ResolvedModel:
     """System-role resolution: no user override, direct slot lookup."""
     row = registry.get_system_role_default(role_id)
     if row is None:

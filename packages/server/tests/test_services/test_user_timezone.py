@@ -39,9 +39,7 @@ def test_auto_set_persists_and_keeps_source_auto(create_tables, db_session: Sess
     assert prefs.timezone_source == "auto"
 
 
-def test_manual_set_locks_out_subsequent_auto_updates(
-    create_tables, db_session: Session
-) -> None:
+def test_manual_set_locks_out_subsequent_auto_updates(create_tables, db_session: Session) -> None:
     """Once the user picks a TZ in Settings, browser drift must not
     silently overwrite it."""
     u = _user(db_session)
