@@ -208,15 +208,19 @@ def build_equity_research_router(
         runner = EquityResearchRunner(db_session=db, inner=inner)
 
         async def stream() -> AsyncIterator[bytes]:
-            async for ev in runner.run_report(
-                user_id=user.id,
-                mode=mode,
-                user_input=user_input,
-                session_id=session_id,
-                attachments=runtime_attachments or None,
-            ):
-                wire = _serialize_event(ev)
-                yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
+            try:
+                async for ev in runner.run_report(
+                    user_id=user.id,
+                    mode=mode,
+                    user_input=user_input,
+                    session_id=session_id,
+                    attachments=runtime_attachments or None,
+                ):
+                    wire = _serialize_event(ev)
+                    yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
+            except Exception as exc:
+                err = {"type": "report.error", "message": str(exc) or exc.__class__.__name__}
+                yield f"event: report.error\ndata: {json.dumps(err)}\n\n".encode()
 
         return StreamingResponse(
             stream(),
