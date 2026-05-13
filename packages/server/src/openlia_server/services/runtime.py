@@ -221,6 +221,7 @@ class RefreshingChatRunner:
         disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
         response_length: str | None = None,
         memory_block: str | None = None,
+        selected_exemplars: list[str] | None = None,
     ):
         db = self._factory()
         try:
@@ -255,6 +256,7 @@ class RefreshingChatRunner:
                 disabled_skill_ids=frozenset(disabled_skill_ids),
                 response_length=response_length,
                 memory_block=memory_block,
+                selected_exemplars=selected_exemplars,
             ):
                 yield event
         finally:

@@ -108,8 +108,10 @@ def build_chat_stream_router(
         # nothing matches. Applies to every chat-style department on this
         # unified endpoint, not just Secretary.
         from openlia_server.services import graph_retrieval
+        from openlia_server.services.exemplar_selector import select_exemplars
 
         memory_block = graph_retrieval.retrieve_memory_block(db, user_id=user.id, message=q)
+        selected_exemplars = select_exemplars(q)
 
         factory: Callable[[], ChatRunner] = request.app.state.chat_runner_factory
         persist = _Persistence(db_session_factory=db_session_factory, session_id=session_id)
@@ -129,6 +131,7 @@ def build_chat_stream_router(
                 disabled_connector_ids=tuple(session_row.disabled_connector_ids or ()),
                 disabled_skill_ids=tuple(session_row.disabled_skill_ids or ()),
                 memory_block=memory_block,
+                selected_exemplars=selected_exemplars,
             ),
             media_type="text/event-stream",
         )
@@ -208,6 +211,7 @@ async def _event_source(
     disabled_connector_ids: tuple[str, ...] = (),
     disabled_skill_ids: tuple[str, ...] = (),
     memory_block: str | None = None,
+    selected_exemplars: list[str] | None = None,
 ) -> AsyncIterator[bytes]:
     token = CancellationToken()
     runner = factory()
@@ -230,6 +234,7 @@ async def _event_source(
             disabled_connector_ids=disabled_connector_ids,
             disabled_skill_ids=disabled_skill_ids,
             memory_block=memory_block,
+            selected_exemplars=selected_exemplars,
         ):
             wire = to_wire(event)
             etype = wire["type"]
