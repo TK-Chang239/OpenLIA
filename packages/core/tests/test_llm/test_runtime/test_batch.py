@@ -8,13 +8,12 @@ from typing import Literal
 
 import pytest
 from _fakes import FakeProvider, FakeProviderScript
-from openlia.llm.exceptions import ContextLengthError, TierNotConfiguredError
+from openlia.llm.exceptions import ContextLengthError, ModelNotConfiguredError
 from openlia.llm.runtime.batch import BatchRunner
 from openlia.llm.runtime.messages import BatchItem
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.types import (
     Capabilities,
-    ModelTier,
     ProviderCredentials,
     ResolvedModel,
 )
@@ -55,7 +54,6 @@ def _resolved() -> ResolvedModel:
         provider_id="p1",
         model_id="m1",
         model_ref="fake-1",
-        tier=ModelTier.QUICK,
         credentials=ProviderCredentials(api_key="k", base_url=None),
         capabilities=Capabilities(streaming=True, tool_calling=False, structured_output=True),
         overrides={},
@@ -63,28 +61,18 @@ def _resolved() -> ResolvedModel:
 
 
 class _Registry:
-    def get_department_tier_override(self, department_id: str):
-        return None
-
-    def get_user_preference(self, user_id, tier):
-        return None
-
-    def get_tier_default(self, tier):
-        return None
-
-    def get_any_in_tier(self, tier):
-        return None
+    pass
 
 
 def _always(resolved):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry):
         return resolved
 
     return _r
 
 
 def _raises(exc):
-    def _r(*, department_id, user_id, registry, tier_override=None):
+    def _r(*, department_id, user_id, registry):
         raise exc
 
     return _r
@@ -172,10 +160,12 @@ async def test_batch_surfaces_per_item_failure_without_sinking_batch(
     assert by_id["ok2"].ok is True
 
 
-async def test_batch_tier_not_configured_fails_every_item(prompts_root: Path) -> None:
+async def test_batch_model_not_configured_fails_every_item(prompts_root: Path) -> None:
     runner = BatchRunner(
         prompts=PromptLoader(root=prompts_root),
-        resolve=_raises(TierNotConfiguredError("quick")),
+        resolve=_raises(
+            ModelNotConfiguredError(slot_kind="department", slot_id="retail_sentiment")
+        ),
         registry=_Registry(),
         provider_factory=lambda r: FakeProvider(),
     )
@@ -191,7 +181,7 @@ async def test_batch_tier_not_configured_fails_every_item(prompts_root: Path) ->
         concurrency=2,
     )
     assert all(r.ok is False for r in results)
-    assert all("TierNotConfiguredError" in r.error for r in results)
+    assert all("ModelNotConfiguredError" in r.error for r in results)
 
 
 async def test_batch_concurrency_is_bounded(prompts_root: Path) -> None:

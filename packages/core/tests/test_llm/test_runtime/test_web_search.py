@@ -8,7 +8,7 @@ from openlia.llm.runtime.web_search import (
     WebSearchResult,
     resolve_web_search,
 )
-from openlia.llm.types import Capabilities, ModelTier, ProviderCredentials, ResolvedModel
+from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
 
 pytestmark = pytest.mark.asyncio
 
@@ -19,7 +19,6 @@ def _resolved(*, web_search_native: bool) -> ResolvedModel:
         provider_id="p1",
         model_id="m1",
         model_ref="gpt-5.4",
-        tier=ModelTier.EVERYDAY,
         credentials=ProviderCredentials(api_key="sk", base_url=None),
         capabilities=Capabilities(
             streaming=True,
