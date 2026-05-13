@@ -5,7 +5,6 @@ from typing import Protocol
 
 from openlia.llm.capabilities import capabilities_for
 from openlia.llm.department_defaults import DEPARTMENT_DEFAULT_TIERS
-from openlia.llm.exceptions import TierNotConfiguredError
 from openlia.llm.types import (
     ModelTier,
     ProviderCredentials,
@@ -122,4 +121,4 @@ def resolve(
     if any_row is not None:
         return _to_resolved(any_row)
 
-    raise TierNotConfiguredError(tier.value)
+    raise ValueError(f"No model configured for tier: {tier.value}")
