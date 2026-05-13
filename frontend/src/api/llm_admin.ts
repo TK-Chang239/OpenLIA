@@ -11,8 +11,6 @@ export type ProviderKind =
   | 'openai_compat'
   | 'ollama';
 
-export type Tier = 'thinking' | 'everyday' | 'quick';
-
 export interface AdminProvider {
   id: string;
   kind: ProviderKind;
@@ -27,10 +25,8 @@ export interface AdminProvider {
 export interface AdminModel {
   id: string;
   provider_id: string;
-  tier: Tier;
   model_ref: string;
   display_name: string;
-  is_tier_default: boolean;
   is_enabled: boolean;
   overrides: Record<string, unknown> | null;
 }
@@ -68,10 +64,8 @@ export interface AdminProviderUpdate {
 
 export interface AdminModelInput {
   provider_id: string;
-  tier: Tier;
   model_ref: string;
   display_name: string;
-  is_tier_default?: boolean;
   is_enabled?: boolean;
   overrides?: Record<string, unknown> | null;
   advertised_capabilities?: Record<string, unknown> | null;

@@ -2,9 +2,9 @@
 
 The nightly extraction job (slice 6, wired later) calls
 ``index_report_summary`` on each newly-saved report. The indexer asks
-the user's quick-tier LLM for a structured summary in the claude-mem
-style, embeds the summary text, and persists the result via
-``upsert_artifact_summary``.
+the model assigned to the ``graph_summarization`` system role for a
+structured summary in the claude-mem style, embeds the summary text,
+and persists the result via ``upsert_artifact_summary``.
 
 Production code uses ``make_summarize_fn(client)`` to build the
 summarize callable from any LLM client implementing the

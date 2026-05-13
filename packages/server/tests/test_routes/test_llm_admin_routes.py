@@ -267,7 +267,6 @@ def test_create_model_rejects_without_provider(company_client, make_user, monkey
         "/settings/admin/llm/models",
         json={
             "provider_id": "no-such",
-            "tier": "thinking",
             "model_ref": "gpt-5.4-pro",
             "display_name": "Pro",
         },
@@ -293,28 +292,12 @@ def test_delete_provider_blocks_with_models(
     svc.create_model(
         db_session,
         provider_id=p.id,
-        tier="thinking",
         model_ref="x",
         display_name="x",
-        is_tier_default=True,
     )
     db_session.commit()
     resp = company_client.delete(f"/settings/admin/llm/providers/{p.id}")
     assert resp.status_code == 409
-
-
-def test_department_tier_override_roundtrip(company_client, make_user, monkeypatch) -> None:
-    monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
-    make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
-    _login(company_client)
-    resp = company_client.post(
-        "/settings/admin/llm/department/equity_research", json={"tier": "quick"}
-    )
-    assert resp.status_code == 200
-    resp = company_client.post(
-        "/settings/admin/llm/department/equity_research", json={"tier": None}
-    )
-    assert resp.status_code == 200
 
 
 def test_capability_override_roundtrip(company_client, make_user, monkeypatch) -> None:
@@ -333,10 +316,10 @@ def test_capability_override_roundtrip(company_client, make_user, monkeypatch) -
 # -- NEW-4-10 / NEW-4-24 / NEW-4-25 / NEW-4-27 fix-plan additions ---------------
 
 
-def test_update_model_persists_tier_and_model_ref(
+def test_update_model_persists_model_ref(
     company_client, make_user, monkeypatch, db_session
 ) -> None:
-    """NEW-4-10: PUT /models/{id} persists tier + model_ref + provider_id."""
+    """PUT /models/{id} persists model_ref + provider_id."""
     monkeypatch.setenv("OPENLIA_SECRET_KEY", "0" * 43 + "=")
     make_user(email="admin@example.com", password="pw-12345678", is_admin=True)
     _login(company_client)
@@ -346,10 +329,8 @@ def test_update_model_persists_tier_and_model_ref(
     m = svc.create_model(
         db_session,
         provider_id=p.id,
-        tier="quick",
         model_ref="gpt-5.4-mini",
         display_name="GPT 5.4 mini",
-        is_tier_default=True,
     )
     db_session.commit()
 
@@ -357,17 +338,14 @@ def test_update_model_persists_tier_and_model_ref(
         f"/settings/admin/llm/models/{m.id}",
         json={
             "provider_id": p.id,
-            "tier": "everyday",
             "model_ref": "gpt-5.4",
             "display_name": "GPT 5.4",
-            "is_tier_default": True,
             "is_enabled": True,
             "overrides": None,
         },
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["tier"] == "everyday"
     assert body["model_ref"] == "gpt-5.4"
 
 
@@ -419,10 +397,8 @@ def test_create_openai_compat_model_persists_capability_override(
         "/settings/admin/llm/models",
         json={
             "provider_id": p.id,
-            "tier": "everyday",
             "model_ref": "grok-pro",
             "display_name": "Grok Pro",
-            "is_tier_default": True,
             "is_enabled": True,
             "advertised_capabilities": {
                 "tool_calling": True,

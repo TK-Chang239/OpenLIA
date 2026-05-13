@@ -6,13 +6,13 @@ Loop contract:
       request the model; if it returns tool calls, emit tool events,
       dispatch, append tool-result messages, loop.
       if it returns text, stream tokens and emit chat.done.
-  - chat.error on any LLMProviderError (including TierNotConfiguredError).
+  - chat.error on any LLMProviderError or ModelNotConfiguredError.
 
 Cancellation: poll cancel_token between yields; stop yielding with no
 terminal event when flipped.
 
 When constructed with a v2 connector `dispatcher` plus a `router_llm_client`,
-the runner additionally performs spec-§8 routing: it asks a small Haiku-tier
+the runner additionally performs spec-§8 routing: it asks a small router
 LLM to pick a tool subset from the dispatcher's `candidate_tools()`, places
 a cache breakpoint marker before that subset in the system prompt, and
 exposes the `request_additional_tools` escalation tool. Without those
@@ -32,7 +32,7 @@ from openlia.connectors.dispatch import MissingRequiredArgumentError
 from openlia.connectors.serialization import to_jsonable
 from openlia.departments import get_department
 from openlia.llm.base import LLMProvider
-from openlia.llm.exceptions import LLMProviderError
+from openlia.llm.exceptions import LLMProviderError, ModelNotConfiguredError
 from openlia.llm.resolver import ModelRegistry
 from openlia.llm.runtime.attachments import (
     AttachmentNotSupportedError,
@@ -175,6 +175,8 @@ def build_chat_system_prompt(
     disabled_skill_ids: frozenset[str] = frozenset(),
     response_length: str | None = None,
     memory_block: str | None = None,
+    selected_exemplars: list[str] | None = None,
+    market_basket: dict[str, list[str]] | None = None,
 ) -> str:
     """Render the chat.system slot with the user's visible skills menu.
 
@@ -215,6 +217,8 @@ def build_chat_system_prompt(
         skills_menu=skills_menu,
         response_length=response_length,
         memory_block=memory_block,
+        selected_exemplars=list(selected_exemplars) if selected_exemplars else [],
+        market_basket=market_basket,
     )
 
 
@@ -249,7 +253,7 @@ class ChatRunner:
         self._provider_factory = provider_factory
         self._skill_registry = skill_registry
         self._message_id_factory = message_id_factory or (lambda: f"m_{uuid.uuid4().hex[:12]}")
-        # Phase 9: v2 connector dispatcher + Haiku-tier router. When all
+        # Phase 9: v2 connector dispatcher + router LLM client. When all
         # three are present the runner uses the spec §8 routing flow;
         # otherwise it falls through to the legacy ToolDispatcher path.
         self._dispatcher = dispatcher
@@ -312,6 +316,8 @@ class ChatRunner:
         disabled_skill_ids: frozenset[str] = frozenset(),
         response_length: str | None = None,
         memory_block: str | None = None,
+        selected_exemplars: list[str] | None = None,
+        market_basket: dict[str, list[str]] | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -326,7 +332,7 @@ class ChatRunner:
                 registry=self._registry,
                 model_id_override=model_id_override,
             )
-        except LLMProviderError as exc:
+        except (LLMProviderError, ModelNotConfiguredError) as exc:
             yield ChatError(
                 message_id=message_id,
                 error_class=type(exc).__name__,
@@ -369,6 +375,8 @@ class ChatRunner:
             disabled_skill_ids=disabled_skill_ids,
             response_length=response_length,
             memory_block=memory_block,
+            selected_exemplars=selected_exemplars,
+            market_basket=market_basket,
         )
         self._trace(
             "llm.resolved",
@@ -378,9 +386,6 @@ class ChatRunner:
                 "model_id": resolved.model_id,
                 "model_ref": resolved.model_ref,
                 "provider_kind": resolved.provider_kind,
-                "tier": resolved.tier.value
-                if hasattr(resolved.tier, "value")
-                else str(resolved.tier),
                 "system_prompt_chars": len(system),
                 "system_prompt_excerpt": system[:400],
             },

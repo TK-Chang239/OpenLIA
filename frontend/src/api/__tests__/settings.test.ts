@@ -3,9 +3,8 @@ import {
   getPrefs,
   updatePrefs,
   updateEmail,
-  getModelPreferences,
-  putModelPreference,
-  deleteModelPreference,
+  getEnabledModels,
+  getRegisteredDepartmentIds,
   updateTimezone,
   updateGraphExtractionTime,
 } from '../settings';
@@ -53,30 +52,32 @@ describe('settings api', () => {
     });
   });
 
-  it('GET /settings/models/preferences returns preferences map', async () => {
+  it('GET /settings/models returns flat enabled models', async () => {
     (fetch as any).mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ preferences: { thinking: 'gpt-4o' } }),
+      json: async () => [
+        {
+          id: 'm1',
+          model_ref: 'gpt-4o',
+          display_name: 'GPT-4o',
+          provider_id: 'p1',
+          provider_kind: 'openai',
+          is_enabled: true,
+        },
+      ],
     });
-    const prefs = await getModelPreferences();
-    expect(prefs.preferences.thinking).toBe('gpt-4o');
+    const models = await getEnabledModels();
+    expect(models).toHaveLength(1);
+    expect(models[0].model_ref).toBe('gpt-4o');
   });
 
-  it('PUT /settings/models/preferences/{tier} with model_id body', async () => {
-    (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-    await putModelPreference('quick', 'gpt-4o-mini');
-    const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/models/preferences/quick');
-    expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ model_id: 'gpt-4o-mini' });
-  });
-
-  it('DELETE /settings/models/preferences/{tier}', async () => {
-    (fetch as any).mockResolvedValueOnce({ ok: true, json: async () => ({}) });
-    await deleteModelPreference('quick');
-    const [url, init] = (fetch as any).mock.calls[0];
-    expect(url).toBe('/api/settings/models/preferences/quick');
-    expect(init.method).toBe('DELETE');
+  it('GET /settings/departments unwraps departments array', async () => {
+    (fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ departments: ['secretary', 'equity_research'] }),
+    });
+    const deps = await getRegisteredDepartmentIds();
+    expect(deps).toEqual(['secretary', 'equity_research']);
   });
 
   it('PUT /settings/timezone with timezone+source body', async () => {

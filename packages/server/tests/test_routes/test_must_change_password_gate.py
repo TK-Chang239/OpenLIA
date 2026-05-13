@@ -83,15 +83,15 @@ class TestForcedPasswordBlocksProductRoutes:
             )
         )
 
-    def test_settings_models_list_blocked(self, forced_user_client):
+    def test_department_model_pref_get_blocked(self, forced_user_client):
         client, _ = forced_user_client
-        _assert_must_change(client.get("/settings/models/preferences"))
+        _assert_must_change(client.get("/departments/secretary/model-pref"))
 
-    def test_settings_models_put_blocked(self, forced_user_client):
+    def test_department_model_pref_put_blocked(self, forced_user_client):
         client, _ = forced_user_client
         _assert_must_change(
             client.put(
-                "/settings/models/preferences/thinking",
+                "/departments/secretary/model-pref",
                 json={"model_id": "any-id"},
             )
         )

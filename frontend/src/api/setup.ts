@@ -10,25 +10,22 @@ export interface WizardStatus {
   env_overrides: Record<string, string>;
 }
 
-export interface TestResult {
-  ok: boolean;
-  latency_ms: number | null;
-  error: string | null;
+export interface SaveModelsPayload {
+  models: Array<{
+    provider_kind: string;
+    api_key: string | null;
+    base_url: string | null;
+    env_var_name: string | null;
+    model_ref: string;
+    display_name: string;
+  }>;
+  department_defaults: Record<string, string>;
+  system_role_defaults: Record<string, string>;
 }
 
-export interface TierEntry {
-  provider: string;
-  model: string;
-  api_key?: string;
-  base_url?: string;
-  capabilities?: Record<string, boolean>;
-  is_tier_default?: boolean;
-}
-
-export interface ModelsPayload {
-  thinking: TierEntry[];
-  everyday: TierEntry[];
-  quick: TierEntry[];
+export interface WizardSetupState {
+  enabled_department_ids: string[];
+  system_role_ids: string[];
 }
 
 export interface ReviewPoll {
@@ -62,15 +59,11 @@ export const setIdentity = (displayName: string) =>
 export const setAdmin = (payload: { email: string; password: string; display_name: string }) =>
   fetchJson<{ email: string }>("/api/setup/admin", { method: "POST", json: payload });
 
-export const testModel = (payload: {
-  provider: string;
-  model: string;
-  api_key?: string;
-  base_url?: string;
-}) => fetchJson<TestResult>("/api/setup/models/test", { method: "POST", json: payload });
-
-export const saveModels = (payload: ModelsPayload) =>
+export const saveModels = (payload: SaveModelsPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/models", { method: "POST", json: payload });
+
+export const getSetupState = () =>
+  fetchJson<WizardSetupState>("/api/setup/state");
 
 export const saveProviders = () =>
   fetchJson<{ ok: boolean }>("/api/setup/providers", { method: "POST" });
@@ -85,8 +78,3 @@ export const pollReview = (id: string) => fetchJson<ReviewPoll>(`/api/setup/revi
 
 export const finish = () =>
   fetchJson<{ redirect: string; mode: Mode }>("/api/setup/finish", { method: "POST" });
-
-export const getRequiredTiers = () =>
-  fetchJson<{ required_tiers: string[]; enabled_departments: string[] }>(
-    "/api/setup/required_tiers",
-  );

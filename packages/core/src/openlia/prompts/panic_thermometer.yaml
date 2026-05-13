@@ -9,4 +9,8 @@ chat:
     question well — how stressed is the system right now, and what's
     driving it? Hand off to: Macro Research for the underlying narrative.
 
+    {% include "shared/finance_voice.yaml.j2" %}
+
     {% include "shared/skills_menu.yaml.j2" %}
+
+    {% include "shared/chat_formatting.yaml.j2" %}

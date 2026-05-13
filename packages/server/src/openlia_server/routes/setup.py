@@ -14,6 +14,11 @@ from sqlalchemy.orm import Session
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.middleware.wizard_gate import build_wizard_gate
 from openlia_server.services import wizard as wizard_svc
+from openlia_server.services.wizard_models import (
+    UnknownModelRefError,
+    WizardModelsPayload,
+    save_wizard_models,
+)
 
 
 def _set_wizard_cookie(response: Response, token: str) -> None:
@@ -64,22 +69,6 @@ class AccessControlIn(BaseModel):
     bind_port: int = Field(ge=1, le=65535)
 
 
-class _SetupTierEntryIn(BaseModel):
-    provider: str
-    model: str
-    api_key: str | None = None
-    base_url: str | None = None
-    env_var_name: str | None = None
-    capabilities: dict | None = None
-    is_tier_default: bool = True
-
-
-class ModelsIn(BaseModel):
-    thinking: list[_SetupTierEntryIn] = Field(default_factory=list)
-    everyday: list[_SetupTierEntryIn] = Field(default_factory=list)
-    quick: list[_SetupTierEntryIn] = Field(default_factory=list)
-
-
 class ModelsTestIn(BaseModel):
     provider: str
     model: str
@@ -88,9 +77,9 @@ class ModelsTestIn(BaseModel):
     env_var_name: str | None = None
 
 
-class RequiredTiersOut(BaseModel):
-    required_tiers: list[str]
-    enabled_departments: list[str]
+class WizardStateOut(BaseModel):
+    enabled_department_ids: list[str]
+    system_role_ids: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -138,19 +127,15 @@ def build_setup_router(
             env_overrides=s.env_overrides,
         )
 
-    @router.get("/required_tiers", response_model=RequiredTiersOut)
-    def get_required_tiers(db: Session = Depends(session_dep)) -> RequiredTiersOut:
-        from openlia.departments import (
-            get_enabled_default_tiers,
-            get_registered_department_ids,
-        )
+    @router.get("/state", response_model=WizardStateOut)
+    def get_state(db: Session = Depends(session_dep)) -> WizardStateOut:
+        from openlia.departments import get_registered_department_ids
+        from openlia.llm.system_roles import SYSTEM_ROLE_IDS
 
-        enabled = get_registered_department_ids()
-        tiers = get_enabled_default_tiers(enabled)
-        # Stable ordering: thinking > everyday > quick (most-demanding first).
-        order = ["thinking", "everyday", "quick"]
-        ordered = [t for t in order if t in tiers]
-        return RequiredTiersOut(required_tiers=ordered, enabled_departments=enabled)
+        return WizardStateOut(
+            enabled_department_ids=get_registered_department_ids(),
+            system_role_ids=list(SYSTEM_ROLE_IDS),
+        )
 
     @router.post(
         "/mode",
@@ -241,20 +226,26 @@ def build_setup_router(
         dependencies=[Depends(require_loopback_during_wizard), Depends(require_wizard_active)],
     )
     def post_models(
-        payload: ModelsIn,
+        payload: WizardModelsPayload,
         db: Session = Depends(session_dep),
         _: None = Depends(require_wizard_session),
     ) -> dict[str, bool]:
-        from openlia_server.services.wizard_models import UnknownLLMKindError, save_models
+        from openlia_server.services.slot_defaults import InvalidSlotError
 
         try:
-            save_models(db, payload)
-        except UnknownLLMKindError as exc:
+            save_wizard_models(db, payload)
+        except InvalidSlotError as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": "unknown_llm_kind", "message": str(exc)},
+                detail={"code": "invalid_slot", "message": str(exc)},
             ) from exc
-        wizard_svc.advance_step(db, "models", "shared")
+        except UnknownModelRefError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "unknown_model_ref", "message": str(exc)},
+            ) from exc
+        wizard_mode = wizard_svc.get_status(db, env=dict(os.environ)).mode
+        wizard_svc.advance_step(db, "models", wizard_mode)
         return {"ok": True}
 
     @router.post(

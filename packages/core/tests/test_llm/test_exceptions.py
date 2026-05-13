@@ -10,7 +10,6 @@ from openlia.llm.exceptions import (
     ModelNotFoundError,
     ProviderOutageError,
     RateLimitError,
-    TierNotConfiguredError,
     TransportError,
 )
 
@@ -23,7 +22,6 @@ def test_all_errors_derive_from_llm_provider_error() -> None:
         ModelNotFoundError,
         ProviderOutageError,
         RateLimitError,
-        TierNotConfiguredError,
         TransportError,
     ):
         assert issubclass(cls, LLMProviderError)
@@ -40,12 +38,6 @@ def test_rate_limit_retry_after_roundtrip() -> None:
     assert err.retry_after_seconds == 12
 
 
-def test_tier_not_configured_names_tier() -> None:
-    err = TierNotConfiguredError("thinking")
-    assert err.tier == "thinking"
-    assert "thinking" in str(err)
-
-
 def test_auth_error_is_non_transient() -> None:
     from openlia.llm.exceptions import is_transient
 
@@ -53,7 +45,6 @@ def test_auth_error_is_non_transient() -> None:
     assert is_transient(ModelNotFoundError("nope")) is False
     assert is_transient(CapabilityError("no tools")) is False
     assert is_transient(ContextLengthError("too long", limit=8000)) is False
-    assert is_transient(TierNotConfiguredError("quick")) is False
 
 
 def test_transport_and_rate_limit_and_outage_are_transient() -> None:

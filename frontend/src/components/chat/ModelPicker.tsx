@@ -1,39 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Cpu } from "lucide-react";
 
 import {
-  getModelsRoster,
+  getEnabledModels,
   getPrefs,
   updatePrefs,
-  type ModelsRoster,
   type RosterEntry,
 } from "../../api/settings";
-
-const TIER_ORDER: ReadonlyArray<keyof ModelsRoster> = ["thinking", "everyday", "quick"];
-const TIER_LABEL: Record<keyof ModelsRoster, string> = {
-  thinking: "Thinking",
-  everyday: "Everyday",
-  quick: "Quick",
-};
 
 /** User-level preferred LLM. Selection persists across all chats and
  *  departments (writes ``user_prefs.preferred_model_id``). Visual: design's
  *  bordered mono-10px pill in the composer toolbar with left icon + chevron. */
 export function ModelPicker(): JSX.Element | null {
-  const [roster, setRoster] = useState<ModelsRoster | null>(null);
+  const [models, setModels] = useState<RosterEntry[] | null>(null);
   const [modelId, setModelId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     Promise.all([
-      getModelsRoster().catch(() => null),
+      getEnabledModels().catch(() => null),
       getPrefs().catch(() => null),
-    ]).then(([r, p]) => {
+    ]).then(([m, p]) => {
       if (cancelled) return;
-      setRoster(r);
+      setModels(m);
       setModelId(p?.preferred_model_id ?? null);
     });
     return () => {
@@ -41,13 +33,25 @@ export function ModelPicker(): JSX.Element | null {
     };
   }, []);
 
-  if (!roster) return null;
+  const grouped = useMemo(() => {
+    if (!models) return [];
+    const byKind = new Map<string, RosterEntry[]>();
+    for (const m of models) {
+      if (!m.is_enabled) continue;
+      const key = m.provider_kind;
+      const arr = byKind.get(key) ?? [];
+      arr.push(m);
+      byKind.set(key, arr);
+    }
+    return Array.from(byKind.entries()).map(([kind, items]) => ({
+      kind,
+      items,
+    }));
+  }, [models]);
 
-  const enabledByTier = TIER_ORDER.map((tier) => ({
-    tier,
-    items: roster[tier].filter((m) => m.is_enabled),
-  })).filter((g) => g.items.length > 0);
-  const enabledFlat = enabledByTier.flatMap((g) => g.items);
+  if (!models) return null;
+
+  const enabledFlat = grouped.flatMap((g) => g.items);
   if (enabledFlat.length === 0) return null;
 
   const knownIds = new Set(enabledFlat.map((m) => m.id));
@@ -98,8 +102,8 @@ export function ModelPicker(): JSX.Element | null {
             boxShadow: "var(--shadow-md)",
           }}
         >
-          {enabledByTier.map((group, gi) => (
-            <DropdownMenu.Group key={group.tier}>
+          {grouped.map((group, gi) => (
+            <DropdownMenu.Group key={group.kind}>
               {gi > 0 ? (
                 <DropdownMenu.Separator
                   className="my-1 h-px"
@@ -113,7 +117,7 @@ export function ModelPicker(): JSX.Element | null {
                   color: "var(--color-text-tertiary)",
                 }}
               >
-                {TIER_LABEL[group.tier]}
+                {group.kind}
               </DropdownMenu.Label>
               {group.items.map((m: RosterEntry) => {
                 const active = m.id === selected;

@@ -4,7 +4,6 @@ const TABS = [
   { to: 'invites', label: 'Invites' },
   { to: 'users', label: 'Users' },
   { to: 'reset-requests', label: 'Reset requests' },
-  { to: 'models', label: 'Models' },
   { to: 'connectors', label: 'Connectors' },
   { to: 'runner-specs', label: 'Runner specs' },
   { to: 'skills', label: 'Skill activity' },

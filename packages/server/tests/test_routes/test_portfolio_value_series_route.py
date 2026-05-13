@@ -45,7 +45,7 @@ def test_value_series_returns_points(client, user_factory, login_as) -> None:
     assert len(body["points"]) >= 1
     # Period return is positive (100 → 110 = +10%).
     assert body["period_return_abs"] is not None
-    assert Decimal(body["period_return_abs"]) == Decimal("100")  # 10 shares × 10 increase
+    assert Decimal(body["period_return_abs"]) == Decimal("100")  # 10 shares x 10 increase
     assert Decimal(body["period_return_pct"]) == Decimal("0.1")
 
 

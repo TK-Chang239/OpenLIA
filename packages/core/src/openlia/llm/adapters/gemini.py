@@ -4,7 +4,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 
-from openlia.llm.adapters._content import render_gemini_contents
+from openlia.llm.adapters._content import render_gemini_contents, strip_cache_breakpoint
 from openlia.llm.adapters._http import (
     TRANSIENT_NETWORK_ERRORS,
     make_client,
@@ -70,7 +70,9 @@ class GeminiAdapter(LLMProvider):
             },
         }
         if request.system:
-            payload["systemInstruction"] = {"parts": [{"text": request.system}]}
+            payload["systemInstruction"] = {
+                "parts": [{"text": strip_cache_breakpoint(request.system)}]
+            }
         if request.stop:
             payload["generationConfig"]["stopSequences"] = request.stop
         if request.tools:
@@ -127,7 +129,9 @@ class GeminiAdapter(LLMProvider):
             },
         }
         if request.system:
-            payload["systemInstruction"] = {"parts": [{"text": request.system}]}
+            payload["systemInstruction"] = {
+                "parts": [{"text": strip_cache_breakpoint(request.system)}]
+            }
         if request.stop:
             payload["generationConfig"]["stopSequences"] = request.stop
         if request.tools:

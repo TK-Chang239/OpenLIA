@@ -191,7 +191,7 @@ def compute_value_series_intraday(
     Finds the most recent UTC date with any intraday rows for the user's
     tickers (up to ``_INTRADAY_FALLBACK_LIMIT_DAYS`` back), then emits one
     point per unique tick timestamp. Each point sums
-    ``sharesᵢ × last-known-priceᵢ`` over holdings whose ``added_at <= ts``.
+    ``shares_i * last-known-price_i`` over holdings whose ``added_at <= ts``.
 
     Returns an empty series if no eligible intraday data exists.
     """

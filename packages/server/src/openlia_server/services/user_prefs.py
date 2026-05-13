@@ -2,12 +2,26 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.config import UserPrefs
+
+# Snapshot basket (fix-chats Q5/Q6). Top-movers sector ETFs stay hardcoded
+# in snapshot_format.yaml.j2 — only these four sections are user-editable.
+DEFAULT_MARKET_BASKET: dict[str, list[str]] = {
+    "tape": ["SPY", "QQQ", "DIA", "IWM"],
+    "risk": ["VIX", "HYG", "TLT"],
+    "macro": ["DXY", "GLD", "USO"],
+    "crypto": ["BTC"],
+}
+
+_BASKET_SECTIONS = frozenset(DEFAULT_MARKET_BASKET.keys())
+_TICKER_RE = re.compile(r"^[A-Z0-9.^-]{1,10}$")
+_MAX_TICKERS_PER_SECTION = 12
 
 Theme = Literal["system", "light", "dark"]
 DisplayLang = Literal["en", "zh-TW"]
@@ -85,6 +99,64 @@ def set_graph_extraction_time(db: Session, *, user_id: str, time: str) -> UserPr
         raise ValueError(f"invalid HH:MM time: {time!r}")
     prefs = get_or_create(db, user_id=user_id)
     prefs.graph_extraction_time = time
+    db.flush()
+    return prefs
+
+
+def get_market_basket(db: Session, *, user_id: str) -> dict[str, list[str]]:
+    """Return the user's snapshot basket, falling back to DEFAULT_MARKET_BASKET.
+
+    Used by chat_stream to inject the basket into Secretary's system prompt
+    at request time. The fallback is a fresh dict per call so callers can
+    safely mutate the return value.
+    """
+    prefs = db.query(UserPrefs).filter_by(user_id=user_id).one_or_none()
+    if prefs is None or prefs.default_market_basket is None:
+        return {k: list(v) for k, v in DEFAULT_MARKET_BASKET.items()}
+    return {k: list(v) for k, v in prefs.default_market_basket.items()}
+
+
+def set_market_basket(
+    db: Session,
+    *,
+    user_id: str,
+    basket: dict[str, list[str]],
+) -> UserPrefs:
+    """Validate + persist the user's snapshot basket.
+
+    Validation:
+      - Sections must be exactly tape / risk / macro / crypto.
+      - Each section: non-empty list of 1-12 tickers.
+      - Ticker form: ^[A-Z0-9.^-]{1,10}$ (after trim + uppercase).
+    """
+    if not isinstance(basket, dict):
+        raise ValueError("basket must be a mapping of section → tickers")
+    sections = frozenset(basket.keys())
+    missing = _BASKET_SECTIONS - sections
+    if missing:
+        raise ValueError(f"missing section(s): {sorted(missing)}")
+    extra = sections - _BASKET_SECTIONS
+    if extra:
+        raise ValueError(f"unknown section(s): {sorted(extra)}")
+    normalized: dict[str, list[str]] = {}
+    for section, tickers in basket.items():
+        if not isinstance(tickers, list) or not tickers:
+            raise ValueError(f"section {section!r} is empty")
+        if len(tickers) > _MAX_TICKERS_PER_SECTION:
+            raise ValueError(
+                f"too many tickers in {section!r}: {len(tickers)} > {_MAX_TICKERS_PER_SECTION}"
+            )
+        norm: list[str] = []
+        for t in tickers:
+            if not isinstance(t, str):
+                raise ValueError(f"invalid ticker in {section!r}: {t!r} not a string")
+            cleaned = t.strip().upper()
+            if not _TICKER_RE.match(cleaned):
+                raise ValueError(f"invalid ticker {t!r} in section {section!r}")
+            norm.append(cleaned)
+        normalized[section] = norm
+    prefs = get_or_create(db, user_id=user_id)
+    prefs.default_market_basket = normalized
     db.flush()
     return prefs
 

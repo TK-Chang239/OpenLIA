@@ -27,6 +27,9 @@ export async function listDevEvents(): Promise<DevEvent[]> {
 /** Open an EventSource on ``/api/dev/events/stream`` and call ``onEvent``
  *  for each ``dev.event`` SSE frame. Returns a close handle. */
 export function streamDevEvents(onEvent: (e: DevEvent) => void): () => void {
+  if (typeof EventSource === "undefined") {
+    return () => undefined;
+  }
   const es = new EventSource("/api/dev/events/stream");
   const handler = (msg: MessageEvent<string>) => {
     try {

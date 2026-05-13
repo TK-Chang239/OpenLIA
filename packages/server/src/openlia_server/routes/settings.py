@@ -59,10 +59,8 @@ class _ProviderUpdate(BaseModel):
 
 class _ModelIn(BaseModel):
     provider_id: str
-    tier: Literal["thinking", "everyday", "quick"]
     model_ref: str
     display_name: str
-    is_tier_default: bool = False
     is_enabled: bool = True
     overrides: dict | None = None
     advertised_capabilities: dict | None = None
@@ -71,10 +69,8 @@ class _ModelIn(BaseModel):
 class _ModelOut(BaseModel):
     id: str
     provider_id: str
-    tier: str
     model_ref: str
     display_name: str
-    is_tier_default: bool
     is_enabled: bool
     overrides: dict | None
 
@@ -94,10 +90,6 @@ class _TestOut(BaseModel):
     error_msg: str | None = None
 
 
-class _DepartmentTierIn(BaseModel):
-    tier: Literal["thinking", "everyday", "quick"] | None = None
-
-
 def _provider_to_out(row, *, test: dict | None = None) -> _ProviderOut:
     return _ProviderOut(
         id=row.id,
@@ -108,6 +100,17 @@ def _provider_to_out(row, *, test: dict | None = None) -> _ProviderOut:
         base_url=row.base_url,
         is_enabled=row.is_enabled,
         test=test,
+    )
+
+
+def _model_to_out(row) -> _ModelOut:
+    return _ModelOut(
+        id=row.id,
+        provider_id=row.provider_id,
+        model_ref=row.model_ref,
+        display_name=row.display_name,
+        is_enabled=row.is_enabled,
+        overrides=row.overrides,
     )
 
 
@@ -282,19 +285,7 @@ def build_llm_providers_admin_router(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"error": "provider not found"},
             ) from exc
-        return [
-            _ModelOut(
-                id=m.id,
-                provider_id=m.provider_id,
-                tier=m.tier,
-                model_ref=m.model_ref,
-                display_name=m.display_name,
-                is_tier_default=m.is_tier_default,
-                is_enabled=m.is_enabled,
-                overrides=m.overrides,
-            )
-            for m in llm_svc.list_models_for_provider(db, provider_id)
-        ]
+        return [_model_to_out(m) for m in llm_svc.list_models_for_provider(db, provider_id)]
 
     @router.get("/providers/{provider_id}/remote-models")
     async def remote_models(
@@ -346,10 +337,8 @@ def build_llm_providers_admin_router(
         created = llm_svc.create_model(
             db,
             provider_id=payload.provider_id,
-            tier=payload.tier,
             model_ref=payload.model_ref,
             display_name=payload.display_name,
-            is_tier_default=payload.is_tier_default,
             is_enabled=payload.is_enabled,
             overrides=payload.overrides,
         )
@@ -361,16 +350,7 @@ def build_llm_providers_admin_router(
                 override=payload.advertised_capabilities,
             )
         m = db.get(LLMModel, created.id)
-        return _ModelOut(
-            id=m.id,
-            provider_id=m.provider_id,
-            tier=m.tier,
-            model_ref=m.model_ref,
-            display_name=m.display_name,
-            is_tier_default=m.is_tier_default,
-            is_enabled=m.is_enabled,
-            overrides=m.overrides,
-        )
+        return _model_to_out(m)
 
     @router.put("/models/{model_id}", response_model=_ModelOut)
     def update_model(
@@ -386,10 +366,8 @@ def build_llm_providers_admin_router(
                 db,
                 model_id,
                 provider_id=payload.provider_id,
-                tier=payload.tier,
                 model_ref=payload.model_ref,
                 display_name=payload.display_name,
-                is_tier_default=payload.is_tier_default,
                 is_enabled=payload.is_enabled,
                 overrides=payload.overrides,
             )
@@ -399,33 +377,11 @@ def build_llm_providers_admin_router(
                 detail={"error": "model not found"},
             ) from exc
         m = db.get(LLMModel, model_id)
-        return _ModelOut(
-            id=m.id,
-            provider_id=m.provider_id,
-            tier=m.tier,
-            model_ref=m.model_ref,
-            display_name=m.display_name,
-            is_tier_default=m.is_tier_default,
-            is_enabled=m.is_enabled,
-            overrides=m.overrides,
-        )
+        return _model_to_out(m)
 
     @router.delete("/models/{model_id}", status_code=status.HTTP_204_NO_CONTENT)
     def delete_model(model_id: str, _=require_admin, db: DBSession = Depends(session_dep)) -> None:
         llm_svc.delete_model(db, model_id)
-
-    @router.post("/department/{department_id}")
-    def set_department_tier(
-        department_id: str,
-        payload: _DepartmentTierIn,
-        _=require_admin,
-        db: DBSession = Depends(session_dep),
-    ) -> dict:
-        if payload.tier is None:
-            llm_svc.clear_department_tier_override(db, department_id)
-        else:
-            llm_svc.set_department_tier_override(db, department_id, payload.tier)
-        return {"ok": True}
 
     @router.post("/capability_override/{provider_kind}/{model:path}")
     def set_capability_override(

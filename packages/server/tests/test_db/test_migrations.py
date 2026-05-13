@@ -21,7 +21,7 @@ EXPECTED_TABLES = {
     # Config (6)
     "llm_providers",
     "llm_models",
-    "user_llm_preferences",
+    "llm_slot_defaults",
     "web_search_providers",
     # Content (8)
     "chat_sessions",
@@ -160,3 +160,27 @@ def test_baseline_is_idempotent(tmp_path: Path) -> None:
     assert r1.returncode == 0, r1.stderr
     r2 = _run_alembic(["upgrade", "head"], db_url)
     assert r2.returncode == 0, r2.stderr
+
+
+def test_llm_models_has_no_tier_columns(tmp_path: Path) -> None:
+    db_url = f"sqlite:///{tmp_path}/no_tier.db"
+    result = _run_alembic(["upgrade", "head"], db_url)
+    assert result.returncode == 0, result.stderr
+
+    eng = create_engine(db_url)
+    cols = {c["name"] for c in inspect(eng).get_columns("llm_models")}
+    assert "tier" not in cols
+    assert "is_tier_default" not in cols
+
+
+def test_llm_slot_defaults_table_exists_with_correct_shape(tmp_path: Path) -> None:
+    db_url = f"sqlite:///{tmp_path}/slot_defaults.db"
+    result = _run_alembic(["upgrade", "head"], db_url)
+    assert result.returncode == 0, result.stderr
+
+    eng = create_engine(db_url)
+    inspector = inspect(eng)
+    cols = {c["name"]: c for c in inspector.get_columns("llm_slot_defaults")}
+    assert set(cols.keys()) == {"slot_kind", "slot_id", "model_id", "updated_at"}
+    pk = inspector.get_pk_constraint("llm_slot_defaults")
+    assert set(pk["constrained_columns"]) == {"slot_kind", "slot_id"}

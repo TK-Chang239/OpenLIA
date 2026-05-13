@@ -148,8 +148,8 @@ def test_factory_raises_when_no_model_configured(db_session_factory) -> None:
 
 
 def test_factory_builds_client_when_model_configured(db_session_factory, db_session) -> None:
-    """Seed a provider+model and confirm the factory yields a working client."""
-    from openlia_server.db.models.config import LLMModel, LLMProvider
+    """Seed a provider+model+slot default and confirm the factory yields a working client."""
+    from openlia_server.db.models.config import LLMModel, LLMProvider, LLMSlotDefault
 
     provider_row = LLMProvider(
         id="p-1",
@@ -164,11 +164,16 @@ def test_factory_builds_client_when_model_configured(db_session_factory, db_sess
         provider_id="p-1",
         model_ref="stub-model",
         display_name="Stub Model",
-        tier="quick",
         is_enabled=True,
-        is_tier_default=True,
     )
     db_session.add_all([provider_row, model_row])
+    db_session.flush()
+    slot_row = LLMSlotDefault(
+        slot_kind="system_role",
+        slot_id="connector_spec_adapter",
+        model_id="m-1",
+    )
+    db_session.add(slot_row)
     db_session.commit()
 
     factory = make_adapter_llm_client_factory(db_session_factory)

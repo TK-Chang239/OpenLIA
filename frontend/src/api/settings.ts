@@ -1,6 +1,5 @@
 export type Theme = 'system' | 'light' | 'dark';
 export type LangCode = 'en' | 'zh-TW' | 'both';
-export type Tier = 'everyday' | 'quick' | 'thinking';
 export type TimezoneSource = 'auto' | 'manual';
 
 export interface Prefs {
@@ -42,30 +41,18 @@ export interface EmailUpdateIn {
   current_password: string;
 }
 
-export interface ModelPreferences {
-  preferences: Record<string, string>;
-}
-
 export interface RosterEntry {
   id: string;
   model_ref: string;
   display_name: string;
   provider_id: string;
   provider_kind: string;
-  is_tier_default: boolean;
   is_enabled: boolean;
-}
-
-export interface ModelsRoster {
-  thinking: RosterEntry[];
-  everyday: RosterEntry[];
-  quick: RosterEntry[];
 }
 
 export interface EffectiveModel {
   model_ref: string;
   provider_kind: string;
-  tier: string;
   model_id: string;
   provider_id: string;
 }
@@ -81,35 +68,13 @@ export const updatePrefs = (patch: PrefsPatch) =>
 export const updateEmail = (body: EmailUpdateIn) =>
   request<{ email: string }>('/api/settings/email', { method: 'PATCH', body: JSON.stringify(body) });
 
-export const getModelsRoster = () => request<ModelsRoster>('/api/settings/models');
-
-export const getModelPreferences = () =>
-  request<ModelPreferences>('/api/settings/models/preferences');
-
-export const putModelPreference = (tier: Tier, model_id: string) =>
-  request<{ ok: true }>(`/api/settings/models/preferences/${tier}`, {
-    method: 'PUT',
-    body: JSON.stringify({ model_id }),
-  });
-
-export const deleteModelPreference = (tier: Tier) =>
-  request<{ ok: true }>(`/api/settings/models/preferences/${tier}`, { method: 'DELETE' });
+export const getEnabledModels = () => request<RosterEntry[]>('/api/settings/models');
 
 export const getEffectiveModel = (departmentId: string) =>
   request<EffectiveModel>(`/api/settings/models/effective/${departmentId}`);
 
-export interface DepartmentDefaultRow {
-  department_id: string;
-  tier: string;
-  reason: string;
-}
-
-export interface DepartmentDefaults {
-  departments: DepartmentDefaultRow[];
-}
-
-export const getDepartmentDefaults = () =>
-  request<DepartmentDefaults>('/api/settings/models/department-defaults');
+export const getRegisteredDepartmentIds = () =>
+  request<{ departments: string[] }>('/api/settings/departments').then((r) => r.departments);
 
 export const updateTimezone = (body: TimezoneIn) =>
   request<Prefs>('/api/settings/timezone', {

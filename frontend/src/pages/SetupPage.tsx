@@ -7,13 +7,11 @@ import { ModelsStep } from "../setup/steps/ModelsStep";
 import { ConnectorsStep } from "../setup/steps/ConnectorsStep";
 import { AccessControlStep } from "../setup/steps/AccessControlStep";
 import { ReviewStep } from "../setup/steps/ReviewStep";
-import { getRequiredTiers } from "../api/setup";
-
-type TierName = "thinking" | "everyday" | "quick";
-const FALLBACK_TIERS: TierName[] = ["thinking", "everyday", "quick"];
+import { getSetupState } from "../api/setup";
 
 function Inner() {
   const wizard = useWizard();
+  const setupState = useSetupState();
   if (wizard.state === "loading") {
     return <div className="p-8 text-sm text-text-secondary">Loading…</div>;
   }
@@ -36,7 +34,6 @@ function Inner() {
   const total = status.mode === "company" ? 6 : 5;
   const step = viewStep ?? status.current_step;
   const envLocked = !!status.env_overrides.mode;
-  const requiredTiers = useRequiredTiers();
   const onBack = goBack ?? refresh;
 
   if (step === "mode")
@@ -49,7 +46,8 @@ function Inner() {
     return (
       <ModelsStep
         totalSteps={total}
-        requiredTiers={requiredTiers}
+        enabledDepartmentIds={setupState.enabled_department_ids}
+        systemRoleIds={setupState.system_role_ids}
         onBack={onBack}
         onSaved={refresh}
       />
@@ -63,26 +61,29 @@ function Inner() {
   return <div className="p-8">Unknown step: {step}</div>;
 }
 
-function useRequiredTiers(): TierName[] {
-  const [tiers, setTiers] = useState<TierName[]>(FALLBACK_TIERS);
+function useSetupState(): { enabled_department_ids: string[]; system_role_ids: string[] } {
+  const [state, setState] = useState<{
+    enabled_department_ids: string[];
+    system_role_ids: string[];
+  }>({ enabled_department_ids: [], system_role_ids: [] });
   useEffect(() => {
     let cancelled = false;
-    getRequiredTiers()
+    getSetupState()
       .then((resp) => {
         if (cancelled) return;
-        const valid = resp.required_tiers.filter((t): t is TierName =>
-          (FALLBACK_TIERS as string[]).includes(t),
-        );
-        if (valid.length > 0) setTiers(valid);
+        setState({
+          enabled_department_ids: resp.enabled_department_ids,
+          system_role_ids: resp.system_role_ids,
+        });
       })
       .catch(() => {
-        // Fall back to the default trio; do not block the wizard.
+        // Fall back to empty arrays; the assign screen will show no slots.
       });
     return () => {
       cancelled = true;
     };
   }, []);
-  return tiers;
+  return state;
 }
 
 export function SetupPage() {

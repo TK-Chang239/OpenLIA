@@ -12,7 +12,6 @@ import { AdminSkillsSection } from '../components/settings/sections/AdminSkillsS
 import { InvitesPanel } from '../components/settings/admin/InvitesPanel';
 import { UsersPanel } from '../components/settings/admin/UsersPanel';
 import { ResetRequestsPanel } from '../components/settings/admin/ResetRequestsPanel';
-import { ModelsAdminPanel } from '../components/settings/admin/ModelsAdminPanel';
 import { ConnectorsAdminPanel } from '../components/settings/admin/ConnectorsAdminPanel';
 import { RunnerCallableSpecsAdminPanel } from '../components/settings/admin/RunnerCallableSpecsAdminPanel';
 import { useCurrentUser } from '../auth/useCurrentUser';
@@ -29,7 +28,7 @@ export function SettingsPage(): JSX.Element {
       <Route element={<SettingsShell userRole={user.role} />}>
         <Route index element={<Navigate to="general" replace />} />
         <Route path="general" element={<GeneralSection />} />
-        <Route path="models" element={<ModelsSection />} />
+        <Route path="models" element={<ModelsSection userRole={user.role} />} />
         <Route path="timezone" element={<TimezoneSection />} />
         <Route
           path="account"
@@ -49,7 +48,6 @@ export function SettingsPage(): JSX.Element {
             <Route path="invites" element={<InvitesPanel />} />
             <Route path="users" element={<UsersPanel currentUserId={user.id} />} />
             <Route path="reset-requests" element={<ResetRequestsPanel />} />
-            <Route path="models" element={<ModelsAdminPanel />} />
             <Route path="connectors" element={<ConnectorsAdminPanel />} />
             <Route path="runner-specs" element={<RunnerCallableSpecsAdminPanel />} />
             <Route path="skills" element={<AdminSkillsSection />} />

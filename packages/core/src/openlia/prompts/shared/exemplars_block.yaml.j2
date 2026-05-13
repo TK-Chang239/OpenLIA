@@ -1,0 +1,17 @@
+{# packages/core/src/openlia/prompts/shared/exemplars_block.yaml.j2 #}
+{# Conditional injection of category-specific worked exemplars based on #}
+{# the server-side exemplar_selector's output. The always-on general    #}
+{# exemplar is included unconditionally elsewhere in the prompt and is  #}
+{# NOT controlled by this partial. Renders nothing when the list is     #}
+{# empty so per-turn token cost stays zero when nothing matched.        #}
+{% if selected_exemplars is defined and selected_exemplars %}
+{% if "snapshot" in selected_exemplars %}
+{% include "shared/exemplars/snapshot.yaml.j2" %}
+{% endif %}
+{% if "single_stock" in selected_exemplars %}
+{% include "shared/exemplars/single_stock.yaml.j2" %}
+{% endif %}
+{% if "continuation" in selected_exemplars %}
+{% include "shared/exemplars/continuation.yaml.j2" %}
+{% endif %}
+{% endif %}

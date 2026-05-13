@@ -84,7 +84,7 @@ def test_value_series_sums_shares_x_close(create_tables, db_session: Session) ->
     today = date(2026, 5, 3)
     result = compute_value_series(db_session, user_id="u-vs", timeframe="1w", today=today)
 
-    # 10 shares × close on each day.
+    # 10 shares x close on each day.
     assert [(p.date, p.value) for p in result.points] == [
         (date(2026, 5, 1), Decimal("1000")),
         (date(2026, 5, 2), Decimal("1050")),
@@ -135,7 +135,7 @@ def test_value_series_excludes_holdings_before_added_at(create_tables, db_sessio
     today = date(2026, 5, 3)
     result = compute_value_series(db_session, user_id="u-vs", timeframe="1w", today=today)
 
-    # Day 1: AAPL only (10 × 100) = 1000. Day 3: AAPL + GOOG (10×100 + 2×500) = 2000.
+    # Day 1: AAPL only (10 x 100) = 1000. Day 3: AAPL + GOOG (10x100 + 2x500) = 2000.
     values = {p.date: p.value for p in result.points}
     assert values[date(2026, 5, 1)] == Decimal("1000")
     assert values[date(2026, 5, 2)] == Decimal("1000")
@@ -217,12 +217,12 @@ def test_value_series_filters_by_market(create_tables, db_session: Session) -> N
         db_session, user_id="u-vs", timeframe="1w", today=today, market="twse"
     )
 
-    # US only: 10 × AAPL prices
+    # US only: 10 x AAPL prices
     assert {(p.date, p.value) for p in us.points} == {
         (date(2026, 5, 1), Decimal("1000")),
         (date(2026, 5, 2), Decimal("1100")),
     }
-    # TWSE only: 5 × 2330.TW prices
+    # TWSE only: 5 x 2330.TW prices
     assert {(p.date, p.value) for p in tw.points} == {
         (date(2026, 5, 1), Decimal("2500")),
         (date(2026, 5, 2), Decimal("2750")),

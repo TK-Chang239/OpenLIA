@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from openlia.connectors.types import Category
-from openlia.departments.base import Tier
 
 _SUGGEST_REDIRECT_TOOL: dict[str, Any] = {
     "name": "suggest_redirect",
@@ -67,7 +66,6 @@ class SecretaryDepartment:
     name: str = "secretary"
     display_name: str = "Secretary"
     prompt_name: str = "secretary"
-    tier: Tier = "everyday"
 
     # Connector dependencies (spec §10.1). Secretary now answers questions
     # itself end-to-end, so it claims every connector category any
