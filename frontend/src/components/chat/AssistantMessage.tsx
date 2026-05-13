@@ -41,6 +41,62 @@ function MarkdownText({ text }: { text: string }): JSX.Element {
       remarkPlugins={[remarkGfm]}
       components={{
         code: MarkdownCodeRenderer as never,
+        h1: ({ children }) => (
+          <h3
+            className="mb-2 mt-4 font-mono text-[11px] uppercase text-text-secondary first:mt-0"
+            style={{ letterSpacing: "var(--tracking-label)" }}
+          >
+            {children}
+          </h3>
+        ),
+        h2: ({ children }) => (
+          <h3
+            className="mb-2 mt-4 font-mono text-[11px] uppercase text-text-secondary first:mt-0"
+            style={{ letterSpacing: "var(--tracking-label)" }}
+          >
+            {children}
+          </h3>
+        ),
+        h3: ({ children }) => (
+          <h3
+            className="mb-2 mt-4 font-mono text-[11px] uppercase text-text-secondary first:mt-0"
+            style={{ letterSpacing: "var(--tracking-label)" }}
+          >
+            {children}
+          </h3>
+        ),
+        p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
+        ul: ({ children }) => (
+          <ul className="my-2 list-disc space-y-0.5 pl-5">{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol className="my-2 list-decimal space-y-0.5 pl-5">{children}</ol>
+        ),
+        li: ({ children }) => <li className="leading-[1.55]">{children}</li>,
+        strong: ({ children }) => (
+          <strong className="font-semibold text-text-primary">{children}</strong>
+        ),
+        table: ({ children }) => (
+          <div className="my-3 overflow-x-auto rounded-md border border-border-subtle">
+            <table className="w-full font-mono text-[12px] tabular-nums">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => (
+          <thead className="border-b border-border-subtle">{children}</thead>
+        ),
+        tbody: ({ children }) => <tbody>{children}</tbody>,
+        tr: ({ children }) => (
+          <tr className="border-b border-border-subtle last:border-b-0">{children}</tr>
+        ),
+        th: ({ children }) => (
+          <th
+            className="px-3 py-2 text-left font-mono text-[10px] uppercase text-text-tertiary"
+            style={{ letterSpacing: "var(--tracking-label)" }}
+          >
+            {children}
+          </th>
+        ),
+        td: ({ children }) => <td className="px-3 py-1.5 align-top">{children}</td>,
       }}
     >
       {text}
@@ -81,7 +137,7 @@ export function AssistantMessage({
             latencyMs={latencyMs}
           />
         ) : null}
-        <div className="rounded-[10px] border border-border-subtle bg-bg-elevated px-4 py-[14px] text-[14.5px] leading-[1.65] font-display text-text-primary prose prose-sm dark:prose-invert max-w-none">
+        <div className="rounded-[10px] border border-border-subtle bg-bg-elevated px-4 py-[14px] text-[14.5px] leading-[1.65] font-display text-text-primary">
           {inlineChunks.map((c, i) =>
             c.type === "text" ? (
               <MarkdownText key={`t-${i}`} text={c.text} />
