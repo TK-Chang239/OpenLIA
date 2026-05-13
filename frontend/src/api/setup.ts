@@ -10,12 +10,6 @@ export interface WizardStatus {
   env_overrides: Record<string, string>;
 }
 
-export interface TestResult {
-  ok: boolean;
-  latency_ms: number | null;
-  error: string | null;
-}
-
 export interface SaveModelsPayload {
   models: Array<{
     provider_kind: string;
@@ -65,13 +59,6 @@ export const setIdentity = (displayName: string) =>
 export const setAdmin = (payload: { email: string; password: string; display_name: string }) =>
   fetchJson<{ email: string }>("/api/setup/admin", { method: "POST", json: payload });
 
-export const testModel = (payload: {
-  provider: string;
-  model: string;
-  api_key?: string;
-  base_url?: string;
-}) => fetchJson<TestResult>("/api/setup/models/test", { method: "POST", json: payload });
-
 export const saveModels = (payload: SaveModelsPayload) =>
   fetchJson<{ ok: boolean }>("/api/setup/models", { method: "POST", json: payload });
 
@@ -91,8 +78,3 @@ export const pollReview = (id: string) => fetchJson<ReviewPoll>(`/api/setup/revi
 
 export const finish = () =>
   fetchJson<{ redirect: string; mode: Mode }>("/api/setup/finish", { method: "POST" });
-
-export const getRequiredTiers = () =>
-  fetchJson<{ required_tiers: string[]; enabled_departments: string[] }>(
-    "/api/setup/required_tiers",
-  );
