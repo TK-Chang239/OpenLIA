@@ -10,6 +10,7 @@ from enum import StrEnum
 class SystemRole(StrEnum):
     AI_REVIEW = "ai_review"
     CONNECTOR_AGENTIC_RESOLVER = "connector_agentic_resolver"
+    CONNECTOR_SPEC_ADAPTER = "connector_spec_adapter"
     GRAPH_EXTRACTION = "graph_extraction"
     GRAPH_SUMMARIZATION = "graph_summarization"
 
@@ -20,6 +21,7 @@ SYSTEM_ROLE_IDS: tuple[str, ...] = tuple(r.value for r in SystemRole)
 _LABELS: dict[str, str] = {
     SystemRole.AI_REVIEW.value: "Wizard AI review",
     SystemRole.CONNECTOR_AGENTIC_RESOLVER.value: "Connector agentic resolver",
+    SystemRole.CONNECTOR_SPEC_ADAPTER.value: "Connector spec adapter",
     SystemRole.GRAPH_EXTRACTION.value: "Graph memory extraction",
     SystemRole.GRAPH_SUMMARIZATION.value: "Graph memory summarization",
 }
