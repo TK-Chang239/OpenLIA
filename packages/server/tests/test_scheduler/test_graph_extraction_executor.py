@@ -21,7 +21,6 @@ from openlia_server.scheduler.registry import JobStatus
 from openlia_server.services.adapter_llm_client import AdapterLlmNotConfigured
 from sqlalchemy import select
 
-
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
@@ -118,6 +117,7 @@ def _build_executor(
     *,
     session_factory,
     provider_factory=None,
+    summary_provider_factory=None,
     extract_results: list[list[dict]] | None = None,
     summarize_result: dict | None = None,
 ) -> tuple[GraphExtractionExecutor, dict]:
@@ -157,6 +157,7 @@ def _build_executor(
         session_factory=session_factory,
         sleep=FakeSleep(),
         provider_factory=provider_factory or _resolve_fake_provider,
+        summary_provider_factory=summary_provider_factory or _resolve_fake_provider,
         embedding_factory=_embedding_factory,
         extract_fn_builder=_extract_builder,
         summarize_fn_builder=_summarize_builder,
@@ -316,6 +317,7 @@ async def test_exception_in_loop_writes_audit_finish_with_error(
         session_factory=session_factory,
         sleep=FakeSleep(),
         provider_factory=_resolve_fake_provider,
+        summary_provider_factory=_resolve_fake_provider,
         embedding_factory=_embedding_factory,
         extract_fn_builder=_bad_extract_builder,
     )
@@ -365,6 +367,7 @@ async def test_cancel_between_sessions_stops_processing(session_factory) -> None
         session_factory=session_factory,
         sleep=FakeSleep(),
         provider_factory=_resolve_fake_provider,
+        summary_provider_factory=_resolve_fake_provider,
         embedding_factory=_embedding_factory,
         extract_fn_builder=_extract_builder,
     )
@@ -372,3 +375,111 @@ async def test_cancel_between_sessions_stops_processing(session_factory) -> None
 
     # First call ran; cancel triggered between sessions; remaining 2 skipped.
     assert call_count["n"] == 1
+
+
+# ----------------------------------------------------------------------
+# Extraction and summarization resolve via distinct system_role slots
+# ----------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_summary_phase_resolves_graph_summarization_role(
+    session_factory,
+) -> None:
+    """Summary phase must call its own provider factory, not reuse the
+    extraction provider. Default factories route to ``graph_extraction``
+    and ``graph_summarization`` system roles respectively.
+    """
+    with session_factory() as s:
+        _seed_user(s)
+        _seed_chat_session(s, sid="cs_1", user_id="u_1")
+        _seed_report(s, rid="r_1", user_id="u_1")
+        s.commit()
+
+    calls: list[str] = []
+
+    class _ExtractProvider:
+        model = "extract-model"
+
+        async def generate(self, request):  # pragma: no cover
+            raise AssertionError("not used")
+
+    class _SummaryProvider:
+        model = "summary-model"
+
+        async def generate(self, request):  # pragma: no cover
+            raise AssertionError("not used")
+
+    def _extract_factory(_db) -> Any:
+        calls.append("extract")
+        return _ExtractProvider()
+
+    def _summary_factory(_db) -> Any:
+        calls.append("summary")
+        return _SummaryProvider()
+
+    log: dict[str, list] = {"extract_clients": [], "summarize_clients": []}
+
+    def _extract_builder(client):
+        log["extract_clients"].append(client)
+
+        def _extract(_messages):
+            return []
+
+        return _extract
+
+    def _summarize_builder(client):
+        log["summarize_clients"].append(client)
+
+        def _summarize(_report):
+            return {
+                "subject": "NVDA",
+                "tagline": "Long",
+                "findings": ["margins up"],
+                "entities_mentioned": ["ticker:NVDA"],
+                "tone": "bullish",
+                "horizon": "medium",
+            }
+
+        return _summarize
+
+    ex = GraphExtractionExecutor(
+        session_factory=session_factory,
+        sleep=FakeSleep(),
+        provider_factory=_extract_factory,
+        summary_provider_factory=_summary_factory,
+        embedding_factory=_embedding_factory,
+        extract_fn_builder=_extract_builder,
+        summarize_fn_builder=_summarize_builder,
+    )
+    await ex.execute(user_id="u_1", schedule_id=None)
+
+    assert "extract" in calls
+    assert "summary" in calls
+    # Distinct clients wrap distinct providers.
+    assert len(log["extract_clients"]) == 1
+    assert len(log["summarize_clients"]) == 1
+    assert log["extract_clients"][0] is not log["summarize_clients"][0]
+
+
+def test_default_summary_provider_factory_targets_graph_summarization_role() -> None:
+    """The default factory must route summarization through the
+    ``graph_summarization`` system role slot (not ``graph_extraction``)."""
+    from openlia_server.scheduler.executors import graph_extraction as mod
+
+    captured: dict[str, str] = {}
+
+    def _fake_resolver(_db, role_id: str):
+        captured["role_id"] = role_id
+        return object()
+
+    import openlia_server.scheduler.executors.graph_extraction as gx_mod
+
+    original = gx_mod._resolve_provider_for_role
+    gx_mod._resolve_provider_for_role = _fake_resolver
+    try:
+        mod._default_summary_provider_factory(object())
+    finally:
+        gx_mod._resolve_provider_for_role = original
+
+    assert captured["role_id"] == "graph_summarization"
