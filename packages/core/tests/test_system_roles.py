@@ -10,6 +10,7 @@ def test_system_role_ids_contains_locked_set():
     assert SYSTEM_ROLE_IDS == (
         "ai_review",
         "connector_agentic_resolver",
+        "connector_spec_adapter",
         "graph_extraction",
         "graph_summarization",
     )
