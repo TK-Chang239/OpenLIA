@@ -10,6 +10,7 @@ from openlia.llm.runtime.schema_slim import (
     SchemaSlimSystemicFailure,
 )
 from openlia.llm.runtime.tools import (
+    _READ_PAYLOAD_NAME,
     MAX_TOOLS_PER_REQUEST,
     ToolCallResult,
     ToolDispatcher,
@@ -286,7 +287,9 @@ async def test_build_appends_extra_tools() -> None:
         },
     )
     tools = await disp.build("secretary", has_web_search=False, extra_tools=extra)
-    assert [t.name for t in tools] == ["suggest_redirect"]
+    names = [t.name for t in tools]
+    assert "suggest_redirect" in names
+    assert "read_payload" in names
 
 
 async def test_dispatch_extra_tool_echoes_arguments_into_structured() -> None:
@@ -399,7 +402,7 @@ async def test_build_under_cap_unchanged() -> None:
         web_search=WebSearchResolution(False, None, None),
     )
     tools = await disp.build("equity_research", has_web_search=False)
-    assert len(tools) == 3  # 2 mapped + request_additional_tools
+    assert len(tools) == 4  # 2 mapped + request_additional_tools + read_payload
 
 
 # ---------------------------------------------------------------------------
@@ -582,13 +585,17 @@ class TestTracePlumbing:
 
         calls.clear()
 
-        # Exercise dispatch() with a requirement tool — no trace
+        # Exercise dispatch() with a requirement tool — only payload.stub trace emitted
         await disp.dispatch(
             department_id="dept_a",
             call=ToolCall(id="c2", name="tool_a", arguments={}),
         )
 
-        assert calls == []
+        req_categories = {c[0] for c in calls}
+        assert req_categories == {"payload.stub"}
+        # No slim/escalation traces from requirement dispatch.
+        assert "slim.summary" not in req_categories
+        assert "escalation_cache.summary" not in req_categories
 
 
 # ---------------------------------------------------------------------------
@@ -1438,3 +1445,364 @@ class TestEscalationCacheTraces:
         assert "evicted_names" in p
         assert len(p["evicted_names"]) == 1
         assert p["cap"] == 4
+
+
+# ---------------------------------------------------------------------------
+# PR4.3: PayloadStore + stubification tests
+# ---------------------------------------------------------------------------
+
+
+def _make_large_payload(n_rows: int = 200) -> dict[str, Any]:
+    """Tabular payload large enough to exceed default stub threshold (8000 chars)."""
+    rows = [
+        {
+            "date": f"2024-{(i % 12) + 1:02d}-01",
+            "revenue": 1000000 + i * 12345,
+            "expenses": 900000 + i * 9876,
+            "ebitda": 100000 + i * 2469,
+            "description": f"Quarter {i} results with some extra text to pad the payload size",
+        }
+        for i in range(n_rows)
+    ]
+    return {"rows": rows, "ticker": "AAPL", "period": "annual"}
+
+
+def _make_small_payload() -> dict[str, Any]:
+    return {"symbol": "AAPL", "price": 190.5, "volume": 1000000}
+
+
+_TraceList = list[tuple[str, str, dict[str, Any] | None]]
+
+
+def _make_dispatcher_traced() -> tuple[ToolDispatcher, _TraceList]:
+    calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+        calls.append((cat, msg, payload))
+
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        trace=recorder,
+    )
+    return disp, calls
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestPayloadStore:
+    pytestmark: ClassVar[list] = [pytest.mark.asyncio]
+
+    async def test_dispatch_under_threshold_returns_raw(self) -> None:
+        """Small payload returned raw; payload.stub trace fired with stubbed=False."""
+        small = _make_small_payload()
+        data = FakeDataDispatcher(manifest=_MANIFEST, results={"stock_quote": small})
+        disp, calls = _make_dispatcher_traced()
+        disp._data = data
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"}),
+        )
+
+        assert result.ok is True
+        # Raw payload returned (no stub fields).
+        assert result.payload.get("symbol") == "AAPL"
+        assert "ref" not in result.payload
+
+        stub_traces = [c for c in calls if c[0] == "payload.stub"]
+        assert len(stub_traces) == 1
+        p = stub_traces[0][2]
+        assert p is not None
+        assert p["stubbed"] is False
+        assert p["tool"] == "stock_quote"
+
+    async def test_dispatch_over_threshold_stubifies(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Large payload stubified; full payload stored; payload.stub trace stubbed=True."""
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "PAYLOAD_STUB_THRESHOLD_CHARS", 100)
+
+        large = _make_large_payload()
+        data = FakeDataDispatcher(manifest=_MANIFEST, results={"stock_quote": large})
+        calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(cat: str, msg: str, p: dict[str, Any] | None) -> None:
+            calls.append((cat, msg, p))
+
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            trace=recorder,
+        )
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"}),
+        )
+
+        assert result.ok is True
+        # Stub returned: has ref field.
+        assert "ref" in result.payload
+        ref = result.payload["ref"]
+        # Full payload stored.
+        assert ref in disp._payload_store
+
+        stub_traces = [c for c in calls if c[0] == "payload.stub"]
+        assert len(stub_traces) == 1
+        p = stub_traces[0][2]
+        assert p is not None
+        assert p["stubbed"] is True
+        assert p["shape"] is not None
+
+    async def test_stub_ref_format(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Refs follow pattern r_<4hex>_<seq>."""
+        import re
+
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "PAYLOAD_STUB_THRESHOLD_CHARS", 100)
+
+        large = _make_large_payload()
+        data = FakeDataDispatcher(manifest=_MANIFEST, results={"stock_quote": large})
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        )
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"}),
+        )
+
+        ref = result.payload["ref"]
+        assert re.fullmatch(r"r_[0-9a-f]{4}_\d+", ref), f"Unexpected ref format: {ref!r}"
+
+    async def test_per_run_scope(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Each dispatcher instance has its own store, independent of others."""
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "PAYLOAD_STUB_THRESHOLD_CHARS", 100)
+
+        large = _make_large_payload()
+        data = FakeDataDispatcher(manifest=_MANIFEST, results={"stock_quote": large})
+
+        disp1 = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        )
+        disp2 = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        )
+
+        r1 = await disp1.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="c1", name="stock_quote", arguments={"symbol": "AAPL"}),
+        )
+        r2 = await disp2.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="c2", name="stock_quote", arguments={"symbol": "MSFT"}),
+        )
+
+        ref1 = r1.payload["ref"]
+        ref2 = r2.payload["ref"]
+
+        # Each dispatcher has its own store.
+        assert ref1 in disp1._payload_store
+        assert ref1 not in disp2._payload_store
+        assert ref2 in disp2._payload_store
+        assert ref2 not in disp1._payload_store
+
+
+# ---------------------------------------------------------------------------
+# PR4.4: read_payload tool tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestReadPayload:
+    pytestmark: ClassVar[list] = [pytest.mark.asyncio]
+
+    def _make_disp_with_store(
+        self,
+        stored: dict[str, Any],
+        ref: str = "r_abcd_01",
+    ) -> tuple[ToolDispatcher, list[tuple[str, str, dict[str, Any] | None]]]:
+        calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(cat: str, msg: str, p: dict[str, Any] | None) -> None:
+            calls.append((cat, msg, p))
+
+        data = FakeDataDispatcher(manifest=_MANIFEST)
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            trace=recorder,
+        )
+        disp._payload_store[ref] = stored
+        return disp, calls
+
+    async def test_read_payload_returns_full(self) -> None:
+        """read_payload with no path returns the full stored payload."""
+        stored = {"ticker": "AAPL", "price": 190.5, "volume": 1000}
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_abcd_01"},
+            ),
+        )
+
+        assert result.ok is True
+        assert result.payload == stored
+
+    async def test_read_payload_with_path(self) -> None:
+        """read_payload with a path returns a slice."""
+        stored = {"ticker": "AAPL", "price": 190.5}
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_abcd_01", "path": "ticker"},
+            ),
+        )
+
+        assert result.ok is True
+        # Primitive result wrapped in {"value": ...}
+        assert result.payload == {"value": "AAPL"}
+
+    async def test_read_payload_unknown_ref_returns_error(self) -> None:
+        """Unknown ref returns ok=False with descriptive error."""
+        data = FakeDataDispatcher(manifest=_MANIFEST)
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        )
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_dead_99"},
+            ),
+        )
+
+        assert result.ok is False
+        assert "Unknown ref" in result.payload["error"]
+
+    async def test_read_payload_parse_error(self) -> None:
+        """Invalid path syntax returns ok=False with syntax error message."""
+        stored = {"ticker": "AAPL"}
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_abcd_01", "path": ".invalid"},
+            ),
+        )
+
+        assert result.ok is False
+        assert "Invalid path syntax" in result.payload["error"]
+
+    async def test_read_payload_resolve_error(self) -> None:
+        """Valid syntax, path doesn't apply returns ok=False."""
+        stored = {"ticker": "AAPL"}
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_abcd_01", "path": "rows[0]"},
+            ),
+        )
+
+        assert result.ok is False
+        assert "error" in result.payload
+
+    async def test_read_payload_sub_stub_on_oversized(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Result larger than READ_PAYLOAD_CAP_CHARS returns a sub-stub."""
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "READ_PAYLOAD_CAP_CHARS", 100)
+
+        # Large stored payload
+        stored = {f"key_{i}": "x" * 50 for i in range(100)}
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_abcd_01"},
+            ),
+        )
+
+        assert result.ok is True
+        # Sub-stub has ref, truncated, hint fields.
+        assert result.payload.get("truncated") is True
+        assert "hint" in result.payload
+        assert result.payload.get("ref") == "r_abcd_01"
+
+    async def test_read_payload_traces(self) -> None:
+        """read_payload.call and read_payload.result traces fired."""
+        stored = {"ticker": "AAPL", "price": 190.5}
+        disp, calls = self._make_disp_with_store(stored)
+
+        await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={"ref": "r_abcd_01", "path": "ticker"},
+            ),
+        )
+
+        categories = [c[0] for c in calls]
+        assert "read_payload.call" in categories
+        assert "read_payload.result" in categories
+
+        call_trace = next(c for c in calls if c[0] == "read_payload.call")
+        assert call_trace[2] is not None
+        assert call_trace[2]["ref"] == "r_abcd_01"
+        assert call_trace[2]["path"] == "ticker"
+
+        result_trace = next(c for c in calls if c[0] == "read_payload.result")
+        assert result_trace[2] is not None
+        assert result_trace[2]["outcome"] == "ok"
+        assert result_trace[2]["ref"] == "r_abcd_01"
+
+    def test_read_payload_registered_in_builtin_handlers(self) -> None:
+        """_READ_PAYLOAD_NAME is in the handler table."""
+        data = FakeDataDispatcher(manifest=_MANIFEST)
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        )
+        assert _READ_PAYLOAD_NAME in disp._builtin_handlers
+
+    async def test_read_payload_in_build_output(self) -> None:
+        """build() always includes the read_payload schema."""
+        data = FakeDataDispatcher(manifest=_MANIFEST)
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+        )
+        tools = await disp.build("equity_research", has_web_search=False)
+        names = [t.name for t in tools]
+        assert "read_payload" in names

@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -27,6 +28,12 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from openlia.skills import SkillRegistry
 
+from openlia.llm.runtime.payload_path import (
+    PathParseError,
+    PathResolveError,
+    apply_path,
+)
+from openlia.llm.runtime.payload_stub import generate_stub
 from openlia.llm.runtime.schema_slim import SchemaSlimSystemicFailure, slim_tool_schema
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import ToolCall, ToolSchema
@@ -69,6 +76,38 @@ def _get_max_tools_per_request() -> int:
 
 MAX_TOOLS_PER_REQUEST = _get_max_tools_per_request()
 
+
+def _get_payload_stub_threshold_chars() -> int:
+    raw = os.environ.get("OPENLIA_PAYLOAD_STUB_THRESHOLD_CHARS")
+    if raw is None:
+        return 8000
+    try:
+        v = int(raw)
+        if v < 1:
+            raise ValueError
+        return v
+    except ValueError:
+        log.warning("Invalid OPENLIA_PAYLOAD_STUB_THRESHOLD_CHARS=%r; using default 8000", raw)
+        return 8000
+
+
+def _get_read_payload_cap_chars() -> int:
+    raw = os.environ.get("OPENLIA_READ_PAYLOAD_CAP_CHARS")
+    if raw is None:
+        return 50_000  # 50KB
+    try:
+        v = int(raw)
+        if v < 1:
+            raise ValueError
+        return v
+    except ValueError:
+        log.warning("Invalid OPENLIA_READ_PAYLOAD_CAP_CHARS=%r; using default 50000", raw)
+        return 50_000
+
+
+PAYLOAD_STUB_THRESHOLD_CHARS = _get_payload_stub_threshold_chars()
+READ_PAYLOAD_CAP_CHARS = _get_read_payload_cap_chars()
+
 _ESCALATION_FAILURE_THRESHOLD = 3
 
 _REQUEST_ADDITIONAL_TOOLS_NAME = "request_additional_tools"
@@ -103,6 +142,34 @@ _WEB_SEARCH_SCHEMA = ToolSchema(
         "type": "object",
         "properties": {"query": {"type": "string"}},
         "required": ["query"],
+    },
+)
+
+_READ_PAYLOAD_NAME = "read_payload"
+_READ_PAYLOAD_SCHEMA = ToolSchema(
+    name=_READ_PAYLOAD_NAME,
+    description=(
+        "Read a slice of a previously-stored tool-result payload. Call when "
+        "you've received a stub (a result with a `ref` field) and need "
+        "specific values from it."
+    ),
+    parameters={
+        "type": "object",
+        "properties": {
+            "ref": {
+                "type": "string",
+                "description": "The `ref` from a stub.",
+            },
+            "path": {
+                "type": "string",
+                "description": (
+                    "Optional path. Forms: key, key.subkey, rows[i], rows[i:j], "
+                    "rows.column. Composable. Omit for entire payload."
+                ),
+            },
+        },
+        "required": ["ref"],
+        "additionalProperties": False,
     },
 )
 
@@ -294,9 +361,15 @@ class ToolDispatcher:
         self._escalation_cache = _EscalationCache()
         self._trace: TraceRecorder = trace if trace is not None else _noop_trace
         self._consecutive_escalation_failures: dict[str, int] = {}
+        self._payload_store: dict[str, dict[str, Any]] = {}
+        # Per-run scope: dispatcher is per-run, so the store dies with the
+        # dispatcher instance. No cleanup needed.
+        self._payload_seq = 0  # monotonic per dispatcher for short refs
+        self._ref_prefix = uuid.uuid4().hex[:4]  # 4 hex chars; sufficient within a run
         self._builtin_handlers: dict[str, _BuiltinHandler] = {
             _REQUEST_ADDITIONAL_TOOLS_NAME: type(self)._dispatch_request_additional_tools,
             "web_search": type(self)._dispatch_web_search,
+            _READ_PAYLOAD_NAME: type(self)._dispatch_read_payload,
         }
 
     async def available_categories(self) -> list[str]:
@@ -330,6 +403,8 @@ class ToolDispatcher:
             header.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
         if has_web_search and self._web_search.available:
             header.append(_WEB_SEARCH_SCHEMA)
+        # read_payload is always included: the payload store is always wired.
+        header.append(_READ_PAYLOAD_SCHEMA)
         # Department-provided structured tools (e.g. Secretary's suggest_redirect).
         # Dispatch echoes their arguments back as `structured` data so the
         # frontend can render UI cards without a separate event type.
@@ -582,11 +657,42 @@ class ToolDispatcher:
         # Mark MRU so future LRU eviction keeps recently-dispatched tools.
         # No-op if the tool was never added to the escalation cache.
         self._escalation_cache.touch(department_id, call.name)
+        normalized = _normalize_payload(payload)
+
+        # Threshold check: if normalized payload is large, externalize it.
+        size_chars = len(json.dumps(normalized, default=str))
+        stubbed = False
+        final_payload: dict[str, Any] = normalized
+        shape: str | None = None
+        n_rows: int | None = None
+
+        if size_chars > PAYLOAD_STUB_THRESHOLD_CHARS:
+            self._payload_seq += 1
+            ref = f"r_{self._ref_prefix}_{self._payload_seq:02d}"
+            self._payload_store[ref] = normalized
+            stub = generate_stub(normalized, ref=ref, tool_name=call.name)
+            final_payload = stub
+            stubbed = True
+            shape = stub.get("shape")
+            n_rows = stub.get("n_rows")
+
+        self._trace(
+            "payload.stub",
+            f"{call.name} size={size_chars} stubbed={stubbed}",
+            {
+                "tool": call.name,
+                "size_chars": size_chars,
+                "stubbed": stubbed,
+                "shape": shape,
+                "n_rows": n_rows,
+            },
+        )
+
         return ToolCallResult(
             call_id=call.id,
             ok=True,
             summary=_summarize_requirement(call.name, call.arguments),
-            payload=_normalize_payload(payload),
+            payload=final_payload,
         )
 
     async def _dispatch_request_additional_tools(
@@ -752,6 +858,100 @@ class ToolDispatcher:
             summary=f"Searched the web for: {query}",
             payload={
                 "results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results]
+            },
+        )
+
+    async def _dispatch_read_payload(self, department_id: str, call: ToolCall) -> ToolCallResult:
+        """Look up a stored payload by ref and apply an optional path slice."""
+        ref = str(call.arguments.get("ref", "")).strip()
+        path_raw = call.arguments.get("path")
+        path: str | None = (
+            str(path_raw).strip() if isinstance(path_raw, str) and path_raw.strip() else None
+        )
+
+        self._trace(
+            "read_payload.call",
+            f"ref={ref} path={path!r}",
+            {"ref": ref, "path": path},
+        )
+
+        if ref not in self._payload_store:
+            msg = (
+                f"Unknown ref: {ref!r}. Refs are run-scoped — only refs returned in "
+                "the current run are valid."
+            )
+            self._emit_read_payload_result(ref, path, "ref_not_found", 0, False)
+            return ToolCallResult(
+                call_id=call.id,
+                ok=False,
+                summary=f"read_payload: unknown ref {ref!r}",
+                payload={"error": msg},
+            )
+
+        payload = self._payload_store[ref]
+        try:
+            result = apply_path(payload, path)
+        except PathParseError:
+            msg = (
+                f"Invalid path syntax: {path!r}. Supported forms: key, key.subkey, "
+                "rows[i], rows[i:j], rows.column."
+            )
+            self._emit_read_payload_result(ref, path, "parse_error", 0, False)
+            return ToolCallResult(
+                call_id=call.id,
+                ok=False,
+                summary="read_payload: parse error",
+                payload={"error": msg},
+            )
+        except PathResolveError as exc:
+            msg = f"Path {path!r} did not match payload structure: {exc!s}"
+            self._emit_read_payload_result(ref, path, "no_match", 0, False)
+            return ToolCallResult(
+                call_id=call.id,
+                ok=False,
+                summary="read_payload: no match",
+                payload={"error": msg},
+            )
+
+        result_size = len(json.dumps(result, default=str))
+        if result_size > READ_PAYLOAD_CAP_CHARS:
+            # Sub-stub on oversized result; reuse original ref.
+            sub_stub = generate_stub(result, ref=ref, tool_name=call.name)
+            sub_stub["path"] = path
+            sub_stub["hint"] = "Slice with rows[i:j] or project with rows.column to narrow."
+            self._emit_read_payload_result(ref, path, "sub_stub_returned", result_size, True)
+            return ToolCallResult(
+                call_id=call.id,
+                ok=True,
+                summary=f"read_payload: sub-stub returned ({result_size} chars)",
+                payload=sub_stub,
+            )
+
+        self._emit_read_payload_result(ref, path, "ok", result_size, False)
+        return ToolCallResult(
+            call_id=call.id,
+            ok=True,
+            summary=f"read_payload: {result_size} chars",
+            payload={"value": result} if not isinstance(result, dict) else result,
+        )
+
+    def _emit_read_payload_result(
+        self,
+        ref: str,
+        path: str | None,
+        outcome: str,
+        result_size_chars: int,
+        sub_stub: bool,
+    ) -> None:
+        self._trace(
+            "read_payload.result",
+            f"ref={ref} path={path!r} outcome={outcome} size={result_size_chars}",
+            {
+                "ref": ref,
+                "path": path,
+                "outcome": outcome,
+                "result_size_chars": result_size_chars,
+                "sub_stub": sub_stub,
             },
         )
 
