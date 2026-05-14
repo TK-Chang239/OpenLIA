@@ -589,16 +589,18 @@ class ChatRunner:
 
             for r in results:
                 conversation.append(Message(role="tool", content=json.dumps(r.payload)))
-            tools = self._maybe_with_recall_tool(
-                self._maybe_with_skill_tool(
-                    await self._tools.build(
-                        department_id, has_web_search=True, extra_tools=extra_tool_specs
-                    ),
-                    department_id=department_id,
-                    user_id=user_id,
-                    disabled_skill_ids=disabled_skill_ids,
+            escalated = any(c.name == "request_additional_tools" for c in response.tool_calls)
+            if escalated:
+                tools = self._maybe_with_recall_tool(
+                    self._maybe_with_skill_tool(
+                        await self._tools.build(
+                            department_id, has_web_search=True, extra_tools=extra_tool_specs
+                        ),
+                        department_id=department_id,
+                        user_id=user_id,
+                        disabled_skill_ids=disabled_skill_ids,
+                    )
                 )
-            )
 
         # Final text turn — stream tokens.
         if cancel_token is not None and cancel_token.is_cancelled:

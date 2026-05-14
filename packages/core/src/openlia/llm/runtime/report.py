@@ -589,7 +589,9 @@ class ReportRunner:
                 )
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
-            tools = await self._tools.build(department_id, has_web_search=True)
+            escalated = any(c.name == "request_additional_tools" for c in response.tool_calls)
+            if escalated:
+                tools = await self._tools.build(department_id, has_web_search=True)
 
         yield ReportPhase(report_id=report_id, phase="writing")
         if cancel_token is not None and cancel_token.is_cancelled:
