@@ -60,10 +60,9 @@ from openlia.skills import SkillRegistry
 
 _SUBMIT_REPORT_TOOL_NAME = "submit_report"
 _SUBMIT_REPORT_DESCRIPTION = (
-    "Submit the final report. Call this tool exactly once with the structured "
-    "report payload as `arguments`. Top-level keys MUST be `cover` and `sections` "
-    "matching the framework. Server fills schema_version, department, and "
-    "generated_at — do not include those."
+    "Submit the final report. Call exactly once with the structured payload. "
+    "Keys MUST be `cover` and `sections` matching the framework. "
+    "Server fills schema_version, department, generated_at — omit them."
 )
 
 
