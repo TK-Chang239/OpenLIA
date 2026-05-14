@@ -322,7 +322,9 @@ class ToolDispatcher:
                 )
             )
 
-        return self._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
+        return self._pack_for_provider(
+            mapped=mapped, expanded=expanded, header=header, department_id=department_id
+        )
 
     def _pack_for_provider(
         self,
@@ -330,6 +332,7 @@ class ToolDispatcher:
         mapped: list[ToolSchema],
         expanded: list[ToolSchema],
         header: list[ToolSchema],
+        department_id: str | None = None,
     ) -> list[ToolSchema]:
         """Slim, sort, cap, and emit in header+mapped+expanded order.
 
@@ -388,9 +391,23 @@ class ToolDispatcher:
             result = header_slim[:MAX_TOOLS_PER_REQUEST]
             self._emit_slim_summary(n, len(failures), chars_before, chars_after)
             return result
-        if len(mapped_sorted) + len(expanded_slim) > budget:
-            keep_expanded = expanded_slim[: min(len(expanded_slim), budget)]
-            keep_mapped = mapped_sorted[: budget - len(keep_expanded)]
+        total_data = len(mapped_sorted) + len(expanded_slim)
+        if total_data > budget:
+            over = total_data - budget
+            if over <= len(mapped_sorted):
+                # Evict only from mapped (alphabetical-tail first).
+                keep_mapped = mapped_sorted[: len(mapped_sorted) - over]
+                keep_expanded = expanded_slim
+            else:
+                # Mapped fully dropped; evict remainder from expanded by LRU.
+                keep_mapped = []
+                evict_count = over - len(mapped_sorted)
+                if department_id is not None:
+                    lru_names = self._escalation_cache.lru_order(department_id)
+                    to_drop = set(lru_names[:evict_count])
+                    keep_expanded = [t for t in expanded_slim if t.name not in to_drop]
+                else:
+                    keep_expanded = expanded_slim[evict_count:]
             data_tools: list[ToolSchema] = keep_mapped + keep_expanded
         else:
             data_tools = mapped_sorted + expanded_slim
@@ -432,7 +449,7 @@ class ToolDispatcher:
         handler = self._builtin_handlers.get(name)
         if handler is not None:
             return await handler(self, department_id, call)
-        return await self._dispatch_requirement(call)
+        return await self._dispatch_requirement(department_id, call)
 
     async def dispatch_many(
         self,
@@ -465,7 +482,7 @@ class ToolDispatcher:
             structured=args,
         )
 
-    async def _dispatch_requirement(self, call: ToolCall) -> ToolCallResult:
+    async def _dispatch_requirement(self, department_id: str, call: ToolCall) -> ToolCallResult:
         try:
             payload = await self._data.dispatch_requirement(
                 tool_name=call.name, arguments=call.arguments
@@ -477,6 +494,9 @@ class ToolDispatcher:
                 summary=f"Failed to fetch {call.name}: {exc!s}",
                 payload={"error": str(exc)},
             )
+        # Mark MRU so future LRU eviction keeps recently-dispatched tools.
+        # No-op if the tool was never added to the escalation cache.
+        self._escalation_cache.touch(department_id, call.name)
         return ToolCallResult(
             call_id=call.id,
             ok=True,

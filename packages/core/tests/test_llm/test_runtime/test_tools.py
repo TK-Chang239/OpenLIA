@@ -891,3 +891,132 @@ class TestPackForProvider:
             result = disp._pack_for_provider(mapped=[original], expanded=[], header=[])
         assert len(result) == 1
         assert result[0].description == "original desc"
+
+
+# ---------------------------------------------------------------------------
+# Touch-on-dispatch + LRU-eviction tests (PR3.5)
+# ---------------------------------------------------------------------------
+
+
+async def test_touch_on_successful_dispatch() -> None:
+    """After a successful dispatch, the tool is moved to MRU in lru_order."""
+    data = FakeDataDispatcher(
+        manifest={},
+        results={"tool_a": {"data": 1}, "tool_b": {"data": 2}},
+    )
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+    # Seed the escalation cache directly so touch() has something to work with.
+    disp._escalation_cache.add("dept_x", [_make_schema("tool_a"), _make_schema("tool_b")])
+    # Initially lru_order is addition order: tool_a first, tool_b last (MRU).
+    assert disp._escalation_cache.lru_order("dept_x") == ["tool_a", "tool_b"]
+
+    # Dispatch tool_a successfully — it should become MRU.
+    result = await disp.dispatch(
+        department_id="dept_x",
+        call=ToolCall(id="c1", name="tool_a", arguments={}),
+    )
+    assert result.ok is True
+    assert disp._escalation_cache.lru_order("dept_x") == ["tool_b", "tool_a"]
+
+
+async def test_no_touch_on_failed_dispatch() -> None:
+    """A failed dispatch must not touch the escalation cache."""
+    data = FakeDataDispatcher(manifest={}, raise_for={"tool_a"})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+    disp._escalation_cache.add("dept_x", [_make_schema("tool_a"), _make_schema("tool_b")])
+    original_order = disp._escalation_cache.lru_order("dept_x")
+
+    result = await disp.dispatch(
+        department_id="dept_x",
+        call=ToolCall(id="c1", name="tool_a", arguments={}),
+    )
+    assert result.ok is False
+    # LRU order unchanged — no touch on failure.
+    assert disp._escalation_cache.lru_order("dept_x") == original_order
+
+
+async def test_pack_evicts_by_lru_under_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When expanded > budget, the LRU-oldest are dropped and MRU are kept."""
+    import openlia.llm.runtime.tools as tools_mod
+
+    monkeypatch.setattr(tools_mod, "MAX_TOOLS_PER_REQUEST", 10)
+
+    data = FakeDataDispatcher(manifest={})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+    dept = "dept_lru"
+    # Add 50 tools in order t_00 … t_49.
+    all_schemas = [_make_schema(f"t_{i:02d}") for i in range(50)]
+    disp._escalation_cache.add(dept, all_schemas)
+
+    # Touch tools t_25 through t_49 (in order), so t_49 becomes MRU.
+    for i in range(25, 50):
+        disp._escalation_cache.touch(dept, f"t_{i:02d}")
+
+    # header = 1 meta tool; budget = 10 - 1 = 9; expanded = 50; evict 41.
+    # LRU-oldest 41 are t_00..t_24 (never touched) and t_25..t_40 (touched early).
+    # Surviving 9 should be t_41..t_49 (most recently touched).
+    header = [_make_schema("meta")]
+    expanded = disp._escalation_cache.for_emission(dept)
+    result = disp._pack_for_provider(
+        mapped=[], expanded=expanded, header=header, department_id=dept
+    )
+    assert len(result) == 10
+    names = [t.name for t in result]
+    assert "meta" in names
+    for i in range(41, 50):
+        assert f"t_{i:02d}" in names, f"t_{i:02d} should survive eviction"
+    for i in range(41):
+        assert f"t_{i:02d}" not in names, f"t_{i:02d} should be evicted"
+
+
+async def test_pack_preserves_emission_order_after_lru_evict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After LRU eviction, surviving tools appear in addition order, not LRU order."""
+    import openlia.llm.runtime.tools as tools_mod
+
+    monkeypatch.setattr(tools_mod, "MAX_TOOLS_PER_REQUEST", 5)
+
+    data = FakeDataDispatcher(manifest={})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+    dept = "dept_order"
+    # Add tools in alphabetical order that is NOT LRU order: alpha, beta, gamma, delta, epsilon.
+    schemas = [
+        _make_schema("alpha"),
+        _make_schema("beta"),
+        _make_schema("gamma"),
+        _make_schema("delta"),
+        _make_schema("epsilon"),
+    ]
+    disp._escalation_cache.add(dept, schemas)
+
+    # Touch to create non-trivial LRU: touch alpha last (MRU), beta second.
+    # LRU order (LRU first): gamma, delta, epsilon, beta, alpha.
+    disp._escalation_cache.touch(dept, "beta")
+    disp._escalation_cache.touch(dept, "alpha")
+
+    # header = 1; budget = 4; expanded = 5; evict 1 (LRU = gamma).
+    header = [_make_schema("hdr")]
+    expanded = disp._escalation_cache.for_emission(dept)
+    result = disp._pack_for_provider(
+        mapped=[], expanded=expanded, header=header, department_id=dept
+    )
+    assert len(result) == 5
+    names = [t.name for t in result]
+    # gamma evicted (LRU-oldest).
+    assert "gamma" not in names
+    # Remaining 4 in addition order: alpha, beta, delta, epsilon.
+    data_tools = [t.name for t in result if t.name != "hdr"]
+    assert data_tools == ["alpha", "beta", "delta", "epsilon"]
