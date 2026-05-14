@@ -52,8 +52,7 @@ _REQUEST_ADDITIONAL_TOOLS_SCHEMA = ToolSchema(
     description=(
         "Call this if you realize you need a capability that's not in your "
         "current toolset. Provide a one-sentence reason describing what you "
-        "want to do; matching tools will be added to your toolset for the "
-        "rest of this run."
+        "want to do; matching tools will be added to your toolset."
     ),
     parameters={
         "type": "object",
@@ -86,7 +85,7 @@ LOAD_SKILL_SCHEMA = ToolSchema(
     description=(
         "Load the full instructions/playbook for an installed skill. Returns the "
         "skill's markdown body. Call this when the user's question matches a skill "
-        "from the menu and you want its detailed guidance before answering."
+        "from the menu and you want its detailed guidance."
     ),
     parameters={
         "type": "object",
