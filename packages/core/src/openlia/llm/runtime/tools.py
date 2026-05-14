@@ -298,10 +298,21 @@ class ToolDispatcher:
                 )
             )
 
-        # Enforce the provider cap. Prefer keeping `expanded` (LLM
-        # explicitly escalated for these mid-run) over `mapped` (warm-up
-        # full inventory or cache-promoted). Truncate from the mapped
-        # tail. If after that we still don't fit, drop expanded too.
+        return self._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+
+    def _pack_for_provider(
+        self,
+        *,
+        mapped: list[ToolSchema],
+        expanded: list[ToolSchema],
+        tail: list[ToolSchema],
+    ) -> list[ToolSchema]:
+        """Apply MAX_TOOLS_PER_REQUEST cap and return the final tool list.
+
+        Phase A will extend this method with slim+sort logic; today it just
+        enforces the cap with priority: tail (builtins) > expanded
+        (LLM-requested) > mapped (warmup/cache).
+        """
         budget = MAX_TOOLS_PER_REQUEST - len(tail)
         if budget < 0:
             # Pathological: tail alone exceeds the cap. Truncate tail.
