@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from typing import Any, ClassVar
+from unittest.mock import patch
 
 import pytest
 from _fakes import FakeDataDispatcher, FakeSearchAdapter
+from openlia.llm.runtime.schema_slim import (
+    TOOL_DESCRIPTION_MAX_CHARS,
+    SchemaSlimSystemicFailure,
+)
 from openlia.llm.runtime.tools import (
     MAX_TOOLS_PER_REQUEST,
     ToolCallResult,
@@ -527,8 +532,9 @@ class TestTracePlumbing:
         assert calls == [("cat", "msg", {"key": "val"})]
 
     @pytest.mark.asyncio
-    async def test_dispatch_paths_do_not_emit_traces_yet(self) -> None:
-        """PR1.4 only adds plumbing; subsequent PRs will populate traces."""
+    async def test_dispatch_paths_emit_only_slim_summary_traces(self) -> None:
+        """PR2.2 adds slim.summary from _pack_for_provider (called by build()).
+        Dispatch paths (requirement tools, builtins) still emit no traces."""
         calls: list[tuple[str, str, dict[str, Any] | None]] = []
 
         def recorder(category: str, message: str, payload: dict[str, Any] | None) -> None:
@@ -549,16 +555,21 @@ class TestTracePlumbing:
             trace=recorder,
         )
 
-        # Exercise build()
+        # Exercise build() — emits slim.summary
         await disp.build("dept_a", has_web_search=False)
 
-        # Exercise dispatch() with a builtin (request_additional_tools)
+        slim_calls_after_build = [c for c in calls if c[0] == "slim.summary"]
+        assert len(slim_calls_after_build) == 1
+
+        calls.clear()
+
+        # Exercise dispatch() with a builtin (request_additional_tools) — no trace
         await disp.dispatch(
             department_id="dept_a",
             call=ToolCall(id="c1", name="request_additional_tools", arguments={"reason": "test"}),
         )
 
-        # Exercise dispatch() with a requirement tool
+        # Exercise dispatch() with a requirement tool — no trace
         await disp.dispatch(
             department_id="dept_a",
             call=ToolCall(id="c2", name="tool_a", arguments={}),
@@ -686,28 +697,31 @@ class TestPackForProvider:
     def test_under_budget_passthrough(self) -> None:
         disp = _make_dispatcher()
         a, b, c, t1 = _make_schema("a"), _make_schema("b"), _make_schema("c"), _make_schema("t1")
-        result = disp._pack_for_provider(mapped=[a, b], expanded=[c], tail=[t1])
-        assert result == [a, b, c, t1]
+        # emit order: header + mapped_sorted + expanded
+        result = disp._pack_for_provider(mapped=[a, b], expanded=[c], header=[t1])
+        assert result == [t1, a, b, c]
 
     def test_at_cap_no_truncation(self) -> None:
         disp = _make_dispatcher()
-        tail = [_make_schema(f"tail_{i}") for i in range(2)]
-        budget = MAX_TOOLS_PER_REQUEST - len(tail)
-        mapped = [_make_schema(f"m_{i}") for i in range(budget // 2)]
+        header = [_make_schema(f"tail_{i}") for i in range(2)]
+        budget = MAX_TOOLS_PER_REQUEST - len(header)
+        # Use alphabetical names so sort is a no-op
+        mapped = [_make_schema(f"m_{i:03d}") for i in range(budget // 2)]
         expanded = [_make_schema(f"e_{i}") for i in range(budget - len(mapped))]
-        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
-        assert result == mapped + expanded + tail
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
+        # emit order: header + mapped_sorted + expanded
+        assert result == header + sorted(mapped, key=lambda t: t.name) + expanded
 
     def test_over_cap_truncates_mapped_first(self) -> None:
         disp = _make_dispatcher()
-        tail = [_make_schema("t1"), _make_schema("t2")]
+        header = [_make_schema("t1"), _make_schema("t2")]
         expanded = [_make_schema("e1"), _make_schema("e2")]
         # mapped is large enough to push total over cap
         mapped = [_make_schema(f"m_{i}") for i in range(MAX_TOOLS_PER_REQUEST)]
-        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
         assert len(result) == MAX_TOOLS_PER_REQUEST
         names = [t.name for t in result]
-        # tail preserved
+        # header preserved
         assert "t1" in names
         assert "t2" in names
         # expanded preserved
@@ -716,11 +730,11 @@ class TestPackForProvider:
 
     def test_expanded_preserved_over_mapped(self) -> None:
         disp = _make_dispatcher()
-        tail = [_make_schema("t1")]
+        header = [_make_schema("t1")]
         expanded = [_make_schema(f"e_{i}") for i in range(10)]
         # mapped large enough to force truncation
         mapped = [_make_schema(f"m_{i}") for i in range(MAX_TOOLS_PER_REQUEST)]
-        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
         names = [t.name for t in result]
         # all expanded items survive
         for i in range(10):
@@ -728,12 +742,12 @@ class TestPackForProvider:
 
     def test_pathological_tail_exceeds_cap(self) -> None:
         disp = _make_dispatcher()
-        tail = [_make_schema(f"tail_{i}") for i in range(MAX_TOOLS_PER_REQUEST + 5)]
+        header = [_make_schema(f"tail_{i}") for i in range(MAX_TOOLS_PER_REQUEST + 5)]
         mapped = [_make_schema("m1")]
         expanded = [_make_schema("e1")]
-        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
         assert len(result) == MAX_TOOLS_PER_REQUEST
-        # mapped and expanded are dropped; result is tail slice
+        # mapped and expanded are dropped; result is header slice
         names = [t.name for t in result]
         assert "m1" not in names
         assert "e1" not in names
@@ -741,5 +755,139 @@ class TestPackForProvider:
     def test_empty_inputs(self) -> None:
         disp = _make_dispatcher()
         t1 = _make_schema("t1")
-        result = disp._pack_for_provider(mapped=[], expanded=[], tail=[t1])
+        result = disp._pack_for_provider(mapped=[], expanded=[], header=[t1])
         assert result == [t1]
+
+    # ------------------------------------------------------------------
+    # New tests: slim + sort + threshold + trace
+    # ------------------------------------------------------------------
+
+    def test_slim_applied_to_long_description(self) -> None:
+        disp = _make_dispatcher()
+        long_desc = "x" * 300
+        fat = ToolSchema(name="fat_tool", description=long_desc, parameters={})
+        result = disp._pack_for_provider(mapped=[fat], expanded=[], header=[])
+        assert len(result) == 1
+        assert len(result[0].description) <= TOOL_DESCRIPTION_MAX_CHARS
+
+    def test_mapped_sorted_alphabetically(self) -> None:
+        disp = _make_dispatcher()
+        c, a, b = _make_schema("c"), _make_schema("a"), _make_schema("b")
+        result = disp._pack_for_provider(mapped=[c, a, b], expanded=[], header=[])
+        names = [t.name for t in result]
+        assert names == ["a", "b", "c"]
+
+    def test_expanded_preserves_addition_order(self) -> None:
+        disp = _make_dispatcher()
+        c, a, b = _make_schema("c"), _make_schema("a"), _make_schema("b")
+        result = disp._pack_for_provider(mapped=[], expanded=[c, a, b], header=[])
+        names = [t.name for t in result]
+        assert names == ["c", "a", "b"]
+
+    def test_header_preserved_in_receive_order(self) -> None:
+        disp = _make_dispatcher()
+        t2, t1 = _make_schema("t2"), _make_schema("t1")
+        result = disp._pack_for_provider(mapped=[], expanded=[], header=[t2, t1])
+        assert result[0].name == "t2"
+        assert result[1].name == "t1"
+
+    def test_trace_slim_summary_emitted(self) -> None:
+        calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+            calls.append((cat, msg, payload))
+
+        data = FakeDataDispatcher(manifest={})
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            trace=recorder,
+        )
+        disp._pack_for_provider(mapped=[_make_schema("a")], expanded=[], header=[_make_schema("h")])
+        slim_events = [c for c in calls if c[0] == "slim.summary"]
+        assert len(slim_events) == 1
+        payload = slim_events[0][2]
+        assert payload is not None
+        assert "n_tools" in payload
+        assert "n_failures" in payload
+        assert "chars_before" in payload
+        assert "chars_after" in payload
+        assert "ratio" in payload
+
+    def test_trace_shows_reduction_ratio(self) -> None:
+        calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+            calls.append((cat, msg, payload))
+
+        data = FakeDataDispatcher(manifest={})
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            trace=recorder,
+        )
+        # Build a fat tool: description of 300 chars — will be slimmed to <=200
+        fat = ToolSchema(name="fat", description="w" * 300, parameters={})
+        disp._pack_for_provider(mapped=[fat], expanded=[], header=[])
+        slim_events = [c for c in calls if c[0] == "slim.summary"]
+        payload = slim_events[0][2]
+        assert payload is not None
+        assert payload["ratio"] < 0.7
+
+    def test_threshold_breach_raises(self) -> None:
+        disp = _make_dispatcher()
+        # 10 tools, slim fails on 6 => 6 >= 5 AND 6/10 = 60% > 20% => raise
+        tools = [_make_schema(f"t{i}") for i in range(10)]
+        fail_names = {t.name for t in tools[:6]}
+
+        def fake_slim(t: ToolSchema) -> ToolSchema:
+            if t.name in fail_names:
+                raise ValueError("injected failure")
+            return t
+
+        with patch("openlia.llm.runtime.tools.slim_tool_schema", side_effect=fake_slim):
+            with pytest.raises(SchemaSlimSystemicFailure):
+                disp._pack_for_provider(mapped=tools, expanded=[], header=[])
+
+    def test_threshold_not_breached_under_count(self) -> None:
+        # 4 failures in 100 tools: count 4 < 5 → no raise
+        disp = _make_dispatcher()
+        tools = [_make_schema(f"t{i:03d}") for i in range(100)]
+        fail_names = {t.name for t in tools[:4]}
+
+        def fake_slim(t: ToolSchema) -> ToolSchema:
+            if t.name in fail_names:
+                raise ValueError("injected")
+            return t
+
+        with patch("openlia.llm.runtime.tools.slim_tool_schema", side_effect=fake_slim):
+            result = disp._pack_for_provider(mapped=tools, expanded=[], header=[])
+        assert len(result) == 100
+
+    def test_threshold_not_breached_under_ratio(self) -> None:
+        # 5 failures in 50 tools: count 5 >= 5 but ratio 5/50 = 10% < 20% → no raise
+        disp = _make_dispatcher()
+        tools = [_make_schema(f"t{i:03d}") for i in range(50)]
+        fail_names = {t.name for t in tools[:5]}
+
+        def fake_slim(t: ToolSchema) -> ToolSchema:
+            if t.name in fail_names:
+                raise ValueError("injected")
+            return t
+
+        with patch("openlia.llm.runtime.tools.slim_tool_schema", side_effect=fake_slim):
+            result = disp._pack_for_provider(mapped=tools, expanded=[], header=[])
+        assert len(result) == 50
+
+    def test_failed_tool_passes_through_unslimmed(self) -> None:
+        disp = _make_dispatcher()
+        original = ToolSchema(name="broken", description="original desc", parameters={})
+
+        def fake_slim(t: ToolSchema) -> ToolSchema:
+            raise ValueError("always fails")
+
+        with patch("openlia.llm.runtime.tools.slim_tool_schema", side_effect=fake_slim):
+            # Only 1 failure — won't breach threshold (count < 5)
+            result = disp._pack_for_provider(mapped=[original], expanded=[], header=[])
+        assert len(result) == 1
+        assert result[0].description == "original desc"
