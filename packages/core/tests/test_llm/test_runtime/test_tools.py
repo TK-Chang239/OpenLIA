@@ -344,7 +344,7 @@ def _bulk_manifest(department_id: str, count: int) -> dict[str, dict[str, Any]]:
 
 async def test_build_caps_total_tools_at_provider_limit() -> None:
     # 130 mapped tools + request_additional_tools + web_search would be 132
-    # — OpenAI rejects anything past 128.
+    # — cap (MAX_TOOLS_PER_REQUEST) is enforced.
     data = FakeDataDispatcher(manifest=_bulk_manifest("equity_research", 130))
     disp = ToolDispatcher(
         data_dispatcher=data,
@@ -358,9 +358,10 @@ async def test_build_caps_total_tools_at_provider_limit() -> None:
     # Meta-tools must be preserved — they enable escalation and search.
     assert "request_additional_tools" in names
     assert "web_search" in names
-    # The truncated mapped slice keeps the head, in declaration order.
+    # The truncated mapped slice keeps the alphabetical head.
+    # With cap=48: header=2, budget=46; tools tool_000..tool_045 survive.
     assert "tool_000" in names
-    assert "tool_125" in names
+    # tools beyond budget are evicted.
     assert "tool_129" not in names
 
 
@@ -534,7 +535,9 @@ class TestTracePlumbing:
     @pytest.mark.asyncio
     async def test_dispatch_paths_emit_only_slim_summary_traces(self) -> None:
         """PR2.2 adds slim.summary from _pack_for_provider (called by build()).
-        Dispatch paths (requirement tools, builtins) still emit no traces."""
+        PR3.8 adds expand_tools.request and expand_tools.result from
+        request_additional_tools dispatch. Requirement tool dispatch still
+        emits no traces."""
         calls: list[tuple[str, str, dict[str, Any] | None]] = []
 
         def recorder(category: str, message: str, payload: dict[str, Any] | None) -> None:
@@ -555,7 +558,7 @@ class TestTracePlumbing:
             trace=recorder,
         )
 
-        # Exercise build() — emits slim.summary
+        # Exercise build() — emits slim.summary + escalation_cache.summary
         await disp.build("dept_a", has_web_search=False)
 
         slim_calls_after_build = [c for c in calls if c[0] == "slim.summary"]
@@ -563,11 +566,21 @@ class TestTracePlumbing:
 
         calls.clear()
 
-        # Exercise dispatch() with a builtin (request_additional_tools) — no trace
+        # Exercise dispatch() with a builtin (request_additional_tools)
+        # — emits expand_tools.request and expand_tools.result (PR3.8)
         await disp.dispatch(
             department_id="dept_a",
             call=ToolCall(id="c1", name="request_additional_tools", arguments={"reason": "test"}),
         )
+
+        expand_categories = {c[0] for c in calls}
+        assert "expand_tools.request" in expand_categories
+        assert "expand_tools.result" in expand_categories
+        # No slim.summary or escalation_cache.summary from dispatch alone.
+        assert "slim.summary" not in expand_categories
+        assert "escalation_cache.summary" not in expand_categories
+
+        calls.clear()
 
         # Exercise dispatch() with a requirement tool — no trace
         await disp.dispatch(
@@ -849,8 +862,11 @@ class TestPackForProvider:
             with pytest.raises(SchemaSlimSystemicFailure):
                 disp._pack_for_provider(mapped=tools, expanded=[], header=[])
 
-    def test_threshold_not_breached_under_count(self) -> None:
+    def test_threshold_not_breached_under_count(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 4 failures in 100 tools: count 4 < 5 → no raise
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "MAX_TOOLS_PER_REQUEST", 200)
         disp = _make_dispatcher()
         tools = [_make_schema(f"t{i:03d}") for i in range(100)]
         fail_names = {t.name for t in tools[:4]}
@@ -864,8 +880,11 @@ class TestPackForProvider:
             result = disp._pack_for_provider(mapped=tools, expanded=[], header=[])
         assert len(result) == 100
 
-    def test_threshold_not_breached_under_ratio(self) -> None:
+    def test_threshold_not_breached_under_ratio(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 5 failures in 50 tools: count 5 >= 5 but ratio 5/50 = 10% < 20% → no raise
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "MAX_TOOLS_PER_REQUEST", 100)
         disp = _make_dispatcher()
         tools = [_make_schema(f"t{i:03d}") for i in range(50)]
         fail_names = {t.name for t in tools[:5]}
@@ -1020,3 +1039,402 @@ async def test_pack_preserves_emission_order_after_lru_evict(
     # Remaining 4 in addition order: alpha, beta, delta, epsilon.
     data_tools = [t.name for t in result if t.name != "hdr"]
     assert data_tools == ["alpha", "beta", "delta", "epsilon"]
+
+
+# ---------------------------------------------------------------------------
+# Task A: MAX_TOOLS_PER_REQUEST env override tests (PR3.6)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestMaxToolsEnvOverride:
+    pytestmark: ClassVar[list] = []  # sync tests; override module-level asyncio marker
+
+    def test_max_tools_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No env var set — function returns default 48."""
+        from openlia.llm.runtime.tools import _get_max_tools_per_request
+
+        monkeypatch.delenv("OPENLIA_MAX_TOOLS_PER_REQUEST", raising=False)
+        assert _get_max_tools_per_request() == 48
+
+    def test_max_tools_env_override_valid(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Valid env var overrides the default."""
+        from openlia.llm.runtime.tools import _get_max_tools_per_request
+
+        monkeypatch.setenv("OPENLIA_MAX_TOOLS_PER_REQUEST", "64")
+        assert _get_max_tools_per_request() == 64
+
+    def test_max_tools_env_override_invalid_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Non-integer value falls back to 48 and logs a warning."""
+        import logging
+
+        from openlia.llm.runtime.tools import _get_max_tools_per_request
+
+        monkeypatch.setenv("OPENLIA_MAX_TOOLS_PER_REQUEST", "not_an_integer")
+        with caplog.at_level(logging.WARNING, logger="openlia.llm.runtime.tools"):
+            result = _get_max_tools_per_request()
+        assert result == 48
+        assert any("not_an_integer" in r.message for r in caplog.records)
+
+    def test_max_tools_env_override_zero_falls_back(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Zero (< 1) falls back to 48 and logs a warning."""
+        import logging
+
+        from openlia.llm.runtime.tools import _get_max_tools_per_request
+
+        monkeypatch.setenv("OPENLIA_MAX_TOOLS_PER_REQUEST", "0")
+        with caplog.at_level(logging.WARNING, logger="openlia.llm.runtime.tools"):
+            result = _get_max_tools_per_request()
+        assert result == 48
+        assert any("0" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Task B: Re-escalation loop guard tests (PR3.7)
+# ---------------------------------------------------------------------------
+
+
+async def test_escalation_loop_guard_fires_at_threshold() -> None:
+    """After 3 consecutive empty escalations, payload contains a directive."""
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    for i in range(2):
+        r = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id=f"c{i}",
+                name="request_additional_tools",
+                arguments={"reason": "obscure thing nothing matches"},
+            ),
+        )
+        assert r.ok is False
+        assert "directive" not in r.payload
+
+    # Third call fires the directive.
+    r3 = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(
+            id="c3",
+            name="request_additional_tools",
+            arguments={"reason": "obscure thing nothing matches"},
+        ),
+    )
+    assert r3.ok is False
+    assert "directive" in r3.payload
+    directive_text = r3.payload["directive"].lower()
+    assert "consecutive" in directive_text
+
+
+async def test_escalation_loop_guard_counter_resets_on_success() -> None:
+    """Counter resets after a successful escalation; directive not fired until threshold again."""
+    new_tool = {
+        "name": "options_chain",
+        "description": "Options chain",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }
+    data = FakeDataDispatcher(
+        manifest=_MANIFEST,
+        results={"expand::success call": new_tool},
+    )
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    dept = "equity_research"
+
+    # Two failures.
+    for i in range(2):
+        await disp.dispatch(
+            department_id=dept,
+            call=ToolCall(
+                id=f"fail{i}",
+                name="request_additional_tools",
+                arguments={"reason": "nothing matches"},
+            ),
+        )
+
+    # Success resets counter.
+    r_success = await disp.dispatch(
+        department_id=dept,
+        call=ToolCall(
+            id="success",
+            name="request_additional_tools",
+            arguments={"reason": "success call"},
+        ),
+    )
+    assert r_success.ok is True
+    assert disp._consecutive_escalation_failures.get(dept, 0) == 0
+
+    # Two more failures after reset — counter at 2, directive NOT fired.
+    for i in range(2):
+        r = await disp.dispatch(
+            department_id=dept,
+            call=ToolCall(
+                id=f"post{i}",
+                name="request_additional_tools",
+                arguments={"reason": "nothing matches again"},
+            ),
+        )
+        assert "directive" not in r.payload
+
+    assert disp._consecutive_escalation_failures.get(dept, 0) == 2
+
+
+async def test_escalation_loop_guard_directive_trace_emitted() -> None:
+    """expand_tools.directive_fired trace is emitted when threshold is hit."""
+    trace_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+        trace_calls.append((cat, msg, payload))
+
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+        trace=recorder,
+    )
+    for i in range(3):
+        await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id=f"c{i}",
+                name="request_additional_tools",
+                arguments={"reason": "nothing matches"},
+            ),
+        )
+
+    directive_traces = [c for c in trace_calls if c[0] == "expand_tools.directive_fired"]
+    assert len(directive_traces) == 1
+    payload = directive_traces[0][2]
+    assert payload is not None
+    assert payload["consecutive_failures"] == 3
+    assert payload["department_id"] == "equity_research"
+
+
+# ---------------------------------------------------------------------------
+# Task C: Four new traces tests (PR3.8)
+# ---------------------------------------------------------------------------
+
+
+async def test_expand_tools_request_trace_emitted() -> None:
+    """expand_tools.request trace has correct reason, category_hint, already_loaded."""
+    trace_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+        trace_calls.append((cat, msg, payload))
+
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+        trace=recorder,
+    )
+    await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(
+            id="c1",
+            name="request_additional_tools",
+            arguments={"reason": "need options data", "category_hint": "financial"},
+        ),
+    )
+
+    req_traces = [c for c in trace_calls if c[0] == "expand_tools.request"]
+    assert len(req_traces) == 1
+    p = req_traces[0][2]
+    assert p is not None
+    assert p["reason"] == "need options data"
+    assert p["category_hint"] == "financial"
+    assert p["already_loaded"] == 0
+
+
+async def test_expand_tools_result_trace_emitted() -> None:
+    """expand_tools.result trace has matched_count, added_count, top_names, failure_reason."""
+    new_tool = {
+        "name": "options_chain",
+        "description": "Options chain",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }
+    trace_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+        trace_calls.append((cat, msg, payload))
+
+    data = FakeDataDispatcher(
+        manifest=_MANIFEST,
+        results={"expand::need options": new_tool},
+    )
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+        trace=recorder,
+    )
+    await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(
+            id="c1",
+            name="request_additional_tools",
+            arguments={"reason": "need options"},
+        ),
+    )
+
+    result_traces = [c for c in trace_calls if c[0] == "expand_tools.result"]
+    assert len(result_traces) == 1
+    p = result_traces[0][2]
+    assert p is not None
+    assert p["matched_count"] == 1
+    assert p["added_count"] == 1
+    assert p["top_names"] == ["options_chain"]
+    assert p["failure_reason"] is None
+
+
+async def test_expand_tools_result_failure_reason_no_match() -> None:
+    """failure_reason == 'no_match' when data dispatcher returns empty list."""
+    trace_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+        trace_calls.append((cat, msg, payload))
+
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+        trace=recorder,
+    )
+    await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(
+            id="c1",
+            name="request_additional_tools",
+            arguments={"reason": "obscure thing"},
+        ),
+    )
+
+    result_traces = [c for c in trace_calls if c[0] == "expand_tools.result"]
+    assert len(result_traces) == 1
+    p = result_traces[0][2]
+    assert p is not None
+    assert p["failure_reason"] == "no_match"
+    assert p["matched_count"] == 0
+
+
+async def test_expand_tools_result_failure_reason_all_already_loaded() -> None:
+    """failure_reason == 'all_already_loaded' when entries returned but all already in cache."""
+    new_tool = {
+        "name": "options_chain",
+        "description": "Options chain",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    }
+    trace_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+    def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+        trace_calls.append((cat, msg, payload))
+
+    data = FakeDataDispatcher(
+        manifest=_MANIFEST,
+        results={
+            "expand::first": new_tool,
+            "expand::second": new_tool,
+        },
+    )
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+        trace=recorder,
+    )
+    # First call — adds tool successfully.
+    await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c1", name="request_additional_tools", arguments={"reason": "first"}),
+    )
+    trace_calls.clear()
+
+    # Second call — tool already in cache.
+    await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c2", name="request_additional_tools", arguments={"reason": "second"}),
+    )
+    result_traces = [c for c in trace_calls if c[0] == "expand_tools.result"]
+    assert len(result_traces) == 1
+    p = result_traces[0][2]
+    assert p is not None
+    assert p["failure_reason"] == "all_already_loaded"
+    assert p["matched_count"] == 1
+    assert p["added_count"] == 0
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestEscalationCacheTraces:
+    pytestmark: ClassVar[list] = []  # sync tests
+
+    _TraceList = list[tuple[str, str, dict[str, Any] | None]]
+
+    def _make_traced_dispatcher(self) -> tuple[ToolDispatcher, _TraceList]:
+        trace_calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(cat: str, msg: str, payload: dict[str, Any] | None) -> None:
+            trace_calls.append((cat, msg, payload))
+
+        data = FakeDataDispatcher(manifest={})
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            trace=recorder,
+        )
+        return disp, trace_calls
+
+    def test_escalation_cache_summary_trace(self) -> None:
+        """escalation_cache.summary emitted from _pack_for_provider with correct counts."""
+        disp, calls = self._make_traced_dispatcher()
+        mapped = [_make_schema("m1"), _make_schema("m2")]
+        expanded = [_make_schema("e1")]
+        header = [_make_schema("h1")]
+        disp._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
+        summary_traces = [c for c in calls if c[0] == "escalation_cache.summary"]
+        assert len(summary_traces) == 1
+        p = summary_traces[0][2]
+        assert p is not None
+        assert p["builtins"] == 1
+        assert p["expanded"] == 1
+        assert p["emitted"] == 4  # h1 + m1 + m2 + e1
+        assert p["evicted"] == 0
+
+    def test_escalation_cache_evict_trace_only_when_eviction_fires(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No evict trace when under budget; evict trace with evicted_names when over budget."""
+        import openlia.llm.runtime.tools as tools_mod
+
+        monkeypatch.setattr(tools_mod, "MAX_TOOLS_PER_REQUEST", 4)
+
+        disp, calls = self._make_traced_dispatcher()
+        header = [_make_schema("h1")]
+        mapped = [_make_schema("m1")]
+        expanded = [_make_schema("e1")]
+
+        # Under budget: h1 + m1 + e1 = 3 < 4.
+        disp._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
+        evict_traces = [c for c in calls if c[0] == "escalation_cache.evict"]
+        assert len(evict_traces) == 0
+
+        calls.clear()
+
+        # Over budget: h1 + m1 + m2 + m3 + e1 = 5 > 4; evict 1 from mapped.
+        disp._pack_for_provider(
+            mapped=[_make_schema("m1"), _make_schema("m2"), _make_schema("m3")],
+            expanded=[_make_schema("e1")],
+            header=[_make_schema("h1")],
+        )
+        evict_traces = [c for c in calls if c[0] == "escalation_cache.evict"]
+        assert len(evict_traces) == 1
+        p = evict_traces[0][2]
+        assert p is not None
+        assert "evicted_names" in p
+        assert len(p["evicted_names"]) == 1
+        assert p["cap"] == 4

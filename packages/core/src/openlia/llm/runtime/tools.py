@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -46,11 +47,29 @@ def _noop_trace(_category: str, _message: str, _payload: dict[str, Any] | None) 
 # when a model loops on the same tool without convergence.
 MAX_TOOL_TURNS = 32
 
+
 # Hard provider cap on tools per request. OpenAI rejects requests whose
 # `tools` array exceeds 128 with `invalid_request_error`; Anthropic and
 # Gemini accept more but degrade routing accuracy past this point. We
 # enforce this across all providers via `ToolDispatcher.build()`.
-MAX_TOOLS_PER_REQUEST = 128
+# Default lowered to 48 for accuracy; override via OPENLIA_MAX_TOOLS_PER_REQUEST.
+def _get_max_tools_per_request() -> int:
+    raw = os.environ.get("OPENLIA_MAX_TOOLS_PER_REQUEST")
+    if raw is None:
+        return 48
+    try:
+        v = int(raw)
+        if v < 1:
+            raise ValueError
+        return v
+    except ValueError:
+        log.warning("Invalid OPENLIA_MAX_TOOLS_PER_REQUEST=%r; using default 48", raw)
+        return 48
+
+
+MAX_TOOLS_PER_REQUEST = _get_max_tools_per_request()
+
+_ESCALATION_FAILURE_THRESHOLD = 3
 
 _REQUEST_ADDITIONAL_TOOLS_NAME = "request_additional_tools"
 
@@ -274,6 +293,7 @@ class ToolDispatcher:
         self._web_search = web_search
         self._escalation_cache = _EscalationCache()
         self._trace: TraceRecorder = trace if trace is not None else _noop_trace
+        self._consecutive_escalation_failures: dict[str, int] = {}
         self._builtin_handlers: dict[str, _BuiltinHandler] = {
             _REQUEST_ADDITIONAL_TOOLS_NAME: type(self)._dispatch_request_additional_tools,
             "web_search": type(self)._dispatch_web_search,
@@ -390,6 +410,37 @@ class ToolDispatcher:
         if budget < 0:
             result = header_slim[:MAX_TOOLS_PER_REQUEST]
             self._emit_slim_summary(n, len(failures), chars_before, chars_after)
+            n_emitted = len(result)
+            n_evicted = len(mapped_sorted) + len(expanded_slim)
+            n_builtins_path = len(header_slim)
+            n_expanded_path = len(expanded_slim)
+            self._trace(
+                "escalation_cache.summary",
+                (
+                    f"emitted={n_emitted} builtins={n_builtins_path}"
+                    f" expanded={n_expanded_path} evicted={n_evicted}"
+                ),
+                {
+                    "expanded": n_expanded_path,
+                    "builtins": n_builtins_path,
+                    "emitted": n_emitted,
+                    "evicted": n_evicted,
+                },
+            )
+            if n_evicted > 0:
+                evicted_names = [t.name for t in mapped_sorted + expanded_slim]
+                self._trace(
+                    "escalation_cache.evict",
+                    (
+                        f"evicted={n_evicted} working_set={n_expanded_path}"
+                        f" cap={MAX_TOOLS_PER_REQUEST}"
+                    ),
+                    {
+                        "working_set_size": n_expanded_path,
+                        "cap": MAX_TOOLS_PER_REQUEST,
+                        "evicted_names": evicted_names,
+                    },
+                )
             return result
         total_data = len(mapped_sorted) + len(expanded_slim)
         if total_data > budget:
@@ -410,10 +461,44 @@ class ToolDispatcher:
                     keep_expanded = expanded_slim[evict_count:]
             data_tools: list[ToolSchema] = keep_mapped + keep_expanded
         else:
+            keep_mapped = mapped_sorted
+            keep_expanded = expanded_slim
             data_tools = mapped_sorted + expanded_slim
         result = header_slim + data_tools
 
         self._emit_slim_summary(n, len(failures), chars_before, chars_after)
+
+        # Task C: escalation_cache.summary and escalation_cache.evict traces
+        n_emitted = len(result)
+        n_evicted = total_data - len(data_tools) if total_data > budget else 0
+        n_expanded = len(expanded_slim)
+        n_builtins = len(header_slim)
+        self._trace(
+            "escalation_cache.summary",
+            f"emitted={n_emitted} builtins={n_builtins} expanded={n_expanded} evicted={n_evicted}",
+            {
+                "expanded": n_expanded,
+                "builtins": n_builtins,
+                "emitted": n_emitted,
+                "evicted": n_evicted,
+            },
+        )
+        if n_evicted > 0:
+            # Compute evicted names: tools in expanded_slim that were not kept.
+            keep_expanded_names = {t.name for t in keep_expanded}
+            evicted_names = [t.name for t in expanded_slim if t.name not in keep_expanded_names]
+            # Also add mapped tools that were evicted.
+            keep_mapped_names = {t.name for t in keep_mapped}
+            evicted_names += [t.name for t in mapped_sorted if t.name not in keep_mapped_names]
+            self._trace(
+                "escalation_cache.evict",
+                f"evicted={n_evicted} working_set={n_expanded} cap={MAX_TOOLS_PER_REQUEST}",
+                {
+                    "working_set_size": n_expanded,
+                    "cap": MAX_TOOLS_PER_REQUEST,
+                    "evicted_names": evicted_names,
+                },
+            )
         return result
 
     def _emit_slim_summary(
@@ -516,6 +601,21 @@ class ToolDispatcher:
             if isinstance(category_hint_raw, str) and category_hint_raw.strip()
             else None
         )
+
+        # Task C: expand_tools.request trace
+        reason_trimmed = reason[:500]
+        self._trace(
+            "expand_tools.request",
+            f"reason={reason_trimmed!r} hint={category_hint}",
+            {
+                "reason": reason_trimmed,
+                "category_hint": category_hint,
+                "candidate_count": -1,
+                "filtered_count": -1,
+                "already_loaded": len(self._escalation_cache.for_emission(department_id)),
+            },
+        )
+
         try:
             entries = await self._data.expand_tools(
                 department_id=department_id,
@@ -523,12 +623,25 @@ class ToolDispatcher:
                 category_hint=category_hint,
             )
         except Exception as exc:
+            # Task C: failure_reason="exception" branch
+            self._trace(
+                "expand_tools.result",
+                "matched=0 added=0 reason=exception",
+                {
+                    "matched_count": 0,
+                    "added_count": 0,
+                    "top_names": [],
+                    "scores": [],
+                    "failure_reason": "exception",
+                },
+            )
             return ToolCallResult(
                 call_id=call.id,
                 ok=False,
                 summary=f"request_additional_tools failed: {exc!s}",
                 payload={"error": str(exc)},
             )
+
         added = self._escalation_cache.add(
             department_id,
             [
@@ -540,13 +653,72 @@ class ToolDispatcher:
                 for e in entries
             ],
         )
+
+        # Task C: compute failure_reason for expand_tools.result trace
+        top_names = [e["name"] for e in entries]
+        failure_reason: str | None = None
         if not added:
+            if not entries:
+                failure_reason = "no_match"
+            else:
+                failure_reason = "all_already_loaded"
+
+        self._trace(
+            "expand_tools.result",
+            f"matched={len(entries)} added={len(added)} reason={failure_reason}",
+            {
+                "matched_count": len(entries),
+                "added_count": len(added),
+                "top_names": top_names,
+                "scores": [],
+                "failure_reason": failure_reason,
+            },
+        )
+
+        if not added:
+            # Task B: re-escalation loop guard
+            self._consecutive_escalation_failures[department_id] = (
+                self._consecutive_escalation_failures.get(department_id, 0) + 1
+            )
+            if (
+                self._consecutive_escalation_failures[department_id]
+                >= _ESCALATION_FAILURE_THRESHOLD
+            ):
+                n_consec = self._consecutive_escalation_failures[department_id]
+                self._trace(
+                    "expand_tools.directive_fired",
+                    f"directive fired after {n_consec} consecutive failures",
+                    {
+                        "consecutive_failures": n_consec,
+                        "department_id": department_id,
+                    },
+                )
+                return ToolCallResult(
+                    call_id=call.id,
+                    ok=False,
+                    summary="Repeated escalation failures.",
+                    payload={
+                        "added_tools": [],
+                        "found": False,
+                        "directive": (
+                            f"You've made {n_consec} consecutive escalation"
+                            " requests with no new tools added. Stop escalating."
+                            " Either use the tools already in your working set,"
+                            " call `web_search` if this needs unstructured data,"
+                            " or write the report with what you have and"
+                            " note the data gap explicitly."
+                        ),
+                    },
+                )
             return ToolCallResult(
                 call_id=call.id,
                 ok=False,
                 summary="No additional tools matched the request.",
                 payload={"added_tools": [], "found": False},
             )
+
+        # Success: reset the counter.
+        self._consecutive_escalation_failures[department_id] = 0
         return ToolCallResult(
             call_id=call.id,
             ok=True,
