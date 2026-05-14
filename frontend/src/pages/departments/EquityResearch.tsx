@@ -13,6 +13,7 @@ import {
   createSession,
   getSession,
   listMessages,
+  patchSession,
 } from "../../api/chat";
 import { saveReportToRepo } from "../../api/repo";
 import {
@@ -95,6 +96,8 @@ export default function EquityResearch(): JSX.Element {
   const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
   const [genDurationSec, setGenDurationSec] = useState<number | null>(null);
   const [autoStarted, setAutoStarted] = useState(false);
+  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>([]);
+  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
 
   const lastSentChatRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
@@ -154,6 +157,8 @@ export default function EquityResearch(): JSX.Element {
       setHistory([]);
       setHistoryLoaded(false);
       setRestoredReportId(null);
+      setDisabledConnectorIds([]);
+      setDisabledSkillIds([]);
       return;
     }
     let cancelled = false;
@@ -169,7 +174,14 @@ export default function EquityResearch(): JSX.Element {
       ),
     ]).then(async ([sess, msgs, reports]) => {
       if (cancelled) return;
-      if (sess) setSessionTitle(sess.title);
+      if (sess) {
+        setSessionTitle(sess.title);
+        setDisabledConnectorIds(sess.disabled_connector_ids ?? []);
+        setDisabledSkillIds(sess.disabled_skill_ids ?? []);
+      } else {
+        setDisabledConnectorIds([]);
+        setDisabledSkillIds([]);
+      }
       setHistory(msgs?.items ?? []);
       setHistoryLoaded(true);
       const latest = reports?.items?.[0];
@@ -276,6 +288,14 @@ export default function EquityResearch(): JSX.Element {
         setSessionId(row.id);
         setSessionTitle(row.title);
         setSubject(trimmed);
+        // Push any pre-session tool toggles onto the new row. Fire-and-forget;
+        // a failure here just falls back to "all on" for this run.
+        if (disabledConnectorIds.length > 0 || disabledSkillIds.length > 0) {
+          void patchSession(row.id, {
+            disabled_connector_ids: disabledConnectorIds,
+            disabled_skill_ids: disabledSkillIds,
+          });
+        }
         startReport({
           url: "/api/departments/equity-research/report",
           body: {
@@ -289,7 +309,13 @@ export default function EquityResearch(): JSX.Element {
         setStartError(err instanceof Error ? err.message : "Failed to start research");
       }
     },
-    [config, resetReport, startReport],
+    [
+      config,
+      resetReport,
+      startReport,
+      disabledConnectorIds,
+      disabledSkillIds,
+    ],
   );
 
   const handleComposerSubmit = (text: string, attachments?: File[]) => {
@@ -550,13 +576,15 @@ export default function EquityResearch(): JSX.Element {
         onModeClick={() => setSettingsOpen(true)}
         modelPicker={<ModelPicker />}
         toolPicker={
-          sessionId ? (
-            <ToolPicker
-              sessionId={sessionId}
-              initialDisabledConnectorIds={[]}
-              initialDisabledSkillIds={[]}
-            />
-          ) : null
+          <ToolPicker
+            sessionId={sessionId}
+            initialDisabledConnectorIds={disabledConnectorIds}
+            initialDisabledSkillIds={disabledSkillIds}
+            onChange={(next) => {
+              setDisabledConnectorIds(next.disabledConnectorIds);
+              setDisabledSkillIds(next.disabledSkillIds);
+            }}
+          />
         }
         initialValue={tickerParam ?? promptParam ?? undefined}
       />
