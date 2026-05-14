@@ -591,3 +591,82 @@ class TestDispatchHandlerTable:
         assert result.ok is True
         assert result.structured == {"query": "should echo"}
         assert result.payload == {"ack": True}
+
+
+# ---------------------------------------------------------------------------
+# _pack_for_provider unit tests
+# ---------------------------------------------------------------------------
+
+
+def _make_dispatcher() -> ToolDispatcher:
+    data = FakeDataDispatcher(manifest={})
+    return ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+    )
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestPackForProvider:
+    pytestmark: ClassVar[list] = []  # sync tests; override module-level asyncio marker
+
+    def test_under_budget_passthrough(self) -> None:
+        disp = _make_dispatcher()
+        a, b, c, t1 = _make_schema("a"), _make_schema("b"), _make_schema("c"), _make_schema("t1")
+        result = disp._pack_for_provider(mapped=[a, b], expanded=[c], tail=[t1])
+        assert result == [a, b, c, t1]
+
+    def test_at_cap_no_truncation(self) -> None:
+        disp = _make_dispatcher()
+        tail = [_make_schema(f"tail_{i}") for i in range(2)]
+        budget = MAX_TOOLS_PER_REQUEST - len(tail)
+        mapped = [_make_schema(f"m_{i}") for i in range(budget // 2)]
+        expanded = [_make_schema(f"e_{i}") for i in range(budget - len(mapped))]
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        assert result == mapped + expanded + tail
+
+    def test_over_cap_truncates_mapped_first(self) -> None:
+        disp = _make_dispatcher()
+        tail = [_make_schema("t1"), _make_schema("t2")]
+        expanded = [_make_schema("e1"), _make_schema("e2")]
+        # mapped is large enough to push total over cap
+        mapped = [_make_schema(f"m_{i}") for i in range(MAX_TOOLS_PER_REQUEST)]
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        assert len(result) == MAX_TOOLS_PER_REQUEST
+        names = [t.name for t in result]
+        # tail preserved
+        assert "t1" in names
+        assert "t2" in names
+        # expanded preserved
+        assert "e1" in names
+        assert "e2" in names
+
+    def test_expanded_preserved_over_mapped(self) -> None:
+        disp = _make_dispatcher()
+        tail = [_make_schema("t1")]
+        expanded = [_make_schema(f"e_{i}") for i in range(10)]
+        # mapped large enough to force truncation
+        mapped = [_make_schema(f"m_{i}") for i in range(MAX_TOOLS_PER_REQUEST)]
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        names = [t.name for t in result]
+        # all expanded items survive
+        for i in range(10):
+            assert f"e_{i}" in names
+
+    def test_pathological_tail_exceeds_cap(self) -> None:
+        disp = _make_dispatcher()
+        tail = [_make_schema(f"tail_{i}") for i in range(MAX_TOOLS_PER_REQUEST + 5)]
+        mapped = [_make_schema("m1")]
+        expanded = [_make_schema("e1")]
+        result = disp._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        assert len(result) == MAX_TOOLS_PER_REQUEST
+        # mapped and expanded are dropped; result is tail slice
+        names = [t.name for t in result]
+        assert "m1" not in names
+        assert "e1" not in names
+
+    def test_empty_inputs(self) -> None:
+        disp = _make_dispatcher()
+        t1 = _make_schema("t1")
+        result = disp._pack_for_provider(mapped=[], expanded=[], tail=[t1])
+        assert result == [t1]
