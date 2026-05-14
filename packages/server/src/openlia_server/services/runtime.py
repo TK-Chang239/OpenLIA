@@ -300,21 +300,13 @@ def _build_report_runner_with_registry(
 ) -> ReportRunner:
     """Build a per-run ``ReportRunner`` wired to the v2 connector dispatcher.
 
-    The bridge instance is pinned to ``(user_id, department_id, run_id,
-    run_date)`` so usage records the right cache row. ``RefreshingReportRunner``
-    creates a fresh ``ReportRunner`` per call so this binding is safe.
+    Phase B: empty starter pack — bridge returns [] from list_requirement_tools
+    and the LLM escalates via request_additional_tools for every data tool.
+    ``RefreshingReportRunner`` creates a fresh ``ReportRunner`` per call.
     """
     from openlia_server.services.report_dispatcher_bridge import ReportDispatcherBridge
-    from openlia_server.services.report_tool_cache import ReportToolCache
 
     prompts = PromptLoader()
-    cache = ReportToolCache(session=db)
-    cache.note_run_started(
-        user_id=user_id,
-        department_id=department_id,
-        run_id=run_id,
-        run_date=run_date,
-    )
     try:
         connector_dispatcher = build_dispatcher(db)
     except Exception:
@@ -323,11 +315,7 @@ def _build_report_runner_with_registry(
     else:
         data_dispatcher = ReportDispatcherBridge(
             dispatcher=connector_dispatcher,
-            cache=cache,
-            user_id=user_id,
             department_id=department_id,
-            run_id=run_id,
-            run_date=run_date,
         )
     from openlia_server import dev_events
 
