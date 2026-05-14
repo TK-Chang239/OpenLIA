@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -173,6 +174,67 @@ def _summarize_requirement(tool_name: str, arguments: dict[str, Any]) -> str:
     return f"Fetched {tool_name}"
 
 
+class _EscalationCache:
+    """Per-department working set of tools added via request_additional_tools.
+
+    Provides two views for downstream consumers:
+      * for_emission(dept) — addition order, stable for prompt-cache prefix.
+      * lru_order(dept) — names in LRU order (MRU last), used for eviction priority.
+    `touch(dept, name)` marks a tool MRU; not yet called in this PR.
+    """
+
+    def __init__(self) -> None:
+        # per-department: insertion-order dict keyed by tool name
+        self._addition_order: dict[str, dict[str, ToolSchema]] = {}
+        # per-department: list of names in LRU order (MRU last)
+        self._lru_order: dict[str, list[str]] = {}
+
+    def add(self, department_id: str, schemas: Iterable[ToolSchema]) -> list[str]:
+        """Add schemas; return names newly added. Already-present names are skipped."""
+        added: list[str] = []
+        for schema in schemas:
+            addition = self._addition_order.setdefault(department_id, {})
+            lru = self._lru_order.setdefault(department_id, [])
+            if schema.name in addition:
+                continue
+            addition[schema.name] = schema
+            lru.append(schema.name)
+            added.append(schema.name)
+        return added
+
+    def touch(self, department_id: str, name: str) -> None:
+        """Mark `name` as most-recently-used. No-op if not in cache.
+        Wired up in a later PR; defined here for the structure."""
+        lru = self._lru_order.get(department_id)
+        if lru is None:
+            return
+        try:
+            lru.remove(name)
+        except ValueError:
+            return
+        lru.append(name)
+
+    def for_emission(self, department_id: str) -> list[ToolSchema]:
+        """Return all tools for this department in addition order."""
+        addition = self._addition_order.get(department_id)
+        if not addition:
+            return []
+        return list(addition.values())
+
+    def lru_order(self, department_id: str) -> list[str]:
+        """Return tool names in LRU order (MRU last)."""
+        lru = self._lru_order.get(department_id)
+        if not lru:
+            return []
+        return list(lru)
+
+    def has_any(self, department_id: str) -> bool:
+        """True if at least one tool has been added for this department.
+        Used by ToolDispatcher.build() to decide whether the escalation
+        meta-tool should still be exposed."""
+        return bool(self._addition_order.get(department_id))
+
+
 class ToolDispatcher:
     def __init__(
         self,
@@ -182,7 +244,7 @@ class ToolDispatcher:
     ) -> None:
         self._data = data_dispatcher
         self._web_search = web_search
-        self._expanded: dict[str, list[ToolSchema]] = {}  # per-department
+        self._escalation_cache = _EscalationCache()
 
     async def build(
         self,
@@ -200,12 +262,12 @@ class ToolDispatcher:
             )
             for entry in mapped_raw
         ]
-        expanded = list(self._expanded.get(department_id, []))
+        expanded = self._escalation_cache.for_emission(department_id)
 
         # Tail items always preserved: escalation, web_search, extra_tools.
         # If mapped+expanded is empty there's nothing to escalate from, so
         # `request_additional_tools` is also dropped (matches prior behaviour).
-        has_data_tools = bool(mapped) or bool(expanded)
+        has_data_tools = bool(mapped) or self._escalation_cache.has_any(department_id)
         tail: list[ToolSchema] = []
         if has_data_tools:
             tail.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
@@ -330,20 +392,17 @@ class ToolDispatcher:
                 summary=f"request_additional_tools failed: {exc!s}",
                 payload={"error": str(exc)},
             )
-        existing = {s.name for s in self._expanded.get(department_id, [])}
-        added: list[str] = []
-        for entry in entries:
-            name = entry["name"]
-            if name in existing:
-                continue
-            schema = ToolSchema(
-                name=name,
-                description=entry.get("description", ""),
-                parameters=entry.get("parameters") or {},
-            )
-            self._expanded.setdefault(department_id, []).append(schema)
-            existing.add(name)
-            added.append(name)
+        added = self._escalation_cache.add(
+            department_id,
+            [
+                ToolSchema(
+                    name=e["name"],
+                    description=e.get("description", ""),
+                    parameters=e.get("parameters") or {},
+                )
+                for e in entries
+            ],
+        )
         if not added:
             return ToolCallResult(
                 call_id=call.id,

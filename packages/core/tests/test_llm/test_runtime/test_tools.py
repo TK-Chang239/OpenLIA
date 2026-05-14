@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from _fakes import FakeDataDispatcher, FakeSearchAdapter
@@ -8,9 +8,10 @@ from openlia.llm.runtime.tools import (
     MAX_TOOLS_PER_REQUEST,
     ToolCallResult,
     ToolDispatcher,
+    _EscalationCache,
 )
 from openlia.llm.runtime.web_search import WebSearchResolution, WebSearchResult
-from openlia.llm.types import ToolCall
+from openlia.llm.types import ToolCall, ToolSchema
 
 pytestmark = pytest.mark.asyncio
 
@@ -393,3 +394,101 @@ async def test_build_under_cap_unchanged() -> None:
     )
     tools = await disp.build("equity_research", has_web_search=False)
     assert len(tools) == 3  # 2 mapped + request_additional_tools
+
+
+# ---------------------------------------------------------------------------
+# _EscalationCache unit tests
+# ---------------------------------------------------------------------------
+
+
+def _make_schema(name: str) -> ToolSchema:
+    return ToolSchema(name=name, description=f"{name} desc", parameters={})
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestEscalationCache:
+    pytestmark: ClassVar[list] = []  # override module-level asyncio marker; these are sync tests
+
+    def test_add_returns_newly_added_names(self) -> None:
+        cache = _EscalationCache()
+        added = cache.add("dept_a", [_make_schema("alpha"), _make_schema("beta")])
+        assert added == ["alpha", "beta"]
+
+    def test_add_ignores_duplicates(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha")])
+        added = cache.add("dept_a", [_make_schema("alpha"), _make_schema("gamma")])
+        assert added == ["gamma"]
+
+    def test_for_emission_returns_addition_order(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha"), _make_schema("beta"), _make_schema("gamma")])
+        schemas = cache.for_emission("dept_a")
+        assert [s.name for s in schemas] == ["alpha", "beta", "gamma"]
+
+    def test_for_emission_unchanged_after_touch(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha"), _make_schema("beta"), _make_schema("gamma")])
+        cache.touch("dept_a", "alpha")
+        schemas = cache.for_emission("dept_a")
+        assert [s.name for s in schemas] == ["alpha", "beta", "gamma"]
+
+    def test_lru_order_puts_touched_name_last(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha"), _make_schema("beta"), _make_schema("gamma")])
+        cache.touch("dept_a", "alpha")
+        assert cache.lru_order("dept_a") == ["beta", "gamma", "alpha"]
+
+    def test_lru_order_multiple_touches(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha"), _make_schema("beta"), _make_schema("gamma")])
+        cache.touch("dept_a", "alpha")
+        cache.touch("dept_a", "beta")
+        # beta touched last => MRU last; alpha touched before beta => second-to-last
+        assert cache.lru_order("dept_a") == ["gamma", "alpha", "beta"]
+
+    def test_touch_nonexistent_name_is_noop(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha")])
+        cache.touch("dept_a", "nonexistent")  # must not raise
+        assert cache.lru_order("dept_a") == ["alpha"]
+
+    def test_for_emission_empty_department_returns_empty(self) -> None:
+        cache = _EscalationCache()
+        assert cache.for_emission("missing") == []
+
+    def test_lru_order_empty_department_returns_empty(self) -> None:
+        cache = _EscalationCache()
+        assert cache.lru_order("missing") == []
+
+    def test_has_any_false_on_empty(self) -> None:
+        cache = _EscalationCache()
+        assert cache.has_any("dept_a") is False
+
+    def test_has_any_true_after_add(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha")])
+        assert cache.has_any("dept_a") is True
+
+    def test_per_department_isolation(self) -> None:
+        cache = _EscalationCache()
+        cache.add("dept_a", [_make_schema("alpha")])
+        assert cache.for_emission("dept_b") == []
+        assert cache.has_any("dept_b") is False
+        cache.add("dept_b", [_make_schema("beta")])
+        assert [s.name for s in cache.for_emission("dept_a")] == ["alpha"]
+        assert [s.name for s in cache.for_emission("dept_b")] == ["beta"]
+
+    def test_add_empty_iterable_does_not_create_department_key(self) -> None:
+        cache = _EscalationCache()
+        result = cache.add("dept_a", [])
+        assert result == []
+        assert cache.has_any("dept_a") is False
+        # Verify no ghost keys leaked into internal state:
+        # has_any should return False because the key doesn't exist OR the value is empty.
+        # Either is acceptable; the important invariant is has_any False.
+
+    def test_touch_unknown_department_is_noop(self) -> None:
+        cache = _EscalationCache()
+        cache.touch("nonexistent_dept", "alpha")  # must not raise
+        assert cache.lru_order("nonexistent_dept") == []
