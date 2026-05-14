@@ -137,9 +137,16 @@ def _build_chat_runner_with_registry(
     recall_artifacts: RecallArtifactsHandler | None = None,
 ) -> ChatRunner:
     prompts = PromptLoader()
+
+    from openlia_server import dev_events
+
+    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
+        dev_events.record(category, message, payload)
+
     tools = ToolDispatcher(
         data_dispatcher=_EmptyDataDispatcher(),
         web_search=web_search,
+        trace=_trace,
     )
 
     def _provider_factory(resolved):
@@ -149,11 +156,6 @@ def _build_chat_runner_with_registry(
             model=resolved.model_ref,
             capabilities=resolved.capabilities,
         )
-
-    from openlia_server import dev_events
-
-    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
-        dev_events.record(category, message, payload)
 
     # v2 wiring: connector dispatcher + tool router + per-dept routing context.
     # Each piece is best-effort; if any fails the runner silently falls back
@@ -327,9 +329,15 @@ def _build_report_runner_with_registry(
             run_id=run_id,
             run_date=run_date,
         )
+    from openlia_server import dev_events
+
+    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
+        dev_events.record(category, message, payload)
+
     tools = ToolDispatcher(
         data_dispatcher=data_dispatcher,
         web_search=web_search,
+        trace=_trace,
     )
 
     def _provider_factory(resolved):
@@ -339,11 +347,6 @@ def _build_report_runner_with_registry(
             model=resolved.model_ref,
             capabilities=resolved.capabilities,
         )
-
-    from openlia_server import dev_events
-
-    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
-        dev_events.record(category, message, payload)
 
     return ReportRunner(
         prompts=prompts,
