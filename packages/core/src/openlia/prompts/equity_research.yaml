@@ -32,6 +32,8 @@ report:
 
     {% include "shared/output_discipline.yaml.j2" %}
 
+    {% include "shared/tool_discovery.yaml.j2" %}
+
   stock_initiation:
     user: |
       Generate a Stock Initiation Report for {{ user_input }}.

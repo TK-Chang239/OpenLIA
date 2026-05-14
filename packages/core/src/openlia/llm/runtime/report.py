@@ -234,6 +234,7 @@ def build_report_system_prompt(
     user_id: str | None,
     registry: SkillRegistry,
     style_guide: str,
+    available_category_hints: list[str],
     loader: PromptLoader | None = None,
 ) -> str:
     """Render the report.system slot with the user's visible skills menu."""
@@ -251,7 +252,11 @@ def build_report_system_prompt(
         for s in visible
     ]
     return loader.render(
-        department_id, "report.system", style_guide=style_guide, skills_menu=skills_menu
+        department_id,
+        "report.system",
+        style_guide=style_guide,
+        skills_menu=skills_menu,
+        available_category_hints=available_category_hints,
     )
 
 
@@ -437,11 +442,13 @@ class ReportRunner:
         )
         provider = self._provider_factory(resolved)
 
+        available_category_hints = await self._tools.available_categories()
         system = build_report_system_prompt(
             department_id=department_id,
             user_id=user_id,
             registry=self._skill_registry,
             style_guide=style_guide,
+            available_category_hints=available_category_hints,
             loader=self._prompts,
         )
         tools = await self._tools.build(department_id, has_web_search=True)

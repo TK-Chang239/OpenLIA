@@ -95,6 +95,7 @@ class PromptLoader:
         merged = {
             "current_desk": DEPARTMENT_LABELS.get(department_id, department_id),
             "skills_menu": [],  # default; callers override
+            "available_category_hints": [],  # default; ReportRunner overrides with live categories
             "response_length": None,  # default; callers override per-session
             "memory_block": None,  # default; slice-13 graph memory hook overrides
             "selected_exemplars": [],  # default; fix-chats exemplar_selector overrides

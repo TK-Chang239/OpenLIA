@@ -35,6 +35,8 @@ report:
 
     {% include "shared/output_discipline.yaml.j2" %}
 
+    {% include "shared/tool_discovery.yaml.j2" %}
+
   morning_briefing:
     user: |
       Today is {{ current_date_long }} ({{ current_date }}). Anchor every
