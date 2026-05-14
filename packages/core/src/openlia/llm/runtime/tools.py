@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -25,8 +26,14 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 if TYPE_CHECKING:
     from openlia.skills import SkillRegistry
 
+from openlia.llm.runtime.schema_slim import SchemaSlimSystemicFailure, slim_tool_schema
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import ToolCall, ToolSchema
+
+log = logging.getLogger(__name__)
+
+_SLIM_SYSTEMIC_FAILURE_MIN_COUNT = 5
+_SLIM_SYSTEMIC_FAILURE_MIN_RATIO = 0.20
 
 TraceRecorder = Callable[[str, str, dict[str, Any] | None], None]
 
@@ -285,20 +292,20 @@ class ToolDispatcher:
         ]
         expanded = self._escalation_cache.for_emission(department_id)
 
-        # Tail items always preserved: escalation, web_search, extra_tools.
+        # Header items always preserved: escalation, web_search, extra_tools.
         # If mapped+expanded is empty there's nothing to escalate from, so
         # `request_additional_tools` is also dropped (matches prior behaviour).
         has_data_tools = bool(mapped) or self._escalation_cache.has_any(department_id)
-        tail: list[ToolSchema] = []
+        header: list[ToolSchema] = []
         if has_data_tools:
-            tail.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
+            header.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
         if has_web_search and self._web_search.available:
-            tail.append(_WEB_SEARCH_SCHEMA)
+            header.append(_WEB_SEARCH_SCHEMA)
         # Department-provided structured tools (e.g. Secretary's suggest_redirect).
         # Dispatch echoes their arguments back as `structured` data so the
         # frontend can render UI cards without a separate event type.
         for entry in extra_tools:
-            tail.append(
+            header.append(
                 ToolSchema(
                     name=entry["name"],
                     description=entry["description"],
@@ -306,32 +313,102 @@ class ToolDispatcher:
                 )
             )
 
-        return self._pack_for_provider(mapped=mapped, expanded=expanded, tail=tail)
+        return self._pack_for_provider(mapped=mapped, expanded=expanded, header=header)
 
     def _pack_for_provider(
         self,
         *,
         mapped: list[ToolSchema],
         expanded: list[ToolSchema],
-        tail: list[ToolSchema],
+        header: list[ToolSchema],
     ) -> list[ToolSchema]:
-        """Apply MAX_TOOLS_PER_REQUEST cap and return the final tool list.
+        """Slim, sort, cap, and emit in header+mapped+expanded order.
 
-        Phase A will extend this method with slim+sort logic; today it just
-        enforces the cap with priority: tail (builtins) > expanded
-        (LLM-requested) > mapped (warmup/cache).
+        Cap priority: header > expanded > mapped. Header always preserved
+        (unless pathologically large). Mapped truncated from its end.
         """
-        budget = MAX_TOOLS_PER_REQUEST - len(tail)
+        chars_before = 0
+        chars_after = 0
+        failures: list[tuple[str, Exception]] = []
+
+        def _slim_one(t: ToolSchema) -> ToolSchema:
+            nonlocal chars_before, chars_after
+            before = len(
+                json.dumps(
+                    {"d": t.description, "p": t.parameters},
+                    separators=(",", ":"),
+                )
+            )
+            try:
+                slimmed = slim_tool_schema(t)
+            except Exception as exc:
+                failures.append((t.name, exc))
+                log.warning("slim_tool_schema failed for %s: %s", t.name, exc)
+                chars_before += before
+                chars_after += before  # passthrough — no savings
+                return t
+            after = len(
+                json.dumps(
+                    {"d": slimmed.description, "p": slimmed.parameters},
+                    separators=(",", ":"),
+                )
+            )
+            chars_before += before
+            chars_after += after
+            return slimmed
+
+        header_slim = [_slim_one(t) for t in header]
+        mapped_slim = [_slim_one(t) for t in mapped]
+        expanded_slim = [_slim_one(t) for t in expanded]
+
+        # Threshold check
+        n = len(header) + len(mapped) + len(expanded)
+        if len(failures) >= _SLIM_SYSTEMIC_FAILURE_MIN_COUNT and (
+            n > 0 and len(failures) / n > _SLIM_SYSTEMIC_FAILURE_MIN_RATIO
+        ):
+            raise SchemaSlimSystemicFailure(
+                f"slim failed on {len(failures)}/{n} schemas: {[name for name, _ in failures[:10]]}"
+            )
+
+        # Per-section sort: mapped alphabetical; header and expanded preserve order.
+        mapped_sorted = sorted(mapped_slim, key=lambda t: t.name)
+
+        # Apply cap: header > expanded > mapped; emit order header+mapped+expanded.
+        budget = MAX_TOOLS_PER_REQUEST - len(header_slim)
         if budget < 0:
-            # Pathological: tail alone exceeds the cap. Truncate tail.
-            return tail[:MAX_TOOLS_PER_REQUEST]
-        if len(mapped) + len(expanded) > budget:
-            keep_expanded = expanded[: min(len(expanded), budget)]
-            keep_mapped = mapped[: budget - len(keep_expanded)]
+            result = header_slim[:MAX_TOOLS_PER_REQUEST]
+            self._emit_slim_summary(n, len(failures), chars_before, chars_after)
+            return result
+        if len(mapped_sorted) + len(expanded_slim) > budget:
+            keep_expanded = expanded_slim[: min(len(expanded_slim), budget)]
+            keep_mapped = mapped_sorted[: budget - len(keep_expanded)]
             data_tools: list[ToolSchema] = keep_mapped + keep_expanded
         else:
-            data_tools = mapped + expanded
-        return data_tools + tail
+            data_tools = mapped_sorted + expanded_slim
+        result = header_slim + data_tools
+
+        self._emit_slim_summary(n, len(failures), chars_before, chars_after)
+        return result
+
+    def _emit_slim_summary(
+        self,
+        n_tools: int,
+        n_failures: int,
+        chars_before: int,
+        chars_after: int,
+    ) -> None:
+        ratio = (chars_after / chars_before) if chars_before > 0 else 1.0
+        self._trace(
+            "slim.summary",
+            f"slim {n_tools} tools failures={n_failures} ratio={ratio:.2f}",
+            {
+                "n_tools": n_tools,
+                "n_failures": n_failures,
+                "chars_before": chars_before,
+                "chars_after": chars_after,
+                "ratio": ratio,
+            },
+        )
 
     async def dispatch(
         self,
