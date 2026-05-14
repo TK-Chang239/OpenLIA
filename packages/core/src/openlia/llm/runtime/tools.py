@@ -31,6 +31,12 @@ from openlia.llm.types import ToolCall, ToolSchema
 # when a model loops on the same tool without convergence.
 MAX_TOOL_TURNS = 32
 
+# Hard provider cap on tools per request. OpenAI rejects requests whose
+# `tools` array exceeds 128 with `invalid_request_error`; Anthropic and
+# Gemini accept more but degrade routing accuracy past this point. We
+# enforce this across all providers via `ToolDispatcher.build()`.
+MAX_TOOLS_PER_REQUEST = 128
+
 _REQUEST_ADDITIONAL_TOOLS_NAME = "request_additional_tools"
 
 _REQUEST_ADDITIONAL_TOOLS_SCHEMA = ToolSchema(
@@ -194,25 +200,44 @@ class ToolDispatcher:
             )
             for entry in mapped_raw
         ]
-        mapped.extend(self._expanded.get(department_id, []))
-        tools: list[ToolSchema] = list(mapped)
+        expanded = list(self._expanded.get(department_id, []))
 
-        if mapped:
-            tools.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
+        # Tail items always preserved: escalation, web_search, extra_tools.
+        # If mapped+expanded is empty there's nothing to escalate from, so
+        # `request_additional_tools` is also dropped (matches prior behaviour).
+        has_data_tools = bool(mapped) or bool(expanded)
+        tail: list[ToolSchema] = []
+        if has_data_tools:
+            tail.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
         if has_web_search and self._web_search.available:
-            tools.append(_WEB_SEARCH_SCHEMA)
+            tail.append(_WEB_SEARCH_SCHEMA)
         # Department-provided structured tools (e.g. Secretary's suggest_redirect).
         # Dispatch echoes their arguments back as `structured` data so the
         # frontend can render UI cards without a separate event type.
         for entry in extra_tools:
-            tools.append(
+            tail.append(
                 ToolSchema(
                     name=entry["name"],
                     description=entry["description"],
                     parameters=entry["parameters"],
                 )
             )
-        return tools
+
+        # Enforce the provider cap. Prefer keeping `expanded` (LLM
+        # explicitly escalated for these mid-run) over `mapped` (warm-up
+        # full inventory or cache-promoted). Truncate from the mapped
+        # tail. If after that we still don't fit, drop expanded too.
+        budget = MAX_TOOLS_PER_REQUEST - len(tail)
+        if budget < 0:
+            # Pathological: tail alone exceeds the cap. Truncate tail.
+            return tail[:MAX_TOOLS_PER_REQUEST]
+        if len(mapped) + len(expanded) > budget:
+            keep_expanded = expanded[: min(len(expanded), budget)]
+            keep_mapped = mapped[: budget - len(keep_expanded)]
+            data_tools: list[ToolSchema] = keep_mapped + keep_expanded
+        else:
+            data_tools = mapped + expanded
+        return data_tools + tail
 
     async def dispatch(
         self,

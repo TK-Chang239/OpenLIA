@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from _fakes import FakeDataDispatcher, FakeSearchAdapter
 from openlia.llm.runtime.tools import (
+    MAX_TOOLS_PER_REQUEST,
     ToolCallResult,
     ToolDispatcher,
 )
@@ -318,3 +321,75 @@ async def test_dispatch_known_data_tool_ignores_extra_tool_names() -> None:
     )
     assert result.ok is True
     assert result.structured is None
+
+
+def _bulk_manifest(department_id: str, count: int) -> dict[str, dict[str, Any]]:
+    return {
+        department_id: {
+            f"tool_{i:03d}": {
+                "name": f"tool_{i:03d}",
+                "description": f"Tool number {i}.",
+                "parameters": {"type": "object", "properties": {}},
+            }
+            for i in range(count)
+        }
+    }
+
+
+async def test_build_caps_total_tools_at_provider_limit() -> None:
+    # 130 mapped tools + request_additional_tools + web_search would be 132
+    # — OpenAI rejects anything past 128.
+    data = FakeDataDispatcher(manifest=_bulk_manifest("equity_research", 130))
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(
+            available=True, variant="configured", adapter=FakeSearchAdapter()
+        ),
+    )
+    tools = await disp.build("equity_research", has_web_search=True)
+    assert len(tools) == MAX_TOOLS_PER_REQUEST
+    names = [t.name for t in tools]
+    # Meta-tools must be preserved — they enable escalation and search.
+    assert "request_additional_tools" in names
+    assert "web_search" in names
+    # The truncated mapped slice keeps the head, in declaration order.
+    assert "tool_000" in names
+    assert "tool_125" in names
+    assert "tool_129" not in names
+
+
+async def test_build_caps_preserves_expanded_over_mapped() -> None:
+    # When over the cap, tools the LLM explicitly escalated for must
+    # survive at the expense of warm-up mapped tools.
+    data = FakeDataDispatcher(manifest=_bulk_manifest("equity_research", 130))
+    expanded_entry: dict[str, Any] = {
+        "name": "escalated_specialty_tool",
+        "description": "Added via request_additional_tools mid-run.",
+        "parameters": {"type": "object", "properties": {}},
+    }
+    data.results["expand::needed"] = expanded_entry
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    # Trigger escalation so `escalated_specialty_tool` lands in _expanded.
+    await disp._dispatch_request_additional_tools(
+        "equity_research",
+        ToolCall(id="c1", name="request_additional_tools", arguments={"reason": "needed"}),
+    )
+    tools = await disp.build("equity_research", has_web_search=False)
+    names = [t.name for t in tools]
+    assert len(tools) == MAX_TOOLS_PER_REQUEST
+    assert "escalated_specialty_tool" in names
+    assert "request_additional_tools" in names
+
+
+async def test_build_under_cap_unchanged() -> None:
+    # Sanity: small manifests still flow through unchanged.
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    tools = await disp.build("equity_research", has_web_search=False)
+    assert len(tools) == 3  # 2 mapped + request_additional_tools
