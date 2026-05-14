@@ -6,7 +6,8 @@ Flow per run():
     → tool loop until the LLM returns no more tool calls
       (emit report.tool_call per dispatched tool)
   → report.phase("writing")
-    → one structured-output turn (response_format=json_schema)
+    → bounded loop: model may call read_payload zero or more times,
+      then calls submit_report; forced on the final turn.
   → report.phase("finalizing")
   → report.complete(schema=parsed_json)
 
@@ -19,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 import re
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -48,7 +50,7 @@ from openlia.llm.runtime.events import (
 )
 from openlia.llm.runtime.messages import Attachment, ContentBlock, ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
-from openlia.llm.runtime.tools import MAX_TOOL_TURNS, ToolDispatcher
+from openlia.llm.runtime.tools import _READ_PAYLOAD_SCHEMA, MAX_TOOL_TURNS, ToolDispatcher
 from openlia.llm.types import (
     LLMRequest,
     Message,
@@ -59,6 +61,23 @@ from openlia.reports.schema import ReportSchema
 from openlia.skills import SkillRegistry
 
 _SUBMIT_REPORT_TOOL_NAME = "submit_report"
+
+
+def _get_max_writing_turns() -> int:
+    raw = os.environ.get("OPENLIA_MAX_WRITING_TURNS")
+    if raw is None:
+        return 8
+    try:
+        v = int(raw)
+        if v < 1:
+            raise ValueError
+        return v
+    except ValueError:
+        return 8
+
+
+MAX_WRITING_TURNS = _get_max_writing_turns()
+
 _SUBMIT_REPORT_DESCRIPTION = (
     "Submit the final report. Call exactly once with the structured payload. "
     "Keys MUST be `cover` and `sections` matching the framework. "
@@ -618,51 +637,156 @@ class ReportRunner:
         writing_max_tokens = resolved.capabilities.max_output_tokens
         submit_tool = _submit_report_tool()
         submit_choice = _submit_report_tool_choice(resolved.provider_kind)
-        self._trace(
-            "llm.call.start",
-            f"writing turn max_tokens={writing_max_tokens} (forced submit_report)",
-            {"report_id": report_id, "phase": "writing", "max_tokens": writing_max_tokens},
-        )
-        try:
-            final = await self._await(
-                provider.generate(
-                    LLMRequest(
-                        messages=conversation,
-                        system=system,
-                        tools=[submit_tool],
-                        tool_choice=submit_choice,
-                        max_tokens=writing_max_tokens,
-                    )
-                ),
-                cancel_token=cancel_token,
-            )
-        except asyncio.CancelledError:
-            return
-        except LLMProviderError as exc:
+        writing_tools = [submit_tool, _READ_PAYLOAD_SCHEMA]
+
+        final = None
+        for writing_turn in range(MAX_WRITING_TURNS):
+            if cancel_token is not None and cancel_token.is_cancelled:
+                return
+            is_final_turn = writing_turn == MAX_WRITING_TURNS - 1
             self._trace(
-                "llm.call.error",
-                f"writing-turn provider error: {exc}",
-                {"report_id": report_id, "error_class": type(exc).__name__},
+                "llm.call.start",
+                f"writing turn {writing_turn} (forced={is_final_turn})",
+                {
+                    "report_id": report_id,
+                    "phase": "writing",
+                    "turn": writing_turn,
+                    "forced": is_final_turn,
+                },
             )
+            try:
+                response = await self._await(
+                    provider.generate(
+                        LLMRequest(
+                            messages=conversation,
+                            system=system,
+                            tools=writing_tools,
+                            tool_choice=submit_choice if is_final_turn else None,
+                            max_tokens=writing_max_tokens,
+                        )
+                    ),
+                    cancel_token=cancel_token,
+                )
+            except asyncio.CancelledError:
+                return
+            except LLMProviderError as exc:
+                self._trace(
+                    "llm.call.error",
+                    f"writing-turn provider error: {exc}",
+                    {"report_id": report_id},
+                )
+                yield ReportError(
+                    report_id=report_id,
+                    error_class=type(exc).__name__,
+                    message=str(exc),
+                )
+                return
+
+            # Check for submit_report call.
+            submit_call = next(
+                (c for c in response.tool_calls if c.name == _SUBMIT_REPORT_TOOL_NAME), None
+            )
+            if submit_call is not None:
+                final = response
+                self._trace(
+                    "llm.call.done",
+                    f"writing turn {writing_turn} done tool_calls={len(response.tool_calls)}",
+                    {
+                        "report_id": report_id,
+                        "phase": "writing",
+                        "input_tokens": response.input_tokens,
+                        "output_tokens": response.output_tokens,
+                        "finish_reason": response.finish_reason,
+                        "tool_call_names": [c.name for c in response.tool_calls],
+                        "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
+                    },
+                )
+                break
+
+            # No submit_report: if no tool calls at all, treat as end of loop.
+            if not response.tool_calls:
+                final = response
+                self._trace(
+                    "llm.call.done",
+                    f"writing turn {writing_turn} done (no tool calls)",
+                    {
+                        "report_id": report_id,
+                        "phase": "writing",
+                        "input_tokens": response.input_tokens,
+                        "output_tokens": response.output_tokens,
+                        "finish_reason": response.finish_reason,
+                        "tool_call_names": [],
+                        "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
+                    },
+                )
+                break
+
+            # Dispatch tool calls (read_payload, etc.) and continue.
+            conversation.append(
+                Message(
+                    role="assistant",
+                    content=response.text or "",
+                    tool_calls=tuple(response.tool_calls),
+                )
+            )
+            for call in response.tool_calls:
+                args_preview = _unicode_safe_truncate(
+                    json.dumps(call.arguments, separators=(",", ":"), ensure_ascii=False),
+                    max_len=120,
+                )
+                yield ReportToolCallStart(
+                    report_id=report_id,
+                    call_id=call.id,
+                    tool_name=call.name,
+                    args_preview=args_preview,
+                )
+            try:
+                results = await self._await(
+                    self._tools.dispatch_many(
+                        department_id=department_id,
+                        calls=response.tool_calls,
+                    ),
+                    cancel_token=cancel_token,
+                )
+            except asyncio.CancelledError:
+                return
+
+            for r in results:
+                tool_name = _tool_name_for_result(response, r.call_id)
+                if tool_name == "read_payload":
+                    self._trace(
+                        "writing.read_payload",
+                        f"writing-phase read_payload: {r.summary}",
+                        {"report_id": report_id, "call_id": r.call_id, "ok": r.ok},
+                    )
+                yield ReportToolCall(
+                    report_id=report_id,
+                    tool_name=tool_name,
+                    summary=r.summary,
+                    call_id=r.call_id,
+                )
+                conversation.append(
+                    Message(
+                        role="tool",
+                        content=json.dumps(r.payload),
+                        tool_call_id=r.call_id,
+                    )
+                )
+        else:
+            # for/else: exhausted MAX_WRITING_TURNS without submit_report.
+            self._trace(
+                "writing.forced_submit",
+                f"writing-phase hit MAX_WRITING_TURNS={MAX_WRITING_TURNS} without submit",
+                {"report_id": report_id, "max_turns": MAX_WRITING_TURNS},
+            )
+
+        if final is None:
             yield ReportError(
                 report_id=report_id,
-                error_class=type(exc).__name__,
-                message=str(exc),
+                error_class="RuntimeError",
+                message="Writing phase ended with no LLM response.",
             )
             return
-        self._trace(
-            "llm.call.done",
-            f"writing turn done tool_calls={len(final.tool_calls)}",
-            {
-                "report_id": report_id,
-                "phase": "writing",
-                "input_tokens": final.input_tokens,
-                "output_tokens": final.output_tokens,
-                "finish_reason": final.finish_reason,
-                "tool_call_names": [c.name for c in final.tool_calls],
-                "text_preview": _unicode_safe_truncate(final.text or "", max_len=200),
-            },
-        )
 
         yield ReportPhase(report_id=report_id, phase="finalizing")
         if cancel_token is not None and cancel_token.is_cancelled:
