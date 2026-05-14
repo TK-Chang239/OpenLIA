@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from openlia.connectors.dispatch import Dispatcher
+from openlia.llm.runtime.expand_ranking import rank_candidates
 
 log = logging.getLogger(__name__)
 
@@ -63,21 +64,35 @@ class ReportDispatcherBridge:
         reason: str,
         category_hint: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Escalation hook bound to `request_additional_tools`.
+        """Rank the candidate inventory by relevance to `reason` + `category_hint`.
 
-        Returns the full candidate inventory. Runtime de-dupes against
-        already-added tools. PR3.4 will replace this with rank_candidates;
-        for now (PR3.2) keep behavior identical to today.
+        Returns up to 8 candidates (DEFAULT_TOP_K). Runtime de-dupes against
+        tools already in the working set, so it's safe to return overlap.
         """
         if department_id != self.department_id:
             raise RuntimeError(
                 f"bridge pinned to {self.department_id!r} but asked for {department_id!r}"
             )
+        raw_candidates: list[dict[str, Any]] = []
+        for entry in self.dispatcher.candidate_tools():
+            raw_candidates.append(
+                {
+                    "name": entry["name"],
+                    "description": entry.get("description", ""),
+                    "category": entry.get("category"),
+                    "input_schema": entry.get("input_schema") or {},
+                }
+            )
+        ranked = rank_candidates(
+            raw_candidates,
+            reason=reason,
+            category_hint=category_hint,
+        )
         return [
             {
-                "name": entry["name"],
-                "description": entry.get("description", ""),
-                "parameters": entry.get("input_schema") or {},
+                "name": c["name"],
+                "description": c.get("description", ""),
+                "parameters": c.get("input_schema") or {},
             }
-            for entry in self.dispatcher.candidate_tools()
+            for c in ranked
         ]

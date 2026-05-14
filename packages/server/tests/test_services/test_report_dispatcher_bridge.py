@@ -57,25 +57,6 @@ async def test_dispatch_requirement_coerces_non_dict() -> None:
 
 
 @pytest.mark.asyncio
-async def test_expand_tools_returns_full_inventory() -> None:
-    """expand_tools returns all candidate tools from the dispatcher."""
-    tools = [
-        {"name": "fmp__quote", "description": "Get quote", "input_schema": {"type": "object"}},
-        {"name": "eodhd__news", "description": "Get news", "input_schema": {"type": "object"}},
-    ]
-    dispatcher = _make_dispatcher(tools)
-    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
-    result = await bridge.expand_tools(department_id="equity_research", reason="need market data")
-    assert len(result) == 2
-    names = {t["name"] for t in result}
-    assert names == {"fmp__quote", "eodhd__news"}
-    for entry in result:
-        assert "name" in entry
-        assert "description" in entry
-        assert "parameters" in entry
-
-
-@pytest.mark.asyncio
 async def test_expand_tools_wrong_department_raises() -> None:
     dispatcher = _make_dispatcher([])
     bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
@@ -89,13 +70,14 @@ async def test_expand_tools_maps_input_schema_to_parameters() -> None:
     tools = [
         {
             "name": "fmp__quote",
-            "description": "Get quote",
+            "description": "Real-time stock price quote for a symbol",
             "input_schema": {"type": "object", "properties": {"symbol": {"type": "string"}}},
         }
     ]
     dispatcher = _make_dispatcher(tools)
     bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
-    result = await bridge.expand_tools(department_id="equity_research", reason="test")
+    result = await bridge.expand_tools(department_id="equity_research", reason="stock price quote")
+    assert len(result) == 1
     assert result[0]["parameters"] == {
         "type": "object",
         "properties": {"symbol": {"type": "string"}},
@@ -105,10 +87,10 @@ async def test_expand_tools_maps_input_schema_to_parameters() -> None:
 @pytest.mark.asyncio
 async def test_expand_tools_missing_input_schema_defaults_to_empty_dict() -> None:
     """Tools missing input_schema get an empty dict for parameters."""
-    tools = [{"name": "simple_tool"}]
+    tools = [{"name": "simple_tool", "description": "simple utility tool helper"}]
     dispatcher = _make_dispatcher(tools)
     bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
-    result = await bridge.expand_tools(department_id="equity_research", reason="test")
+    result = await bridge.expand_tools(department_id="equity_research", reason="simple utility")
     assert result[0]["parameters"] == {}
 
 
@@ -193,3 +175,128 @@ async def test_available_categories_skips_unvalidated() -> None:
     bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
     result = await bridge.available_categories()
     assert result == ["financial"]
+
+
+# ---------------------------------------------------------------------------
+# expand_tools ranking tests (PR3.4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_expand_tools_returns_ranked() -> None:
+    """Most-relevant tool ranks first when multiple candidates are present."""
+    tools = [
+        {
+            "name": "fmp__statements",
+            "description": "Retrieve income statement and financial statements for a company",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        },
+        {
+            "name": "eodhd__news",
+            "description": "Latest headlines and news articles",
+            "input_schema": {"type": "object"},
+            "category": "news",
+        },
+        {
+            "name": "fmp__quote",
+            "description": "Real-time stock price quote",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        },
+    ]
+    dispatcher = _make_dispatcher(tools)
+    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
+    result = await bridge.expand_tools(
+        department_id="equity_research", reason="quarterly income statement"
+    )
+    assert len(result) >= 1
+    assert result[0]["name"] == "fmp__statements"
+    for entry in result:
+        assert "name" in entry
+        assert "description" in entry
+        assert "parameters" in entry
+
+
+@pytest.mark.asyncio
+async def test_expand_tools_respects_category_hint() -> None:
+    """Category hint boosts financial tool above equally-described news tool."""
+    tools = [
+        {
+            "name": "fmp__earnings",
+            "description": "Quarterly earnings report data",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        },
+        {
+            "name": "newsapi__earnings",
+            "description": "Quarterly earnings report coverage",
+            "input_schema": {"type": "object"},
+            "category": "news",
+        },
+    ]
+    dispatcher = _make_dispatcher(tools)
+    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
+    result = await bridge.expand_tools(
+        department_id="equity_research",
+        reason="quarterly earnings report",
+        category_hint="financial",
+    )
+    assert len(result) >= 1
+    assert result[0]["name"] == "fmp__earnings"
+
+
+@pytest.mark.asyncio
+async def test_expand_tools_returns_empty_when_no_match() -> None:
+    """Returns [] when no candidate scores above the floor."""
+    tools = [
+        {
+            "name": "fmp__forex",
+            "description": "Currency exchange rates",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        },
+        {
+            "name": "fmp__crypto",
+            "description": "Cryptocurrency price data",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        },
+        {
+            "name": "eodhd__macro",
+            "description": "Macroeconomic indicators GDP inflation",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        },
+    ]
+    dispatcher = _make_dispatcher(tools)
+    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
+    # Query tokens completely disjoint from all tool names/descriptions.
+    result = await bridge.expand_tools(
+        department_id="equity_research",
+        reason="xyzzy wibble frobnicate quux zork",
+    )
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_expand_tools_caps_at_default_top_k() -> None:
+    """Result is capped at DEFAULT_TOP_K (8) even with 20 matching tools."""
+    from openlia.llm.runtime.expand_ranking import DEFAULT_TOP_K
+
+    # 20 tools all containing "statement" in name and description.
+    tools = [
+        {
+            "name": f"fmp__statement_{i}",
+            "description": f"Financial statement data variant {i}",
+            "input_schema": {"type": "object"},
+            "category": "financial",
+        }
+        for i in range(20)
+    ]
+    dispatcher = _make_dispatcher(tools)
+    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
+    result = await bridge.expand_tools(
+        department_id="equity_research", reason="financial statement data"
+    )
+    assert len(result) == DEFAULT_TOP_K
