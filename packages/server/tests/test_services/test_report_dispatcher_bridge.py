@@ -6,6 +6,8 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from openlia.connectors.dispatch import Dispatcher, PreparedConnector
+from openlia.connectors.types import Category, ConnectorStatus
 from openlia_server.services.report_dispatcher_bridge import ReportDispatcherBridge
 
 
@@ -108,3 +110,86 @@ async def test_expand_tools_missing_input_schema_defaults_to_empty_dict() -> Non
     bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
     result = await bridge.expand_tools(department_id="equity_research", reason="test")
     assert result[0]["parameters"] == {}
+
+
+# ---------------------------------------------------------------------------
+# available_categories tests
+# ---------------------------------------------------------------------------
+
+
+def _fake_transport() -> MagicMock:
+    t = MagicMock()
+    t.call_tool = AsyncMock(return_value={})
+    t.list_tools = AsyncMock(return_value=[])
+    t.aclose = AsyncMock()
+    return t
+
+
+def _make_real_dispatcher(
+    connectors: dict[str, PreparedConnector],
+) -> Dispatcher:
+    return Dispatcher(connectors=connectors)
+
+
+@pytest.mark.asyncio
+async def test_available_categories() -> None:
+    """Returns sorted distinct categories from VALIDATED connectors, web_search excluded."""
+    connectors = {
+        "fmp": PreparedConnector(
+            connector_id="fmp",
+            provider_id="fmp",
+            category=Category.FINANCIAL,
+            status=ConnectorStatus.VALIDATED,
+            transport=_fake_transport(),
+        ),
+        "eodhd_news": PreparedConnector(
+            connector_id="eodhd_news",
+            provider_id="eodhd",
+            category=Category.NEWS,
+            status=ConnectorStatus.VALIDATED,
+            transport=_fake_transport(),
+        ),
+        "reddit": PreparedConnector(
+            connector_id="reddit",
+            provider_id="reddit",
+            category=Category.SOCIAL,
+            status=ConnectorStatus.VALIDATED,
+            transport=_fake_transport(),
+        ),
+        "brave": PreparedConnector(
+            connector_id="brave",
+            provider_id="brave",
+            category=Category.WEB_SEARCH,
+            status=ConnectorStatus.VALIDATED,
+            transport=_fake_transport(),
+        ),
+    }
+    dispatcher = _make_real_dispatcher(connectors)
+    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
+    result = await bridge.available_categories()
+    assert result == ["financial", "news", "social"]
+
+
+@pytest.mark.asyncio
+async def test_available_categories_skips_unvalidated() -> None:
+    """Connectors with status FAILED are excluded from results."""
+    connectors = {
+        "fmp": PreparedConnector(
+            connector_id="fmp",
+            provider_id="fmp",
+            category=Category.FINANCIAL,
+            status=ConnectorStatus.VALIDATED,
+            transport=_fake_transport(),
+        ),
+        "broken_news": PreparedConnector(
+            connector_id="broken_news",
+            provider_id="news_co",
+            category=Category.NEWS,
+            status=ConnectorStatus.FAILED,
+            transport=_fake_transport(),
+        ),
+    }
+    dispatcher = _make_real_dispatcher(connectors)
+    bridge = ReportDispatcherBridge(dispatcher=dispatcher, department_id="equity_research")
+    result = await bridge.available_categories()
+    assert result == ["financial"]

@@ -146,6 +146,9 @@ class FakeDataDispatcher:
             return entry
         return [entry]
 
+    async def available_categories(self) -> list[str]:
+        return []
+
 
 @dataclass
 class FakeSearchAdapter:

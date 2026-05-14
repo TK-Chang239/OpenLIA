@@ -82,6 +82,9 @@ class _EmptyDataDispatcher:
     ) -> list[dict[str, Any]]:
         return []
 
+    async def available_categories(self) -> list[str]:
+        return []
+
 
 def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
     # Stub during connector-v2 rebuild; Phase 9 rewires search through the

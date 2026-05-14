@@ -43,6 +43,19 @@ class ReportDispatcherBridge:
         payload = await self.dispatcher.dispatch_tool_use(tool_name, arguments)
         return payload if isinstance(payload, dict) else {"value": payload}
 
+    async def available_categories(self) -> list[str]:
+        """Return sorted distinct categories from validated connectors,
+        excluding web_search (it's already a separate tool, not a category)."""
+        from openlia.connectors.types import Category, ConnectorStatus
+
+        return sorted(
+            {
+                c.category.value
+                for c in self.dispatcher.connectors.values()
+                if c.status == ConnectorStatus.VALIDATED and c.category != Category.WEB_SEARCH
+            }
+        )
+
     async def expand_tools(
         self,
         *,

@@ -133,6 +133,11 @@ class DataProviderDispatcher(Protocol):
         category_hint: str | None = None,
     ) -> list[dict[str, Any]]: ...
 
+    async def available_categories(self) -> list[str]:
+        """Return the list of category strings the dispatcher exposes
+        (for category_hint guidance in the prompt). Returns the empty
+        list if no categorized inventory is available."""
+
 
 @dataclass(frozen=True)
 class ToolCallResult:
@@ -273,6 +278,10 @@ class ToolDispatcher:
             _REQUEST_ADDITIONAL_TOOLS_NAME: type(self)._dispatch_request_additional_tools,
             "web_search": type(self)._dispatch_web_search,
         }
+
+    async def available_categories(self) -> list[str]:
+        """Delegate to the underlying data dispatcher."""
+        return await self._data.available_categories()
 
     async def build(
         self,

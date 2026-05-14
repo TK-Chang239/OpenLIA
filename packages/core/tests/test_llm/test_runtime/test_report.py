@@ -1458,3 +1458,41 @@ async def test_report_run_uses_user_template_branch_when_provided(
     assert start.section_titles == []
     section_starts = [e for e in events if isinstance(e, ReportSectionStart)]
     assert section_starts == []
+
+
+async def test_prompt_renders_with_category_hints(tmp_path: Path) -> None:
+    """build_report_system_prompt passes available_category_hints into the
+    render context; the rendered text contains the hint values when the
+    template includes shared/tool_discovery.yaml.j2."""
+    prompts_root = tmp_path / "prompts_hints"
+    shared = prompts_root / "shared"
+    shared.mkdir(parents=True)
+    (shared / "output_discipline.yaml.j2").write_text("Output discipline.\n")
+    (shared / "tool_discovery.yaml.j2").write_text(
+        "Available hints: {{ available_category_hints | join(', ') }}.\n"
+    )
+    (prompts_root / "equity_research.yaml").write_text(
+        dedent(
+            """\
+            report:
+              system: |
+                Style: {{ style_guide }}
+                {% include "shared/output_discipline.yaml.j2" %}
+                {% include "shared/tool_discovery.yaml.j2" %}
+            """
+        )
+    )
+
+    from openlia.llm.runtime.prompts import PromptLoader
+    from openlia.llm.runtime.report import build_report_system_prompt
+
+    loader = PromptLoader(root=prompts_root)
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="",
+        available_category_hints=["financial", "news"],
+        loader=loader,
+    )
+    assert "financial, news" in rendered
