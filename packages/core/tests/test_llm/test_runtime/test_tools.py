@@ -495,6 +495,79 @@ class TestEscalationCache:
 
 
 # ---------------------------------------------------------------------------
+# TraceRecorder plumbing tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestWarning")
+class TestTracePlumbing:
+    pytestmark: ClassVar[list] = []  # override module-level asyncio marker; these are sync tests
+
+    def _make_dispatcher(self, **kwargs) -> ToolDispatcher:
+        return ToolDispatcher(
+            data_dispatcher=FakeDataDispatcher(manifest=_MANIFEST),
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            **kwargs,
+        )
+
+    def test_trace_defaults_to_noop(self) -> None:
+        disp = self._make_dispatcher()
+        assert callable(disp._trace)
+        result = disp._trace("cat", "msg", {"key": "val"})
+        assert result is None
+
+    def test_trace_uses_provided_recorder(self) -> None:
+        calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(category: str, message: str, payload: dict[str, Any] | None) -> None:
+            calls.append((category, message, payload))
+
+        disp = self._make_dispatcher(trace=recorder)
+        disp._trace("cat", "msg", {"key": "val"})
+        assert calls == [("cat", "msg", {"key": "val"})]
+
+    @pytest.mark.asyncio
+    async def test_dispatch_paths_do_not_emit_traces_yet(self) -> None:
+        """PR1.4 only adds plumbing; subsequent PRs will populate traces."""
+        calls: list[tuple[str, str, dict[str, Any] | None]] = []
+
+        def recorder(category: str, message: str, payload: dict[str, Any] | None) -> None:
+            calls.append((category, message, payload))
+
+        new_tool = {
+            "name": "tool_a",
+            "description": "d",
+            "parameters": {},
+        }
+        data = FakeDataDispatcher(
+            manifest={"dept_a": {"tool_a": new_tool}},
+            results={"expand::test": new_tool},
+        )
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(available=False, variant=None, adapter=None),
+            trace=recorder,
+        )
+
+        # Exercise build()
+        await disp.build("dept_a", has_web_search=False)
+
+        # Exercise dispatch() with a builtin (request_additional_tools)
+        await disp.dispatch(
+            department_id="dept_a",
+            call=ToolCall(id="c1", name="request_additional_tools", arguments={"reason": "test"}),
+        )
+
+        # Exercise dispatch() with a requirement tool
+        await disp.dispatch(
+            department_id="dept_a",
+            call=ToolCall(id="c2", name="tool_a", arguments={}),
+        )
+
+        assert calls == []
+
+
+# ---------------------------------------------------------------------------
 # Handler-table dispatch tests
 # ---------------------------------------------------------------------------
 

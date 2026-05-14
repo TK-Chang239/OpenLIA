@@ -28,6 +28,13 @@ if TYPE_CHECKING:
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import ToolCall, ToolSchema
 
+TraceRecorder = Callable[[str, str, dict[str, Any] | None], None]
+
+
+def _noop_trace(_category: str, _message: str, _payload: dict[str, Any] | None) -> None:
+    return None
+
+
 # Hard outer cap on tool-loop iterations to prevent runaway provider calls
 # when a model loops on the same tool without convergence.
 MAX_TOOL_TURNS = 32
@@ -250,10 +257,12 @@ class ToolDispatcher:
         *,
         data_dispatcher: DataProviderDispatcher,
         web_search: WebSearchResolution,
+        trace: TraceRecorder | None = None,
     ) -> None:
         self._data = data_dispatcher
         self._web_search = web_search
         self._escalation_cache = _EscalationCache()
+        self._trace: TraceRecorder = trace if trace is not None else _noop_trace
         self._builtin_handlers: dict[str, _BuiltinHandler] = {
             _REQUEST_ADDITIONAL_TOOLS_NAME: type(self)._dispatch_request_additional_tools,
             "web_search": type(self)._dispatch_web_search,
