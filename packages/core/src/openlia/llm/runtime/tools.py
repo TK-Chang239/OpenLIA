@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
@@ -138,6 +138,9 @@ class ToolCallResult:
     structured: dict[str, Any] | None = None
 
 
+_BuiltinHandler = Callable[["ToolDispatcher", str, ToolCall], Awaitable[ToolCallResult]]
+
+
 def _normalize_payload(payload: Any, *, max_array_len: int = 50) -> dict[str, Any]:
     """Strip nulls, cap arrays, convert recursively. Marks truncation."""
     if not isinstance(payload, dict):
@@ -190,14 +193,20 @@ class _EscalationCache:
         self._lru_order: dict[str, list[str]] = {}
 
     def add(self, department_id: str, schemas: Iterable[ToolSchema]) -> list[str]:
-        """Add schemas; return names newly added. Already-present names are skipped."""
+        """Add schemas; return names newly added.
+
+        Already-present names (by name field) are skipped."""
         added: list[str] = []
+        addition: dict[str, ToolSchema] | None = None
+        lru: list[str] | None = None
         for schema in schemas:
-            addition = self._addition_order.setdefault(department_id, {})
-            lru = self._lru_order.setdefault(department_id, [])
+            if addition is None:
+                addition = self._addition_order.setdefault(department_id, {})
+                lru = self._lru_order.setdefault(department_id, [])
             if schema.name in addition:
                 continue
             addition[schema.name] = schema
+            assert lru is not None
             lru.append(schema.name)
             added.append(schema.name)
         return added
@@ -245,6 +254,10 @@ class ToolDispatcher:
         self._data = data_dispatcher
         self._web_search = web_search
         self._escalation_cache = _EscalationCache()
+        self._builtin_handlers: dict[str, _BuiltinHandler] = {
+            _REQUEST_ADDITIONAL_TOOLS_NAME: type(self)._dispatch_request_additional_tools,
+            "web_search": type(self)._dispatch_web_search,
+        }
 
     async def build(
         self,
@@ -311,10 +324,9 @@ class ToolDispatcher:
         name = call.name
         if name in extra_tool_names:
             return self._dispatch_structured_echo(call)
-        if name == _REQUEST_ADDITIONAL_TOOLS_NAME:
-            return await self._dispatch_request_additional_tools(department_id, call)
-        if name == "web_search":
-            return await self._dispatch_web_search(call)
+        handler = self._builtin_handlers.get(name)
+        if handler is not None:
+            return await handler(self, department_id, call)
         return await self._dispatch_requirement(call)
 
     async def dispatch_many(
@@ -417,7 +429,7 @@ class ToolDispatcher:
             payload={"added_tools": added, "found": True},
         )
 
-    async def _dispatch_web_search(self, call: ToolCall) -> ToolCallResult:
+    async def _dispatch_web_search(self, department_id: str, call: ToolCall) -> ToolCallResult:
         if not self._web_search.available or self._web_search.variant != "configured":
             return ToolCallResult(
                 call_id=call.id,

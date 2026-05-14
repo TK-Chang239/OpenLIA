@@ -492,3 +492,102 @@ class TestEscalationCache:
         cache = _EscalationCache()
         cache.touch("nonexistent_dept", "alpha")  # must not raise
         assert cache.lru_order("nonexistent_dept") == []
+
+
+# ---------------------------------------------------------------------------
+# Handler-table dispatch tests
+# ---------------------------------------------------------------------------
+
+
+class TestDispatchHandlerTable:
+    """Pin the handler-table routing introduced in PR1.2.
+
+    All four branches of dispatch() are covered:
+      1. request_additional_tools  -> handler table -> _dispatch_request_additional_tools
+      2. web_search                -> handler table -> _dispatch_web_search
+      3. unknown built-in name     -> fallthrough   -> _dispatch_requirement
+      4. name in extra_tool_names  -> echo branch   -> _dispatch_structured_echo
+         (precedence: checked BEFORE the handler table)
+    """
+
+    pytestmark: ClassVar[list] = [pytest.mark.asyncio]
+
+    async def test_request_additional_tools_routes_via_handler_table(self) -> None:
+        new_tool = {
+            "name": "sector_etf",
+            "description": "Sector ETF flows.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        }
+        data = FakeDataDispatcher(
+            manifest=_MANIFEST,
+            results={"expand::sector data": new_tool},
+        )
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        )
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="ht1",
+                name="request_additional_tools",
+                arguments={"reason": "sector data"},
+            ),
+        )
+        # expand_tools was called — new tool added means ok=True and payload reflects it.
+        assert result.ok is True
+        assert "sector_etf" in result.payload.get("added_tools", [])
+
+    async def test_web_search_routes_via_handler_table(self) -> None:
+        adapter = FakeSearchAdapter(
+            results=[WebSearchResult(title="Handler table hit", url="https://x", snippet="ok")]
+        )
+        data = FakeDataDispatcher(manifest=_MANIFEST)
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(True, "configured", adapter),
+        )
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="ht2", name="web_search", arguments={"query": "handler table"}),
+        )
+        assert result.ok is True
+        assert result.payload["results"][0]["title"] == "Handler table hit"
+
+    async def test_unknown_name_falls_through_to_dispatch_requirement(self) -> None:
+        data = FakeDataDispatcher(
+            manifest=_MANIFEST,
+            results={"fmp__quote": {"symbol": "MSFT", "price": 420.0}},
+        )
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        )
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(id="ht3", name="fmp__quote", arguments={"symbol": "MSFT"}),
+        )
+        # Falls through to _dispatch_requirement which hits FakeDataDispatcher.dispatch_requirement.
+        assert result.ok is True
+        assert result.payload.get("symbol") == "MSFT"
+        assert result.structured is None
+
+    async def test_extra_tool_names_echo_beats_handler_table(self) -> None:
+        # web_search is in both the handler table AND extra_tool_names.
+        # The extra_tool_names branch must win (checked first).
+        adapter = FakeSearchAdapter()
+        data = FakeDataDispatcher(manifest=_MANIFEST)
+        disp = ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(True, "configured", adapter),
+        )
+        call = ToolCall(id="ht4", name="web_search", arguments={"query": "should echo"})
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=call,
+            extra_tool_names=frozenset({"web_search"}),
+        )
+        # Echo path: ok=True, structured carries the arguments, payload is {"ack": True}.
+        assert result.ok is True
+        assert result.structured == {"query": "should echo"}
+        assert result.payload == {"ack": True}
