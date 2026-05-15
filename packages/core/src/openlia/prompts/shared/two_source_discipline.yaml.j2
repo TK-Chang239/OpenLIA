@@ -119,3 +119,7 @@ cite.
 The two-source discipline is the single highest-leverage cost lever in
 this system. The provider plumbing is a one-time fix; this prompt is
 what keeps the system continuously efficient. Follow it strictly.
+{% if "eodhd" in connector_quirks %}
+
+{% include "shared/connector_quirks/eodhd.yaml.j2" %}
+{% endif %}

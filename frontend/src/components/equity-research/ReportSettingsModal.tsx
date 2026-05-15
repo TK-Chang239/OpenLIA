@@ -9,6 +9,7 @@ import {
   type ErTemplate,
   type ReportLength,
   type ReportMode,
+  WEB_SEARCH_BUDGET_DEFAULTS,
 } from "../../api/equity-research";
 import { useCurrentUser } from "../../auth/useCurrentUser";
 import { SECTION_CATALOG } from "../../lib/equity-research/section-catalog";
@@ -95,6 +96,12 @@ export function ReportSettingsModal({
   const [selectedTemplateByMode, setSelectedTemplateByMode] = useState<
     Record<ReportMode, string>
   >(() => normalizeSelected(config.selected_template_id_by_mode));
+  // Per-mode override map. Stored as strings so the empty input maps
+  // cleanly to "use framework default" without juggling NaN. Parsed
+  // and validated at save-time.
+  const [budgetInputs, setBudgetInputs] = useState<Record<ReportMode, string>>(
+    () => normalizeBudgetInputs(config.web_search_budgets_by_mode),
+  );
   const [activeTemplate, setActiveTemplate] = useState<ErTemplate | null>(null);
   const currentUser = useCurrentUser();
   const isAdmin = currentUser?.role === "admin";
@@ -111,6 +118,7 @@ export function ReportSettingsModal({
     setCustoms(config.custom_sections_by_mode);
     setPendingCustom(null);
     setSelectedTemplateByMode(normalizeSelected(config.selected_template_id_by_mode));
+    setBudgetInputs(normalizeBudgetInputs(config.web_search_budgets_by_mode));
   }, [open, config]);
 
   const templateActive = (selectedTemplateByMode[mode] ?? "default") !== "default";
@@ -139,14 +147,32 @@ export function ReportSettingsModal({
   };
 
   const save = async () => {
+    const budgets: Partial<Record<ReportMode, number>> = {};
+    for (const m of Object.keys(WEB_SEARCH_BUDGET_DEFAULTS) as ReportMode[]) {
+      const raw = budgetInputs[m].trim();
+      if (!raw) continue; // empty = use framework default; don't send.
+      const n = Number(raw);
+      if (Number.isInteger(n) && n > 0) {
+        budgets[m] = n;
+      }
+    }
     await onSave({
       report_mode: mode,
       report_length: length,
       sections_by_mode: sections,
       custom_sections_by_mode: customs,
       selected_template_id_by_mode: selectedTemplateByMode,
+      web_search_budgets_by_mode: budgets,
     });
     onClose();
+  };
+
+  const setBudget = (m: ReportMode, raw: string) => {
+    // Coerce: blank, or digits only. Anything else is rejected at the
+    // input boundary so the field never holds invalid state.
+    if (raw === "" || /^\d+$/.test(raw)) {
+      setBudgetInputs({ ...budgetInputs, [m]: raw });
+    }
   };
 
   const modeOptions = (Object.keys(MODE_LABELS) as ReportMode[]).map((v) => ({
@@ -350,6 +376,46 @@ export function ReportSettingsModal({
                 </section>
               </>
             )}
+
+            <section className="border-t border-[--color-border-subtle] px-[22px] py-[18px]">
+              <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                Web Search Budget
+              </span>
+              <p className="mb-[14px] text-[12.5px] leading-[1.5] text-[--color-text-secondary]">
+                Web search supplements your data connectors for qualitative
+                context (news, strategy, regulatory updates). It does not
+                substitute for financial data tools. Leave blank to use the
+                framework default for each mode.
+              </p>
+              <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
+                {(Object.keys(WEB_SEARCH_BUDGET_DEFAULTS) as ReportMode[]).map(
+                  (m) => (
+                    <li
+                      key={m}
+                      className="flex items-center justify-between gap-3"
+                    >
+                      <span className="text-[13.5px] text-[--color-text-primary]">
+                        {MODE_LABELS[m]}
+                      </span>
+                      <div className="flex items-center gap-[8px]">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          aria-label={`Web search budget for ${MODE_LABELS[m]}`}
+                          value={budgetInputs[m]}
+                          onChange={(e) => setBudget(m, e.target.value)}
+                          placeholder={String(WEB_SEARCH_BUDGET_DEFAULTS[m])}
+                          className="h-7 w-[64px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-2 text-right text-[13px] tabular-nums text-[--color-text-primary] placeholder:text-[--color-text-tertiary]"
+                        />
+                        <span className="text-[12px] text-[--color-text-tertiary]">
+                          searches
+                        </span>
+                      </div>
+                    </li>
+                  ),
+                )}
+              </ul>
+            </section>
           </div>
 
           <div className="flex justify-end gap-2 rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[14px]">
@@ -386,6 +452,24 @@ function normalizeSelected(
   for (const m of Object.keys(out) as ReportMode[]) {
     const v = raw[m];
     if (typeof v === "string" && v) out[m] = v;
+  }
+  return out;
+}
+
+function normalizeBudgetInputs(
+  raw: ErConfig["web_search_budgets_by_mode"] | undefined,
+): Record<ReportMode, string> {
+  const out: Record<ReportMode, string> = {
+    stock_initiation: "",
+    stock_update: "",
+    sector_research: "",
+  };
+  if (!raw) return out;
+  for (const m of Object.keys(out) as ReportMode[]) {
+    const v = raw[m];
+    if (typeof v === "number" && Number.isInteger(v) && v > 0) {
+      out[m] = String(v);
+    }
   }
   return out;
 }

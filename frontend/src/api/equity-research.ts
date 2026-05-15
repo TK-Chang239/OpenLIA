@@ -17,6 +17,9 @@ export interface ErConfig {
   sections_by_mode: Record<ReportMode, string[]>;
   custom_sections_by_mode: Record<ReportMode, CustomSection[]>;
   selected_template_id_by_mode: Record<ReportMode, TemplateSelection>;
+  // Phase 5f: per-mode web-search budget override. Absent keys mean
+  // "use framework default" (resolved server-side at report-run time).
+  web_search_budgets_by_mode: Partial<Record<ReportMode, number>>;
 }
 
 export interface ErConfigPatch {
@@ -25,7 +28,18 @@ export interface ErConfigPatch {
   sections_by_mode?: Partial<Record<ReportMode, string[]>>;
   custom_sections_by_mode?: Partial<Record<ReportMode, CustomSection[]>>;
   selected_template_id_by_mode?: Partial<Record<ReportMode, TemplateSelection>>;
+  web_search_budgets_by_mode?: Partial<Record<ReportMode, number>>;
 }
+
+// Framework defaults — shown as placeholder values in the stepper UI
+// when the user hasn't recorded an override for a mode. Source of
+// truth is `packages/core/src/openlia/reports/frameworks/*.json`;
+// duplicated here so the UI can render before the first PUT.
+export const WEB_SEARCH_BUDGET_DEFAULTS: Record<ReportMode, number> = {
+  stock_initiation: 10,
+  stock_update: 5,
+  sector_research: 15,
+};
 
 export interface ErTemplate {
   id: string;

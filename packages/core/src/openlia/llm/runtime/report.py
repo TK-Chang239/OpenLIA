@@ -66,6 +66,7 @@ from openlia.llm.types import (
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import (
     ReportValidationError,
+    enforce_uncited_concrete_claims,
     find_uncited_concrete_claims,
     validate_report_payload,
 )
@@ -212,8 +213,7 @@ def _rescue_failed_searches(
         return response
 
     has_configured = (
-        web_search_resolution.variant == "configured"
-        and web_search_resolution.adapter is not None
+        web_search_resolution.variant == "configured" and web_search_resolution.adapter is not None
     )
     if not has_configured:
         for f in response.server_tool_failures:
@@ -331,8 +331,10 @@ def _coerce_sparkline_point(idx: int, point: Any) -> Any:
         return {"x": float(idx), "y": float(point)}
     if isinstance(point, (list, tuple)) and len(point) == 2:
         x, y = point
-        if isinstance(x, (int, float)) and not isinstance(x, bool) and (
-            isinstance(y, (int, float)) and not isinstance(y, bool)
+        if (
+            isinstance(x, (int, float))
+            and not isinstance(x, bool)
+            and (isinstance(y, (int, float)) and not isinstance(y, bool))
         ):
             return {"x": float(x), "y": float(y)}
     return point
@@ -463,6 +465,7 @@ def build_report_system_prompt(
     current_date: str,
     current_date_long: str,
     search_budget: int = 8,
+    connector_quirks: tuple[str, ...] = ("eodhd",),
     loader: PromptLoader | None = None,
 ) -> str:
     """Render the report.system slot with the user's visible skills menu.
@@ -495,6 +498,7 @@ def build_report_system_prompt(
         current_date=current_date,
         current_date_long=current_date_long,
         search_budget=search_budget,
+        connector_quirks=list(connector_quirks),
     )
 
 
@@ -563,9 +567,7 @@ def _no_trace(_category: str, _message: str, _payload: dict[str, Any] | None) ->
 _GLOBAL_DEFAULT_SEARCH_BUDGET = 8
 
 
-def _resolve_search_budget(
-    *, framework: dict[str, Any] | None, override: int | None
-) -> int:
+def _resolve_search_budget(*, framework: dict[str, Any] | None, override: int | None) -> int:
     """Pick the per-report web-search cap.
 
     Three-level chain: user override → framework default → 8. Bad
@@ -1069,8 +1071,12 @@ class ReportRunner:
                     validated_payload = candidate
                     final = response
                     # Phase 5d: surface uncited-claim warnings as traces.
-                    # Warn-only — strict promotion is Phase 6.
-                    for w in find_uncited_concrete_claims(validated_schema):
+                    # Phase 6a: when ``request.citations_strict`` is set,
+                    # promote warnings to a ``ReportValidationError`` so
+                    # the rescue/retry loop fires below; otherwise stay
+                    # warn-only.
+                    uncited_warnings = find_uncited_concrete_claims(validated_schema)
+                    for w in uncited_warnings:
                         self._trace(
                             "report.warning.uncited_claim",
                             f"{w.path}: {w.message}",
@@ -1081,6 +1087,9 @@ class ReportRunner:
                                 "path": w.path,
                             },
                         )
+                    enforce_uncited_concrete_claims(
+                        validated_schema, strict=request.citations_strict
+                    )
                     self._trace(
                         "llm.call.done",
                         (
@@ -1186,9 +1195,7 @@ class ReportRunner:
                 if is_final_turn:
                     final = response
                     break
-                conversation.append(
-                    Message(role="assistant", content=response.text or "")
-                )
+                conversation.append(Message(role="assistant", content=response.text or ""))
                 conversation.append(
                     Message(
                         role="user",

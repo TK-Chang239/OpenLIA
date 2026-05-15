@@ -45,6 +45,13 @@ class ErUserConfig(Base, TimestampMixin):
     selected_template_id_by_mode: Mapped[dict] = mapped_column(
         JSON, nullable=False, default=dict, server_default=text("'{}'")
     )
+    # Phase 5f: per-mode override for the web search budget the model is
+    # allowed to spend per report. Nullable; absent keys fall back to
+    # the framework default (and ultimately to 8). Stored as a JSON
+    # dict of {mode_key: positive_int}.
+    web_search_budgets_by_mode: Mapped[dict | None] = mapped_column(
+        JSON, nullable=True, default=None
+    )
 
     __table_args__ = (
         CheckConstraint(

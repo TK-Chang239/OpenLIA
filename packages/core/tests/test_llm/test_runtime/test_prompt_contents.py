@@ -63,6 +63,7 @@ def test_shared_include_output_discipline_is_rendered_into_report_system() -> No
         current_date="2026-05-14",
         current_date_long="Thursday, May 14, 2026",
         search_budget=10,
+        connector_quirks=[],
     )
     assert "Output discipline" in out
 
@@ -203,6 +204,7 @@ def test_two_source_discipline_partial_renders_with_budget_and_date() -> None:
         search_budget=10,
         current_date="2026-05-14",
         current_date_long="Thursday, May 14, 2026",
+        connector_quirks=[],
     )
     assert "## Two-source discipline" in out
     assert "Quantitative claims" in out
@@ -225,9 +227,32 @@ def test_equity_research_report_system_includes_two_source_partial() -> None:
         current_date="2026-05-14",
         current_date_long="Thursday, May 14, 2026",
         search_budget=10,
+        connector_quirks=["eodhd"],
     )
     assert "## Two-source discipline" in out
     assert "budget of 10 web searches" in out
+    # EODHD connector quirks present when "eodhd" is in connector_quirks.
+    assert "## EODHD ticker conventions" in out
+    assert "AAPL.US" in out
+    assert "BZ.COMM" in out
+
+
+def test_report_system_omits_eodhd_quirks_when_connector_inactive() -> None:
+    """Conditional include: when connector_quirks does not contain
+    'eodhd', the partial is suppressed and the system prompt stays
+    free of EODHD-specific ticker noise."""
+    loader = PromptLoader()
+    out = loader.render(
+        "equity_research",
+        "report.system",
+        style_guide="x",
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=10,
+        connector_quirks=[],
+    )
+    assert "EODHD ticker conventions" not in out
+    assert "BZ.COMM" not in out
 
 
 def test_two_source_discipline_partial_is_strict_undefined_safe() -> None:
@@ -243,4 +268,8 @@ def test_two_source_discipline_partial_is_strict_undefined_safe() -> None:
     )
     tmpl = env.get_template("shared/two_source_discipline.yaml.j2")
     with pytest.raises(UndefinedError):
-        tmpl.render(current_date="2026-05-14", current_date_long="Thursday, May 14, 2026")
+        tmpl.render(
+            current_date="2026-05-14",
+            current_date_long="Thursday, May 14, 2026",
+            connector_quirks=[],
+        )
