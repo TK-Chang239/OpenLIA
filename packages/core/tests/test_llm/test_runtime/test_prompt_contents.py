@@ -62,6 +62,7 @@ def test_shared_include_output_discipline_is_rendered_into_report_system() -> No
         style_guide="x",
         current_date="2026-05-14",
         current_date_long="Thursday, May 14, 2026",
+        search_budget=10,
     )
     assert "Output discipline" in out
 
@@ -180,3 +181,66 @@ def test_response_length_partial_renders_without_context_var() -> None:
     tmpl = env.get_template("shared/response_length.yaml.j2")
     out = tmpl.render()  # no context at all
     assert "## Response length" not in out
+
+
+# ---------- Phase 5a: two_source_discipline partial ----------
+
+
+def test_two_source_discipline_partial_renders_with_budget_and_date() -> None:
+    """The shared/two_source_discipline.yaml.j2 partial renders cleanly
+    under StrictUndefined with the canonical context (search_budget,
+    current_date, current_date_long) and includes the key discipline
+    headings + the budget number it was given."""
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+    from openlia.llm.runtime.prompts import _default_prompts_root
+
+    env = Environment(
+        loader=FileSystemLoader(str(_default_prompts_root())),
+        undefined=StrictUndefined,
+    )
+    tmpl = env.get_template("shared/two_source_discipline.yaml.j2")
+    out = tmpl.render(
+        search_budget=10,
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+    )
+    assert "## Two-source discipline" in out
+    assert "Quantitative claims" in out
+    assert "Qualitative claims" in out
+    assert "Search budget" in out
+    assert "budget of 10 web searches" in out
+    # Transitively includes temporal anchor.
+    assert "Thursday, May 14, 2026" in out
+    assert "training cutoff" in out.lower()
+
+
+def test_equity_research_report_system_includes_two_source_partial() -> None:
+    """Equity Research's report.system rendering carries the two-source
+    discipline headings and the search-budget directive."""
+    loader = PromptLoader()
+    out = loader.render(
+        "equity_research",
+        "report.system",
+        style_guide="x",
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=10,
+    )
+    assert "## Two-source discipline" in out
+    assert "budget of 10 web searches" in out
+
+
+def test_two_source_discipline_partial_is_strict_undefined_safe() -> None:
+    """Missing search_budget under StrictUndefined must raise — guards
+    against renderers that silently drop the budget directive."""
+    from jinja2 import Environment, FileSystemLoader, StrictUndefined
+    from jinja2.exceptions import UndefinedError
+    from openlia.llm.runtime.prompts import _default_prompts_root
+
+    env = Environment(
+        loader=FileSystemLoader(str(_default_prompts_root())),
+        undefined=StrictUndefined,
+    )
+    tmpl = env.get_template("shared/two_source_discipline.yaml.j2")
+    with pytest.raises(UndefinedError):
+        tmpl.render(current_date="2026-05-14", current_date_long="Thursday, May 14, 2026")

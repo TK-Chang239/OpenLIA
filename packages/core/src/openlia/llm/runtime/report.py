@@ -64,7 +64,11 @@ from openlia.llm.types import (
     ToolSchema,
 )
 from openlia.reports.schema import ReportSchema
-from openlia.reports.validator import ReportValidationError, validate_report_payload
+from openlia.reports.validator import (
+    ReportValidationError,
+    find_uncited_concrete_claims,
+    validate_report_payload,
+)
 from openlia.skills import SkillRegistry
 
 _SUBMIT_REPORT_TOOL_NAME = "submit_report"
@@ -458,13 +462,16 @@ def build_report_system_prompt(
     available_category_hints: list[str],
     current_date: str,
     current_date_long: str,
+    search_budget: int = 8,
     loader: PromptLoader | None = None,
 ) -> str:
     """Render the report.system slot with the user's visible skills menu.
 
     `current_date` (ISO date) and `current_date_long` (human form) anchor the
-    model to today. Departments that include `shared/temporal_anchor.yaml.j2`
-    consume them; under StrictUndefined they must always be passed.
+    model to today. `search_budget` feeds the two-source-discipline partial's
+    per-report cap so the model knows how many web searches it has left.
+    All three are consumed under StrictUndefined; the caller must always
+    supply them.
     """
     loader = loader or PromptLoader()
     visible = registry.visible(department_id=department_id, user_id=user_id)
@@ -487,6 +494,7 @@ def build_report_system_prompt(
         available_category_hints=available_category_hints,
         current_date=current_date,
         current_date_long=current_date_long,
+        search_budget=search_budget,
     )
 
 
@@ -550,6 +558,32 @@ TraceRecorder = Callable[[str, str, dict[str, Any] | None], None]
 
 def _no_trace(_category: str, _message: str, _payload: dict[str, Any] | None) -> None:
     return None
+
+
+_GLOBAL_DEFAULT_SEARCH_BUDGET = 8
+
+
+def _resolve_search_budget(
+    *, framework: dict[str, Any] | None, override: int | None
+) -> int:
+    """Pick the per-report web-search cap.
+
+    Three-level chain: user override → framework default → 8. Bad
+    values (non-int, zero, negative, bool) fall through to the next
+    level so a typo'd ``"10"`` in a framework file or a stray ``0`` in
+    a user pref never silently disables search.
+    """
+
+    def _is_pos_int(v: Any) -> bool:
+        return isinstance(v, int) and not isinstance(v, bool) and v > 0
+
+    if _is_pos_int(override):
+        return int(override) if override is not None else _GLOBAL_DEFAULT_SEARCH_BUDGET
+    if isinstance(framework, dict):
+        fw_default = framework.get("web_search_budget_default")
+        if _is_pos_int(fw_default):
+            return int(fw_default)
+    return _GLOBAL_DEFAULT_SEARCH_BUDGET
 
 
 def _web_search_events_for_response(
@@ -640,13 +674,20 @@ class ReportRunner:
         report_id = self._report_id_factory()
 
         using_user_template = bool(request.user_template_text)
+        framework_raw: dict[str, Any] | None
         if using_user_template:
             framework: dict[str, Any] = {"sections": [], "length_preference": request.length}
+            framework_raw = None
             style_guide = ""
         else:
             framework_raw = _load_framework(self._frameworks_root, request.mode)
             framework = _customize_framework(framework_raw, request)
             style_guide = _load_style_guide(self._frameworks_root, request.mode)
+
+        search_budget = _resolve_search_budget(
+            framework=framework_raw,
+            override=request.web_search_budget_override,
+        )
 
         self._trace(
             "report.request",
@@ -733,6 +774,7 @@ class ReportRunner:
             available_category_hints=available_category_hints,
             current_date=current_date,
             current_date_long=current_date_long,
+            search_budget=search_budget,
             loader=self._prompts,
         )
         tools = await self._tools.build(department_id, has_web_search=True)
@@ -778,7 +820,15 @@ class ReportRunner:
         native_tools: tuple[str, ...] = (
             ("web_search",) if self._tools.web_search.variant == "native" else ()
         )
-        web_search_max_uses = self._tools.web_search_budget
+        # Native path: forward the per-report budget to the provider so it
+        # enforces server-side (Anthropic's `max_uses`). Configured path:
+        # the dispatcher still keeps its own counter via
+        # `self._tools.web_search_budget` (G-2). When neither path is
+        # active, send `None` so adapters skip the cap field entirely.
+        if self._tools.web_search.variant == "native":
+            web_search_max_uses: int | None = search_budget
+        else:
+            web_search_max_uses = self._tools.web_search_budget
         # Per-run rescue set (guardrail G-1): each (turn_idx, query)
         # pair gets at most one configured-adapter rewrite. If the
         # configured retry also fails, the failure stays inline and the
@@ -1015,9 +1065,22 @@ class ReportRunner:
                     generated_at=datetime.now(UTC),
                 )
                 try:
-                    validate_report_payload(candidate)
+                    validated_schema = validate_report_payload(candidate)
                     validated_payload = candidate
                     final = response
+                    # Phase 5d: surface uncited-claim warnings as traces.
+                    # Warn-only — strict promotion is Phase 6.
+                    for w in find_uncited_concrete_claims(validated_schema):
+                        self._trace(
+                            "report.warning.uncited_claim",
+                            f"{w.path}: {w.message}",
+                            {
+                                "report_id": report_id,
+                                "kind": w.kind,
+                                "slot": w.slot,
+                                "path": w.path,
+                            },
+                        )
                     self._trace(
                         "llm.call.done",
                         (

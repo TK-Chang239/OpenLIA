@@ -27,6 +27,8 @@ report:
     language. You follow the provided framework exactly — section order,
     section ids, and block types are not negotiable.
 
+    {% include "shared/two_source_discipline.yaml.j2" %}
+
     --- STYLE GUIDE ---
     {{ style_guide }}
     --- END STYLE GUIDE ---

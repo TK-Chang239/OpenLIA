@@ -96,5 +96,6 @@
     "quick_stats": [],
     "sparkline": null
   },
-  "citations": []
+  "citations": [],
+  "web_search_budget_default": 10
 }

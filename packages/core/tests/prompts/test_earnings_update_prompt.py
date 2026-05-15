@@ -27,7 +27,14 @@ def _ctx(**overrides: object) -> dict[str, object]:
 
 
 def test_system_prompt_mentions_department_role(loader: PromptLoader) -> None:
-    text = loader.render("earnings_update", "report.system", style_guide="x")
+    text = loader.render(
+        "earnings_update",
+        "report.system",
+        style_guide="x",
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=5,
+    )
     assert "earnings" in text.lower()
     assert "analyst" in text.lower()
 
