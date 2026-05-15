@@ -52,6 +52,30 @@ interface PersistedToolCall {
   structured?: Record<string, unknown> | null;
 }
 
+const DISABLED_CONNECTORS_LS_KEY = "equity-research:disabled-connector-ids";
+const DISABLED_SKILLS_LS_KEY = "equity-research:disabled-skill-ids";
+
+function readLocalStorageIds(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalStorageIds(key: string, ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // localStorage may be disabled (private mode, quota); silently no-op.
+  }
+}
+
 function firstName(displayName: string | null | undefined): string {
   if (!displayName) return "there";
   const trimmed = displayName.trim();
@@ -75,7 +99,7 @@ function parseTickerCompany(
 }
 
 export default function EquityResearch(): JSX.Element {
-  const { config, patch } = useErConfig();
+  const { config, loading, patch } = useErConfig();
   const { user } = useAuth();
   const fileViewer = useFileViewer();
 
@@ -96,8 +120,23 @@ export default function EquityResearch(): JSX.Element {
   const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
   const [genDurationSec, setGenDurationSec] = useState<number | null>(null);
   const [autoStarted, setAutoStarted] = useState(false);
-  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>([]);
-  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
+  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>(
+    () => readLocalStorageIds(DISABLED_CONNECTORS_LS_KEY),
+  );
+  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>(
+    () => readLocalStorageIds(DISABLED_SKILLS_LS_KEY),
+  );
+
+  // Mirror toggle state to localStorage so it survives a page refresh.
+  // The server-side session row remains the source of truth once a
+  // session exists; localStorage covers the pre-session window the user
+  // hits on cold load before submitting the first ticker.
+  useEffect(() => {
+    writeLocalStorageIds(DISABLED_CONNECTORS_LS_KEY, disabledConnectorIds);
+  }, [disabledConnectorIds]);
+  useEffect(() => {
+    writeLocalStorageIds(DISABLED_SKILLS_LS_KEY, disabledSkillIds);
+  }, [disabledSkillIds]);
 
   const lastSentChatRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
@@ -157,8 +196,9 @@ export default function EquityResearch(): JSX.Element {
       setHistory([]);
       setHistoryLoaded(false);
       setRestoredReportId(null);
-      setDisabledConnectorIds([]);
-      setDisabledSkillIds([]);
+      // Pre-session toggle state stays in React+localStorage; do not
+      // reset it here, otherwise a fresh mount would clobber the
+      // toggles the user picked on the prior visit.
       return;
     }
     let cancelled = false;
@@ -288,13 +328,18 @@ export default function EquityResearch(): JSX.Element {
         setSessionId(row.id);
         setSessionTitle(row.title);
         setSubject(trimmed);
-        // Push any pre-session tool toggles onto the new row. Fire-and-forget;
-        // a failure here just falls back to "all on" for this run.
+        // Push any pre-session tool toggles onto the new row before
+        // starting the report stream. Awaiting prevents the runner from
+        // reading the row before the disabled lists are persisted.
         if (disabledConnectorIds.length > 0 || disabledSkillIds.length > 0) {
-          void patchSession(row.id, {
-            disabled_connector_ids: disabledConnectorIds,
-            disabled_skill_ids: disabledSkillIds,
-          });
+          try {
+            await patchSession(row.id, {
+              disabled_connector_ids: disabledConnectorIds,
+              disabled_skill_ids: disabledSkillIds,
+            });
+          } catch {
+            // Patch failure falls back to "all on" for this run.
+          }
         }
         startReport({
           url: "/api/departments/equity-research/report",
@@ -435,16 +480,19 @@ export default function EquityResearch(): JSX.Element {
 
   const autoscrollKey = useMemo(
     () =>
-      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${reportState.toolCalls.length}:${schema ? "s" : "_"}`,
+      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${schema ? "s" : "_"}`,
     [
       history.length,
       chatStream.state.message.length,
       chatStream.state.toolCalls.length,
       reportState.status,
-      reportState.toolCalls.length,
       schema,
     ],
   );
+
+  if (loading || !config) {
+    return <PageSkeleton />;
+  }
 
   const { ticker, company } = parseTickerCompany(schema?.cover ?? null);
   const placeholder = sessionId
@@ -469,31 +517,11 @@ export default function EquityResearch(): JSX.Element {
               ))}
 
               {isReportStreaming ? (
-                <>
-                  <ReportProgressIndicator
-                    startedAt={genStartedAt}
-                    mode={config.report_mode}
-                    subject={subject || sessionTitle || ""}
-                  />
-                  {reportState.toolCalls.length > 0 ? (
-                    <div
-                      data-testid="er-report-tool-chips"
-                      className="flex flex-wrap gap-2"
-                    >
-                      {reportState.toolCalls.map((c, i) => (
-                        <ToolCallChip
-                          key={c.callId || `rt-${i}`}
-                          toolName={c.toolName}
-                          argsPreview={c.argsPreview}
-                          status={c.status}
-                          summary={c.summary}
-                          structured={null}
-                          index={i}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </>
+                <ReportProgressIndicator
+                  startedAt={genStartedAt}
+                  mode={config.report_mode}
+                  subject={subject || sessionTitle || ""}
+                />
               ) : null}
 
               {reportState.status === "error" ? (
@@ -646,5 +674,24 @@ function HistoricalMessage({ message }: { message: ChatMessage }): JSX.Element {
         departmentId="equity_research"
       />
     </>
+  );
+}
+
+function PageSkeleton(): JSX.Element {
+  return (
+    <div className="flex h-full flex-col bg-[--color-bg-base]">
+      <header className="flex h-[52px] flex-shrink-0 items-center border-b border-[--color-border-subtle] px-6">
+        <div
+          className="h-5 w-40 animate-pulse rounded bg-[--color-border-subtle]"
+          aria-hidden="true"
+        />
+      </header>
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
+        <div className="space-y-3 text-center">
+          <div className="mx-auto h-7 w-56 animate-pulse rounded bg-[--color-border-subtle]" />
+          <div className="mx-auto h-4 w-72 animate-pulse rounded bg-[--color-border-subtle]" />
+        </div>
+      </div>
+    </div>
   );
 }

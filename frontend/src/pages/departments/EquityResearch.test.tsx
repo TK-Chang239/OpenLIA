@@ -20,10 +20,6 @@ vi.mock("../../auth/AuthContext", () => ({
   }),
 }));
 
-const erConfigMockState = {
-  loading: false,
-};
-
 vi.mock("../../hooks/useErConfig", () => ({
   useErConfig: () => ({
     config: {
@@ -40,7 +36,7 @@ vi.mock("../../hooks/useErConfig", () => ({
         sector_research: [],
       },
     },
-    loading: erConfigMockState.loading,
+    loading: false,
     patch: vi.fn().mockResolvedValue(undefined),
   }),
 }));
@@ -131,19 +127,120 @@ describe("EquityResearchPage", () => {
     expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
   });
 
-  it("paints the welcome stage on the first frame even while the config fetch is still pending — no full-page skeleton flash", () => {
-    erConfigMockState.loading = true;
-    try {
-      renderPage();
-      // Welcome view is the first thing the user sees, not a placeholder.
-      expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
-      // The composer is mounted too — the page shell is fully usable.
-      expect(
-        screen.getByPlaceholderText(/Enter a ticker/i),
-      ).toBeInTheDocument();
-    } finally {
-      erConfigMockState.loading = false;
-    }
+  it("waits for the disabled-ids PATCH to land before starting the report stream", async () => {
+    // The pre-session toggle PATCH used to fire-and-forget; a slow PATCH
+    // raced the report stream and the runner read an un-patched row.
+    // Awaiting the PATCH eliminates the race.
+    localStorage.setItem(
+      "equity-research:disabled-connector-ids",
+      JSON.stringify(["financial:fmp"]),
+    );
+
+    const ordered: string[] = [];
+    let resolvePatch: (() => void) | null = null;
+    const patchLanded = new Promise<void>((res) => {
+      resolvePatch = res;
+    });
+
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/chat/sessions/sess-1")) {
+        // Delay before recording so the report POST loses the race
+        // if the caller didn't await the patch.
+        await new Promise((r) => setTimeout(r, 20));
+        ordered.push("patch");
+        resolvePatch?.();
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/api/departments/equity-research/report")) {
+        ordered.push("report");
+        return {
+          ok: true,
+          status: 200,
+          body: sseBody([
+            { event: "report.complete", data: { report_id: "r_1", schema: {} } },
+            { event: "report.saved", data: { report_id: "r_1" } },
+          ]),
+        } as unknown as Response;
+      }
+      return new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    renderPage();
+    await act(async () => {
+      submitInput("AAPL");
+    });
+    await patchLanded;
+    await waitFor(() => {
+      expect(ordered).toContain("report");
+    });
+
+    const patchIdx = ordered.indexOf("patch");
+    const reportIdx = ordered.indexOf("report");
+    expect(patchIdx).toBeGreaterThanOrEqual(0);
+    expect(reportIdx).toBeGreaterThan(patchIdx);
+  });
+
+  it("hydrates pre-session tool toggles from localStorage and forwards them to the new session row", async () => {
+    // User had toggled two tools off in a previous visit; after a page
+    // refresh that pre-session state must survive (issue 112).
+    localStorage.setItem(
+      "equity-research:disabled-connector-ids",
+      JSON.stringify(["financial:fmp"]),
+    );
+    localStorage.setItem(
+      "equity-research:disabled-skill-ids",
+      JSON.stringify(["macro_outlook"]),
+    );
+
+    const calls: { url: string; body: unknown }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      let parsed: unknown = null;
+      try {
+        parsed = init?.body ? JSON.parse(String(init.body)) : null;
+      } catch {
+        parsed = null;
+      }
+      calls.push({ url: String(url), body: parsed });
+      if (String(url).includes("/api/chat/sessions/")) {
+        // patchSession + getSession: respond with empty JSON.
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return {
+        ok: true,
+        status: 200,
+        body: sseBody([
+          { event: "report.complete", data: { report_id: "r_1", schema: {} } },
+          { event: "report.saved", data: { report_id: "r_1" } },
+        ]),
+      } as unknown as Response;
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    renderPage();
+    await act(async () => {
+      submitInput("AAPL");
+    });
+
+    await waitFor(() => {
+      const patch = calls.find(
+        (c) => c.url.includes("/api/chat/sessions/sess-1") && c.body !== null,
+      );
+      expect(patch).toBeDefined();
+      const body = patch?.body as Record<string, unknown> | undefined;
+      expect(body?.disabled_connector_ids).toEqual(["financial:fmp"]);
+      expect(body?.disabled_skill_ids).toEqual(["macro_outlook"]);
+    });
   });
 
   it("pre-fills the input from the ?ticker= query param (NEW-21-09)", () => {
@@ -240,74 +337,6 @@ describe("EquityResearchPage", () => {
 
     const retry = await screen.findByRole("button", { name: /try again/i });
     expect(retry).toBeInTheDocument();
-  });
-
-  it("renders tool-call chips during report generation, then clears them at report.saved", async () => {
-    // Use a long-running stream that pauses between phases so we can assert
-    // chips visible during generation, then close to fire report.saved.
-    let pushFrame: ((s: string) => void) | null = null;
-    let closeStream: (() => void) | null = null;
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        const enc = new TextEncoder();
-        pushFrame = (s) => controller.enqueue(enc.encode(s));
-        closeStream = () => controller.close();
-      },
-    });
-    const fetchMock = vi.fn(async (url: string) => {
-      if (typeof url === "string" && url.includes("/report")) {
-        return { ok: true, status: 200, body: stream } as unknown as Response;
-      }
-      return { ok: true, status: 200, body: sseBody([]) } as unknown as Response;
-    });
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    renderPage();
-    await act(async () => {
-      submitInput("AAPL");
-    });
-
-    // Open with report.start + a running tool call.
-    await act(async () => {
-      pushFrame?.(
-        `event: report.start\ndata: ${JSON.stringify({
-          report_id: "r_42",
-          department: "equity_research",
-          mode: "stock_initiation",
-          section_titles: [],
-        })}\n\n`,
-      );
-      pushFrame?.(
-        `event: report.tool_call.start\ndata: ${JSON.stringify({
-          report_id: "r_42",
-          call_id: "c1",
-          tool_name: "fetch_quote",
-          args_preview: "AAPL",
-        })}\n\n`,
-      );
-    });
-
-    const chipRow = await screen.findByTestId("er-report-tool-chips");
-    expect(chipRow).toBeInTheDocument();
-
-    // Close the report — chips should disappear with the indicator.
-    await act(async () => {
-      pushFrame?.(
-        `event: report.complete\ndata: ${JSON.stringify({
-          report_id: "r_42",
-          schema: {},
-        })}\n\n`,
-      );
-      pushFrame?.(
-        `event: report.saved\ndata: ${JSON.stringify({ report_id: "r_42" })}\n\n`,
-      );
-      closeStream?.();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("er-report-card")).toBeInTheDocument();
-    });
-    expect(screen.queryByTestId("er-report-tool-chips")).not.toBeInTheDocument();
   });
 
   it("follow-up chat hits the ER chat URL with session_id (NEW-14-01)", async () => {
