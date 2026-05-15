@@ -18,14 +18,146 @@ from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.retry import with_retries
 from openlia.llm.types import (
+    Citation,
+    FailedSearch,
     LLMChunk,
     LLMRequest,
     LLMResponse,
     Message,
     ModelInfo,
+    ServerToolCall,
     TestResult,
     ToolCall,
 )
+
+# Anthropic's native server-side web search tool. Documented at
+# https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
+_WEB_SEARCH_NATIVE_TYPE = "web_search_20250305"
+_WEB_SEARCH_NATIVE_NAME = "web_search"
+_WEB_SEARCH_DEFAULT_MAX_USES = 5
+
+# Maps Anthropic's `web_search_tool_result_error.error_code` values onto
+# the runtime's canonical `FailedSearch.error_kind`. `max_uses_exceeded`
+# is intentionally excluded: it signals the budget the runtime set was
+# reached server-side, not a failure, and should NOT trigger I-a rescue.
+_WEB_SEARCH_ERROR_KIND: dict[str, str] = {
+    "too_many_requests": "rate_limit",
+    "unavailable": "server_error",
+    "invalid_input": "unknown",
+}
+
+
+def _build_anthropic_tools(request: LLMRequest) -> list[dict] | None:
+    """Render request.tools into Anthropic's tools array. When
+    `web_search` is in `request.native_tools`, drop any function-tool
+    entry with the same name (guardrail G-6 defensive) and append the
+    native server-side block instead."""
+    native_web_search = "web_search" in request.native_tools
+    function_tools = request.tools or []
+    if native_web_search:
+        function_tools = [t for t in function_tools if t.name != _WEB_SEARCH_NATIVE_NAME]
+
+    payload_tools: list[dict] = [
+        {"name": t.name, "description": t.description, "input_schema": t.parameters}
+        for t in function_tools
+    ]
+    if native_web_search:
+        max_uses = request.web_search_max_uses or _WEB_SEARCH_DEFAULT_MAX_USES
+        payload_tools.append(
+            {"type": _WEB_SEARCH_NATIVE_TYPE, "name": _WEB_SEARCH_NATIVE_NAME, "max_uses": max_uses}
+        )
+    return payload_tools or None
+
+
+def _parse_anthropic_content(
+    content: list[dict],
+) -> tuple[
+    list[str],
+    list[ToolCall],
+    tuple[ServerToolCall, ...],
+    tuple[Citation, ...],
+    tuple[FailedSearch, ...],
+]:
+    """Walk a `/v1/messages` response's content blocks and split into
+    the five output channels:
+      * `text_parts`             plain text deltas, concatenated upstream
+      * `tool_calls`             standard function-tool invocations
+      * `server_tool_calls`      native server-side tool uses (telemetry only)
+      * `citations`              web_search_result blocks → Citation
+      * `server_tool_failures`   web_search_tool_result_error → FailedSearch
+
+    Pairs each `web_search_tool_result` (or its error) with the
+    `server_tool_use` block by `tool_use_id` so the failure's `query`
+    field can be reconstructed from the original input.
+    """
+    text_parts: list[str] = []
+    tool_calls: list[ToolCall] = []
+    server_tool_calls: list[ServerToolCall] = []
+    citations: list[Citation] = []
+    failures: list[FailedSearch] = []
+    # Pair-table: server_tool_use id → original input dict (carries `query`).
+    server_use_by_id: dict[str, dict] = {}
+    cit_counter = 0
+
+    for block in content:
+        btype = block.get("type")
+        if btype == "text":
+            text_parts.append(block.get("text", ""))
+        elif btype == "tool_use":
+            tool_calls.append(
+                ToolCall(
+                    id=block.get("id", ""),
+                    name=block.get("name", ""),
+                    arguments=block.get("input") or {},
+                )
+            )
+        elif btype == "server_tool_use":
+            server_input = block.get("input") or {}
+            server_use_by_id[block.get("id", "")] = server_input
+            server_tool_calls.append(
+                ServerToolCall(
+                    name=block.get("name", ""),
+                    arguments=server_input,
+                    turn_idx=0,
+                )
+            )
+        elif btype == "web_search_tool_result":
+            result_content = block.get("content")
+            paired_input = server_use_by_id.get(block.get("tool_use_id", ""), {})
+            if isinstance(result_content, dict) and (
+                result_content.get("type") == "web_search_tool_result_error"
+            ):
+                error_code = str(result_content.get("error_code", ""))
+                if error_code == "max_uses_exceeded":
+                    # Budget signal, not a failure. Don't rescue.
+                    continue
+                failures.append(
+                    FailedSearch(
+                        query=str(paired_input.get("query", "")),
+                        error_kind=_WEB_SEARCH_ERROR_KIND.get(error_code, "unknown"),
+                        error_message=error_code,
+                        turn_idx=0,
+                    )
+                )
+            elif isinstance(result_content, list):
+                for r in result_content:
+                    if r.get("type") != "web_search_result":
+                        continue
+                    cit_counter += 1
+                    citations.append(
+                        Citation(
+                            id=f"c{cit_counter}",
+                            kind="web",
+                            url=r.get("url"),
+                            title=r.get("title"),
+                            source="Anthropic Web Search",
+                            date=r.get("page_age"),
+                            snippet=r.get("encrypted_content"),
+                        )
+                    )
+        # Unknown block types are ignored — forward-compatible with
+        # future Anthropic content block additions.
+    return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
 
 _BASE_URL = "https://api.anthropic.com"
 _API_VERSION = "2023-06-01"
@@ -95,15 +227,9 @@ class AnthropicAdapter(LLMProvider):
             payload["system"] = _build_system_with_cache_control(request.system)
         if request.stop:
             payload["stop_sequences"] = request.stop
-        if request.tools:
-            payload["tools"] = [
-                {
-                    "name": t.name,
-                    "description": t.description,
-                    "input_schema": t.parameters,
-                }
-                for t in request.tools
-            ]
+        anthropic_tools = _build_anthropic_tools(request)
+        if anthropic_tools is not None:
+            payload["tools"] = anthropic_tools
         if request.tool_choice is not None:
             payload["tool_choice"] = request.tool_choice
 
@@ -123,20 +249,13 @@ class AnthropicAdapter(LLMProvider):
 
         body = await with_retries(_post)
 
-        text_parts: list[str] = []
-        tool_calls: list[ToolCall] = []
-        for block in body.get("content", []):
-            btype = block.get("type")
-            if btype == "text":
-                text_parts.append(block.get("text", ""))
-            elif btype == "tool_use":
-                tool_calls.append(
-                    ToolCall(
-                        id=block.get("id", ""),
-                        name=block.get("name", ""),
-                        arguments=block.get("input") or {},
-                    )
-                )
+        (
+            text_parts,
+            tool_calls,
+            server_tool_calls,
+            citations,
+            server_tool_failures,
+        ) = _parse_anthropic_content(body.get("content", []))
         usage = body.get("usage") or {}
         return LLMResponse(
             text="".join(text_parts),
@@ -144,6 +263,9 @@ class AnthropicAdapter(LLMProvider):
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
             tool_calls=tool_calls,
+            citations=citations,
+            server_tool_calls=server_tool_calls,
+            server_tool_failures=server_tool_failures,
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
@@ -158,15 +280,9 @@ class AnthropicAdapter(LLMProvider):
             payload["system"] = _build_system_with_cache_control(request.system)
         if request.stop:
             payload["stop_sequences"] = request.stop
-        if request.tools:
-            payload["tools"] = [
-                {
-                    "name": t.name,
-                    "description": t.description,
-                    "input_schema": t.parameters,
-                }
-                for t in request.tools
-            ]
+        anthropic_tools = _build_anthropic_tools(request)
+        if anthropic_tools is not None:
+            payload["tools"] = anthropic_tools
 
         async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
             try:

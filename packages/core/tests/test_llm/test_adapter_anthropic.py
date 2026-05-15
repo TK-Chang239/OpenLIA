@@ -209,3 +209,244 @@ async def test_stream_sends_stream_true_in_payload() -> None:
         async for _ in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
             pass
     assert captured["body"]["stream"] is True
+
+
+# ---------- Phase 1: native web_search (server-side tool) ----------
+
+
+def _ok_response(content: list[dict], stop_reason: str = "end_turn") -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "content": content,
+            "stop_reason": stop_reason,
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        },
+    )
+
+
+async def test_generate_appends_native_web_search_tool_block() -> None:
+    """When LLMRequest.native_tools contains 'web_search', the adapter
+    appends Anthropic's native server-side tool block alongside any
+    function-tools. The `max_uses` field carries the per-run budget
+    from the runtime."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return _ok_response([{"type": "text", "text": "ok"}])
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="recent NVDA news")],
+                native_tools=("web_search",),
+                web_search_max_uses=7,
+            )
+        )
+    body = json.loads(captured["payload"])
+    assert body["tools"] == [
+        {"type": "web_search_20250305", "name": "web_search", "max_uses": 7}
+    ]
+
+
+async def test_generate_uses_default_max_uses_when_unspecified() -> None:
+    """`web_search_max_uses=None` defaults to 5 on the native block.
+    Conservative default keeps server-side cost bounded when the
+    runtime omits the budget."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return _ok_response([{"type": "text", "text": "ok"}])
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    body = json.loads(captured["payload"])
+    assert body["tools"][0]["max_uses"] == 5
+
+
+async def test_generate_omits_generic_web_search_envelope_when_native() -> None:
+    """Defensive: even if a ToolSchema named 'web_search' leaks into
+    request.tools, the adapter drops it and ships only the native form.
+    Guardrail G-6 at adapter level."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["payload"] = request.read()
+        return _ok_response([{"type": "text", "text": "ok"}])
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="web_search",
+                        description="generic",
+                        parameters={"type": "object"},
+                    ),
+                    ToolSchema(
+                        name="submit_report",
+                        description="submit",
+                        parameters={"type": "object"},
+                    ),
+                ],
+                native_tools=("web_search",),
+            )
+        )
+    body = json.loads(captured["payload"])
+    names = [t.get("name") for t in body["tools"]]
+    # Only one entry named web_search, and it's the native form.
+    assert names.count("web_search") == 1
+    web_search_entry = next(t for t in body["tools"] if t["name"] == "web_search")
+    assert web_search_entry.get("type") == "web_search_20250305"
+    assert "submit_report" in names
+
+
+async def test_generate_records_server_tool_use_separately_from_tool_calls() -> None:
+    """server_tool_use blocks (Anthropic's marker for native search
+    invocations) populate LLMResponse.server_tool_calls. Regular
+    function tool_use blocks still flow through tool_calls. The two
+    never mix."""
+    adapter = _adapter()
+    content = [
+        {
+            "type": "server_tool_use",
+            "id": "srvtoolu_01",
+            "name": "web_search",
+            "input": {"query": "NVDA recent news"},
+        },
+        {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_01",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "url": "https://reuters.com/nvda",
+                    "title": "NVDA jumps on AI capex",
+                    "page_age": "2 days",
+                }
+            ],
+        },
+        {"type": "text", "text": "NVDA rallied this week."},
+        {
+            "type": "tool_use",
+            "id": "toolu_99",
+            "name": "submit_report",
+            "input": {"ok": True},
+        },
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=_ok_response(content, stop_reason="tool_use")
+        )
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    assert [c.name for c in resp.tool_calls] == ["submit_report"]
+    assert len(resp.server_tool_calls) == 1
+    assert resp.server_tool_calls[0].name == "web_search"
+    assert resp.server_tool_calls[0].arguments == {"query": "NVDA recent news"}
+
+
+async def test_generate_extracts_citations_from_web_search_results() -> None:
+    """Each web_search_result inside web_search_tool_result.content
+    becomes a Citation(kind="web", source="Anthropic Web Search") on
+    LLMResponse.citations. Available downstream for the report
+    schema's citations slot."""
+    adapter = _adapter()
+    content = [
+        {
+            "type": "server_tool_use",
+            "id": "srv1",
+            "name": "web_search",
+            "input": {"query": "q"},
+        },
+        {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srv1",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "url": "https://reuters.com/a",
+                    "title": "Reuters article",
+                    "page_age": "1 day",
+                },
+                {
+                    "type": "web_search_result",
+                    "url": "https://ft.com/b",
+                    "title": "FT report",
+                    "page_age": "3 days",
+                },
+            ],
+        },
+        {"type": "text", "text": "Two findings."},
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=_ok_response(content)
+        )
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    urls = [c.url for c in resp.citations]
+    assert "https://reuters.com/a" in urls
+    assert "https://ft.com/b" in urls
+    assert all(c.kind == "web" for c in resp.citations)
+    assert all(c.source == "Anthropic Web Search" for c in resp.citations)
+
+
+async def test_generate_detects_web_search_tool_result_error_as_failed_search() -> None:
+    """A web_search_tool_result whose content is a
+    web_search_tool_result_error becomes a FailedSearch on
+    LLMResponse.server_tool_failures. The runtime's I-a rescue path
+    (Phase 0) consumes this to re-route to the configured adapter."""
+    adapter = _adapter()
+    content = [
+        {
+            "type": "server_tool_use",
+            "id": "srv1",
+            "name": "web_search",
+            "input": {"query": "blocked query"},
+        },
+        {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srv1",
+            "content": {
+                "type": "web_search_tool_result_error",
+                "error_code": "too_many_requests",
+            },
+        },
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=_ok_response(content)
+        )
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    assert len(resp.server_tool_failures) == 1
+    f = resp.server_tool_failures[0]
+    assert f.query == "blocked query"
+    assert f.error_kind == "rate_limit"
