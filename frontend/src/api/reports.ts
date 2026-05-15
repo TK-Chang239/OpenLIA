@@ -14,6 +14,7 @@ export interface Metric {
   context?: string | null;
   tag?: Tag | null;
   highlight?: boolean;
+  source_ids?: string[];
 }
 
 export interface ReportCover {
@@ -84,13 +85,18 @@ export type FormatRule =
   | 'tag-info';
 
 export interface TextBlock { type: 'text'; content: string; }
-export interface KeyFindingBlock { type: 'key_finding'; content: string; }
+export interface KeyFindingBlock {
+  type: 'key_finding';
+  content: string;
+  source_ids?: string[];
+}
 export interface PullQuoteBlock {
   type: 'pull_quote';
   text: string;
   attribution?: string | null;
   source?: string | null;
   timestamp?: string | null;
+  source_ids?: string[];
 }
 export interface RatingBadgeBlock {
   type: 'rating_badge';
@@ -164,6 +170,7 @@ export interface QuoteBlock {
   role?: string | null;
   tag?: Tag | null;
   timestamp?: string | null;
+  source_ids?: string[];
 }
 
 // Charts (kept loose — existing chart renderers consume the raw shapes).

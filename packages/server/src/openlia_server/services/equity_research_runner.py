@@ -84,6 +84,7 @@ class EquityResearchRunner:
             length=_LENGTH_MAP.get(active.report_length, "standard"),
             user_template_text=active.template_text,
             user_template_name=active.template_name,
+            web_search_budget_override=active.web_search_budget,
         )
 
         last_complete: ReportComplete | None = None

@@ -129,6 +129,110 @@ describe("useReportStream", () => {
     expect((init.headers as Record<string, string>)["content-type"]).toBeUndefined();
   });
 
+  it("report.tool_call.start inserts a running chip with call_id, tool_name, args_preview", async () => {
+    const body =
+      sseFrame("report.start", {
+        report_id: "r_1",
+        department: "equity_research",
+        mode: "stock_initiation",
+        section_titles: [],
+      }) +
+      sseFrame("report.tool_call.start", {
+        report_id: "r_1",
+        call_id: "c1",
+        tool_name: "search_news",
+        args_preview: '{"query":"AAPL"}',
+      });
+
+    vi.stubGlobal("fetch", mockFetchStream(body));
+    const { result } = renderHook(() => useReportStream());
+    act(() => {
+      result.current.start({ url: "/api/x", body: {} });
+    });
+
+    await waitFor(() =>
+      expect(result.current.state.toolCalls).toHaveLength(1),
+    );
+    expect(result.current.state.toolCalls[0]).toMatchObject({
+      callId: "c1",
+      toolName: "search_news",
+      argsPreview: '{"query":"AAPL"}',
+      status: "running",
+    });
+  });
+
+  it("report.tool_call matches the prior .start by call_id and flips status to done", async () => {
+    const body =
+      sseFrame("report.start", {
+        report_id: "r_1",
+        department: "equity_research",
+        mode: "stock_initiation",
+        section_titles: [],
+      }) +
+      sseFrame("report.tool_call.start", {
+        report_id: "r_1",
+        call_id: "c1",
+        tool_name: "search_news",
+        args_preview: '{"q":"AAPL"}',
+      }) +
+      sseFrame("report.tool_call", {
+        report_id: "r_1",
+        call_id: "c1",
+        tool_name: "search_news",
+        summary: "3 results",
+      });
+
+    vi.stubGlobal("fetch", mockFetchStream(body));
+    const { result } = renderHook(() => useReportStream());
+    act(() => {
+      result.current.start({ url: "/api/x", body: {} });
+    });
+
+    await waitFor(() =>
+      expect(result.current.state.toolCalls[0]?.status).toBe("done"),
+    );
+    expect(result.current.state.toolCalls).toHaveLength(1);
+    expect(result.current.state.toolCalls[0]).toMatchObject({
+      callId: "c1",
+      toolName: "search_news",
+      argsPreview: '{"q":"AAPL"}',
+      status: "done",
+      summary: "3 results",
+    });
+  });
+
+  it("orphan report.tool_call (no prior .start) appends a done chip", async () => {
+    const body =
+      sseFrame("report.start", {
+        report_id: "r_1",
+        department: "equity_research",
+        mode: "stock_initiation",
+        section_titles: [],
+      }) +
+      sseFrame("report.tool_call", {
+        report_id: "r_1",
+        call_id: "c_orphan",
+        tool_name: "fetch_quote",
+        summary: "AAPL 198.4",
+      });
+
+    vi.stubGlobal("fetch", mockFetchStream(body));
+    const { result } = renderHook(() => useReportStream());
+    act(() => {
+      result.current.start({ url: "/api/x", body: {} });
+    });
+
+    await waitFor(() =>
+      expect(result.current.state.toolCalls).toHaveLength(1),
+    );
+    expect(result.current.state.toolCalls[0]).toMatchObject({
+      callId: "c_orphan",
+      toolName: "fetch_quote",
+      status: "done",
+      summary: "AAPL 198.4",
+    });
+  });
+
   it("section.start / section.complete drive section state (NEW-14-06)", async () => {
     const body =
       sseFrame("report.start", {

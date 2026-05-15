@@ -32,6 +32,7 @@ describe("equity-research api", () => {
         stock_update: "default",
         sector_research: "default",
       },
+      web_search_budgets_by_mode: {},
     };
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

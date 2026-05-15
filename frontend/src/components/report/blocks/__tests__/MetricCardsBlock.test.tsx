@@ -18,6 +18,20 @@ describe('MetricCardsBlock', () => {
     expect(screen.getAllByText(/\+\d/)).toHaveLength(2);
   });
 
+  it('renders inline citation refs next to metric values', () => {
+    render(
+      <MetricCardsBlock
+        type="metric_cards"
+        metrics={[
+          { label: 'Revenue', value: '$124.3B', source_ids: ['1'] },
+        ]}
+      />,
+    );
+    const link = screen.getByRole('link', { name: 'Source 1' });
+    expect(link).toHaveAttribute('href', '#cite-1');
+    expect(link).toHaveTextContent('[1]');
+  });
+
   it('applies positive and negative delta classes', () => {
     const { container } = render(
       <MetricCardsBlock
