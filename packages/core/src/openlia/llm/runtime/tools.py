@@ -163,8 +163,15 @@ _READ_PAYLOAD_SCHEMA = ToolSchema(
             "path": {
                 "type": "string",
                 "description": (
-                    "Optional path. Forms: key, key.subkey, rows[i], rows[i:j], "
-                    "rows.column. Composable. Omit for entire payload."
+                    "Optional path. Five forms only: key | key.subkey | rows[i] | "
+                    "rows[i:j] | rows.column. Composable: rows[0:5].close. "
+                    "Negative indices allowed: rows[-1]. Omit for entire payload. "
+                    "Valid examples: 'financials.income.revenue', "
+                    "'data.rows[0:10].close', 'rows[-1].date'. "
+                    "INVALID — do NOT use: '$.rows[*]' (no JSONPath root or "
+                    "wildcards), \"rows['date']\" (no bracket-strings — use "
+                    "rows.date), 'rows[?(@.x>0)]' (no filter predicates), "
+                    "'rows[0,2]' (no multi-index)."
                 ),
             },
         },
