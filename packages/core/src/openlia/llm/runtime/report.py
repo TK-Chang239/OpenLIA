@@ -468,6 +468,17 @@ def _coerce_table_headers(block: dict[str, Any]) -> None:
     block["headers"] = fixed
 
 
+def _coerce_combo_series(series: Any) -> None:
+    """combo_chart series schema requires ``values``; LLM drift commonly ships
+    ``data`` (the line/area-chart key) instead. Rename so strict validation
+    accepts the payload."""
+    if not isinstance(series, list):
+        return
+    for s in series:
+        if isinstance(s, dict) and "values" not in s and isinstance(s.get("data"), list):
+            s["values"] = s.pop("data")
+
+
 def _coerce_blocks(blocks: Any) -> None:
     if not isinstance(blocks, list):
         return
@@ -483,6 +494,9 @@ def _coerce_blocks(blocks: Any) -> None:
             _coerce_table_headers(block)
         elif btype in _CHART_BLOCK_TYPES:
             _coerce_chart_options(block)
+            if btype == "combo_chart":
+                _coerce_combo_series(block.get("bar_series"))
+                _coerce_combo_series(block.get("line_series"))
 
 
 def _extract_json_object(text: str) -> str:

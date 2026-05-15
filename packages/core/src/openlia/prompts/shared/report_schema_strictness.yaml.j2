@@ -21,6 +21,11 @@ Report payload strictness:
   `{height, show_legend, show_grid}`. No `note`, no `caption`, no `subtitle`
   inside options — put commentary in the chart `title` or an adjacent
   `text` block.
+- `combo_chart.bar_series` and `combo_chart.line_series` items must be shaped
+  `{"name": str, "values": [float, ...]}` (one value per `categories` entry).
+  Do NOT use `data` for these series — that key is reserved for
+  line_chart/area_chart/scatter_plot, whose series carry `{x, y}` points.
+  Example: `"bar_series": [{"name": "Revenue", "values": [3.2, 5.0, 7.2]}]`.
 - Table `headers` must be a list of objects shaped `{key, label}` (with
   optional `align`, `sortable`, `sparkline`). Plain strings are rejected.
   Example: `[{"key": "ticker", "label": "Ticker"}, {"key": "price", "label": "Price", "align": "right"}]`.

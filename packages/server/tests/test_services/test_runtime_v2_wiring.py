@@ -166,6 +166,13 @@ def test_refreshing_report_runner_forwards_disabled_ids(monkeypatch) -> None:
 
     monkeypatch.setattr(svc, "SQLModelRegistry", _NoopRegistry)
 
+    from openlia.llm.exceptions import ModelNotConfiguredError
+
+    def _raise_unconfigured(**_kwargs):
+        raise ModelNotConfiguredError(slot_kind="department", slot_id="equity_research")
+
+    monkeypatch.setattr(svc, "resolve", _raise_unconfigured)
+
     class _SpySession:
         def __init__(self) -> None:
             self.closed = False
