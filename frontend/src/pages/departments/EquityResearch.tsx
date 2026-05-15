@@ -75,7 +75,7 @@ function parseTickerCompany(
 }
 
 export default function EquityResearch(): JSX.Element {
-  const { config, loading, patch } = useErConfig();
+  const { config, patch } = useErConfig();
   const { user } = useAuth();
   const fileViewer = useFileViewer();
 
@@ -446,10 +446,6 @@ export default function EquityResearch(): JSX.Element {
     ],
   );
 
-  if (loading || !config) {
-    return <PageSkeleton />;
-  }
-
   const { ticker, company } = parseTickerCompany(schema?.cover ?? null);
   const placeholder = sessionId
     ? "Ask a follow-up question about the company, sector, or report…"
@@ -650,24 +646,5 @@ function HistoricalMessage({ message }: { message: ChatMessage }): JSX.Element {
         departmentId="equity_research"
       />
     </>
-  );
-}
-
-function PageSkeleton(): JSX.Element {
-  return (
-    <div className="flex h-full flex-col bg-[--color-bg-base]">
-      <header className="flex h-[52px] flex-shrink-0 items-center border-b border-[--color-border-subtle] px-6">
-        <div
-          className="h-5 w-40 animate-pulse rounded bg-[--color-border-subtle]"
-          aria-hidden="true"
-        />
-      </header>
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
-        <div className="space-y-3 text-center">
-          <div className="mx-auto h-7 w-56 animate-pulse rounded bg-[--color-border-subtle]" />
-          <div className="mx-auto h-4 w-72 animate-pulse rounded bg-[--color-border-subtle]" />
-        </div>
-      </div>
-    </div>
   );
 }

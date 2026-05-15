@@ -41,6 +41,30 @@ export const WEB_SEARCH_BUDGET_DEFAULTS: Record<ReportMode, number> = {
   sector_research: 15,
 };
 
+// Safe defaults used as initial config state so the page can paint its
+// welcome view on the first frame without waiting for the GET round-trip.
+// The real server config replaces this in place as soon as it arrives.
+export const ER_CONFIG_DEFAULTS: ErConfig = {
+  report_mode: "stock_initiation",
+  report_length: "normal",
+  sections_by_mode: {
+    stock_initiation: [],
+    stock_update: [],
+    sector_research: [],
+  },
+  custom_sections_by_mode: {
+    stock_initiation: [],
+    stock_update: [],
+    sector_research: [],
+  },
+  selected_template_id_by_mode: {
+    stock_initiation: "default",
+    stock_update: "default",
+    sector_research: "default",
+  },
+  web_search_budgets_by_mode: {},
+};
+
 export interface ErTemplate {
   id: string;
   owner_scope: TemplateOwnerScope;

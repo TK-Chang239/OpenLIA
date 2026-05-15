@@ -20,6 +20,10 @@ vi.mock("../../auth/AuthContext", () => ({
   }),
 }));
 
+const erConfigMockState = {
+  loading: false,
+};
+
 vi.mock("../../hooks/useErConfig", () => ({
   useErConfig: () => ({
     config: {
@@ -36,7 +40,7 @@ vi.mock("../../hooks/useErConfig", () => ({
         sector_research: [],
       },
     },
-    loading: false,
+    loading: erConfigMockState.loading,
     patch: vi.fn().mockResolvedValue(undefined),
   }),
 }));
@@ -125,6 +129,21 @@ describe("EquityResearchPage", () => {
   it("renders the welcome stage when no session is active", () => {
     renderPage();
     expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
+  });
+
+  it("paints the welcome stage on the first frame even while the config fetch is still pending — no full-page skeleton flash", () => {
+    erConfigMockState.loading = true;
+    try {
+      renderPage();
+      // Welcome view is the first thing the user sees, not a placeholder.
+      expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
+      // The composer is mounted too — the page shell is fully usable.
+      expect(
+        screen.getByPlaceholderText(/Enter a ticker/i),
+      ).toBeInTheDocument();
+    } finally {
+      erConfigMockState.loading = false;
+    }
   });
 
   it("pre-fills the input from the ?ticker= query param (NEW-21-09)", () => {
