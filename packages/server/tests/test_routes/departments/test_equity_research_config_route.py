@@ -8,7 +8,7 @@ def test_get_config_returns_defaults(company_client, auth_user):
     assert body["report_mode"] == "stock_initiation"
     assert body["report_length"] == "normal"
     assert "stock_initiation" in body["sections_by_mode"]
-    assert len(body["sections_by_mode"]["stock_initiation"]) == 13
+    assert len(body["sections_by_mode"]["stock_initiation"]) == 14
 
 
 def test_put_config_partial_update_length_only(company_client, auth_user):
