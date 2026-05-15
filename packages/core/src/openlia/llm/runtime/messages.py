@@ -76,6 +76,15 @@ class ReportRequest:
     reference_portfolio: list[dict[str, Any]] | None = None
     user_template_text: str | None = None
     user_template_name: str | None = None
+    # Per-report override for the web-search budget. ``None`` means the
+    # runner resolves from the framework default (and falls back to the
+    # global 8 if the framework didn't declare one). See
+    # ``_resolve_search_budget`` in ``llm.runtime.report``.
+    web_search_budget_override: int | None = None
+    # Phase 6: when True, uncited concrete claims become validation
+    # errors and trigger the strict-validation retry loop. Default False
+    # keeps the warn-only path.
+    citations_strict: bool = False
 
     def __post_init__(self) -> None:
         if self.length not in _ALLOWED_LENGTHS:

@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from openlia.connectors.dispatch import Dispatcher
+from openlia.connectors.serialization import to_jsonable
 from openlia.llm.runtime.expand_ranking import rank_candidates
 
 log = logging.getLogger(__name__)
@@ -40,9 +41,15 @@ class ReportDispatcherBridge:
     async def dispatch_requirement(
         self, *, tool_name: str, arguments: dict[str, Any]
     ) -> dict[str, Any]:
-        """Pass-through to v2 dispatcher; coerce non-dict results."""
-        payload = await self.dispatcher.dispatch_tool_use(tool_name, arguments)
-        return payload if isinstance(payload, dict) else {"value": payload}
+        """Pass-through to v2 dispatcher; coerce non-dict results.
+
+        Runs the result through `to_jsonable` so non-JSON SDK return types
+        (firecrawl-py ExtractResponse/SearchData, other pydantic models,
+        dataclasses, datetimes) survive the downstream `json.dumps` when
+        the runtime serializes the tool result for the LLM."""
+        raw = await self.dispatcher.dispatch_tool_use(tool_name, arguments)
+        coerced = to_jsonable(raw)
+        return coerced if isinstance(coerced, dict) else {"value": coerced}
 
     async def available_categories(self) -> list[str]:
         """Return sorted distinct categories from validated connectors,

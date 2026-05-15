@@ -20,15 +20,38 @@ const R = 44;
 
 export function ComboChartBlock({
   title,
-  categories,
-  bar_series,
-  line_series,
+  categories: rawCategories,
+  bar_series: rawBarSeries,
+  line_series: rawLineSeries,
   y_left_label,
   y_right_label,
   options,
 }: ComboChartBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
+
+  // LLM drift sometimes ships a series with ``data`` instead of ``values`` (the
+  // key used by line/area charts). Coerce to a uniform shape so a single bad
+  // series cannot crash the whole report view.
+  const categories = useMemo<string[]>(
+    () => (Array.isArray(rawCategories) ? rawCategories : []),
+    [rawCategories],
+  );
+  const normalizeSeries = (raw: unknown): ComboSeries[] =>
+    (Array.isArray(raw) ? raw : []).map((s) => {
+      const obj = (s ?? {}) as { name?: unknown; values?: unknown; data?: unknown };
+      const values = Array.isArray(obj.values)
+        ? obj.values
+        : Array.isArray(obj.data)
+          ? obj.data
+          : [];
+      return {
+        name: typeof obj.name === 'string' ? obj.name : '',
+        values: (values as unknown[]).map((v) => (typeof v === 'number' ? v : 0)),
+      };
+    });
+  const bar_series = useMemo<ComboSeries[]>(() => normalizeSeries(rawBarSeries), [rawBarSeries]);
+  const line_series = useMemo<ComboSeries[]>(() => normalizeSeries(rawLineSeries), [rawLineSeries]);
 
   const chart = useMemo(() => {
     if (categories.length === 0) return null;

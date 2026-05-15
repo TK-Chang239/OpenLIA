@@ -1,8 +1,11 @@
+import { CitationRefs } from '../CitationRefs';
+
 export interface Metric {
   label: string;
   value: string;
   delta?: string;
   delta_direction?: 'up' | 'down' | 'flat';
+  source_ids?: string[];
 }
 
 export interface MetricCardsBlockProps {
@@ -22,10 +25,14 @@ export function MetricCardsBlock({ metrics }: MetricCardsBlockProps) {
       {metrics.map((m) => (
         <div key={m.label} className="metric-card">
           <div className="metric-card__label">{m.label}</div>
-          <div className="metric-card__value">{m.value}</div>
+          <div className="metric-card__value">
+            {m.value}
+            {!m.delta ? <CitationRefs ids={m.source_ids} /> : null}
+          </div>
           {m.delta ? (
             <div className={`metric-card__delta ${deltaClass(m.delta_direction)}`}>
               {m.delta}
+              <CitationRefs ids={m.source_ids} />
             </div>
           ) : null}
         </div>

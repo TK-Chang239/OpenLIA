@@ -55,6 +55,9 @@ class ErConfigPatch(BaseModel):
     sections_by_mode: dict[str, list[str]] | None = None
     custom_sections_by_mode: dict[str, list[CustomSectionPayload]] | None = None
     selected_template_id_by_mode: dict[str, str] | None = None
+    # Phase 5f: per-mode web search budget override. Absent modes fall
+    # back to the framework default at the runtime layer.
+    web_search_budgets_by_mode: dict[str, int] | None = None
 
 
 class TemplatePatch(BaseModel):
@@ -89,6 +92,7 @@ def _serialize(cfg) -> dict:
             for mode, customs in cfg.custom_sections_by_mode.items()
         },
         "selected_template_id_by_mode": dict(cfg.selected_template_id_by_mode),
+        "web_search_budgets_by_mode": dict(cfg.web_search_budgets_by_mode),
     }
 
 
@@ -152,6 +156,7 @@ def build_equity_research_router(
                     else None
                 ),
                 selected_template_id_by_mode=patch.selected_template_id_by_mode,
+                web_search_budgets_by_mode=patch.web_search_budgets_by_mode,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
