@@ -46,6 +46,7 @@ const baseConfig: ErConfig = {
     stock_update: "default",
     sector_research: "default",
   },
+  web_search_budgets_by_mode: {},
 };
 
 describe("ReportSettingsModal", () => {
@@ -126,5 +127,102 @@ describe("ReportSettingsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /save settings/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0].report_length).toBe("elaborative");
+  });
+
+  it("renders empty budget inputs with framework defaults as placeholders", () => {
+    render(
+      <ReportSettingsModal
+        open
+        config={baseConfig}
+        onClose={() => {}}
+        onSave={async () => {}}
+      />,
+    );
+    const init = screen.getByLabelText(
+      "Web search budget for Stock Initiation",
+    ) as HTMLInputElement;
+    expect(init.value).toBe("");
+    expect(init.placeholder).toBe("10");
+    const update = screen.getByLabelText(
+      "Web search budget for Stock Update",
+    ) as HTMLInputElement;
+    expect(update.placeholder).toBe("5");
+    const sector = screen.getByLabelText(
+      "Web search budget for Sector Research",
+    ) as HTMLInputElement;
+    expect(sector.placeholder).toBe("15");
+  });
+
+  it("pre-fills budget inputs from existing overrides", () => {
+    const cfg: ErConfig = {
+      ...baseConfig,
+      web_search_budgets_by_mode: { stock_initiation: 12, stock_update: 3 },
+    };
+    render(
+      <ReportSettingsModal
+        open
+        config={cfg}
+        onClose={() => {}}
+        onSave={async () => {}}
+      />,
+    );
+    expect(
+      (screen.getByLabelText(
+        "Web search budget for Stock Initiation",
+      ) as HTMLInputElement).value,
+    ).toBe("12");
+    expect(
+      (screen.getByLabelText(
+        "Web search budget for Stock Update",
+      ) as HTMLInputElement).value,
+    ).toBe("3");
+    // Sector Research: no override → empty.
+    expect(
+      (screen.getByLabelText(
+        "Web search budget for Sector Research",
+      ) as HTMLInputElement).value,
+    ).toBe("");
+  });
+
+  it("entering a budget and saving sends it in the patch (positive ints only, empties dropped)", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ReportSettingsModal
+        open
+        config={baseConfig}
+        onClose={() => {}}
+        onSave={onSave}
+      />,
+    );
+    fireEvent.change(
+      screen.getByLabelText("Web search budget for Stock Initiation"),
+      { target: { value: "7" } },
+    );
+    // Stock Update left blank → not sent (use framework default).
+    fireEvent.click(screen.getByRole("button", { name: /save settings/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    const patch = onSave.mock.calls[0][0];
+    expect(patch.web_search_budgets_by_mode).toEqual({ stock_initiation: 7 });
+  });
+
+  it("rejects non-digit characters at the input boundary", () => {
+    render(
+      <ReportSettingsModal
+        open
+        config={baseConfig}
+        onClose={() => {}}
+        onSave={async () => {}}
+      />,
+    );
+    const input = screen.getByLabelText(
+      "Web search budget for Stock Initiation",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "abc" } });
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "12" } });
+    expect(input.value).toBe("12");
+    fireEvent.change(input, { target: { value: "12x" } });
+    // Invalid keystroke ignored — value stays "12".
+    expect(input.value).toBe("12");
   });
 });

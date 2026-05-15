@@ -488,7 +488,7 @@ function ProgressPanel({
 }: {
   phase: string | null;
   sections: { id: string; title: string; status: string }[];
-  toolCalls: { tool: string; summary: string }[];
+  toolCalls: { toolName: string }[];
 }) {
   const phaseLabel =
     phase === "fetching_data"
@@ -552,14 +552,14 @@ function ProgressPanel({
         <div className="flex flex-wrap gap-1.5">
           {toolCalls.slice(-4).map((t, i) => (
             <span
-              key={`${t.tool}-${i}`}
+              key={`${t.toolName}-${i}`}
               className="inline-flex items-center px-2 py-0.5 rounded font-mono text-[10px] tracking-[0.04em] uppercase"
               style={{
                 background: "var(--color-surface-active)",
                 color: "var(--color-text-secondary)",
               }}
             >
-              {t.tool}
+              {t.toolName}
             </span>
           ))}
         </div>

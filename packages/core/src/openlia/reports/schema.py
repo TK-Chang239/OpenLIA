@@ -42,6 +42,10 @@ class Metric(_Strict):
     context: str | None = None
     tag: Tag | None = None
     highlight: bool = False
+    # IDs of entries in ReportSchema.citations supporting this metric's
+    # value/delta. Empty list = uncited; the Phase 5d validator emits a
+    # warning for value-bearing slots that ship without sources.
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class ChartOptions(_Strict):
@@ -85,6 +89,7 @@ class MetricCardsBlock(_Strict):
 class KeyFindingBlock(_Strict):
     type: Literal["key_finding"]
     content: str
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class RatingBadgeBlock(_Strict):
@@ -104,6 +109,7 @@ class PullQuoteBlock(_Strict):
     attribution: str | None = None
     source: str | None = None
     timestamp: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class CalloutItem(_Strict):
@@ -172,6 +178,7 @@ class QuoteBlock(_Strict):
     role: str | None = None
     tag: Tag | None = None
     timestamp: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
 
 
 class LineChartBlock(_Strict):
@@ -279,12 +286,17 @@ class TreemapBlock(_Strict):
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
+class ComboSeries(_Strict):
+    name: str
+    values: Annotated[list[float], Field(min_length=1)]
+
+
 class ComboChartBlock(_Strict):
     type: Literal["combo_chart"]
     title: str
     categories: Annotated[list[str], Field(min_length=1)]
-    bar_series: Annotated[list[dict[str, Any]], Field(min_length=1)]
-    line_series: Annotated[list[dict[str, Any]], Field(min_length=1)]
+    bar_series: Annotated[list[ComboSeries], Field(min_length=1)]
+    line_series: Annotated[list[ComboSeries], Field(min_length=1)]
     y_left_label: str | None = None
     y_right_label: str | None = None
     options: ChartOptions = Field(default_factory=ChartOptions)

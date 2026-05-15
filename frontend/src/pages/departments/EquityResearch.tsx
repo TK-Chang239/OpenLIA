@@ -99,7 +99,7 @@ function parseTickerCompany(
 }
 
 export default function EquityResearch(): JSX.Element {
-  const { config, loading, patch } = useErConfig();
+  const { config, patch } = useErConfig();
   const { user } = useAuth();
   const fileViewer = useFileViewer();
 
@@ -480,19 +480,16 @@ export default function EquityResearch(): JSX.Element {
 
   const autoscrollKey = useMemo(
     () =>
-      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${schema ? "s" : "_"}`,
+      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${reportState.toolCalls.length}:${schema ? "s" : "_"}`,
     [
       history.length,
       chatStream.state.message.length,
       chatStream.state.toolCalls.length,
       reportState.status,
+      reportState.toolCalls.length,
       schema,
     ],
   );
-
-  if (loading || !config) {
-    return <PageSkeleton />;
-  }
 
   const { ticker, company } = parseTickerCompany(schema?.cover ?? null);
   const placeholder = sessionId
@@ -517,11 +514,31 @@ export default function EquityResearch(): JSX.Element {
               ))}
 
               {isReportStreaming ? (
-                <ReportProgressIndicator
-                  startedAt={genStartedAt}
-                  mode={config.report_mode}
-                  subject={subject || sessionTitle || ""}
-                />
+                <>
+                  <ReportProgressIndicator
+                    startedAt={genStartedAt}
+                    mode={config.report_mode}
+                    subject={subject || sessionTitle || ""}
+                  />
+                  {reportState.toolCalls.length > 0 ? (
+                    <div
+                      data-testid="er-report-tool-chips"
+                      className="flex flex-wrap gap-2"
+                    >
+                      {reportState.toolCalls.map((c, i) => (
+                        <ToolCallChip
+                          key={c.callId || `rt-${i}`}
+                          toolName={c.toolName}
+                          argsPreview={c.argsPreview}
+                          status={c.status}
+                          summary={c.summary}
+                          structured={null}
+                          index={i}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
               {reportState.status === "error" ? (
@@ -677,21 +694,3 @@ function HistoricalMessage({ message }: { message: ChatMessage }): JSX.Element {
   );
 }
 
-function PageSkeleton(): JSX.Element {
-  return (
-    <div className="flex h-full flex-col bg-[--color-bg-base]">
-      <header className="flex h-[52px] flex-shrink-0 items-center border-b border-[--color-border-subtle] px-6">
-        <div
-          className="h-5 w-40 animate-pulse rounded bg-[--color-border-subtle]"
-          aria-hidden="true"
-        />
-      </header>
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
-        <div className="space-y-3 text-center">
-          <div className="mx-auto h-7 w-56 animate-pulse rounded bg-[--color-border-subtle]" />
-          <div className="mx-auto h-4 w-72 animate-pulse rounded bg-[--color-border-subtle]" />
-        </div>
-      </div>
-    </div>
-  );
-}

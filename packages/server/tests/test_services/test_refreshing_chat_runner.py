@@ -82,9 +82,16 @@ def _fake_inner(monkeypatch):
 
     monkeypatch.setattr(
         svc,
-        "_resolve_configured_search",
-        lambda db: WebSearchResolution(available=False, variant=None, adapter=None),
+        "_resolve_web_search_for",
+        lambda *, resolved: WebSearchResolution(available=False, variant=None, adapter=None),
     )
+
+    from openlia.llm.exceptions import ModelNotConfiguredError
+
+    def _raise_unconfigured(**_kwargs):
+        raise ModelNotConfiguredError(slot_kind="department", slot_id="secretary")
+
+    monkeypatch.setattr(svc, "resolve", _raise_unconfigured)
 
 
 @pytest.mark.asyncio

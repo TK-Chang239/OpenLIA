@@ -123,8 +123,8 @@ def test_render_block_chart_emits_title_for_every_chart_type():
             "combo_chart",
             {
                 "categories": ["a"],
-                "bar_series": [{"name": "b", "data": [1]}],
-                "line_series": [{"name": "l", "data": [1]}],
+                "bar_series": [{"name": "b", "values": [1]}],
+                "line_series": [{"name": "l", "values": [1]}],
             },
         ),
     ]:

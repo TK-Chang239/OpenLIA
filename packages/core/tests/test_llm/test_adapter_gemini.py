@@ -226,3 +226,317 @@ async def test_stream_yields_text_deltas_and_terminal_finish_reason() -> None:
             chunks.append(c)
     assert "".join(c.delta for c in chunks) == "Hi!"
     assert chunks[-1].finish_reason == "STOP"
+
+
+# ---------- Phase 2: native Grounding with Google Search ----------
+
+
+def _gemini_ok(content_text: str, *, grounding_metadata: dict | None = None) -> httpx.Response:
+    candidate: dict = {
+        "content": {"parts": [{"text": content_text}]},
+        "finishReason": "STOP",
+    }
+    if grounding_metadata is not None:
+        candidate["groundingMetadata"] = grounding_metadata
+    return httpx.Response(
+        200,
+        json={
+            "candidates": [candidate],
+            "usageMetadata": {"promptTokenCount": 1, "candidatesTokenCount": 1},
+        },
+    )
+
+
+async def test_generate_appends_google_search_tool_when_native() -> None:
+    """When LLMRequest.native_tools contains 'web_search', Gemini's
+    native grounding tool `{"google_search": {}}` is appended to
+    `tools`. Function tools and the native tool live in the same
+    array (Gemini packs both under the single Tool union)."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="recent NVDA news")],
+                native_tools=("web_search",),
+            )
+        )
+    assert {"google_search": {}} in captured["body"]["tools"]
+
+
+async def test_generate_combines_function_tools_with_google_search() -> None:
+    """Function tools (rendered as a `functionDeclarations` entry) and
+    the native `google_search` tool coexist in the same `tools` array.
+    Gemini's API tolerates both styles in one request."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="get_stock_quote",
+                        description="quote",
+                        parameters={"type": "object"},
+                    ),
+                ],
+                native_tools=("web_search",),
+            )
+        )
+    tools = captured["body"]["tools"]
+    assert {"google_search": {}} in tools
+    fn_decls = next(t["functionDeclarations"] for t in tools if "functionDeclarations" in t)
+    assert any(d["name"] == "get_stock_quote" for d in fn_decls)
+
+
+async def test_generate_omits_google_search_when_no_native_tools() -> None:
+    """Regression guard: without native_tools, the payload never
+    contains `{"google_search": {}}`. Today's behavior, pinned to
+    catch future changes that flip the default."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert "tools" not in captured["body"] or all(
+        "google_search" not in t for t in captured["body"]["tools"]
+    )
+
+
+async def test_generate_parses_grounding_chunks_into_citations() -> None:
+    """`candidates[0].groundingMetadata.groundingChunks[i].web` becomes
+    Citation(kind="web", source="Google Search", url=uri, title=title)
+    on LLMResponse.citations."""
+    adapter = _adapter()
+    grounding = {
+        "webSearchQueries": ["NVDA recent news"],
+        "groundingChunks": [
+            {"web": {"uri": "https://reuters.com/a", "title": "Reuters"}},
+            {"web": {"uri": "https://ft.com/b", "title": "FT"}},
+        ],
+        "groundingSupports": [],
+    }
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(return_value=_gemini_ok("NVDA news.", grounding_metadata=grounding))
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    urls = [c.url for c in resp.citations]
+    assert "https://reuters.com/a" in urls
+    assert "https://ft.com/b" in urls
+    assert all(c.kind == "web" for c in resp.citations)
+    assert all(c.source == "Google Search" for c in resp.citations)
+
+
+async def test_generate_segments_citations_via_grounding_supports() -> None:
+    """`groundingSupports[i]` ties a text segment to one or more chunk
+    indices. The adapter expands each (support, chunk_idx) pair into a
+    distinct Citation with `segment_start`/`segment_end` populated, so
+    downstream renderers can place inline `[N]` markers at the right
+    char offsets."""
+    adapter = _adapter()
+    grounding = {
+        "webSearchQueries": ["q"],
+        "groundingChunks": [
+            {"web": {"uri": "https://a", "title": "A"}},
+            {"web": {"uri": "https://b", "title": "B"}},
+        ],
+        "groundingSupports": [
+            {
+                "segment": {"startIndex": 0, "endIndex": 10, "text": "Span one"},
+                "groundingChunkIndices": [0, 1],
+            },
+            {
+                "segment": {"startIndex": 11, "endIndex": 20, "text": "Span two"},
+                "groundingChunkIndices": [1],
+            },
+        ],
+    }
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(return_value=_gemini_ok("Span one and Span two", grounding_metadata=grounding))
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    # 2 chunks always present as bare Citations (chunk-only). 2 supports x
+    # (2+1) = 3 segmented Citations on top. The adapter is free to
+    # consolidate or duplicate; we assert the segmented ones exist with
+    # the right (url, segment_start, segment_end) triplets.
+    segmented = [
+        (c.url, c.segment_start, c.segment_end)
+        for c in resp.citations
+        if c.segment_start is not None
+    ]
+    assert ("https://a", 0, 10) in segmented
+    assert ("https://b", 0, 10) in segmented
+    assert ("https://b", 11, 20) in segmented
+
+
+# ---------- Unified streaming: synthetic ServerToolEvent ----------
+
+
+async def test_gemini_detects_missing_grounding_as_failure() -> None:
+    """When native web_search is requested but groundingMetadata is
+    empty (chunks absent), the adapter records one FailedSearch with
+    error_kind='unknown' so the runtime can route to the configured
+    fallback (I-a rescue). Gemini's failure surface is implicit
+    compared to Anthropic / OpenAI; absence of grounding for a search
+    request is the strongest signal we have."""
+    adapter = _adapter()
+    # groundingMetadata present but with no chunks AND no queries —
+    # i.e. Gemini engaged the search tool but returned nothing.
+    grounding: dict = {"groundingChunks": [], "groundingSupports": [], "webSearchQueries": []}
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(return_value=_gemini_ok("nothing found", grounding_metadata=grounding))
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="What's new with NVDA today?")],
+                native_tools=("web_search",),
+            )
+        )
+    assert len(resp.server_tool_failures) == 1
+    failure = resp.server_tool_failures[0]
+    assert failure.error_kind == "unknown"
+    assert failure.turn_idx == 0
+
+
+async def test_gemini_no_failure_when_native_not_requested() -> None:
+    """A non-grounded turn without native_tools requested produces no
+    FailedSearch — absence of grounding is only a signal when search
+    was asked for."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(return_value=_gemini_ok("ok", grounding_metadata=None))
+        resp = await adapter.generate(
+            LLMRequest(messages=[Message(role="user", content="hello")])
+        )
+    assert resp.server_tool_failures == ()
+
+
+async def test_stream_emits_synthetic_invoked_and_completed_when_grounded() -> None:
+    """Gemini's streamed responses don't expose per-search progress.
+    When a streamed chunk's candidate carries `groundingMetadata`, the
+    adapter emits a synthetic ServerToolEvent(kind="invoked") then
+    ServerToolEvent(kind="completed") on the same chunk's tail — so
+    the runtime can surface 'Searching...' + result urls."""
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"NVDA"}]},'
+        b'"groundingMetadata":{"webSearchQueries":["NVDA earnings"],'
+        b'"groundingChunks":['
+        b'{"web":{"uri":"https://reuters.com/nvda","title":"R"}},'
+        b'{"web":{"uri":"https://ft.com/nvda","title":"F"}}'
+        b'],'
+        b'"groundingSupports":[]'
+        b'},"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    events = [c.server_tool_event for c in chunks if c.server_tool_event]
+    kinds = [e.kind for e in events]
+    assert kinds == ["invoked", "completed"]
+    assert events[0].provider == "gemini"
+    assert events[0].query == "NVDA earnings"
+    assert events[1].provider == "gemini"
+    assert events[1].n_results == 2
+    assert events[1].urls == ("https://reuters.com/nvda", "https://ft.com/nvda")
+
+
+async def test_stream_no_grounding_emits_no_server_tool_event() -> None:
+    """Streams without groundingMetadata must NOT emit synthetic
+    ServerToolEvents — otherwise the runtime emits phantom search
+    events for plain replies."""
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]},'
+        b'"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert all(c.server_tool_event is None for c in chunks)
+
+
+async def test_stream_grounding_emits_once_even_across_multiple_chunks() -> None:
+    """The synthetic invoked/completed pair fires exactly once per
+    stream — when grounding metadata first appears. A later chunk
+    carrying additional text must not retrigger."""
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"a"}]},'
+        b'"groundingMetadata":{"webSearchQueries":["q"],'
+        b'"groundingChunks":[{"web":{"uri":"https://x","title":"X"}}]'
+        b'},"index":0}]}\n\n'
+        b'data: {"candidates":[{"content":{"parts":[{"text":"b"}]},'
+        b'"groundingMetadata":{"webSearchQueries":["q"],'
+        b'"groundingChunks":[{"web":{"uri":"https://x","title":"X"}}]'
+        b'},"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    events = [c.server_tool_event for c in chunks if c.server_tool_event]
+    assert [e.kind for e in events] == ["invoked", "completed"]

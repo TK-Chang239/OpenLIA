@@ -5,12 +5,19 @@ from openlia.llm.adapters.gemini import GeminiAdapter
 from openlia.llm.adapters.ollama import OllamaAdapter
 from openlia.llm.adapters.openai import OpenAIAdapter
 from openlia.llm.adapters.openai_compat import OpenAICompatAdapter
+from openlia.llm.adapters.openai_responses import OpenAIResponsesAdapter
+from openlia.llm.adapters.openai_router import OpenAIRouter
 from openlia.llm.adapters.openrouter import OpenRouterAdapter
 from openlia.llm.base import LLMProvider
 from openlia.llm.types import Capabilities, ProviderCredentials
 
+# `kind="openai"` resolves to OpenAIRouter, which transparently
+# multiplexes Chat Completions and Responses API per-turn based on
+# `LLMRequest.native_tools`. Behavior is identical to OpenAIAdapter
+# for non-search workloads — see openai_router.py for the routing
+# rule and rationale (spec B2).
 ADAPTERS: dict[str, type[LLMProvider]] = {
-    "openai": OpenAIAdapter,
+    "openai": OpenAIRouter,
     "anthropic": AnthropicAdapter,
     "gemini": GeminiAdapter,
     "openrouter": OpenRouterAdapter,
@@ -37,6 +44,8 @@ __all__ = [
     "OllamaAdapter",
     "OpenAIAdapter",
     "OpenAICompatAdapter",
+    "OpenAIResponsesAdapter",
+    "OpenAIRouter",
     "OpenRouterAdapter",
     "build_adapter",
 ]

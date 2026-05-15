@@ -59,6 +59,37 @@ async def test_build_returns_mapping_tools_plus_request_additional_tools() -> No
     assert "web_search" not in names
 
 
+async def test_build_includes_request_additional_tools_with_empty_starter_pack() -> None:
+    # Phase B contract: the report bridge returns an empty starter pack
+    # (`list_requirement_tools` -> []) and the LLM is expected to escalate
+    # for every data tool via `request_additional_tools`. The meta-tool
+    # must therefore be exposed even when there are no mapped tools and
+    # no cached escalation entries — otherwise the model has no entry
+    # point to load data tools and the system prompt's promise is broken.
+    data = FakeDataDispatcher(manifest={})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    tools = await disp.build("equity_research", has_web_search=False)
+    names = [t.name for t in tools]
+    assert "request_additional_tools" in names
+    assert "read_payload" in names
+
+
+async def test_build_keeps_request_additional_tools_across_fetch_turns() -> None:
+    # Regression: on every fetching-phase turn the meta-tool must remain
+    # exposed so a model that escalates once can escalate again later.
+    data = FakeDataDispatcher(manifest={})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    for _ in range(3):
+        tools = await disp.build("equity_research", has_web_search=False)
+        assert "request_additional_tools" in [t.name for t in tools]
+
+
 async def test_build_appends_web_search_when_available() -> None:
     data = FakeDataDispatcher(manifest=_MANIFEST)
     disp = ToolDispatcher(
@@ -1806,3 +1837,77 @@ class TestReadPayload:
         tools = await disp.build("equity_research", has_web_search=False)
         names = [t.name for t in tools]
         assert "read_payload" in names
+
+
+# ---------- Phase 0 contract: native web_search wiring ----------
+
+
+async def test_build_suppresses_generic_web_search_when_native_variant() -> None:
+    """Guardrail G-6: when WebSearchResolution.variant == 'native', the
+    adapter swaps the provider-native tool into the wire payload. The
+    dispatcher must NOT also emit the generic _WEB_SEARCH_SCHEMA, or the
+    model sees two tools named web_search (provider rejects, or model
+    routing degrades)."""
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(available=True, variant="native", adapter=None),
+    )
+    tools = await disp.build("equity_research", has_web_search=True)
+    names = [t.name for t in tools]
+    assert "web_search" not in names
+
+
+async def test_dispatch_web_search_returns_error_when_budget_exhausted() -> None:
+    """Guardrail G-2: with a configured search adapter and a budget of 1,
+    the first dispatch succeeds and the second returns ok=False with a
+    budget-exhausted summary. Soft-cap for providers that have no
+    native max_uses (Gemini, OpenAI Responses)."""
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(True, "configured", adapter=FakeSearchAdapter()),
+        web_search_budget=1,
+    )
+    first = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c1", name="web_search", arguments={"query": "q1"}),
+    )
+    second = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c2", name="web_search", arguments={"query": "q2"}),
+    )
+    assert first.ok is True
+    assert second.ok is False
+    assert "budget" in second.summary.lower()
+
+
+async def test_dispatch_web_search_does_not_increment_budget_on_failure() -> None:
+    """Guardrail G-2 detail: a failed search does not consume budget.
+    Only successful results count, so a flaky provider doesn't burn the
+    cap on retries."""
+
+    class _BrokenSearchAdapter:
+        async def search(self, query: str):
+            raise RuntimeError("network down")
+
+    data = FakeDataDispatcher(manifest=_MANIFEST)
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(True, "configured", adapter=_BrokenSearchAdapter()),
+        web_search_budget=1,
+    )
+    fail = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c1", name="web_search", arguments={"query": "q1"}),
+    )
+    # Budget still available; this should be allowed by the budget guard
+    # (it may fail again on the broken adapter, but NOT with a
+    # budget-exhausted summary).
+    retry = await disp.dispatch(
+        department_id="equity_research",
+        call=ToolCall(id="c2", name="web_search", arguments={"query": "q2"}),
+    )
+    assert fail.ok is False
+    assert retry.ok is False
+    assert "budget" not in retry.summary.lower()

@@ -12,6 +12,7 @@ string.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -92,6 +93,7 @@ class PromptLoader:
             template_src = self._resolve_slot(data, slot)
         except PromptSlotNotFound as exc:
             raise PromptSlotNotFound(f"{department_id}:{slot} — {exc}") from None
+        now = datetime.now(UTC)
         merged = {
             "current_desk": DEPARTMENT_LABELS.get(department_id, department_id),
             "skills_menu": [],  # default; callers override
@@ -100,6 +102,16 @@ class PromptLoader:
             "memory_block": None,  # default; slice-13 graph memory hook overrides
             "selected_exemplars": [],  # default; fix-chats exemplar_selector overrides
             "market_basket": None,  # default; fix-chats user_prefs.get_market_basket overrides
+            # Defaults consumed by shared/temporal_anchor + shared/two_source_discipline.
+            # ReportRunner overrides current_date/current_date_long with the same UTC
+            # clock; BatchRunner / future callers get safe defaults so a partial that
+            # transitively references these variables never crashes with StrictUndefined.
+            "current_date": now.date().isoformat(),
+            "current_date_long": (
+                f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
+            ),
+            "search_budget": 0,
+            "connector_quirks": (),
             **context,
         }
         template = self._env.from_string(template_src)

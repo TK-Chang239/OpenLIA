@@ -27,7 +27,6 @@ from openlia.llm.types import (
     ProviderCredentials,
 )
 
-
 SYS_WITH_MARKER = f"STATIC PREFIX\n\n{CACHE_BREAKPOINT_MARKER}\n\nDYNAMIC SUFFIX"
 
 SAMPLE_REQUEST = LLMRequest(
