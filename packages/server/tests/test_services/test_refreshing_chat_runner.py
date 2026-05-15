@@ -77,15 +77,14 @@ def _fake_inner(monkeypatch):
 
     monkeypatch.setattr(svc, "SQLModelRegistry", _NoopRegistry)
 
-    # Skip the real model+search resolution in tests: simulate "no
-    # model configured" so the runner falls back to an unavailable
-    # WebSearchResolution without trying to read the DB registry.
-    from openlia.llm.exceptions import ModelNotConfiguredError
+    # Skip the real DB-backed search-provider lookup in tests.
+    from openlia.llm.runtime.web_search import WebSearchResolution
 
-    def _raise_not_configured(**_: object):
-        raise ModelNotConfiguredError(slot_kind="department", slot_id="test")
-
-    monkeypatch.setattr(svc, "resolve", _raise_not_configured)
+    monkeypatch.setattr(
+        svc,
+        "_resolve_configured_search",
+        lambda db: WebSearchResolution(available=False, variant=None, adapter=None),
+    )
 
 
 @pytest.mark.asyncio

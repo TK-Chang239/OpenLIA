@@ -15,10 +15,6 @@ def test_system_prompt_mentions_briefing_role(loader: PromptLoader) -> None:
         "morning_briefing",
         "report.system",
         style_guide="x",
-        current_date="2026-05-14",
-        current_date_long="Thursday, May 14, 2026",
-        search_budget=5,
-        connector_quirks=[],
     )
     assert "briefing" in text.lower()
     assert "analyst" in text.lower()

@@ -355,7 +355,6 @@ class ToolDispatcher:
         data_dispatcher: DataProviderDispatcher,
         web_search: WebSearchResolution,
         trace: TraceRecorder | None = None,
-        web_search_budget: int | None = None,
     ) -> None:
         self._data = data_dispatcher
         self._web_search = web_search
@@ -367,14 +366,6 @@ class ToolDispatcher:
         # dispatcher instance. No cleanup needed.
         self._payload_seq = 0  # monotonic per dispatcher for short refs
         self._ref_prefix = uuid.uuid4().hex[:4]  # 4 hex chars; sufficient within a run
-        # Per-run soft cap on web_search invocations. Anthropic enforces
-        # natively via the tool block's max_uses; Gemini and OpenAI
-        # Responses have no equivalent so we count successful results
-        # here and refuse further calls once the cap is reached. `None`
-        # means uncapped. Counter increments only on successful results
-        # (guardrail G-2): a failed search does not burn budget.
-        self._web_search_budget = web_search_budget
-        self._web_search_calls_per_run = 0
         self._builtin_handlers: dict[str, _BuiltinHandler] = {
             _REQUEST_ADDITIONAL_TOOLS_NAME: type(self)._dispatch_request_additional_tools,
             "web_search": type(self)._dispatch_web_search,
@@ -384,20 +375,6 @@ class ToolDispatcher:
     async def available_categories(self) -> list[str]:
         """Delegate to the underlying data dispatcher."""
         return await self._data.available_categories()
-
-    @property
-    def web_search(self) -> WebSearchResolution:
-        """Read-only access to the configured WebSearchResolution. Used
-        by the runtime to derive ``LLMRequest.native_tools`` when the
-        variant is "native" (provider handles web_search server-side)."""
-        return self._web_search
-
-    @property
-    def web_search_budget(self) -> int | None:
-        """Per-run soft cap on web_search invocations. ``None`` means
-        uncapped. Used by the runtime to pass through to LLMRequest
-        when the provider supports it natively (Anthropic max_uses)."""
-        return self._web_search_budget
 
     async def build(
         self,
@@ -418,26 +395,13 @@ class ToolDispatcher:
         expanded = self._escalation_cache.for_emission(department_id)
 
         # Header items always preserved: escalation, web_search, extra_tools.
-        # `request_additional_tools` is always exposed: under the Phase B
-        # empty-starter-pack contract the data dispatcher returns no
-        # mapped tools and the LLM must escalate to load any data tool.
-        # Gating the meta-tool on a non-empty mapped/expanded set breaks
-        # that bootstrap — the model sees no entry point and refuses to
-        # fabricate. The dispatcher is the source of truth for whether
-        # escalation actually yields candidates; if it doesn't, the
-        # `request_additional_tools` dispatch returns `ok=False` with
-        # a "no tools matched" message, which the model handles.
-        header: list[ToolSchema] = [_REQUEST_ADDITIONAL_TOOLS_SCHEMA]
-        # Guardrail G-6: native exposes web_search through provider-side
-        # adapter swap (e.g. Anthropic's web_search_20250305 tool block).
-        # Suppress the generic schema in that case to avoid the model
-        # seeing two tools named web_search. Configured variant uses the
-        # generic envelope dispatched here in this class.
-        if (
-            has_web_search
-            and self._web_search.available
-            and self._web_search.variant == "configured"
-        ):
+        # If mapped+expanded is empty there's nothing to escalate from, so
+        # `request_additional_tools` is also dropped (matches prior behaviour).
+        has_data_tools = bool(mapped) or self._escalation_cache.has_any(department_id)
+        header: list[ToolSchema] = []
+        if has_data_tools:
+            header.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
+        if has_web_search and self._web_search.available:
             header.append(_WEB_SEARCH_SCHEMA)
         # read_payload is always included: the payload store is always wired.
         header.append(_READ_PAYLOAD_SCHEMA)
@@ -876,21 +840,6 @@ class ToolDispatcher:
                 summary="web_search unavailable",
                 payload={"error": "web_search not available"},
             )
-        # Guardrail G-2: refuse if the per-run budget is exhausted. Budget
-        # is counted by successful results only; failures don't decrement.
-        if (
-            self._web_search_budget is not None
-            and self._web_search_calls_per_run >= self._web_search_budget
-        ):
-            return ToolCallResult(
-                call_id=call.id,
-                ok=False,
-                summary=f"web_search budget exhausted ({self._web_search_budget})",
-                payload={
-                    "error": "web_search_budget_exhausted",
-                    "budget": self._web_search_budget,
-                },
-            )
         adapter = self._web_search.adapter
         assert adapter is not None  # available + configured => adapter present
         query = str(call.arguments.get("query", ""))
@@ -903,7 +852,6 @@ class ToolDispatcher:
                 summary=f"web_search failed: {exc!s}",
                 payload={"error": str(exc)},
             )
-        self._web_search_calls_per_run += 1
         return ToolCallResult(
             call_id=call.id,
             ok=True,
@@ -912,15 +860,6 @@ class ToolDispatcher:
                 "results": [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results]
             },
         )
-
-    def record_native_web_search(self, n: int = 1) -> None:
-        """Record N native (provider-side) web_search invocations against
-        the per-run budget. Used by the runtime when a provider runs
-        web_search server-side (Gemini, OpenAI Responses) and we need
-        budget telemetry parity with the configured path. Anthropic
-        enforces server-side via the tool block's max_uses, but we still
-        record here so DevPanel telemetry sees a consistent total."""
-        self._web_search_calls_per_run += n
 
     async def _dispatch_read_payload(self, department_id: str, call: ToolCall) -> ToolCallResult:
         """Look up a stored payload by ref and apply an optional path slice."""

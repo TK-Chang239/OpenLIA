@@ -37,14 +37,7 @@ pytestmark = pytest.mark.asyncio
 # Helpers
 # ---------------------------------------------------------------------------
 
-_SUBMIT_PAYLOAD = {
-    "cover": {
-        "title": "AAPL",
-        "subtitle": "Coverage initiation",
-        "tagline": "Constructive setup",
-    },
-    "sections": [],
-}
+_SUBMIT_PAYLOAD = {"cover": {"title": "AAPL"}, "sections": []}
 
 
 def _empty_skill_registry(tmp_path: Path) -> SkillRegistry:
@@ -312,73 +305,6 @@ async def test_writing_forces_submit_on_final_turn(
     # No forced_submit trace — loop broke via submit_call
     forced_traces = [t for t in trace if t[0] == "writing.forced_submit"]
     assert not forced_traces
-
-
-# ---------------------------------------------------------------------------
-# Refusal-recovery: text-only on writing turn 0 must NOT exit the loop
-# ---------------------------------------------------------------------------
-
-
-async def test_writing_recovers_from_text_only_refusal(
-    prompts_root: Path,
-    frameworks_root: Path,
-    tmp_path: Path,
-) -> None:
-    """Production failure mode: model refuses on writing turn 0 with text-only
-    response ("I'm sorry, I can't complete this report..."), no tool_calls.
-
-    Previous behavior broke out of the writing loop on the first text-only
-    turn and emitted "LLM did not call submit_report" — the user never saw
-    a renderable report.
-
-    Required behavior: push a reminder back to the model and continue. The
-    next turn produces submit_report (or the final forced turn eventually
-    does), and the runner emits ReportComplete."""
-    submit_call = ToolCall(id="w1", name="submit_report", arguments=_SUBMIT_PAYLOAD)
-
-    refusal_text = (
-        "I'm sorry, but I can't complete this report as requested because the "
-        "required data tools are not available in this session, and I should "
-        "not fabricate financials."
-    )
-
-    script = FakeProviderScript(
-        turns=[
-            ("final", ""),  # fetching_data loop — break
-            ("final", refusal_text),  # writing turn 0 — text-only refusal
-            ("tool_calls", [submit_call]),  # writing turn 1 — finally submits
-        ]
-    )
-    provider = FakeProvider(script=script)
-    trace: list[tuple[str, str, dict[str, Any] | None]] = []
-    runner = _make_runner(provider, prompts_root, frameworks_root, tmp_path, trace=trace)
-    events = await _collect(runner)
-
-    # Must complete successfully — no ReportError for refusal.
-    errors = [e for e in events if isinstance(e, ReportError)]
-    assert not errors, f"Refusal must be recovered, got errors: {[e.message for e in errors]}"
-    completes = [e for e in events if isinstance(e, ReportComplete)]
-    assert len(completes) == 1, f"Expected ReportComplete, got events: {events}"
-
-    # Three LLM calls: 1 fetching + 2 writing (turn 0 refused, turn 1 submitted).
-    assert len(provider.captured_requests) == 3, (
-        f"Loop must continue past refusal; got {len(provider.captured_requests)} calls"
-    )
-
-    # The conversation sent on writing turn 1 must include a reminder produced
-    # in response to the refusal — observable as either a tool-role or user-role
-    # message appended after the refusal assistant turn.
-    second_writing_request = provider.captured_requests[2]
-    follow_up = [
-        m
-        for m in second_writing_request.messages
-        if m.role in {"tool", "user"} and "submit_report" in (m.content or "")
-    ]
-    msg_summary = [(m.role, (m.content or "")[:60]) for m in second_writing_request.messages]
-    assert follow_up, (
-        "Expected a reminder message instructing the model to call submit_report "
-        f"on writing turn 1; got messages: {msg_summary}"
-    )
 
 
 # ---------------------------------------------------------------------------

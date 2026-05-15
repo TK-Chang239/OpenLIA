@@ -5,7 +5,7 @@ Provides CRUD + defaults + resolve_active for ErUserConfig rows.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 from uuid import uuid4
 
@@ -39,9 +39,6 @@ class ErConfigDTO:
     sections_by_mode: dict[ReportMode, list[str]]
     custom_sections_by_mode: dict[ReportMode, list[CustomSectionDTO]]
     selected_template_id_by_mode: dict[ReportMode, str]
-    # Per-mode override for the LLM web-search budget. Modes absent from
-    # this map use the framework's `web_search_budget_default`. Phase 5f.
-    web_search_budgets_by_mode: dict[ReportMode, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -53,9 +50,6 @@ class ActiveReportConfig:
     template_id: str | None = None
     template_name: str | None = None
     template_text: str | None = None
-    # Resolved per-mode budget for this report run, or None to defer to
-    # the framework default at the runtime layer.
-    web_search_budget: int | None = None
 
 
 def _framework_section_ids(mode: ReportMode) -> set[str]:
@@ -105,19 +99,12 @@ def _row_to_dto(row: ErUserConfig) -> ErConfigDTO:
     for mode in _VALID_MODES:
         selected_by_mode[mode] = str(raw_selected.get(mode, "default") or "default")
 
-    raw_budgets = row.web_search_budgets_by_mode or {}
-    budgets_by_mode: dict[ReportMode, int] = {}
-    for mode_key, v in raw_budgets.items():
-        if mode_key in _VALID_MODES and isinstance(v, int) and not isinstance(v, bool) and v > 0:
-            budgets_by_mode[mode_key] = v  # type: ignore[index]
-
     return ErConfigDTO(
         report_mode=row.report_mode,  # type: ignore[arg-type]
         report_length=row.report_length,  # type: ignore[arg-type]
         sections_by_mode=sections_by_mode,
         custom_sections_by_mode=custom_by_mode,
         selected_template_id_by_mode=selected_by_mode,
-        web_search_budgets_by_mode=budgets_by_mode,
     )
 
 
@@ -161,7 +148,6 @@ class EquityResearchConfigService:
         sections_by_mode: dict[str, list[str]] | None = None,
         custom_sections_by_mode: dict[str, list[CustomSectionDTO]] | None = None,
         selected_template_id_by_mode: dict[str, str] | None = None,
-        web_search_budgets_by_mode: dict[str, int] | None = None,
     ) -> ErConfigDTO:
         if report_mode is not None and report_mode not in _VALID_MODES:
             raise ValueError(f"unknown mode {report_mode!r}")
@@ -206,19 +192,6 @@ class EquityResearchConfigService:
                 merged_selected[mode_key] = sel or "default"
             row.selected_template_id_by_mode = merged_selected
 
-        if web_search_budgets_by_mode is not None:
-            # Validate first so a single bad value doesn't half-write.
-            for mode_key, v in web_search_budgets_by_mode.items():
-                _validate_mode_key(mode_key)
-                if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
-                    raise ValueError(
-                        f"web_search budget for {mode_key!r} must be a positive int, "
-                        f"got {v!r}"
-                    )
-            merged_budgets = dict(row.web_search_budgets_by_mode or {})
-            merged_budgets.update(web_search_budgets_by_mode)
-            row.web_search_budgets_by_mode = merged_budgets
-
         self._db.flush()
         return _row_to_dto(row)
 
@@ -230,7 +203,6 @@ class EquityResearchConfigService:
         user_id: str | None = None,
     ) -> ActiveReportConfig:
         _validate_mode_key(mode)
-        budget = cfg.web_search_budgets_by_mode.get(mode)
         selected_id = cfg.selected_template_id_by_mode.get(mode, "default")
         if selected_id and selected_id != "default":
             row = self._db.get(ErTemplate, selected_id)
@@ -243,7 +215,6 @@ class EquityResearchConfigService:
                     template_id=row.id,
                     template_name=row.name,
                     template_text=row.extracted_text,
-                    web_search_budget=budget,
                 )
 
         enabled = tuple(cfg.sections_by_mode.get(mode, []))
@@ -256,7 +227,6 @@ class EquityResearchConfigService:
             report_length=cfg.report_length,
             enabled_section_ids=enabled,
             custom_sections=customs,
-            web_search_budget=budget,
         )
 
 
