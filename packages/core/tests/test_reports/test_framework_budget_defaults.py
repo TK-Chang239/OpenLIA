@@ -19,8 +19,8 @@ EXPECTED: dict[str, int] = {
     "stock_initiation": 10,
     "stock_update": 5,
     "sector_research": 15,
-    "earnings_update": 5,
-    "morning_briefing": 5,
+    "earnings_update": 6,
+    "morning_briefing": 6,
 }
 
 

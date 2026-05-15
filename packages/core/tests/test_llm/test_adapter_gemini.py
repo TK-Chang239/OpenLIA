@@ -408,6 +408,48 @@ async def test_generate_segments_citations_via_grounding_supports() -> None:
 # ---------- Unified streaming: synthetic ServerToolEvent ----------
 
 
+async def test_gemini_detects_missing_grounding_as_failure() -> None:
+    """When native web_search is requested but groundingMetadata is
+    empty (chunks absent), the adapter records one FailedSearch with
+    error_kind='unknown' so the runtime can route to the configured
+    fallback (I-a rescue). Gemini's failure surface is implicit
+    compared to Anthropic / OpenAI; absence of grounding for a search
+    request is the strongest signal we have."""
+    adapter = _adapter()
+    # groundingMetadata present but with no chunks AND no queries —
+    # i.e. Gemini engaged the search tool but returned nothing.
+    grounding: dict = {"groundingChunks": [], "groundingSupports": [], "webSearchQueries": []}
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(return_value=_gemini_ok("nothing found", grounding_metadata=grounding))
+        resp = await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="What's new with NVDA today?")],
+                native_tools=("web_search",),
+            )
+        )
+    assert len(resp.server_tool_failures) == 1
+    failure = resp.server_tool_failures[0]
+    assert failure.error_kind == "unknown"
+    assert failure.turn_idx == 0
+
+
+async def test_gemini_no_failure_when_native_not_requested() -> None:
+    """A non-grounded turn without native_tools requested produces no
+    FailedSearch — absence of grounding is only a signal when search
+    was asked for."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(return_value=_gemini_ok("ok", grounding_metadata=None))
+        resp = await adapter.generate(
+            LLMRequest(messages=[Message(role="user", content="hello")])
+        )
+    assert resp.server_tool_failures == ()
+
+
 async def test_stream_emits_synthetic_invoked_and_completed_when_grounded() -> None:
     """Gemini's streamed responses don't expose per-search progress.
     When a streamed chunk's candidate carries `groundingMetadata`, the
