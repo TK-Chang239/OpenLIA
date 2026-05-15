@@ -15,6 +15,7 @@ from openlia.llm.base import LLMProvider
 from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.retry import with_retries
 from openlia.llm.types import (
+    Citation,
     LLMChunk,
     LLMRequest,
     LLMResponse,
@@ -24,6 +25,93 @@ from openlia.llm.types import (
 )
 
 _BASE_URL = "https://generativelanguage.googleapis.com"
+
+# Gemini's native Grounding with Google Search tool. Documented at
+# https://ai.google.dev/gemini-api/docs/grounding. Activated by adding
+# `{"google_search": {}}` to the request's `tools` array; the response
+# returns search results under `candidates[0].groundingMetadata`.
+_GOOGLE_SEARCH_TOOL = {"google_search": {}}
+
+
+def _build_gemini_tools(request: LLMRequest) -> list[dict] | None:
+    """Render request.tools into Gemini's `tools` array. Function tools
+    pack into a single `{"functionDeclarations": [...]}` entry; native
+    search adds a sibling `{"google_search": {}}` entry."""
+    tools: list[dict] = []
+    if request.tools:
+        tools.append(
+            {
+                "functionDeclarations": [
+                    {
+                        "name": t.name,
+                        "description": t.description,
+                        "parameters": t.parameters,
+                    }
+                    for t in request.tools
+                ]
+            }
+        )
+    if "web_search" in request.native_tools:
+        tools.append(_GOOGLE_SEARCH_TOOL)
+    return tools or None
+
+
+def _parse_gemini_grounding(grounding_metadata: dict | None) -> tuple[Citation, ...]:
+    """Walk `candidates[0].groundingMetadata` into Citations.
+
+    For each `groundingChunks[i].web` chunk we emit one "bare" Citation
+    carrying the URL/title with no segment offsets. For each
+    `groundingSupports[s]` we additionally emit one "segmented"
+    Citation per `groundingChunkIndices[i]`, copying the same URL/title
+    but populating `segment_start`/`segment_end` from the support's
+    `segment.startIndex`/`segment.endIndex`. This lets downstream
+    renderers place inline `[N]` markers at exact char offsets while
+    bare Citations still serve the side-panel chip list.
+    """
+    if not grounding_metadata:
+        return ()
+    chunks = grounding_metadata.get("groundingChunks") or []
+    supports = grounding_metadata.get("groundingSupports") or []
+
+    chunk_meta: list[dict[str, str | None]] = []
+    citations: list[Citation] = []
+    for i, chunk in enumerate(chunks):
+        web = chunk.get("web") or {}
+        url = web.get("uri")
+        title = web.get("title")
+        chunk_meta.append({"url": url, "title": title})
+        citations.append(
+            Citation(
+                id=f"c{i + 1}",
+                kind="web",
+                url=url,
+                title=title,
+                source="Google Search",
+            )
+        )
+
+    seg_seq = 0
+    for support in supports:
+        segment = support.get("segment") or {}
+        start = segment.get("startIndex")
+        end = segment.get("endIndex")
+        for idx in support.get("groundingChunkIndices") or []:
+            if not (0 <= idx < len(chunk_meta)):
+                continue
+            seg_seq += 1
+            meta = chunk_meta[idx]
+            citations.append(
+                Citation(
+                    id=f"cs{seg_seq}",
+                    kind="web",
+                    url=meta["url"],
+                    title=meta["title"],
+                    source="Google Search",
+                    segment_start=start,
+                    segment_end=end,
+                )
+            )
+    return tuple(citations)
 
 
 class GeminiAdapter(LLMProvider):
@@ -75,19 +163,9 @@ class GeminiAdapter(LLMProvider):
             }
         if request.stop:
             payload["generationConfig"]["stopSequences"] = request.stop
-        if request.tools:
-            payload["tools"] = [
-                {
-                    "functionDeclarations": [
-                        {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
-                        }
-                        for t in request.tools
-                    ]
-                }
-            ]
+        gemini_tools = _build_gemini_tools(request)
+        if gemini_tools is not None:
+            payload["tools"] = gemini_tools
         if request.tool_choice is not None:
             payload["toolConfig"] = request.tool_choice
 
@@ -113,11 +191,13 @@ class GeminiAdapter(LLMProvider):
         parts = (candidate.get("content") or {}).get("parts") or []
         text = "".join(p.get("text", "") for p in parts if "text" in p)
         usage = body.get("usageMetadata") or {}
+        citations = _parse_gemini_grounding(candidate.get("groundingMetadata"))
         return LLMResponse(
             text=text,
             finish_reason=candidate.get("finishReason", "STOP"),
             input_tokens=int(usage.get("promptTokenCount", 0)),
             output_tokens=int(usage.get("candidatesTokenCount", 0)),
+            citations=citations,
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
@@ -134,19 +214,9 @@ class GeminiAdapter(LLMProvider):
             }
         if request.stop:
             payload["generationConfig"]["stopSequences"] = request.stop
-        if request.tools:
-            payload["tools"] = [
-                {
-                    "functionDeclarations": [
-                        {
-                            "name": t.name,
-                            "description": t.description,
-                            "parameters": t.parameters,
-                        }
-                        for t in request.tools
-                    ]
-                }
-            ]
+        gemini_tools = _build_gemini_tools(request)
+        if gemini_tools is not None:
+            payload["tools"] = gemini_tools
         if request.tool_choice is not None:
             payload["toolConfig"] = request.tool_choice
 
