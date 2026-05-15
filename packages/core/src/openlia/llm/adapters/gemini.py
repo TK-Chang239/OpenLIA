@@ -16,6 +16,7 @@ from openlia.llm.exceptions import LLMProviderError
 from openlia.llm.retry import with_retries
 from openlia.llm.types import (
     Citation,
+    FailedSearch,
     LLMChunk,
     LLMRequest,
     LLMResponse,
@@ -192,13 +193,32 @@ class GeminiAdapter(LLMProvider):
         parts = (candidate.get("content") or {}).get("parts") or []
         text = "".join(p.get("text", "") for p in parts if "text" in p)
         usage = body.get("usageMetadata") or {}
-        citations = _parse_gemini_grounding(candidate.get("groundingMetadata"))
+        gmd = candidate.get("groundingMetadata")
+        citations = _parse_gemini_grounding(gmd)
+        failures: tuple[FailedSearch, ...] = ()
+        if "web_search" in request.native_tools:
+            chunks = (gmd or {}).get("groundingChunks") or []
+            queries = (gmd or {}).get("webSearchQueries") or []
+            # Native was requested but the model returned no grounding
+            # — either the search was blocked, returned nothing, or
+            # the model abstained. Surface as FailedSearch so the
+            # runtime can route to the configured fallback (I-a).
+            if gmd is not None and not chunks and not queries:
+                failures = (
+                    FailedSearch(
+                        query="",
+                        error_kind="unknown",
+                        error_message="gemini grounding empty",
+                        turn_idx=0,
+                    ),
+                )
         return LLMResponse(
             text=text,
             finish_reason=candidate.get("finishReason", "STOP"),
             input_tokens=int(usage.get("promptTokenCount", 0)),
             output_tokens=int(usage.get("candidatesTokenCount", 0)),
             citations=citations,
+            server_tool_failures=failures,
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:

@@ -56,6 +56,7 @@ from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.tools import _READ_PAYLOAD_SCHEMA, MAX_TOOL_TURNS, ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
+    Citation,
     LLMRequest,
     LLMResponse,
     Message,
@@ -244,6 +245,15 @@ def _rescue_failed_searches(
             f"native failed ({f.error_kind}); routing to configured",
             {"query": f.query, "error_kind": f.error_kind, "turn_idx": f.turn_idx},
         )
+        # G-3 double-cost flag: each rescue means the provider may have
+        # billed for the failed native search AND the configured fallback
+        # will bill again. Emit a discrete trace so DevPanel can render
+        # rescue rate x estimated double-bill cost.
+        trace(
+            "web_search.double_billed",
+            f"rescue may double-bill ({f.error_kind})",
+            {"query": f.query, "error_kind": f.error_kind, "turn_idx": f.turn_idx},
+        )
 
     if not rewrote:
         return response
@@ -278,6 +288,40 @@ def _inject_server_fields(
     payload.setdefault("cover", {})
     payload.setdefault("sections", [])
     return payload
+
+
+def _merge_provider_citations(
+    payload: dict[str, Any], provider_citations: list[Citation]
+) -> None:
+    """Merge native-provider citations into payload['citations'] in
+    place. Model-authored entries (from submit_report) win on id
+    collision; provider-only entries are appended.
+
+    ReportSchema.Citation accepts {id, title, source?, url?, date?},
+    so we drop the dataclass-only fields (kind, snippet, segments,
+    tool_*) when projecting.
+    """
+    if not provider_citations:
+        return
+    existing = payload.get("citations")
+    if not isinstance(existing, list):
+        existing = []
+    existing_ids = {
+        c["id"] for c in existing if isinstance(c, dict) and isinstance(c.get("id"), str)
+    }
+    for cit in provider_citations:
+        if cit.id in existing_ids:
+            continue
+        projected: dict[str, Any] = {"id": cit.id, "title": cit.title or cit.id}
+        if cit.source is not None:
+            projected["source"] = cit.source
+        if cit.url is not None:
+            projected["url"] = cit.url
+        if cit.date is not None:
+            projected["date"] = cit.date
+        existing.append(projected)
+        existing_ids.add(cit.id)
+    payload["citations"] = existing
 
 
 def _apply_coercion_fallback(payload: dict[str, Any]) -> dict[str, Any]:
@@ -837,6 +881,44 @@ class ReportRunner:
         # two-source-discipline prompt instructs the model to write
         # "Data not available."
         rescue_seen: set[tuple[int, str]] = set()
+        # G-9 cost telemetry accumulators. Surfaced on ReportComplete.
+        web_search_count = 0
+        web_search_provider_breakdown: dict[str, int] = {}
+        web_search_rescues = 0
+        # Provider-emitted citations from LLMResponse.citations across
+        # all turns. Merged into ReportSchema.citations at submit time;
+        # model-authored entries (from submit_report) win on id collision.
+        provider_citations: list[Citation] = []
+        provider_citation_ids: set[str] = set()
+
+        def _absorb_response_citations(resp_citations: tuple[Citation, ...]) -> None:
+            for cit in resp_citations:
+                if cit.id in provider_citation_ids:
+                    continue
+                provider_citation_ids.add(cit.id)
+                provider_citations.append(cit)
+
+        def _sub_path(provider_kind: str, has_native: bool) -> str:
+            # G-8: OpenAI multiplexes; other providers use a single API.
+            if provider_kind == "openai":
+                return "responses" if has_native else "chat_completions"
+            return provider_kind
+
+        def _emit_provider_selected(
+            turn_idx_: int, phase: str, *, turn_native_tools: tuple[str, ...]
+        ) -> None:
+            self._trace(
+                "llm.provider.selected",
+                f"turn {turn_idx_} via {resolved.provider_kind}",
+                {
+                    "report_id": report_id,
+                    "provider_kind": resolved.provider_kind,
+                    "sub_path": _sub_path(resolved.provider_kind, bool(turn_native_tools)),
+                    "native_tools": list(turn_native_tools),
+                    "turn_idx": turn_idx_,
+                    "phase": phase,
+                },
+            )
 
         force_escalation_choice = _force_tool_choice(
             resolved.provider_kind, _REQUEST_ADDITIONAL_TOOLS_NAME
@@ -848,6 +930,9 @@ class ReportRunner:
                 "llm.call.start",
                 f"tool turn {turn_idx} (tools={len(tools or [])})",
                 {"report_id": report_id, "phase": "fetching_data", "turn": turn_idx},
+            )
+            _emit_provider_selected(
+                turn_idx, phase="fetching_data", turn_native_tools=native_tools
             )
             # Empty-starter-pack bootstrap: on turn 0 the LLM has only
             # `request_additional_tools`, `read_payload`, and (optionally)
@@ -888,6 +973,17 @@ class ReportRunner:
                     message=str(exc),
                 )
                 return
+            # G-9 accounting: count native server-side searches before
+            # rescue rewriting (a rescued failure should not double-count
+            # as a successful search).
+            for _stc in response.server_tool_calls:
+                if _stc.name == "web_search":
+                    web_search_count += 1
+                    web_search_provider_breakdown[resolved.provider_kind] = (
+                        web_search_provider_breakdown.get(resolved.provider_kind, 0) + 1
+                    )
+            _absorb_response_citations(response.citations)
+            _seen_before = len(rescue_seen)
             # I-a rescue: when a provider's native web_search failed
             # mid-turn and a configured fallback exists, rewrite each
             # failure into a synthetic web_search ToolCall. The
@@ -898,6 +994,7 @@ class ReportRunner:
                 seen=rescue_seen,
                 trace=self._trace,
             )
+            web_search_rescues += len(rescue_seen) - _seen_before
             for _ev in _web_search_events_for_response(
                 response,
                 report_id=report_id,
@@ -1019,6 +1116,7 @@ class ReportRunner:
                     "forced": is_final_turn,
                 },
             )
+            _emit_provider_selected(writing_turn, phase="writing", turn_native_tools=())
             try:
                 response = await self._await(
                     provider.generate(
@@ -1054,6 +1152,7 @@ class ReportRunner:
                 provider_kind=resolved.provider_kind,
             ):
                 yield _ev
+            _absorb_response_citations(response.citations)
 
             # Check for submit_report call.
             submit_call = next(
@@ -1066,6 +1165,7 @@ class ReportRunner:
                     department_id=department_id,
                     generated_at=datetime.now(UTC),
                 )
+                _merge_provider_citations(candidate, provider_citations)
                 try:
                     validated_schema = validate_report_payload(candidate)
                     validated_payload = candidate
@@ -1356,7 +1456,13 @@ class ReportRunner:
                 "sections": len(schema_payload.get("sections") or []),
             },
         )
-        yield ReportComplete(report_id=report_id, schema=schema_payload)
+        yield ReportComplete(
+            report_id=report_id,
+            schema=schema_payload,
+            web_search_count=web_search_count,
+            web_search_provider_breakdown=dict(web_search_provider_breakdown),
+            web_search_rescues=web_search_rescues,
+        )
 
     @staticmethod
     async def _await(awaitable, *, cancel_token: CancellationToken | None):

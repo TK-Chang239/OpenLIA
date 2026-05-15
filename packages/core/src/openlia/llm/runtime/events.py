@@ -190,6 +190,12 @@ class ReportComplete:
     # TODO(plan-13): narrow to ReportSchema once Phase 13 ships the type.
     schema: dict[str, Any]
     ts: str = field(default_factory=_utc_now_iso)
+    # Guardrail G-9: cost telemetry. Populated by ReportRunner from the
+    # native server_tool_calls observed per turn plus the rescue counter.
+    # DevPanel renders these in the run summary.
+    web_search_count: int = 0
+    web_search_provider_breakdown: dict[str, int] = field(default_factory=dict)
+    web_search_rescues: int = 0
 
 
 @dataclass(frozen=True)

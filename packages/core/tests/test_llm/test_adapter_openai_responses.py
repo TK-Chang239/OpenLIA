@@ -195,6 +195,51 @@ async def test_input_assistant_with_tool_calls_emits_function_call_items() -> No
     }
 
 
+async def test_openai_responses_conversation_translation_drops_prior_web_search_items() -> (
+    None
+):
+    """Conversation replay across Responses turns must NOT carry prior
+    `web_search_call` items into the next request's `input`. The
+    canonical Message list carries assistant `content` (where the
+    model has already integrated search results into output_text) and
+    `tool_calls`; native server-side search items are dropped on
+    translation (citations surface separately on LLMResponse)."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[
+                    Message(role="user", content="What's new with NVDA?"),
+                    # Prior assistant turn — its web_search produced citations
+                    # that the model already wove into output_text. The
+                    # canonical Message carries only `content`; no
+                    # web_search_call item exists.
+                    Message(
+                        role="assistant",
+                        content="Nvidia announced H300 [Reuters].",
+                    ),
+                    Message(role="user", content="follow-up: timeline?"),
+                ]
+            )
+        )
+    items = captured["body"]["input"]
+    types = [it.get("type") for it in items]
+    assert "web_search_call" not in types
+    assert all(it.get("type") != "web_search_call" for it in items)
+    # Prior assistant text is replayed as output_text.
+    assistant_items = [it for it in items if it.get("role") == "assistant"]
+    assert len(assistant_items) == 1
+    assert assistant_items[0]["content"][0]["type"] == "output_text"
+    assert "H300" in assistant_items[0]["content"][0]["text"]
+
+
 async def test_input_tool_result_emits_function_call_output() -> None:
     """A `role="tool"` Message translates to a `function_call_output`
     input item paired by `call_id`."""
