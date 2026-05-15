@@ -27,6 +27,18 @@ const CATEGORY_COLOR: Record<string, string> = {
   "report.tool_result": "text-green-500",
   "report.complete": "text-yellow-600",
   "report.error": "text-red-500",
+  "slim.summary": "text-amber-500",
+  "expand_tools.request": "text-fuchsia-500",
+  "expand_tools.result": "text-fuchsia-500",
+  "expand_tools.directive_fired": "text-orange-500",
+  "escalation_cache.summary": "text-amber-500",
+  "escalation_cache.evict": "text-amber-600",
+  "payload.stub": "text-teal-500",
+  "read_payload.call": "text-teal-500",
+  "read_payload.result": "text-teal-600",
+  "writing.read_payload": "text-teal-500",
+  "writing.forced_submit": "text-orange-500",
+  "attachment.warning": "text-amber-500",
 };
 
 const BACKLOGS: Record<string, { title: string; source: string }> = {

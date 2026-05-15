@@ -395,12 +395,16 @@ class ToolDispatcher:
         expanded = self._escalation_cache.for_emission(department_id)
 
         # Header items always preserved: escalation, web_search, extra_tools.
-        # If mapped+expanded is empty there's nothing to escalate from, so
-        # `request_additional_tools` is also dropped (matches prior behaviour).
-        has_data_tools = bool(mapped) or self._escalation_cache.has_any(department_id)
-        header: list[ToolSchema] = []
-        if has_data_tools:
-            header.append(_REQUEST_ADDITIONAL_TOOLS_SCHEMA)
+        # `request_additional_tools` is always exposed: under the Phase B
+        # empty-starter-pack contract the data dispatcher returns no
+        # mapped tools and the LLM must escalate to load any data tool.
+        # Gating the meta-tool on a non-empty mapped/expanded set breaks
+        # that bootstrap — the model sees no entry point and refuses to
+        # fabricate. The dispatcher is the source of truth for whether
+        # escalation actually yields candidates; if it doesn't, the
+        # `request_additional_tools` dispatch returns `ok=False` with
+        # a "no tools matched" message, which the model handles.
+        header: list[ToolSchema] = [_REQUEST_ADDITIONAL_TOOLS_SCHEMA]
         if has_web_search and self._web_search.available:
             header.append(_WEB_SEARCH_SCHEMA)
         # read_payload is always included: the payload store is always wired.
