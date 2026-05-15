@@ -508,6 +508,43 @@
   border-bottom-color: var(--report-positive);
 }
 
+/* ─── Inline `[N]` citation markers ─────────────────────────────────────── */
+.citation-refs {
+  display: inline-block;
+  margin-left: 0.25em;
+  white-space: nowrap;
+}
+
+.citation-refs > .citation-ref + .citation-ref {
+  margin-left: 0.15em;
+}
+
+.citation-ref {
+  font-size: 0.7em;
+  vertical-align: super;
+  color: var(--report-text-tertiary);
+  text-decoration: none;
+  transition: color 120ms ease;
+}
+
+.citation-ref:hover,
+.citation-ref:focus-visible {
+  color: var(--report-accent);
+  text-decoration: underline;
+}
+
+/* Brief flash highlight when a citation jump-target is focused via #cite-N */
+@keyframes citation-target-flash {
+  0%   { background-color: var(--report-accent-soft-bg); }
+  100% { background-color: transparent; }
+}
+
+.report-citations__item:target,
+.report-rail__citations-item:target {
+  animation: citation-target-flash 2s ease-out;
+  border-radius: 4px;
+}
+
 .report-citations__meta {
   font-family: var(--report-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
@@ -883,6 +920,72 @@
   font-size: 10px;
   letter-spacing: 0.06em;
   color: var(--report-text-tertiary);
+}
+
+.report-rail__citations-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-rail__citations-item {
+  border-bottom: 1px solid var(--report-border);
+}
+
+.report-rail__citations-item:last-child {
+  border-bottom: 0;
+}
+
+.report-rail__citations-item a {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  text-decoration: none;
+  color: inherit;
+}
+
+.report-rail__citations-item a:hover .report-rail__citations-title {
+  color: var(--report-positive);
+}
+
+.report-rail__citations-num {
+  font-family: var(--report-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--report-text-tertiary);
+}
+
+.report-rail__citations-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.report-rail__citations-title {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--report-text-primary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+}
+
+.report-rail__citations-meta {
+  font-family: var(--report-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--report-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---- Narrow viewports ---- */
