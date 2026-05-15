@@ -171,12 +171,38 @@ def test_report_system_prompt_includes_schema_strictness_guide(tmp_path: Path) -
         registry=_empty_skill_registry(tmp_path),
         style_guide="",
         available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
         loader=loader,
     )
     assert "page_furniture" in rendered
     assert "height" in rendered and "show_legend" in rendered and "show_grid" in rendered
     assert "key" in rendered and "label" in rendered
     assert "extra" in rendered.lower() or "forbid" in rendered.lower()
+
+
+def test_report_system_prompt_anchors_current_date(tmp_path: Path) -> None:
+    """Render the real equity_research report.system slot and assert the
+    temporal anchor partial emits today's date + freshness discipline.
+
+    Guards against regression where the runtime computes `current_date`
+    but the rendered system prompt never references it, letting the model
+    fall back to its training cutoff."""
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        loader=loader,
+    )
+    assert "Thursday, May 14, 2026" in rendered
+    assert "2026-05-14" in rendered
+    assert "training cutoff" in rendered.lower()
+    assert "web_search" in rendered
 
 
 # ---------- Step 3 contract: validation failure → repair turn with feedback ----------
