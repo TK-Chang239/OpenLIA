@@ -286,12 +286,17 @@ class TreemapBlock(_Strict):
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
+class ComboSeries(_Strict):
+    name: str
+    values: Annotated[list[float], Field(min_length=1)]
+
+
 class ComboChartBlock(_Strict):
     type: Literal["combo_chart"]
     title: str
     categories: Annotated[list[str], Field(min_length=1)]
-    bar_series: Annotated[list[dict[str, Any]], Field(min_length=1)]
-    line_series: Annotated[list[dict[str, Any]], Field(min_length=1)]
+    bar_series: Annotated[list[ComboSeries], Field(min_length=1)]
+    line_series: Annotated[list[ComboSeries], Field(min_length=1)]
     y_left_label: str | None = None
     y_right_label: str | None = None
     options: ChartOptions = Field(default_factory=ChartOptions)

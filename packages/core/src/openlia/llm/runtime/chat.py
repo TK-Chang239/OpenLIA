@@ -431,6 +431,8 @@ class ChatRunner:
         wrapped_messages = wrap_last_user_message(messages)
         conversation = _build_conversation(wrapped_messages, materialized_blocks)
 
+        native_tools, web_search_max_uses = self._native_web_search_args()
+
         # Tool loop — bounded by MAX_TOOL_TURNS (32) as an outer runaway guard.
         # Chat exposes the same `request_additional_tools` escalation as the
         # expansions; the budget arg is None here so only the outer cap fires.
@@ -463,6 +465,8 @@ class ChatRunner:
                             system=system,
                             tools=tools or None,
                             max_tokens=resolved.capabilities.max_output_tokens,
+                            native_tools=native_tools,
+                            web_search_max_uses=web_search_max_uses,
                         )
                     ),
                     cancel_token=cancel_token,
@@ -613,6 +617,8 @@ class ChatRunner:
                     messages=conversation,
                     system=system,
                     max_tokens=resolved.capabilities.max_output_tokens,
+                    native_tools=native_tools,
+                    web_search_max_uses=web_search_max_uses,
                 )
             ).__aiter__()
             while True:
@@ -657,6 +663,17 @@ class ChatRunner:
         if cancel_token is not None and cancel_token.is_cancelled:
             return
         yield ChatDone(message_id=message_id, stop_reason="complete")
+
+    def _native_web_search_args(self) -> tuple[tuple[str, ...], int | None]:
+        """Per-call `native_tools` and `web_search_max_uses` for `LLMRequest`.
+
+        When the dispatcher's web search resolution is `native`, the
+        adapter swaps in the provider's native search tool block. Chat
+        has no per-run search budget (only reports do), so `max_uses`
+        stays `None` and the provider applies its own default cap.
+        """
+        native = ("web_search",) if self._tools.web_search.variant == "native" else ()
+        return native, None
 
     @staticmethod
     async def _await(awaitable, *, cancel_token: CancellationToken | None):
@@ -776,6 +793,8 @@ class ChatRunner:
         wrapped_messages = wrap_last_user_message(messages)
         conversation = _build_conversation(wrapped_messages, materialized_blocks)
 
+        native_tools, web_search_max_uses = self._native_web_search_args()
+
         candidate_list = list(candidate_by_name.values())
 
         extra_tool_names: frozenset[str] = frozenset(spec["name"] for spec in extra_tool_specs)
@@ -859,6 +878,8 @@ class ChatRunner:
                             system=system_prompt,
                             tools=tools or None,
                             max_tokens=resolved.capabilities.max_output_tokens,
+                            native_tools=native_tools,
+                            web_search_max_uses=web_search_max_uses,
                         )
                     ),
                     cancel_token=cancel_token,
@@ -1027,6 +1048,8 @@ class ChatRunner:
                     messages=conversation,
                     system=system_prompt,
                     max_tokens=resolved.capabilities.max_output_tokens,
+                    native_tools=native_tools,
+                    web_search_max_uses=web_search_max_uses,
                 )
             ).__aiter__()
             while True:
