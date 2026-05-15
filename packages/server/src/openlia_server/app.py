@@ -801,20 +801,42 @@ def create_app(
 
 
 def _mount_frontend(app: FastAPI) -> None:
-    """Serve `frontend/dist` with SPA fallback when OPENLIA_FRONTEND_DIST is set.
+    """Serve `frontend/dist` with SPA fallback when configured.
 
-    Opt-in via env var so dev servers don't accidentally serve a stale build
-    alongside the API. The Docker image sets OPENLIA_FRONTEND_DIST=/app/frontend/dist.
+    Resolution order:
+      1. OPENLIA_FRONTEND_DIST env var (wins if set; missing dir -> skip).
+      2. /app/frontend/dist (Docker image default).
+      3. <repo>/frontend/dist (local npm build).
+
+    Skips silently when no candidate resolves to a directory containing
+    index.html, so dev servers and tests don't need a built bundle.
     """
+    candidates: list[str] = []
     dist_env = os.environ.get("OPENLIA_FRONTEND_DIST")
-    if not dist_env:
+    if dist_env:
+        candidates.append(dist_env)
+    else:
+        candidates.append("/app/frontend/dist")
+        here = os.path.dirname(os.path.abspath(__file__))
+        # Walk: openlia_server → src → server → packages → repo root.
+        repo_dist = os.path.normpath(os.path.join(here, "..", "..", "..", "..", "frontend", "dist"))
+        candidates.append(repo_dist)
+
+    resolved: tuple[str, str] | None = None
+    for candidate in candidates:
+        dist_dir = os.path.abspath(candidate)
+        if not os.path.isdir(dist_dir):
+            continue
+        index_html = os.path.join(dist_dir, "index.html")
+        if not os.path.isfile(index_html):
+            continue
+        resolved = (dist_dir, index_html)
+        break
+
+    if resolved is None:
         return
 
-    dist_dir = os.path.abspath(dist_env)
-    index_html = os.path.join(dist_dir, "index.html")
-    if not os.path.isdir(dist_dir) or not os.path.isfile(index_html):
-        return
-
+    dist_dir, index_html = resolved
     assets_dir = os.path.join(dist_dir, "assets")
     if os.path.isdir(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")

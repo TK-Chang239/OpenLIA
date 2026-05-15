@@ -35,6 +35,8 @@ class _InnerRunner(Protocol):
         request: ReportRequest,
         attachments: list[Attachment] | None = ...,
         model_id_override: str | None = ...,
+        disabled_connector_ids: tuple[str, ...] = ...,
+        disabled_skill_ids: tuple[str, ...] = ...,
     ) -> AsyncIterator[SseEvent]: ...
 
 
@@ -59,6 +61,8 @@ class EquityResearchRunner:
         session_id: str | None,
         attachments: list[Attachment] | None = None,
         model_id_override: str | None = None,
+        disabled_connector_ids: tuple[str, ...] = (),
+        disabled_skill_ids: tuple[str, ...] = (),
     ) -> AsyncIterator[SseEvent | ReportSavedEvent]:
         if mode not in self._dept.valid_modes:
             raise ValueError(f"unknown equity_research mode: {mode!r}")
@@ -84,7 +88,6 @@ class EquityResearchRunner:
             length=_LENGTH_MAP.get(active.report_length, "standard"),
             user_template_text=active.template_text,
             user_template_name=active.template_name,
-            web_search_budget_override=active.web_search_budget,
         )
 
         last_complete: ReportComplete | None = None
@@ -94,6 +97,8 @@ class EquityResearchRunner:
             request=request,
             attachments=attachments,
             model_id_override=model_id_override,
+            disabled_connector_ids=disabled_connector_ids,
+            disabled_skill_ids=disabled_skill_ids,
         ):
             if isinstance(ev, ReportComplete):
                 last_complete = ev

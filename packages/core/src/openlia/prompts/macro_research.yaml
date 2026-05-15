@@ -23,8 +23,6 @@ batch:
       {% include "shared/skills_menu.yaml.j2" %}
 
       {% include "shared/output_discipline.yaml.j2" %}
-
-      {% include "shared/two_source_discipline.yaml.j2" %}
     user: |
       Question: {{ question }}
       Framework: {{ framework_name }}
@@ -44,8 +42,6 @@ batch:
       {% include "shared/skills_menu.yaml.j2" %}
 
       {% include "shared/output_discipline.yaml.j2" %}
-
-      {% include "shared/two_source_discipline.yaml.j2" %}
     user: |
       Framework: {{ framework_name }}
       Tier-4 sub-scores:

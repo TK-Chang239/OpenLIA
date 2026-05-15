@@ -55,9 +55,6 @@ class ErConfigPatch(BaseModel):
     sections_by_mode: dict[str, list[str]] | None = None
     custom_sections_by_mode: dict[str, list[CustomSectionPayload]] | None = None
     selected_template_id_by_mode: dict[str, str] | None = None
-    # Phase 5f: per-mode web search budget override. Absent modes fall
-    # back to the framework default at the runtime layer.
-    web_search_budgets_by_mode: dict[str, int] | None = None
 
 
 class TemplatePatch(BaseModel):
@@ -92,7 +89,6 @@ def _serialize(cfg) -> dict:
             for mode, customs in cfg.custom_sections_by_mode.items()
         },
         "selected_template_id_by_mode": dict(cfg.selected_template_id_by_mode),
-        "web_search_budgets_by_mode": dict(cfg.web_search_budgets_by_mode),
     }
 
 
@@ -156,7 +152,6 @@ def build_equity_research_router(
                     else None
                 ),
                 selected_template_id_by_mode=patch.selected_template_id_by_mode,
-                web_search_budgets_by_mode=patch.web_search_budgets_by_mode,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -176,6 +171,18 @@ def build_equity_research_router(
     ) -> StreamingResponse:
         if mode not in _VALID_MODES:
             raise HTTPException(status_code=400, detail=f"unknown mode: {mode!r}")
+
+        disabled_connector_ids: tuple[str, ...] = ()
+        disabled_skill_ids: tuple[str, ...] = ()
+        if session_id is not None:
+            try:
+                session_row = chat_sessions_svc.get_session(
+                    db, session_id=session_id, user_id=user.id
+                )
+            except (LookupError, PermissionError) as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            disabled_connector_ids = tuple(session_row.disabled_connector_ids or ())
+            disabled_skill_ids = tuple(session_row.disabled_skill_ids or ())
 
         runtime_attachments: list[RuntimeAttachment] = []
         if uploads:
@@ -220,6 +227,8 @@ def build_equity_research_router(
                     user_input=user_input,
                     session_id=session_id,
                     attachments=runtime_attachments or None,
+                    disabled_connector_ids=disabled_connector_ids,
+                    disabled_skill_ids=disabled_skill_ids,
                 ):
                     wire = _serialize_event(ev)
                     yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()

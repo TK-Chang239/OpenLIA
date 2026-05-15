@@ -9,7 +9,6 @@ import { ReportSkeleton } from './ReportSkeleton';
 import { ScrollTracker } from './furniture/ScrollTracker';
 import { TableOfContents } from './TableOfContents';
 import { RailPanel } from './RailPanel';
-import { CitationsRail } from './CitationsRail';
 import { CitationsSection, SOURCES_SECTION_ID } from './CitationsSection';
 
 export type ReportTheme = 'light' | 'dark';
@@ -73,13 +72,12 @@ export function ReportRenderer({
   if (citations.length) {
     tocSections.push({ id: SOURCES_SECTION_ID, title: 'Sources & Disclosures' });
   }
-  const hasRailPanel =
+  const hasRail =
     !!schema.rail &&
     (!!schema.rail.verdict ||
       (schema.rail.quick_stats && schema.rail.quick_stats.length > 0) ||
       !!schema.rail.sparkline ||
       (related && related.length > 0));
-  const hasRail = hasRailPanel || citations.length > 0;
 
   const sectionIds = tocSections.map((t) => t.id);
 
@@ -106,8 +104,7 @@ export function ReportRenderer({
         </main>
         {hasRail ? (
           <aside className="report__rail">
-            {hasRailPanel ? <RailPanel rail={schema.rail!} related={related} /> : null}
-            <CitationsRail citations={citations} />
+            <RailPanel rail={schema.rail!} related={related} />
           </aside>
         ) : null}
       </div>

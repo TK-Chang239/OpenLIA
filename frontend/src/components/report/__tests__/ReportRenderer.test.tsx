@@ -68,17 +68,4 @@ describe('ReportRenderer', () => {
     const { container } = render(<ReportRenderer schema={schema} theme="dark" />);
     expect(container.querySelector('[data-report-theme="dark"]')).toBeTruthy();
   });
-
-  it('renders the side rail when only citations are present', () => {
-    const withCites: ReportSchema = {
-      ...schema,
-      citations: [
-        { id: '1', title: 'Press release', source: 'Apple IR', url: 'https://example.com' },
-      ],
-    };
-    const { container } = render(<ReportRenderer schema={withCites} />);
-    expect(container.querySelector('.report__rail')).toBeTruthy();
-    expect(container.querySelector('.report-rail__citations')).toBeTruthy();
-    expect(container.querySelector('.report--3col')).toBeTruthy();
-  });
 });

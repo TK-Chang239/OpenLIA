@@ -10,8 +10,7 @@
  * Wire contract (matches routes that use `event: <type>\ndata: <json>\n\n`):
  *   - report.start    { report_id, department, mode, section_titles[] }
  *   - report.phase    { report_id, phase: 'fetching_data'|'writing'|'finalizing' }
- *   - report.tool_call.start { report_id, call_id, tool_name, args_preview }
- *   - report.tool_call{ report_id, tool_name, summary, call_id }
+ *   - report.tool_call{ report_id, tool_name, summary }
  *   - report.complete { report_id, schema }   — schema delivered; not yet saved
  *   - report.saved    { report_id }           — persisted, safe to fetch
  *   - report.error    { report_id?, message }
@@ -35,22 +34,12 @@ export interface SectionView {
   status: SectionStatus;
 }
 
-export type ToolCallStatus = "running" | "done";
-
-export interface ReportToolCallView {
-  callId: string;
-  toolName: string;
-  argsPreview: string;
-  status: ToolCallStatus;
-  summary?: string;
-}
-
 export interface ReportStreamState {
   status: ReportStreamStatus;
   phase: ReportPhase | null;
   sectionTitles: string[];
   sections: SectionView[];
-  toolCalls: ReportToolCallView[];
+  toolCalls: { tool: string; summary: string }[];
   reportId: string | null;
   errorMessage: string | null;
 }
@@ -123,47 +112,17 @@ function reducer(state: ReportStreamState, action: Action): ReportStreamState {
       );
       return { ...state, sections: next };
     }
-    case "report.tool_call.start": {
-      const callId = String(data.call_id ?? "");
+    case "report.tool_call":
       return {
         ...state,
         toolCalls: [
           ...state.toolCalls,
           {
-            callId,
-            toolName: String(data.tool_name ?? ""),
-            argsPreview: String(data.args_preview ?? ""),
-            status: "running" as const,
+            tool: String(data.tool_name ?? ""),
+            summary: String(data.summary ?? ""),
           },
         ],
       };
-    }
-    case "report.tool_call": {
-      const callId = String(data.call_id ?? "");
-      const toolName = String(data.tool_name ?? "");
-      const summary = String(data.summary ?? "");
-      const idx = callId
-        ? state.toolCalls.findIndex((c) => c.callId === callId)
-        : -1;
-      if (idx >= 0) {
-        const next = [...state.toolCalls];
-        next[idx] = { ...next[idx], status: "done", summary };
-        return { ...state, toolCalls: next };
-      }
-      return {
-        ...state,
-        toolCalls: [
-          ...state.toolCalls,
-          {
-            callId,
-            toolName,
-            argsPreview: "",
-            status: "done" as const,
-            summary,
-          },
-        ],
-      };
-    }
     case "report.complete":
       // Schema has arrived but `report.saved` follows with the persisted id.
       return state;

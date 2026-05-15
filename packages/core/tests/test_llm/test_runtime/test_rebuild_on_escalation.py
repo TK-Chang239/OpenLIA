@@ -134,14 +134,7 @@ async def test_build_called_once_initial_and_once_on_escalation(
         arguments={"reason": "need more data", "category_hint": None},
     )
     # Turn 2: submit_report to end the data-fetch loop
-    submit_payload = {
-        "cover": {
-            "title": "AAPL",
-            "subtitle": "Coverage",
-            "tagline": "x",
-        },
-        "sections": [],
-    }
+    submit_payload = {"cover": {"title": "AAPL"}, "sections": []}
     submit_call = ToolCall(id="c2", name="submit_report", arguments=submit_payload)
 
     script = FakeProviderScript(

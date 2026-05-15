@@ -1493,8 +1493,6 @@ async def test_prompt_renders_with_category_hints(tmp_path: Path) -> None:
         registry=_empty_skill_registry(tmp_path),
         style_guide="",
         available_category_hints=["financial", "news"],
-        current_date="2026-05-14",
-        current_date_long="Thursday, May 14, 2026",
         loader=loader,
     )
     assert "financial, news" in rendered
