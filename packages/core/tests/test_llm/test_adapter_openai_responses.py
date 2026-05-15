@@ -353,3 +353,135 @@ async def test_generate_detects_failed_web_search_call() -> None:
     f = resp.server_tool_failures[0]
     assert f.query == "blocked query"
     assert f.error_kind in {"server_error", "unknown"}
+
+
+# ---------- Unified streaming: real Responses SSE ----------
+
+
+import httpx as _httpx  # noqa: E402
+
+
+async def test_stream_yields_text_deltas_from_response_output_text_delta() -> None:
+    """The Responses SSE stream emits `response.output_text.delta` frames
+    whose `delta` field carries the next text chunk. Concatenated they
+    rebuild the assistant message."""
+    sse = (
+        b'data: {"type":"response.output_text.delta","delta":"Hello "}\n\n'
+        b'data: {"type":"response.output_text.delta","delta":"world"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed"}}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(
+            return_value=_httpx.Response(
+                200, content=sse, headers={"content-type": "text/event-stream"}
+            )
+        )
+        chunks = []
+        async for c in _adapter().stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert "".join(c.delta for c in chunks) == "Hello world"
+
+
+async def test_stream_emits_server_tool_invoked_on_web_search_in_progress() -> None:
+    """A `response.web_search_call.in_progress` event yields a
+    ServerToolEvent(kind="invoked", provider="openai"). Query is
+    pulled from the item's `action.query` when present."""
+    sse = (
+        b'data: {"type":"response.web_search_call.in_progress",'
+        b'"item":{"action":{"query":"NVDA earnings"}}}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed"}}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(
+            return_value=_httpx.Response(
+                200, content=sse, headers={"content-type": "text/event-stream"}
+            )
+        )
+        chunks = []
+        async for c in _adapter().stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    invoked = [c for c in chunks if c.server_tool_event and c.server_tool_event.kind == "invoked"]
+    assert len(invoked) == 1
+    e = invoked[0].server_tool_event
+    assert e.provider == "openai"
+    assert e.query == "NVDA earnings"
+
+
+async def test_stream_emits_server_tool_completed_on_web_search_completed() -> None:
+    """A `response.web_search_call.completed` event yields a
+    ServerToolEvent(kind="completed", provider="openai"). Result urls
+    are not in this event — they arrive later as url_citation
+    annotations — so urls=() and n_results is omitted/None."""
+    sse = (
+        b'data: {"type":"response.web_search_call.in_progress",'
+        b'"item":{"action":{"query":"q"}}}\n\n'
+        b'data: {"type":"response.web_search_call.completed",'
+        b'"item":{"status":"completed"}}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed"}}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(
+            return_value=_httpx.Response(
+                200, content=sse, headers={"content-type": "text/event-stream"}
+            )
+        )
+        chunks = []
+        async for c in _adapter().stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    completed = [
+        c for c in chunks if c.server_tool_event and c.server_tool_event.kind == "completed"
+    ]
+    assert len(completed) == 1
+    assert completed[0].server_tool_event.provider == "openai"
+
+
+async def test_stream_terminal_chunk_carries_finish_reason() -> None:
+    """`response.completed` ends the stream; the adapter emits a
+    terminal LLMChunk with `finish_reason` set so callers see EOS."""
+    sse = (
+        b'data: {"type":"response.output_text.delta","delta":"x"}\n\n'
+        b'data: {"type":"response.completed","response":{"status":"completed"}}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(
+            return_value=_httpx.Response(
+                200, content=sse, headers={"content-type": "text/event-stream"}
+            )
+        )
+        chunks = []
+        async for c in _adapter().stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert chunks[-1].finish_reason == "completed"
+
+
+async def test_stream_targets_responses_endpoint_with_stream_true() -> None:
+    """Streaming POSTs `/v1/responses` with `"stream": true` in the body."""
+    captured: dict = {}
+
+    def _capture(request):
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.read())
+        return _httpx.Response(
+            200,
+            content=b'data: {"type":"response.completed","response":{"status":"completed"}}\n\n',
+            headers={"content-type": "text/event-stream"},
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        async for _ in _adapter().stream(
+            LLMRequest(messages=[Message(role="user", content="x")])
+        ):
+            pass
+    assert captured["path"] == "/v1/responses"
+    assert captured["body"]["stream"] is True

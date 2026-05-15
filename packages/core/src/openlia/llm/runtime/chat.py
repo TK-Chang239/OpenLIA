@@ -53,6 +53,8 @@ from openlia.llm.runtime.events import (
     ChatToken,
     ChatToolCallResult,
     ChatToolCallStart,
+    ChatWebSearchCompleted,
+    ChatWebSearchInvoked,
     SseEvent,
 )
 from openlia.llm.runtime.messages import Attachment, ChatMessage, ContentBlock
@@ -625,6 +627,23 @@ class ChatRunner:
                     break
                 except asyncio.CancelledError:
                     return
+                if chunk.server_tool_event is not None:
+                    e = chunk.server_tool_event
+                    if e.kind == "invoked":
+                        yield ChatWebSearchInvoked(
+                            message_id=message_id,
+                            query=e.query or "",
+                            turn_idx=0,
+                            provider=e.provider,
+                        )
+                    elif e.kind == "completed":
+                        yield ChatWebSearchCompleted(
+                            message_id=message_id,
+                            n_results=e.n_results or 0,
+                            urls=list(e.urls),
+                            turn_idx=0,
+                            provider=e.provider,
+                        )
                 if chunk.delta:
                     yield ChatToken(message_id=message_id, text=chunk.delta)
         except LLMProviderError as exc:
@@ -1022,6 +1041,23 @@ class ChatRunner:
                     break
                 except asyncio.CancelledError:
                     return
+                if chunk.server_tool_event is not None:
+                    e = chunk.server_tool_event
+                    if e.kind == "invoked":
+                        yield ChatWebSearchInvoked(
+                            message_id=message_id,
+                            query=e.query or "",
+                            turn_idx=0,
+                            provider=e.provider,
+                        )
+                    elif e.kind == "completed":
+                        yield ChatWebSearchCompleted(
+                            message_id=message_id,
+                            n_results=e.n_results or 0,
+                            urls=list(e.urls),
+                            turn_idx=0,
+                            provider=e.provider,
+                        )
                 if chunk.delta:
                     yield ChatToken(message_id=message_id, text=chunk.delta)
         except LLMProviderError as exc:
