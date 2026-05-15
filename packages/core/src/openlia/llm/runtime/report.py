@@ -381,9 +381,16 @@ def build_report_system_prompt(
     registry: SkillRegistry,
     style_guide: str,
     available_category_hints: list[str],
+    current_date: str,
+    current_date_long: str,
     loader: PromptLoader | None = None,
 ) -> str:
-    """Render the report.system slot with the user's visible skills menu."""
+    """Render the report.system slot with the user's visible skills menu.
+
+    `current_date` (ISO date) and `current_date_long` (human form) anchor the
+    model to today. Departments that include `shared/temporal_anchor.yaml.j2`
+    consume them; under StrictUndefined they must always be passed.
+    """
     loader = loader or PromptLoader()
     visible = registry.visible(department_id=department_id, user_id=user_id)
     skills_menu = [
@@ -403,6 +410,8 @@ def build_report_system_prompt(
         style_guide=style_guide,
         skills_menu=skills_menu,
         available_category_hints=available_category_hints,
+        current_date=current_date,
+        current_date_long=current_date_long,
     )
 
 
@@ -589,18 +598,20 @@ class ReportRunner:
         provider = self._provider_factory(resolved)
 
         available_category_hints = await self._tools.available_categories()
+        now = datetime.now(UTC)
+        current_date = now.date().isoformat()
+        current_date_long = f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
         system = build_report_system_prompt(
             department_id=department_id,
             user_id=user_id,
             registry=self._skill_registry,
             style_guide=style_guide,
             available_category_hints=available_category_hints,
+            current_date=current_date,
+            current_date_long=current_date_long,
             loader=self._prompts,
         )
         tools = await self._tools.build(department_id, has_web_search=True)
-        now = datetime.now(UTC)
-        current_date = now.date().isoformat()
-        current_date_long = f"{now.strftime('%A')}, {now.strftime('%B')} {now.day}, {now.year}"
         if using_user_template:
             user_msg = self._prompts.render(
                 department_id,

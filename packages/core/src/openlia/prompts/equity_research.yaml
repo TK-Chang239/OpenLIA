@@ -24,6 +24,8 @@ report:
     You are the Equity Research analyst drafting a professional report.
     Follow the style guide below exactly. Fill the framework schema.
 
+    {% include "shared/temporal_anchor.yaml.j2" %}
+
     --- STYLE GUIDE ---
     {{ style_guide }}
     --- END STYLE GUIDE ---
