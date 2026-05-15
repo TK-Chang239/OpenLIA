@@ -76,6 +76,19 @@ class LLMRequest:
     #       {"mode": "ANY"|"AUTO"|"NONE", "allowed_function_names": [...]}}
     # `None` means no constraint (model decides).
     tool_choice: dict | None = None
+    # Canonical names of tools the runtime wants the adapter to satisfy
+    # via the provider's native server-side mechanism instead of the
+    # standard function-tool envelope. Today only "web_search" is
+    # recognized; adapters swap the generic ToolSchema for the
+    # provider-native form (e.g. `{"type": "web_search_20250305", ...}`
+    # on Anthropic, `{"google_search": {}}` on Gemini,
+    # `{"type": "web_search"}` on OpenAI Responses).
+    native_tools: tuple[str, ...] = ()
+    # Per-run cap on native web_search invocations. Anthropic enforces
+    # this server-side via the tool block's `max_uses`; Gemini and
+    # OpenAI have no equivalent so the runtime enforces softly via
+    # the dispatcher's per-run counter. `None` means no cap.
+    web_search_max_uses: int | None = None
 
 
 @dataclass(frozen=True)
@@ -86,18 +99,96 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
+class Citation:
+    """Provider-agnostic source reference attached to LLMResponse and,
+    downstream, to ReportSchema. One Citation per tool result or
+    web-search result the runtime observes.
+
+    `kind` distinguishes:
+      - "tool"   structured connector call; tool_name + tool_args identify it
+      - "web"    web search result; url + title + source populated
+      - "memory" model-knowledge fallback; source="model_knowledge" with
+                 `date` marking the staleness boundary
+    """
+
+    id: str
+    kind: str
+    tool_name: str | None = None
+    tool_args: dict | None = None
+    url: str | None = None
+    title: str | None = None
+    source: str | None = None
+    date: str | None = None
+    snippet: str | None = None
+    segment_start: int | None = None
+    segment_end: int | None = None
+
+
+@dataclass(frozen=True)
+class ServerToolCall:
+    """Telemetry record of a provider-side tool invocation the runtime
+    did NOT dispatch itself (native web_search). Never enters
+    ``ToolDispatcher.dispatch()``."""
+
+    name: str
+    arguments: dict
+    turn_idx: int
+
+
+@dataclass(frozen=True)
+class FailedSearch:
+    """Adapter-detected native search failure. Runtime rewrites each
+    entry into a configured-adapter ToolCall when a fallback is
+    available (the I-a rescue path). Single rewrite per (turn_idx,
+    query) — no retry loop."""
+
+    query: str
+    error_kind: str
+    error_message: str
+    turn_idx: int
+
+
+@dataclass(frozen=True)
+class ServerToolEvent:
+    """Streaming marker for provider-side tool activity. Surfaced
+    through ``LLMChunk.server_tool_event`` so the runtime can emit
+    SSE frames without each adapter knowing the wire format."""
+
+    kind: str
+    provider: str
+    query: str | None = None
+    urls: tuple[str, ...] = ()
+    n_results: int | None = None
+
+
+@dataclass(frozen=True)
 class LLMResponse:
     text: str
     finish_reason: str
     input_tokens: int
     output_tokens: int
     tool_calls: list[ToolCall] = field(default_factory=list)
+    # Source references collected from native tool results (kind="tool")
+    # and web search results (kind="web"). Empty tuple for adapters that
+    # do not yet emit citations; the runtime treats absence as "no
+    # provider-side citations" and falls back to inline-marker parsing.
+    citations: tuple[Citation, ...] = field(default_factory=tuple)
+    # Provider-side tool invocations recorded for telemetry only.
+    server_tool_calls: tuple[ServerToolCall, ...] = field(default_factory=tuple)
+    # Provider-side tool failures the runtime should consider rewriting
+    # into configured-adapter calls. See `FailedSearch` and the I-a
+    # rescue path in ReportRunner.
+    server_tool_failures: tuple[FailedSearch, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
 class LLMChunk:
     delta: str
     finish_reason: str | None = None
+    # Adapter-emitted markers for provider-side tool activity. Runtime
+    # translates these to SSE events (WebSearchInvoked /
+    # WebSearchCompleted). `None` on text-only chunks.
+    server_tool_event: ServerToolEvent | None = None
 
 
 @dataclass(frozen=True)
