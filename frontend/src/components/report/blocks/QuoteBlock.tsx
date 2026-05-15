@@ -1,4 +1,5 @@
 import type { QuoteBlock as Block } from '../../../api/reports';
+import { CitationRefs } from '../CitationRefs';
 
 const HIGHLIGHT_RE = /==(.+?)==/g;
 
@@ -19,7 +20,7 @@ function renderHighlightedText(text: string): React.ReactNode {
   return parts;
 }
 
-export function QuoteBlock({ text, speaker, role, tag, timestamp }: Omit<Block, 'type'>) {
+export function QuoteBlock({ text, speaker, role, tag, timestamp, source_ids }: Omit<Block, 'type'>) {
   return (
     <figure className="report-quote">
       {speaker || role || tag || timestamp ? (
@@ -34,7 +35,10 @@ export function QuoteBlock({ text, speaker, role, tag, timestamp }: Omit<Block, 
           {timestamp ? <span className="report-quote__timestamp">{timestamp}</span> : null}
         </figcaption>
       ) : null}
-      <blockquote className="report-quote__body">{renderHighlightedText(text)}</blockquote>
+      <blockquote className="report-quote__body">
+        {renderHighlightedText(text)}
+        <CitationRefs ids={source_ids} />
+      </blockquote>
     </figure>
   );
 }

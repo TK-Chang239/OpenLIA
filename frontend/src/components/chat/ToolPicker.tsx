@@ -6,11 +6,22 @@ import { listSkills, type SkillSummary } from "../../api/skills";
 import { patchSession } from "../../api/chat";
 
 interface Props {
-  /** Current chat session id — toggles persist on this row. */
-  sessionId: string;
+  /** Current chat session id — toggles persist on this row. When null
+   *  (no session yet), the picker still renders and tracks state but
+   *  skips `patchSession`; the caller is expected to push the final
+   *  state via `onChange` once a session is created. */
+  sessionId: string | null;
   /** Initial disabled lists from the loaded session row. */
   initialDisabledConnectorIds: string[];
   initialDisabledSkillIds: string[];
+  /** Notified whenever a toggle flips, regardless of sessionId. Lets the
+   *  parent hold the lifted state so it can be persisted at session
+   *  creation. Optional — when omitted (e.g., from ChatInterface where
+   *  sessionId is always non-null) the picker operates as before. */
+  onChange?: (next: {
+    disabledConnectorIds: string[];
+    disabledSkillIds: string[];
+  }) => void;
 }
 
 /** Per-session toggle for connectors + skills. Disabled connectors are
@@ -21,6 +32,7 @@ export function ToolPicker({
   sessionId,
   initialDisabledConnectorIds,
   initialDisabledSkillIds,
+  onChange,
 }: Props): JSX.Element | null {
   const [open, setOpen] = useState(false);
   const [connectors, setConnectors] = useState<ConnectorRow[] | null>(null);
@@ -75,11 +87,20 @@ export function ToolPicker({
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setDisabledConnectors(next);
+    onChange?.({
+      disabledConnectorIds: [...next],
+      disabledSkillIds: [...disabledSkills],
+    });
+    if (!sessionId) return;
     try {
       await patchSession(sessionId, { disabled_connector_ids: [...next] });
     } catch {
       // best-effort persist; revert on failure so UI stays in sync.
       setDisabledConnectors(disabledConnectors);
+      onChange?.({
+        disabledConnectorIds: [...disabledConnectors],
+        disabledSkillIds: [...disabledSkills],
+      });
     }
   };
 
@@ -88,10 +109,19 @@ export function ToolPicker({
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setDisabledSkills(next);
+    onChange?.({
+      disabledConnectorIds: [...disabledConnectors],
+      disabledSkillIds: [...next],
+    });
+    if (!sessionId) return;
     try {
       await patchSession(sessionId, { disabled_skill_ids: [...next] });
     } catch {
       setDisabledSkills(disabledSkills);
+      onChange?.({
+        disabledConnectorIds: [...disabledConnectors],
+        disabledSkillIds: [...disabledSkills],
+      });
     }
   };
 

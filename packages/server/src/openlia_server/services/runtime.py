@@ -31,7 +31,8 @@ from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.recall_artifacts import RecallArtifactsHandler
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.llm.runtime.web_search import WebSearchResolution, resolve_web_search
+from openlia.llm.types import ResolvedModel
 from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
@@ -82,11 +83,21 @@ class _EmptyDataDispatcher:
     ) -> list[dict[str, Any]]:
         return []
 
+    async def available_categories(self) -> list[str]:
+        return []
 
-def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
-    # Stub during connector-v2 rebuild; Phase 9 rewires search through the
-    # connector dispatcher.
-    return WebSearchResolution(available=False, variant=None, adapter=None)
+
+def _resolve_web_search_for(*, resolved: ResolvedModel) -> WebSearchResolution:
+    # Native variant is selected when the resolved model advertises
+    # `web_search_native=True` and the env-flag kill switch is off.
+    # Configured variant requires a connector-backed search adapter;
+    # Phase 9 rewires that path, so until then the factory returns None
+    # and unsupported-model + native-disabled cases fall through to
+    # `available=False`.
+    return resolve_web_search(
+        resolved=resolved,
+        search_adapter_factory=lambda: None,
+    )
 
 
 def _empty_skill_registry() -> SkillRegistry:
@@ -137,9 +148,16 @@ def _build_chat_runner_with_registry(
     recall_artifacts: RecallArtifactsHandler | None = None,
 ) -> ChatRunner:
     prompts = PromptLoader()
+
+    from openlia_server import dev_events
+
+    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
+        dev_events.record(category, message, payload)
+
     tools = ToolDispatcher(
         data_dispatcher=_EmptyDataDispatcher(),
         web_search=web_search,
+        trace=_trace,
     )
 
     def _provider_factory(resolved):
@@ -149,11 +167,6 @@ def _build_chat_runner_with_registry(
             model=resolved.model_ref,
             capabilities=resolved.capabilities,
         )
-
-    from openlia_server import dev_events
-
-    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
-        dev_events.record(category, message, payload)
 
     # v2 wiring: connector dispatcher + tool router + per-dept routing context.
     # Each piece is best-effort; if any fails the runner silently falls back
@@ -227,7 +240,20 @@ class RefreshingChatRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            web_search = _resolve_configured_search(db)
+            # Resolve the model up front so web search resolution can
+            # consult its capabilities (native variant requires
+            # `web_search_native=True`). The runner re-resolves internally
+            # on each turn — that's fine since the registry is stable.
+            try:
+                resolved = resolve(
+                    department_id=department_id,
+                    user_id=user_id,
+                    registry=registry,
+                    model_id_override=model_id_override,
+                )
+                web_search = _resolve_web_search_for(resolved=resolved)
+            except ModelNotConfiguredError:
+                web_search = WebSearchResolution(False, None, None)
             # Build the recall_artifacts handler with a session factory
             # bound to the same DB the runner uses. The handler opens a
             # fresh session per call so it never reuses a session
@@ -298,21 +324,13 @@ def _build_report_runner_with_registry(
 ) -> ReportRunner:
     """Build a per-run ``ReportRunner`` wired to the v2 connector dispatcher.
 
-    The bridge instance is pinned to ``(user_id, department_id, run_id,
-    run_date)`` so usage records the right cache row. ``RefreshingReportRunner``
-    creates a fresh ``ReportRunner`` per call so this binding is safe.
+    Phase B: empty starter pack — bridge returns [] from list_requirement_tools
+    and the LLM escalates via request_additional_tools for every data tool.
+    ``RefreshingReportRunner`` creates a fresh ``ReportRunner`` per call.
     """
     from openlia_server.services.report_dispatcher_bridge import ReportDispatcherBridge
-    from openlia_server.services.report_tool_cache import ReportToolCache
 
     prompts = PromptLoader()
-    cache = ReportToolCache(session=db)
-    cache.note_run_started(
-        user_id=user_id,
-        department_id=department_id,
-        run_id=run_id,
-        run_date=run_date,
-    )
     try:
         connector_dispatcher = build_dispatcher(db)
     except Exception:
@@ -321,15 +339,17 @@ def _build_report_runner_with_registry(
     else:
         data_dispatcher = ReportDispatcherBridge(
             dispatcher=connector_dispatcher,
-            cache=cache,
-            user_id=user_id,
             department_id=department_id,
-            run_id=run_id,
-            run_date=run_date,
         )
+    from openlia_server import dev_events
+
+    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
+        dev_events.record(category, message, payload)
+
     tools = ToolDispatcher(
         data_dispatcher=data_dispatcher,
         web_search=web_search,
+        trace=_trace,
     )
 
     def _provider_factory(resolved):
@@ -339,11 +359,6 @@ def _build_report_runner_with_registry(
             model=resolved.model_ref,
             capabilities=resolved.capabilities,
         )
-
-    from openlia_server import dev_events
-
-    def _trace(category: str, message: str, payload: dict[str, Any] | None) -> None:
-        dev_events.record(category, message, payload)
 
     return ReportRunner(
         prompts=prompts,
@@ -384,7 +399,16 @@ class RefreshingReportRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            web_search = _resolve_configured_search(db)
+            try:
+                resolved = resolve(
+                    department_id=department_id,
+                    user_id=user_id,
+                    registry=registry,
+                    model_id_override=model_id_override,
+                )
+                web_search = _resolve_web_search_for(resolved=resolved)
+            except ModelNotConfiguredError:
+                web_search = WebSearchResolution(False, None, None)
             run_id = f"r_{_uuid.uuid4().hex[:12]}"
             run_date = _dt.now(_UTC).date()
             runner = _build_report_runner_with_registry(

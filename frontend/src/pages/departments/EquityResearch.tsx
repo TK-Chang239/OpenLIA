@@ -13,6 +13,7 @@ import {
   createSession,
   getSession,
   listMessages,
+  patchSession,
 } from "../../api/chat";
 import { saveReportToRepo } from "../../api/repo";
 import {
@@ -74,7 +75,7 @@ function parseTickerCompany(
 }
 
 export default function EquityResearch(): JSX.Element {
-  const { config, loading, patch } = useErConfig();
+  const { config, patch } = useErConfig();
   const { user } = useAuth();
   const fileViewer = useFileViewer();
 
@@ -95,6 +96,8 @@ export default function EquityResearch(): JSX.Element {
   const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
   const [genDurationSec, setGenDurationSec] = useState<number | null>(null);
   const [autoStarted, setAutoStarted] = useState(false);
+  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>([]);
+  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
 
   const lastSentChatRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
@@ -154,6 +157,8 @@ export default function EquityResearch(): JSX.Element {
       setHistory([]);
       setHistoryLoaded(false);
       setRestoredReportId(null);
+      setDisabledConnectorIds([]);
+      setDisabledSkillIds([]);
       return;
     }
     let cancelled = false;
@@ -169,7 +174,14 @@ export default function EquityResearch(): JSX.Element {
       ),
     ]).then(async ([sess, msgs, reports]) => {
       if (cancelled) return;
-      if (sess) setSessionTitle(sess.title);
+      if (sess) {
+        setSessionTitle(sess.title);
+        setDisabledConnectorIds(sess.disabled_connector_ids ?? []);
+        setDisabledSkillIds(sess.disabled_skill_ids ?? []);
+      } else {
+        setDisabledConnectorIds([]);
+        setDisabledSkillIds([]);
+      }
       setHistory(msgs?.items ?? []);
       setHistoryLoaded(true);
       const latest = reports?.items?.[0];
@@ -276,6 +288,14 @@ export default function EquityResearch(): JSX.Element {
         setSessionId(row.id);
         setSessionTitle(row.title);
         setSubject(trimmed);
+        // Push any pre-session tool toggles onto the new row. Fire-and-forget;
+        // a failure here just falls back to "all on" for this run.
+        if (disabledConnectorIds.length > 0 || disabledSkillIds.length > 0) {
+          void patchSession(row.id, {
+            disabled_connector_ids: disabledConnectorIds,
+            disabled_skill_ids: disabledSkillIds,
+          });
+        }
         startReport({
           url: "/api/departments/equity-research/report",
           body: {
@@ -289,7 +309,13 @@ export default function EquityResearch(): JSX.Element {
         setStartError(err instanceof Error ? err.message : "Failed to start research");
       }
     },
-    [config, resetReport, startReport],
+    [
+      config,
+      resetReport,
+      startReport,
+      disabledConnectorIds,
+      disabledSkillIds,
+    ],
   );
 
   const handleComposerSubmit = (text: string, attachments?: File[]) => {
@@ -409,19 +435,16 @@ export default function EquityResearch(): JSX.Element {
 
   const autoscrollKey = useMemo(
     () =>
-      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${schema ? "s" : "_"}`,
+      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${reportState.toolCalls.length}:${schema ? "s" : "_"}`,
     [
       history.length,
       chatStream.state.message.length,
       chatStream.state.toolCalls.length,
       reportState.status,
+      reportState.toolCalls.length,
       schema,
     ],
   );
-
-  if (loading || !config) {
-    return <PageSkeleton />;
-  }
 
   const { ticker, company } = parseTickerCompany(schema?.cover ?? null);
   const placeholder = sessionId
@@ -446,11 +469,31 @@ export default function EquityResearch(): JSX.Element {
               ))}
 
               {isReportStreaming ? (
-                <ReportProgressIndicator
-                  startedAt={genStartedAt}
-                  mode={config.report_mode}
-                  subject={subject || sessionTitle || ""}
-                />
+                <>
+                  <ReportProgressIndicator
+                    startedAt={genStartedAt}
+                    mode={config.report_mode}
+                    subject={subject || sessionTitle || ""}
+                  />
+                  {reportState.toolCalls.length > 0 ? (
+                    <div
+                      data-testid="er-report-tool-chips"
+                      className="flex flex-wrap gap-2"
+                    >
+                      {reportState.toolCalls.map((c, i) => (
+                        <ToolCallChip
+                          key={c.callId || `rt-${i}`}
+                          toolName={c.toolName}
+                          argsPreview={c.argsPreview}
+                          status={c.status}
+                          summary={c.summary}
+                          structured={null}
+                          index={i}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
               {reportState.status === "error" ? (
@@ -550,13 +593,15 @@ export default function EquityResearch(): JSX.Element {
         onModeClick={() => setSettingsOpen(true)}
         modelPicker={<ModelPicker />}
         toolPicker={
-          sessionId ? (
-            <ToolPicker
-              sessionId={sessionId}
-              initialDisabledConnectorIds={[]}
-              initialDisabledSkillIds={[]}
-            />
-          ) : null
+          <ToolPicker
+            sessionId={sessionId}
+            initialDisabledConnectorIds={disabledConnectorIds}
+            initialDisabledSkillIds={disabledSkillIds}
+            onChange={(next) => {
+              setDisabledConnectorIds(next.disabledConnectorIds);
+              setDisabledSkillIds(next.disabledSkillIds);
+            }}
+          />
         }
         initialValue={tickerParam ?? promptParam ?? undefined}
       />
@@ -601,24 +646,5 @@ function HistoricalMessage({ message }: { message: ChatMessage }): JSX.Element {
         departmentId="equity_research"
       />
     </>
-  );
-}
-
-function PageSkeleton(): JSX.Element {
-  return (
-    <div className="flex h-full flex-col bg-[--color-bg-base]">
-      <header className="flex h-[52px] flex-shrink-0 items-center border-b border-[--color-border-subtle] px-6">
-        <div
-          className="h-5 w-40 animate-pulse rounded bg-[--color-border-subtle]"
-          aria-hidden="true"
-        />
-      </header>
-      <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
-        <div className="space-y-3 text-center">
-          <div className="mx-auto h-7 w-56 animate-pulse rounded bg-[--color-border-subtle]" />
-          <div className="mx-auto h-4 w-72 animate-pulse rounded bg-[--color-border-subtle]" />
-        </div>
-      </div>
-    </div>
   );
 }

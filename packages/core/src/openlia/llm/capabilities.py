@@ -77,7 +77,7 @@ def _openai_gpt_5_4() -> Capabilities:
         vision=True,
         web_search_native=True,
         max_context_tokens=200_000,
-        max_output_tokens=8_192,
+        max_output_tokens=128_000,
     )
 
 

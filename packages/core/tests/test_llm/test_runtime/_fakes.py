@@ -78,6 +78,19 @@ class FakeProvider(LLMProvider):
                 output_tokens=0,
                 tool_calls=list(payload),
             )
+        if kind == "tool_calls_with_searches":
+            # payload: {"tool_calls": [...], "server_tool_calls": (...),
+            # "citations": (...), "server_tool_failures": (...)}
+            return LLMResponse(
+                text="",
+                finish_reason="tool_calls",
+                input_tokens=0,
+                output_tokens=0,
+                tool_calls=list(payload.get("tool_calls") or []),
+                server_tool_calls=tuple(payload.get("server_tool_calls") or ()),
+                citations=tuple(payload.get("citations") or ()),
+                server_tool_failures=tuple(payload.get("server_tool_failures") or ()),
+            )
         if kind == "final_json":
             return LLMResponse(
                 text=payload,
@@ -110,6 +123,12 @@ class FakeProvider(LLMProvider):
             return
         if kind == "text":
             yield LLMChunk(delta=payload, finish_reason="stop")
+            return
+        if kind == "stream_chunks":
+            # `payload` is a list of LLMChunk instances. Yielded as-is so
+            # tests can pre-build chunks carrying server_tool_event etc.
+            for chunk in payload:
+                yield chunk
             return
         raise AssertionError(f"unknown stream turn {kind}")
 
@@ -145,6 +164,9 @@ class FakeDataDispatcher:
         if isinstance(entry, list):
             return entry
         return [entry]
+
+    async def available_categories(self) -> list[str]:
+        return []
 
 
 @dataclass

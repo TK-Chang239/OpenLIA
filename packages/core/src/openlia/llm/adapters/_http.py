@@ -33,12 +33,19 @@ _CONTEXT_LENGTH_RE = re.compile(r"(?:context|maximum).*?(\d{3,7})\s*tokens?", re
 def make_client(
     *,
     base_url: str,
-    timeout: float = 30.0,
+    timeout: httpx.Timeout | float | None = None,
     headers: dict[str, str] | None = None,
 ) -> httpx.AsyncClient:
     # httpx-level transport retries handle low-level TLS / connect resets that
     # fire before any HTTP response arrives. with_retries handles the
     # application-level retries on top.
+    #
+    # Default timeout is generous on read because long-context models
+    # (gpt-5.4, claude-opus-4-7) routinely take minutes to emit the first
+    # byte on large reasoning + tool-loop turns. Connect/write/pool stay
+    # short so legitimately broken sockets surface fast.
+    if timeout is None:
+        timeout = httpx.Timeout(connect=15.0, read=600.0, write=60.0, pool=15.0)
     transport = httpx.AsyncHTTPTransport(retries=2)
     return httpx.AsyncClient(
         base_url=base_url,

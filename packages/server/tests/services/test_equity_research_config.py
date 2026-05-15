@@ -93,3 +93,91 @@ def test_resolve_active_returns_sections_for_selected_mode(db_session, user):
     expected_ids = {s["id"] for s in load_framework("stock_update")["sections"]}
     assert set(active.enabled_section_ids) == expected_ids
     assert active.custom_sections == ()
+
+
+# ---------- Phase 5f: per-mode web_search budget overrides ----------
+
+
+def test_get_config_defaults_web_search_budgets_by_mode_to_empty(db_session, user):
+    """No row → defaults: no overrides recorded; ReportRunner falls back
+    to the framework default."""
+    svc = EquityResearchConfigService(db_session)
+    cfg = svc.get_config(user)
+    assert cfg.web_search_budgets_by_mode == {}
+
+
+def test_update_config_persists_web_search_budgets_by_mode(db_session, user):
+    svc = EquityResearchConfigService(db_session)
+    svc.get_config(user)
+    updated = svc.update_config(
+        user,
+        web_search_budgets_by_mode={
+            "stock_initiation": 12,
+            "stock_update": 3,
+        },
+    )
+    assert updated.web_search_budgets_by_mode == {
+        "stock_initiation": 12,
+        "stock_update": 3,
+    }
+    # Round-trip through DB.
+    refreshed = svc.get_config(user)
+    assert refreshed.web_search_budgets_by_mode == {
+        "stock_initiation": 12,
+        "stock_update": 3,
+    }
+
+
+def test_update_config_merges_web_search_budgets_partially(db_session, user):
+    """A PUT that only sets one mode must leave the other modes' budgets
+    intact — the patch is a merge, not a replacement."""
+    svc = EquityResearchConfigService(db_session)
+    svc.get_config(user)
+    svc.update_config(
+        user, web_search_budgets_by_mode={"stock_initiation": 10, "sector_research": 15}
+    )
+    svc.update_config(user, web_search_budgets_by_mode={"stock_update": 4})
+    cfg = svc.get_config(user)
+    assert cfg.web_search_budgets_by_mode == {
+        "stock_initiation": 10,
+        "sector_research": 15,
+        "stock_update": 4,
+    }
+
+
+def test_update_config_rejects_unknown_mode_in_budget_map(db_session, user):
+    svc = EquityResearchConfigService(db_session)
+    svc.get_config(user)
+    with pytest.raises(ValueError, match="unknown mode"):
+        svc.update_config(
+            user, web_search_budgets_by_mode={"not_a_real_mode": 5}
+        )
+
+
+def test_update_config_rejects_non_positive_budget(db_session, user):
+    svc = EquityResearchConfigService(db_session)
+    svc.get_config(user)
+    with pytest.raises(ValueError, match="positive"):
+        svc.update_config(
+            user, web_search_budgets_by_mode={"stock_initiation": 0}
+        )
+    with pytest.raises(ValueError, match="positive"):
+        svc.update_config(
+            user, web_search_budgets_by_mode={"stock_initiation": -3}
+        )
+
+
+def test_resolve_active_exposes_web_search_budget_for_mode(db_session, user):
+    """The runner reads ``active.web_search_budget`` to populate
+    ``ReportRequest.web_search_budget_override``. None when the user
+    hasn't set one — runner then falls back to framework default."""
+    svc = EquityResearchConfigService(db_session)
+    svc.get_config(user)
+    svc.update_config(user, web_search_budgets_by_mode={"stock_initiation": 7})
+
+    cfg = svc.get_config(user)
+    init_active = svc.resolve_active(cfg, mode="stock_initiation")
+    assert init_active.web_search_budget == 7
+
+    update_active = svc.resolve_active(cfg, mode="stock_update")
+    assert update_active.web_search_budget is None

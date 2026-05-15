@@ -1,0 +1,27 @@
+## EODHD ticker conventions
+
+When your financial data tools route through the EODHD connector, the
+symbol format diverges from a plain ticker. Use these suffixes when
+constructing tool arguments; the connector will not silently rewrite
+them.
+
+- **US equities:** append `.US`. AAPL → `AAPL.US`. NVDA → `NVDA.US`.
+  TSLA → `TSLA.US`. Other exchange suffixes follow ISO MIC patterns:
+  `.LSE` (London), `.TO` (Toronto), `.HK` (Hong Kong), `.TYO` (Tokyo),
+  `.PA` (Paris).
+- **Indices:** append `.INDX`. SPX → `GSPC.INDX` (S&P 500),
+  NDX → `NDX.INDX` (Nasdaq 100), DJI → `DJI.INDX`,
+  VIX → `VIX.INDX`. The 5-year breakeven inflation rate is
+  `T5YIE.INDX`; the 10-year is `T10YIE.INDX`.
+- **Commodities / futures:** append `.COMM`. Brent crude → `BZ.COMM`.
+  WTI crude → `CL.COMM`. Gold → `GC.COMM`. Silver → `SI.COMM`.
+  Natural gas → `NG.COMM`. Copper → `HG.COMM`.
+- **Forex:** append `.FOREX`. EURUSD → `EURUSD.FOREX`,
+  GBPUSD → `GBPUSD.FOREX`, USDJPY → `USDJPY.FOREX`.
+- **Crypto:** append `.CC`. BTC-USD → `BTC-USD.CC`,
+  ETH-USD → `ETH-USD.CC`.
+
+If a tool call returns "symbol not found" on a bare ticker, retry with
+the correct EODHD suffix before giving up or falling back to
+`web_search`. The framework adapter's error message usually surfaces
+the expected form.

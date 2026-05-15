@@ -206,6 +206,7 @@ class Dispatcher:
                         "name": f"{conn.provider_id}{PREFIX_SEP}{tool_name}",
                         "description": td.description,
                         "input_schema": td.input_schema,
+                        "category": conn.category.value,
                     }
                 )
         return out
