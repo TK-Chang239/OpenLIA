@@ -56,7 +56,13 @@ def test_shared_include_voice_is_rendered_into_secretary_system() -> None:
 
 def test_shared_include_output_discipline_is_rendered_into_report_system() -> None:
     loader = PromptLoader()
-    out = loader.render("equity_research", "report.system", style_guide="x")
+    out = loader.render(
+        "equity_research",
+        "report.system",
+        style_guide="x",
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+    )
     assert "Output discipline" in out
 
 

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import dataclasses
 import json
 import os
 import re
@@ -51,10 +52,13 @@ from openlia.llm.runtime.events import (
 from openlia.llm.runtime.messages import Attachment, ContentBlock, ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.tools import _READ_PAYLOAD_SCHEMA, MAX_TOOL_TURNS, ToolDispatcher
+from openlia.llm.runtime.web_search import WebSearchResolution
 from openlia.llm.types import (
     LLMRequest,
+    LLMResponse,
     Message,
     ResolvedModel,
+    ToolCall,
     ToolSchema,
 )
 from openlia.reports.schema import ReportSchema
@@ -169,6 +173,75 @@ def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
     if len(s) <= max_len:
         return s
     return s[:max_len]
+
+
+def _rescue_failed_searches(
+    response: LLMResponse,
+    *,
+    web_search_resolution: WebSearchResolution,
+    seen: set[tuple[int, str]],
+    trace: Callable[[str, str, dict[str, Any] | None], None],
+) -> LLMResponse:
+    """I-a rescue path: rewrite native web_search failures into synthetic
+    configured-adapter ToolCalls.
+
+    For each ``FailedSearch`` in ``response.server_tool_failures``:
+      * If a configured search adapter is available, append a
+        ``ToolCall(name="web_search", arguments={"query": failure.query})``
+        to ``response.tool_calls``. The standard dispatch loop picks it
+        up on the next turn and routes to the configured adapter.
+      * Otherwise, leave the failure inline. The two-source-discipline
+        prompt directs the model to write "Data not available".
+
+    Guardrail G-1: ``seen`` is a per-run set of ``(turn_idx, query)``
+    pairs that have already been rewritten. A second rewrite of the same
+    pair is suppressed to prevent a native-fail → configured-fail →
+    re-rewrite loop.
+
+    Pure helper; no side effects beyond ``seen`` mutation and trace
+    emission. Returned LLMResponse is a new instance when rewrites
+    occur, the original instance otherwise.
+    """
+    if not response.server_tool_failures:
+        return response
+
+    has_configured = (
+        web_search_resolution.variant == "configured"
+        and web_search_resolution.adapter is not None
+    )
+    if not has_configured:
+        for f in response.server_tool_failures:
+            trace(
+                "web_search.failed",
+                f"native failed ({f.error_kind}); no configured fallback",
+                {"query": f.query, "error_kind": f.error_kind, "turn_idx": f.turn_idx},
+            )
+        return response
+
+    new_calls = list(response.tool_calls)
+    rewrote = False
+    for i, f in enumerate(response.server_tool_failures):
+        key = (f.turn_idx, f.query)
+        if key in seen:
+            continue
+        seen.add(key)
+        new_calls.append(
+            ToolCall(
+                id=f"rescue_{f.turn_idx}_{i}",
+                name="web_search",
+                arguments={"query": f.query},
+            )
+        )
+        rewrote = True
+        trace(
+            "web_search.rescue",
+            f"native failed ({f.error_kind}); routing to configured",
+            {"query": f.query, "error_kind": f.error_kind, "turn_idx": f.turn_idx},
+        )
+
+    if not rewrote:
+        return response
+    return dataclasses.replace(response, tool_calls=new_calls)
 
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
@@ -645,6 +718,23 @@ class ReportRunner:
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
+        # Phase 0 wiring: derive native_tools from the runtime's web
+        # search resolution. When variant=="native", adapters will swap
+        # the provider's native web_search tool block into the wire
+        # payload; the dispatcher already suppresses the generic
+        # ToolSchema in this case (guardrail G-6). When variant is
+        # configured or unavailable, native_tools stays empty.
+        native_tools: tuple[str, ...] = (
+            ("web_search",) if self._tools.web_search.variant == "native" else ()
+        )
+        web_search_max_uses = self._tools.web_search_budget
+        # Per-run rescue set (guardrail G-1): each (turn_idx, query)
+        # pair gets at most one configured-adapter rewrite. If the
+        # configured retry also fails, the failure stays inline and the
+        # two-source-discipline prompt instructs the model to write
+        # "Data not available."
+        rescue_seen: set[tuple[int, str]] = set()
+
         force_escalation_choice = _force_tool_choice(
             resolved.provider_kind, _REQUEST_ADDITIONAL_TOOLS_NAME
         )
@@ -675,6 +765,8 @@ class ReportRunner:
                             tools=tools or None,
                             tool_choice=turn_tool_choice,
                             max_tokens=2048,
+                            native_tools=native_tools,
+                            web_search_max_uses=web_search_max_uses,
                         )
                     ),
                     cancel_token=cancel_token,
@@ -693,6 +785,16 @@ class ReportRunner:
                     message=str(exc),
                 )
                 return
+            # I-a rescue: when a provider's native web_search failed
+            # mid-turn and a configured fallback exists, rewrite each
+            # failure into a synthetic web_search ToolCall. The
+            # standard dispatch loop below picks it up next turn.
+            response = _rescue_failed_searches(
+                response,
+                web_search_resolution=self._tools.web_search,
+                seen=rescue_seen,
+                trace=self._trace,
+            )
             self._trace(
                 "llm.call.done",
                 f"tool turn {turn_idx} done tool_calls={len(response.tool_calls)}",

@@ -201,6 +201,55 @@ class ReportError:
     ts: str = field(default_factory=_utc_now_iso)
 
 
+@dataclass(frozen=True)
+class ReportWebSearchInvoked:
+    """Emitted when the model fires a native web_search call. Lets the
+    UI render a "Searching: …" status during the 5-15s server-side
+    search so the report stream never appears frozen."""
+
+    TYPE = "report.web_search.invoked"
+    report_id: str
+    query: str
+    turn_idx: int
+    provider: str
+    ts: str = field(default_factory=_utc_now_iso)
+
+
+@dataclass(frozen=True)
+class ReportWebSearchCompleted:
+    """Emitted when a native web_search call returns. Carries the result
+    URLs so the UI can surface a citation chip immediately."""
+
+    TYPE = "report.web_search.completed"
+    report_id: str
+    n_results: int
+    urls: list[str]
+    turn_idx: int
+    provider: str
+    ts: str = field(default_factory=_utc_now_iso)
+
+
+@dataclass(frozen=True)
+class ChatWebSearchInvoked:
+    TYPE = "chat.web_search.invoked"
+    message_id: str
+    query: str
+    turn_idx: int
+    provider: str
+    ts: str = field(default_factory=_utc_now_iso)
+
+
+@dataclass(frozen=True)
+class ChatWebSearchCompleted:
+    TYPE = "chat.web_search.completed"
+    message_id: str
+    n_results: int
+    urls: list[str]
+    turn_idx: int
+    provider: str
+    ts: str = field(default_factory=_utc_now_iso)
+
+
 SseEvent = (
     ChatStart
     | ChatToolCallStart
@@ -212,6 +261,8 @@ SseEvent = (
     | ChatGuardrail
     | ChatSkillLoaded
     | ChatMemoryBlock
+    | ChatWebSearchInvoked
+    | ChatWebSearchCompleted
     | ReportStart
     | ReportPhase
     | ReportToolCallStart
@@ -221,6 +272,8 @@ SseEvent = (
     | ReportSectionComplete
     | ReportComplete
     | ReportError
+    | ReportWebSearchInvoked
+    | ReportWebSearchCompleted
 )
 
 
