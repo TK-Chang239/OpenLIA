@@ -31,7 +31,8 @@ from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.recall_artifacts import RecallArtifactsHandler
 from openlia.llm.runtime.report import ReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
-from openlia.llm.runtime.web_search import WebSearchResolution
+from openlia.llm.runtime.web_search import WebSearchResolution, resolve_web_search
+from openlia.llm.types import ResolvedModel
 from openlia.skills import FilesystemSkillStore, LayeredSkillStore, SkillRegistry
 from sqlalchemy.orm import Session as DBSession
 
@@ -86,10 +87,17 @@ class _EmptyDataDispatcher:
         return []
 
 
-def _resolve_configured_search(db: DBSession) -> WebSearchResolution:
-    # Stub during connector-v2 rebuild; Phase 9 rewires search through the
-    # connector dispatcher.
-    return WebSearchResolution(available=False, variant=None, adapter=None)
+def _resolve_web_search_for(*, resolved: ResolvedModel) -> WebSearchResolution:
+    # Native variant is selected when the resolved model advertises
+    # `web_search_native=True` and the env-flag kill switch is off.
+    # Configured variant requires a connector-backed search adapter;
+    # Phase 9 rewires that path, so until then the factory returns None
+    # and unsupported-model + native-disabled cases fall through to
+    # `available=False`.
+    return resolve_web_search(
+        resolved=resolved,
+        search_adapter_factory=lambda: None,
+    )
 
 
 def _empty_skill_registry() -> SkillRegistry:
@@ -232,7 +240,20 @@ class RefreshingChatRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            web_search = _resolve_configured_search(db)
+            # Resolve the model up front so web search resolution can
+            # consult its capabilities (native variant requires
+            # `web_search_native=True`). The runner re-resolves internally
+            # on each turn — that's fine since the registry is stable.
+            try:
+                resolved = resolve(
+                    department_id=department_id,
+                    user_id=user_id,
+                    registry=registry,
+                    model_id_override=model_id_override,
+                )
+                web_search = _resolve_web_search_for(resolved=resolved)
+            except ModelNotConfiguredError:
+                web_search = WebSearchResolution(False, None, None)
             # Build the recall_artifacts handler with a session factory
             # bound to the same DB the runner uses. The handler opens a
             # fresh session per call so it never reuses a session
@@ -378,7 +399,16 @@ class RefreshingReportRunner:
         db = self._factory()
         try:
             registry = SQLModelRegistry(db)
-            web_search = _resolve_configured_search(db)
+            try:
+                resolved = resolve(
+                    department_id=department_id,
+                    user_id=user_id,
+                    registry=registry,
+                    model_id_override=model_id_override,
+                )
+                web_search = _resolve_web_search_for(resolved=resolved)
+            except ModelNotConfiguredError:
+                web_search = WebSearchResolution(False, None, None)
             run_id = f"r_{_uuid.uuid4().hex[:12]}"
             run_date = _dt.now(_UTC).date()
             runner = _build_report_runner_with_registry(
