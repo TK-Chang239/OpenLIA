@@ -47,6 +47,8 @@ from openlia.llm.runtime.events import (
     ReportStart,
     ReportToolCall,
     ReportToolCallStart,
+    ReportWebSearchCompleted,
+    ReportWebSearchInvoked,
     SseEvent,
 )
 from openlia.llm.runtime.messages import Attachment, ContentBlock, ReportRequest
@@ -550,6 +552,55 @@ def _no_trace(_category: str, _message: str, _payload: dict[str, Any] | None) ->
     return None
 
 
+def _web_search_events_for_response(
+    response: LLMResponse,
+    *,
+    report_id: str,
+    turn_idx: int,
+    provider_kind: str,
+) -> list[SseEvent]:
+    """Build the ReportWebSearchInvoked/Completed pair for an LLM turn
+    that exercised native server-side web search.
+
+    Emits one ``ReportWebSearchInvoked`` per ``server_tool_calls`` entry
+    named ``web_search``, then a single aggregate ``ReportWebSearchCompleted``
+    carrying the de-duplicated web citation URLs from the same turn.
+    Returns an empty list when the response carried no native search
+    activity — guards against phantom events for plain tool-calling
+    turns.
+    """
+    search_calls = [c for c in response.server_tool_calls if c.name == "web_search"]
+    if not search_calls:
+        return []
+    events: list[SseEvent] = []
+    for call in search_calls:
+        events.append(
+            ReportWebSearchInvoked(
+                report_id=report_id,
+                query=str(call.arguments.get("query", "")),
+                turn_idx=turn_idx,
+                provider=provider_kind,
+            )
+        )
+    seen: set[str] = set()
+    urls: list[str] = []
+    for c in response.citations:
+        if c.kind != "web" or not c.url or c.url in seen:
+            continue
+        seen.add(c.url)
+        urls.append(c.url)
+    events.append(
+        ReportWebSearchCompleted(
+            report_id=report_id,
+            n_results=len(urls),
+            urls=urls,
+            turn_idx=turn_idx,
+            provider=provider_kind,
+        )
+    )
+    return events
+
+
 class ReportRunner:
     def __init__(
         self,
@@ -795,6 +846,13 @@ class ReportRunner:
                 seen=rescue_seen,
                 trace=self._trace,
             )
+            for _ev in _web_search_events_for_response(
+                response,
+                report_id=report_id,
+                turn_idx=turn_idx,
+                provider_kind=resolved.provider_kind,
+            ):
+                yield _ev
             self._trace(
                 "llm.call.done",
                 f"tool turn {turn_idx} done tool_calls={len(response.tool_calls)}",
@@ -936,6 +994,14 @@ class ReportRunner:
                     message=str(exc),
                 )
                 return
+
+            for _ev in _web_search_events_for_response(
+                response,
+                report_id=report_id,
+                turn_idx=writing_turn,
+                provider_kind=resolved.provider_kind,
+            ):
+                yield _ev
 
             # Check for submit_report call.
             submit_call = next(

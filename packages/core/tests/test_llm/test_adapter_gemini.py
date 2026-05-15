@@ -403,3 +403,98 @@ async def test_generate_segments_citations_via_grounding_supports() -> None:
     assert ("https://a", 0, 10) in segmented
     assert ("https://b", 0, 10) in segmented
     assert ("https://b", 11, 20) in segmented
+
+
+# ---------- Unified streaming: synthetic ServerToolEvent ----------
+
+
+async def test_stream_emits_synthetic_invoked_and_completed_when_grounded() -> None:
+    """Gemini's streamed responses don't expose per-search progress.
+    When a streamed chunk's candidate carries `groundingMetadata`, the
+    adapter emits a synthetic ServerToolEvent(kind="invoked") then
+    ServerToolEvent(kind="completed") on the same chunk's tail — so
+    the runtime can surface 'Searching...' + result urls."""
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"NVDA"}]},'
+        b'"groundingMetadata":{"webSearchQueries":["NVDA earnings"],'
+        b'"groundingChunks":['
+        b'{"web":{"uri":"https://reuters.com/nvda","title":"R"}},'
+        b'{"web":{"uri":"https://ft.com/nvda","title":"F"}}'
+        b'],'
+        b'"groundingSupports":[]'
+        b'},"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    events = [c.server_tool_event for c in chunks if c.server_tool_event]
+    kinds = [e.kind for e in events]
+    assert kinds == ["invoked", "completed"]
+    assert events[0].provider == "gemini"
+    assert events[0].query == "NVDA earnings"
+    assert events[1].provider == "gemini"
+    assert events[1].n_results == 2
+    assert events[1].urls == ("https://reuters.com/nvda", "https://ft.com/nvda")
+
+
+async def test_stream_no_grounding_emits_no_server_tool_event() -> None:
+    """Streams without groundingMetadata must NOT emit synthetic
+    ServerToolEvents — otherwise the runtime emits phantom search
+    events for plain replies."""
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}]},'
+        b'"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert all(c.server_tool_event is None for c in chunks)
+
+
+async def test_stream_grounding_emits_once_even_across_multiple_chunks() -> None:
+    """The synthetic invoked/completed pair fires exactly once per
+    stream — when grounding metadata first appears. A later chunk
+    carrying additional text must not retrigger."""
+    adapter = _adapter()
+    sse_body = (
+        b'data: {"candidates":[{"content":{"parts":[{"text":"a"}]},'
+        b'"groundingMetadata":{"webSearchQueries":["q"],'
+        b'"groundingChunks":[{"web":{"uri":"https://x","title":"X"}}]'
+        b'},"index":0}]}\n\n'
+        b'data: {"candidates":[{"content":{"parts":[{"text":"b"}]},'
+        b'"groundingMetadata":{"webSearchQueries":["q"],'
+        b'"groundingChunks":[{"web":{"uri":"https://x","title":"X"}}]'
+        b'},"finishReason":"STOP","index":0}]}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            "gemini-3-flash:streamGenerateContent"
+        ).respond(200, content=sse_body, headers={"content-type": "text/event-stream"})
+        chunks = []
+        async for c in adapter.stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    events = [c.server_tool_event for c in chunks if c.server_tool_event]
+    assert [e.kind for e in events] == ["invoked", "completed"]

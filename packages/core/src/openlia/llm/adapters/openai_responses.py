@@ -36,6 +36,7 @@ from openlia.llm.types import (
     ModelInfo,
     ProviderCredentials,
     ServerToolCall,
+    ServerToolEvent,
     TestResult,
     ToolCall,
 )
@@ -292,14 +293,84 @@ class OpenAIResponsesAdapter(LLMProvider):
         )
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        """Phase 3a ships generate() only. Streaming SSE parsing for
-        `response.output_text.delta` and `response.web_search_call.*`
-        events lands in a follow-up sub-task that introduces the unified
-        ServerToolEvent streaming pipeline. For now, fall back to
-        generate() and yield one chunk so streaming callers don't
-        break."""
-        resp = await self.generate(request)
-        yield LLMChunk(delta=resp.text, finish_reason=resp.finish_reason)
+        """Real Responses-API SSE parsing.
+
+        Recognized events:
+          * `response.output_text.delta`      → text chunk
+          * `response.web_search_call.in_progress` → ServerToolEvent("invoked")
+          * `response.web_search_call.completed`   → ServerToolEvent("completed")
+          * `response.completed`              → terminal chunk with finish_reason
+
+        Unknown event types are ignored, keeping the adapter forward-
+        compatible with future SSE additions from OpenAI.
+        """
+        payload: dict = {
+            "model": self.model,
+            "input": _to_responses_input(list(request.messages)),
+            "stream": True,
+        }
+        if request.system:
+            payload["instructions"] = strip_cache_breakpoint(request.system)
+        if request.max_tokens:
+            payload["max_output_tokens"] = request.max_tokens
+        tools = _build_responses_tools(request)
+        if tools is not None:
+            payload["tools"] = tools
+        if request.tool_choice is not None:
+            payload["tool_choice"] = request.tool_choice
+
+        async with make_client(base_url=self._base_url, headers=self._headers()) as client:
+            try:
+                async with client.stream("POST", "/v1/responses", json=payload) as resp:
+                    if resp.status_code != 200:
+                        body_bytes = await resp.aread()
+                        status_to_exception(
+                            status_code=resp.status_code,
+                            body_text=body_bytes.decode("utf-8", errors="replace"),
+                            headers=dict(resp.headers),
+                        )
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line[len("data:") :].strip()
+                        if data == "[DONE]":
+                            continue
+                        try:
+                            evt = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        etype = evt.get("type")
+                        if etype == "response.output_text.delta":
+                            text = evt.get("delta") or ""
+                            if text:
+                                yield LLMChunk(delta=text)
+                        elif etype == "response.web_search_call.in_progress":
+                            item = evt.get("item") or {}
+                            action = item.get("action") or {}
+                            yield LLMChunk(
+                                delta="",
+                                server_tool_event=ServerToolEvent(
+                                    kind="invoked",
+                                    provider="openai",
+                                    query=str(action.get("query", "")),
+                                ),
+                            )
+                        elif etype == "response.web_search_call.completed":
+                            yield LLMChunk(
+                                delta="",
+                                server_tool_event=ServerToolEvent(
+                                    kind="completed",
+                                    provider="openai",
+                                ),
+                            )
+                        elif etype == "response.completed":
+                            response_obj = evt.get("response") or {}
+                            yield LLMChunk(
+                                delta="",
+                                finish_reason=response_obj.get("status", "completed"),
+                            )
+            except TRANSIENT_NETWORK_ERRORS as exc:
+                raise wrap_httpx_error(exc) from exc
 
     async def test_connection(self, model: str) -> TestResult:
         t0 = time.monotonic()

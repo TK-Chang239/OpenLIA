@@ -450,3 +450,93 @@ async def test_generate_detects_web_search_tool_result_error_as_failed_search() 
     f = resp.server_tool_failures[0]
     assert f.query == "blocked query"
     assert f.error_kind == "rate_limit"
+
+
+# ---------- Unified streaming: ServerToolEvent ----------
+
+
+async def test_stream_emits_server_tool_invoked_with_query() -> None:
+    """When a `server_tool_use` content block streams in via
+    content_block_start + input_json_delta(s) + content_block_stop,
+    the adapter emits one ServerToolEvent(kind="invoked", provider=
+    "anthropic", query=<accumulated>) on the LLMChunk that
+    coincides with the closing content_block_stop."""
+    sse = (
+        b'data: {"type":"content_block_start","index":1,'
+        b'"content_block":{"type":"server_tool_use","id":"srvtoolu_01",'
+        b'"name":"web_search","input":{}}}\n\n'
+        b'data: {"type":"content_block_delta","index":1,'
+        b'"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":\\""}}\n\n'
+        b'data: {"type":"content_block_delta","index":1,'
+        b'"delta":{"type":"input_json_delta","partial_json":"NVDA earnings\\"}"}}\n\n'
+        b'data: {"type":"content_block_stop","index":1}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200, content=sse, headers={"content-type": "text/event-stream"}
+        )
+        chunks = []
+        async for c in _adapter().stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    invoked = [c for c in chunks if c.server_tool_event and c.server_tool_event.kind == "invoked"]
+    assert len(invoked) == 1
+    e = invoked[0].server_tool_event
+    assert e.provider == "anthropic"
+    assert e.query == "NVDA earnings"
+
+
+async def test_stream_emits_server_tool_completed_with_urls() -> None:
+    """When a `web_search_tool_result` content block arrives, the
+    adapter emits one ServerToolEvent(kind="completed", urls=<...>,
+    n_results=<len>) on a chunk."""
+    sse = (
+        b'data: {"type":"content_block_start","index":2,'
+        b'"content_block":{"type":"web_search_tool_result",'
+        b'"tool_use_id":"srvtoolu_01","content":['
+        b'{"type":"web_search_result","url":"https://reuters.com/a","title":"R"},'
+        b'{"type":"web_search_result","url":"https://ft.com/b","title":"F"}'
+        b"]}}\n\n"
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200, content=sse, headers={"content-type": "text/event-stream"}
+        )
+        chunks = []
+        async for c in _adapter().stream(
+            LLMRequest(
+                messages=[Message(role="user", content="x")],
+                native_tools=("web_search",),
+            )
+        ):
+            chunks.append(c)
+    completed = [
+        c for c in chunks if c.server_tool_event and c.server_tool_event.kind == "completed"
+    ]
+    assert len(completed) == 1
+    e = completed[0].server_tool_event
+    assert e.provider == "anthropic"
+    assert e.n_results == 2
+    assert e.urls == ("https://reuters.com/a", "https://ft.com/b")
+
+
+async def test_stream_text_chunks_have_no_server_tool_event() -> None:
+    """Plain text deltas must NOT set server_tool_event; otherwise the
+    runtime would emit spurious ChatWebSearchInvoked events."""
+    sse = (
+        b'data: {"type":"content_block_delta","index":0,'
+        b'"delta":{"type":"text_delta","text":"Hi"}}\n\n'
+    )
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200, content=sse, headers={"content-type": "text/event-stream"}
+        )
+        chunks = []
+        async for c in _adapter().stream(LLMRequest(messages=[Message(role="user", content="x")])):
+            chunks.append(c)
+    assert all(c.server_tool_event is None for c in chunks)
+    assert "".join(c.delta for c in chunks) == "Hi"

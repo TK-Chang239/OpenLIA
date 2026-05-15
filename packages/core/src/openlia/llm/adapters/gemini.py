@@ -21,6 +21,7 @@ from openlia.llm.types import (
     LLMResponse,
     Message,
     ModelInfo,
+    ServerToolEvent,
     TestResult,
 )
 
@@ -233,6 +234,12 @@ class GeminiAdapter(LLMProvider):
                             body_text=body_bytes.decode("utf-8", errors="replace"),
                             headers=dict(resp.headers),
                         )
+                    # Gemini streams text deltas and surfaces native
+                    # search via `groundingMetadata` on a candidate.
+                    # The wire format has no separate "invoked"/"completed"
+                    # markers, so we synthesize one ServerToolEvent pair
+                    # at the first chunk that carries groundingMetadata.
+                    grounding_emitted = False
                     async for line in resp.aiter_lines():
                         if not line or not line.startswith("data:"):
                             continue
@@ -245,6 +252,32 @@ class GeminiAdapter(LLMProvider):
                         parts = (candidate.get("content") or {}).get("parts") or []
                         text = "".join(p.get("text", "") for p in parts if "text" in p)
                         finish = candidate.get("finishReason")
+                        gmd = candidate.get("groundingMetadata")
+                        if gmd and not grounding_emitted:
+                            grounding_emitted = True
+                            queries = gmd.get("webSearchQueries") or []
+                            first_query = str(queries[0]) if queries else ""
+                            yield LLMChunk(
+                                delta="",
+                                server_tool_event=ServerToolEvent(
+                                    kind="invoked",
+                                    provider="gemini",
+                                    query=first_query,
+                                ),
+                            )
+                            chunks_list = gmd.get("groundingChunks") or []
+                            urls = tuple(
+                                (c.get("web") or {}).get("uri", "") for c in chunks_list
+                            )
+                            yield LLMChunk(
+                                delta="",
+                                server_tool_event=ServerToolEvent(
+                                    kind="completed",
+                                    provider="gemini",
+                                    urls=urls,
+                                    n_results=len(urls),
+                                ),
+                            )
                         if text or finish:
                             yield LLMChunk(delta=text, finish_reason=finish)
             except TRANSIENT_NETWORK_ERRORS as exc:

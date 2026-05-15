@@ -26,6 +26,7 @@ from openlia.llm.types import (
     Message,
     ModelInfo,
     ServerToolCall,
+    ServerToolEvent,
     TestResult,
     ToolCall,
 )
@@ -294,6 +295,13 @@ class AnthropicAdapter(LLMProvider):
                             body_text=body_bytes.decode("utf-8", errors="replace"),
                             headers=dict(resp.headers),
                         )
+                    # Server-side tool blocks (`server_tool_use`) carry
+                    # their arguments via `input_json_delta` between
+                    # content_block_start and content_block_stop. We
+                    # buffer the partial JSON per block index and emit
+                    # ServerToolEvent("invoked") at block_stop.
+                    server_use_buf: dict[int, str] = {}
+                    server_use_names: dict[int, str] = {}
                     async for line in resp.aiter_lines():
                         if not line or not line.startswith("data:"):
                             continue
@@ -303,12 +311,61 @@ class AnthropicAdapter(LLMProvider):
                         except json.JSONDecodeError:
                             continue
                         etype = evt.get("type")
-                        if etype == "content_block_delta":
+                        if etype == "content_block_start":
+                            block = evt.get("content_block") or {}
+                            btype = block.get("type")
+                            idx = evt.get("index", -1)
+                            if btype == "server_tool_use":
+                                server_use_buf[idx] = ""
+                                server_use_names[idx] = block.get("name", "")
+                            elif btype == "web_search_tool_result":
+                                result_content = block.get("content")
+                                if isinstance(result_content, list):
+                                    urls = tuple(
+                                        r.get("url", "")
+                                        for r in result_content
+                                        if r.get("type") == "web_search_result"
+                                    )
+                                    yield LLMChunk(
+                                        delta="",
+                                        server_tool_event=ServerToolEvent(
+                                            kind="completed",
+                                            provider="anthropic",
+                                            urls=urls,
+                                            n_results=len(urls),
+                                        ),
+                                    )
+                        elif etype == "content_block_delta":
                             delta = evt.get("delta") or {}
-                            if delta.get("type") == "text_delta":
+                            dtype = delta.get("type")
+                            if dtype == "text_delta":
                                 text = delta.get("text") or ""
                                 if text:
                                     yield LLMChunk(delta=text)
+                            elif dtype == "input_json_delta":
+                                idx = evt.get("index", -1)
+                                if idx in server_use_buf:
+                                    server_use_buf[idx] += delta.get("partial_json", "")
+                        elif etype == "content_block_stop":
+                            idx = evt.get("index", -1)
+                            if idx in server_use_buf:
+                                raw = server_use_buf.pop(idx)
+                                server_use_names.pop(idx, None)
+                                query = ""
+                                try:
+                                    parsed = json.loads(raw) if raw else {}
+                                    if isinstance(parsed, dict):
+                                        query = str(parsed.get("query", ""))
+                                except json.JSONDecodeError:
+                                    pass
+                                yield LLMChunk(
+                                    delta="",
+                                    server_tool_event=ServerToolEvent(
+                                        kind="invoked",
+                                        provider="anthropic",
+                                        query=query,
+                                    ),
+                                )
                         elif etype == "message_delta":
                             stop_reason = (evt.get("delta") or {}).get("stop_reason")
                             if stop_reason:
