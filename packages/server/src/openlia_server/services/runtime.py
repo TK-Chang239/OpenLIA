@@ -300,18 +300,23 @@ def _build_report_runner_with_registry(
     run_id: str,
     run_date,
     skill_registry: SkillRegistry | None = None,
+    disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
+    disabled_skill_ids: tuple[str, ...] | frozenset[str] = (),
 ) -> ReportRunner:
     """Build a per-run ``ReportRunner`` wired to the v2 connector dispatcher.
 
-    Phase B: empty starter pack — bridge returns [] from list_requirement_tools
-    and the LLM escalates via request_additional_tools for every data tool.
-    ``RefreshingReportRunner`` creates a fresh ``ReportRunner`` per call.
+    ``disabled_connector_ids`` and ``disabled_skill_ids`` flow from the
+    session row's tool-toggle state; they prune the connector dispatcher
+    pool and the skills_menu in the system prompt respectively, matching
+    the chat-side contract.
     """
     from openlia_server.services.report_dispatcher_bridge import ReportDispatcherBridge
 
     prompts = PromptLoader()
     try:
-        connector_dispatcher = build_dispatcher(db)
+        connector_dispatcher = build_dispatcher(
+            db, disabled_connector_ids=disabled_connector_ids
+        )
     except Exception:
         logger.exception("report runner: build_dispatcher failed; using empty dispatcher")
         data_dispatcher: Any = _EmptyDataDispatcher()
@@ -370,6 +375,8 @@ class RefreshingReportRunner:
         cancel_token=None,
         attachments=None,
         model_id_override: str | None = None,
+        disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
+        disabled_skill_ids: tuple[str, ...] | frozenset[str] = (),
     ):
         import uuid as _uuid
         from datetime import UTC as _UTC
@@ -390,6 +397,8 @@ class RefreshingReportRunner:
                 department_id=department_id,
                 run_id=run_id,
                 run_date=run_date,
+                disabled_connector_ids=disabled_connector_ids,
+                disabled_skill_ids=disabled_skill_ids,
             )
             db.commit()
             async for event in runner.run(
@@ -399,6 +408,7 @@ class RefreshingReportRunner:
                 cancel_token=cancel_token,
                 attachments=attachments,
                 model_id_override=model_id_override,
+                disabled_skill_ids=frozenset(disabled_skill_ids),
             ):
                 yield event
             db.commit()

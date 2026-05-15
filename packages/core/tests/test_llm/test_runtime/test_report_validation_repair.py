@@ -251,7 +251,12 @@ async def test_writing_loop_pushes_repair_feedback_on_validation_failure(
         e for e in events if isinstance(e, ReportToolCall) and e.tool_name == "submit_report"
     ]
     assert submit_results, "expected a submit_report tool-result event for the failed turn"
-    assert "validation_failed" in submit_results[0].summary
+    chip = submit_results[0].summary
+    assert "validation_failed" in chip
+    # Chip must name the first failing field path so operators can diagnose
+    # repeated repair loops without server-side traces. The generic
+    # `ReportValidationError` message is not enough on its own.
+    assert "Report payload failed validation" not in chip
 
     # Final event is ReportComplete with the strict-valid payload (no coercion needed).
     final = events[-1]

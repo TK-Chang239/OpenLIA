@@ -511,6 +511,7 @@ def build_report_system_prompt(
     search_budget: int = 8,
     connector_quirks: tuple[str, ...] = ("eodhd",),
     loader: PromptLoader | None = None,
+    disabled_skill_ids: frozenset[str] = frozenset(),
 ) -> str:
     """Render the report.system slot with the user's visible skills menu.
 
@@ -519,9 +520,18 @@ def build_report_system_prompt(
     per-report cap so the model knows how many web searches it has left.
     All three are consumed under StrictUndefined; the caller must always
     supply them.
+
+    ``disabled_skill_ids`` is the per-session opt-out set from the
+    chat-input "Tools" picker; matching the chat-path contract, skills
+    whose ``manifest.name`` is in the set are stripped from ``skills_menu``
+    so the model never knows they exist this run.
     """
     loader = loader or PromptLoader()
-    visible = registry.visible(department_id=department_id, user_id=user_id)
+    visible = registry.visible(
+        department_id=department_id,
+        user_id=user_id,
+        disabled_skill_ids=disabled_skill_ids,
+    )
     skills_menu = [
         {
             "id": s.manifest.name,
@@ -716,6 +726,7 @@ class ReportRunner:
         cancel_token: CancellationToken | None = None,
         attachments: list[Attachment] | None = None,
         model_id_override: str | None = None,
+        disabled_skill_ids: frozenset[str] = frozenset(),
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
@@ -822,6 +833,7 @@ class ReportRunner:
             current_date_long=current_date_long,
             search_budget=search_budget,
             loader=self._prompts,
+            disabled_skill_ids=disabled_skill_ids,
         )
         tools = await self._tools.build(department_id, has_web_search=True)
         if using_user_template:
@@ -1264,10 +1276,16 @@ class ReportRunner:
                             tool_call_id=submit_call.id,
                         )
                     )
+                    first = exc.details[0] if exc.details else None
+                    chip_summary = (
+                        f"validation_failed: {first['path']}: {first['message']}"
+                        if first
+                        else f"validation_failed: {exc}"
+                    )
                     yield ReportToolCall(
                         report_id=report_id,
                         tool_name=_SUBMIT_REPORT_TOOL_NAME,
-                        summary=_unicode_safe_truncate(f"validation_failed: {exc}", max_len=200),
+                        summary=_unicode_safe_truncate(chip_summary, max_len=200),
                         call_id=submit_call.id,
                     )
                     continue

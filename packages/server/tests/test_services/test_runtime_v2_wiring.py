@@ -96,6 +96,105 @@ def test_build_chat_runner_threads_disabled_connector_ids_to_dispatcher(
     assert not any(n.startswith("eodhd__") for n in names)
 
 
+def test_build_report_runner_threads_disabled_connector_ids_to_dispatcher(
+    db_session: DBSession,
+) -> None:
+    """Report path parity with chat: connectors in the disabled list must
+    not appear in the report runner's data dispatcher candidate tools."""
+    from datetime import UTC, date, datetime  # noqa: F401
+
+    _seed_validated_eodhd(db_session)
+    from openlia.llm.runtime.web_search import WebSearchResolution
+    from openlia_server.services.llm_registry import SQLModelRegistry
+    from openlia_server.services.runtime import _build_report_runner_with_registry
+
+    registry = SQLModelRegistry(db_session)
+    runner = _build_report_runner_with_registry(
+        registry,
+        web_search=WebSearchResolution(False, None, None),
+        db=db_session,
+        user_id="u1",
+        department_id="equity_research",
+        run_id="r_test",
+        run_date=date.today(),
+        disabled_connector_ids=("conn-eodhd-1",),
+    )
+    # The dispatcher under the bridge is the connector dispatcher; its
+    # candidate_tools must omit anything from the disabled connector.
+    bridge = runner._tools._data
+    candidate_names = {c["name"] for c in bridge.dispatcher.candidate_tools()}
+    assert not any(n.startswith("eodhd__") for n in candidate_names)
+
+
+def test_refreshing_report_runner_forwards_disabled_ids(monkeypatch) -> None:
+    """RefreshingReportRunner.run must thread disabled_connector_ids and
+    disabled_skill_ids down to _build_report_runner_with_registry and to
+    the per-call ReportRunner.run."""
+    from openlia_server.services import runtime as svc
+
+    captured: dict = {}
+
+    class _FakeReportRunner:
+        async def run(self, **kwargs):
+            captured["runner_kwargs"] = kwargs
+            yield {"type": "report.start"}
+
+    def _fake_build(
+        registry,
+        *,
+        web_search,
+        db,
+        user_id,
+        department_id,
+        run_id,
+        run_date,
+        skill_registry=None,
+        disabled_connector_ids=(),
+        disabled_skill_ids=(),
+    ):
+        captured["build_kwargs"] = {
+            "disabled_connector_ids": disabled_connector_ids,
+            "disabled_skill_ids": disabled_skill_ids,
+        }
+        return _FakeReportRunner()
+
+    monkeypatch.setattr(svc, "_build_report_runner_with_registry", _fake_build)
+
+    class _NoopRegistry:
+        def __init__(self, db) -> None:
+            self.db = db
+
+    monkeypatch.setattr(svc, "SQLModelRegistry", _NoopRegistry)
+
+    class _SpySession:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def commit(self) -> None:
+            pass
+
+        def close(self) -> None:
+            self.closed = True
+
+    import asyncio
+
+    async def _drive() -> None:
+        async for _ in svc.RefreshingReportRunner(_SpySession).run(
+            department_id="equity_research",
+            user_id="u1",
+            request=object(),
+            disabled_connector_ids=("c-foo",),
+            disabled_skill_ids=("s-bar",),
+        ):
+            pass
+
+    asyncio.run(_drive())
+
+    assert captured["build_kwargs"]["disabled_connector_ids"] == ("c-foo",)
+    assert captured["build_kwargs"]["disabled_skill_ids"] == ("s-bar",)
+    assert captured["runner_kwargs"]["disabled_skill_ids"] == frozenset({"s-bar"})
+
+
 def test_build_chat_runner_uses_routing_context_loader_from_core(
     db_session: DBSession, _stub_router_factory
 ) -> None:
