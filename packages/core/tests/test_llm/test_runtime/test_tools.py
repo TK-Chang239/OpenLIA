@@ -59,6 +59,37 @@ async def test_build_returns_mapping_tools_plus_request_additional_tools() -> No
     assert "web_search" not in names
 
 
+async def test_build_includes_request_additional_tools_with_empty_starter_pack() -> None:
+    # Phase B contract: the report bridge returns an empty starter pack
+    # (`list_requirement_tools` -> []) and the LLM is expected to escalate
+    # for every data tool via `request_additional_tools`. The meta-tool
+    # must therefore be exposed even when there are no mapped tools and
+    # no cached escalation entries — otherwise the model has no entry
+    # point to load data tools and the system prompt's promise is broken.
+    data = FakeDataDispatcher(manifest={})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    tools = await disp.build("equity_research", has_web_search=False)
+    names = [t.name for t in tools]
+    assert "request_additional_tools" in names
+    assert "read_payload" in names
+
+
+async def test_build_keeps_request_additional_tools_across_fetch_turns() -> None:
+    # Regression: on every fetching-phase turn the meta-tool must remain
+    # exposed so a model that escalates once can escalate again later.
+    data = FakeDataDispatcher(manifest={})
+    disp = ToolDispatcher(
+        data_dispatcher=data,
+        web_search=WebSearchResolution(False, None, None),
+    )
+    for _ in range(3):
+        tools = await disp.build("equity_research", has_web_search=False)
+        assert "request_additional_tools" in [t.name for t in tools]
+
+
 async def test_build_appends_web_search_when_available() -> None:
     data = FakeDataDispatcher(manifest=_MANIFEST)
     disp = ToolDispatcher(

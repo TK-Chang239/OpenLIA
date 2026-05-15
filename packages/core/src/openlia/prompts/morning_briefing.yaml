@@ -35,6 +35,8 @@ report:
 
     {% include "shared/output_discipline.yaml.j2" %}
 
+    {% include "shared/report_schema_strictness.yaml.j2" %}
+
     {% include "shared/tool_discovery.yaml.j2" %}
 
   morning_briefing:

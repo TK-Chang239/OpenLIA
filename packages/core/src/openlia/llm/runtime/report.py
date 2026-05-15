@@ -58,6 +58,7 @@ from openlia.llm.types import (
     ToolSchema,
 )
 from openlia.reports.schema import ReportSchema
+from openlia.reports.validator import ReportValidationError, validate_report_payload
 from openlia.skills import SkillRegistry
 
 _SUBMIT_REPORT_TOOL_NAME = "submit_report"
@@ -85,20 +86,24 @@ _SUBMIT_REPORT_DESCRIPTION = (
 )
 
 
+_SERVER_CONTROLLED_FIELDS = frozenset(
+    {"schema_version", "department", "generated_at", "page_furniture"}
+)
+
+
 def _submit_report_input_schema() -> dict[str, Any]:
     """JSON Schema for `submit_report.arguments` derived from `ReportSchema`.
 
-    Server-controlled meta fields (`schema_version`, `department`,
-    `generated_at`) are stripped — the runner injects them post-LLM.
+    Server-controlled fields are stripped so the LLM never sees them as
+    emittable: meta (`schema_version`, `department`, `generated_at`) and
+    presentation (`page_furniture`, which the assembler injects).
     """
     schema = copy.deepcopy(ReportSchema.model_json_schema())
     props = schema.get("properties", {})
-    for stripped in ("schema_version", "department", "generated_at"):
+    for stripped in _SERVER_CONTROLLED_FIELDS:
         props.pop(stripped, None)
     required = schema.get("required") or []
-    schema["required"] = [
-        r for r in required if r not in {"schema_version", "department", "generated_at"}
-    ]
+    schema["required"] = [r for r in required if r not in _SERVER_CONTROLLED_FIELDS]
     schema["properties"] = props
     return schema
 
@@ -134,18 +139,30 @@ def _extract_writing_payload(final: Any) -> dict[str, Any] | None:
 def _submit_report_tool_choice(provider_kind: str) -> dict[str, Any]:
     """Return the provider-specific `tool_choice` payload that forces the
     model to emit a `submit_report` tool_use. Adapters forward verbatim."""
+    return _force_tool_choice(provider_kind, _SUBMIT_REPORT_TOOL_NAME)
+
+
+_REQUEST_ADDITIONAL_TOOLS_NAME = "request_additional_tools"
+
+
+def _force_tool_choice(provider_kind: str, tool_name: str) -> dict[str, Any]:
+    """Provider-specific `tool_choice` payload forcing `tool_name`.
+
+    Adapters forward verbatim. Used both for forcing `submit_report` on the
+    writing-phase final turn and for forcing `request_additional_tools` on
+    fetching-phase turn 0 (the empty-starter-pack bootstrap)."""
     if provider_kind == "anthropic":
-        return {"type": "tool", "name": _SUBMIT_REPORT_TOOL_NAME}
+        return {"type": "tool", "name": tool_name}
     if provider_kind == "gemini":
         return {
             "function_calling_config": {
                 "mode": "ANY",
-                "allowed_function_names": [_SUBMIT_REPORT_TOOL_NAME],
+                "allowed_function_names": [tool_name],
             }
         }
     # OpenAI, OpenRouter, openai_compat, ollama (OpenAI-compatible) all use
     # the chat-completions tool_choice shape.
-    return {"type": "function", "function": {"name": _SUBMIT_REPORT_TOOL_NAME}}
+    return {"type": "function", "function": {"name": tool_name}}
 
 
 def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
@@ -157,17 +174,11 @@ def _unicode_safe_truncate(s: str, *, max_len: int = 120) -> str:
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
 
 
-def _normalize_schema_payload(
+def _inject_server_fields(
     payload: dict[str, Any], *, department_id: str, generated_at: datetime
 ) -> dict[str, Any]:
-    """Force server-controlled top-level fields and forgive common LLM drift.
-
-    The strict ReportSchema requires exactly five top-level keys. Models
-    sometimes wrap the payload (`{"report": {...}}`), invent meta wrappers
-    (`{"report_metadata": {...}, ...}`), or simply forget meta fields.
-    Strip those, hoist `cover`/`sections` if needed, and overwrite the
-    server-controlled fields.
-    """
+    """Hoist any wrapper layer, strip server-controlled fields, and stamp the
+    server-managed meta. Strict-validation candidate is built from this."""
     if not isinstance(payload, dict):
         return payload
 
@@ -180,24 +191,44 @@ def _normalize_schema_payload(
 
     payload.pop("report_metadata", None)
     payload.pop("report_mode", None)
+    payload.pop("page_furniture", None)
 
     payload["schema_version"] = "2.0"
     payload["department"] = department_id
     payload["generated_at"] = generated_at.isoformat()
     payload.setdefault("cover", {})
     payload.setdefault("sections", [])
+    return payload
 
-    cover = payload["cover"] if isinstance(payload["cover"], dict) else {}
+
+def _apply_coercion_fallback(payload: dict[str, Any]) -> dict[str, Any]:
+    """Last-resort drift coercion. Used only after strict validation fails
+    AND the LLM has exhausted its repair turn. Silently rewrites authorial
+    intent (e.g., folds chart `note` into title) — always pair with a
+    telemetry event so the rewrite is observable."""
+    if not isinstance(payload, dict):
+        return payload
+    cover = payload.get("cover") if isinstance(payload.get("cover"), dict) else {}
     _coerce_metric_list(cover.get("key_metrics"))
     cover.pop("stats_panel", None)
     rail = payload.get("rail")
     if isinstance(rail, dict):
         _coerce_metric_list(rail.get("quick_stats"))
-    sections = payload["sections"] if isinstance(payload["sections"], list) else []
+        _coerce_sparkline(rail.get("sparkline"))
+    sections = payload.get("sections") if isinstance(payload.get("sections"), list) else []
     for section in sections:
         if isinstance(section, dict):
             _coerce_blocks(section.get("blocks"))
     return payload
+
+
+def _normalize_schema_payload(
+    payload: dict[str, Any], *, department_id: str, generated_at: datetime
+) -> dict[str, Any]:
+    """Compatibility wrapper: server-field injection + coercion fallback.
+    New writing-loop code uses the two pieces separately."""
+    payload = _inject_server_fields(payload, department_id=department_id, generated_at=generated_at)
+    return _apply_coercion_fallback(payload)
 
 
 def _coerce_metric_value(v: Any) -> Any:
@@ -206,6 +237,35 @@ def _coerce_metric_value(v: Any) -> Any:
     if isinstance(v, (int, float)):
         return str(v)
     return v
+
+
+def _coerce_sparkline_point(idx: int, point: Any) -> Any:
+    """Per-element sparkline coercion. Valid `{x, y}` dicts pass through; a
+    bare number becomes `{"x": idx, "y": number}`; a 2-element list/tuple
+    becomes `{"x": first, "y": second}`. Anything else is left untouched so
+    strict validation surfaces a precise error."""
+    if isinstance(point, dict):
+        return point
+    if isinstance(point, bool):
+        return point
+    if isinstance(point, (int, float)):
+        return {"x": float(idx), "y": float(point)}
+    if isinstance(point, (list, tuple)) and len(point) == 2:
+        x, y = point
+        if isinstance(x, (int, float)) and not isinstance(x, bool) and (
+            isinstance(y, (int, float)) and not isinstance(y, bool)
+        ):
+            return {"x": float(x), "y": float(y)}
+    return point
+
+
+def _coerce_sparkline(sparkline: Any) -> None:
+    if not isinstance(sparkline, dict):
+        return
+    points = sparkline.get("points")
+    if not isinstance(points, list):
+        return
+    sparkline["points"] = [_coerce_sparkline_point(i, p) for i, p in enumerate(points)]
 
 
 def _coerce_metric_list(metrics: Any) -> None:
@@ -220,6 +280,69 @@ def _coerce_metric_list(metrics: Any) -> None:
             m["delta"] = _coerce_metric_value(m["delta"])
 
 
+_CHART_OPTION_KEYS = {"height", "show_legend", "show_grid"}
+_CHART_BLOCK_TYPES = {
+    "line_chart",
+    "bar_chart",
+    "area_chart",
+    "pie_chart",
+    "candlestick_chart",
+    "waterfall_chart",
+    "scatter_plot",
+    "heatmap",
+    "treemap",
+    "combo_chart",
+}
+
+
+def _coerce_chart_options(block: dict[str, Any]) -> None:
+    options = block.get("options")
+    if not isinstance(options, dict):
+        return
+    extras = [k for k in options if k not in _CHART_OPTION_KEYS]
+    if not extras:
+        return
+    note_parts: list[str] = []
+    for k in extras:
+        v = options.pop(k)
+        if k == "note" and isinstance(v, str):
+            note_parts.append(v)
+    if note_parts and block.get("type") in _CHART_BLOCK_TYPES:
+        title = block.get("title")
+        suffix = " — " + " ".join(note_parts)
+        if isinstance(title, str) and suffix not in title:
+            block["title"] = title + suffix
+
+
+def _slugify_key(label: str, fallback: str) -> str:
+    return re.sub(r"[^a-z0-9_]+", "_", label.lower()).strip("_") or fallback
+
+
+def _coerce_table_headers(block: dict[str, Any]) -> None:
+    headers = block.get("headers")
+    if not isinstance(headers, list):
+        return
+    fixed: list[Any] = []
+    for idx, h in enumerate(headers):
+        fallback = f"col_{idx}"
+        if isinstance(h, dict):
+            if "label" in h and "key" not in h and isinstance(h["label"], str):
+                h = {**h, "key": _slugify_key(h["label"], fallback)}
+            fixed.append(h)
+            continue
+        if isinstance(h, str):
+            fixed.append({"key": _slugify_key(h, fallback), "label": h})
+            continue
+        if isinstance(h, list) and h:
+            label = str(h[-1]) if len(h) > 1 else str(h[0])
+            key = str(h[0]) if len(h) > 1 else _slugify_key(label, fallback)
+            fixed.append({"key": _slugify_key(key, fallback), "label": label})
+            continue
+        label = "" if h is None else str(h)
+        fixed.append({"key": _slugify_key(label, fallback), "label": label})
+    block["headers"] = fixed
+
+
 def _coerce_blocks(blocks: Any) -> None:
     if not isinstance(blocks, list):
         return
@@ -231,6 +354,10 @@ def _coerce_blocks(blocks: Any) -> None:
             _coerce_metric_list(block.get("metrics"))
         elif btype == "group":
             _coerce_blocks(block.get("blocks"))
+        elif btype == "table":
+            _coerce_table_headers(block)
+        elif btype in _CHART_BLOCK_TYPES:
+            _coerce_chart_options(block)
 
 
 def _extract_json_object(text: str) -> str:
@@ -507,6 +634,9 @@ class ReportRunner:
 
         yield ReportPhase(report_id=report_id, phase="fetching_data")
 
+        force_escalation_choice = _force_tool_choice(
+            resolved.provider_kind, _REQUEST_ADDITIONAL_TOOLS_NAME
+        )
         for turn_idx in range(MAX_TOOL_TURNS) if tools else range(0):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
@@ -515,6 +645,16 @@ class ReportRunner:
                 f"tool turn {turn_idx} (tools={len(tools or [])})",
                 {"report_id": report_id, "phase": "fetching_data", "turn": turn_idx},
             )
+            # Empty-starter-pack bootstrap: on turn 0 the LLM has only
+            # `request_additional_tools`, `read_payload`, and (optionally)
+            # `web_search` available. Without forcing, some models produce a
+            # text-only refusal ("no data tools available") on turn 0 and
+            # exit the loop with zero data — the writing phase then submits
+            # a "no data" report. Forcing the meta-tool on turn 0 guarantees
+            # at least one escalation attempt; the 3-failure directive in
+            # ToolDispatcher handles graceful degradation if expansion truly
+            # yields nothing.
+            turn_tool_choice = force_escalation_choice if turn_idx == 0 else None
             try:
                 response = await self._await(
                     provider.generate(
@@ -522,6 +662,7 @@ class ReportRunner:
                             messages=conversation,
                             system=system,
                             tools=tools or None,
+                            tool_choice=turn_tool_choice,
                             max_tokens=2048,
                         )
                     ),
@@ -640,6 +781,7 @@ class ReportRunner:
         writing_tools = [submit_tool, _READ_PAYLOAD_SCHEMA]
 
         final = None
+        validated_payload: dict[str, Any] | None = None
         for writing_turn in range(MAX_WRITING_TURNS):
             if cancel_token is not None and cancel_token.is_cancelled:
                 return
@@ -687,25 +829,105 @@ class ReportRunner:
                 (c for c in response.tool_calls if c.name == _SUBMIT_REPORT_TOOL_NAME), None
             )
             if submit_call is not None:
-                final = response
-                self._trace(
-                    "llm.call.done",
-                    f"writing turn {writing_turn} done tool_calls={len(response.tool_calls)}",
-                    {
-                        "report_id": report_id,
-                        "phase": "writing",
-                        "input_tokens": response.input_tokens,
-                        "output_tokens": response.output_tokens,
-                        "finish_reason": response.finish_reason,
-                        "tool_call_names": [c.name for c in response.tool_calls],
-                        "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
-                    },
+                args = submit_call.arguments if isinstance(submit_call.arguments, dict) else {}
+                candidate = _inject_server_fields(
+                    copy.deepcopy(args),
+                    department_id=department_id,
+                    generated_at=datetime.now(UTC),
                 )
-                break
+                try:
+                    validate_report_payload(candidate)
+                    validated_payload = candidate
+                    final = response
+                    self._trace(
+                        "llm.call.done",
+                        (
+                            f"writing turn {writing_turn} done (strict-valid) "
+                            f"tool_calls={len(response.tool_calls)}"
+                        ),
+                        {
+                            "report_id": report_id,
+                            "phase": "writing",
+                            "input_tokens": response.input_tokens,
+                            "output_tokens": response.output_tokens,
+                            "finish_reason": response.finish_reason,
+                            "tool_call_names": [c.name for c in response.tool_calls],
+                            "text_preview": _unicode_safe_truncate(
+                                response.text or "", max_len=200
+                            ),
+                            "strict_valid": True,
+                        },
+                    )
+                    break
+                except ReportValidationError as exc:
+                    self._trace(
+                        "writing.validation_failed",
+                        f"submit_report failed strict validation on turn {writing_turn}: {exc}",
+                        {
+                            "report_id": report_id,
+                            "turn": writing_turn,
+                            "is_final_turn": is_final_turn,
+                            "errors": list(exc.details)[:20],
+                        },
+                    )
+                    if is_final_turn:
+                        final = response
+                        break
+                    # Push validation error back as a tool result so the
+                    # model can self-repair on the next turn.
+                    conversation.append(
+                        Message(
+                            role="assistant",
+                            content=response.text or "",
+                            tool_calls=tuple(response.tool_calls),
+                        )
+                    )
+                    failing_paths = "; ".join(
+                        f"{d['path']} ({d['message']})" for d in exc.details[:10]
+                    )
+                    error_payload = {
+                        "ok": False,
+                        "error": "validation_failed",
+                        "message": str(exc),
+                        "errors": list(exc.details),
+                        "instruction": (
+                            "Your submit_report payload failed strict schema validation. "
+                            f"FAILING FIELDS: {failing_paths}. "
+                            "Re-submit the ENTIRE payload (do not assume earlier fields are "
+                            "remembered) with EVERY failing field fixed. "
+                            "Required top-level keys: `cover` (object) and `sections` (array). "
+                            "Required cover fields: `title` (str), `subtitle` (str), "
+                            "`tagline` (str). Use the framework's cover.instructions to "
+                            "decide what to write. Each section needs `id`, `title`, and "
+                            "non-empty `blocks`. "
+                            "Reminders: do NOT include page_furniture, schema_version, "
+                            "department, or generated_at (server-set); ChartOptions accepts "
+                            "only {height, show_legend, show_grid}; table headers must be "
+                            "objects with {key, label}; metric value/delta must be strings."
+                        ),
+                    }
+                    conversation.append(
+                        Message(
+                            role="tool",
+                            content=json.dumps(error_payload),
+                            tool_call_id=submit_call.id,
+                        )
+                    )
+                    yield ReportToolCall(
+                        report_id=report_id,
+                        tool_name=_SUBMIT_REPORT_TOOL_NAME,
+                        summary=_unicode_safe_truncate(f"validation_failed: {exc}", max_len=200),
+                        call_id=submit_call.id,
+                    )
+                    continue
 
-            # No submit_report: if no tool calls at all, treat as end of loop.
+            # No submit_report and no tool calls at all. On the final turn the
+            # caller already forced submit_report via tool_choice — so this is
+            # a refusal we couldn't override; record it and break. On earlier
+            # turns we push a reminder and continue: writing exists only to
+            # call submit_report (or read_payload), so a text-only "I can't
+            # complete this report" response is never a legitimate stop.
             if not response.tool_calls:
-                final = response
                 self._trace(
                     "llm.call.done",
                     f"writing turn {writing_turn} done (no tool calls)",
@@ -719,7 +941,34 @@ class ReportRunner:
                         "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
                     },
                 )
-                break
+                if is_final_turn:
+                    final = response
+                    break
+                conversation.append(
+                    Message(role="assistant", content=response.text or "")
+                )
+                conversation.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "Your previous response had no tool calls. The writing "
+                            "phase requires you to call the submit_report tool with "
+                            "the report payload. Do not refuse: if data is missing, "
+                            "state that plainly inside the report sections rather "
+                            "than skipping the call. Call submit_report now."
+                        ),
+                    )
+                )
+                self._trace(
+                    "writing.refusal_recovered",
+                    f"text-only response on writing turn {writing_turn}; pushed reminder",
+                    {
+                        "report_id": report_id,
+                        "turn": writing_turn,
+                        "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
+                    },
+                )
+                continue
 
             # Dispatch tool calls (read_payload, etc.) and continue.
             conversation.append(
@@ -805,30 +1054,43 @@ class ReportRunner:
             )
             return
 
-        schema_payload = _extract_writing_payload(final)
-        if schema_payload is None:
-            preview = _unicode_safe_truncate((final.text or "").strip(), max_len=200)
-            self._trace(
-                "report.error",
-                "writing turn returned no submit_report tool_use",
-                {"report_id": report_id, "preview": preview},
-            )
-            yield ReportError(
-                report_id=report_id,
-                error_class="RuntimeError",
-                message=(
-                    "LLM did not call submit_report; got "
-                    f"{len(final.tool_calls)} tool_calls and {len(final.text or '')} chars of text "
-                    f"(starts with: {preview!r})"
-                ),
-            )
-            return
+        if validated_payload is not None:
+            schema_payload = validated_payload
+        else:
+            schema_payload = _extract_writing_payload(final)
+            if schema_payload is None:
+                preview = _unicode_safe_truncate((final.text or "").strip(), max_len=200)
+                self._trace(
+                    "report.error",
+                    "writing turn returned no submit_report tool_use",
+                    {"report_id": report_id, "preview": preview},
+                )
+                yield ReportError(
+                    report_id=report_id,
+                    error_class="RuntimeError",
+                    message=(
+                        "LLM did not call submit_report; got "
+                        f"{len(final.tool_calls)} tool_calls and "
+                        f"{len(final.text or '')} chars of text "
+                        f"(starts with: {preview!r})"
+                    ),
+                )
+                return
 
-        schema_payload = _normalize_schema_payload(
-            schema_payload,
-            department_id=department_id,
-            generated_at=datetime.now(UTC),
-        )
+            schema_payload = _inject_server_fields(
+                schema_payload,
+                department_id=department_id,
+                generated_at=datetime.now(UTC),
+            )
+            schema_payload = _apply_coercion_fallback(schema_payload)
+            self._trace(
+                "report.coercion_applied",
+                "strict validation exhausted; coercion fallback applied",
+                {
+                    "report_id": report_id,
+                    "sections": len(schema_payload.get("sections") or []),
+                },
+            )
 
         for section in schema_payload.get("sections", []) or []:
             yield ReportSectionComplete(
