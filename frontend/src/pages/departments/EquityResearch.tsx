@@ -52,6 +52,30 @@ interface PersistedToolCall {
   structured?: Record<string, unknown> | null;
 }
 
+const DISABLED_CONNECTORS_LS_KEY = "equity-research:disabled-connector-ids";
+const DISABLED_SKILLS_LS_KEY = "equity-research:disabled-skill-ids";
+
+function readLocalStorageIds(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeLocalStorageIds(key: string, ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // localStorage may be disabled (private mode, quota); silently no-op.
+  }
+}
+
 function firstName(displayName: string | null | undefined): string {
   if (!displayName) return "there";
   const trimmed = displayName.trim();
@@ -96,8 +120,23 @@ export default function EquityResearch(): JSX.Element {
   const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
   const [genDurationSec, setGenDurationSec] = useState<number | null>(null);
   const [autoStarted, setAutoStarted] = useState(false);
-  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>([]);
-  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>([]);
+  const [disabledConnectorIds, setDisabledConnectorIds] = useState<string[]>(
+    () => readLocalStorageIds(DISABLED_CONNECTORS_LS_KEY),
+  );
+  const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>(
+    () => readLocalStorageIds(DISABLED_SKILLS_LS_KEY),
+  );
+
+  // Mirror toggle state to localStorage so it survives a page refresh.
+  // The server-side session row remains the source of truth once a
+  // session exists; localStorage covers the pre-session window the user
+  // hits on cold load before submitting the first ticker.
+  useEffect(() => {
+    writeLocalStorageIds(DISABLED_CONNECTORS_LS_KEY, disabledConnectorIds);
+  }, [disabledConnectorIds]);
+  useEffect(() => {
+    writeLocalStorageIds(DISABLED_SKILLS_LS_KEY, disabledSkillIds);
+  }, [disabledSkillIds]);
 
   const lastSentChatRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
@@ -157,8 +196,9 @@ export default function EquityResearch(): JSX.Element {
       setHistory([]);
       setHistoryLoaded(false);
       setRestoredReportId(null);
-      setDisabledConnectorIds([]);
-      setDisabledSkillIds([]);
+      // Pre-session toggle state stays in React+localStorage; do not
+      // reset it here, otherwise a fresh mount would clobber the
+      // toggles the user picked on the prior visit.
       return;
     }
     let cancelled = false;
@@ -288,13 +328,18 @@ export default function EquityResearch(): JSX.Element {
         setSessionId(row.id);
         setSessionTitle(row.title);
         setSubject(trimmed);
-        // Push any pre-session tool toggles onto the new row. Fire-and-forget;
-        // a failure here just falls back to "all on" for this run.
+        // Push any pre-session tool toggles onto the new row before
+        // starting the report stream. Awaiting prevents the runner from
+        // reading the row before the disabled lists are persisted.
         if (disabledConnectorIds.length > 0 || disabledSkillIds.length > 0) {
-          void patchSession(row.id, {
-            disabled_connector_ids: disabledConnectorIds,
-            disabled_skill_ids: disabledSkillIds,
-          });
+          try {
+            await patchSession(row.id, {
+              disabled_connector_ids: disabledConnectorIds,
+              disabled_skill_ids: disabledSkillIds,
+            });
+          } catch {
+            // Patch failure falls back to "all on" for this run.
+          }
         }
         startReport({
           url: "/api/departments/equity-research/report",

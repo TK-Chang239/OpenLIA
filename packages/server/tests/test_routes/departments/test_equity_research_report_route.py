@@ -130,3 +130,31 @@ def test_report_route_rejects_multipart_without_session(company_client, auth_use
         files=[("files", ("a.txt", b"abc", "text/plain"))],
     )
     assert r.status_code == 400
+
+
+def test_report_route_threads_session_disabled_lists(company_client, auth_user, db_session):
+    """The report path must honor the session row's disabled_connector_ids and
+    disabled_skill_ids (parity with chat). Without this, the LLM still has
+    access to tools the user toggled off in the UI."""
+    from openlia_server.services import chat_sessions as chat_sessions_svc
+
+    queue = [ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA)]
+    inner = _AttachmentCapturingInner(queue)
+    company_client.app.state.equity_research_inner_factory = lambda: inner
+
+    sess = chat_sessions_svc.create_session(
+        db_session, user_id=auth_user.id, department="equity_research", title="t"
+    )
+    sess.disabled_connector_ids = ["financial:fmp"]
+    sess.disabled_skill_ids = ["macro_outlook"]
+    db_session.commit()
+
+    r = company_client.post(
+        "/departments/equity-research/report",
+        json={"mode": "stock_update", "user_input": "AAPL", "session_id": sess.id},
+    )
+    assert r.status_code == 200
+    list(r.iter_lines())
+    assert inner.last_kwargs is not None
+    assert inner.last_kwargs.get("disabled_connector_ids") == ("financial:fmp",)
+    assert inner.last_kwargs.get("disabled_skill_ids") == ("macro_outlook",)

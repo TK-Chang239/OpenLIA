@@ -127,6 +127,122 @@ describe("EquityResearchPage", () => {
     expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
   });
 
+  it("waits for the disabled-ids PATCH to land before starting the report stream", async () => {
+    // The pre-session toggle PATCH used to fire-and-forget; a slow PATCH
+    // raced the report stream and the runner read an un-patched row.
+    // Awaiting the PATCH eliminates the race.
+    localStorage.setItem(
+      "equity-research:disabled-connector-ids",
+      JSON.stringify(["financial:fmp"]),
+    );
+
+    const ordered: string[] = [];
+    let resolvePatch: (() => void) | null = null;
+    const patchLanded = new Promise<void>((res) => {
+      resolvePatch = res;
+    });
+
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/chat/sessions/sess-1")) {
+        // Delay before recording so the report POST loses the race
+        // if the caller didn't await the patch.
+        await new Promise((r) => setTimeout(r, 20));
+        ordered.push("patch");
+        resolvePatch?.();
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (u.includes("/api/departments/equity-research/report")) {
+        ordered.push("report");
+        return {
+          ok: true,
+          status: 200,
+          body: sseBody([
+            { event: "report.complete", data: { report_id: "r_1", schema: {} } },
+            { event: "report.saved", data: { report_id: "r_1" } },
+          ]),
+        } as unknown as Response;
+      }
+      return new Response("[]", {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    renderPage();
+    await act(async () => {
+      submitInput("AAPL");
+    });
+    await patchLanded;
+    await waitFor(() => {
+      expect(ordered).toContain("report");
+    });
+
+    const patchIdx = ordered.indexOf("patch");
+    const reportIdx = ordered.indexOf("report");
+    expect(patchIdx).toBeGreaterThanOrEqual(0);
+    expect(reportIdx).toBeGreaterThan(patchIdx);
+  });
+
+  it("hydrates pre-session tool toggles from localStorage and forwards them to the new session row", async () => {
+    // User had toggled two tools off in a previous visit; after a page
+    // refresh that pre-session state must survive (issue 112).
+    localStorage.setItem(
+      "equity-research:disabled-connector-ids",
+      JSON.stringify(["financial:fmp"]),
+    );
+    localStorage.setItem(
+      "equity-research:disabled-skill-ids",
+      JSON.stringify(["macro_outlook"]),
+    );
+
+    const calls: { url: string; body: unknown }[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      let parsed: unknown = null;
+      try {
+        parsed = init?.body ? JSON.parse(String(init.body)) : null;
+      } catch {
+        parsed = null;
+      }
+      calls.push({ url: String(url), body: parsed });
+      if (String(url).includes("/api/chat/sessions/")) {
+        // patchSession + getSession: respond with empty JSON.
+        return new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return {
+        ok: true,
+        status: 200,
+        body: sseBody([
+          { event: "report.complete", data: { report_id: "r_1", schema: {} } },
+          { event: "report.saved", data: { report_id: "r_1" } },
+        ]),
+      } as unknown as Response;
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    renderPage();
+    await act(async () => {
+      submitInput("AAPL");
+    });
+
+    await waitFor(() => {
+      const patch = calls.find(
+        (c) => c.url.includes("/api/chat/sessions/sess-1") && c.body !== null,
+      );
+      expect(patch).toBeDefined();
+      const body = patch?.body as Record<string, unknown> | undefined;
+      expect(body?.disabled_connector_ids).toEqual(["financial:fmp"]);
+      expect(body?.disabled_skill_ids).toEqual(["macro_outlook"]);
+    });
+  });
+
   it("pre-fills the input from the ?ticker= query param (NEW-21-09)", () => {
     renderPage(["/equity-research?ticker=NVDA"]);
     const textarea = screen.getByPlaceholderText(/Enter a ticker/i) as HTMLTextAreaElement;

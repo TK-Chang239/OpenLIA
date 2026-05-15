@@ -255,10 +255,21 @@ def build_report_system_prompt(
     style_guide: str,
     available_category_hints: list[str],
     loader: PromptLoader | None = None,
+    disabled_skill_ids: frozenset[str] = frozenset(),
 ) -> str:
-    """Render the report.system slot with the user's visible skills menu."""
+    """Render the report.system slot with the user's visible skills menu.
+
+    ``disabled_skill_ids`` is the per-session opt-out set from the
+    chat-input "Tools" picker; matching the chat-path contract, skills
+    whose ``manifest.name`` is in the set are stripped from ``skills_menu``
+    so the model never knows they exist this run.
+    """
     loader = loader or PromptLoader()
-    visible = registry.visible(department_id=department_id, user_id=user_id)
+    visible = registry.visible(
+        department_id=department_id,
+        user_id=user_id,
+        disabled_skill_ids=disabled_skill_ids,
+    )
     skills_menu = [
         {
             "id": s.manifest.name,
@@ -376,6 +387,7 @@ class ReportRunner:
         cancel_token: CancellationToken | None = None,
         attachments: list[Attachment] | None = None,
         model_id_override: str | None = None,
+        disabled_skill_ids: frozenset[str] = frozenset(),
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
@@ -469,6 +481,7 @@ class ReportRunner:
             style_guide=style_guide,
             available_category_hints=available_category_hints,
             loader=self._prompts,
+            disabled_skill_ids=disabled_skill_ids,
         )
         tools = await self._tools.build(department_id, has_web_search=True)
         now = datetime.now(UTC)

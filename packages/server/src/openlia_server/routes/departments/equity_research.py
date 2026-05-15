@@ -172,6 +172,18 @@ def build_equity_research_router(
         if mode not in _VALID_MODES:
             raise HTTPException(status_code=400, detail=f"unknown mode: {mode!r}")
 
+        disabled_connector_ids: tuple[str, ...] = ()
+        disabled_skill_ids: tuple[str, ...] = ()
+        if session_id is not None:
+            try:
+                session_row = chat_sessions_svc.get_session(
+                    db, session_id=session_id, user_id=user.id
+                )
+            except (LookupError, PermissionError) as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+            disabled_connector_ids = tuple(session_row.disabled_connector_ids or ())
+            disabled_skill_ids = tuple(session_row.disabled_skill_ids or ())
+
         runtime_attachments: list[RuntimeAttachment] = []
         if uploads:
             if session_id is None:
@@ -215,6 +227,8 @@ def build_equity_research_router(
                     user_input=user_input,
                     session_id=session_id,
                     attachments=runtime_attachments or None,
+                    disabled_connector_ids=disabled_connector_ids,
+                    disabled_skill_ids=disabled_skill_ids,
                 ):
                     wire = _serialize_event(ev)
                     yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
