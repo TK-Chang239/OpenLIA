@@ -435,12 +435,13 @@ export default function EquityResearch(): JSX.Element {
 
   const autoscrollKey = useMemo(
     () =>
-      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${schema ? "s" : "_"}`,
+      `${history.length}:${chatStream.state.message.length}:${chatStream.state.toolCalls.length}:${reportState.status}:${reportState.toolCalls.length}:${schema ? "s" : "_"}`,
     [
       history.length,
       chatStream.state.message.length,
       chatStream.state.toolCalls.length,
       reportState.status,
+      reportState.toolCalls.length,
       schema,
     ],
   );
@@ -472,11 +473,31 @@ export default function EquityResearch(): JSX.Element {
               ))}
 
               {isReportStreaming ? (
-                <ReportProgressIndicator
-                  startedAt={genStartedAt}
-                  mode={config.report_mode}
-                  subject={subject || sessionTitle || ""}
-                />
+                <>
+                  <ReportProgressIndicator
+                    startedAt={genStartedAt}
+                    mode={config.report_mode}
+                    subject={subject || sessionTitle || ""}
+                  />
+                  {reportState.toolCalls.length > 0 ? (
+                    <div
+                      data-testid="er-report-tool-chips"
+                      className="flex flex-wrap gap-2"
+                    >
+                      {reportState.toolCalls.map((c, i) => (
+                        <ToolCallChip
+                          key={c.callId || `rt-${i}`}
+                          toolName={c.toolName}
+                          argsPreview={c.argsPreview}
+                          status={c.status}
+                          summary={c.summary}
+                          structured={null}
+                          index={i}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
 
               {reportState.status === "error" ? (

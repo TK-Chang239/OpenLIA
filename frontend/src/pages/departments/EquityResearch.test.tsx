@@ -223,6 +223,74 @@ describe("EquityResearchPage", () => {
     expect(retry).toBeInTheDocument();
   });
 
+  it("renders tool-call chips during report generation, then clears them at report.saved", async () => {
+    // Use a long-running stream that pauses between phases so we can assert
+    // chips visible during generation, then close to fire report.saved.
+    let pushFrame: ((s: string) => void) | null = null;
+    let closeStream: (() => void) | null = null;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const enc = new TextEncoder();
+        pushFrame = (s) => controller.enqueue(enc.encode(s));
+        closeStream = () => controller.close();
+      },
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (typeof url === "string" && url.includes("/report")) {
+        return { ok: true, status: 200, body: stream } as unknown as Response;
+      }
+      return { ok: true, status: 200, body: sseBody([]) } as unknown as Response;
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    renderPage();
+    await act(async () => {
+      submitInput("AAPL");
+    });
+
+    // Open with report.start + a running tool call.
+    await act(async () => {
+      pushFrame?.(
+        `event: report.start\ndata: ${JSON.stringify({
+          report_id: "r_42",
+          department: "equity_research",
+          mode: "stock_initiation",
+          section_titles: [],
+        })}\n\n`,
+      );
+      pushFrame?.(
+        `event: report.tool_call.start\ndata: ${JSON.stringify({
+          report_id: "r_42",
+          call_id: "c1",
+          tool_name: "fetch_quote",
+          args_preview: "AAPL",
+        })}\n\n`,
+      );
+    });
+
+    const chipRow = await screen.findByTestId("er-report-tool-chips");
+    expect(chipRow).toBeInTheDocument();
+
+    // Close the report — chips should disappear with the indicator.
+    await act(async () => {
+      pushFrame?.(
+        `event: report.complete\ndata: ${JSON.stringify({
+          report_id: "r_42",
+          schema: {},
+        })}\n\n`,
+      );
+      pushFrame?.(
+        `event: report.saved\ndata: ${JSON.stringify({ report_id: "r_42" })}\n\n`,
+      );
+      closeStream?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("er-report-card")).toBeInTheDocument();
+    });
+    expect(screen.queryByTestId("er-report-tool-chips")).not.toBeInTheDocument();
+  });
+
   it("follow-up chat hits the ER chat URL with session_id (NEW-14-01)", async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (typeof url === "string" && url.includes("/report")) {

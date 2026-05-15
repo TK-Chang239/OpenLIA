@@ -952,7 +952,7 @@ class ReportRunner:
                             system=system,
                             tools=tools or None,
                             tool_choice=turn_tool_choice,
-                            max_tokens=2048,
+                            max_tokens=resolved.capabilities.max_output_tokens,
                             native_tools=native_tools,
                             web_search_max_uses=web_search_max_uses,
                         )

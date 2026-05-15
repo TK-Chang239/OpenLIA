@@ -452,7 +452,7 @@ class ChatRunner:
                     "messages": [{"role": m.role, "chars": len(m.content)} for m in conversation],
                     "tool_names": tool_names_v1,
                     "system_prompt_chars": len(system),
-                    "max_tokens": 2048,
+                    "max_tokens": resolved.capabilities.max_output_tokens,
                 },
             )
             try:
@@ -462,7 +462,7 @@ class ChatRunner:
                             messages=conversation,
                             system=system,
                             tools=tools or None,
-                            max_tokens=2048,
+                            max_tokens=resolved.capabilities.max_output_tokens,
                         )
                     ),
                     cancel_token=cancel_token,
@@ -612,7 +612,7 @@ class ChatRunner:
                 LLMRequest(
                     messages=conversation,
                     system=system,
-                    max_tokens=2048,
+                    max_tokens=resolved.capabilities.max_output_tokens,
                 )
             ).__aiter__()
             while True:
@@ -847,7 +847,7 @@ class ChatRunner:
                     "messages": [{"role": m.role, "chars": len(m.content)} for m in conversation],
                     "tool_names": tool_names_v2,
                     "system_prompt_chars": len(system_prompt),
-                    "max_tokens": 2048,
+                    "max_tokens": resolved.capabilities.max_output_tokens,
                     "routed": True,
                 },
             )
@@ -858,7 +858,7 @@ class ChatRunner:
                             messages=conversation,
                             system=system_prompt,
                             tools=tools or None,
-                            max_tokens=2048,
+                            max_tokens=resolved.capabilities.max_output_tokens,
                         )
                     ),
                     cancel_token=cancel_token,
@@ -1026,7 +1026,7 @@ class ChatRunner:
                 LLMRequest(
                     messages=conversation,
                     system=system_prompt,
-                    max_tokens=2048,
+                    max_tokens=resolved.capabilities.max_output_tokens,
                 )
             ).__aiter__()
             while True:
