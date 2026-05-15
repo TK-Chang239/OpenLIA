@@ -9,6 +9,7 @@ import {
   isDevModeEnabled,
   streamDevEvents,
 } from "../../api/devEvents";
+import { computeCostMetrics } from "./devPanelMetrics";
 import morningBriefingBacklog from "./backlog/morning-briefing.md?raw";
 
 const CATEGORY_COLOR: Record<string, string> = {
@@ -48,7 +49,7 @@ const BACKLOGS: Record<string, { title: string; source: string }> = {
   },
 };
 
-type Tab = "events" | "backlog";
+type Tab = "events" | "backlog" | "cost";
 
 export function DevPanel(): JSX.Element | null {
   const [enabled, setEnabled] = useState<boolean | null>(null);
@@ -64,6 +65,8 @@ export function DevPanel(): JSX.Element | null {
     }
     return null;
   }, [location.pathname]);
+
+  const costMetrics = useMemo(() => computeCostMetrics(events), [events]);
 
   useEffect(() => {
     let cancelled = false;
@@ -137,6 +140,18 @@ export function DevPanel(): JSX.Element | null {
               >
                 Backlog
               </button>
+              <button
+                type="button"
+                onClick={() => setTab("cost")}
+                className={`rounded px-2 py-0.5 text-[11px] font-mono uppercase ${
+                  tab === "cost"
+                    ? "bg-surface-hover text-text-primary"
+                    : "text-text-tertiary hover:text-text-primary"
+                }`}
+                data-testid="dev-panel-tab-cost"
+              >
+                Cost
+              </button>
             </div>
             {tab === "events" ? (
               <button
@@ -149,7 +164,7 @@ export function DevPanel(): JSX.Element | null {
               </button>
             ) : null}
           </div>
-          {tab === "events" ? (
+          {tab === "events" && (
             <div
               ref={listRef}
               className="max-h-[40vh] min-h-[120px] overflow-y-auto px-2 py-1 font-mono text-[11px] leading-tight"
@@ -191,7 +206,8 @@ export function DevPanel(): JSX.Element | null {
                 ))
               )}
             </div>
-          ) : (
+          )}
+          {tab === "backlog" && (
             <div
               className="max-h-[60vh] min-h-[120px] overflow-y-auto px-3 py-2 text-[12px] leading-snug"
               data-testid="dev-panel-backlog"
@@ -205,6 +221,49 @@ export function DevPanel(): JSX.Element | null {
                   No backlog for this page.
                 </div>
               )}
+            </div>
+          )}
+          {tab === "cost" && (
+            <div
+              className="min-h-[120px] px-3 py-2 font-mono text-[11px] uppercase leading-tight"
+              data-testid="dev-panel-cost"
+            >
+              <div className="flex justify-between gap-3 py-0.5">
+                <span className="text-text-tertiary">Reports</span>
+                <span
+                  className="text-text-primary tabular-nums"
+                  data-testid="cost-report-count"
+                >
+                  {costMetrics.reportCount}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 py-0.5">
+                <span className="text-text-tertiary">Searches/report</span>
+                <span
+                  className="text-text-primary tabular-nums"
+                  data-testid="cost-searches-per-report"
+                >
+                  {costMetrics.searchesPerReport.toFixed(2)}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 py-0.5">
+                <span className="text-text-tertiary">Rescue rate</span>
+                <span
+                  className="text-text-primary tabular-nums"
+                  data-testid="cost-rescue-rate"
+                >
+                  {(costMetrics.rescueRate * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="flex justify-between gap-3 py-0.5">
+                <span className="text-text-tertiary">Double-bill est.</span>
+                <span
+                  className="text-text-primary tabular-nums"
+                  data-testid="cost-double-bill"
+                >
+                  {(costMetrics.doubleBillEstimate * 100).toFixed(1)}%
+                </span>
+              </div>
             </div>
           )}
         </>

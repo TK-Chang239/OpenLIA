@@ -47,8 +47,7 @@ def find_uncited_concrete_claims(schema: ReportSchema) -> list[ReportValidationW
                                 slot="metric",
                                 path=f"{base}.metrics[{m_idx}]",
                                 message=(
-                                    f"Metric '{metric.label}' ({metric.value}) has no "
-                                    "source_ids."
+                                    f"Metric '{metric.label}' ({metric.value}) has no source_ids."
                                 ),
                             )
                         )
@@ -82,6 +81,36 @@ def find_uncited_concrete_claims(schema: ReportSchema) -> list[ReportValidationW
     return warnings
 
 
+def enforce_uncited_concrete_claims(schema: ReportSchema, *, strict: bool) -> None:
+    """Phase 6a strict-mode wrapper around ``find_uncited_concrete_claims``.
+
+    - ``strict=False`` (default warn-mode): returns silently. Callers
+      still invoke ``find_uncited_concrete_claims`` directly to surface
+      warnings as traces.
+    - ``strict=True``: any uncited concrete claim becomes a fatal
+      ``ReportValidationError`` so the runner's existing rescue/retry
+      loop fires. The error mirrors the warnings as ``(path, message)``
+      tuples and populates ``details`` in the same shape used by schema
+      errors, so trace rendering is identical.
+    """
+    if not strict:
+        return
+    warnings = find_uncited_concrete_claims(schema)
+    if not warnings:
+        return
+    errors = [(w.path, f"{w.kind}: {w.message}") for w in warnings]
+    details = [
+        {
+            "path": w.path,
+            "message": f"{w.kind}: {w.message}",
+            "input_value": "",
+            "input_type": w.slot,
+        }
+        for w in warnings
+    ]
+    raise ReportValidationError(errors, details=details)
+
+
 def _repr_truncated(v: Any, *, max_len: int = 120) -> str:
     """Repr the offending input value, bounded so traces stay readable when
     the LLM dropped a 60-element points array into the wrong slot."""
@@ -97,10 +126,14 @@ class ReportValidationError(ValueError):
         details: list[dict[str, Any]] | None = None,
     ) -> None:
         self.errors = errors
-        self.details = details if details is not None else [
-            {"path": p, "message": m, "input_value": "", "input_type": "unknown"}
-            for p, m in errors
-        ]
+        self.details = (
+            details
+            if details is not None
+            else [
+                {"path": p, "message": m, "input_value": "", "input_type": "unknown"}
+                for p, m in errors
+            ]
+        )
         summary = "; ".join(f"{p}: {m}" for p, m in errors[:5])
         super().__init__(f"Report payload failed validation: {summary}")
 
