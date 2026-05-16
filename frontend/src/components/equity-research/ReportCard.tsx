@@ -1,16 +1,9 @@
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  Bookmark,
-  ChevronDown,
-  Clock,
-  FileText,
-  Globe,
-  Layers,
-} from "lucide-react";
+import { Bookmark, Clock, FileText, Globe, Layers } from "lucide-react";
 import { type JSX, useState } from "react";
 
 import type { ReportMode } from "../../api/equity-research";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 const MODE_TITLE: Record<ReportMode, string> = {
   stock_initiation: "Stock Initiation Report",
@@ -36,7 +29,6 @@ interface Props {
   /** Number of cited sources. */
   citationsCount?: number;
   onOpen: (reportId: string) => void;
-  onDownload: (reportId: string, format: "pdf" | "docx") => void;
   onSave: (reportId: string) => void | Promise<void>;
   initialSaved?: boolean;
 }
@@ -63,7 +55,6 @@ export function ReportCard({
   generatedSeconds,
   citationsCount,
   onOpen,
-  onDownload,
   onSave,
   initialSaved = false,
 }: Props): JSX.Element {
@@ -187,37 +178,7 @@ export function ReportCard({
           Open Report
         </button>
 
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              aria-label="Download"
-              className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
-            >
-              Download
-              <ChevronDown size={12} strokeWidth={2} />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              sideOffset={4}
-              className="z-50 min-w-[180px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-1 text-sm shadow-lg"
-            >
-              <DropdownMenu.Item
-                onSelect={() => onDownload(reportId, "pdf")}
-                className="cursor-pointer rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-[--color-surface-hover]"
-              >
-                Download as PDF
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => onDownload(reportId, "docx")}
-                className="cursor-pointer rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-[--color-surface-hover]"
-              >
-                Download as DOCX
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <ReportDownloadButton reportId={reportId} variant="primary" />
 
         <div className="flex-1" />
 

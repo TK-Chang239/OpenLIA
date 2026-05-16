@@ -23,8 +23,12 @@ describe("MBReportCard", () => {
     );
     fireEvent.click(screen.getByTestId("mb-report-open"));
     expect(onOpen).toHaveBeenCalledWith(baseReport);
-    const dl = screen.getByTestId("mb-report-download") as HTMLAnchorElement;
-    expect(dl.href).toContain("/api/reports/r-1/export/pdf");
+    // download surface is now the shared <ReportDownloadButton>; assert
+    // it's rendered inside the marker span.
+    const dlWrapper = screen.getByTestId("mb-report-download");
+    expect(
+      dlWrapper.querySelector('button[aria-label="Download report"]'),
+    ).not.toBeNull();
   });
 
   it("shows New badge when created_at < 1h and unopened, hides after Open", () => {

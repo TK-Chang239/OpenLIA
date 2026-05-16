@@ -17,12 +17,7 @@ describe("RepoListItem", () => {
     const onOpen = vi.fn();
     render(
       <ul>
-        <RepoListItem
-          row={ROW}
-          downloadUrl="/x"
-          onOpen={onOpen}
-          onRemove={vi.fn()}
-        />
+        <RepoListItem row={ROW} onOpen={onOpen} onRemove={vi.fn()} />
       </ul>,
     );
     fireEvent.click(screen.getByTestId("repo-row"));
@@ -34,7 +29,7 @@ describe("RepoListItem", () => {
     const onRemove = vi.fn();
     render(
       <ul>
-        <RepoListItem row={ROW} downloadUrl="/x" onOpen={onOpen} onRemove={onRemove} />
+        <RepoListItem row={ROW} onOpen={onOpen} onRemove={onRemove} />
       </ul>,
     );
     fireEvent.click(screen.getByRole("button", { name: /Remove AAPL.pdf/ }));
@@ -42,21 +37,21 @@ describe("RepoListItem", () => {
     expect(onOpen).not.toHaveBeenCalled();
   });
 
-  it("does not call onOpen when download anchor clicked", () => {
+  it("renders a download button that does not propagate to row open", () => {
     const onOpen = vi.fn();
     render(
       <ul>
-        <RepoListItem row={ROW} downloadUrl="/x" onOpen={onOpen} onRemove={vi.fn()} />
+        <RepoListItem row={ROW} onOpen={onOpen} onRemove={vi.fn()} />
       </ul>,
     );
-    fireEvent.click(screen.getByRole("link", { name: /Download AAPL.pdf/ }));
+    fireEvent.click(screen.getByRole("button", { name: /download report/i }));
     expect(onOpen).not.toHaveBeenCalled();
   });
 
   it("renders department badge with friendly label", () => {
     render(
       <ul>
-        <RepoListItem row={ROW} downloadUrl="/x" onOpen={vi.fn()} onRemove={vi.fn()} />
+        <RepoListItem row={ROW} onOpen={vi.fn()} onRemove={vi.fn()} />
       </ul>,
     );
     expect(screen.getByTestId("department-badge")).toHaveTextContent("Equity Research");
@@ -66,7 +61,7 @@ describe("RepoListItem", () => {
     const onOpen = vi.fn();
     render(
       <ul>
-        <RepoListItem row={ROW} downloadUrl="/x" onOpen={onOpen} onRemove={vi.fn()} />
+        <RepoListItem row={ROW} onOpen={onOpen} onRemove={vi.fn()} />
       </ul>,
     );
     fireEvent.keyDown(screen.getByTestId("repo-row"), { key: "Enter" });
