@@ -207,8 +207,9 @@ def test_two_source_discipline_partial_renders_with_budget_and_date() -> None:
         connector_quirks=[],
     )
     assert "## Two-source discipline" in out
-    assert "Quantitative claims" in out
-    assert "Qualitative claims" in out
+    assert "Provider tools" in out
+    assert "Web search" in out
+    assert "Web search is required before writing these sections" in out
     assert "Search budget" in out
     assert "budget of 10 web searches" in out
     # Transitively includes temporal anchor.
