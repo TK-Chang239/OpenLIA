@@ -409,6 +409,19 @@ class Citation(_Strict):
     date: str | None = None
 
 
+class MetaStats(_Strict):
+    """Server-authoritative stats about the report itself (not the subject).
+    Rendered in the left sidebar below the table of contents so the reader
+    can gauge thoroughness and freshness at a glance."""
+
+    sources_count: int = 0
+    sections_count: int = 0
+    model_id: str | None = None
+    tokens_used: int | None = None
+    web_search_queries: int | None = None
+    est_read_minutes: int = 0
+
+
 class ReportSchema(_Strict):
     schema_version: Literal["2.0"]
     department: str
@@ -418,6 +431,7 @@ class ReportSchema(_Strict):
     sections: list[Section]
     rail: Rail | None = None
     citations: list[Citation] = Field(default_factory=list)
+    meta_stats: MetaStats | None = None
 
 
 TreemapNode.model_rebuild()

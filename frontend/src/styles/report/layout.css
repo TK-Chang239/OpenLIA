@@ -30,6 +30,9 @@
   position: sticky;
   top: 24px;
   align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   font-size: 13px;
 }
 
@@ -1410,6 +1413,7 @@
 
 /* ---- Page furniture (header / footer) ---- */
 .report-furniture__header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1427,7 +1431,92 @@
   font-weight: 500;
 }
 .report-furniture__header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
   color: var(--report-text-secondary);
+}
+.report-furniture__print {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--report-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  text-decoration: none;
+}
+.report-furniture__print:hover,
+.report-furniture__print:focus-visible {
+  color: var(--report-text-primary);
+  background: var(--report-surface-2, rgba(0, 0, 0, 0.04));
+  border-color: var(--report-border);
+  outline: none;
+}
+.report-furniture__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: transparent;
+  pointer-events: none;
+  overflow: hidden;
+}
+.report-furniture__progress-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--report-accent);
+  opacity: 0.85;
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 60ms linear;
+}
+
+/* ---- Left-sidebar meta-stats (Report Stats card) ---- */
+.report-meta-stats {
+  border-top: 1px solid var(--report-border);
+  padding-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.report-meta-stats__label {
+  font-family: var(--report-font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--report-text-tertiary);
+}
+.report-meta-stats__list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.report-meta-stats__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.report-meta-stats__row dt {
+  color: var(--report-text-tertiary);
+  margin: 0;
+}
+.report-meta-stats__row dd {
+  margin: 0;
+  color: var(--report-text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  word-break: break-word;
+  max-width: 60%;
 }
 
 .report-furniture__footer {

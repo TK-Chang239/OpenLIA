@@ -210,6 +210,15 @@ export type ReportBlock =
   | ChartLikeBlock
   | GroupBlock;
 
+export interface MetaStats {
+  sources_count: number;
+  sections_count: number;
+  model_id?: string | null;
+  tokens_used?: number | null;
+  web_search_queries?: number | null;
+  est_read_minutes: number;
+}
+
 export interface ReportSchema {
   schema_version: '2.0';
   department: string;
@@ -219,6 +228,7 @@ export interface ReportSchema {
   sections: ReportSection[];
   rail?: Rail | null;
   citations?: Citation[];
+  meta_stats?: MetaStats | null;
 }
 
 export async function fetchReport(reportId: string): Promise<ReportSchema> {
