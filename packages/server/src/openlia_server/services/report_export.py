@@ -156,25 +156,20 @@ def _render_docx_block(doc: Any, block: dict[str, Any]) -> None:
 
 async def export_report_pdf(
     launcher: BrowserLauncher,
-    html: str,
     *,
+    bundle_url: str,
     header_html: str | None = None,
     footer_html: str | None = None,
-    bundle_url: str | None = None,
     cookies: list[dict[str, Any]] | None = None,
 ) -> bytes:
-    """Render a report HTML body to PDF bytes via Playwright.
+    """Render a report's print page to PDF bytes via Playwright.
 
-    Two paths:
-      - When `bundle_url` is provided: navigate the page to that URL with
-        `wait_until="networkidle"`. Use this for the SPA-driven flow where
-        the React `ReportRenderer` mounts and ECharts renders real vector
-        graphics. Optional `cookies` are forwarded so the SPA can call
-        `/api/reports/:id` against the protected backend.
-      - Otherwise: use `page.set_content(html)`. This is the static-fallback
-        path that ships chart titles, tables, and metric cards baked into
-        the HTML — used by tests and any environment where the SPA bundle
-        isn't reachable.
+    Navigates to `bundle_url` (the SPA's `/reports/:id/render` route) and
+    captures the rendered DOM as PDF. The print page sets
+    `window.__REPORT_READY__ = true` once its schema has rendered; we wait
+    for that flag in addition to `networkidle` so charts are mounted before
+    capture. Cookies, when provided, are forwarded so the SPA can call
+    `/api/reports/:id` against the protected backend.
     """
     browser = await launcher.browser()
     context = await browser.new_context()
@@ -182,10 +177,8 @@ async def export_report_pdf(
         if cookies:
             await context.add_cookies(cookies)
         page = await context.new_page()
-        if bundle_url is not None:
-            await page.goto(bundle_url, wait_until="networkidle")
-        else:
-            await page.set_content(html, wait_until="networkidle")
+        await page.goto(bundle_url, wait_until="networkidle")
+        await page.wait_for_function("window.__REPORT_READY__ === true", timeout=15_000)
         kwargs: dict[str, Any] = {
             "format": "A4",
             "margin": {"top": "20mm", "bottom": "25mm", "left": "20mm", "right": "20mm"},

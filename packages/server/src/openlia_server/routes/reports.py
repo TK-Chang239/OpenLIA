@@ -23,7 +23,36 @@ from openlia_server.services.report_export import export_report_docx, export_rep
 from openlia_server.services.reports import (
     ReportNotFoundError,
     get_report,
+    get_report_for_user,
 )
+
+_FILENAME_INVALID = re.compile(r'[\x00-\x1f/\\:*?"<>|]')
+
+
+def _sanitize_filename(name: str) -> str:
+    cleaned = _FILENAME_INVALID.sub("", name).strip().strip(".")
+    return cleaned or "report"
+
+
+def _forward_session_cookie(request: Request, base_url: str) -> list[dict[str, Any]] | None:
+    """Build a Playwright cookies list that forwards the session cookie to
+    `base_url` so the SPA can call /api/reports/:id against the protected
+    backend. Returns None when no session cookie is present.
+    """
+    from urllib.parse import urlparse
+
+    session_cookie = request.cookies.get("openlia_session") or request.cookies.get("session")
+    if not session_cookie:
+        return None
+    parsed = urlparse(base_url)
+    return [
+        {
+            "name": "openlia_session",
+            "value": session_cookie,
+            "domain": parsed.hostname or "127.0.0.1",
+            "path": "/",
+        }
+    ]
 
 
 def _esc(value: Any) -> str:
@@ -597,60 +626,62 @@ def build_reports_router(
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
+        row = get_report_for_user(session, user_id=user.id, report_id=report_id)
         launcher = getattr(request.app.state, "browser_launcher", None)
         if launcher is None:
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "PDF export unavailable (browser launcher not configured)",
             )
+        resolver = getattr(request.app.state, "render_base_url_resolver", None)
+        base_url = resolver.resolve() if resolver else None
+        if base_url is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Report rendering requires a built frontend (set OPENLIA_FRONTEND_DIST) "
+                "or a running Vite dev server on :5173. Set "
+                "OPENLIA_REPORT_RENDER_BASE_URL to override.",
+            )
+
         payload = schema.model_dump(mode="json")
-        html = _html_shell(
-            title=payload.get("cover", {}).get("title", "Report"),
-            body=_schema_to_html(payload),
-        )
         furniture = payload.get("page_furniture") or {}
         header_html = _furniture_template(furniture.get("header"), kind="header")
         footer_html = _furniture_template(furniture.get("footer"), kind="footer")
-        # SPA-driven PDF flow (Option A). Opt-in via env var because it
-        # requires a live HTTP server reachable from Playwright and a
-        # built `frontend/dist/`. When unset, the static-fallback HTML
-        # path runs (still ships chart titles for the byte-count gate).
-        bundle_base = os.environ.get("OPENLIA_REPORT_RENDER_BASE_URL")
-        bundle_url: str | None = None
-        cookies: list[dict[str, Any]] | None = None
-        if bundle_base and _resolve_frontend_dist() is not None:
-            bundle_url = f"{bundle_base.rstrip('/')}/reports/{report_id}/render"
-            # Forward the request's session cookie so the SPA can fetch
-            # /api/reports/:id against the protected backend. Falls back
-            # to set_content if no cookie is present.
-            session_cookie = request.cookies.get("openlia_session") or request.cookies.get(
-                "session"
-            )
-            if session_cookie:
-                from urllib.parse import urlparse
+        cookies = _forward_session_cookie(request, base_url)
+        bundle_url = f"{base_url.rstrip('/')}/reports/{report_id}/render"
 
-                parsed = urlparse(bundle_base)
-                cookies = [
-                    {
-                        "name": "openlia_session",
-                        "value": session_cookie,
-                        "domain": parsed.hostname or "127.0.0.1",
-                        "path": "/",
-                    }
-                ]
-        pdf = await export_report_pdf(
-            launcher,
-            html,
-            header_html=header_html,
-            footer_html=footer_html,
-            bundle_url=bundle_url,
-            cookies=cookies,
-        )
-        filename = f"report-{report_id}.pdf"
+        try:
+            pdf = await export_report_pdf(
+                launcher,
+                bundle_url=bundle_url,
+                header_html=header_html,
+                footer_html=footer_html,
+                cookies=cookies,
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            if resolver is not None:
+                resolver.invalidate()
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                f"PDF rendering failed: {exc}",
+            ) from exc
+
+        title = (row.title if row is not None and row.title else None) or payload.get(
+            "cover", {}
+        ).get("title", "report")
+        from urllib.parse import quote as urlquote
+
+        filename = _sanitize_filename(f"{title}.pdf")
         return Response(
             content=pdf,
             media_type="application/pdf",
-            headers={"content-disposition": f'attachment; filename="{filename}"'},
+            headers={
+                "content-disposition": (
+                    f"attachment; filename=\"{filename}\"; filename*=UTF-8''{urlquote(filename)}"
+                )
+            },
         )
 
     @router.get("/{report_id}/docx")
