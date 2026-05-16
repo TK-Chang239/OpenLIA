@@ -64,6 +64,7 @@ from openlia.llm.types import (
     ToolCall,
     ToolSchema,
 )
+from openlia.reports.citations import normalize_report
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import (
     ReportValidationError,
@@ -325,6 +326,41 @@ def _inject_server_fields(
     payload.setdefault("cover", {})
     payload.setdefault("sections", [])
     return payload
+
+
+def _finalize_submit_payload(
+    args: dict[str, Any],
+    *,
+    department_id: str,
+    generated_at: datetime,
+    provider_citations: list[Citation],
+    model_id: str,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    web_search_count: int,
+) -> dict[str, Any]:
+    """Apply server-side finalization to a submit_report payload.
+
+    Sequence: hoist+stamp server fields → rewrite inline citation tuples
+    into `[N]` footnotes → append native-provider citations not already
+    inline → stamp server-authoritative `meta_stats`. The result is
+    ready for strict Pydantic validation by the caller.
+    """
+    candidate = _inject_server_fields(
+        copy.deepcopy(args),
+        department_id=department_id,
+        generated_at=generated_at,
+    )
+    candidate = normalize_report(candidate)
+    _merge_provider_citations(candidate, provider_citations)
+    candidate["meta_stats"] = _build_meta_stats(
+        candidate,
+        model_id=model_id,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+        web_search_count=web_search_count,
+    )
+    return candidate
 
 
 def _merge_provider_citations(payload: dict[str, Any], provider_citations: list[Citation]) -> None:
@@ -1229,14 +1265,11 @@ class ReportRunner:
             )
             if submit_call is not None:
                 args = submit_call.arguments if isinstance(submit_call.arguments, dict) else {}
-                candidate = _inject_server_fields(
-                    copy.deepcopy(args),
+                candidate = _finalize_submit_payload(
+                    args,
                     department_id=department_id,
                     generated_at=datetime.now(UTC),
-                )
-                _merge_provider_citations(candidate, provider_citations)
-                candidate["meta_stats"] = _build_meta_stats(
-                    candidate,
+                    provider_citations=provider_citations,
                     model_id=resolved.model_ref,
                     total_input_tokens=total_input_tokens,
                     total_output_tokens=total_output_tokens,
@@ -1516,6 +1549,7 @@ class ReportRunner:
                 department_id=department_id,
                 generated_at=datetime.now(UTC),
             )
+            schema_payload = normalize_report(schema_payload)
             schema_payload = _apply_coercion_fallback(schema_payload)
             self._trace(
                 "report.coercion_applied",

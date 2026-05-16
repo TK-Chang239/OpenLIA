@@ -201,6 +201,60 @@ def test_report_system_prompt_documents_chart_height_enum(tmp_path: Path) -> Non
     assert "pixel" in lower or "integer" in lower
 
 
+def test_runtime_finalize_submit_payload_rewrites_inline_citation_tuples() -> None:
+    """The runtime finalization helper that ReportRunner calls after
+    `submit_report` must rewrite inline citation tuples like
+    `[Reuters, "Title", 2026-05-12, https://x.com]` into footnote markers
+    `[1]` and populate `payload["citations"]`. Without this hook the raw
+    tuples leak into the rendered report and the citations rail stays empty."""
+    from datetime import UTC, datetime
+
+    from openlia.llm.runtime.report import _finalize_submit_payload
+
+    payload = {
+        "cover": {
+            "title": "Apple Q1 Initiation",
+            "subtitle": "Hold",
+            "tagline": "Solid quarter; valuation full.",
+        },
+        "sections": [
+            {
+                "id": "company_overview",
+                "title": "Company Overview",
+                "blocks": [
+                    {
+                        "type": "text",
+                        "content": (
+                            "Apple beat Q1 estimates "
+                            '[Reuters, "Apple Q1 beats", 2026-05-12, '
+                            "https://reuters.com/business/apple-q1]."
+                        ),
+                    }
+                ],
+            }
+        ],
+    }
+
+    finalized = _finalize_submit_payload(
+        payload,
+        department_id="equity_research",
+        generated_at=datetime(2026, 5, 16, tzinfo=UTC),
+        provider_citations=[],
+        model_id="gpt-5.4",
+        total_input_tokens=100,
+        total_output_tokens=50,
+        web_search_count=0,
+    )
+
+    text_block = finalized["sections"][0]["blocks"][0]
+    assert "[1]" in text_block["content"]
+    assert "Reuters" not in text_block["content"]
+    assert "reuters.com" not in text_block["content"]
+    assert len(finalized["citations"]) == 1
+    assert finalized["citations"][0]["id"] == "1"
+    assert finalized["citations"][0]["url"] == "https://reuters.com/business/apple-q1"
+
+
 def test_report_system_prompt_marks_cache_breakpoint(tmp_path: Path) -> None:
     """The rendered report system prompt must embed the cache-breakpoint
     sentinel. Without it, the Anthropic adapter cannot split off a cached
