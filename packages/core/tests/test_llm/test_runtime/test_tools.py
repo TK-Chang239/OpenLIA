@@ -1730,7 +1730,12 @@ class TestReadPayload:
         assert "Unknown ref" in result.payload["error"]
 
     async def test_read_payload_parse_error(self) -> None:
-        """Invalid path syntax returns ok=False with syntax error message."""
+        """Invalid path syntax returns ok=False with syntax error message.
+
+        The error body must give the LLM enough information to self-correct:
+        canonical forms AND a worked bracket-string example, since some keys
+        cannot be expressed as a plain bareword.
+        """
         stored = {"ticker": "AAPL"}
         disp, _ = self._make_disp_with_store(stored)
 
@@ -1744,7 +1749,11 @@ class TestReadPayload:
         )
 
         assert result.ok is False
-        assert "Invalid path syntax" in result.payload["error"]
+        body = result.payload["error"]
+        assert "Invalid path syntax" in body
+        # A worked example with a quoted key must be present so the model has
+        # a concrete pattern to retry with.
+        assert '["' in body or "['" in body
 
     async def test_read_payload_resolve_error(self) -> None:
         """Valid syntax, path doesn't apply returns ok=False."""
@@ -1762,6 +1771,38 @@ class TestReadPayload:
 
         assert result.ok is False
         assert "error" in result.payload
+
+    async def test_read_payload_resolves_iso_date_keyed_path(self) -> None:
+        """Provider fundamentals nest data under ISO-date keys; the model
+        drills via dotted form and expects a valid slice back, not a parse
+        error sentinel."""
+        stored = {
+            "Financials": {
+                "Income_Statement": {
+                    "yearly": {
+                        "2026-01-31": {"totalRevenue": 281_700},
+                        "2025-01-31": {"totalRevenue": 245_122},
+                    },
+                },
+            },
+        }
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={
+                    "ref": "r_abcd_01",
+                    "path": "Financials.Income_Statement.yearly.2026-01-31",
+                },
+            ),
+        )
+
+        assert result.ok is True
+        assert "parse error" not in result.summary
+        assert result.payload == {"totalRevenue": 281_700}
 
     async def test_read_payload_sub_stub_on_oversized(
         self, monkeypatch: pytest.MonkeyPatch

@@ -33,7 +33,12 @@ class PathResolveError(ValueError):
 
 _TOKEN_RE = re.compile(
     r"""
-    (?P<name>[A-Za-z_][A-Za-z0-9_]*)        # bareword
+    (?P<name>[A-Za-z0-9_][A-Za-z0-9_\-]*)   # bareword: alnum/_/- interior;
+                                            # leading digit permits date keys
+                                            # like 2026-01-31 and numeric keys
+                                            # like outstandingShares.annual.0;
+                                            # leading hyphen is still rejected
+                                            # so it cannot shadow [-idx] syntax
     | \[ \s* (?P<lo>-?\d+)? \s* : \s* (?P<hi>-?\d+)? \s* \]   # [lo:hi] slice
     | \[ \s* (?P<idx>-?\d+) \s* \]          # [i] or [-i]
     | (?P<dot>\.)
@@ -61,7 +66,7 @@ def apply_path(payload: Any, path: str | None) -> Any:
     return result
 
 
-_BRACKET_STRING_RE = re.compile(r"""\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\]""")
+_BRACKET_STRING_RE = re.compile(r"""\[\s*['"]([A-Za-z0-9_][A-Za-z0-9_\-]*)['"]\s*\]""")
 
 
 def _normalize_path(path: str) -> str:

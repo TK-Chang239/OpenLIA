@@ -961,8 +961,12 @@ class ToolDispatcher:
             result = apply_path(payload, path)
         except PathParseError:
             msg = (
-                f"Invalid path syntax: {path!r}. Supported forms: key, key.subkey, "
-                "rows[i], rows[i:j], rows.column."
+                f"Invalid path syntax: {path!r}. "
+                "Supported forms: key, key.subkey, rows[i], rows[i:j], rows.column. "
+                "Names accept letters, digits, underscore, and hyphen interior "
+                "(e.g. yearly.2026-01-31). For keys that contain dots, spaces, or "
+                'other punctuation use bracket-string syntax: yearly["2026-01-31"] '
+                "or data['some key']."
             )
             self._emit_read_payload_result(ref, path, "parse_error", 0, False)
             return ToolCallResult(

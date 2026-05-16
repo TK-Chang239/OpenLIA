@@ -174,3 +174,42 @@ def test_filter_expression_still_errors() -> None:
     # We don't try to silently fix predicate filters — they change semantics.
     with pytest.raises(PathParseError):
         apply_path({"rows": []}, "rows[?(@.x>0)]")
+
+
+# --- Provider-payload key shapes (date keys, numeric keys) ---
+
+
+def test_dotted_date_key_resolves() -> None:
+    # Provider fundamentals nest by ISO date; the LLM drills via dotted form.
+    payload = {
+        "Financials": {
+            "Income_Statement": {
+                "yearly": {"2026-01-31": {"totalRevenue": 281700}},
+            },
+        },
+    }
+    assert apply_path(payload, "Financials.Income_Statement.yearly.2026-01-31") == {
+        "totalRevenue": 281700
+    }
+
+
+def test_dotted_date_key_then_field_resolves() -> None:
+    payload = {"yearly": {"2026-01-31": {"totalRevenue": 281700}}}
+    assert apply_path(payload, "yearly.2026-01-31.totalRevenue") == 281700
+
+
+def test_bracket_string_date_key_resolves() -> None:
+    payload = {"yearly": {"2026-01-31": {"totalRevenue": 281700}}}
+    assert apply_path(payload, 'yearly["2026-01-31"]') == {"totalRevenue": 281700}
+
+
+def test_numeric_leading_key_resolves() -> None:
+    # EODHD outstandingShares.annual uses string-integer keys like "0", "1".
+    payload = {"annual": {"0": {"shares": 7_400_000_000}}}
+    assert apply_path(payload, "annual.0.shares") == 7_400_000_000
+
+
+def test_leading_hyphen_still_rejected() -> None:
+    # A bareword cannot start with a hyphen; that would collide with -idx.
+    with pytest.raises(PathParseError):
+        apply_path({"-x": 1}, "-x")
