@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { paletteColor, niceTicks, formatTick, yScale, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface ScatterSeries { name: string; data: { x: number; y: number }[]; }
 
@@ -18,6 +19,7 @@ const { L, R, T, B } = CHART_PADDING;
 export function ScatterBlock({ title, series, x_label, y_label, options }: ScatterBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   const chart = useMemo(() => {
     const xs = series.flatMap((s) => s.data.map((d) => d.x));
@@ -50,7 +52,7 @@ export function ScatterBlock({ title, series, x_label, y_label, options }: Scatt
       : L + ((x - chart.xMin) / (chart.xMax - chart.xMin)) * (W - L - R);
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -85,10 +87,18 @@ export function ScatterBlock({ title, series, x_label, y_label, options }: Scatt
             {s.data.map((d, i) => (
               <circle
                 key={i}
+                className="series-dot"
                 cx={xToPx(d.x)}
                 cy={yScale(d.y, chart.yMin, chart.yMax, T, H - B)}
                 r={3.5}
                 style={{ fillOpacity: 0.85 }}
+                {...hover({
+                  label: s.name,
+                  rows: [
+                    { name: x_label ?? 'x', value: formatTick(d.x) },
+                    { name: y_label ?? 'y', value: formatTick(d.y) },
+                  ],
+                })}
               />
             ))}
           </g>
@@ -118,6 +128,7 @@ export function ScatterBlock({ title, series, x_label, y_label, options }: Scatt
           ))}
         </div>
       ) : null}
+      {tooltipNode}
     </figure>
   );
 }

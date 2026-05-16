@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { paletteColor, niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface ComboSeries { name: string; values: number[]; }
 
@@ -29,6 +30,8 @@ export function ComboChartBlock({
 }: ComboChartBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
+  const { figureRef, tooltipNode, hover, activeKey } = useChartTooltip();
+  const activeIndex = typeof activeKey === 'number' ? activeKey : null;
 
   // LLM drift sometimes ships a series with ``data`` instead of ``values`` (the
   // key used by line/area charts). Coerce to a uniform shape so a single bad
@@ -86,7 +89,7 @@ export function ComboChartBlock({
   const baselineL = yScale(Math.max(chart.lMin, 0), chart.lMin, chart.lMax, T, H - B);
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -131,6 +134,7 @@ export function ComboChartBlock({
               return (
                 <rect
                   key={s.name}
+                  className={activeIndex === ci ? 'is-active' : undefined}
                   x={x}
                   y={Math.min(baselineL, yv)}
                   width={Math.max(1, barW - 1)}
@@ -142,6 +146,16 @@ export function ComboChartBlock({
           </g>
         ))}
 
+        {activeIndex !== null && categories[activeIndex] !== undefined ? (
+          <line
+            className="report-chart__guide"
+            x1={L + activeIndex * slot + slot / 2}
+            x2={L + activeIndex * slot + slot / 2}
+            y1={T}
+            y2={H - B}
+          />
+        ) : null}
+
         {line_series.map((s, si) => {
           const points = s.values.map((v, i) => `${L + i * slot + slot / 2},${yScale(v, chart.rMin, chart.rMax, T, H - B)}`).join(' ');
           const color = paletteColor(bar_series.length + si);
@@ -151,10 +165,10 @@ export function ComboChartBlock({
               {s.values.map((v, i) => (
                 <circle
                   key={i}
-                  className="series-dot"
+                  className={`series-dot${activeIndex === i ? ' series-dot--active' : ''}`}
                   cx={L + i * slot + slot / 2}
                   cy={yScale(v, chart.rMin, chart.rMax, T, H - B)}
-                  r={2.5}
+                  r={activeIndex === i ? 4.5 : 2.5}
                   style={{ fill: color }}
                 />
               ))}
@@ -169,6 +183,33 @@ export function ComboChartBlock({
             </text>
           ) : null,
         )}
+        {categories.map((cat, ci) => (
+          <rect
+            key={`hit-${ci}`}
+            className="hover-target"
+            x={L + ci * slot}
+            y={T}
+            width={Math.max(1, slot)}
+            height={H - T - B}
+            fill="transparent"
+            {...hover({
+              key: ci,
+              label: cat,
+              rows: [
+                ...bar_series.map((s, si) => ({
+                  swatch: paletteColor(si),
+                  name: s.name,
+                  value: formatTick(s.values[ci] ?? 0),
+                })),
+                ...line_series.map((s, si) => ({
+                  swatch: paletteColor(bar_series.length + si),
+                  name: s.name,
+                  value: formatTick(s.values[ci] ?? 0),
+                })),
+              ],
+            })}
+          />
+        ))}
       </svg>
       {showLegend ? (
         <div className="report-chart__legend">
@@ -180,6 +221,7 @@ export function ComboChartBlock({
           ))}
         </div>
       ) : null}
+      {tooltipNode}
     </figure>
   );
 }

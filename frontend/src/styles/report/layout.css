@@ -1128,10 +1128,100 @@
 
 /* ---- Charts (hand-rolled SVG) ---- */
 .report-chart {
+  position: relative;
   margin: 12px 0 18px;
   padding: 14px 0;
   border-top: 1px solid var(--report-border);
   border-bottom: 1px solid var(--report-border);
+}
+
+/* ---- Chart hover affordances ---- */
+.report-chart__tooltip {
+  position: absolute;
+  pointer-events: none;
+  transform: translate(14px, -50%);
+  background: var(--report-bg);
+  border: 1px solid var(--report-border-strong, var(--report-border));
+  border-radius: 3px;
+  padding: 8px 10px;
+  min-width: 140px;
+  max-width: 260px;
+  z-index: 6;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  font-family: var(--report-font-mono);
+  font-size: 11px;
+  color: var(--report-text-primary);
+  white-space: nowrap;
+}
+.report-chart__tooltip-label {
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--report-text-tertiary);
+  margin: 0 0 4px;
+}
+.report-chart__tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.45;
+}
+.report-chart__tooltip-row + .report-chart__tooltip-row {
+  margin-top: 2px;
+}
+.report-chart__tooltip-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+.report-chart__tooltip-name {
+  color: var(--report-text-secondary);
+  margin-right: auto;
+}
+.report-chart__tooltip-value {
+  color: var(--report-text-primary);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+
+.report-line-chart .series-dot,
+.report-line-chart .hover-target {
+  cursor: pointer;
+  transition: filter 120ms ease, opacity 120ms ease, r 120ms ease;
+}
+.report-line-chart .series-dot:hover,
+.report-line-chart .series-dot--active {
+  filter: brightness(1.2);
+  stroke-width: 2;
+}
+.report-line-chart .hover-target:hover,
+.report-line-chart .hover-target.is-active {
+  filter: brightness(1.22);
+}
+.report-line-chart .hover-target--dim {
+  opacity: 0.92;
+}
+.report-line-chart .hover-target--dim:hover {
+  opacity: 1;
+  filter: brightness(1.12);
+}
+.report-chart__guide {
+  stroke: var(--report-text-secondary);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.report-pie__svg path {
+  cursor: pointer;
+  transition: filter 120ms ease, transform 120ms ease;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+.report-pie__svg path:hover {
+  filter: brightness(1.18);
 }
 .report-chart__title {
   font-family: var(--report-font-mono);

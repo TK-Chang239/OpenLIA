@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { paletteColor, formatTick } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface PieSegment {
   label: string;
@@ -28,6 +29,7 @@ export function PieChartBlock({
   const showLegend = options?.show_legend !== false;
   const total = segments.reduce((acc, s) => acc + s.value, 0) || 1;
   const rInner = donut ? R_OUTER * 0.6 : 0;
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   const arcs = useMemo(() => {
     let acc = 0;
@@ -40,7 +42,7 @@ export function PieChartBlock({
   }, [segments, total]);
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <div className="report-pie">
         <svg
@@ -54,6 +56,16 @@ export function PieChartBlock({
               key={a.label}
               d={arcPath(CX, CY, R_OUTER, rInner, a.startA, a.endA, a.fraction)}
               style={{ fill: paletteColor(i) }}
+              {...hover({
+                label: a.label,
+                rows: [
+                  {
+                    swatch: paletteColor(i),
+                    name: 'Value',
+                    value: `${formatTick(a.value)} (${(a.fraction * 100).toFixed(1)}%)`,
+                  },
+                ],
+              })}
             />
           ))}
         </svg>
@@ -74,6 +86,7 @@ export function PieChartBlock({
           </ul>
         ) : null}
       </div>
+      {tooltipNode}
     </figure>
   );
 }
