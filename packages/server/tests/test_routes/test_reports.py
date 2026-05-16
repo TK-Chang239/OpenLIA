@@ -119,9 +119,7 @@ def _stub_docx_capture(personal_client: TestClient, monkeypatch) -> None:
         return {}
 
     monkeypatch.setattr(reports_mod, "capture_chart_pngs", fake_capture)
-    personal_client.app.state.render_base_url_resolver = _FixedResolver(
-        "http://test-render"
-    )
+    personal_client.app.state.render_base_url_resolver = _FixedResolver("http://test-render")
 
 
 def test_export_docx_streams_docx_bytes(

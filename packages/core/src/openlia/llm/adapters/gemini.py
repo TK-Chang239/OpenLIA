@@ -286,9 +286,7 @@ class GeminiAdapter(LLMProvider):
                                 ),
                             )
                             chunks_list = gmd.get("groundingChunks") or []
-                            urls = tuple(
-                                (c.get("web") or {}).get("uri", "") for c in chunks_list
-                            )
+                            urls = tuple((c.get("web") or {}).get("uri", "") for c in chunks_list)
                             yield LLMChunk(
                                 delta="",
                                 server_tool_event=ServerToolEvent(

@@ -327,9 +327,7 @@ def _inject_server_fields(
     return payload
 
 
-def _merge_provider_citations(
-    payload: dict[str, Any], provider_citations: list[Citation]
-) -> None:
+def _merge_provider_citations(payload: dict[str, Any], provider_citations: list[Citation]) -> None:
     """Merge native-provider citations into payload['citations'] in
     place. Model-authored entries (from submit_report) win on id
     collision; provider-only entries are appended.
@@ -999,9 +997,7 @@ class ReportRunner:
                 f"tool turn {turn_idx} (tools={len(tools or [])})",
                 {"report_id": report_id, "phase": "fetching_data", "turn": turn_idx},
             )
-            _emit_provider_selected(
-                turn_idx, phase="fetching_data", turn_native_tools=native_tools
-            )
+            _emit_provider_selected(turn_idx, phase="fetching_data", turn_native_tools=native_tools)
             # Empty-starter-pack bootstrap: on turn 0 the LLM has only
             # `request_additional_tools`, `read_payload`, and (optionally)
             # `web_search` available. Without forcing, some models produce a

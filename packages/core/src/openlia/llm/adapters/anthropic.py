@@ -160,6 +160,7 @@ def _parse_anthropic_content(
         # future Anthropic content block additions.
     return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
 
+
 _BASE_URL = "https://api.anthropic.com"
 _API_VERSION = "2023-06-01"
 

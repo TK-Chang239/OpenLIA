@@ -212,8 +212,7 @@ class EquityResearchConfigService:
                 _validate_mode_key(mode_key)
                 if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
                     raise ValueError(
-                        f"web_search budget for {mode_key!r} must be a positive int, "
-                        f"got {v!r}"
+                        f"web_search budget for {mode_key!r} must be a positive int, got {v!r}"
                     )
             merged_budgets = dict(row.web_search_budgets_by_mode or {})
             merged_budgets.update(web_search_budgets_by_mode)

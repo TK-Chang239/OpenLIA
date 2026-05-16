@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { useCallback, useState } from "react";
 import {
   downloadReportBlob,
   triggerBrowserSave,
@@ -23,23 +24,9 @@ export function ReportDownloadButton({
 }: ReportDownloadButtonProps): JSX.Element {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
 
   const download = useCallback(
     async (fmt: DownloadFormat) => {
-      setOpen(false);
       setBusy(true);
       try {
         const { blob, filename } = await downloadReportBlob(reportId, fmt);
@@ -57,64 +44,49 @@ export function ReportDownloadButton({
   );
 
   const showDocx = docxEnabled();
+  const triggerClass =
+    variant === "primary"
+      ? "inline-flex items-center gap-1.5 h-[30px] px-3 rounded-md border border-[--color-border-subtle] bg-transparent text-[13px] text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
+      : "inline-flex items-center gap-1 p-1.5 rounded-[--radius-sm] text-[--color-text-secondary] hover:bg-[--color-surface-hover] disabled:opacity-50";
 
   return (
-    <div
-      ref={rootRef}
-      className={
-        className
-          ? `report-download relative inline-block ${className}`
-          : "report-download relative inline-block"
-      }
-      data-busy={busy ? "true" : "false"}
-    >
-      <button
-        type="button"
-        aria-label="Download report"
-        aria-haspopup="menu"
-        aria-expanded={open ? "true" : "false"}
-        disabled={busy}
-        onClick={() => setOpen((v) => !v)}
-        className={
-          variant === "primary"
-            ? "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[--radius-sm] border border-[--color-border-subtle] bg-[--color-bg-elevated] text-sm text-[--color-text-primary] hover:bg-[--color-bg-hover] disabled:opacity-50"
-            : "inline-flex items-center gap-1 p-1.5 rounded-[--radius-sm] text-[--color-text-secondary] hover:bg-[--color-bg-hover] disabled:opacity-50"
-        }
-      >
-        {busy ? <Spinner /> : <DownloadIcon />}
-        {variant === "primary" && <span>Download</span>}
-        <Chevron />
-      </button>
-      {open && (
-        <ul
-          role="menu"
-          className="absolute right-0 mt-1 z-20 min-w-[170px] rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] shadow-md py-1 text-sm"
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          aria-label="Download report"
+          disabled={busy}
+          data-busy={busy ? "true" : "false"}
+          className={className ? `${triggerClass} ${className}` : triggerClass}
         >
-          <li role="none">
-            <button
-              role="menuitem"
-              type="button"
-              onClick={() => void download("pdf")}
-              className="block w-full text-left px-3 py-1.5 text-[--color-text-primary] hover:bg-[--color-bg-hover]"
-            >
-              Download as PDF
-            </button>
-          </li>
+          {busy ? <Spinner /> : <DownloadIcon />}
+          {variant === "primary" && <span>Download</span>}
+          <Chevron />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          sideOffset={4}
+          align="end"
+          className="z-50 min-w-[180px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-1 text-sm shadow-lg"
+        >
+          <DropdownMenu.Item
+            onSelect={() => void download("pdf")}
+            className="cursor-pointer rounded-sm px-2 py-1.5 outline-none text-[--color-text-primary] data-[highlighted]:bg-[--color-surface-hover]"
+          >
+            Download as PDF
+          </DropdownMenu.Item>
           {showDocx && (
-            <li role="none">
-              <button
-                role="menuitem"
-                type="button"
-                onClick={() => void download("docx")}
-                className="block w-full text-left px-3 py-1.5 text-[--color-text-primary] hover:bg-[--color-bg-hover]"
-              >
-                Download as Word
-              </button>
-            </li>
+            <DropdownMenu.Item
+              onSelect={() => void download("docx")}
+              className="cursor-pointer rounded-sm px-2 py-1.5 outline-none text-[--color-text-primary] data-[highlighted]:bg-[--color-surface-hover]"
+            >
+              Download as Word
+            </DropdownMenu.Item>
           )}
-        </ul>
-      )}
-    </div>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
 

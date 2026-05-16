@@ -40,9 +40,7 @@ def test_other_dept_includes_audience_model(dept: str) -> None:
 @pytest.mark.parametrize("dept", OTHER_CHAT_DEPTS)
 def test_other_dept_includes_vocab_avoid_list(dept: str) -> None:
     out = PromptLoader().render(dept, "chat.system").lower()
-    assert "great question" in out, (
-        f"{dept} chat.system missing finance_voice vocab avoid list"
-    )
+    assert "great question" in out, f"{dept} chat.system missing finance_voice vocab avoid list"
 
 
 @pytest.mark.parametrize("dept", OTHER_CHAT_DEPTS)

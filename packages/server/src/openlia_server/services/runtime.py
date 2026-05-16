@@ -335,9 +335,7 @@ def _build_report_runner_with_registry(
 
     prompts = PromptLoader()
     try:
-        connector_dispatcher = build_dispatcher(
-            db, disabled_connector_ids=disabled_connector_ids
-        )
+        connector_dispatcher = build_dispatcher(db, disabled_connector_ids=disabled_connector_ids)
     except Exception:
         logger.exception("report runner: build_dispatcher failed; using empty dispatcher")
         data_dispatcher: Any = _EmptyDataDispatcher()

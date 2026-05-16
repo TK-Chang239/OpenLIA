@@ -444,9 +444,7 @@ async def test_gemini_no_failure_when_native_not_requested() -> None:
         mock.post(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
         ).mock(return_value=_gemini_ok("ok", grounding_metadata=None))
-        resp = await adapter.generate(
-            LLMRequest(messages=[Message(role="user", content="hello")])
-        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hello")]))
     assert resp.server_tool_failures == ()
 
 
@@ -463,7 +461,7 @@ async def test_stream_emits_synthetic_invoked_and_completed_when_grounded() -> N
         b'"groundingChunks":['
         b'{"web":{"uri":"https://reuters.com/nvda","title":"R"}},'
         b'{"web":{"uri":"https://ft.com/nvda","title":"F"}}'
-        b'],'
+        b"],"
         b'"groundingSupports":[]'
         b'},"finishReason":"STOP","index":0}]}\n\n'
     )

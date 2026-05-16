@@ -149,22 +149,16 @@ def test_update_config_rejects_unknown_mode_in_budget_map(db_session, user):
     svc = EquityResearchConfigService(db_session)
     svc.get_config(user)
     with pytest.raises(ValueError, match="unknown mode"):
-        svc.update_config(
-            user, web_search_budgets_by_mode={"not_a_real_mode": 5}
-        )
+        svc.update_config(user, web_search_budgets_by_mode={"not_a_real_mode": 5})
 
 
 def test_update_config_rejects_non_positive_budget(db_session, user):
     svc = EquityResearchConfigService(db_session)
     svc.get_config(user)
     with pytest.raises(ValueError, match="positive"):
-        svc.update_config(
-            user, web_search_budgets_by_mode={"stock_initiation": 0}
-        )
+        svc.update_config(user, web_search_budgets_by_mode={"stock_initiation": 0})
     with pytest.raises(ValueError, match="positive"):
-        svc.update_config(
-            user, web_search_budgets_by_mode={"stock_initiation": -3}
-        )
+        svc.update_config(user, web_search_budgets_by_mode={"stock_initiation": -3})
 
 
 def test_resolve_active_exposes_web_search_budget_for_mode(db_session, user):

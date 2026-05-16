@@ -140,11 +140,7 @@ def test_sparkline_strictness_prompt_documents_point_shape() -> None:
 
     import openlia.prompts as prompts_pkg
 
-    prompt_path = (
-        Path(prompts_pkg.__file__).parent
-        / "shared"
-        / "report_schema_strictness.yaml.j2"
-    )
+    prompt_path = Path(prompts_pkg.__file__).parent / "shared" / "report_schema_strictness.yaml.j2"
     text = prompt_path.read_text()
     # Names the field and the per-point shape.
     assert "sparkline" in text.lower()
