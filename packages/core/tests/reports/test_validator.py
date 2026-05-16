@@ -1,6 +1,7 @@
 import pytest
 from openlia.reports.validator import (
     ReportValidationError,
+    enforce_required_rail,
     validate_report_payload,
 )
 
@@ -80,3 +81,74 @@ def test_validator_details_carry_input_value_and_type():
     assert detail["input_type"] == "int"
     # Backward-compat: .errors still a list of (path, message) tuples.
     assert all(isinstance(e, tuple) and len(e) == 2 for e in err.errors)
+
+
+def _good_with_rail(department: str) -> dict:
+    payload = _good()
+    payload["department"] = department
+    payload["rail"] = {
+        "verdict": {"rating": "Buy", "target": "$245", "as_of": "2026-05-16"},
+        "quick_stats": [
+            {"label": "Market Cap", "value": "$3.5T"},
+            {"label": "Sector", "value": "Tech"},
+            {"label": "Exchange", "value": "NASDAQ"},
+            {"label": "52W Range", "value": "$170-$245"},
+            {"label": "ADTV (3mo)", "value": "55M"},
+            {"label": "P/E (fwd)", "value": "28x"},
+        ],
+    }
+    return payload
+
+
+def test_enforce_required_rail_passes_when_complete():
+    schema = validate_report_payload(_good_with_rail("stock_initiation"))
+    enforce_required_rail(schema, department_id="stock_initiation")
+
+
+def test_enforce_required_rail_skips_unconfigured_departments():
+    schema = validate_report_payload(_good())  # no rail
+    enforce_required_rail(schema, department_id="morning_briefing")
+    enforce_required_rail(schema, department_id="equity_research")
+
+
+def test_enforce_required_rail_fails_on_missing_verdict():
+    payload = _good_with_rail("stock_initiation")
+    payload["rail"]["verdict"] = None
+    schema = validate_report_payload(payload)
+    with pytest.raises(ReportValidationError) as exc:
+        enforce_required_rail(schema, department_id="stock_initiation")
+    assert any("rail.verdict" in p for p, _ in exc.value.errors)
+
+
+def test_enforce_required_rail_fails_on_missing_quick_stat_label():
+    payload = _good_with_rail("stock_initiation")
+    payload["rail"]["quick_stats"] = [
+        m for m in payload["rail"]["quick_stats"] if m["label"] != "Sector"
+    ]
+    schema = validate_report_payload(payload)
+    with pytest.raises(ReportValidationError) as exc:
+        enforce_required_rail(schema, department_id="stock_initiation")
+    msgs = " ".join(m for _, m in exc.value.errors)
+    assert "'Sector'" in msgs
+
+
+def test_enforce_required_rail_label_match_is_case_insensitive():
+    payload = _good_with_rail("stock_initiation")
+    for m in payload["rail"]["quick_stats"]:
+        m["label"] = m["label"].upper()
+    schema = validate_report_payload(payload)
+    enforce_required_rail(schema, department_id="stock_initiation")
+
+
+def test_enforce_required_rail_earnings_update_required_labels():
+    payload = _good_with_rail("earnings_update")
+    payload["rail"]["quick_stats"] = [
+        {"label": "Period", "value": "Q1 FY26"},
+        {"label": "Market Cap", "value": "$3.5T"},
+        {"label": "EPS Surprise", "value": "+4.2%"},
+        {"label": "Revenue Surprise", "value": "+3.1%"},
+        {"label": "Beats", "value": "3"},
+        {"label": "Misses", "value": "0"},
+    ]
+    schema = validate_report_payload(payload)
+    enforce_required_rail(schema, department_id="earnings_update")

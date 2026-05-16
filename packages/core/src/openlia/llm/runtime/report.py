@@ -67,6 +67,7 @@ from openlia.llm.types import (
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import (
     ReportValidationError,
+    enforce_required_rail,
     enforce_uncited_concrete_claims,
     find_uncited_concrete_claims,
     validate_report_payload,
@@ -261,6 +262,42 @@ def _rescue_failed_searches(
 
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
+
+
+def _word_count(node: Any) -> int:
+    if isinstance(node, str):
+        return len(node.split())
+    if isinstance(node, dict):
+        return sum(_word_count(v) for v in node.values())
+    if isinstance(node, list):
+        return sum(_word_count(v) for v in node)
+    return 0
+
+
+def _build_meta_stats(
+    payload: dict[str, Any],
+    *,
+    model_id: str | None,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    web_search_count: int,
+) -> dict[str, Any]:
+    """Compute the server-authoritative MetaStats block from the
+    already-merged payload. Counts are derived from the payload so
+    citations from both the LLM and native web_search are included."""
+    citations = payload.get("citations") if isinstance(payload.get("citations"), list) else []
+    sections = payload.get("sections") if isinstance(payload.get("sections"), list) else []
+    words = _word_count(sections) + _word_count(payload.get("cover"))
+    est_minutes = max(1, round(words / 220))
+    tokens_total = total_input_tokens + total_output_tokens
+    return {
+        "sources_count": len(citations),
+        "sections_count": len(sections),
+        "model_id": model_id,
+        "tokens_used": tokens_total if tokens_total > 0 else None,
+        "web_search_queries": web_search_count if web_search_count > 0 else None,
+        "est_read_minutes": est_minutes,
+    }
 
 
 def _inject_server_fields(
@@ -911,6 +948,11 @@ class ReportRunner:
         web_search_count = 0
         web_search_provider_breakdown: dict[str, int] = {}
         web_search_rescues = 0
+        # Aggregate token usage across all provider turns. Used to
+        # populate ReportSchema.meta_stats.tokens_used so the
+        # left-sidebar "Report Stats" card reflects the real cost.
+        total_input_tokens = 0
+        total_output_tokens = 0
         # Provider-emitted citations from LLMResponse.citations across
         # all turns. Merged into ReportSchema.citations at submit time;
         # model-authored entries (from submit_report) win on id collision.
@@ -999,6 +1041,8 @@ class ReportRunner:
                     message=str(exc),
                 )
                 return
+            total_input_tokens += response.input_tokens or 0
+            total_output_tokens += response.output_tokens or 0
             # G-9 accounting: count native server-side searches before
             # rescue rewriting (a rescued failure should not double-count
             # as a successful search).
@@ -1171,6 +1215,8 @@ class ReportRunner:
                 )
                 return
 
+            total_input_tokens += response.input_tokens or 0
+            total_output_tokens += response.output_tokens or 0
             for _ev in _web_search_events_for_response(
                 response,
                 report_id=report_id,
@@ -1192,8 +1238,16 @@ class ReportRunner:
                     generated_at=datetime.now(UTC),
                 )
                 _merge_provider_citations(candidate, provider_citations)
+                candidate["meta_stats"] = _build_meta_stats(
+                    candidate,
+                    model_id=resolved.model_ref,
+                    total_input_tokens=total_input_tokens,
+                    total_output_tokens=total_output_tokens,
+                    web_search_count=web_search_count,
+                )
                 try:
                     validated_schema = validate_report_payload(candidate)
+                    enforce_required_rail(validated_schema, department_id=department_id)
                     validated_payload = candidate
                     final = response
                     # Phase 5d: surface uncited-claim warnings as traces.

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 type ItemType = 'total' | 'increase' | 'decrease';
 
@@ -17,6 +18,7 @@ const { L, R, T, B } = CHART_PADDING;
 
 export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
   const showGrid = options?.show_grid !== false;
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   const chart = useMemo(() => {
     if (items.length === 0) return null;
@@ -54,7 +56,7 @@ export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
   const visibleX = visibleXLabels(chart.bars.map((b) => b.label));
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -89,9 +91,27 @@ export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
               : b.type === 'increase'
               ? 'var(--report-positive)'
               : 'var(--report-negative)';
+          const signedLabel =
+            b.type === 'total' ? formatTick(b.value)
+            : b.type === 'increase' ? `+${formatTick(b.value)}`
+            : `-${formatTick(b.value)}`;
           return (
             <g key={b.label}>
-              <rect x={x} y={y} width={barW} height={h} style={{ fill }} />
+              <rect
+                className="hover-target"
+                x={x}
+                y={y}
+                width={barW}
+                height={h}
+                style={{ fill }}
+                {...hover({
+                  label: b.label,
+                  rows: [
+                    { swatch: fill, name: b.type, value: signedLabel },
+                    { name: 'Running', value: formatTick(b.hi) },
+                  ],
+                })}
+              />
               {i < chart.bars.length - 1 && b.type !== 'total' ? (
                 <line
                   x1={x + barW}
@@ -119,6 +139,7 @@ export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
           ) : null,
         )}
       </svg>
+      {tooltipNode}
     </figure>
   );
 }

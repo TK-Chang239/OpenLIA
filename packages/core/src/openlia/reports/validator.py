@@ -13,6 +13,37 @@ from openlia.reports.schema import (
     ReportSchema,
 )
 
+# Frameworks whose rail must include a verdict and a known floor of
+# quick_stats labels. Keyed by department id (matches the framework JSON
+# file stem). Other report types (morning_briefing, sector_research) are
+# intentionally absent — their rails are quick-stats-only.
+_REQUIRED_RAIL_QUICK_STATS: dict[str, tuple[str, ...]] = {
+    "stock_initiation": (
+        "Market Cap",
+        "Sector",
+        "Exchange",
+        "52W Range",
+        "ADTV (3mo)",
+        "P/E (fwd)",
+    ),
+    "stock_update": (
+        "Market Cap",
+        "Sector",
+        "Exchange",
+        "52W Range",
+        "ADTV (3mo)",
+        "P/E (fwd)",
+    ),
+    "earnings_update": (
+        "Period",
+        "Market Cap",
+        "EPS Surprise",
+        "Revenue Surprise",
+        "Beats",
+        "Misses",
+    ),
+}
+
 
 @dataclass(frozen=True)
 class ReportValidationWarning:
@@ -79,6 +110,58 @@ def find_uncited_concrete_claims(schema: ReportSchema) -> list[ReportValidationW
                     )
                 )
     return warnings
+
+
+def enforce_required_rail(schema: ReportSchema, *, department_id: str) -> None:
+    """Enforce that single-stock and earnings-update reports populate the
+    right-rail "Lia's Call" verdict and a known floor of quick_stats
+    labels. Failures raise ``ReportValidationError`` so the writing
+    loop's repair turn fires.
+
+    Reports outside the configured frameworks pass through untouched.
+    Quick-stats matching is case-insensitive on the label.
+    """
+    required_labels = _REQUIRED_RAIL_QUICK_STATS.get(department_id)
+    if required_labels is None:
+        return
+    errors: list[tuple[str, str]] = []
+    details: list[dict[str, Any]] = []
+    rail = schema.rail
+    if rail is None or rail.verdict is None or not rail.verdict.rating.strip():
+        errors.append(
+            (
+                "rail.verdict",
+                "required_rail: rail.verdict.rating is required for this report type.",
+            )
+        )
+        details.append(
+            {
+                "path": "rail.verdict",
+                "message": (
+                    "required_rail: rail.verdict.rating is required for this report type."
+                ),
+                "input_value": "",
+                "input_type": "verdict",
+            }
+        )
+    quick_stats = rail.quick_stats if rail is not None else []
+    present = {m.label.strip().casefold() for m in quick_stats}
+    missing = [label for label in required_labels if label.casefold() not in present]
+    for label in missing:
+        msg = (
+            f"required_rail: rail.quick_stats is missing required label {label!r}."
+        )
+        errors.append(("rail.quick_stats", msg))
+        details.append(
+            {
+                "path": "rail.quick_stats",
+                "message": msg,
+                "input_value": "",
+                "input_type": "quick_stats",
+            }
+        )
+    if errors:
+        raise ReportValidationError(errors, details=details)
 
 
 def enforce_uncited_concrete_claims(schema: ReportSchema, *, strict: bool) -> None:

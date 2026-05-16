@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { paletteColor, niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface BarSeries {
   name: string;
@@ -29,6 +30,7 @@ export function BarChartBlock({
 }: BarChartBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
+  const { figureRef, tooltipNode, hover, activeKey } = useChartTooltip();
 
   // Defensive normalization: LLM-generated payloads sometimes ship a series
   // entry with missing/null ``values``. Coerce to [] so downstream indexing
@@ -90,7 +92,7 @@ export function BarChartBlock({
   const baseline = yScale(0, yMin, yMax, T, H - B);
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -113,7 +115,7 @@ export function BarChartBlock({
           })}
         <line className="axis-line" x1={L} x2={W - R} y1={H - B} y2={H - B} />
 
-        {safeCategories.map((_cat, ci) => {
+        {safeCategories.map((cat, ci) => {
           const slotLeft = L + ci * groupW + innerPad;
           if (chart.mode === 'stacked') {
             let cumPos = 0;
@@ -128,14 +130,21 @@ export function BarChartBlock({
                   const yBot = yScale(Math.min(start, end), yMin, yMax, T, H - B);
                   if (v >= 0) cumPos = end;
                   else cumNeg = end;
+                  const k = `${ci}:${si}`;
                   return (
                     <rect
                       key={s.name}
+                      className={`hover-target${activeKey === k ? ' is-active' : ''}`}
                       x={slotLeft}
                       y={yTop}
                       width={barW}
                       height={Math.max(1, yBot - yTop)}
                       style={{ fill: paletteColor(si) }}
+                      {...hover({
+                        key: k,
+                        label: cat,
+                        rows: [{ swatch: paletteColor(si), name: s.name, value: formatTick(v) }],
+                      })}
                     />
                   );
                 })}
@@ -150,14 +159,21 @@ export function BarChartBlock({
                 const yv = yScale(v, yMin, yMax, T, H - B);
                 const yTop = Math.min(baseline, yv);
                 const h = Math.max(1, Math.abs(baseline - yv));
+                const k = `${ci}:${si}`;
                 return (
                   <rect
                     key={s.name}
+                    className={`hover-target${activeKey === k ? ' is-active' : ''}`}
                     x={x}
                     y={yTop}
                     width={Math.max(1, barW - 1)}
                     height={h}
                     style={{ fill: paletteColor(si) }}
+                    {...hover({
+                      key: k,
+                      label: cat,
+                      rows: [{ swatch: paletteColor(si), name: s.name, value: formatTick(v) }],
+                    })}
                   />
                 );
               })}
@@ -179,6 +195,7 @@ export function BarChartBlock({
         )}
       </svg>
       {showLegend && series.length > 1 ? <Legend series={series} /> : null}
+      {tooltipNode}
     </figure>
   );
 }
@@ -196,13 +213,18 @@ function HorizontalBars({
 }) {
   const all = series.flatMap((s) => s.values);
   const maxV = Math.max(1e-9, ...all);
+  const seriesName = series[0]?.name ?? '';
   const rows = categories.map((c, i) => ({ name: c, value: series[0]?.values[i] ?? 0 }));
   return (
     <figure className="report-chart">
       <figcaption className="report-chart__title">{title}</figcaption>
       <div className="report-bars-h">
         {rows.map((r) => (
-          <div className="report-bars-h__row" key={r.name}>
+          <div
+            className="report-bars-h__row"
+            key={r.name}
+            title={seriesName ? `${r.name} · ${seriesName}: ${formatTick(r.value)}` : `${r.name}: ${formatTick(r.value)}`}
+          >
             <div className="report-bars-h__name">{r.name}</div>
             <div className="report-bars-h__track">
               <div className="report-bars-h__fill" style={{ width: `${(r.value / maxV) * 100}%` }} />

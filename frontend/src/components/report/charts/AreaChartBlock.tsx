@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { paletteColor, niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface AreaSeries {
   name: string;
@@ -25,6 +26,7 @@ export function AreaChartBlock({
 }: AreaChartBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   const chart = useMemo(() => {
     const cats = series[0]?.data.map((d) => String(d.x)) ?? [];
@@ -61,7 +63,7 @@ export function AreaChartBlock({
   const baseline = yScale(chart.yMin, chart.yMin, chart.yMax, T, H - B);
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -121,6 +123,31 @@ export function AreaChartBlock({
             </text>
           ) : null,
         )}
+        {chart.cats.map((cat, ci) => {
+          const cx = L + ci * chart.xStep;
+          const halfStep = chart.xStep > 0 ? chart.xStep / 2 : (W - L - R) / 2;
+          const x = Math.max(L, cx - halfStep);
+          const width = Math.min(W - R - x, halfStep * 2);
+          return (
+            <rect
+              key={`hit-${ci}`}
+              className="hover-target"
+              x={x}
+              y={T}
+              width={Math.max(1, width)}
+              height={H - T - B}
+              fill="transparent"
+              {...hover({
+                label: cat,
+                rows: series.map((s, sIdx) => ({
+                  swatch: paletteColor(sIdx),
+                  name: s.name,
+                  value: formatTick(s.data[ci]?.y ?? 0),
+                })),
+              })}
+            />
+          );
+        })}
       </svg>
       {showLegend && series.length > 1 ? (
         <div className="report-chart__legend">
@@ -135,6 +162,7 @@ export function AreaChartBlock({
           ))}
         </div>
       ) : null}
+      {tooltipNode}
     </figure>
   );
 }

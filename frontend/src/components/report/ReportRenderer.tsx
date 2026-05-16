@@ -8,6 +8,7 @@ import { ReportSection } from './ReportSection';
 import { ReportSkeleton } from './ReportSkeleton';
 import { ScrollTracker } from './furniture/ScrollTracker';
 import { TableOfContents } from './TableOfContents';
+import { MetaStatsCard } from './MetaStatsCard';
 import { RailPanel } from './RailPanel';
 import { CitationsRail } from './CitationsRail';
 import { CitationsSection, SOURCES_SECTION_ID } from './CitationsSection';
@@ -45,6 +46,7 @@ export interface ReportRendererProps {
   sectionTitles?: string[];
   theme?: ReportTheme;
   related?: RelatedLink[];
+  reportId?: string | null;
 }
 
 export function ReportRenderer({
@@ -53,6 +55,7 @@ export function ReportRenderer({
   sectionTitles = [],
   theme,
   related,
+  reportId,
 }: ReportRendererProps) {
   const appTheme = useAppTheme();
   const resolvedTheme: ReportTheme = theme ?? appTheme;
@@ -86,7 +89,11 @@ export function ReportRenderer({
   return (
     <div data-report-theme={resolvedTheme} className={`report${hasRail ? ' report--3col' : ''}`}>
       {furniture ? (
-        <ReportHeader left={furniture.header.left} right={furniture.header.right} />
+        <ReportHeader
+          left={furniture.header.left}
+          right={furniture.header.right}
+          printHref={reportId ? `/reports/${reportId}/render` : undefined}
+        />
       ) : null}
       <div className="report__body">
         <aside className="report__toc">
@@ -95,6 +102,7 @@ export function ReportRenderer({
             activeId={activeId}
             onSectionClick={setActiveId}
           />
+          {schema.meta_stats ? <MetaStatsCard stats={schema.meta_stats} /> : null}
         </aside>
         <main className="report__main">
           <ReportCover cover={schema.cover} />

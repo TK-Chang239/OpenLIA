@@ -81,7 +81,7 @@ export function RailPanel({ rail, related }: RailPanelProps) {
     <div className="report-rail">
       {verdict ? (
         <section className="report-rail__card report-rail__verdict">
-          <div className="report-rail__card-label">Verdict</div>
+          <div className="report-rail__card-label">Lia's Call</div>
           <div className="report-rail__verdict-row">
             <span className="report-rail__rating">{verdict.rating}</span>
             {verdict.previous_rating ? (
@@ -101,7 +101,7 @@ export function RailPanel({ rail, related }: RailPanelProps) {
 
       {rail.quick_stats && rail.quick_stats.length > 0 ? (
         <section className="report-rail__card report-rail__stats">
-          <div className="report-rail__card-label">Quick read</div>
+          <div className="report-rail__card-label">Quick Stats</div>
           <dl>
             {rail.quick_stats.map((m) => (
               <div key={m.label} className="report-rail__stat-row">

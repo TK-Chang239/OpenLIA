@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { CHART_VIEWBOX } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface HeatmapBlockProps {
   type: 'heatmap';
@@ -14,6 +15,7 @@ const { W } = CHART_VIEWBOX;
 
 export function HeatmapBlock({ title, x_labels, y_labels, values, options }: HeatmapBlockProps) {
   const showLegend = options?.show_legend !== false;
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   const flat = useMemo(() => {
     const out: number[] = [];
@@ -45,7 +47,7 @@ export function HeatmapBlock({ title, x_labels, y_labels, values, options }: Hea
   };
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -65,16 +67,21 @@ export function HeatmapBlock({ title, x_labels, y_labels, values, options }: Hea
             >
               {yl}
             </text>
-            {x_labels.map((_xl, xi) => {
+            {x_labels.map((xl, xi) => {
               const v = values[yi]?.[xi] ?? 0;
               return (
                 <g key={`${yi}-${xi}`}>
                   <rect
+                    className="hover-target"
                     x={padL + xi * cellW}
                     y={padT + yi * cellH}
                     width={cellW - 1}
                     height={cellH - 1}
                     style={{ fill: tone(v), stroke: 'var(--report-border)', strokeWidth: 0.5 }}
+                    {...hover({
+                      label: `${yl} · ${xl}`,
+                      rows: [{ name: 'Value', value: Number.isFinite(v) ? v.toFixed(3) : '—' }],
+                    })}
                   />
                   <text
                     x={padL + xi * cellW + cellW / 2}
@@ -114,6 +121,7 @@ export function HeatmapBlock({ title, x_labels, y_labels, values, options }: Hea
           </span>
         </div>
       ) : null}
+      {tooltipNode}
     </figure>
   );
 }

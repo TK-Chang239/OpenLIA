@@ -1,5 +1,6 @@
 import { useId, useMemo } from 'react';
 import { paletteColor } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface LineSeries {
   name: string;
@@ -45,6 +46,11 @@ function formatTick(v: number): string {
   return v.toFixed(1);
 }
 
+function formatValue(v: number | undefined): string {
+  if (v === undefined || v === null || Number.isNaN(v)) return '—';
+  return formatTick(v);
+}
+
 export function LineChartBlock({
   title,
   series,
@@ -70,9 +76,11 @@ export function LineChartBlock({
   const showLegend = options?.show_legend !== false;
   const gradId = useId().replace(/[^A-Za-z0-9_-]/g, '');
   const baselineY = H - PAD_B;
+  const { figureRef, tooltipNode, hover, activeKey } = useChartTooltip();
+  const activeIndex = typeof activeKey === 'number' ? activeKey : null;
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -157,14 +165,49 @@ export function LineChartBlock({
               {s.data.map((d, i) => (
                 <circle
                   key={i}
-                  className="series-dot"
+                  className={`series-dot${activeIndex === i ? ' series-dot--active' : ''}`}
                   cx={PAD_L + i * chart.xStep}
                   cy={chart.yToPx(d.y)}
-                  r={2.5}
+                  r={activeIndex === i ? 4.5 : 2.5}
                   style={{ fill: color }}
                 />
               ))}
             </g>
+          );
+        })}
+        {activeIndex !== null && chart.xs[activeIndex] !== undefined ? (
+          <line
+            className="report-chart__guide"
+            x1={PAD_L + activeIndex * chart.xStep}
+            x2={PAD_L + activeIndex * chart.xStep}
+            y1={PAD_T}
+            y2={H - PAD_B}
+          />
+        ) : null}
+        {chart.xs.map((label, i) => {
+          const cx = PAD_L + i * chart.xStep;
+          const halfStep = chart.xStep > 0 ? chart.xStep / 2 : (W - PAD_L - PAD_R) / 2;
+          const x = Math.max(PAD_L, cx - halfStep);
+          const width = Math.min(W - PAD_R - x, halfStep * 2);
+          return (
+            <rect
+              key={`hit-${i}`}
+              className="hover-target"
+              x={x}
+              y={PAD_T}
+              width={Math.max(1, width)}
+              height={H - PAD_T - PAD_B}
+              fill="transparent"
+              {...hover({
+                key: i,
+                label,
+                rows: series.map((s, sIdx) => ({
+                  swatch: paletteColor(sIdx),
+                  name: s.name,
+                  value: formatValue(s.data[i]?.y),
+                })),
+              })}
+            />
           );
         })}
       </svg>
@@ -181,6 +224,7 @@ export function LineChartBlock({
           ))}
         </div>
       )}
+      {tooltipNode}
     </figure>
   );
 }
