@@ -246,7 +246,16 @@ class EquityResearchConfigService:
                     web_search_budget=budget,
                 )
 
-        enabled = tuple(cfg.sections_by_mode.get(mode, []))
+        stored = list(cfg.sections_by_mode.get(mode, []))
+        framework_ids = _framework_section_id_list(mode)
+        stored_set = set(stored)
+        # Backfill framework sections added after the user's config was
+        # last saved. A section absent from `stored` is treated as
+        # never-seen rather than user-disabled, since the data model has
+        # no separate "disabled" list. New users get the full framework
+        # via `_default_sections_by_mode`, so this only matters for
+        # existing rows when frameworks gain a section.
+        enabled = tuple(stored + [sid for sid in framework_ids if sid not in stored_set])
         customs = tuple(
             CustomSection(id=c.id, title=c.title, description=c.description)
             for c in cfg.custom_sections_by_mode.get(mode, [])

@@ -51,11 +51,44 @@ def apply_path(payload: Any, path: str | None) -> Any:
     """
     if path is None or path == "":
         return payload
+    path = _normalize_path(path)
+    if path == "":
+        return payload
     tokens = _tokenize(path)
     result = payload
     for kind, value in tokens:
         result = _step(result, kind, value, path)
     return result
+
+
+_BRACKET_STRING_RE = re.compile(r"""\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\]""")
+
+
+def _normalize_path(path: str) -> str:
+    """Silently fix common bad forms before parsing.
+
+    Models frequently emit JSONPath-flavored or bracket-string syntax.
+    We rewrite mechanical mistakes to the canonical 5-form grammar so
+    they parse instead of failing. Predicate filters are *not* rewritten
+    — they change semantics and should error loudly.
+    """
+    s = path.strip()
+    # Strip JSONPath root: "$.a" -> "a", "$a" -> "a", "$" -> "".
+    if s.startswith("$"):
+        s = s[1:]
+        if s.startswith("."):
+            s = s[1:]
+    # ['key'] / ["key"] -> .key
+    s = _BRACKET_STRING_RE.sub(r".\1", s)
+    # [*] -> "" (wildcard reduces to column-projection via following dot)
+    s = re.sub(r"\[\s*\*\s*\]", "", s)
+    # Collapse runs of dots: "a..b" -> "a.b".
+    s = re.sub(r"\.{2,}", ".", s)
+    # A leading dot from the bracket-string rewrite is just a separator artefact.
+    s = s.lstrip(".")
+    # Trailing dot is meaningless.
+    s = s.rstrip(".")
+    return s
 
 
 def _tokenize(path: str) -> list[tuple[str, Any]]:

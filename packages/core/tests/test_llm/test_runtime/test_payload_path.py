@@ -94,9 +94,9 @@ def test_parse_error_unbalanced_bracket() -> None:
         apply_path({}, "rows[1")
 
 
-def test_parse_error_leading_dot() -> None:
-    with pytest.raises(PathParseError):
-        apply_path({}, ".rows")
+def test_leading_dot_is_normalized() -> None:
+    # Leading dot is a mechanical typo — normalized away rather than rejected.
+    assert apply_path({"rows": 1}, ".rows") == 1
 
 
 # --- Resolve errors ---
@@ -123,3 +123,54 @@ def test_resolve_wrong_type_for_index() -> None:
 def test_dot_access_on_dict_returns_value_not_list() -> None:
     # "r.x" where r is a plain dict — should return dict["x"], not a list.
     assert apply_path({"r": {"x": 1}}, "r.x") == 1
+
+
+# --- Normalization of common bad forms (silently fixed before parsing) ---
+
+
+def test_normalize_strips_leading_dollar() -> None:
+    assert apply_path({"a": 1}, "$.a") == 1
+
+
+def test_normalize_strips_bare_leading_dollar() -> None:
+    assert apply_path({"a": 1}, "$a") == 1
+
+
+def test_normalize_bracket_string_single_quote() -> None:
+    assert apply_path({"rows": [{"date": "x"}]}, "rows['date']") == ["x"]
+
+
+def test_normalize_bracket_string_double_quote() -> None:
+    assert apply_path({"rows": [{"date": "x"}]}, 'rows["date"]') == ["x"]
+
+
+def test_normalize_leading_bracket_string() -> None:
+    assert apply_path({"rows": [1, 2, 3]}, "['rows'][0]") == 1
+
+
+def test_normalize_collapses_double_dots() -> None:
+    assert apply_path({"a": {"b": 2}}, "a..b") == 2
+
+
+def test_normalize_strips_trailing_dot() -> None:
+    assert apply_path({"a": 1}, "a.") == 1
+
+
+def test_normalize_strips_whitespace() -> None:
+    assert apply_path({"a": {"b": 2}}, "  a.b  ") == 2
+
+
+def test_normalize_wildcard_becomes_projection() -> None:
+    rows = [{"x": 1}, {"x": 2}]
+    assert apply_path({"rows": rows}, "rows[*].x") == [1, 2]
+
+
+def test_normalize_preserves_valid_path() -> None:
+    rows = [{"x": 1}, {"x": 2}]
+    assert apply_path({"rows": rows}, "rows[0:2].x") == [1, 2]
+
+
+def test_filter_expression_still_errors() -> None:
+    # We don't try to silently fix predicate filters — they change semantics.
+    with pytest.raises(PathParseError):
+        apply_path({"rows": []}, "rows[?(@.x>0)]")
