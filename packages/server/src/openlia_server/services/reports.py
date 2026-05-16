@@ -15,6 +15,7 @@ scheduler executor); this module never commits.
 
 from __future__ import annotations
 
+import re
 import uuid
 from typing import Any
 
@@ -32,6 +33,39 @@ class ReportNotFoundError(LookupError):
 
 class InvalidReportSchemaError(ValueError):
     """Raised when a payload fails canonical `ReportSchema` validation."""
+
+
+_EARNINGS_PERIOD_RE = re.compile(r"Q[1-4]\s*F?Y\s*\d{2,4}", re.IGNORECASE)
+
+
+def derive_report_title(mode: str, schema: ReportSchema) -> str | None:
+    """Build a distinguishing repo-list title from cover fields.
+
+    Returns ``None`` when the relevant cover fields are missing so callers
+    can fall back to ``cover.title``. Keeps the on-page H1 (``cover.title``,
+    e.g. "Stock Initiation Report") untouched — only the persisted DB title
+    used in repo lists, file viewer, and PDF filename changes.
+    """
+    cover = schema.cover
+    ticker = (cover.ticker or "").strip()
+    subtitle = (cover.subtitle or "").strip()
+    eyebrow = (cover.eyebrow or "").strip()
+
+    if mode == "stock_initiation":
+        return f"{ticker} — Initiation" if ticker else None
+    if mode == "stock_update":
+        return f"{ticker} — Update" if ticker else None
+    if mode == "sector_research":
+        return f"{subtitle} — Sector Research" if subtitle else None
+    if mode in ("earnings_analysis", "earnings_update"):
+        if not ticker:
+            return None
+        period_match = _EARNINGS_PERIOD_RE.search(eyebrow)
+        if period_match:
+            period = re.sub(r"\s+", " ", period_match.group(0)).upper().replace("FY ", "FY")
+            return f"{ticker} {period} Earnings"
+        return f"{ticker} Earnings"
+    return None
 
 
 def validate_report_schema(payload: Any) -> ReportSchema:
@@ -96,12 +130,13 @@ def create_report(
     source_session_id: str | None = None,
 ) -> str:
     report_id = str(uuid.uuid4())
+    resolved_title = title or derive_report_title(mode, schema) or schema.cover.title
     row = Report(
         id=report_id,
         user_id=user_id,
         department=department,
         report_type=mode,
-        title=title or schema.cover.title,
+        title=resolved_title,
         subject=subject,
         content_markdown=content_markdown,
         content_structured=schema.model_dump(mode="json"),
