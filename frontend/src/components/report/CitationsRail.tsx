@@ -1,11 +1,12 @@
 import type { Citation } from '../../api/reports';
+import { displayCitationTitle } from './CitationsSection';
 
 export interface CitationsRailProps {
   citations: Citation[];
 }
 
 function composePreview(c: Citation): string {
-  const parts: string[] = [c.title];
+  const parts: string[] = [displayCitationTitle(c)];
   if (c.source) parts[0] = `${parts[0]} — ${c.source}`;
   if (c.date) parts[0] = `${parts[0]} (${c.date})`;
   if (c.url) parts.push(c.url);
@@ -34,7 +35,7 @@ export function CitationsRail({ citations }: CitationsRailProps) {
               >
                 <span className="report-rail__citations-num">[{c.id}]</span>
                 <span className="report-rail__citations-body">
-                  <span className="report-rail__citations-title">{c.title}</span>
+                  <span className="report-rail__citations-title">{displayCitationTitle(c)}</span>
                   {meta ? (
                     <span className="report-rail__citations-meta">{meta}</span>
                   ) : null}
