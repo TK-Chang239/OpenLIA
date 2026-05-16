@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface ReportHeaderProps {
   left: string;
@@ -6,38 +6,56 @@ export interface ReportHeaderProps {
   printHref?: string;
 }
 
-function readScrollProgress(): number {
-  if (typeof document === 'undefined') return 0;
-  const el = document.scrollingElement ?? document.documentElement;
-  const scrollable = el.scrollHeight - el.clientHeight;
-  if (scrollable <= 0) return 0;
-  const ratio = el.scrollTop / scrollable;
-  if (Number.isNaN(ratio)) return 0;
-  return Math.max(0, Math.min(1, ratio));
+function findScrollAncestor(start: HTMLElement | null): HTMLElement | Window {
+  if (typeof window === 'undefined') return globalThis as unknown as Window;
+  let el: HTMLElement | null = start?.parentElement ?? null;
+  while (el && el !== document.body && el !== document.documentElement) {
+    const style = window.getComputedStyle(el);
+    const oy = style.overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return window;
 }
 
-function useScrollProgress(): number {
+function readProgress(source: HTMLElement | Window): number {
+  if (source === window) {
+    const el = document.scrollingElement ?? document.documentElement;
+    const scrollable = el.scrollHeight - el.clientHeight;
+    if (scrollable <= 0) return 0;
+    return Math.max(0, Math.min(1, el.scrollTop / scrollable));
+  }
+  const el = source as HTMLElement;
+  const scrollable = el.scrollHeight - el.clientHeight;
+  if (scrollable <= 0) return 0;
+  return Math.max(0, Math.min(1, el.scrollTop / scrollable));
+}
+
+function useScrollProgress(anchorRef: React.RefObject<HTMLElement>): number {
   const [progress, setProgress] = useState(0);
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const source = findScrollAncestor(anchorRef.current);
     let frame = 0;
     const tick = () => {
       frame = 0;
-      setProgress(readScrollProgress());
+      setProgress(readProgress(source));
     };
     const onScroll = () => {
       if (frame) return;
       frame = window.requestAnimationFrame(tick);
     };
     onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
+    source.addEventListener('scroll', onScroll, { passive: true });
     window.addEventListener('resize', onScroll, { passive: true });
     return () => {
-      window.removeEventListener('scroll', onScroll);
+      source.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', onScroll);
       if (frame) window.cancelAnimationFrame(frame);
     };
-  }, []);
+  }, [anchorRef]);
   return progress;
 }
 
@@ -62,9 +80,10 @@ function PrinterIcon() {
 }
 
 export function ReportHeader({ left, right, printHref }: ReportHeaderProps) {
-  const progress = useScrollProgress();
+  const ref = useRef<HTMLDivElement>(null);
+  const progress = useScrollProgress(ref);
   return (
-    <div className="report-furniture__header">
+    <div ref={ref} className="report-furniture__header">
       <span className="report-furniture__header-left">{left}</span>
       <span className="report-furniture__header-right">
         <span className="report-furniture__header-right-text">{right}</span>
