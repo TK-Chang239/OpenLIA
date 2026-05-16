@@ -5,7 +5,7 @@ operation that produces a tombstoned report row.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 from openlia_server.db.models.content import RepoItem, Report, ReportVersion
@@ -64,9 +64,7 @@ def _mk_repo_item(db: Session, *, report_id: str, user_id: str = "u-1") -> RepoI
     return item
 
 
-def _mk_graph_summary(
-    db: Session, *, report_id: str, user_id: str = "u-1"
-) -> GraphArtifactSummary:
+def _mk_graph_summary(db: Session, *, report_id: str, user_id: str = "u-1") -> GraphArtifactSummary:
     summary = GraphArtifactSummary(
         id=f"gs-{uuid.uuid4().hex[:8]}",
         user_id=user_id,
@@ -79,9 +77,7 @@ def _mk_graph_summary(
     return summary
 
 
-def test_tombstone_blanks_body_and_sets_expired_at(
-    create_tables, db_session: Session
-) -> None:
+def test_tombstone_blanks_body_and_sets_expired_at(create_tables, db_session: Session) -> None:
     report = _mk_report(db_session)
     rid = report.id
 
@@ -105,9 +101,7 @@ def test_tombstone_deletes_report_versions(create_tables, db_session: Session) -
 
     tombstone_report(db_session, report_id=report.id)
 
-    remaining = (
-        db_session.query(ReportVersion).filter(ReportVersion.report_id == report.id).count()
-    )
+    remaining = db_session.query(ReportVersion).filter(ReportVersion.report_id == report.id).count()
     assert remaining == 0
 
 
@@ -117,15 +111,11 @@ def test_tombstone_deletes_repo_items(create_tables, db_session: Session) -> Non
 
     tombstone_report(db_session, report_id=report.id)
 
-    remaining = (
-        db_session.query(RepoItem).filter(RepoItem.report_id == report.id).count()
-    )
+    remaining = db_session.query(RepoItem).filter(RepoItem.report_id == report.id).count()
     assert remaining == 0
 
 
-def test_tombstone_deletes_graph_artifact_summary(
-    create_tables, db_session: Session
-) -> None:
+def test_tombstone_deletes_graph_artifact_summary(create_tables, db_session: Session) -> None:
     report = _mk_report(db_session)
     _mk_graph_summary(db_session, report_id=report.id, user_id="u-1")
 
@@ -151,9 +141,7 @@ def test_tombstone_works_on_unsaved_report(create_tables, db_session: Session) -
     assert changed is True
 
 
-def test_tombstone_works_when_no_graph_summary(
-    create_tables, db_session: Session
-) -> None:
+def test_tombstone_works_when_no_graph_summary(create_tables, db_session: Session) -> None:
     """No GraphArtifactSummary row — should still succeed."""
     report = _mk_report(db_session)
 
@@ -176,16 +164,12 @@ def test_tombstone_is_idempotent(create_tables, db_session: Session) -> None:
     assert expired_at_first == expired_at_second
 
 
-def test_tombstone_missing_report_returns_false(
-    create_tables, db_session: Session
-) -> None:
+def test_tombstone_missing_report_returns_false(create_tables, db_session: Session) -> None:
     changed = tombstone_report(db_session, report_id="does-not-exist")
     assert changed is False
 
 
-def test_tombstone_does_not_touch_other_reports(
-    create_tables, db_session: Session
-) -> None:
+def test_tombstone_does_not_touch_other_reports(create_tables, db_session: Session) -> None:
     keep = _mk_report(db_session, title="Keep me alive")
     target = _mk_report(db_session, title="Tombstone me")
     _mk_version(db_session, report_id=keep.id)
@@ -198,10 +182,7 @@ def test_tombstone_does_not_touch_other_reports(
     keep_row = db_session.get(Report, keep.id)
     assert keep_row.content_markdown == "# Body markdown"
     assert keep_row.expired_at is None
-    assert (
-        db_session.query(ReportVersion).filter(ReportVersion.report_id == keep.id).count()
-        == 1
-    )
+    assert db_session.query(ReportVersion).filter(ReportVersion.report_id == keep.id).count() == 1
     assert db_session.query(RepoItem).filter(RepoItem.report_id == keep.id).count() == 1
     assert (
         db_session.query(GraphArtifactSummary)

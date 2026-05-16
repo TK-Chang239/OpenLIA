@@ -306,9 +306,7 @@ def test_sweep_skips_old_saved_report(db_session: Session) -> None:
 
     _ensure_user(db_session)
     now = datetime.now(UTC)
-    _mk_report(
-        db_session, rid="r_saved", user_id="u_1", created_at=now - timedelta(days=30)
-    )
+    _mk_report(db_session, rid="r_saved", user_id="u_1", created_at=now - timedelta(days=30))
     _mk_repo_item(db_session, report_id="r_saved", user_id="u_1")
     db_session.commit()
 
@@ -326,12 +324,8 @@ def test_sweep_hard_deletes_orphan_reports(db_session: Session) -> None:
     from openlia_server.db.models.content import Report
 
     now = datetime.now(UTC)
-    _mk_report(
-        db_session, rid="r_orphan_old", user_id=None, created_at=now - timedelta(days=8)
-    )
-    _mk_report(
-        db_session, rid="r_orphan_new", user_id=None, created_at=now - timedelta(days=2)
-    )
+    _mk_report(db_session, rid="r_orphan_old", user_id=None, created_at=now - timedelta(days=8))
+    _mk_report(db_session, rid="r_orphan_new", user_id=None, created_at=now - timedelta(days=2))
     db_session.commit()
 
     summary = run_maintenance_once(db_session)
@@ -368,9 +362,7 @@ def test_sweep_respects_env_retention_override(
     monkeypatch.setenv("OPENLIA_UNSAVED_REPORT_RETENTION_DAYS", "30")
     _ensure_user(db_session)
     now = datetime.now(UTC)
-    _mk_report(
-        db_session, rid="r_10d", user_id="u_1", created_at=now - timedelta(days=10)
-    )
+    _mk_report(db_session, rid="r_10d", user_id="u_1", created_at=now - timedelta(days=10))
     db_session.commit()
 
     summary = run_maintenance_once(db_session)

@@ -196,9 +196,7 @@ def test_list_include_expired_returns_tombstones(
     tombstone_report(db_session, report_id=rid)
     db_session.commit()
 
-    r = personal_client.get(
-        "/reports?department=equity_research&include_expired=true"
-    )
+    r = personal_client.get("/reports?department=equity_research&include_expired=true")
     assert r.status_code == 200
     items = r.json()["items"]
     assert len(items) == 1
@@ -206,9 +204,7 @@ def test_list_include_expired_returns_tombstones(
     assert items[0]["expired_at"] is not None
 
 
-def test_detail_returns_tombstone_payload(
-    personal_client: TestClient, db_session: Session
-) -> None:
+def test_detail_returns_tombstone_payload(personal_client: TestClient, db_session: Session) -> None:
     rid = _seed_report(db_session, "local")
     db_session.commit()
     tombstone_report(db_session, report_id=rid)
@@ -261,9 +257,7 @@ def test_export_docx_returns_410_on_tombstone(
     assert r.status_code == 410
 
 
-def test_render_returns_410_on_tombstone(
-    personal_client: TestClient, db_session: Session
-) -> None:
+def test_render_returns_410_on_tombstone(personal_client: TestClient, db_session: Session) -> None:
     rid = _seed_report(db_session, "local")
     db_session.commit()
     tombstone_report(db_session, report_id=rid)
@@ -291,14 +285,10 @@ def test_delete_tombstones_instead_of_dropping_row(
     assert row.expired_at is not None
     assert row.content_markdown == ""
     assert row.content_structured == {}
-    assert (
-        db_session.query(RepoItem).filter(RepoItem.report_id == rid).count() == 0
-    )
+    assert db_session.query(RepoItem).filter(RepoItem.report_id == rid).count() == 0
 
 
-def test_delete_is_idempotent_via_route(
-    personal_client: TestClient, db_session: Session
-) -> None:
+def test_delete_is_idempotent_via_route(personal_client: TestClient, db_session: Session) -> None:
     rid = _seed_report(db_session, "local")
     db_session.commit()
 
