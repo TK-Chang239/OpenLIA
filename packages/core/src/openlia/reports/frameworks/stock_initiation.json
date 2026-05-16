@@ -60,6 +60,12 @@
       "blocks": []
     },
     {
+      "id": "recent_developments",
+      "title": "Recent Developments",
+      "instructions": "Surface qualitative context from the last ~30 days that a reader would need to assess the stock today. Cover: company-specific news (product launches, executive moves, M&A, guidance updates, material filings), recent analyst actions (rating or PT changes with the analyst/firm named), regulatory or legal developments, and sector or macro events that move the thesis. This section is qualitative and time-sensitive — structured tools do not cover it, so call `web_search` to gather sources. Cite each item inline with `[source, date, url]`. If genuinely nothing material has happened in the period, state that explicitly with a 'no material developments as of <date>' line rather than fabricating filler.",
+      "blocks": []
+    },
+    {
       "id": "historical_financials",
       "title": "Historical Financial Data",
       "instructions": "Cover four areas. First, state the company's fiscal year end date. Second, present a 5-year balance sheet summary table (total assets, total liabilities, shareholders' equity, cash and equivalents, total debt, and other material items). Third, present a 5-year income statement summary table (revenue, cost of revenue, gross profit, operating income, net income, EPS, revenue growth rate YoY, EPS growth rate YoY). Apply directional cell formatting to growth rates. Fourth, if there were any mergers, acquisitions, divestitures, or spin-offs during this period that caused significant changes in revenue or profit, explain them in a text block. Use combo charts to visualize revenue and margin trends over the 5-year period.",

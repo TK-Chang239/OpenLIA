@@ -1739,7 +1739,7 @@ class TestReadPayload:
             call=ToolCall(
                 id="c1",
                 name="read_payload",
-                arguments={"ref": "r_abcd_01", "path": ".invalid"},
+                arguments={"ref": "r_abcd_01", "path": "rows[abc]"},
             ),
         )
 
