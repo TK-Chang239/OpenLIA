@@ -25,7 +25,6 @@ import {
   groupReports,
   type FeedFilter,
 } from "../../components/earnings-update/feed/feedHelpers";
-import { downloadUrlForReport } from "../../api/files";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
 import { useEuConfig } from "../../hooks/useEuConfig";
 import { useEuReports } from "../../hooks/useEuReports";
@@ -99,13 +98,6 @@ export default function EarningsUpdate() {
     },
     [fv, reports],
   );
-
-  const downloadReport = useCallback((id: string) => {
-    const a = document.createElement("a");
-    a.href = downloadUrlForReport(id);
-    a.rel = "noopener";
-    a.click();
-  }, []);
 
   const removeReport = useCallback(
     async (id: string) => {
@@ -429,7 +421,6 @@ export default function EarningsUpdate() {
           reports={reports}
           onBack={() => setCabinetOpen(false)}
           onOpenReport={(id) => openReport(id)}
-          onDownload={(id) => downloadReport(id)}
           onRemove={async (id) => {
             await removeReport(id);
           }}

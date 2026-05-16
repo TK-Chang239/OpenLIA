@@ -1,10 +1,10 @@
 import { RecentReport } from "../../api/earnings-update";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 interface Props {
   report: RecentReport;
   onOpen: (id: string) => void;
   showExtras?: boolean;
-  onDownload?: (id: string) => void;
   onRemove?: (id: string) => void;
   isNew?: boolean;
 }
@@ -21,7 +21,6 @@ export function ReportRowItem({
   report,
   onOpen,
   showExtras,
-  onDownload,
   onRemove,
   isNew = false,
 }: Props) {
@@ -54,14 +53,7 @@ export function ReportRowItem({
       </button>
       {showExtras ? (
         <>
-          <button
-            type="button"
-            onClick={() => onDownload?.(report.id)}
-            aria-label="Download"
-            className="text-sm text-[--color-text-secondary] hover:text-[--color-text-primary] ml-2"
-          >
-            ↓
-          </button>
+          <ReportDownloadButton reportId={report.id} className="ml-2" />
           <button
             type="button"
             onClick={() => onRemove?.(report.id)}

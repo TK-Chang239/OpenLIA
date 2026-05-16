@@ -4,6 +4,7 @@ import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { FileDownloadButton } from "../chat/FileDownloadButton";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 interface Props {
   filename: string;
@@ -36,7 +37,11 @@ export function ViewerHeader({
         {reportId !== undefined && !hideSaveToRepoButton ? (
           <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={initialSaved} />
         ) : null}
-        <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
+        {source.kind === "report" ? (
+          <ReportDownloadButton reportId={source.reportId} />
+        ) : (
+          <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
+        )}
         <button
           ref={closeButtonRef}
           type="button"
