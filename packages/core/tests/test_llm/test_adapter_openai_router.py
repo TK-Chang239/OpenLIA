@@ -99,7 +99,7 @@ async def test_router_stream_routes_to_chat_by_default() -> None:
     """Streaming follows the same per-turn routing rule. Default →
     Chat Completions."""
     router = _router()
-    chat_sse = b"data: {\"choices\":[{\"delta\":{\"content\":\"hi\"},\"finish_reason\":null}]}\n\n"
+    chat_sse = b'data: {"choices":[{"delta":{"content":"hi"},"finish_reason":null}]}\n\n'
     with respx.mock(assert_all_called=False) as mock:
         chat_route = mock.post("https://api.openai.com/v1/chat/completions").mock(
             return_value=httpx.Response(

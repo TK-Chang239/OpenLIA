@@ -137,9 +137,7 @@ async def test_server_tool_calls_emit_invoked_and_completed(
     fetching_turn = {
         "tool_calls": [],
         "server_tool_calls": (
-            ServerToolCall(
-                name="web_search", arguments={"query": "AAPL recent news"}, turn_idx=0
-            ),
+            ServerToolCall(name="web_search", arguments={"query": "AAPL recent news"}, turn_idx=0),
         ),
         "citations": (
             Citation(

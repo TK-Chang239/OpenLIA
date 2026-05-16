@@ -247,9 +247,7 @@ async def test_generate_appends_native_web_search_tool_block() -> None:
             )
         )
     body = json.loads(captured["payload"])
-    assert body["tools"] == [
-        {"type": "web_search_20250305", "name": "web_search", "max_uses": 7}
-    ]
+    assert body["tools"] == [{"type": "web_search_20250305", "name": "web_search", "max_uses": 7}]
 
 
 async def test_generate_uses_default_max_uses_when_unspecified() -> None:
@@ -398,9 +396,7 @@ async def test_generate_extracts_citations_from_web_search_results() -> None:
         {"type": "text", "text": "Two findings."},
     ]
     with respx.mock() as mock:
-        mock.post("https://api.anthropic.com/v1/messages").mock(
-            return_value=_ok_response(content)
-        )
+        mock.post("https://api.anthropic.com/v1/messages").mock(return_value=_ok_response(content))
         resp = await adapter.generate(
             LLMRequest(
                 messages=[Message(role="user", content="hi")],
@@ -437,9 +433,7 @@ async def test_generate_detects_web_search_tool_result_error_as_failed_search() 
         },
     ]
     with respx.mock() as mock:
-        mock.post("https://api.anthropic.com/v1/messages").mock(
-            return_value=_ok_response(content)
-        )
+        mock.post("https://api.anthropic.com/v1/messages").mock(return_value=_ok_response(content))
         resp = await adapter.generate(
             LLMRequest(
                 messages=[Message(role="user", content="hi")],

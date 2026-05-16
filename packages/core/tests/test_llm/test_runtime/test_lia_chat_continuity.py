@@ -35,8 +35,7 @@ def test_intro_not_volunteered_when_not_asked(dept: str) -> None:
     """
     out = PromptLoader().render(dept, "chat.system")
     assert "have not been introduced yet" not in out, (
-        f"{dept} chat.system still carries the buggy "
-        "'or you have not been introduced yet' clause"
+        f"{dept} chat.system still carries the buggy 'or you have not been introduced yet' clause"
     )
 
 
@@ -45,8 +44,7 @@ def test_continuity_rule_present(dept: str) -> None:
     """lia_identity must instruct that this is an ongoing conversation."""
     out = PromptLoader().render(dept, "chat.system")
     assert "ongoing conversation" in out.lower(), (
-        f"{dept} chat.system is missing the continuity rule "
-        "(no 'ongoing conversation' phrase)"
+        f"{dept} chat.system is missing the continuity rule (no 'ongoing conversation' phrase)"
     )
 
 

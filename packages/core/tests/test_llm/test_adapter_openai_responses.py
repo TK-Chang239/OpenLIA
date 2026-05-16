@@ -195,9 +195,7 @@ async def test_input_assistant_with_tool_calls_emits_function_call_items() -> No
     }
 
 
-async def test_openai_responses_conversation_translation_drops_prior_web_search_items() -> (
-    None
-):
+async def test_openai_responses_conversation_translation_drops_prior_web_search_items() -> None:
     """Conversation replay across Responses turns must NOT carry prior
     `web_search_call` items into the next request's `input`. The
     canonical Message list carries assistant `content` (where the
@@ -524,9 +522,7 @@ async def test_stream_targets_responses_endpoint_with_stream_true() -> None:
 
     with respx.mock() as mock:
         mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
-        async for _ in _adapter().stream(
-            LLMRequest(messages=[Message(role="user", content="x")])
-        ):
+        async for _ in _adapter().stream(LLMRequest(messages=[Message(role="user", content="x")])):
             pass
     assert captured["path"] == "/v1/responses"
     assert captured["body"]["stream"] is True

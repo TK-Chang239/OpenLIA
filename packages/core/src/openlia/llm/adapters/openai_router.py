@@ -58,9 +58,7 @@ class OpenAIRouter(LLMProvider):
         capabilities: Capabilities,
     ) -> None:
         super().__init__(credentials=credentials, model=model, capabilities=capabilities)
-        self._chat = OpenAIAdapter(
-            credentials=credentials, model=model, capabilities=capabilities
-        )
+        self._chat = OpenAIAdapter(credentials=credentials, model=model, capabilities=capabilities)
         self._responses = OpenAIResponsesAdapter(
             credentials=credentials, model=model, capabilities=capabilities
         )

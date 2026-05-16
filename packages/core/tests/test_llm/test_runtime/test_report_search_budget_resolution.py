@@ -41,9 +41,7 @@ from openlia.llm.runtime.report import _resolve_search_budget
         ({"web_search_budget_default": 10}, -1, 10),
     ],
 )
-def test_resolve_search_budget(
-    framework: dict, override: int | None, expected: int
-) -> None:
+def test_resolve_search_budget(framework: dict, override: int | None, expected: int) -> None:
     assert _resolve_search_budget(framework=framework, override=override) == expected
 
 
@@ -65,7 +63,5 @@ def test_report_request_accepts_web_search_budget_override() -> None:
     r1 = ReportRequest(mode="stock_initiation", user_input="AAPL")
     assert r1.web_search_budget_override is None
 
-    r2 = ReportRequest(
-        mode="stock_initiation", user_input="AAPL", web_search_budget_override=3
-    )
+    r2 = ReportRequest(mode="stock_initiation", user_input="AAPL", web_search_budget_override=3)
     assert r2.web_search_budget_override == 3

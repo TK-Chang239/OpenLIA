@@ -86,9 +86,7 @@ def _to_responses_input(messages: list[Message]) -> list[dict]:
     items: list[dict] = []
     for m in messages:
         if m.role == "user":
-            items.append(
-                {"role": "user", "content": [{"type": "input_text", "text": m.content}]}
-            )
+            items.append({"role": "user", "content": [{"type": "input_text", "text": m.content}]})
         elif m.role == "assistant":
             if m.content:
                 items.append(
@@ -174,9 +172,7 @@ def _parse_responses_output(
             status = item.get("status", "completed")
             if status == "failed":
                 err = item.get("error") or {}
-                error_code = (
-                    str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
-                )
+                error_code = str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
                 failures.append(
                     FailedSearch(
                         query=query,
@@ -235,10 +231,7 @@ class OpenAIResponsesAdapter(LLMProvider):
                         headers=dict(resp.headers),
                     )
                 data = resp.json()
-                return [
-                    ModelInfo(id=m["id"], display_name=m["id"])
-                    for m in data.get("data", [])
-                ]
+                return [ModelInfo(id=m["id"], display_name=m["id"]) for m in data.get("data", [])]
 
         return await with_retries(_call)
 
