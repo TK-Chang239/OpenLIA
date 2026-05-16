@@ -181,6 +181,49 @@ def test_report_system_prompt_includes_schema_strictness_guide(tmp_path: Path) -
     assert "extra" in rendered.lower() or "forbid" in rendered.lower()
 
 
+def test_report_system_prompt_documents_chart_height_enum(tmp_path: Path) -> None:
+    """Guards against the model emitting `height: 320` (pixel int) — schema
+    requires the enum literal `small`/`medium`/`tall`. Without an explicit
+    callout the model defaults to pixel ints, triggering a validation retry."""
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        loader=loader,
+    )
+    assert '"small"' in rendered and '"medium"' in rendered and '"tall"' in rendered
+    lower = rendered.lower()
+    assert "pixel" in lower or "integer" in lower
+
+
+def test_report_system_prompt_forbids_citations_and_meta_stats_under_rail(
+    tmp_path: Path,
+) -> None:
+    """Guards against the model nesting `citations` or `meta_stats` under
+    `rail`. Both live at the top level of ReportSchema; `meta_stats` is
+    server-computed and must not be authored at all."""
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        loader=loader,
+    )
+    assert "citations" in rendered and "meta_stats" in rendered
+    lower = rendered.lower()
+    assert "top-level" in lower or "top level" in lower
+    assert "rail" in lower
+
+
 def test_report_system_prompt_anchors_current_date(tmp_path: Path) -> None:
     """Render the real equity_research report.system slot and assert the
     temporal anchor partial emits today's date + freshness discipline.
