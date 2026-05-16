@@ -277,5 +277,91 @@ export function reportPdfUrl(reportId: string): string {
 }
 
 export function reportDocxUrl(reportId: string): string {
-  return `/api/reports/${reportId}/docx`;
+  return `/api/reports/${reportId}/export/docx`;
+}
+
+export type DownloadFormat = "pdf" | "docx";
+
+export interface DownloadResult {
+  blob: Blob;
+  filename: string;
+}
+
+export class DownloadError extends Error {
+  public readonly status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "DownloadError";
+    this.status = status;
+  }
+}
+
+const FILENAME_STAR_RE = /filename\*\s*=\s*([^;]+)/i;
+const FILENAME_RE = /filename\s*=\s*("([^"]+)"|([^;]+))/i;
+
+export function parseFilenameFromHeader(
+  contentDisposition: string | null,
+  fallback: string,
+): string {
+  if (!contentDisposition) return fallback;
+  const star = contentDisposition.match(FILENAME_STAR_RE);
+  if (star) {
+    const raw = star[1].trim();
+    // RFC5987: charset'lang'encoded-value
+    const m = raw.match(/^([^']*)'([^']*)'(.+)$/);
+    const value = m ? m[3] : raw;
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+  const m = contentDisposition.match(FILENAME_RE);
+  if (m) {
+    const raw = (m[2] ?? m[3] ?? "").trim();
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+  return fallback;
+}
+
+export async function downloadReportBlob(
+  reportId: string,
+  format: DownloadFormat,
+): Promise<DownloadResult> {
+  const url =
+    format === "pdf" ? reportPdfUrl(reportId) : reportDocxUrl(reportId);
+  const resp = await fetch(url, { credentials: "include" });
+  if (!resp.ok) {
+    let detail = `Download failed (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (body && typeof body.detail === "string") {
+        detail = body.detail;
+      }
+    } catch {
+      // body wasn't JSON; keep generic message
+    }
+    throw new DownloadError(resp.status, detail);
+  }
+  const blob = await resp.blob();
+  const filename = parseFilenameFromHeader(
+    resp.headers.get("content-disposition"),
+    `report-${reportId}.${format}`,
+  );
+  return { blob, filename };
+}
+
+export function triggerBrowserSave(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 5_000);
 }
