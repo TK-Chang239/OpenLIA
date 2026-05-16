@@ -104,9 +104,11 @@ describe("ReportCard", () => {
 
   it("clicking Save flips the bookmark to saved (NEW-14-05)", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
+    const recentCreatedAt = new Date(Date.now() - 86_400_000).toISOString();
     render(
       <ReportCard
         {...baseProps}
+        createdAt={recentCreatedAt}
         onOpen={() => {}}
         onDownload={() => {}}
         onSave={onSave}
@@ -121,6 +123,89 @@ describe("ReportCard", () => {
       expect(
         screen.getByRole("button", { name: /saved to repo/i }),
       ).toBeInTheDocument();
+    });
+  });
+
+  it("renders tombstone variant when expiredAt is set", () => {
+    render(
+      <ReportCard
+        {...baseProps}
+        expiredAt="2026-05-15T12:00:00Z"
+        onOpen={() => {}}
+        onDownload={() => {}}
+        onSave={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("er-report-card-tombstone")).toBeInTheDocument();
+    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open report/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /save to repo/i })).toBeNull();
+  });
+
+  it("clicking Saved when within 7 days calls onUnsave (soft remove)", async () => {
+    const recentCreatedAt = new Date(Date.now() - 86_400_000).toISOString();
+    const onUnsave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ReportCard
+        {...baseProps}
+        createdAt={recentCreatedAt}
+        initialSaved
+        onOpen={() => {}}
+        onDownload={() => {}}
+        onSave={() => {}}
+        onUnsave={onUnsave}
+      />,
+    );
+    const savedBtn = screen.getByRole("button", { name: /saved to repository/i });
+    fireEvent.click(savedBtn);
+    await waitFor(() => {
+      expect(onUnsave).toHaveBeenCalledWith("r1");
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /save to repository/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows Delete button instead of bookmark when saved and age >= 7 days", () => {
+    const oldCreatedAt = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    render(
+      <ReportCard
+        {...baseProps}
+        createdAt={oldCreatedAt}
+        initialSaved
+        onOpen={() => {}}
+        onDownload={() => {}}
+        onSave={() => {}}
+        onDelete={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /delete report/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("bookmark-icon")).toBeNull();
+  });
+
+  it("Delete button opens confirm dialog and dispatches onDelete on confirm", async () => {
+    const oldCreatedAt = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ReportCard
+        {...baseProps}
+        createdAt={oldCreatedAt}
+        initialSaved
+        onOpen={() => {}}
+        onDownload={() => {}}
+        onSave={() => {}}
+        onDelete={onDelete}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /delete report/i }));
+    expect(screen.getByTestId("delete-report-dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledWith("r1");
     });
   });
 });

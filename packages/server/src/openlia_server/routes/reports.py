@@ -26,7 +26,6 @@ from openlia_server.services.reports import (
     tombstone_report,
 )
 
-
 _EXPIRED_DETAIL = {
     "code": "report_expired",
     "message": "This report has expired and is no longer available.",
@@ -39,9 +38,7 @@ def _is_tombstoned(session: DBSession, *, report_id: str, user_id: str) -> bool:
     caller can fall through to its normal 404 path.
     """
     expired_at = session.execute(
-        select(Report.expired_at).where(
-            Report.id == report_id, Report.user_id == user_id
-        )
+        select(Report.expired_at).where(Report.id == report_id, Report.user_id == user_id)
     ).scalar_one_or_none()
     return expired_at is not None
 

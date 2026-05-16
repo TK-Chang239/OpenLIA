@@ -231,17 +231,34 @@ export interface ReportSchema {
   meta_stats?: MetaStats | null;
 }
 
-export async function fetchReport(reportId: string): Promise<ReportSchema> {
+export interface ReportDetail {
+  schema: ReportSchema | null;
+  expired_at: string | null;
+  // Present only on tombstoned rows, so chat-history surfaces can render
+  // the "no longer available" card without a second fetch.
+  title?: string;
+  department?: string;
+  created_at?: string;
+}
+
+export async function fetchReportDetail(reportId: string): Promise<ReportDetail> {
   if (reportId.startsWith('demo-') && import.meta.env?.MODE !== 'test') {
     const { getDemoReportSchema } = await import('../lib/earnings-update/demo-reports');
-    return getDemoReportSchema(reportId);
+    return { schema: await getDemoReportSchema(reportId), expired_at: null };
   }
   const res = await fetch(`/api/reports/${reportId}`, { credentials: 'include' });
   if (!res.ok) {
     throw new Error(`fetchReport failed (${res.status} ${res.statusText ?? ''})`);
   }
-  const body = (await res.json()) as { schema: ReportSchema };
-  return body.schema;
+  return (await res.json()) as ReportDetail;
+}
+
+export async function fetchReport(reportId: string): Promise<ReportSchema> {
+  const detail = await fetchReportDetail(reportId);
+  if (detail.schema === null) {
+    throw new Error(`report ${reportId} is expired and has no schema`);
+  }
+  return detail.schema;
 }
 
 export interface ReportListItem {
@@ -251,19 +268,24 @@ export interface ReportListItem {
   title: string;
   created_at: string;
   source_session_id?: string | null;
+  expired_at?: string | null;
 }
 
 export interface ReportListResponse {
   items: ReportListItem[];
 }
 
-export async function listReports(params: {
-  department?: string;
-  session_id?: string;
-} = {}): Promise<ReportListResponse> {
+export async function listReports(
+  params: {
+    department?: string;
+    session_id?: string;
+    include_expired?: boolean;
+  } = {},
+): Promise<ReportListResponse> {
   const search = new URLSearchParams();
   if (params.department) search.set('department', params.department);
   if (params.session_id) search.set('session_id', params.session_id);
+  if (params.include_expired) search.set('include_expired', 'true');
   const qs = search.toString();
   const res = await fetch(`/api/reports${qs ? `?${qs}` : ''}`, { credentials: 'include' });
   if (!res.ok) {
@@ -272,10 +294,24 @@ export async function listReports(params: {
   return (await res.json()) as ReportListResponse;
 }
 
+export async function deleteReport(reportId: string): Promise<void> {
+  const res = await fetch(`/api/reports/${reportId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!res.ok && res.status !== 204) {
+    throw new Error(`deleteReport failed (${res.status} ${res.statusText ?? ''})`);
+  }
+}
+
 export function reportPdfUrl(reportId: string): string {
   return `/api/reports/${reportId}/export/pdf`;
 }
 
 export function reportDocxUrl(reportId: string): string {
   return `/api/reports/${reportId}/docx`;
+}
+
+export function isReportExpired(row: { expired_at?: string | null }): boolean {
+  return row.expired_at != null;
 }
