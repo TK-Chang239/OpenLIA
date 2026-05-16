@@ -63,7 +63,31 @@ def test_get_report_requires_auth(company_client_anon: TestClient) -> None:
     assert r.status_code == 401
 
 
-def test_export_pdf_streams_pdf_bytes(personal_client: TestClient, db_session: Session) -> None:
+class _FixedResolver:
+    def __init__(self, url: str) -> None:
+        self._url = url
+
+    def resolve(self) -> str | None:
+        return self._url
+
+    def invalidate(self) -> None:
+        return None
+
+
+def _stub_pdf_export(personal_client: TestClient, monkeypatch) -> None:
+    from openlia_server.routes import reports as reports_mod
+
+    async def fake_export(*args, **kwargs):
+        return b"%PDF-1.4 fake"
+
+    monkeypatch.setattr(reports_mod, "export_report_pdf", fake_export)
+    personal_client.app.state.render_base_url_resolver = _FixedResolver("http://test-render")
+
+
+def test_export_pdf_streams_pdf_bytes(
+    personal_client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    _stub_pdf_export(personal_client, monkeypatch)
     rid = _seed_report(db_session, "local")
     db_session.commit()
     r = personal_client.post(f"/reports/{rid}/export/pdf")
@@ -74,10 +98,11 @@ def test_export_pdf_streams_pdf_bytes(personal_client: TestClient, db_session: S
 
 
 def test_export_pdf_via_get_for_download_links(
-    personal_client: TestClient, db_session: Session
+    personal_client: TestClient, db_session: Session, monkeypatch
 ) -> None:
     """The download anchor (`<a href download>`) issues a GET, so the PDF
     export must be reachable via GET as well as POST."""
+    _stub_pdf_export(personal_client, monkeypatch)
     rid = _seed_report(db_session, "local")
     db_session.commit()
     r = personal_client.get(f"/reports/{rid}/export/pdf")
