@@ -4,6 +4,7 @@ import { type FileKind, type FileSource, useFileViewer } from "../viewer/FileVie
 import { sourceUrl } from "../viewer/renderers/sourceUrl";
 import { SaveToRepoButton } from "./SaveToRepoButton";
 import { FileDownloadButton } from "./FileDownloadButton";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 interface Props {
   filename: string;
@@ -90,7 +91,11 @@ export function AttachmentChip({
             onChange={setSaved}
           />
         ) : null}
-        <FileDownloadButton variant="chip" url={sourceUrl(source)} filename={filename} />
+        {source.kind === "report" ? (
+          <ReportDownloadButton reportId={source.reportId} />
+        ) : (
+          <FileDownloadButton variant="chip" url={sourceUrl(source)} filename={filename} />
+        )}
       </div>
     </div>
   );
