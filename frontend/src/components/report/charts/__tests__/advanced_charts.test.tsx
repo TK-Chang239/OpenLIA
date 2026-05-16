@@ -20,7 +20,7 @@ describe('CandlestickBlock', () => {
         ]}
       />,
     );
-    expect(container.querySelectorAll('svg rect')).toHaveLength(2);
+    expect(container.querySelectorAll('svg rect:not(.hover-target)')).toHaveLength(2);
     const wicks = container.querySelectorAll('svg line');
     expect(wicks.length).toBeGreaterThanOrEqual(2);
   });
@@ -51,7 +51,7 @@ describe('WaterfallBlock', () => {
         ]}
       />,
     );
-    expect(container.querySelectorAll('svg rect')).toHaveLength(3);
+    expect(container.querySelectorAll('svg rect.hover-target')).toHaveLength(3);
     expect(screen.getByText('Start')).toBeInTheDocument();
     expect(screen.getByText('End')).toBeInTheDocument();
   });

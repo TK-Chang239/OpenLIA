@@ -55,7 +55,7 @@
     }
   ],
   "rail": {
-    "instructions": "Populate the Rail object: rail.verdict with rating, previous_rating if changed, target, upside %, as_of; rail.quick_stats with market cap (local + USD), enterprise value, 3-month ADTV, sector, exchange, and a compact forecast strip (Revenue/EBITDA/EPS/P/E for current FY and 2\u20133 forward years marked with 'E'); rail.sparkline with 60-day price.",
+    "instructions": "Populate the Rail object. rail.verdict is REQUIRED: rating, previous_rating if changed, target, upside %, as_of. rail.quick_stats is REQUIRED to include ALL of these labels (exact spelling, case-insensitive match): 'Market Cap', 'Sector', 'Exchange', '52W Range', 'ADTV (3mo)', 'P/E (fwd)'. You may add extra metrics beyond these (enterprise value, local-currency market cap, compact forecast strip for Revenue/EBITDA/EPS/P/E across current FY plus 2-3 forward years marked with 'E'). rail.sparkline with 60-day price.",
     "verdict": null,
     "quick_stats": [],
     "sparkline": null

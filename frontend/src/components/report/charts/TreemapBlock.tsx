@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { paletteColor } from './svgUtils';
+import { paletteColor, formatTick } from './svgUtils';
+import { useChartTooltip, type UseChartTooltipReturn } from './useChartTooltip';
 
 export interface TreemapNode { name: string; value: number; children?: TreemapNode[]; }
 
@@ -68,6 +69,7 @@ function layout(nodes: TreemapNode[], x: number, y: number, w: number, h: number
 
 export function TreemapBlock({ title, data }: TreemapBlockProps) {
   const tiles = useMemo(() => layout(data, 0, 0, W, H, 0), [data]);
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   if (tiles.length === 0) {
     return (
@@ -79,7 +81,7 @@ export function TreemapBlock({ title, data }: TreemapBlockProps) {
   }
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -89,18 +91,20 @@ export function TreemapBlock({ title, data }: TreemapBlockProps) {
         aria-label={title}
       >
         {tiles.map((t, i) => (
-          <Group key={`${t.name}-${i}`} tile={t} idx={i} />
+          <Group key={`${t.name}-${i}`} tile={t} idx={i} hover={hover} />
         ))}
       </svg>
+      {tooltipNode}
     </figure>
   );
 }
 
-function Group({ tile, idx }: { tile: Tile; idx: number }) {
+function Group({ tile, idx, hover }: { tile: Tile; idx: number; hover: UseChartTooltipReturn['hover'] }) {
   const fill = paletteColor(idx + tile.depth * 2);
   return (
     <g>
       <rect
+        className="hover-target"
         x={tile.x}
         y={tile.y}
         width={tile.w}
@@ -111,6 +115,10 @@ function Group({ tile, idx }: { tile: Tile; idx: number }) {
           stroke: 'var(--report-border)',
           strokeWidth: 1,
         }}
+        {...hover({
+          label: tile.name,
+          rows: [{ swatch: fill, name: 'Value', value: formatTick(tile.value) }],
+        })}
       />
       {tile.w > 60 && tile.h > 24 ? (
         <>
@@ -132,7 +140,7 @@ function Group({ tile, idx }: { tile: Tile; idx: number }) {
           ) : null}
         </>
       ) : null}
-      {tile.children?.map((c, ci) => <Group key={`${c.name}-${ci}`} tile={c} idx={idx} />)}
+      {tile.children?.map((c, ci) => <Group key={`${c.name}-${ci}`} tile={c} idx={idx} hover={hover} />)}
     </g>
   );
 }

@@ -62,7 +62,7 @@
     }
   ],
   "rail": {
-    "instructions": "Populate the Rail object: rail.verdict with current rating, target, upside %, and as_of (post-earnings); rail.quick_stats with reporting period, market cap, beats count, misses count, EPS surprise %, revenue surprise %; rail.sparkline with after-hours price points if available.",
+    "instructions": "Populate the Rail object. rail.verdict is REQUIRED: rating, target, upside %, as_of (post-earnings). rail.quick_stats is REQUIRED to include ALL of these labels (exact spelling, case-insensitive match): 'Period', 'Market Cap', 'EPS Surprise', 'Revenue Surprise', 'Beats', 'Misses'. You may add extra metrics. rail.sparkline with after-hours price points if available.",
     "verdict": null,
     "quick_stats": [],
     "sparkline": null

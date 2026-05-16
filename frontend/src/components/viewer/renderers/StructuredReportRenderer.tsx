@@ -38,5 +38,5 @@ export function StructuredReportRenderer({ source }: { source: FileSource }): JS
   if (status === "error" || !schema)
     return <RendererError message={error ?? "Failed to load report."} onRetry={load} />;
 
-  return <ReportRenderer schema={schema} />;
+  return <ReportRenderer schema={schema} reportId={reportId} />;
 }

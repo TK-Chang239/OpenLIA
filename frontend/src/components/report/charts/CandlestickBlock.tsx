@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { useChartTooltip } from './useChartTooltip';
 
 export interface CandleRow { date: string; open: number; high: number; low: number; close: number; }
 export interface VolumeRow { date: string; value: number; }
@@ -17,6 +18,7 @@ const { L, R, T, B } = CHART_PADDING;
 
 export function CandlestickBlock({ title, data, volume, options }: CandlestickBlockProps) {
   const showGrid = options?.show_grid !== false;
+  const { figureRef, tooltipNode, hover } = useChartTooltip();
 
   const chart = useMemo(() => {
     if (data.length === 0) return null;
@@ -45,7 +47,7 @@ export function CandlestickBlock({ title, data, volume, options }: CandlestickBl
   const priceBottom = H - B - volH;
 
   return (
-    <figure className="report-chart">
+    <figure className="report-chart" ref={figureRef}>
       <figcaption className="report-chart__title">{title}</figcaption>
       <svg
         className="report-line-chart"
@@ -121,7 +123,32 @@ export function CandlestickBlock({ title, data, volume, options }: CandlestickBl
             </text>
           ) : null,
         )}
+        {data.map((d, i) => {
+          const v = volume?.[i]?.value;
+          return (
+            <rect
+              key={`hit-${d.date}`}
+              className="hover-target"
+              x={L + i * chart.slot}
+              y={T}
+              width={Math.max(1, chart.slot)}
+              height={H - T - B}
+              fill="transparent"
+              {...hover({
+                label: d.date,
+                rows: [
+                  { name: 'Open', value: formatTick(d.open) },
+                  { name: 'High', value: formatTick(d.high) },
+                  { name: 'Low', value: formatTick(d.low) },
+                  { name: 'Close', value: formatTick(d.close) },
+                  ...(v !== undefined ? [{ name: 'Volume', value: formatTick(v) }] : []),
+                ],
+              })}
+            />
+          );
+        })}
       </svg>
+      {tooltipNode}
     </figure>
   );
 }

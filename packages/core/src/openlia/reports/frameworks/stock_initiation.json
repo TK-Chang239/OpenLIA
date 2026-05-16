@@ -97,7 +97,7 @@
     }
   ],
   "rail": {
-    "instructions": "Populate the Rail object: rail.verdict with rating (Buy/Hold/Sell or Overweight/Equal-Weight/Underweight), previous_rating if changed, target price, upside %, and as_of date; rail.quick_stats with market cap, free float %, sector, exchange, 52-week range, and ADTV; rail.sparkline with 60-day daily close points labeled 'Last 60 days'.",
+    "instructions": "Populate the Rail object. rail.verdict is REQUIRED: rating (Buy/Hold/Sell or Overweight/Equal-Weight/Underweight) plus optional previous_rating, target price, upside %, and as_of date. rail.quick_stats is REQUIRED to include ALL of these labels (exact spelling, case-insensitive match): 'Market Cap', 'Sector', 'Exchange', '52W Range', 'ADTV (3mo)', 'P/E (fwd)'. You may add extra metrics beyond these. rail.sparkline: 60-day daily close points labeled 'Last 60 days'.",
     "verdict": null,
     "quick_stats": [],
     "sparkline": null
