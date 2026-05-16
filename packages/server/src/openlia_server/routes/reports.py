@@ -9,7 +9,7 @@ import re
 from collections.abc import Callable
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -23,7 +23,24 @@ from openlia_server.services.report_export import export_report_docx, export_rep
 from openlia_server.services.reports import (
     ReportNotFoundError,
     get_report,
+    tombstone_report,
 )
+
+_EXPIRED_DETAIL = {
+    "code": "report_expired",
+    "message": "This report has expired and is no longer available.",
+}
+
+
+def _is_tombstoned(session: DBSession, *, report_id: str, user_id: str) -> bool:
+    """Return True iff the report exists, is owned by the caller, and has
+    been tombstoned. Returns False on missing-or-unowned rows so the
+    caller can fall through to its normal 404 path.
+    """
+    expired_at = session.execute(
+        select(Report.expired_at).where(Report.id == report_id, Report.user_id == user_id)
+    ).scalar_one_or_none()
+    return expired_at is not None
 
 
 def _esc(value: Any) -> str:
@@ -481,6 +498,7 @@ class ReportListItem(BaseModel):
     title: str
     created_at: str
     source_session_id: str | None = None
+    expired_at: str | None = None
 
 
 class ReportListOut(BaseModel):
@@ -500,6 +518,7 @@ def build_reports_router(
     async def list_reports(
         department: str | None = None,
         session_id: str | None = None,
+        include_expired: bool = Query(False),
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> ReportListOut:
@@ -508,6 +527,8 @@ def build_reports_router(
             stmt = stmt.where(Report.department == department)
         if session_id is not None:
             stmt = stmt.where(Report.source_session_id == session_id)
+        if not include_expired:
+            stmt = stmt.where(Report.expired_at.is_(None))
         rows = list(session.execute(stmt).scalars())
         return ReportListOut(
             items=[
@@ -518,6 +539,7 @@ def build_reports_router(
                     title=r.title,
                     created_at=r.created_at.isoformat() if r.created_at else "",
                     source_session_id=r.source_session_id,
+                    expired_at=r.expired_at.isoformat() if r.expired_at else None,
                 )
                 for r in rows
             ]
@@ -529,11 +551,27 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> dict:
+        row = session.execute(
+            select(Report).where(Report.id == report_id, Report.user_id == user.id)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+        if row.expired_at is not None:
+            # Tombstoned: body is blanked, schema validation would fail.
+            # Return the metadata stub so chat-history surfaces can render
+            # a "no longer available" card without a separate fetch.
+            return {
+                "schema": None,
+                "expired_at": row.expired_at.isoformat(),
+                "title": row.title,
+                "department": row.department,
+                "created_at": row.created_at.isoformat() if row.created_at else "",
+            }
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
-        return {"schema": schema.model_dump(mode="json")}
+        return {"schema": schema.model_dump(mode="json"), "expired_at": None}
 
     @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_report(
@@ -541,12 +579,15 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> None:
+        # Ownership check first — 404 hides existence from non-owners.
         row = session.execute(
             select(Report).where(Report.id == report_id, Report.user_id == user.id)
         ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
-        session.delete(row)
+        # tombstone_report is idempotent: re-deleting an already-tombstoned
+        # report is a no-op (returns False) but still 204s.
+        tombstone_report(session, report_id=report_id)
         session.commit()
 
     @router.get("/{report_id}/render", response_class=HTMLResponse)
@@ -568,6 +609,8 @@ def build_reports_router(
              tables, and disclaimer baked in. Used by Playwright for PDF
              export when the bundle path isn't reachable.
         """
+        if _is_tombstoned(session, report_id=report_id, user_id=user.id):
+            raise HTTPException(status.HTTP_410_GONE, detail=_EXPIRED_DETAIL)
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
@@ -593,6 +636,8 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> Response:
+        if _is_tombstoned(session, report_id=report_id, user_id=user.id):
+            raise HTTPException(status.HTTP_410_GONE, detail=_EXPIRED_DETAIL)
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
@@ -659,6 +704,8 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> Response:
+        if _is_tombstoned(session, report_id=report_id, user_id=user.id):
+            raise HTTPException(status.HTTP_410_GONE, detail=_EXPIRED_DETAIL)
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:

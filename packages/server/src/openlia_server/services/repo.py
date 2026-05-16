@@ -107,7 +107,7 @@ def list_items_filtered(
     stmt = (
         select(RepoItem, Report)
         .join(Report, RepoItem.report_id == Report.id)
-        .where(RepoItem.user_id == user_id)
+        .where(RepoItem.user_id == user_id, Report.expired_at.is_(None))
     )
     if q:
         stmt = stmt.where(func.lower(Report.title).like(f"%{q.lower()}%"))
@@ -146,7 +146,7 @@ def facets(db: Session, *, user_id: str) -> dict:
     stmt = (
         select(Report.department, func.count(RepoItem.id))
         .join(Report, RepoItem.report_id == Report.id)
-        .where(RepoItem.user_id == user_id)
+        .where(RepoItem.user_id == user_id, Report.expired_at.is_(None))
         .group_by(Report.department)
         .order_by(Report.department.asc())
     )

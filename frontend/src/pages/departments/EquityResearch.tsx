@@ -15,8 +15,9 @@ import {
   listMessages,
   patchSession,
 } from "../../api/chat";
-import { saveReportToRepo } from "../../api/repo";
+import { saveReportToRepo, unsaveFromRepo } from "../../api/repo";
 import {
+  deleteReport,
   fetchReport,
   listReports,
   reportDocxUrl,
@@ -115,6 +116,11 @@ export default function EquityResearch(): JSX.Element {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [schema, setSchema] = useState<ReportSchema | null>(null);
+  const [restoredExpiredAt, setRestoredExpiredAt] = useState<string | null>(null);
+  const [restoredTombstone, setRestoredTombstone] = useState<{
+    title: string;
+    createdAt: string;
+  } | null>(null);
   const [restoredReportId, setRestoredReportId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
@@ -196,6 +202,8 @@ export default function EquityResearch(): JSX.Element {
       setHistory([]);
       setHistoryLoaded(false);
       setRestoredReportId(null);
+      setRestoredExpiredAt(null);
+      setRestoredTombstone(null);
       // Pre-session toggle state stays in React+localStorage; do not
       // reset it here, otherwise a fresh mount would clobber the
       // toggles the user picked on the prior visit.
@@ -205,13 +213,20 @@ export default function EquityResearch(): JSX.Element {
     setHistoryLoaded(false);
     setHistory([]);
     setRestoredReportId(null);
+    setRestoredExpiredAt(null);
+    setRestoredTombstone(null);
     persistedStreamRef.current = null;
     void Promise.all([
       getSession(sessionId).catch(() => null),
       listMessages(sessionId).catch(() => null),
-      listReports({ department: "equity_research", session_id: sessionId }).catch(
-        () => null,
-      ),
+      // include_expired=true so a tombstoned report's metadata still
+      // surfaces here — the ReportCard renders a "no longer available"
+      // anchor in conversation history without breaking the chat flow.
+      listReports({
+        department: "equity_research",
+        session_id: sessionId,
+        include_expired: true,
+      }).catch(() => null),
     ]).then(async ([sess, msgs, reports]) => {
       if (cancelled) return;
       if (sess) {
@@ -226,6 +241,13 @@ export default function EquityResearch(): JSX.Element {
       setHistoryLoaded(true);
       const latest = reports?.items?.[0];
       if (latest) {
+        if (latest.expired_at) {
+          // Tombstone: skip fetchReport (no schema to load).
+          setRestoredReportId(latest.id);
+          setRestoredExpiredAt(latest.expired_at);
+          setRestoredTombstone({ title: latest.title, createdAt: latest.created_at });
+          return;
+        }
         try {
           const sch = await fetchReport(latest.id);
           if (cancelled) return;
@@ -460,6 +482,20 @@ export default function EquityResearch(): JSX.Element {
     await saveReportToRepo(id);
   };
 
+  const handleUnsave = async (id: string) => {
+    await unsaveFromRepo(id);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteReport(id);
+    // Card flips to tombstone state on next render via expiredAt prop.
+    setRestoredExpiredAt(new Date().toISOString());
+    setSchema(null);
+    setRestoredTombstone((prev) =>
+      prev ?? { title: schema?.cover.title ?? "Report", createdAt: new Date().toISOString() },
+    );
+  };
+
   const openReport = (id: string) => {
     if (!schema) return;
     fileViewer.open({
@@ -549,6 +585,7 @@ export default function EquityResearch(): JSX.Element {
               ) : null}
 
               {schema &&
+              !restoredExpiredAt &&
               (reportState.status === "complete" || restoredReportId) ? (
                 <div data-testid="er-report-card">
                   <ReportCard
@@ -565,6 +602,26 @@ export default function EquityResearch(): JSX.Element {
                     onOpen={openReport}
                     onDownload={handleDownload}
                     onSave={handleSave}
+                    onUnsave={handleUnsave}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              ) : null}
+
+              {restoredExpiredAt && restoredReportId && restoredTombstone ? (
+                <div data-testid="er-report-card-tombstone-wrap">
+                  <ReportCard
+                    reportId={restoredReportId}
+                    mode={config.report_mode}
+                    ticker={ticker ?? null}
+                    companyName={company ?? null}
+                    subject={subject || sessionTitle || ""}
+                    createdAt={restoredTombstone.createdAt}
+                    preview=""
+                    onOpen={openReport}
+                    onDownload={handleDownload}
+                    onSave={handleSave}
+                    expiredAt={restoredExpiredAt}
                   />
                 </div>
               ) : null}

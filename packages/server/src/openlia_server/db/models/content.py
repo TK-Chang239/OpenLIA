@@ -138,11 +138,19 @@ class Report(Base, TimestampMixin):
     model_ref: Mapped[str] = mapped_column(String(128), nullable=False)
     token_usage: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     generation_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Non-null when the report has been tombstoned: body fields blanked,
+    # report_versions + repo_items + GraphArtifactSummary deleted. The row
+    # itself remains as a chat-history anchor (EquityResearch artifact
+    # card renders a tombstone). Both the nightly maintenance sweep and
+    # the DELETE /reports/{id} route set this via the shared
+    # services/reports.py::tombstone_report function.
+    expired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     __table_args__ = (
         Index("ix_reports_user_id_department", "user_id", "department"),
         Index("ix_reports_user_id_created_at", "user_id", "created_at"),
         Index("ix_reports_subject", "subject"),
         Index("ix_reports_report_type", "report_type"),
+        Index("ix_reports_expired_at", "expired_at"),
     )
 
 
