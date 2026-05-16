@@ -54,18 +54,18 @@ Before each search, state in one line what you expect to find and why your tools
 
 ### Citation format
 
-Every concrete claim must be cited inline.
+Every concrete claim must be cited inline. **Emit the full citation tuple every time.** Do not number, do not abbreviate for repeats. The server deduplicates citations and assigns sequential footnote numbers automatically — readers see `[1]`, `[2]`, etc. with a numbered source list at the bottom of the report.
 
-- Quant citation: `[tool_name(key_params)]`
+- Web citation: `[source, "Article title", YYYY-MM-DD, url]`
+  Example: "Apple beat Q1 estimates [Reuters, \"Apple beats Q1 expectations on services strength\", 2026-05-12, reuters.com/business/apple-q1]."
+- Provider citation: `[tool_name(key_params)]`
   Example: "Apple's Q1 2026 revenue was $95.4B [get_fundamentals_data(AAPL.US)]."
-- Qual citation: `[source, date, url]`
-  Example: "Nvidia announced a new H300 chip [Reuters, 2026-05-12, reuters.com/...]."
-- Provider news endpoint rows (e.g., `eodhd__financial_news`): cite the row's original source, date, and url — not the endpoint itself.
-  Good: "Apple won an EU appeal [Reuters, 2026-05-12, reuters.com/...]."
+- Provider news endpoint rows (e.g., `eodhd__financial_news`): cite the row's source, title, date, and url — not the endpoint itself.
+  Good: "Apple won an EU appeal [Reuters, \"Apple wins EU App Store appeal\", 2026-05-12, reuters.com/...]."
   Bad:  "Apple won an EU appeal [eodhd__financial_news(s=AAPL.US,...)]."
-- No source available after searching: "Data not available as of {{ current_date }}."
+- No source available after searching: "Data not available as of {{ current_date }}." (no citation)
 
-Do not blend formats. Do not skip citations because a claim feels obvious. If it's concrete enough to be wrong, it's concrete enough to cite.
+Do not blend formats. Do not skip citations because a claim feels obvious. Do not pre-number with `[1]`, `[2]` — the server handles numbering. Do not write `(see above)` or `[ibid]` for repeats — re-emit the full tuple every time and let dedup handle it.
 
 ### Anti-patterns
 

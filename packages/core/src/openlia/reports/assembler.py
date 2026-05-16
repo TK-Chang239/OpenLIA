@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from openlia.reports.citations import normalize_report
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import validate_report_payload
 
@@ -93,4 +94,5 @@ def assemble_report(
     stripped.setdefault("department", department)
     stripped.setdefault("generated_at", now.isoformat())
     _assert_no_tool_placeholders(stripped)
+    stripped = normalize_report(stripped)
     return validate_report_payload(stripped)

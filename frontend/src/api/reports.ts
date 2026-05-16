@@ -66,7 +66,7 @@ export interface Rail {
 
 export interface Citation {
   id: string;
-  title: string;
+  title?: string | null;
   source?: string | null;
   url?: string | null;
   date?: string | null;

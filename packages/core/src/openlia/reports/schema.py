@@ -78,6 +78,7 @@ class TableBlock(_Strict):
     rows: Annotated[list[dict[str, Any]], Field(min_length=1)]
     cell_format: dict[str, CellFormat] = Field(default_factory=dict)
     footnotes: list[str] = Field(default_factory=list)
+    source_ids: list[str] = Field(default_factory=list)
     options: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -187,6 +188,7 @@ class LineChartBlock(_Strict):
     series: Annotated[list[dict[str, Any]], Field(min_length=1)]
     x_label: str | None = None
     y_label: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -197,6 +199,7 @@ class BarChartBlock(_Strict):
     series: Annotated[list[dict[str, Any]], Field(min_length=1)]
     orientation: Literal["vertical", "horizontal"] = "vertical"
     stacked: bool = False
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -205,6 +208,7 @@ class AreaChartBlock(_Strict):
     title: str
     series: Annotated[list[dict[str, Any]], Field(min_length=1)]
     stacked: bool = False
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -218,6 +222,7 @@ class PieChartBlock(_Strict):
     title: str
     segments: Annotated[list[PieSegment], Field(min_length=1)]
     donut: bool = False
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -239,6 +244,7 @@ class CandlestickBlock(_Strict):
     title: str
     data: Annotated[list[CandleRow], Field(min_length=1)]
     volume: list[VolumeRow] | None = None
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -252,6 +258,7 @@ class WaterfallBlock(_Strict):
     type: Literal["waterfall_chart"]
     title: str
     items: Annotated[list[WaterfallItem], Field(min_length=2)]
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -261,6 +268,7 @@ class ScatterBlock(_Strict):
     series: Annotated[list[dict[str, Any]], Field(min_length=1)]
     x_label: str | None = None
     y_label: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -270,6 +278,7 @@ class HeatmapBlock(_Strict):
     x_labels: Annotated[list[str], Field(min_length=1)]
     y_labels: Annotated[list[str], Field(min_length=1)]
     values: Annotated[list[list[float]], Field(min_length=1)]
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -283,6 +292,7 @@ class TreemapBlock(_Strict):
     type: Literal["treemap"]
     title: str
     data: Annotated[list[TreemapNode], Field(min_length=1)]
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -299,6 +309,7 @@ class ComboChartBlock(_Strict):
     line_series: Annotated[list[ComboSeries], Field(min_length=1)]
     y_left_label: str | None = None
     y_right_label: str | None = None
+    source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
 
 
@@ -392,7 +403,7 @@ class Rail(_Strict):
 
 class Citation(_Strict):
     id: str
-    title: str
+    title: str | None = None
     source: str | None = None
     url: str | None = None
     date: str | None = None
