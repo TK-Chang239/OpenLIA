@@ -201,6 +201,95 @@ def test_report_system_prompt_documents_chart_height_enum(tmp_path: Path) -> Non
     assert "pixel" in lower or "integer" in lower
 
 
+def test_report_system_prompt_marks_cache_breakpoint(tmp_path: Path) -> None:
+    """The rendered report system prompt must embed the cache-breakpoint
+    sentinel. Without it, the Anthropic adapter cannot split off a cached
+    prefix, and the OpenAI auto-cache has no signal about where the
+    stable boundary lies."""
+    from openlia.llm.adapters._content import CACHE_BREAKPOINT_MARKER
+
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=8,
+        loader=loader,
+    )
+    assert CACHE_BREAKPOINT_MARKER in rendered
+
+
+def test_report_system_prompt_static_prefix_excludes_per_turn_data(
+    tmp_path: Path,
+) -> None:
+    """Everything above the cache breakpoint must be stable across
+    sequential calls within (and ideally across) a report run. The
+    current date, the long-form date, and the search budget all change
+    between renders and therefore must sit BELOW the breakpoint marker."""
+    from openlia.llm.adapters._content import split_at_cache_breakpoint
+
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=8,
+        loader=loader,
+    )
+    static, dynamic = split_at_cache_breakpoint(rendered)
+    assert dynamic is not None
+    assert "2026-05-14" not in static
+    assert "Thursday, May 14, 2026" not in static
+    assert "May 14" not in static
+    # search_budget number should not appear above the breakpoint.
+    assert "budget of 8" not in static
+
+
+def test_report_system_prompt_static_prefix_is_byte_stable_across_dates(
+    tmp_path: Path,
+) -> None:
+    """Same department + style guide + skills set rendered with different
+    dates / budgets must produce a byte-identical static prefix, so the
+    same OpenAI/Anthropic cache slot can serve consecutive turns and even
+    consecutive reports of the same mode."""
+    from openlia.llm.adapters._content import split_at_cache_breakpoint
+
+    loader = PromptLoader()
+    a = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=8,
+        loader=loader,
+    )
+    b = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2027-11-22",
+        current_date_long="Monday, November 22, 2027",
+        search_budget=3,
+        loader=loader,
+    )
+    static_a, _ = split_at_cache_breakpoint(a)
+    static_b, _ = split_at_cache_breakpoint(b)
+    assert static_a == static_b
+
+
 def test_report_system_prompt_forbids_citations_and_meta_stats_under_rail(
     tmp_path: Path,
 ) -> None:

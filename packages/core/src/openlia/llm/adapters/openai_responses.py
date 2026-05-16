@@ -294,11 +294,13 @@ class OpenAIResponsesAdapter(LLMProvider):
             failures,
         ) = _parse_responses_output(body.get("output", []))
         usage = body.get("usage") or {}
+        cached_tokens = int((usage.get("input_tokens_details") or {}).get("cached_tokens", 0))
         return LLMResponse(
             text="".join(text_parts),
             finish_reason=body.get("status", "completed"),
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
+            cached_input_tokens=cached_tokens,
             tool_calls=tool_calls,
             citations=citations,
             server_tool_calls=server_tool_calls,

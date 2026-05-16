@@ -327,9 +327,7 @@ def _inject_server_fields(
     return payload
 
 
-def _merge_provider_citations(
-    payload: dict[str, Any], provider_citations: list[Citation]
-) -> None:
+def _merge_provider_citations(payload: dict[str, Any], provider_citations: list[Citation]) -> None:
     """Merge native-provider citations into payload['citations'] in
     place. Model-authored entries (from submit_report) win on id
     collision; provider-only entries are appended.
@@ -999,9 +997,7 @@ class ReportRunner:
                 f"tool turn {turn_idx} (tools={len(tools or [])})",
                 {"report_id": report_id, "phase": "fetching_data", "turn": turn_idx},
             )
-            _emit_provider_selected(
-                turn_idx, phase="fetching_data", turn_native_tools=native_tools
-            )
+            _emit_provider_selected(turn_idx, phase="fetching_data", turn_native_tools=native_tools)
             # Empty-starter-pack bootstrap: on turn 0 the LLM has only
             # `request_additional_tools`, `read_payload`, and (optionally)
             # `web_search` available. Without forcing, some models produce a
@@ -1081,6 +1077,7 @@ class ReportRunner:
                     "tool_calls": [c.name for c in response.tool_calls],
                     "input_tokens": response.input_tokens,
                     "output_tokens": response.output_tokens,
+                    "cached_input_tokens": response.cached_input_tokens,
                 },
             )
             if not response.tool_calls:
@@ -1281,6 +1278,7 @@ class ReportRunner:
                             "phase": "writing",
                             "input_tokens": response.input_tokens,
                             "output_tokens": response.output_tokens,
+                            "cached_input_tokens": response.cached_input_tokens,
                             "finish_reason": response.finish_reason,
                             "tool_call_names": [c.name for c in response.tool_calls],
                             "text_preview": _unicode_safe_truncate(
@@ -1373,6 +1371,7 @@ class ReportRunner:
                         "phase": "writing",
                         "input_tokens": response.input_tokens,
                         "output_tokens": response.output_tokens,
+                        "cached_input_tokens": response.cached_input_tokens,
                         "finish_reason": response.finish_reason,
                         "tool_call_names": [],
                         "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
