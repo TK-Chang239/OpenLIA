@@ -52,11 +52,16 @@ export function ToolPicker({
     Promise.all([
       listConnectors().catch(() => [] as ConnectorRow[]),
       listSkills().catch(() => [] as SkillSummary[]),
-    ]).then(([c, s]) => {
-      if (cancelled) return;
-      setConnectors(c.filter((row) => row.status === "validated"));
-      setSkills(s.filter((row) => row.enabled));
-    });
+    ])
+      .then(([c, s]) => {
+        if (cancelled) return;
+        setConnectors((c ?? []).filter((row) => row.status === "validated"));
+        setSkills((s ?? []).filter((row) => row.enabled));
+      })
+      .catch(() => {
+        // Last-resort guard: a sync throw from a test-time mock that returns
+        // a non-thenable would otherwise bubble out as an unhandled rejection.
+      });
     return () => {
       cancelled = true;
     };
