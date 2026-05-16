@@ -13,8 +13,8 @@ interface ReportDownloadButtonProps {
 }
 
 const docxEnabled = (): boolean =>
-  String(import.meta.env.VITE_REPORT_DOCX_ENABLED ?? "false").toLowerCase() ===
-  "true";
+  String(import.meta.env.VITE_REPORT_DOCX_ENABLED ?? "true").toLowerCase() !==
+  "false";
 
 export function ReportDownloadButton({
   reportId,

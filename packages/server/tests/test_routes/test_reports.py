@@ -112,7 +112,22 @@ def test_export_pdf_via_get_for_download_links(
     assert r.content[:4] == b"%PDF"
 
 
-def test_export_docx_streams_docx_bytes(personal_client: TestClient, db_session: Session) -> None:
+def _stub_docx_capture(personal_client: TestClient, monkeypatch) -> None:
+    from openlia_server.routes import reports as reports_mod
+
+    async def fake_capture(*args, **kwargs):
+        return {}
+
+    monkeypatch.setattr(reports_mod, "capture_chart_pngs", fake_capture)
+    personal_client.app.state.render_base_url_resolver = _FixedResolver(
+        "http://test-render"
+    )
+
+
+def test_export_docx_streams_docx_bytes(
+    personal_client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    _stub_docx_capture(personal_client, monkeypatch)
     rid = _seed_report(db_session, "local")
     db_session.commit()
     r = personal_client.get(f"/reports/{rid}/docx")

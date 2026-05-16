@@ -19,7 +19,8 @@ from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.db.models.content import Report
 from openlia_server.middleware.auth import build_require_auth
-from openlia_server.services.report_export import export_report_docx, export_report_pdf
+from openlia_server.services.report_docx import assemble_docx
+from openlia_server.services.report_export import capture_chart_pngs, export_report_pdf
 from openlia_server.services.reports import (
     ReportNotFoundError,
     get_report,
@@ -684,9 +685,11 @@ def build_reports_router(
             },
         )
 
-    @router.get("/{report_id}/docx")
+    @router.get("/{report_id}/export/docx")
+    @router.get("/{report_id}/docx")  # legacy alias; removed in a follow-up
     async def export_report_docx_route(
         report_id: str,
+        request: Request,
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> Response:
@@ -694,13 +697,53 @@ def build_reports_router(
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
+        row = get_report_for_user(session, user_id=user.id, report_id=report_id)
+        launcher = getattr(request.app.state, "browser_launcher", None)
+        if launcher is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "DOCX export unavailable (browser launcher not configured)",
+            )
+        resolver = getattr(request.app.state, "render_base_url_resolver", None)
+        base_url = resolver.resolve() if resolver else None
+        if base_url is None:
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                "Report rendering requires a built frontend (set OPENLIA_FRONTEND_DIST) "
+                "or a running Vite dev server on :5173.",
+            )
+
         payload = schema.model_dump(mode="json")
-        data = export_report_docx(payload)
-        filename = f"report-{report_id}.docx"
+        cookies = _forward_session_cookie(request, base_url)
+        bundle_url = f"{base_url.rstrip('/')}/reports/{report_id}/render"
+
+        try:
+            chart_pngs = await capture_chart_pngs(launcher, bundle_url=bundle_url, cookies=cookies)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            if resolver is not None:
+                resolver.invalidate()
+            raise HTTPException(
+                status.HTTP_503_SERVICE_UNAVAILABLE,
+                f"DOCX chart capture failed: {exc}",
+            ) from exc
+
+        title = (row.title if row is not None and row.title else None) or payload.get(
+            "cover", {}
+        ).get("title", "report")
+        docx_bytes = assemble_docx(payload, chart_pngs=chart_pngs, header_text=str(title))
+        from urllib.parse import quote as urlquote
+
+        filename = _sanitize_filename(f"{title}.docx")
         return Response(
-            content=data,
+            content=docx_bytes,
             media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
-            headers={"content-disposition": f'attachment; filename="{filename}"'},
+            headers={
+                "content-disposition": (
+                    f"attachment; filename=\"{filename}\"; filename*=UTF-8''{urlquote(filename)}"
+                )
+            },
         )
 
     return router
