@@ -7,6 +7,7 @@ import json as _json
 import os
 import re
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -28,11 +29,40 @@ from openlia_server.services.reports import (
 )
 
 _FILENAME_INVALID = re.compile(r'[\x00-\x1f/\\:*?"<>|]')
+_FILENAME_SEPARATORS = re.compile("[\\s_\u2013\u2014]+")
+_FILENAME_REPEAT_DASH = re.compile(r"-{2,}")
 
 
 def _sanitize_filename(name: str) -> str:
     cleaned = _FILENAME_INVALID.sub("", name).strip().strip(".")
     return cleaned or "report"
+
+
+def _slugify_segment(text: str) -> str:
+    cleaned = _FILENAME_INVALID.sub("", text)
+    cleaned = _FILENAME_SEPARATORS.sub("-", cleaned)
+    cleaned = _FILENAME_REPEAT_DASH.sub("-", cleaned)
+    return cleaned.strip("-.")
+
+
+def _department_label(department: str) -> str:
+    parts = re.split(r"[\s_\-]+", (department or "").strip())
+    label = "".join(p.capitalize() for p in parts if p)
+    return label or "Report"
+
+
+def _build_download_filename(row: Any, *, fallback_title: str, ext: str) -> str:
+    department = getattr(row, "department", None) or "report"
+    title_raw = getattr(row, "title", None) or fallback_title or ""
+    created = getattr(row, "created_at", None) or datetime.now(UTC)
+    date_part = created.strftime("%Y-%m-%d")
+    dept_part = _department_label(department)
+    title_part = _slugify_segment(title_raw)
+    segments = ["OpenLIA", dept_part]
+    if title_part:
+        segments.append(title_part)
+    segments.append(date_part)
+    return f"{'-'.join(segments)}.{ext}"
 
 
 def _forward_session_cookie(request: Request, base_url: str) -> list[dict[str, Any]] | None:
@@ -669,12 +699,12 @@ def build_reports_router(
                 f"PDF rendering failed: {exc}",
             ) from exc
 
-        title = (row.title if row is not None and row.title else None) or payload.get(
-            "cover", {}
-        ).get("title", "report")
+        fallback_title = payload.get("cover", {}).get("title", "report")
         from urllib.parse import quote as urlquote
 
-        filename = _sanitize_filename(f"{title}.pdf")
+        filename = _sanitize_filename(
+            _build_download_filename(row, fallback_title=fallback_title, ext="pdf")
+        )
         return Response(
             content=pdf,
             media_type="application/pdf",
@@ -729,13 +759,14 @@ def build_reports_router(
                 f"DOCX chart capture failed: {exc}",
             ) from exc
 
-        title = (row.title if row is not None and row.title else None) or payload.get(
-            "cover", {}
-        ).get("title", "report")
-        docx_bytes = assemble_docx(payload, chart_pngs=chart_pngs, header_text=str(title))
+        fallback_title = payload.get("cover", {}).get("title", "report")
+        header_title = (row.title if row is not None and row.title else None) or fallback_title
+        docx_bytes = assemble_docx(payload, chart_pngs=chart_pngs, header_text=str(header_title))
         from urllib.parse import quote as urlquote
 
-        filename = _sanitize_filename(f"{title}.docx")
+        filename = _sanitize_filename(
+            _build_download_filename(row, fallback_title=fallback_title, ext="docx")
+        )
         return Response(
             content=docx_bytes,
             media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
