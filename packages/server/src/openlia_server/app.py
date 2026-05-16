@@ -284,6 +284,18 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        from openlia_server.routes.reports import _resolve_frontend_dist
+        from openlia_server.services.render_base_url import (
+            RenderBaseUrlResolver,
+            default_probe,
+        )
+
+        app.state.render_base_url_resolver = RenderBaseUrlResolver(
+            server_url=os.environ.get("OPENLIA_SERVER_URL", "http://127.0.0.1:8000"),
+            is_spa_served_locally=lambda: _resolve_frontend_dist() is not None,
+            probe=default_probe,
+        )
+
         # Phase 10: populate dept-health cache. Every dept-route handler
         # and every scheduled-job pre-flight reads from app.state.dept_health.
         from openlia_server.services.dept_health import compute_all as _compute_all_health
