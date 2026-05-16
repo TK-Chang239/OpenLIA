@@ -91,6 +91,88 @@ async def test_generate_appends_native_web_search_tool() -> None:
     assert {"type": "web_search"} in captured["body"]["tools"]
 
 
+async def test_generate_translates_chat_completions_tool_choice_to_responses_shape() -> None:
+    """The runtime emits chat-completions-shape tool_choice for openai
+    provider_kind: `{"type":"function","function":{"name":"X"}}`. The
+    Responses API rejects the nested `function` object — it expects the
+    flat shape `{"type":"function","name":"X"}`. The adapter must
+    translate verbatim chat-shape into Responses-shape before POSTing,
+    so the runtime doesn't need to know which inner endpoint the router
+    will pick for this turn."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="submit_report",
+                        description="submit",
+                        parameters={"type": "object"},
+                    ),
+                ],
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "submit_report"},
+                },
+            )
+        )
+    sent = captured["body"]["tool_choice"]
+    assert sent == {"type": "function", "name": "submit_report"}, sent
+
+
+async def test_generate_passes_string_tool_choice_through_unchanged() -> None:
+    """String-form tool_choice values ("auto", "none", "required") are
+    valid on both APIs and must not be mangled by the translation."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tool_choice="required",
+            )
+        )
+    assert captured["body"]["tool_choice"] == "required"
+
+
+async def test_generate_passes_already_flat_tool_choice_through_unchanged() -> None:
+    """If a caller (or future runtime version) already emits the flat
+    Responses-API shape, the adapter must leave it alone."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tool_choice={"type": "function", "name": "submit_report"},
+            )
+        )
+    assert captured["body"]["tool_choice"] == {
+        "type": "function",
+        "name": "submit_report",
+    }
+
+
 async def test_generate_renders_function_tools_in_responses_shape() -> None:
     """Function-tool ToolSchema entries render as Responses-shape
     `{"type":"function","name":...,"parameters":...}` (top-level fields,
@@ -195,9 +277,7 @@ async def test_input_assistant_with_tool_calls_emits_function_call_items() -> No
     }
 
 
-async def test_openai_responses_conversation_translation_drops_prior_web_search_items() -> (
-    None
-):
+async def test_openai_responses_conversation_translation_drops_prior_web_search_items() -> None:
     """Conversation replay across Responses turns must NOT carry prior
     `web_search_call` items into the next request's `input`. The
     canonical Message list carries assistant `content` (where the
@@ -524,9 +604,7 @@ async def test_stream_targets_responses_endpoint_with_stream_true() -> None:
 
     with respx.mock() as mock:
         mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
-        async for _ in _adapter().stream(
-            LLMRequest(messages=[Message(role="user", content="x")])
-        ):
+        async for _ in _adapter().stream(LLMRequest(messages=[Message(role="user", content="x")])):
             pass
     assert captured["path"] == "/v1/responses"
     assert captured["body"]["stream"] is True
