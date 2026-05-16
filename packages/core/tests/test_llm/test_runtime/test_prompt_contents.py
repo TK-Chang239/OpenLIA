@@ -215,6 +215,9 @@ def test_two_source_discipline_partial_renders_with_budget_and_date() -> None:
     # Transitively includes temporal anchor.
     assert "Thursday, May 14, 2026" in out
     assert "training cutoff" in out.lower()
+    # Citation format directs LLM to emit full tuple and let server number.
+    assert '[source, "Article title", YYYY-MM-DD, url]' in out
+    assert "server deduplicates" in out.lower()
 
 
 def test_equity_research_report_system_includes_two_source_partial() -> None:
