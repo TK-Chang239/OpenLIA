@@ -39,6 +39,8 @@ _TOKEN_RE = re.compile(
                                             # like outstandingShares.annual.0;
                                             # leading hyphen is still rejected
                                             # so it cannot shadow [-idx] syntax
+    | \[ \s* " (?P<dqname>[^"]*) " \s* \]   # ["any key"] — verbatim inner
+    | \[ \s* ' (?P<sqname>[^']*) ' \s* \]   # ['any key'] — verbatim inner
     | \[ \s* (?P<lo>-?\d+)? \s* : \s* (?P<hi>-?\d+)? \s* \]   # [lo:hi] slice
     | \[ \s* (?P<idx>-?\d+) \s* \]          # [i] or [-i]
     | (?P<dot>\.)
@@ -124,6 +126,12 @@ def _tokenize(path: str) -> list[tuple[str, Any]]:
 
         if m.group("name"):
             tokens.append(("name", m.group("name")))
+            prev_kind = "name"
+        elif m.group("dqname") is not None:
+            tokens.append(("name", m.group("dqname")))
+            prev_kind = "name"
+        elif m.group("sqname") is not None:
+            tokens.append(("name", m.group("sqname")))
             prev_kind = "name"
         elif m.group("idx") is not None:
             tokens.append(("index", int(m.group("idx"))))

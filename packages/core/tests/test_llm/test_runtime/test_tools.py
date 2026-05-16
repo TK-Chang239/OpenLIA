@@ -1772,6 +1772,61 @@ class TestReadPayload:
         assert result.ok is False
         assert "error" in result.payload
 
+    async def test_read_payload_resolves_segment_key_with_spaces(self) -> None:
+        """Real-world: provider segment payloads use natural-language keys
+        like 'Intelligent Cloud' and 'Productivity & Business Processes'.
+        These must be accessible via bracket-string form."""
+        stored = {
+            "Segments": {
+                "Intelligent Cloud": {"revenue": 105_360, "mix": 43.7},
+                "Productivity & Business Processes": {"revenue": 76_581, "mix": 31.8},
+                "More Personal Computing": {"revenue": 59_021, "mix": 24.5},
+            },
+        }
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={
+                    "ref": "r_abcd_01",
+                    "path": 'Segments["Productivity & Business Processes"]',
+                },
+            ),
+        )
+
+        assert result.ok is True
+        assert "parse error" not in result.summary
+        assert result.payload == {"revenue": 76_581, "mix": 31.8}
+
+    async def test_read_payload_resolves_holding_ticker_with_dot(self) -> None:
+        """EODHD ETF holdings nest by ticker key like 'AAPL.US', 'BRK-B.US'."""
+        stored = {
+            "Holdings": {
+                "AAPL.US": {"Code": "AAPL", "Pct": 7.18},
+                "BRK-B.US": {"Code": "BRK-B", "Pct": 1.55},
+            },
+        }
+        disp, _ = self._make_disp_with_store(stored)
+
+        result = await disp.dispatch(
+            department_id="equity_research",
+            call=ToolCall(
+                id="c1",
+                name="read_payload",
+                arguments={
+                    "ref": "r_abcd_01",
+                    "path": 'Holdings["BRK-B.US"].Pct',
+                },
+            ),
+        )
+
+        assert result.ok is True
+        # Primitive result wrapped in {"value": ...}
+        assert result.payload == {"value": 1.55}
+
     async def test_read_payload_resolves_iso_date_keyed_path(self) -> None:
         """Provider fundamentals nest data under ISO-date keys; the model
         drills via dotted form and expects a valid slice back, not a parse
