@@ -1,15 +1,10 @@
-# packages/server/tests/test_notifications_stream.py
 from __future__ import annotations
 
-import threading
-import time
 from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
-
 from openlia_server.services.user_presence_registry import UserPresenceRegistry
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -34,10 +29,7 @@ def _make_app(db_session, monkeypatch):
     db_session.commit()
 
     monkeypatch.setenv("OPENLIA_MODE", "personal")
-    app = create_app(db_session_factory=session_mod.SessionLocal)
-    presence = UserPresenceRegistry()
-    app.state.user_presence_registry = presence
-    return app, presence
+    return create_app(db_session_factory=session_mod.SessionLocal)
 
 
 # ---------------------------------------------------------------------------
@@ -46,20 +38,27 @@ def _make_app(db_session, monkeypatch):
 
 
 @pytest.fixture
-def _app_and_presence(db_session, monkeypatch):
-    return _make_app(db_session, monkeypatch)
-
-
-@pytest.fixture
-def test_client(_app_and_presence):
-    app, _ = _app_and_presence
+def _app_and_client(db_session, monkeypatch):
+    app = _make_app(db_session, monkeypatch)
+    presence = UserPresenceRegistry()
+    # Enter the TestClient context so the lifespan runs (populates app.state),
+    # then overwrite with a test-controlled presence instance so route handlers
+    # and app_presence fixture share the same object.
     with TestClient(app) as client:
-        yield client
+        app.state.user_presence_registry = presence
+        app.state.user_presence = presence
+        yield client, presence
 
 
 @pytest.fixture
-def app_presence(_app_and_presence):
-    _, presence = _app_and_presence
+def test_client(_app_and_client) -> TestClient:
+    client, _ = _app_and_client
+    return client
+
+
+@pytest.fixture
+def app_presence(_app_and_client) -> UserPresenceRegistry:
+    _, presence = _app_and_client
     return presence
 
 
@@ -76,45 +75,24 @@ def test_user(db_session):
 
 
 def test_get_notifications_stream_returns_eventstream(
-    test_client: TestClient, app_presence: UserPresenceRegistry
+    test_client: TestClient,
 ) -> None:
-    results: dict = {}
-    stop = threading.Event()
-
-    def opener():
-        with test_client.stream("GET", "/notifications/stream") as resp:
-            results["status_code"] = resp.status_code
-            results["content_type"] = resp.headers.get("content-type", "")
-            stop.wait(timeout=2.0)
-
-    t = threading.Thread(target=opener, daemon=True)
-    t.start()
-    # Give the handler time to call presence.attach() and enter the queue-wait,
-    # then inject an event so the generator yields and the stream unblocks.
-    time.sleep(0.2)
-    app_presence.fanout("local", {"type": "test.ping"})
-    # Give the stream thread time to receive the chunk and record headers.
-    time.sleep(0.2)
-    stop.set()
-    t.join(timeout=3.0)
-    assert results.get("status_code") == 200
-    assert results.get("content_type", "").startswith("text/event-stream")
+    # The endpoint yields an immediate connect heartbeat so TestClient.stream
+    # unblocks as soon as that first byte arrives.
+    with test_client.stream("GET", "/notifications/stream") as resp:
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("text/event-stream")
+        # Consume the initial heartbeat so the context is fully entered.
+        next(resp.iter_bytes(chunk_size=4096), None)
 
 
 def test_open_notification_stream_registers_user_in_presence(
     test_client: TestClient, app_presence: UserPresenceRegistry, test_user
 ) -> None:
-    # Open the stream in a background thread; check presence registers.
-    stop = threading.Event()
-
-    def opener():
-        with test_client.stream("GET", "/notifications/stream") as resp:
-            while not stop.is_set():
-                time.sleep(0.05)
-
-    t = threading.Thread(target=opener, daemon=True)
-    t.start()
-    time.sleep(0.3)
-    assert test_user.id not in app_presence.users_with_no_connections()
-    stop.set()
-    t.join(timeout=2.0)
+    with test_client.stream("GET", "/notifications/stream") as resp:
+        # Consuming the initial heartbeat confirms that presence.attach() has run.
+        next(resp.iter_bytes(chunk_size=4096), None)
+        # User has an open connection — must NOT be in the disconnect map.
+        assert test_user.id not in app_presence.users_with_no_connections()
+    # Stream closed → presence.detach() ran → user IS in the disconnect map.
+    assert test_user.id in app_presence.users_with_no_connections()

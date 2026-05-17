@@ -29,6 +29,11 @@ function NotificationsWatcher(): null {
       error: (msg, opts) => push({ title: msg, tone: "error", undo: opts?.action }),
       info: (msg, opts) => push({ title: msg, tone: "info", undo: opts?.action }),
     },
+    onAttachedReportChanged: (data) => {
+      window.dispatchEvent(
+        new CustomEvent("openlia:attached_report_changed", { detail: data }),
+      );
+    },
   });
   return null;
 }

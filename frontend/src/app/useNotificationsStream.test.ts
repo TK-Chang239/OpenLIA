@@ -55,4 +55,19 @@ describe("useNotificationsStream", () => {
       expect.anything(),
     );
   });
+
+  it("invokes onAttachedReportChanged when chat.attached_report_changed fires", () => {
+    const navigate = vi.fn();
+    const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn() };
+    const onAttachedReportChanged = vi.fn();
+    renderHook(() =>
+      useNotificationsStream({ navigate, toast, onAttachedReportChanged })
+    );
+    lastEventSource.fire("chat.attached_report_changed", {
+      session_id: "sess_test", new_report_id: "r_new",
+    });
+    expect(onAttachedReportChanged).toHaveBeenCalledWith({
+      session_id: "sess_test", new_report_id: "r_new",
+    });
+  });
 });

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   type ChatMessage,
@@ -40,9 +40,12 @@ import { ReportSettingsModal } from "../../components/equity-research/ReportSett
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import { useReportStream } from "../../components/report/useReportStream";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
+import { useToast } from "../../components/primitives/Toast";
 import { useAuth } from "../../auth/AuthContext";
 import { useChatHeaderRegistry } from "../../layouts/ChatHeaderContext";
 import { useErConfig } from "../../hooks/useErConfig";
+
+const CHAT_FOLLOWUP_INTRO_TOAST_KEY = "chat_followup_intro_toast_seen";
 
 interface PersistedToolCall {
   call_id: string;
@@ -103,6 +106,8 @@ export default function EquityResearch(): JSX.Element {
   const { config, patch } = useErConfig();
   const { user } = useAuth();
   const fileViewer = useFileViewer();
+  const toast = useToast();
+  const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tickerParam = searchParams.get("ticker");
@@ -174,6 +179,24 @@ export default function EquityResearch(): JSX.Element {
     resetReportRef.current = resetReport;
     sessionIdRef.current = sessionId;
   });
+
+  // Re-anchor the report card when the server re-attaches a new report to this
+  // session (e.g. after a revision). The event is fired by AppLayout's
+  // NotificationsWatcher via the useNotificationsStream hook.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { session_id, new_report_id } = (e as CustomEvent<{ session_id: string; new_report_id: string }>).detail;
+      if (session_id !== sessionIdRef.current) return;
+      setRestoredReportId(new_report_id);
+      setRestoredExpiredAt(null);
+      setRestoredTombstone(null);
+      void fetchReport(new_report_id)
+        .then((s) => setSchema(s))
+        .catch(() => {/* leave existing card if re-fetch fails */});
+    };
+    window.addEventListener("openlia:attached_report_changed", handler);
+    return () => window.removeEventListener("openlia:attached_report_changed", handler);
+  }, []);
 
   // Pre-fill from ?prompt= and clear the query so manual edits don't re-fire.
   useEffect(() => {
@@ -330,6 +353,41 @@ export default function EquityResearch(): JSX.Element {
       cancelled = true;
     };
   }, [reportState.status, reportState.reportId, schema]);
+
+  // Implicit-binding one-time intro toast: fires on the first report.saved
+  // the user sees, then never again (localStorage flag).
+  useEffect(() => {
+    if (reportState.status !== "complete" || !reportState.reportId) return;
+    if (localStorage.getItem(CHAT_FOLLOWUP_INTRO_TOAST_KEY) === "1") return;
+    localStorage.setItem(CHAT_FOLLOWUP_INTRO_TOAST_KEY, "1");
+    toast.push({
+      title: "Report linked to this chat — ask follow-up questions below.",
+      tone: "info",
+      durationMs: 6000,
+    });
+  }, [reportState.status, reportState.reportId, toast]);
+
+  // Redirect toast: fired when the backend signals this report was generated
+  // in a new session because the current session was already bound.
+  // The redirect_session_id is passed via dispatchReport's return value when
+  // the background-generate endpoint is used (redirect=true path).
+  const [redirectSessionId, setRedirectSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!redirectSessionId) return;
+    const targetId = redirectSessionId;
+    setRedirectSessionId(null);
+    toast.push({
+      title: "Generating new report in a separate thread.",
+      tone: "info",
+      durationMs: 8000,
+      undo: {
+        label: "Open",
+        onClick: () => {
+          void navigate(`/chat/${targetId}`);
+        },
+      },
+    });
+  }, [redirectSessionId, toast, navigate]);
 
   const dispatchReport = useCallback(
     async (text: string, attachments?: File[]) => {
