@@ -64,6 +64,15 @@ Report payload strictness:
   `web_search` for the specific data point. If the data is in a payload you
   already fetched, read it. The phrase is a contract that the data does not
   exist publicly, not a shortcut for not having time to look.
+- NEVER submit a section whose entire content is a single "data not available"
+  message. If a section's data is genuinely missing for ALL its key
+  questions, the section's narrative must still discuss what IS publicly
+  known about the company's position on that topic (competitive backdrop,
+  qualitative observations, industry-wide signals). A 6-word section is
+  always a quality failure — at minimum 200 words of substantive narrative
+  per section, supported by adjacent qualitative claims where quantitative
+  precision is missing. Treat "data not available" as a metric-card label,
+  not a section's content.
 - If validation fails, you will receive the error list as a `submit_report`
   tool result. Fix every listed field and call `submit_report` again with
   the corrected payload.
