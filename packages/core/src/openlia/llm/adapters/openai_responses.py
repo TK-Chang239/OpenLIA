@@ -45,6 +45,26 @@ _DEFAULT_BASE_URL = "https://api.openai.com"
 _WEB_SEARCH_NATIVE_TYPE = "web_search"
 
 
+def _normalize_tool_choice(tc: object) -> object:
+    """Translate chat-completions-shape tool_choice into Responses shape.
+
+    The runtime emits the chat-completions form for OpenAI:
+    `{"type":"function","function":{"name":"X"}}`. The Responses API
+    rejects the nested `function` object with "Unknown parameter:
+    'tool_choice.function'" and expects the flat form
+    `{"type":"function","name":"X"}` instead. String forms ("auto",
+    "none", "required") and already-flat dicts pass through unchanged.
+    """
+    if (
+        isinstance(tc, dict)
+        and tc.get("type") == "function"
+        and isinstance(tc.get("function"), dict)
+        and tc["function"].get("name")
+    ):
+        return {"type": "function", "name": tc["function"]["name"]}
+    return tc
+
+
 def _build_responses_tools(request: LLMRequest) -> list[dict] | None:
     """Render request.tools into Responses-shape tools array.
 
@@ -86,9 +106,7 @@ def _to_responses_input(messages: list[Message]) -> list[dict]:
     items: list[dict] = []
     for m in messages:
         if m.role == "user":
-            items.append(
-                {"role": "user", "content": [{"type": "input_text", "text": m.content}]}
-            )
+            items.append({"role": "user", "content": [{"type": "input_text", "text": m.content}]})
         elif m.role == "assistant":
             if m.content:
                 items.append(
@@ -174,9 +192,7 @@ def _parse_responses_output(
             status = item.get("status", "completed")
             if status == "failed":
                 err = item.get("error") or {}
-                error_code = (
-                    str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
-                )
+                error_code = str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
                 failures.append(
                     FailedSearch(
                         query=query,
@@ -235,10 +251,7 @@ class OpenAIResponsesAdapter(LLMProvider):
                         headers=dict(resp.headers),
                     )
                 data = resp.json()
-                return [
-                    ModelInfo(id=m["id"], display_name=m["id"])
-                    for m in data.get("data", [])
-                ]
+                return [ModelInfo(id=m["id"], display_name=m["id"]) for m in data.get("data", [])]
 
         return await with_retries(_call)
 
@@ -255,7 +268,7 @@ class OpenAIResponsesAdapter(LLMProvider):
         if tools is not None:
             payload["tools"] = tools
         if request.tool_choice is not None:
-            payload["tool_choice"] = request.tool_choice
+            payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
 
         async def _post() -> dict:
             async with make_client(base_url=self._base_url, headers=self._headers()) as client:
@@ -281,11 +294,13 @@ class OpenAIResponsesAdapter(LLMProvider):
             failures,
         ) = _parse_responses_output(body.get("output", []))
         usage = body.get("usage") or {}
+        cached_tokens = int((usage.get("input_tokens_details") or {}).get("cached_tokens", 0))
         return LLMResponse(
             text="".join(text_parts),
             finish_reason=body.get("status", "completed"),
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
+            cached_input_tokens=cached_tokens,
             tool_calls=tool_calls,
             citations=citations,
             server_tool_calls=server_tool_calls,
@@ -317,7 +332,7 @@ class OpenAIResponsesAdapter(LLMProvider):
         if tools is not None:
             payload["tools"] = tools
         if request.tool_choice is not None:
-            payload["tool_choice"] = request.tool_choice
+            payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
 
         async with make_client(base_url=self._base_url, headers=self._headers()) as client:
             try:

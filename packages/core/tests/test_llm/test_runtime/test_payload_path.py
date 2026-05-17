@@ -174,3 +174,103 @@ def test_filter_expression_still_errors() -> None:
     # We don't try to silently fix predicate filters — they change semantics.
     with pytest.raises(PathParseError):
         apply_path({"rows": []}, "rows[?(@.x>0)]")
+
+
+# --- Provider-payload key shapes (date keys, numeric keys) ---
+
+
+def test_dotted_date_key_resolves() -> None:
+    # Provider fundamentals nest by ISO date; the LLM drills via dotted form.
+    payload = {
+        "Financials": {
+            "Income_Statement": {
+                "yearly": {"2026-01-31": {"totalRevenue": 281700}},
+            },
+        },
+    }
+    assert apply_path(payload, "Financials.Income_Statement.yearly.2026-01-31") == {
+        "totalRevenue": 281700
+    }
+
+
+def test_dotted_date_key_then_field_resolves() -> None:
+    payload = {"yearly": {"2026-01-31": {"totalRevenue": 281700}}}
+    assert apply_path(payload, "yearly.2026-01-31.totalRevenue") == 281700
+
+
+def test_bracket_string_date_key_resolves() -> None:
+    payload = {"yearly": {"2026-01-31": {"totalRevenue": 281700}}}
+    assert apply_path(payload, 'yearly["2026-01-31"]') == {"totalRevenue": 281700}
+
+
+def test_numeric_leading_key_resolves() -> None:
+    # EODHD outstandingShares.annual uses string-integer keys like "0", "1".
+    payload = {"annual": {"0": {"shares": 7_400_000_000}}}
+    assert apply_path(payload, "annual.0.shares") == 7_400_000_000
+
+
+def test_leading_hyphen_still_rejected() -> None:
+    # A bareword cannot start with a hyphen; that would collide with -idx.
+    with pytest.raises(PathParseError):
+        apply_path({"-x": 1}, "-x")
+
+
+# --- Bracket-quoted keys with arbitrary characters ---
+# Real provider payloads contain keys with spaces, dots, %, /, &, etc.
+# Bareword syntax cannot express these — bracket-string is the canonical
+# fallback. Inner content of a quoted bracket key is taken verbatim.
+
+
+def test_bracket_string_key_with_space() -> None:
+    # FMP segment data: keys like "Intelligent Cloud", "More Personal Computing".
+    payload = {"segments": {"Intelligent Cloud": {"revenue": 105_360}}}
+    assert apply_path(payload, 'segments["Intelligent Cloud"]') == {"revenue": 105_360}
+
+
+def test_bracket_string_key_with_dot() -> None:
+    # EODHD ETF holdings: keys are tickers like "AAPL.US", "BRK-B.US".
+    payload = {"Holdings": {"AAPL.US": {"Code": "AAPL", "Pct": 7.2}}}
+    assert apply_path(payload, 'Holdings["AAPL.US"]') == {"Code": "AAPL", "Pct": 7.2}
+
+
+def test_bracket_string_key_with_percent_sign() -> None:
+    # EODHD fund composition: keys like "Long_%", "Equity_%", "Assets_%".
+    payload = {"AssetAllocation": {"Long_%": "99.6"}}
+    assert apply_path(payload, 'AssetAllocation["Long_%"]') == "99.6"
+
+
+def test_bracket_string_key_with_slash() -> None:
+    # EODHD geographic regions: "Africa/Middle East".
+    payload = {"World": {"Africa/Middle East": {"Equity_%": "0"}}}
+    assert apply_path(payload, 'World["Africa/Middle East"]') == {"Equity_%": "0"}
+
+
+def test_bracket_string_key_with_ampersand_and_spaces() -> None:
+    # MSFT segment key: "Productivity & Business Processes".
+    payload = {
+        "Segments": {"Productivity & Business Processes": {"mix": 31.8}},
+    }
+    assert apply_path(payload, 'Segments["Productivity & Business Processes"]') == {"mix": 31.8}
+
+
+def test_bracket_string_key_at_path_start() -> None:
+    # Bracket-quoted key can also be the very first token of the path.
+    payload = {"Basic Materials": {"Equity_%": "1.75"}}
+    assert apply_path(payload, '["Basic Materials"]') == {"Equity_%": "1.75"}
+
+
+def test_bracket_string_key_then_dotted_subkey() -> None:
+    # Composition: bracket key followed by a dotted sub-access.
+    payload = {"Holdings": {"BRK-B.US": {"Code": "BRK-B"}}}
+    assert apply_path(payload, 'Holdings["BRK-B.US"].Code') == "BRK-B"
+
+
+def test_bracket_string_key_single_quoted() -> None:
+    # Single-quote form is supported alongside double-quote.
+    payload = {"Sectors": {"Health Care": 11.2}}
+    assert apply_path(payload, "Sectors['Health Care']") == 11.2
+
+
+def test_bracket_string_unclosed_quote_errors() -> None:
+    with pytest.raises(PathParseError):
+        apply_path({"a": 1}, '["a')

@@ -247,9 +247,7 @@ async def test_generate_appends_native_web_search_tool_block() -> None:
             )
         )
     body = json.loads(captured["payload"])
-    assert body["tools"] == [
-        {"type": "web_search_20250305", "name": "web_search", "max_uses": 7}
-    ]
+    assert body["tools"] == [{"type": "web_search_20250305", "name": "web_search", "max_uses": 7}]
 
 
 async def test_generate_uses_default_max_uses_when_unspecified() -> None:
@@ -398,9 +396,7 @@ async def test_generate_extracts_citations_from_web_search_results() -> None:
         {"type": "text", "text": "Two findings."},
     ]
     with respx.mock() as mock:
-        mock.post("https://api.anthropic.com/v1/messages").mock(
-            return_value=_ok_response(content)
-        )
+        mock.post("https://api.anthropic.com/v1/messages").mock(return_value=_ok_response(content))
         resp = await adapter.generate(
             LLMRequest(
                 messages=[Message(role="user", content="hi")],
@@ -437,9 +433,7 @@ async def test_generate_detects_web_search_tool_result_error_as_failed_search() 
         },
     ]
     with respx.mock() as mock:
-        mock.post("https://api.anthropic.com/v1/messages").mock(
-            return_value=_ok_response(content)
-        )
+        mock.post("https://api.anthropic.com/v1/messages").mock(return_value=_ok_response(content))
         resp = await adapter.generate(
             LLMRequest(
                 messages=[Message(role="user", content="hi")],
@@ -522,6 +516,46 @@ async def test_stream_emits_server_tool_completed_with_urls() -> None:
     assert e.provider == "anthropic"
     assert e.n_results == 2
     assert e.urls == ("https://reuters.com/a", "https://ft.com/b")
+
+
+async def test_generate_surfaces_cached_input_tokens() -> None:
+    """Anthropic returns cache-read counts under
+    `usage.cache_read_input_tokens`. Surface them on LLMResponse."""
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200,
+            json={
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "hi"}],
+                "usage": {
+                    "input_tokens": 5_000,
+                    "output_tokens": 50,
+                    "cache_read_input_tokens": 4_800,
+                },
+            },
+        )
+        resp = await _adapter().generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.cached_input_tokens == 4_800
+
+
+async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> None:
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").respond(
+            200,
+            json={
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "hi"}],
+                "usage": {"input_tokens": 5, "output_tokens": 2},
+            },
+        )
+        resp = await _adapter().generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.cached_input_tokens == 0
 
 
 async def test_stream_text_chunks_have_no_server_tool_event() -> None:

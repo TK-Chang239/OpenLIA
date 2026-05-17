@@ -167,6 +167,12 @@ class LLMResponse:
     finish_reason: str
     input_tokens: int
     output_tokens: int
+    # Cached portion of input_tokens served from the provider's prompt cache.
+    # 0 when the provider does not report it or no cache hit occurred. Used
+    # by the runtime to record cache hit rate per turn and surface in dev
+    # events. Cost-aware callers should treat this as already-billed at the
+    # cache-read price, not the full input price.
+    cached_input_tokens: int = 0
     tool_calls: list[ToolCall] = field(default_factory=list)
     # Source references collected from native tool results (kind="tool")
     # and web search results (kind="web"). Empty tuple for adapters that

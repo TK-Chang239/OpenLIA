@@ -23,6 +23,7 @@ Reading externalized payloads:
   - `read_payload(ref, "rows[0:5]")` — array slice.
   - `read_payload(ref, "rows.revenue")` — column projection across a list of dicts (returns a list of values).
 - Path forms compose: `rows[0:5].revenue` slices then projects; `data.rows[-1]` navigates then indexes.
+- Names accept letters, digits, underscore, and hyphen interior — provider payloads keyed by ISO date work directly: `read_payload(ref, "Financials.Income_Statement.yearly.2026-01-31")`. For any key that contains a space, dot, ampersand, slash, percent, or other punctuation, use bracket-string form: `read_payload(ref, 'Segments["Intelligent Cloud"]')`, `read_payload(ref, 'Holdings["AAPL.US"].Pct')`, `read_payload(ref, 'AssetAllocation["Long_%"]')`. Single quotes around the outer path arg and double quotes inside (or vice versa) avoids escaping. Do **not** give up and write "Data not available" after a single `parse error` — re-read this rule, switch to the bracket form, and retry before falling back.
 - Calling `read_payload(ref)` without a path returns the entire payload. If the payload exceeds ~50KB, you get another stub instead — slice with a path to avoid this.
 - Refs are scoped to the current run. A ref returned in this conversation will not be valid in a future one.
 

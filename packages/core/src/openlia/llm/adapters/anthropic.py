@@ -160,6 +160,7 @@ def _parse_anthropic_content(
         # future Anthropic content block additions.
     return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
 
+
 _BASE_URL = "https://api.anthropic.com"
 _API_VERSION = "2023-06-01"
 
@@ -263,6 +264,7 @@ class AnthropicAdapter(LLMProvider):
             finish_reason=body.get("stop_reason", "end_turn"),
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
+            cached_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
             tool_calls=tool_calls,
             citations=citations,
             server_tool_calls=server_tool_calls,
