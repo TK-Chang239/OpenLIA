@@ -3,7 +3,7 @@ import type { JSX, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { fetchRepoFacets, saveToRepo, unsaveFromRepo, type RepoFacets, type RepoRow } from "../api/repo";
-import { deleteReport, reportPdfUrl } from "../api/reports";
+import { deleteReport } from "../api/reports";
 import { DeleteReportDialog } from "../components/report/DeleteReportDialog";
 import { useRepoList } from "../hooks/useRepoList";
 import { useFileViewer } from "../components/viewer/FileViewerContext";
@@ -299,7 +299,6 @@ export default function Repository(): JSX.Element {
               <RepoListItem
                 key={row.id}
                 row={row}
-                downloadUrl={reportPdfUrl(row.report_id)}
                 onOpen={handleOpen}
                 onRemove={(r) => {
                   if (isPastRetention(r)) {

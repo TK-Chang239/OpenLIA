@@ -51,4 +51,23 @@ describe('BlockRenderer', () => {
     render(<BlockRenderer block={{ type: 'movie', src: 'x' } as any} />);
     expect(screen.getByText(/unsupported block/i)).toBeInTheDocument();
   });
+
+  it('wraps chart blocks with data-block-path when path is provided', () => {
+    const { container } = render(
+      <BlockRenderer
+        block={{ type: 'pie_chart', title: 'x', segments: [{ label: 'a', value: 1 }] }}
+        blockPath="0-2"
+      />,
+    );
+    const wrapper = container.querySelector('[data-block-path="0-2"]');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.getAttribute('data-block-type')).toBe('pie_chart');
+  });
+
+  it('does not wrap text blocks with data-block-path', () => {
+    const { container } = render(
+      <BlockRenderer block={{ type: 'text', content: 'hi' }} blockPath="0-0" />,
+    );
+    expect(container.querySelector('[data-block-path]')).toBeNull();
+  });
 });

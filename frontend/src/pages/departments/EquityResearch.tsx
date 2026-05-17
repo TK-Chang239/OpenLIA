@@ -20,8 +20,6 @@ import {
   deleteReport,
   fetchReport,
   listReports,
-  reportDocxUrl,
-  reportPdfUrl,
   type ReportSchema,
 } from "../../api/reports";
 import { AssistantMessage } from "../../components/chat/AssistantMessage";
@@ -556,11 +554,6 @@ export default function EquityResearch(): JSX.Element {
     clear,
   ]);
 
-  const handleDownload = (id: string, fmt: "pdf" | "docx") => {
-    const url = fmt === "pdf" ? reportPdfUrl(id) : reportDocxUrl(id);
-    window.open(url, "_blank", "noopener");
-  };
-
   const handleSave = async (id: string) => {
     await saveReportToRepo(id);
   };
@@ -683,7 +676,6 @@ export default function EquityResearch(): JSX.Element {
                     generatedSeconds={genDurationSec}
                     citationsCount={schema.citations?.length ?? 0}
                     onOpen={openReport}
-                    onDownload={handleDownload}
                     onSave={handleSave}
                     onUnsave={handleUnsave}
                     onDelete={handleDelete}

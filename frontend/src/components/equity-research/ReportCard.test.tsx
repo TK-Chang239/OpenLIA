@@ -1,5 +1,4 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 
@@ -34,7 +33,6 @@ describe("ReportCard", () => {
     renderCard({
       ...baseProps,
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
     });
     expect(screen.getByText(/stock update report/i)).toBeInTheDocument();
@@ -47,7 +45,6 @@ describe("ReportCard", () => {
     renderCard({
       ...baseProps,
       onOpen,
-      onDownload: () => {},
       onSave: () => {},
     });
     fireEvent.click(screen.getByRole("button", { name: /open report/i }));
@@ -63,59 +60,26 @@ describe("ReportCard", () => {
       createdAt: "2026-04-09T12:00:00Z",
       preview: "x",
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
     });
     expect(screen.getByText(/sector research report/i)).toBeInTheDocument();
     expect(screen.getByText(/Semiconductors/)).toBeInTheDocument();
   });
 
-  it("Download dropdown shows PDF and DOCX items (NEW-14-04)", async () => {
-    const user = userEvent.setup();
-    renderCard({
-      ...baseProps,
-      onOpen: () => {},
-      onDownload: () => {},
-      onSave: () => {},
-    });
-    await user.click(screen.getByRole("button", { name: /^download$/i }));
-    await waitFor(() => {
-      expect(
-        screen.getByRole("menuitem", { name: /download as pdf/i }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("menuitem", { name: /download as docx/i }),
-      ).toBeInTheDocument();
-    });
+  it("renders a shared download button (delegated component)", () => {
+    renderCard({ ...baseProps, onOpen: () => {}, onSave: () => {} });
+    expect(
+      screen.getByRole("button", { name: /download report/i }),
+    ).toBeInTheDocument();
   });
 
-  it("clicking Download as DOCX invokes onDownload with format=docx", async () => {
-    const user = userEvent.setup();
-    const onDownload = vi.fn();
-    renderCard({
-      ...baseProps,
-      onOpen: () => {},
-      onDownload,
-      onSave: () => {},
-    });
-    await user.click(screen.getByRole("button", { name: /^download$/i }));
-    const docxItem = await screen.findByRole("menuitem", {
-      name: /download as docx/i,
-    });
-    await user.click(docxItem);
-    await waitFor(() => {
-      expect(onDownload).toHaveBeenCalledWith("r1", "docx");
-    });
-  });
-
-  it("clicking Save flips the bookmark to saved (NEW-14-05)", async () => {
+  it("clicking Save flips the bookmark to saved", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
     const recentCreatedAt = new Date(Date.now() - 86_400_000).toISOString();
     renderCard({
       ...baseProps,
       createdAt: recentCreatedAt,
       onOpen: () => {},
-      onDownload: () => {},
       onSave,
     });
     const saveBtn = screen.getByRole("button", { name: /save to repo/i });
@@ -135,7 +99,6 @@ describe("ReportCard", () => {
       ...baseProps,
       expiredAt: "2026-05-15T12:00:00Z",
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
     });
     expect(screen.getByTestId("er-report-card-tombstone")).toBeInTheDocument();
@@ -152,7 +115,6 @@ describe("ReportCard", () => {
       createdAt: recentCreatedAt,
       initialSaved: true,
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
       onUnsave,
     });
@@ -175,7 +137,6 @@ describe("ReportCard", () => {
       createdAt: oldCreatedAt,
       initialSaved: true,
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
       onDelete: vi.fn(),
     });
@@ -193,7 +154,6 @@ describe("ReportCard", () => {
       createdAt: oldCreatedAt,
       initialSaved: true,
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
       onDelete,
     });
@@ -213,7 +173,6 @@ describe("ReportCard", () => {
     renderCard({
       ...baseProps,
       onOpen: () => {},
-      onDownload: () => {},
       onSave: () => {},
     });
     fireEvent.click(screen.getByRole("button", { name: /discuss/i }));

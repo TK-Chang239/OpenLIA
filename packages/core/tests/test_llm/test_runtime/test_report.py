@@ -98,14 +98,14 @@ class _Registry:
 
 
 def _always(resolved):
-    def _r(*, department_id, user_id, registry):
+    def _r(*, department_id, user_id, registry, **_kwargs):
         return resolved
 
     return _r
 
 
 def _raises(exc):
-    def _r(*, department_id, user_id, registry):
+    def _r(*, department_id, user_id, registry, **_kwargs):
         raise exc
 
     return _r

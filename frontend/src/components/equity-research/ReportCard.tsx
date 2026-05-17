@@ -1,8 +1,6 @@
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Bookmark,
-  ChevronDown,
   Clock,
   FileText,
   Globe,
@@ -16,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import type { ReportMode } from "../../api/equity-research";
 import { createSession } from "../../api/chat";
 import { DeleteReportDialog } from "../report/DeleteReportDialog";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 import { useSavedReportsOptional } from "../repo/SavedReportsContext";
 import type { FailedReport } from "./FailedReportCard";
 import { FailedReportCard } from "./FailedReportCard";
@@ -69,7 +68,6 @@ interface CompletedProps {
   /** Number of cited sources. */
   citationsCount?: number;
   onOpen: (reportId: string) => void;
-  onDownload: (reportId: string, format: "pdf" | "docx") => void;
   onSave: (reportId: string) => void | Promise<void>;
   /** Soft-unsave: removes the repo_items pointer. Only invoked when age < 7d. */
   onUnsave?: (reportId: string) => void | Promise<void>;
@@ -102,7 +100,6 @@ function CompletedReportCard({
   generatedSeconds,
   citationsCount,
   onOpen,
-  onDownload,
   onSave,
   onUnsave,
   onDelete,
@@ -325,37 +322,7 @@ function CompletedReportCard({
           Discuss
         </button>
 
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              aria-label="Download"
-              className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
-            >
-              Download
-              <ChevronDown size={12} strokeWidth={2} />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              sideOffset={4}
-              className="z-50 min-w-[180px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-1 text-sm shadow-lg"
-            >
-              <DropdownMenu.Item
-                onSelect={() => onDownload(reportId, "pdf")}
-                className="cursor-pointer rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-[--color-surface-hover]"
-              >
-                Download as PDF
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                onSelect={() => onDownload(reportId, "docx")}
-                className="cursor-pointer rounded-sm px-2 py-1.5 outline-none data-[highlighted]:bg-[--color-surface-hover]"
-              >
-                Download as DOCX
-              </DropdownMenu.Item>
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+        <ReportDownloadButton reportId={reportId} variant="primary" />
 
         <div className="flex-1" />
 

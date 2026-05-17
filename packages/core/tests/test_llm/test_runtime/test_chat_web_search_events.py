@@ -150,9 +150,7 @@ async def test_chunk_without_server_tool_event_emits_no_web_search_frames(
     prompts_root: Path,
 ) -> None:
     """Plain text streams must not produce any ChatWebSearch* events."""
-    provider = FakeProvider(
-        script=FakeProviderScript(turns=[("final", ""), ("tokens", ["Hello"])])
-    )
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["Hello"])]))
     runner = ChatRunner(
         prompts=PromptLoader(root=prompts_root),
         tools=ToolDispatcher(
@@ -172,6 +170,4 @@ async def test_chunk_without_server_tool_event_emits_no_web_search_frames(
             messages=[ChatMessage(role="user", content="hi")],
         )
     )
-    assert not any(
-        isinstance(e, (ChatWebSearchInvoked, ChatWebSearchCompleted)) for e in events
-    )
+    assert not any(isinstance(e, (ChatWebSearchInvoked, ChatWebSearchCompleted)) for e in events)

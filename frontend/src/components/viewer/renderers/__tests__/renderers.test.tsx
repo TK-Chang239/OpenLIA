@@ -21,7 +21,7 @@ describe("renderers", () => {
 
   it("Markdown renders headings and paragraphs", async () => {
     mockFetchText("# Hello\n\nThis is content.");
-    render(<MarkdownRenderer source={{ kind: "report", reportId: "1" }} />);
+    render(<MarkdownRenderer source={{ kind: "attachment", attachmentId: "1" }} />);
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Hello" })).toBeInTheDocument(),
     );
@@ -29,7 +29,7 @@ describe("renderers", () => {
 
   it("Code renders monospace body with line numbers", async () => {
     mockFetchText("line1\nline2");
-    render(<CodeRenderer source={{ kind: "report", reportId: "1" }} />);
+    render(<CodeRenderer source={{ kind: "attachment", attachmentId: "1" }} />);
     await waitFor(() => expect(screen.getByText(/line1/)).toBeInTheDocument());
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
@@ -37,7 +37,7 @@ describe("renderers", () => {
 
   it("CSV renders table with header and rows", async () => {
     mockFetchText("a,b\n1,2\n3,4");
-    render(<CsvRenderer source={{ kind: "report", reportId: "1" }} />);
+    render(<CsvRenderer source={{ kind: "attachment", attachmentId: "1" }} />);
     await waitFor(() => expect(screen.getByText("a")).toBeInTheDocument());
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
@@ -50,11 +50,11 @@ describe("renderers", () => {
   });
 
   it("Unsupported shows message + download link", () => {
-    render(<UnsupportedRenderer source={{ kind: "report", reportId: "5" }} filename="x.exe" />);
+    render(<UnsupportedRenderer source={{ kind: "attachment", attachmentId: "5" }} filename="x.exe" />);
     expect(screen.getByText(/preview not available/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /download/i })).toHaveAttribute(
       "href",
-      "/api/reports/5/download",
+      "/api/chat/attachments/5/download",
     );
   });
 });

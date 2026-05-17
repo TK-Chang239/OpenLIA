@@ -107,8 +107,14 @@ export function ReportRenderer({
         <main className="report__main">
           <ReportCover cover={schema.cover} />
           <ScrollTracker sectionIds={sectionIds} onActiveId={setActiveId} />
-          {schema.sections.map((s) => (
-            <ReportSection key={s.id} id={s.id} title={s.title} blocks={s.blocks as any[]} />
+          {schema.sections.map((s, idx) => (
+            <ReportSection
+              key={s.id}
+              id={s.id}
+              title={s.title}
+              blocks={s.blocks as any[]}
+              sectionIndex={idx}
+            />
           ))}
           {citations.length ? <CitationsSection citations={citations} /> : null}
         </main>

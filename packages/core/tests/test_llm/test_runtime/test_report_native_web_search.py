@@ -147,11 +147,7 @@ async def test_report_request_carries_native_web_search_when_variant_native(
             "sections": [{"id": "overview", "blocks": []}],
         },
     )
-    provider = FakeProvider(
-        script=FakeProviderScript(
-            turns=[("tool_calls", [submit_call])] * 30
-        )
-    )
+    provider = FakeProvider(script=FakeProviderScript(turns=[("tool_calls", [submit_call])] * 30))
     runner = _build(
         prompts_root=prompts_root,
         frameworks_root=frameworks_root,
@@ -188,11 +184,7 @@ async def test_report_request_omits_native_web_search_when_variant_not_native(
             "sections": [{"id": "overview", "blocks": []}],
         },
     )
-    provider = FakeProvider(
-        script=FakeProviderScript(
-            turns=[("tool_calls", [submit_call])] * 30
-        )
-    )
+    provider = FakeProvider(script=FakeProviderScript(turns=[("tool_calls", [submit_call])] * 30))
     runner = _build(
         prompts_root=prompts_root,
         frameworks_root=frameworks_root,

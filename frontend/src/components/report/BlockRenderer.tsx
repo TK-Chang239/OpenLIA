@@ -24,9 +24,26 @@ import { ComboChartBlock } from './charts/ComboChartBlock';
 export interface BlockRendererProps {
   block: any;
   forcedHeight?: ForcedHeight;
+  /** When set on a chart block, wraps the chart in
+   *  `<div data-block-path="..." data-block-type="...">` so headless export
+   *  can locate it and screenshot the rendered chart for DOCX. */
+  blockPath?: string;
 }
 
-export function BlockRenderer({ block, forcedHeight: _forcedHeight }: BlockRendererProps) {
+const CHART_TYPES = new Set([
+  'line_chart',
+  'bar_chart',
+  'area_chart',
+  'pie_chart',
+  'candlestick_chart',
+  'waterfall_chart',
+  'scatter_plot',
+  'heatmap',
+  'treemap',
+  'combo_chart',
+]);
+
+function renderInner(block: any, renderChild?: (child: any, forced: ForcedHeight | undefined) => JSX.Element) {
   switch (block.type) {
     case 'text':
       return <TextBlock content={block.content} />;
@@ -54,9 +71,10 @@ export function BlockRenderer({ block, forcedHeight: _forcedHeight }: BlockRende
       return (
         <GroupBlock
           {...block}
-          renderChild={(child: any, forced) => (
-            <BlockRenderer block={child} forcedHeight={forced} />
-          )}
+          renderChild={
+            renderChild ??
+            ((child: any, forced) => <BlockRenderer block={child} forcedHeight={forced} />)
+          }
         />
       );
     case 'line_chart':
@@ -86,4 +104,16 @@ export function BlockRenderer({ block, forcedHeight: _forcedHeight }: BlockRende
         </div>
       );
   }
+}
+
+export function BlockRenderer({ block, forcedHeight: _forcedHeight, blockPath }: BlockRendererProps) {
+  const inner = renderInner(block);
+  if (blockPath && CHART_TYPES.has(block.type)) {
+    return (
+      <div data-block-path={blockPath} data-block-type={block.type}>
+        {inner}
+      </div>
+    );
+  }
+  return inner;
 }
