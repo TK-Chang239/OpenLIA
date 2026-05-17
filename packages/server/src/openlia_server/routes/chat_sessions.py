@@ -62,6 +62,7 @@ class SessionOut(BaseModel):
     is_pinned: bool
     is_archived: bool
     created_at: datetime
+    attached_report_id: str | None = None
     model_id: str | None = None
     disabled_connector_ids: list[str] = Field(default_factory=list)
     disabled_skill_ids: list[str] = Field(default_factory=list)
@@ -162,11 +163,18 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> SessionOut:
-        row = svc.create_session(db, user_id=user.id, department=body.department, title=body.title)
+        row = svc.create_session(
+            db,
+            user_id=user.id,
+            department=body.department,
+            title=body.title,
+            attached_report_id=body.attached_report_id,
+        )
         if body.attached_report_id:
             _attach_report_as_context(
                 db, session_id=row.id, user_id=user.id, report_id=body.attached_report_id
             )
+            db.commit()
         return SessionOut.model_validate(row, from_attributes=True)
 
     @router.get("/by-department/{department}", response_model=SessionOut)
