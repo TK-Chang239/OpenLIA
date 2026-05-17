@@ -369,7 +369,11 @@ class SubagentReportRunner:
         editor = EditorClient(
             provider=flagship,
             repair_budget=1,
-            max_output_tokens=8192,
+            # 14 sections + cover + rail + citations easily exceeds 8192
+            # tokens in JSON. iter9 hit the cap and lost cover.title/etc,
+            # failing strict validation. 32768 gives substantial headroom
+            # for the full report plus model reasoning before tool call.
+            max_output_tokens=32768,
             on_done=_editor_on_done,
         )
         open_qs: list[OpenQuestion] = [
