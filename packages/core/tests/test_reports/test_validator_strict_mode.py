@@ -94,11 +94,14 @@ def test_enforce_strict_raises_with_all_uncited_paths() -> None:
 # ─── ReportRunner integration (mocked validator path) ──────────────────────
 
 
-def test_report_request_defaults_to_warn_mode() -> None:
+def test_report_request_defaults_to_strict_mode() -> None:
+    """As of 2026-05-17, citations_strict defaults to True so the writer
+    must repair uncited concrete claims rather than emit them as
+    warnings only. See analysis-loop iteration 1 changelog."""
     from openlia.llm.runtime.messages import ReportRequest
 
     req = ReportRequest(mode="stock_initiation", user_input="AAPL")
-    assert req.citations_strict is False
+    assert req.citations_strict is True
 
 
 def test_report_request_accepts_citations_strict_true() -> None:

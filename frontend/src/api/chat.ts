@@ -20,6 +20,7 @@ export interface ChatSession {
   disabled_connector_ids?: string[];
   disabled_skill_ids?: string[];
   response_length?: ResponseLength | null;
+  attached_report_id?: string | null;
 }
 
 export interface MessageAttachment {
