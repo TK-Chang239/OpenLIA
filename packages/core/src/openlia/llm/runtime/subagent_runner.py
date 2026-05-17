@@ -323,10 +323,10 @@ class SubagentReportRunner:
                             {
                                 "type": "text",
                                 "content": (
-                                    f"Section narrative could not be produced "
-                                    f"by the section writer (subagent error). "
-                                    f"Available data for this section is "
-                                    f"described below in tables/charts if any."
+                                    "Section narrative could not be produced "
+                                    "by the section writer (subagent error). "
+                                    "Available data for this section is "
+                                    "described below in tables/charts if any."
                                 ),
                             }
                         ],
