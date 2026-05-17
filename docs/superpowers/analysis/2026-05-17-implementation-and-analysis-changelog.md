@@ -365,6 +365,44 @@ After F17 (explicit eager-fetch list in planner prompt) the planner SHOULD decla
 
 ---
 
+## Phase 3 — Plans 2/3/4 implementation (resumed after user override)
+
+User instruction at session midpoint: *"OK for 1 and 2. You should've continued to complete plan 2/3/4."* Reversed the Plan 2-4 deferral and executed all three.
+
+### Final completion status
+
+| Plan | Total tasks | Done | Status |
+|---|---|---|---|
+| Plan 1: Subagent runner | 18 | 18 | ✅ |
+| Plan 2: Chat followup | 16 | 16 | ✅ |
+| Plan 3: Background generation | 21 | 21 | ✅ |
+| Plan 4: Revision pass | 17 | 17 | ✅ |
+| **Total** | **72** | **72** | ✅ |
+
+### Branch state at session-end
+
+- `feat/subagent-report-architecture` — Plan 1 + iter 1-2 fixes (F1-F8)
+- `feat/report-chat-followup` — Plan 1 + Plan 2 Tasks 1-5 + F9-F17
+- `feat/background-report-generation` — Plan 3 Task 1 only
+- `feat/revision-pass` — **consolidated branch with all of Plans 1, 2, 3, 4 + every analysis-loop fix (F1-F17).** Deliverable branch (~50 commits).
+
+### Design decisions during plans-execution
+
+- **Branch consolidation.** Parallel-agent dispatches put commits on whichever branch was active in the shared working tree at commit time. Rather than fight that, merged everything into `feat/revision-pass`. User can rebase later for clean per-plan branches.
+- **Frontend tasks included.** All TypeScript tasks dispatched with `tsc --noEmit` lint check. All landed.
+- **Adapter patterns.** Plan code repeatedly referenced field names that didn't exist on actual models (`ReportError.code` → `error_class`, `Report.report_schema_json` → `content_structured`, etc.). Each agent adapted while preserving plan intent.
+- **Continuation agents.** When a frontend agent ran out of context mid-investigation, re-dispatched with the prior agent's findings pasted into the prompt.
+
+### Outstanding for follow-up sessions
+
+1. **Live iter-7 NET run** with F17 in place — verifies the eager-fetch planner list closes the "data not available" gap from iter 1-6.
+2. **Hybrid finalization** — subagent runner is missing citations & charts in output. Add a flagship pass after section drafting that injects `submit_report`-style structured blocks on top of the subagent prose.
+3. **Branch cleanup** — for clean per-plan PRs, rebase or cherry-pick from `feat/revision-pass` into the named branches.
+
+---
+
 ## Open questions for the user (to address on return)
 
-_(populated as questions arise during the analysis loop)_
+1. **Server restart pending.** Restart `openlia serve` from `feat/revision-pass` to pick up F17 + the new lifespan wiring (Plan 3 Task 16 registered BackgroundReportRegistry on `app.state` at startup, plus the auto-cancel sweep loop).
+2. **Hybrid finalization decision.** Want to add a flagship-pass-on-top-of-subagent-prose now or keep the runners separate? Recommendation: add it before user-facing rollout, since "no citations" is a quality regression no matter how cheap the subagent path is.
+3. **PR strategy.** One big PR off `feat/revision-pass` with all 4 plans + analysis fixes (~50 commits), or break into 4 PRs (one per plan)? Four-PR route requires rebasing/cherry-picking; one-PR route ships faster.
