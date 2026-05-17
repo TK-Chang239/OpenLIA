@@ -146,7 +146,7 @@ def build_reports_revise_router(
         from openlia.llm.runtime.prompts import PromptLoader
         from openlia.llm.runtime.revision_runner import RevisionRunner
 
-        from openlia_server.services.report_wrapper import run_wrapped_report
+        from openlia_server.services.revision_wrapper import run_wrapped_revision
 
         prompts = PromptLoader()
 
@@ -190,9 +190,10 @@ def build_reports_revise_router(
                 task.subscriber_queues.discard(queue)
 
         _wrapper_task = asyncio.create_task(
-            run_wrapped_report(
+            run_wrapped_revision(
                 runner_coro=_subscribe(),
-                report_id=new_report_id,
+                new_report_id=new_report_id,
+                source_chat_session_id=body.chat_session_id,
                 user_id=user.id,
                 db_session_factory=db_session_factory,
                 presence=presence,
