@@ -77,9 +77,7 @@ async def test_get_notifications_stream_returns_eventstream(
     )
 
     # The handler is the first (and only GET) route endpoint.
-    handler = next(
-        r.endpoint for r in router.routes if getattr(r, "methods", None) == {"GET"}
-    )
+    handler = next(r.endpoint for r in router.routes if getattr(r, "methods", None) == {"GET"})
 
     req = _make_fake_request(presence)
     user = _make_fake_user()
@@ -112,9 +110,7 @@ async def test_open_notification_stream_registers_user_in_presence(
         mode="personal",
         heartbeat_seconds=30,
     )
-    handler = next(
-        r.endpoint for r in router.routes if getattr(r, "methods", None) == {"GET"}
-    )
+    handler = next(r.endpoint for r in router.routes if getattr(r, "methods", None) == {"GET"})
 
     req = _make_fake_request(presence)
     user = _make_fake_user(test_user.id)

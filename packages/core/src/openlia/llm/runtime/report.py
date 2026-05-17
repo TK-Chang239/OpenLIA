@@ -373,7 +373,6 @@ def _finalize_submit_payload(
     return candidate
 
 
-
 def _merge_provider_citations(payload: dict[str, Any], provider_citations: list[Citation]) -> None:
     """Merge native-provider citations into payload['citations'] in
     place. Model-authored entries (from submit_report) win on id

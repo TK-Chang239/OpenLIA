@@ -170,15 +170,11 @@ class SubagentClient:
                 if attempt == self._reprompt_budget:
                     raise
                 issue_msg = f"SectionDraft schema invalid: {exc!s}"
-                messages.append(
-                    Message(role="assistant", content="", tool_calls=(call,))
-                )
+                messages.append(Message(role="assistant", content="", tool_calls=(call,)))
                 messages.append(
                     Message(
                         role="tool",
-                        content=json.dumps(
-                            {"issues": [issue_msg], "hint": "Fix and re-submit."}
-                        ),
+                        content=json.dumps({"issues": [issue_msg], "hint": "Fix and re-submit."}),
                         tool_call_id=call.id,
                     )
                 )
