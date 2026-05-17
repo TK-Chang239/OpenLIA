@@ -1,11 +1,11 @@
 """ChatSession gains an optional attached_report_id column; existing
 sessions get NULL (backward compatible). An index is created on the
 new column."""
+
 from __future__ import annotations
 
-from sqlalchemy import inspect
-
 from openlia_server.db.models.content import ChatSession
+from sqlalchemy import inspect
 
 
 def test_chat_session_model_has_attached_report_id_column() -> None:

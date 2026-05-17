@@ -1,11 +1,11 @@
 """Reports table gains: status (default 'complete'), failure_reason,
 original_request (JSON), started_at. Existing rows backfill as
 'complete'. Status is indexed."""
+
 from __future__ import annotations
 
-from sqlalchemy import inspect
-
 from openlia_server.db.models.content import Report
+from sqlalchemy import inspect
 
 
 def test_report_model_has_new_columns() -> None:

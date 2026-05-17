@@ -64,9 +64,7 @@ class ChatSession(Base, TimestampMixin):
     # discipline). The Secretary chat runtime injects a length directive
     # into the system prompt only for ``concise`` / ``detailed``.
     response_length: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    attached_report_id: Mapped[str | None] = mapped_column(
-        String, nullable=True, default=None
-    )
+    attached_report_id: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
 
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", cascade="all, delete-orphan", passive_deletes=True
@@ -152,7 +150,7 @@ class Report(Base, TimestampMixin):
     # Background generation tracking. status defaults to "complete" so that
     # all existing rows are treated as completed synchronous reports.
     status: Mapped[str] = mapped_column(
-        String, nullable=False, server_default="complete", default="complete", index=True
+        String, nullable=False, server_default="complete", default="complete"
     )
     failure_reason: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
     original_request: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
@@ -163,6 +161,7 @@ class Report(Base, TimestampMixin):
         Index("ix_reports_subject", "subject"),
         Index("ix_reports_report_type", "report_type"),
         Index("ix_reports_expired_at", "expired_at"),
+        Index("idx_reports_status", "status"),
     )
 
 
