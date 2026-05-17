@@ -64,6 +64,9 @@ class ChatSession(Base, TimestampMixin):
     # discipline). The Secretary chat runtime injects a length directive
     # into the system prompt only for ``concise`` / ``detailed``.
     response_length: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    attached_report_id: Mapped[str | None] = mapped_column(
+        String, nullable=True, default=None
+    )
 
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", cascade="all, delete-orphan", passive_deletes=True
@@ -72,6 +75,7 @@ class ChatSession(Base, TimestampMixin):
     __table_args__ = (
         Index("ix_chat_sessions_user_id_department", "user_id", "department"),
         Index("ix_chat_sessions_user_id_updated_at", "user_id", "updated_at"),
+        Index("idx_chat_sessions_attached_report_id", "attached_report_id"),
     )
 
 
@@ -145,6 +149,14 @@ class Report(Base, TimestampMixin):
     # the DELETE /reports/{id} route set this via the shared
     # services/reports.py::tombstone_report function.
     expired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # Background generation tracking. status defaults to "complete" so that
+    # all existing rows are treated as completed synchronous reports.
+    status: Mapped[str] = mapped_column(
+        String, nullable=False, server_default="complete", default="complete", index=True
+    )
+    failure_reason: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    original_request: Mapped[dict | None] = mapped_column(JSON, nullable=True, default=None)
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True, default=None)
     __table_args__ = (
         Index("ix_reports_user_id_department", "user_id", "department"),
         Index("ix_reports_user_id_created_at", "user_id", "created_at"),
