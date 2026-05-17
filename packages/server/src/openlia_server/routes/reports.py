@@ -1,4 +1,4 @@
-"""Reports API: list/read/delete and PDF export."""
+"""Reports API: list/read/delete, PDF export, and background generation."""
 
 from __future__ import annotations
 
@@ -6,7 +6,9 @@ import html as html_escape
 import json as _json
 import os
 import re
+import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -505,6 +507,18 @@ class ReportListOut(BaseModel):
     items: list[ReportListItem]
 
 
+class GenerateReportIn(BaseModel):
+    department_id: str
+    mode: str
+    user_input: str
+    enabled_sections: list[str] = []
+    length: str = "standard"
+
+
+def _bg_enabled() -> bool:
+    return os.environ.get("OPENLIA_BACKGROUND_REPORTS_ENABLED", "0") == "1"
+
+
 def build_reports_router(
     *,
     db_session_factory: Callable[[], DBSession],
@@ -567,11 +581,55 @@ def build_reports_router(
                 "department": row.department,
                 "created_at": row.created_at.isoformat() if row.created_at else "",
             }
+        # Background report still generating: no schema yet, but return
+        # metadata including original_request so the client can poll/retry.
+        if row.status == "generating":
+            return {
+                "schema": None,
+                "expired_at": None,
+                "status": row.status,
+                "original_request": row.original_request,
+            }
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
         return {"schema": schema.model_dump(mode="json"), "expired_at": None}
+
+    @router.post("/generate")
+    async def generate_report_bg(
+        body: GenerateReportIn,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        """Submit a background report generation task.
+
+        When OPENLIA_BACKGROUND_REPORTS_ENABLED=1, inserts a 'generating'
+        row immediately and returns {report_id, status}. The real generation
+        runs asynchronously; the client polls GET /reports/{id}.
+        """
+        if not _bg_enabled():
+            raise HTTPException(
+                status.HTTP_501_NOT_IMPLEMENTED,
+                "background report generation is not enabled",
+            )
+        report_id = f"r_{uuid.uuid4().hex[:12]}"
+        row = Report(
+            id=report_id,
+            user_id=user.id,
+            department=body.department_id,
+            report_type=body.mode,
+            title=f"{body.department_id} — {body.user_input}",
+            content_markdown="",
+            content_structured={},
+            model_ref="",
+            status="generating",
+            original_request=body.model_dump(),
+            started_at=datetime.now(UTC),
+        )
+        session.add(row)
+        session.commit()
+        return {"report_id": report_id, "status": "generating"}
 
     @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_report(

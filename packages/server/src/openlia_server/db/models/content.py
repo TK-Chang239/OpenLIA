@@ -153,6 +153,15 @@ class Report(Base, TimestampMixin):
     # the DELETE /reports/{id} route set this via the shared
     # services/reports.py::tombstone_report function.
     expired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # Background report generation fields (Task 6).
+    # status: NULL for legacy sync reports; 'generating' | 'complete' |
+    #   'failed' | 'cancelled' for background-generated reports.
+    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Serialised GenerateReportIn body — used by the retry flow to
+    # re-submit the same request without the client resending it.
+    original_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Wall-clock time when the background task was submitted.
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     __table_args__ = (
         Index("ix_reports_user_id_department", "user_id", "department"),
         Index("ix_reports_user_id_created_at", "user_id", "created_at"),
