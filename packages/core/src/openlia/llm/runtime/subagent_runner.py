@@ -123,6 +123,27 @@ class SubagentReportRunner:
         user_id: str | None,
         request: ReportRequest,
     ) -> AsyncIterator[SseEvent]:
+        from datetime import UTC, datetime
+
+        from openlia.llm.runtime.editor_client import (
+            EDITOR_TOOL_NAME,  # noqa: F401  -- imported for symmetry
+            EditorClient,
+            EditorRequest,
+        )
+        from openlia.llm.runtime.events import (
+            ReportComplete,
+            ReportSectionComplete,
+        )
+        from openlia.llm.runtime.prior_section_summarizer import summarize_section_draft
+        from openlia.llm.runtime.report import _finalize_submit_payload
+        from openlia.llm.runtime.section_draft import OpenQuestion, PriorSection, SectionDraft
+        from openlia.llm.runtime.subagent_client import (
+            SECTION_DRAFT_TOOL_NAME,  # noqa: F401
+            SubagentClient,
+            SubagentRequest,
+        )
+        from openlia.reports.validator import validate_report_payload
+
         report_id = self._report_id_factory()
         framework = _load_framework(self._frameworks_root, request.mode)
         style_guide = _load_style_guide(self._frameworks_root, request.mode)
@@ -135,16 +156,13 @@ class SubagentReportRunner:
         )
 
         yield ReportPhase(report_id=report_id, phase="planning")
-
-        # Resolve flagship for planning.
-        resolved = self._resolve(
+        resolved_flag = self._resolve(
             department_id=department_id,
             user_id=user_id,
             registry=self._registry,
             role="flagship",
         )
-        flagship = self._flagship_factory(resolved)
-
+        flagship = self._flagship_factory(resolved_flag)
         planning_system = self._prompts.render(
             department_id,
             "report.subagent_planning",
@@ -158,12 +176,131 @@ class SubagentReportRunner:
             framework=framework,
         )
         if isinstance(plan_or_err, ReportError):
-            yield plan_or_err
+            yield ReportError(
+                report_id=report_id,
+                error_class=plan_or_err.error_class,
+                message=plan_or_err.message,
+            )
             return
+        plan = plan_or_err
 
-        # Plan validated. Eager fetch + drafting + editing land in later tasks.
-        # For now: this slice ends after planning.
-        return
+        yield ReportPhase(report_id=report_id, phase="eager_fetch")
+        fetched_data = await self._eager_fetch(plan, department_id=department_id)
+
+        yield ReportPhase(report_id=report_id, phase="section_drafting")
+        resolved_sub = self._resolve(
+            department_id=department_id,
+            user_id=user_id,
+            registry=self._registry,
+            role="subagent",
+        )
+        subagent_provider = self._subagent_factory(resolved_sub)
+        subagent = SubagentClient(provider=subagent_provider)
+        prior_summaries: list[PriorSection] = []
+        drafts: list[SectionDraft] = []
+        sections_by_id = {s.section_id: s for s in plan.sections}
+        role_prompt = (
+            self._prompts.render_partial("shared/section_subagent_role.yaml.j2")
+            if hasattr(self._prompts, "render_partial")
+            else ""
+        )
+        for section in plan.sections:
+            section_data = self._slice_for_section(section, fetched_data)
+            req = SubagentRequest(
+                role_prompt=role_prompt,
+                style_guide=style_guide,
+                schema_strictness="",
+                company_thesis=plan.company_thesis,
+                cross_section_themes=list(plan.cross_section_themes),
+                this_section=section,
+                fetched_data=section_data,
+                prior_section_summaries=list(prior_summaries),
+            )
+            draft = await subagent.draft(req)
+            drafts.append(draft)
+            yield ReportSectionComplete(
+                report_id=report_id,
+                section_id=section.section_id,
+                blocks=draft.blocks,
+            )
+            prior_summaries.append(
+                summarize_section_draft(draft, title=sections_by_id[section.section_id].title)
+            )
+
+        yield ReportPhase(report_id=report_id, phase="editing")
+        editor = EditorClient(provider=flagship, repair_budget=1, max_output_tokens=8192)
+        open_qs: list[OpenQuestion] = [
+            OpenQuestion(section_id=d.section_id, question=q)
+            for d in drafts
+            for q in d.open_questions
+        ]
+        editor_payload = await editor.compose(
+            EditorRequest(
+                role_prompt="",
+                style_guide=style_guide,
+                schema_strictness="",
+                company_thesis=plan.company_thesis,
+                cross_section_themes=list(plan.cross_section_themes),
+                section_drafts=drafts,
+                open_questions=open_qs,
+                framework_cover_instructions=str(
+                    framework.get("cover", {}).get("instructions", "")
+                ),
+            )
+        )
+
+        finalized = _finalize_submit_payload(
+            editor_payload,
+            department_id=department_id,
+            generated_at=datetime.now(UTC),
+            provider_citations=[],
+            model_id=resolved_flag.model_ref,
+            total_input_tokens=0,
+            total_output_tokens=0,
+            web_search_count=0,
+        )
+        validate_report_payload(finalized)
+        yield ReportComplete(report_id=report_id, schema=finalized)
+
+    async def _eager_fetch(self, plan: ReportPlan, *, department_id: str) -> dict[str, Any]:
+        """Dispatch every unique tool call from the plan, resolve every
+        DataPath into a flat ``{"<ref-or-tool>:<path>": value}`` map."""
+        from openlia.llm.runtime.payload_path import apply_path
+        from openlia.llm.types import ToolCall as _TC
+
+        results: dict[str, Any] = {}
+        unique = dedupe_data_paths(plan)
+        for entry in unique:
+            call = _TC(
+                id=f"eager_{uuid.uuid4().hex[:6]}",
+                name=entry.tool_name,
+                arguments=dict(entry.tool_arguments),
+            )
+            res_list = await self._tools.dispatch_many(
+                department_id=department_id,
+                calls=[call],
+            )
+            res = res_list[0]
+            payload = res.payload
+            for dp in entry.attached:
+                key = (
+                    f"{entry.tool_name}"
+                    f"({json.dumps(entry.tool_arguments, sort_keys=True)})"
+                    f":{dp.path or ''}"
+                )
+                value = payload if dp.path is None else apply_path(payload, dp.path)
+                results[key] = value
+        return results
+
+    def _slice_for_section(self, section: Any, fetched_data: dict[str, Any]) -> dict[str, Any]:
+        slice_out: dict[str, Any] = {}
+        for dp in section.data_paths:
+            if dp.tool_name is None:
+                continue
+            key = f"{dp.tool_name}({json.dumps(dp.tool_arguments, sort_keys=True)}):{dp.path or ''}"
+            if key in fetched_data:
+                slice_out[key] = fetched_data[key]
+        return slice_out
 
     async def _run_planning(
         self,
