@@ -151,8 +151,8 @@ class SubagentReportRunner:
         self._frameworks_root = frameworks_root or _default_frameworks_root()
         self._plan_repair_turns = plan_repair_turns
         self._trace: TraceFn = trace or (lambda *a: None)
-        self._bundle_dir: Path = bundle_dir if bundle_dir is not None else (
-            Path.home() / ".openlia" / "report_bundles"
+        self._bundle_dir: Path = (
+            bundle_dir if bundle_dir is not None else (Path.home() / ".openlia" / "report_bundles")
         )
 
     async def run(
@@ -371,6 +371,44 @@ class SubagentReportRunner:
             web_search_count=0,
         )
         validate_report_payload(finalized)
+
+        from openlia.llm.runtime.report_context_bundle import (
+            ReportContextBundle,
+            persist_bundle,
+        )
+
+        # Persist the report context bundle for chat follow-ups.
+        bundle_path = self._bundle_dir / f"{report_id}.json.gz"
+        try:
+            truncated = persist_bundle(
+                ReportContextBundle(
+                    plan=plan,
+                    fetched_data=fetched_data,
+                    section_drafts=drafts,
+                    payload_refs={},  # Task 14 wires the eager-fetch ref store here when available
+                    generation_meta={
+                        "model_id": resolved_flag.model_ref,
+                        "total_input_tokens": 0,  # Task 16 wires real totals
+                        "total_output_tokens": 0,
+                        "web_search_count": 0,
+                        "schema_version": "1.0",
+                    },
+                ),
+                path=bundle_path,
+            )
+            if truncated:
+                self._trace(
+                    "report.warning.bundle_truncated",
+                    f"dropped {len(truncated)} payload_refs to fit cap",
+                    {"report_id": report_id, "dropped_keys": truncated},
+                )
+        except Exception as exc:
+            self._trace(
+                "report.warning.bundle_persist_failed",
+                f"failed to write bundle: {exc!s}",
+                {"report_id": report_id, "error": str(exc)},
+            )
+
         yield ReportComplete(report_id=report_id, schema=finalized)
 
     async def _eager_fetch(self, plan: ReportPlan, *, department_id: str) -> dict[str, Any]:
