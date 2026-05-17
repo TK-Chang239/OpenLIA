@@ -1,6 +1,7 @@
 """Two parallel report-generation requests against the same unbound
 source chat must result in exactly one implicit-binding and one
 redirect. The per-source-session lock serializes the binding decision."""
+
 from __future__ import annotations
 
 import asyncio
@@ -48,6 +49,7 @@ async def async_test_client(db_session, monkeypatch):
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_BACKGROUND_REPORTS_ENABLED", "1")
+    monkeypatch.setenv("OPENLIA_REPORT_CHAT_ENABLED", "1")
     app = create_app(db_session_factory=session_mod.SessionLocal)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
