@@ -64,6 +64,7 @@ from openlia.llm.types import (
     ToolCall,
     ToolSchema,
 )
+from openlia.reports.citations import normalize_report
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import (
     ReportValidationError,
@@ -91,6 +92,16 @@ def _get_max_writing_turns() -> int:
 
 
 MAX_WRITING_TURNS = _get_max_writing_turns()
+
+# Hard cap on output tokens during the fetching loop. Fetching turns
+# emit only tool-call arguments (read_payload paths, eodhd__ args,
+# request_additional_tools) — never prose. A 2048 ceiling is enough
+# headroom for any tool's arguments while preventing the runaway
+# scenario where a model that "gives up" calling tools writes a full
+# inline report draft and burns the model's max_output_tokens budget.
+# Observed in run r_f03c92dd8c30 turn 6: 13,151 output tokens with
+# zero tool calls. Writing phase is unchanged (keeps the full budget).
+FETCHING_MAX_OUTPUT_TOKENS = 2048
 
 _SUBMIT_REPORT_DESCRIPTION = (
     "Submit the final report. Call exactly once with the structured payload. "
@@ -327,9 +338,42 @@ def _inject_server_fields(
     return payload
 
 
-def _merge_provider_citations(
-    payload: dict[str, Any], provider_citations: list[Citation]
-) -> None:
+def _finalize_submit_payload(
+    args: dict[str, Any],
+    *,
+    department_id: str,
+    generated_at: datetime,
+    provider_citations: list[Citation],
+    model_id: str,
+    total_input_tokens: int,
+    total_output_tokens: int,
+    web_search_count: int,
+) -> dict[str, Any]:
+    """Apply server-side finalization to a submit_report payload.
+
+    Sequence: hoist+stamp server fields → rewrite inline citation tuples
+    into `[N]` footnotes → append native-provider citations not already
+    inline → stamp server-authoritative `meta_stats`. The result is
+    ready for strict Pydantic validation by the caller.
+    """
+    candidate = _inject_server_fields(
+        copy.deepcopy(args),
+        department_id=department_id,
+        generated_at=generated_at,
+    )
+    candidate = normalize_report(candidate)
+    _merge_provider_citations(candidate, provider_citations)
+    candidate["meta_stats"] = _build_meta_stats(
+        candidate,
+        model_id=model_id,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+        web_search_count=web_search_count,
+    )
+    return candidate
+
+
+def _merge_provider_citations(payload: dict[str, Any], provider_citations: list[Citation]) -> None:
     """Merge native-provider citations into payload['citations'] in
     place. Model-authored entries (from submit_report) win on id
     collision; provider-only entries are appended.
@@ -999,9 +1043,7 @@ class ReportRunner:
                 f"tool turn {turn_idx} (tools={len(tools or [])})",
                 {"report_id": report_id, "phase": "fetching_data", "turn": turn_idx},
             )
-            _emit_provider_selected(
-                turn_idx, phase="fetching_data", turn_native_tools=native_tools
-            )
+            _emit_provider_selected(turn_idx, phase="fetching_data", turn_native_tools=native_tools)
             # Empty-starter-pack bootstrap: on turn 0 the LLM has only
             # `request_additional_tools`, `read_payload`, and (optionally)
             # `web_search` available. Without forcing, some models produce a
@@ -1020,7 +1062,10 @@ class ReportRunner:
                             system=system,
                             tools=tools or None,
                             tool_choice=turn_tool_choice,
-                            max_tokens=resolved.capabilities.max_output_tokens,
+                            max_tokens=min(
+                                resolved.capabilities.max_output_tokens,
+                                FETCHING_MAX_OUTPUT_TOKENS,
+                            ),
                             native_tools=native_tools,
                             web_search_max_uses=web_search_max_uses,
                         )
@@ -1081,6 +1126,7 @@ class ReportRunner:
                     "tool_calls": [c.name for c in response.tool_calls],
                     "input_tokens": response.input_tokens,
                     "output_tokens": response.output_tokens,
+                    "cached_input_tokens": response.cached_input_tokens,
                 },
             )
             if not response.tool_calls:
@@ -1148,7 +1194,9 @@ class ReportRunner:
                 return
             escalated = any(c.name == "request_additional_tools" for c in response.tool_calls)
             if escalated:
-                tools = await self._tools.build(department_id, has_web_search=True)
+                tools = await self._tools.build(
+                    department_id, has_web_search=True, expose_escalation=False
+                )
 
         yield ReportPhase(report_id=report_id, phase="writing")
         if cancel_token is not None and cancel_token.is_cancelled:
@@ -1232,14 +1280,11 @@ class ReportRunner:
             )
             if submit_call is not None:
                 args = submit_call.arguments if isinstance(submit_call.arguments, dict) else {}
-                candidate = _inject_server_fields(
-                    copy.deepcopy(args),
+                candidate = _finalize_submit_payload(
+                    args,
                     department_id=department_id,
                     generated_at=datetime.now(UTC),
-                )
-                _merge_provider_citations(candidate, provider_citations)
-                candidate["meta_stats"] = _build_meta_stats(
-                    candidate,
+                    provider_citations=provider_citations,
                     model_id=resolved.model_ref,
                     total_input_tokens=total_input_tokens,
                     total_output_tokens=total_output_tokens,
@@ -1281,6 +1326,7 @@ class ReportRunner:
                             "phase": "writing",
                             "input_tokens": response.input_tokens,
                             "output_tokens": response.output_tokens,
+                            "cached_input_tokens": response.cached_input_tokens,
                             "finish_reason": response.finish_reason,
                             "tool_call_names": [c.name for c in response.tool_calls],
                             "text_preview": _unicode_safe_truncate(
@@ -1373,6 +1419,7 @@ class ReportRunner:
                         "phase": "writing",
                         "input_tokens": response.input_tokens,
                         "output_tokens": response.output_tokens,
+                        "cached_input_tokens": response.cached_input_tokens,
                         "finish_reason": response.finish_reason,
                         "tool_call_names": [],
                         "text_preview": _unicode_safe_truncate(response.text or "", max_len=200),
@@ -1517,6 +1564,7 @@ class ReportRunner:
                 department_id=department_id,
                 generated_at=datetime.now(UTC),
             )
+            schema_payload = normalize_report(schema_payload)
             schema_payload = _apply_coercion_fallback(schema_payload)
             self._trace(
                 "report.coercion_applied",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from textwrap import dedent
@@ -181,6 +182,192 @@ def test_report_system_prompt_includes_schema_strictness_guide(tmp_path: Path) -
     assert "extra" in rendered.lower() or "forbid" in rendered.lower()
 
 
+def test_report_system_prompt_documents_chart_height_enum(tmp_path: Path) -> None:
+    """Guards against the model emitting `height: 320` (pixel int) — schema
+    requires the enum literal `small`/`medium`/`tall`. Without an explicit
+    callout the model defaults to pixel ints, triggering a validation retry."""
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        loader=loader,
+    )
+    assert '"small"' in rendered and '"medium"' in rendered and '"tall"' in rendered
+    lower = rendered.lower()
+    assert "pixel" in lower or "integer" in lower
+
+
+def test_runtime_finalize_submit_payload_rewrites_inline_citation_tuples() -> None:
+    """The runtime finalization helper that ReportRunner calls after
+    `submit_report` must rewrite inline citation tuples like
+    `[Reuters, "Title", 2026-05-12, https://x.com]` into footnote markers
+    `[1]` and populate `payload["citations"]`. Without this hook the raw
+    tuples leak into the rendered report and the citations rail stays empty."""
+    from datetime import UTC, datetime
+
+    from openlia.llm.runtime.report import _finalize_submit_payload
+
+    payload = {
+        "cover": {
+            "title": "Apple Q1 Initiation",
+            "subtitle": "Hold",
+            "tagline": "Solid quarter; valuation full.",
+        },
+        "sections": [
+            {
+                "id": "company_overview",
+                "title": "Company Overview",
+                "blocks": [
+                    {
+                        "type": "text",
+                        "content": (
+                            "Apple beat Q1 estimates "
+                            '[Reuters, "Apple Q1 beats", 2026-05-12, '
+                            "https://reuters.com/business/apple-q1]."
+                        ),
+                    }
+                ],
+            }
+        ],
+    }
+
+    finalized = _finalize_submit_payload(
+        payload,
+        department_id="equity_research",
+        generated_at=datetime(2026, 5, 16, tzinfo=UTC),
+        provider_citations=[],
+        model_id="gpt-5.4",
+        total_input_tokens=100,
+        total_output_tokens=50,
+        web_search_count=0,
+    )
+
+    text_block = finalized["sections"][0]["blocks"][0]
+    assert "[1]" in text_block["content"]
+    assert "Reuters" not in text_block["content"]
+    assert "reuters.com" not in text_block["content"]
+    assert len(finalized["citations"]) == 1
+    assert finalized["citations"][0]["id"] == "1"
+    assert finalized["citations"][0]["url"] == "https://reuters.com/business/apple-q1"
+
+
+def test_report_system_prompt_marks_cache_breakpoint(tmp_path: Path) -> None:
+    """The rendered report system prompt must embed the cache-breakpoint
+    sentinel. Without it, the Anthropic adapter cannot split off a cached
+    prefix, and the OpenAI auto-cache has no signal about where the
+    stable boundary lies."""
+    from openlia.llm.adapters._content import CACHE_BREAKPOINT_MARKER
+
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=8,
+        loader=loader,
+    )
+    assert CACHE_BREAKPOINT_MARKER in rendered
+
+
+def test_report_system_prompt_static_prefix_excludes_per_turn_data(
+    tmp_path: Path,
+) -> None:
+    """Everything above the cache breakpoint must be stable across
+    sequential calls within (and ideally across) a report run. The
+    current date, the long-form date, and the search budget all change
+    between renders and therefore must sit BELOW the breakpoint marker."""
+    from openlia.llm.adapters._content import split_at_cache_breakpoint
+
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=8,
+        loader=loader,
+    )
+    static, dynamic = split_at_cache_breakpoint(rendered)
+    assert dynamic is not None
+    assert "2026-05-14" not in static
+    assert "Thursday, May 14, 2026" not in static
+    assert "May 14" not in static
+    # search_budget number should not appear above the breakpoint.
+    assert "budget of 8" not in static
+
+
+def test_report_system_prompt_static_prefix_is_byte_stable_across_dates(
+    tmp_path: Path,
+) -> None:
+    """Same department + style guide + skills set rendered with different
+    dates / budgets must produce a byte-identical static prefix, so the
+    same OpenAI/Anthropic cache slot can serve consecutive turns and even
+    consecutive reports of the same mode."""
+    from openlia.llm.adapters._content import split_at_cache_breakpoint
+
+    loader = PromptLoader()
+    a = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        search_budget=8,
+        loader=loader,
+    )
+    b = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="STYLE",
+        available_category_hints=[],
+        current_date="2027-11-22",
+        current_date_long="Monday, November 22, 2027",
+        search_budget=3,
+        loader=loader,
+    )
+    static_a, _ = split_at_cache_breakpoint(a)
+    static_b, _ = split_at_cache_breakpoint(b)
+    assert static_a == static_b
+
+
+def test_report_system_prompt_forbids_citations_and_meta_stats_under_rail(
+    tmp_path: Path,
+) -> None:
+    """Guards against the model nesting `citations` or `meta_stats` under
+    `rail`. Both live at the top level of ReportSchema; `meta_stats` is
+    server-computed and must not be authored at all."""
+    loader = PromptLoader()
+    rendered = build_report_system_prompt(
+        department_id="equity_research",
+        user_id=None,
+        registry=_empty_skill_registry(tmp_path),
+        style_guide="",
+        available_category_hints=[],
+        current_date="2026-05-14",
+        current_date_long="Thursday, May 14, 2026",
+        loader=loader,
+    )
+    assert "citations" in rendered and "meta_stats" in rendered
+    lower = rendered.lower()
+    assert "top-level" in lower or "top level" in lower
+    assert "rail" in lower
+
+
 def test_report_system_prompt_anchors_current_date(tmp_path: Path) -> None:
     """Render the real equity_research report.system slot and assert the
     temporal anchor partial emits today's date + freshness discipline.
@@ -203,6 +390,123 @@ def test_report_system_prompt_anchors_current_date(tmp_path: Path) -> None:
     assert "2026-05-14" in rendered
     assert "training cutoff" in rendered.lower()
     assert "web_search" in rendered
+
+
+# ---------- Cost guard: fetching-phase output token cap ----------
+
+
+@pytest.mark.asyncio
+async def test_fetching_turn_caps_max_output_tokens(
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
+) -> None:
+    """Fetching turns must cap max_output_tokens to a small value
+    (~2048) so a model that "gives up" calling tools can't burn the
+    full ~16K output budget on inline prose. Observed in run
+    r_f03c92dd8c30 turn 6: 13,151 output tokens with zero tool calls."""
+    from openlia.llm.runtime.report import FETCHING_MAX_OUTPUT_TOKENS
+
+    good_call = ToolCall(id="t_good", name="submit_report", arguments=_strict_valid_payload())
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", []),  # fetching turn 0: ends loop
+                ("tool_calls", [good_call]),  # writing turn: submit_report
+            ]
+        ),
+        capabilities=Capabilities(
+            streaming=True,
+            tool_calling=True,
+            structured_output=True,
+            max_output_tokens=16_000,
+        ),
+    )
+
+    def _resolve_high_max(*, department_id, user_id, registry, model_id_override=None):
+        return dataclasses.replace(_resolved(), capabilities=provider.capabilities)
+
+    data = FakeDataDispatcher(manifest={"equity_research": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_resolve_high_max,
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_cap",
+    )
+    await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+
+    fetching_request = provider.captured_requests[0]
+    assert fetching_request.max_tokens == FETCHING_MAX_OUTPUT_TOKENS
+    assert FETCHING_MAX_OUTPUT_TOKENS <= 2048
+
+
+# ---------- Cost guard: request_additional_tools dropped after first call ----------
+
+
+@pytest.mark.asyncio
+async def test_request_additional_tools_dropped_after_first_call(
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
+) -> None:
+    """Once the runtime has expanded the tool registry once, the
+    request_additional_tools meta-tool must be absent from subsequent
+    fetching turns. A second mid-loop call mutates the prefix bytes and
+    invalidates the OpenAI/Anthropic prompt cache. Observed in run
+    r_f03c92dd8c30: turn 5 called request_additional_tools again, and
+    turn 6 dropped to 0% cache hit on 66K input tokens."""
+    escalate_call = ToolCall(
+        id="t_esc",
+        name="request_additional_tools",
+        arguments={"reason": "load tools"},
+    )
+    good_call = ToolCall(id="t_good", name="submit_report", arguments=_strict_valid_payload())
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [escalate_call]),  # fetching turn 0: escalate
+                ("tool_calls", []),  # fetching turn 1: end loop
+                ("tool_calls", [good_call]),  # writing turn: submit_report
+            ]
+        )
+    )
+    data = FakeDataDispatcher(manifest={"equity_research": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_resolve,
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_drop",
+    )
+    await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+
+    # Turn 0 (the escalation turn) must offer request_additional_tools.
+    turn_0_tools = {t.name for t in (provider.captured_requests[0].tools or [])}
+    assert "request_additional_tools" in turn_0_tools
+    # Turn 1 (after escalation) must NOT offer it. Caches stay warm.
+    turn_1_tools = {t.name for t in (provider.captured_requests[1].tools or [])}
+    assert "request_additional_tools" not in turn_1_tools
 
 
 # ---------- Step 3 contract: validation failure → repair turn with feedback ----------

@@ -18,9 +18,11 @@ Report payload strictness:
 - Chart blocks (line_chart, bar_chart, area_chart, pie_chart,
   candlestick_chart, waterfall_chart, scatter_plot, heatmap, treemap,
   combo_chart) accept `options` with ONLY three keys:
-  `{height, show_legend, show_grid}`. No `note`, no `caption`, no `subtitle`
-  inside options — put commentary in the chart `title` or an adjacent
-  `text` block.
+  `{height, show_legend, show_grid}`. `options.height` is an enum string —
+  one of `"small"`, `"medium"`, or `"tall"`. Pixel integers like `320` or
+  `"320px"` are rejected. `show_legend` and `show_grid` are booleans.
+  No `note`, no `caption`, no `subtitle` inside options — put commentary in
+  the chart `title` or an adjacent `text` block.
 - `combo_chart.bar_series` and `combo_chart.line_series` items must be shaped
   `{"name": str, "values": [float, ...]}` (one value per `categories` entry).
   Do NOT use `data` for these series — that key is reserved for
@@ -35,6 +37,10 @@ Report payload strictness:
   (min 2 points). Flat numeric arrays like `[120.5, 121.2]` and bare pairs
   like `[[1, 120.5], [2, 121.2]]` are rejected.
   Example: `[{"x": 0, "y": 120.5}, {"x": 1, "y": 121.2}, {"x": 2, "y": 119.8}]`.
+- `rail` (optional sticky right-rail) accepts ONLY `verdict`, `quick_stats`,
+  and `sparkline`. `citations` is a TOP-LEVEL field on the report payload —
+  do NOT nest it under `rail`. `meta_stats` is server-computed; do NOT emit
+  it at any level (top-level or nested).
 - If validation fails, you will receive the error list as a `submit_report`
   tool result. Fix every listed field and call `submit_report` again with
   the corrected payload.
