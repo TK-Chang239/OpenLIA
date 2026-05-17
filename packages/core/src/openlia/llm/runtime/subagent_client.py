@@ -25,6 +25,7 @@ from openlia.llm.base import LLMProvider
 from openlia.llm.runtime.plan_schema import SectionPlan
 from openlia.llm.runtime.section_draft import PriorSection, SectionDraft
 from openlia.llm.types import LLMRequest, Message, ToolSchema
+from openlia.reports.validator import validate_report_payload
 
 SECTION_DRAFT_TOOL_NAME = "submit_section"
 
@@ -178,4 +179,18 @@ class SubagentClient:
                 "TextBlocks contain numeric claims (digits, percentages, "
                 "$amounts) but citations_used is empty. Add citation ids."
             )
+        # Strict per-block validation by passing a one-section dummy payload
+        # through the existing validator. Cheaper than rebuilding block-level
+        # discrimination here.
+        dummy = {
+            "cover": {"title": "x", "subtitle": "x", "tagline": "x"},
+            "sections": [{"id": draft.section_id, "title": "x", "blocks": draft.blocks}],
+            "schema_version": "2.0",
+            "department": "equity_research",
+            "generated_at": "2026-05-16T00:00:00+00:00",
+        }
+        try:
+            validate_report_payload(dummy)
+        except Exception as exc:
+            issues.append(f"block schema invalid: {exc!s}")
         return issues
