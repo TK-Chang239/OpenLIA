@@ -382,10 +382,42 @@ def _build_report_runner_with_registry(
 
     runner_cls = select_report_runner_class(department_id=department_id)
     if runner_cls is SubagentReportRunner:
+        # SubagentReportRunner expects resolve(...role=...). The classic
+        # resolve() doesn't accept role. Build a role-aware closure that
+        # picks the subagent model from env when role=="subagent" and
+        # falls back to flagship resolution otherwise.
+        def _resolve_with_role(
+            *,
+            department_id: str,
+            user_id: str | None,
+            registry,
+            role: str = "flagship",
+            model_id_override: str | None = None,
+        ):
+            if role == "subagent":
+                sub_model_id = os.environ.get("OPENLIA_DEFAULT_SUBAGENT_MODEL_ID")
+                if sub_model_id:
+                    row = registry.get_by_id(sub_model_id)
+                    if row is not None:
+                        from openlia.llm.resolver import _to_resolved
+                        return _to_resolved(row)
+                # Soft fallback to flagship, warned via dev events.
+                _trace(
+                    "report.warning.subagent_unconfigured",
+                    "subagent model unset or unknown; falling back to flagship.",
+                    {"department_id": department_id},
+                )
+            return resolve(
+                department_id=department_id,
+                registry=registry,
+                user_id=user_id,
+                model_id_override=model_id_override,
+            )
+
         return SubagentReportRunner(
             prompts=prompts,
             tools=tools,
-            resolve=resolve,
+            resolve=_resolve_with_role,
             registry=registry,
             flagship_provider_factory=_provider_factory,
             subagent_provider_factory=_provider_factory,

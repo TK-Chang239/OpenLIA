@@ -180,10 +180,162 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
 
         return _BRACKET.sub(_sub, text)
 
+    # Citation-bearing string fields per block type. The writer may emit
+    # raw [provider(args)] or web-tuple brackets in any of these; we walk
+    # them all so footnote coverage matches the visible report, not just
+    # the prose paragraphs.
+    _STRING_FIELDS = {
+        "text": ("content",),
+        "key_finding": ("content", "title"),
+        "pull_quote": ("content", "quote", "attribution"),
+        "quote": ("content", "quote", "attribution"),
+        "bullet_list": ("title",),  # items handled below
+        "comparison_split": ("title",),  # nested left/right items handled below
+        "table": ("title", "caption", "footnote"),
+        "metric_cards": ("title",),
+        "callout": ("content", "title"),
+    }
+
+    def _rewrite_block(block: dict) -> None:
+        btype = block.get("type")
+        for field in _STRING_FIELDS.get(btype, ()):
+            v = block.get(field)
+            if isinstance(v, str) and v:
+                block[field] = _rewrite(v)
+        # bullet_list items
+        if btype == "bullet_list":
+            items = block.get("items") or []
+            block["items"] = [
+                _rewrite(it) if isinstance(it, str) else it for it in items
+            ]
+        # comparison_split: left + right blocks each have title + items
+        if btype == "comparison_split":
+            for side in ("left", "right"):
+                sd = block.get(side) or {}
+                if isinstance(sd, dict):
+                    if isinstance(sd.get("title"), str):
+                        sd["title"] = _rewrite(sd["title"])
+                    items = sd.get("items") or []
+                    sd["items"] = [
+                        _rewrite(it) if isinstance(it, str) else it for it in items
+                    ]
+        # metric_cards: each metric's label/value
+        if btype == "metric_cards":
+            for m in block.get("metrics") or []:
+                if isinstance(m, dict):
+                    for fld in ("label", "value", "delta", "context", "tag"):
+                        v = m.get(fld)
+                        if isinstance(v, str) and v:
+                            m[fld] = _rewrite(v)
+        # table cells (rows is a list of dicts, values may be strings)
+        if btype == "table":
+            for row in block.get("rows") or []:
+                if isinstance(row, dict):
+                    for k, v in list(row.items()):
+                        if isinstance(v, str) and v:
+                            row[k] = _rewrite(v)
+
     for section in payload.get("sections", []):
         for block in section.get("blocks", []):
-            if block.get("type") == "text":
-                block["content"] = _rewrite(block["content"])
+            _rewrite_block(block)
+
+    # Rail.quick_stats are Metric objects with label/value strings.
+    rail = payload.get("rail")
+    if isinstance(rail, dict):
+        # The model occasionally hallucinates source_ids on the Rail itself —
+        # that field doesn't exist on the Rail schema (only verdict /
+        # quick_stats / sparkline are valid). Strip it so we never produce
+        # validation errors on this known drift point.
+        rail.pop("source_ids", None)
+        for m in rail.get("quick_stats") or []:
+            if isinstance(m, dict):
+                for fld in ("label", "value", "delta", "context", "tag"):
+                    v = m.get(fld)
+                    if isinstance(v, str) and v:
+                        m[fld] = _rewrite(v)
 
     payload["citations"] = citations
+
+    # Second pass: harvest [N] refs from each block's visible strings and
+    # auto-fill that block's source_ids when empty. The writer leaves
+    # source_ids = [] on Metric / KeyFinding / etc. far too often; this
+    # closes the gap so the validator's "no source_ids" warning fires
+    # only when there really is no inline attribution either.
+    _REF_RE = re.compile(r"\[(\d+)\]")
+
+    def _collect_refs(*texts: Any) -> list[str]:
+        seen: list[str] = []
+        for t in texts:
+            if not isinstance(t, str):
+                continue
+            for m in _REF_RE.finditer(t):
+                cid = m.group(1)
+                if cid not in seen:
+                    seen.append(cid)
+        return seen
+
+    def _autofill_source_ids(block: dict) -> None:
+        btype = block.get("type")
+        # Direct source_ids on the block itself (key_finding, pull_quote, quote)
+        if "source_ids" in block and not block.get("source_ids"):
+            texts = [block.get("content"), block.get("quote"), block.get("title")]
+            if btype == "bullet_list":
+                texts.extend(block.get("items") or [])
+            refs = _collect_refs(*texts)
+            if refs:
+                block["source_ids"] = refs
+        # metric_cards: each metric has its own source_ids
+        if btype == "metric_cards":
+            for m in block.get("metrics") or []:
+                if isinstance(m, dict) and not m.get("source_ids"):
+                    refs = _collect_refs(m.get("label"), m.get("value"), m.get("context"))
+                    if refs:
+                        m["source_ids"] = refs
+
+    for section in payload.get("sections", []):
+        for block in section.get("blocks", []):
+            _autofill_source_ids(block)
+
+    if isinstance(rail, dict):
+        for m in rail.get("quick_stats") or []:
+            if isinstance(m, dict) and not m.get("source_ids"):
+                refs = _collect_refs(m.get("label"), m.get("value"), m.get("context"))
+                if refs:
+                    m["source_ids"] = refs
+
+    # Third pass: structural cleanup. Charts with no data are a known
+    # writer drift — the model declares the chart it wishes existed but
+    # leaves series empty. An empty chart renders as a blank box and is
+    # worse than no block at all, so we drop them.
+    _CHART_TYPES = {
+        "line_chart", "bar_chart", "area_chart", "pie_chart",
+        "candlestick_chart", "waterfall_chart", "scatter_plot",
+        "heatmap", "treemap", "combo_chart", "stacked_bar_chart",
+    }
+    for section in payload.get("sections", []):
+        kept_blocks: list[dict] = []
+        for block in section.get("blocks", []):
+            btype = block.get("type")
+            if btype in _CHART_TYPES:
+                series = block.get("series") or []
+                # Treat a chart as empty if it declares no series OR every
+                # declared series has no data points. Either way the chart
+                # would render blank.
+                non_empty = False
+                for sr in series:
+                    if not isinstance(sr, dict):
+                        continue
+                    data = sr.get("data") or sr.get("values") or []
+                    if any(pt is not None for pt in data):
+                        non_empty = True
+                        break
+                # pie_chart uses a flat slices structure instead of series
+                if btype == "pie_chart":
+                    slices = block.get("slices") or []
+                    non_empty = bool(slices) or non_empty
+                if not non_empty:
+                    continue  # drop the empty chart
+            kept_blocks.append(block)
+        section["blocks"] = kept_blocks
+
     return payload

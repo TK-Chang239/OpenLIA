@@ -97,7 +97,53 @@ Per the user's latest instruction: full authority to fix conceptual/design issue
 
 ### Iteration log
 
-_(populated as the analysis loop runs)_
+#### Iteration 1 — NET (Cloudflare), 2026-05-17 ~03:44 EDT
+
+**Run id:** `r_6d592fa801a0` → persisted as `c9d59ce1-465e-49e3-880f-de100b138b71`
+**Runner:** classic `ReportRunner` (server pre-dates today's subagent work; restart denied by sandbox)
+
+**Telemetry:**
+- 16 LLM calls. Input 906K, cached 761K (84% hit), output 12K.
+- Estimated cost ≈ **$0.40** at gpt-5.4 pricing (1.25/0.125/10 per M input/cached-input/output). Way below the prior ~$1.50 baseline — the PR #122 cache fix is holding.
+- 16 web_search invocations per `meta_stats.web_search_queries` but **0 web_search events in `dev-events.jsonl`** — telemetry gap (noted; not fixed yet).
+- 1 `writing.validation_failed` on `rail.source_ids: Extra inputs are not permitted` (1 repair turn).
+- 13 `report.warning.uncited_claim` events.
+
+**Quality findings (in priority order):**
+
+1. **Citation system is undercounting badly.** Final report has only **3 citations** for a 14-section report packed with quantitative claims. All three citations are tool-name labels (`eodhd__get_fundamentals_data(NET.US)`), and citation #2's `url` field is a tool-call signature stuffed into the URL slot (`https://eodhd__...;eodhd__...`). The 13 uncited-claim warnings confirm coverage is broken.
+   - Root cause: `citations.normalize_report()` only walks `text` blocks. Tables, charts, metric_cards, bullet_lists, key_findings, comparison_split, etc. carry citation refs as `source_ids: list[str]` — but the writer leaves them `[]` and the normalizer never harvests inline brackets from those block types either.
+
+2. **`rail.source_ids` schema-illegal field.** Model puts `source_ids: ['c1']` directly on the Rail object. `Rail` schema (verdict / quick_stats / sparkline only) rejects it. Forces a full repair turn each run.
+
+3. **Empty chart blocks.** Two `combo_chart` blocks ("Revenue and margin trend" in `historical_financials`, "Projected revenue and operating margin" in `financial_projections`) have `series: []`. Renders as blank chart boxes. The writer declares the chart but doesn't supply data.
+
+4. **Empty `source_ids: []` on every `rail.quick_stats` metric** despite obvious inline attribution opportunities.
+
+5. **"Data not available" hallucination** in `industry_overview` re: third-party TAM figures — model didn't web_search before punting.
+
+**Analysis quality:** Surprisingly solid. Sections read like professional research — competitive moat framing, switching-cost analysis, bull/bear case with multiples (32x vs 22x FY2026E), specific financials ($2.17bn rev, $943.5mn cash, $3.70bn debt, $324.3mn FCF). Not surface-level. The problems are mechanical formatting + citation plumbing, not the underlying analysis depth.
+
+**Fixes applied in iteration 1:**
+
+| # | Fix | Type | Files |
+|---|-----|------|-------|
+| F1 | `normalize_report()` now walks every citation-bearing block type (text, key_finding, pull_quote, quote, bullet_list, comparison_split, table cells, metric_cards labels/values, callout, rail.quick_stats) so inline `[provider(args)]` brackets in any block produce footnote entries. | Mechanical | `packages/core/src/openlia/reports/citations.py` |
+| F2 | Auto-fill empty `source_ids: []` from inline `[N]` references on the same block (Metric, KeyFinding, PullQuote, Quote, metric_cards entries, rail.quick_stats entries). | Conceptual | `packages/core/src/openlia/reports/citations.py` |
+| F3 | Strip illegal `rail.source_ids` field in post-processing so the model's drift never reaches the validator. | Mechanical | `packages/core/src/openlia/reports/citations.py` |
+| F4 | Drop chart blocks that have empty `series` / `slices` / `bar_series`. Empty charts render as ugly blank boxes; better to omit. | Conceptual | `packages/core/src/openlia/reports/citations.py` |
+| F5 | Strengthen `report_schema_strictness.yaml.j2` prompt: explicit "no source_ids on rail itself", "every Metric needs source_ids or inline [N]", "empty chart series is rejected — omit the block", "data not available requires at least one web_search first". | Conceptual | `packages/core/src/openlia/prompts/shared/report_schema_strictness.yaml.j2` |
+
+**Design decisions made (alternatives considered):**
+
+- **Citation harvesting strategy.** Considered: (a) require the model to author full `Citation` objects in `submit_report.citations` directly, (b) extract from web_search provider events only, (c) the current approach — walk all string fields and intern brackets. Chose (c) because the model already emits `[provider(args)]` brackets reliably in text; the gap is that other blocks were silently skipped. Migrating to (a) would require a much bigger prompt change and is brittle against schema drift.
+- **Empty-chart handling.** Considered: (a) keep empty chart and let renderer show "no data" graphic, (b) coerce empty chart to a text block with the chart title, (c) drop the block entirely. Chose (c) — empty charts are noise; if the model had data it would have emitted it. The adjacent text block already explains the section, so the drop is invisible to a quality reader.
+- **rail.source_ids handling.** Considered: (a) extend `Rail` schema to accept `source_ids` for backward compatibility with the model's drift, (b) strip it server-side. Chose (b) — the field is meaningless on Rail (sources belong on the individual Metric children inside quick_stats). Accepting it would just hide a quality problem.
+
+**Deferred (queued for next iteration):**
+- Web-search telemetry gap (16 searches happened, 0 logged to dev-events).
+- "Data not available" pattern enforcement (prompt nudge applied, but validator-level enforcement would be stronger).
+- Sub-3 citations for a 14-section report is still a smell even after F1+F2 — the writer might be reusing the same 3 tool calls across all sections. Need to check after re-running.
 
 ---
 
