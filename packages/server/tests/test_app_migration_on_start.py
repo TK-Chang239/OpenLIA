@@ -10,7 +10,6 @@ from openlia_server.db import bootstrap as bootstrap_module
 from openlia_server.db import session as session_mod
 from sqlalchemy import text
 
-
 _QUOTED = re.compile(r'"([^"]+)"')
 
 
