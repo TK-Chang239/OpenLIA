@@ -7,11 +7,14 @@ import {
   FileText,
   Globe,
   Layers,
+  MessageSquare,
   Trash2,
 } from "lucide-react";
 import { type JSX, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { ReportMode } from "../../api/equity-research";
+import { createSession } from "../../api/chat";
 import { DeleteReportDialog } from "../report/DeleteReportDialog";
 import { useSavedReportsOptional } from "../repo/SavedReportsContext";
 
@@ -89,9 +92,11 @@ export function ReportCard({
   expiredAt = null,
 }: Props): JSX.Element {
   const reduce = useReducedMotion();
+  const navigate = useNavigate();
   const savedCtx = useSavedReportsOptional();
   const [localSaved, setLocalSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
+  const [discussing, setDiscussing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -127,6 +132,22 @@ export function ReportCard({
       setDeleteOpen(false);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDiscuss = async () => {
+    if (discussing) return;
+    setDiscussing(true);
+    try {
+      const title = ticker ?? subject;
+      const session = await createSession({
+        department: "equity_research",
+        title,
+        attached_report_id: reportId,
+      });
+      navigate(`/chat/${session.id}`);
+    } finally {
+      setDiscussing(false);
     }
   };
 
@@ -274,6 +295,16 @@ export function ReportCard({
         >
           <FileText size={13} strokeWidth={1.7} />
           Open Report
+        </button>
+
+        <button
+          type="button"
+          onClick={() => void handleDiscuss()}
+          disabled={discussing}
+          className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
+        >
+          <MessageSquare size={13} strokeWidth={1.7} />
+          Discuss
         </button>
 
         <DropdownMenu.Root>
