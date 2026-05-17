@@ -844,3 +844,62 @@ async def test_fallback_path_merges_provider_citations_and_stamps_meta_stats(
     assert meta.get("sections_count") == 1
     assert meta.get("sources_count", 0) >= 1
     assert meta.get("model_id")
+
+
+def test_inject_server_fields_hoists_rail_citations_to_root() -> None:
+    """When the model puts citations under rail (a recurring drift even
+    after explicit prompt guidance), strip them from rail and merge them
+    into the root-level `citations` array so strict validation passes on
+    the very first turn instead of burning the 8-turn repair budget."""
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
+
+    from openlia.llm.runtime.report import _inject_server_fields
+
+    payload = {
+        "cover": {"title": "T", "subtitle": "S", "tagline": "x"},
+        "sections": [{"id": "s", "title": "S", "blocks": []}],
+        "rail": {
+            "verdict": {"stance": "hold", "rationale": "x"},
+            "citations": [{"id": "1", "title": "From rail"}],
+            "meta_stats": {"sources_count": 99},  # also misplaced; should drop
+        },
+        "meta_stats": {"sources_count": 50},  # model should not emit; drop
+    }
+    out = _inject_server_fields(
+        payload, department_id="equity_research", generated_at=_dt.now(_UTC)
+    )
+    assert "citations" not in out.get("rail", {})
+    assert "meta_stats" not in out.get("rail", {})
+    assert "meta_stats" not in out  # top-level model-authored copy dropped too
+    root_cites = out.get("citations") or []
+    assert any(c.get("id") == "1" and c.get("title") == "From rail" for c in root_cites)
+
+
+def test_inject_server_fields_merges_rail_citations_with_existing_root() -> None:
+    """If the model puts SOME citations at root and ALSO some under rail,
+    hoist the rail ones in but keep root entries; deduplicate by id."""
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
+
+    from openlia.llm.runtime.report import _inject_server_fields
+
+    payload = {
+        "cover": {"title": "T", "subtitle": "S", "tagline": "x"},
+        "sections": [{"id": "s", "title": "S", "blocks": []}],
+        "citations": [{"id": "1", "title": "Root one"}],
+        "rail": {
+            "verdict": {"stance": "hold", "rationale": "x"},
+            "citations": [
+                {"id": "1", "title": "Same id — dropped (root wins)"},
+                {"id": "2", "title": "New one — kept"},
+            ],
+        },
+    }
+    out = _inject_server_fields(
+        payload, department_id="equity_research", generated_at=_dt.now(_UTC)
+    )
+    assert "citations" not in out.get("rail", {})
+    by_id = {c["id"]: c for c in (out.get("citations") or [])}
+    assert by_id["1"]["title"] == "Root one"  # root wins on id collision
+    assert by_id["2"]["title"] == "New one — kept"
