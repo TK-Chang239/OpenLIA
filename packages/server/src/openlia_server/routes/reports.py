@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import html as html_escape
 import json as _json
 import os
 import re
 import uuid
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -14,13 +16,14 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import Report
+from openlia_server.db.models.content import ChatSession, Report
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.routes.chat_sessions import _attach_report_as_context
 from openlia_server.services.report_export import export_report_docx, export_report_pdf
 from openlia_server.services.reports import (
     ReportNotFoundError,
@@ -513,6 +516,17 @@ class GenerateReportIn(BaseModel):
     user_input: str
     enabled_sections: list[str] = []
     length: str = "standard"
+    # Optional: the chat session that triggered this generation. When set and
+    # the session's attached_report_id is NULL, the handler implicitly binds
+    # the new report to that session (Task 8 — implicit binding).
+    source_session_id: str | None = None
+
+
+# Module-level lock map keyed by source_session_id. Prevents two concurrent
+# requests from the same chat session both seeing attached_report_id=NULL and
+# both binding. Per-process only; multi-process deployments should use a DB
+# advisory lock instead (flagged as a v2 concern).
+_SOURCE_SESSION_LOCKS: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
 
 def _bg_enabled() -> bool:
@@ -607,29 +621,92 @@ def build_reports_router(
         When OPENLIA_BACKGROUND_REPORTS_ENABLED=1, inserts a 'generating'
         row immediately and returns {report_id, status}. The real generation
         runs asynchronously; the client polls GET /reports/{id}.
+
+        Implicit binding (Task 8): when source_session_id is given and that
+        session's attached_report_id is NULL, set it to the new report id.
+        If the session was already bound (race), create a new session for
+        the new report and return redirect=True.
         """
         if not _bg_enabled():
             raise HTTPException(
                 status.HTTP_501_NOT_IMPLEMENTED,
                 "background report generation is not enabled",
             )
-        report_id = f"r_{uuid.uuid4().hex[:12]}"
-        row = Report(
-            id=report_id,
-            user_id=user.id,
-            department=body.department_id,
-            report_type=body.mode,
-            title=f"{body.department_id} — {body.user_input}",
-            content_markdown="",
-            content_structured={},
-            model_ref="",
-            status="generating",
-            original_request=body.model_dump(),
-            started_at=datetime.now(UTC),
-        )
-        session.add(row)
-        session.commit()
-        return {"report_id": report_id, "status": "generating"}
+        source_id = body.source_session_id
+        # Validate source session ownership before acquiring lock.
+        source_session: ChatSession | None = None
+        if source_id is not None:
+            source_session = session.execute(
+                select(ChatSession).where(
+                    ChatSession.id == source_id,
+                    ChatSession.user_id == user.id,
+                )
+            ).scalar_one_or_none()
+            if source_session is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "source session not found")
+
+        async with _SOURCE_SESSION_LOCKS[source_id or ""]:
+            report_id = f"r_{uuid.uuid4().hex[:12]}"
+            row = Report(
+                id=report_id,
+                user_id=user.id,
+                department=body.department_id,
+                report_type=body.mode,
+                title=f"{body.department_id} — {body.user_input}",
+                content_markdown="",
+                content_structured={},
+                model_ref="",
+                status="generating",
+                original_request=body.model_dump(),
+                started_at=datetime.now(UTC),
+                source_session_id=source_id,
+            )
+            session.add(row)
+            session.flush()  # obtain report_id in DB before binding
+
+            if source_session is not None:
+                # Implicit binding: conditional UPDATE — only sets the column
+                # when it is still NULL, avoiding overwrites in race conditions.
+                updated = session.execute(
+                    update(ChatSession)
+                    .where(
+                        ChatSession.id == source_id,
+                        ChatSession.attached_report_id.is_(None),
+                    )
+                    .values(attached_report_id=report_id)
+                ).rowcount
+                session.commit()
+                if updated == 1:
+                    # Successfully bound: source session now owns this report.
+                    return {
+                        "session_id": source_id,
+                        "report_id": report_id,
+                        "redirect": False,
+                    }
+                # Race: source session was already bound by another request.
+                # Create a new session for this report so the user still gets
+                # a chat context (Task 9 will wire the redirect in the client).
+                new_session = ChatSession(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    department=source_session.department,
+                    title=source_session.title or f"{body.department_id} — {body.user_input}",
+                    attached_report_id=report_id,
+                )
+                session.add(new_session)
+                session.flush()
+                _attach_report_as_context(
+                    session, session_id=new_session.id, user_id=user.id, report_id=report_id
+                )
+                session.commit()
+                return {
+                    "session_id": new_session.id,
+                    "report_id": report_id,
+                    "redirect": True,
+                }
+
+            session.commit()
+            return {"report_id": report_id, "status": "generating"}
 
     @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
     async def delete_report(
