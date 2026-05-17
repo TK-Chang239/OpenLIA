@@ -41,10 +41,10 @@ def build_notifications_stream_router(
         queue = presence.attach(user.id)
 
         async def gen() -> AsyncIterator[bytes]:
-            # Send an initial connect heartbeat so the client receives the
-            # first byte immediately and knows the connection is live.
-            yield b"event: report.heartbeat\ndata: {}\n\n"
             try:
+                # Send an initial connect heartbeat so the client receives the
+                # first byte immediately and knows the connection is live.
+                yield b"event: report.heartbeat\ndata: {}\n\n"
                 while True:
                     try:
                         ev = await asyncio.wait_for(queue.get(), timeout=heartbeat_seconds)
