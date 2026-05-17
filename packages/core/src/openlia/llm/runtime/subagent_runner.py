@@ -15,6 +15,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import openlia.prompts as _prompts_pkg
 from openlia.llm.base import LLMProvider
 from openlia.llm.runtime.events import (
     ReportError,
@@ -34,6 +35,21 @@ from openlia.llm.types import (
 )
 
 PLAN_REPORT_TOOL_NAME = "plan_report"
+
+
+def load_section_subagent_role() -> str:
+    p = Path(_prompts_pkg.__file__).parent / "shared" / "section_subagent_role.yaml.j2"
+    return p.read_text()
+
+
+def load_editor_role() -> str:
+    p = Path(_prompts_pkg.__file__).parent / "shared" / "editor_role.yaml.j2"
+    return p.read_text()
+
+
+def _load_schema_strictness() -> str:
+    p = Path(_prompts_pkg.__file__).parent / "shared" / "report_schema_strictness.yaml.j2"
+    return p.read_text() if p.exists() else ""
 
 
 ResolveFn = Callable[..., ResolvedModel]
@@ -199,17 +215,14 @@ class SubagentReportRunner:
         prior_summaries: list[PriorSection] = []
         drafts: list[SectionDraft] = []
         sections_by_id = {s.section_id: s for s in plan.sections}
-        role_prompt = (
-            self._prompts.render_partial("shared/section_subagent_role.yaml.j2")
-            if hasattr(self._prompts, "render_partial")
-            else ""
-        )
+        subagent_role = load_section_subagent_role()
+        schema_strictness = _load_schema_strictness()
         for section in plan.sections:
             section_data = self._slice_for_section(section, fetched_data)
             req = SubagentRequest(
-                role_prompt=role_prompt,
+                role_prompt=subagent_role,
                 style_guide=style_guide,
-                schema_strictness="",
+                schema_strictness=schema_strictness,
                 company_thesis=plan.company_thesis,
                 cross_section_themes=list(plan.cross_section_themes),
                 this_section=section,
@@ -236,9 +249,9 @@ class SubagentReportRunner:
         ]
         editor_payload = await editor.compose(
             EditorRequest(
-                role_prompt="",
+                role_prompt=load_editor_role(),
                 style_guide=style_guide,
-                schema_strictness="",
+                schema_strictness=schema_strictness,
                 company_thesis=plan.company_thesis,
                 cross_section_themes=list(plan.cross_section_themes),
                 section_drafts=drafts,
