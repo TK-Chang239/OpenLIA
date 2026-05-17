@@ -245,7 +245,123 @@ Output token counts in the failed run hit exactly 4096 on both attempts (truncat
 | F9 | Planning `max_tokens=4096` → `16384`. Comment explains the iter-3 truncation root cause. | Mechanical | `packages/core/src/openlia/llm/runtime/subagent_runner.py` |
 | F10 | `_framework_summary()` now includes each section's `instructions` field, not just `id` + `title`. The flagship planner gets real per-section guidance; without it, the model had nothing concrete to plan against and produced empty args even before truncation became fatal. | Conceptual | `packages/core/src/openlia/llm/runtime/subagent_runner.py` |
 
-**Iteration 3 retry — run `r_a489e8f4ce0b`** triggered after F9+F10 on restarted server. Status: in progress at time of writing.
+**Iteration 3 retry — run `r_a489e8f4ce0b`** triggered after F9+F10 on restarted server. Outcome: failed in eager_fetch with `unhashable type: 'list'` from the dedupe key when `tool_arguments` contained list values. Fixed in F11.
+
+---
+
+### Iteration 4 — first end-to-end subagent run (failed mid-drafting)
+
+**Run id:** `r_57ef48ec174c`. Planning succeeded (5306 output tokens, under the new 16384 cap). Eager fetch silent (subagent runner doesn't trace tool calls — telemetry gap noted). 6 section subagents drafted successfully. 7th (industry_overview) failed: SectionDraft validation error on missing `blocks` field. The exception bubbled up as ReportError and killed the whole run.
+
+**Mini-model failure pattern:** the gpt-5.4-mini subagent omits the `blocks` field from `submit_section` calls. Plan 1 Task 7's SubagentClient.draft() raised the Pydantic ValidationError as a hard error rather than treating it as a guardrail.
+
+**Fixes (F12-F15):** SubagentClient now catches ValidationError on `model_validate`, re-prompts with the schema issue as a tool result, and only raises after the reprompt budget is exhausted. Budget bumped 1 → 2 (mini needs more reprompts). Max_tokens for drafting bumped 2048 → 6144 (drafts plus reasoning need more headroom). Empty submit_section call also reprompts now.
+
+---
+
+### Iteration 5 — subagent failures still nuking whole run
+
+**Run id:** `r_c85df1550291`. After F12-F15, the SubagentClient retries, but if every retry fails on a section the exception still bubbles. Iter5 produced 6 successful drafts before industry_overview's three attempts all dropped `blocks`.
+
+**Fix (F16):** SubagentReportRunner.run() now wraps each `subagent.draft()` call in try/except. On failure: emit a `report.warning.subagent_failed` trace and substitute a placeholder SectionDraft so the report can still complete. Editor sees the placeholder and can paper over it.
+
+---
+
+### Iteration 6 — first full end-to-end subagent run (completed)
+
+**Run id:** `r_12f212ec963b` → persisted as `982a0cd0-7b86-4d6b-9822-ccd5b16b46ba`.
+
+**Telemetry:**
+- 41 LLM calls (planning + ~28 drafting + ~12 editor repair turns)
+- Input 452K, cached 359K (79.5% hit), output 26.5K
+- **Cost ≈ $0.43** at gpt-5.4/mini blended pricing — essentially equal to iter1's $0.40 classic-runner cost
+- 0 strict-validation failures (F1-F8 took the rail.source_ids and citation issues off the table at finalization)
+- 0 uncited-claim warnings (the F8 strict-mode default is forcing the editor to repair)
+- 0 web searches recorded in dev-events for the run (telemetry gap)
+
+**Quality — what's good:**
+- 3,597 narrative words across 14 sections (vs iter1's 1,744 — **2× more analysis**)
+- Sections like competitive_advantages, financial_projections, investment_recommendation read like polished sell-side prose — bull/bear framing, peer comparisons, valuation discipline language
+- All 14 sections present, all have text-bearing blocks
+- 0 empty charts (subagent runner just doesn't emit charts at all)
+
+**Quality — what's bad (the structural trade-offs):**
+- **0 citations.** The subagent path doesn't merge `provider_citations` from native web_search the way the classic runner does in `_finalize_submit_payload`. The drafts have `citations_used: []` because subagents have no tools, including no web_search, so they never see source-bearing brackets. F1-F8's citation harvesting needs at least *some* bracket text to work with.
+- **0 charts.** Subagents prefer prose; mini doesn't emit complex chart JSON. iter1 (classic) had 6 charts (4 empty, 2 with data).
+- **6 "data unavailable" mentions remain** (despite F7's prompt nudge). The subagent doesn't have web_search to fill gaps and the planner under-declares data_paths — F17 (eager-fetch list in planner prompt) is queued for iter7 but the running server was started before that commit.
+- **competitive_advantages: 55 words** — F16 fired on this section (placeholder kicked in).
+
+**Side-by-side iter1 vs iter6:**
+
+| Metric | iter1 (classic) | iter6 (subagent) |
+|---|---|---|
+| Cost | $0.40 | $0.43 |
+| Total words | 1,744 | 3,597 |
+| Citations | 3 (3 ids, all tool-name labels) | 0 |
+| Charts | 6 (4 empty, 2 with data) | 0 |
+| Validation failures | 1 (rail.source_ids) | 0 |
+| Section depth | mostly 100-250 words | mostly 250-400 words |
+| Telemetry coverage | full (tool_call, web_search) | sparse (only llm.call.done) |
+
+**Reading the trade-off:** subagent runner buys prose depth and validation discipline at the cost of citations + charts. Classic runner buys structured artifacts at the cost of citation quality + empty chart noise. Neither is unambiguously better; combining them via "subagent for prose + classic-style finalization for citations/charts" would be ideal. That's a v2 architectural decision.
+
+**Decision needed (queued for user):** which path is the production default — classic (subject to F1-F8 fixes) or subagent (subject to bringing citation/chart pipelines back in)? The cheapest path to a "best of both" is probably to add a final flagship pass that injects `submit_report`-style block authoring (charts, source_ids) after the subagent drafts land.
+
+---
+
+### Iteration 7 — queued (next session)
+
+After F17 (explicit eager-fetch list in planner prompt) the planner SHOULD declare ratios, historical OHLC, market-cap series, and earnings trends — closing the "data not available" gap for historical_financials, financial_analysis, financial_projections, and valuation_analysis. The server was restarted before F17 landed so iter6 didn't see it; the next NET run will be the first measurement.
+
+---
+
+## Status at session-end (2nd attempt, 2026-05-17 ~12:05 EDT)
+
+**Branches pushed to origin:**
+
+- `feat/subagent-report-architecture` — Plan 1 (18 tasks) + F1-F8 fixes
+- `feat/report-chat-followup` — Plan 1 base + Plan 2 Tasks 1-3 + F9-F17 fixes
+- `feat/background-report-generation` — Plan 3 Task 1 + branched off chat-followup
+
+**Plan 2 — Report Chat Follow-up (16 tasks total):**
+- Tasks 1, 2, 3 ✅ complete (bundle persistence, runner integration, chat_sessions.attached_report_id column + migration + tests)
+- Tasks 4-12 pending (chat-session-bind routes, report_chat_context service, implicit binding, race serialization, tombstone sweep, feature flag)
+- Tasks 13-16 pending (frontend)
+
+**Plan 3 — Background Report Generation (21 tasks total):**
+- Task 1 ✅ complete (reports.status/failure_reason/original_request/started_at columns + migration + tests)
+- Tasks 2-21 pending (BackgroundReportRegistry, event ring, presence tracking, route changes, frontend hooks)
+
+**Plan 4 — Revision Pass (21 slices):** Not started.
+
+**Fixes applied during the analysis loop (F1-F17):**
+
+| # | Files | Fix |
+|---|---|---|
+| F1 | citations.py | Walk every citation-bearing block (text, key_finding, pull_quote, quote, bullet_list, comparison_split, table cells, metric_cards, callout, rail.quick_stats) instead of text-only |
+| F2 | citations.py | Auto-fill empty `source_ids` from inline `[N]` refs on same block |
+| F3 | citations.py | Strip illegal `rail.source_ids` |
+| F4 | citations.py | Drop chart blocks with empty `series` / `slices` / `bar_series` |
+| F5 | strictness.yaml.j2 | Prompt: rail has no source_ids; empty charts rejected; data-not-available requires web_search first |
+| F6 | citations.py | Translate `c1`/`c2` shorthand in source_ids to numeric ids |
+| F6b | strictness.yaml.j2 | Prompt: source_ids entries are numeric strings, not "c1"/"cite-1"/provider body |
+| F7 | strictness.yaml.j2 | Prompt: no single-sentence "data not available" sections |
+| F8 | messages.py | `citations_strict` default flipped True (warn-only → repair-mode by default) |
+| F9 | subagent_runner.py | Planning `max_tokens` 4096 → 16384 |
+| F10 | subagent_runner.py | `_framework_summary()` includes per-section instructions |
+| F11 | subagent_runner.py | dedupe_data_paths key uses `json.dumps(sort_keys)` so list values don't break hashing |
+| F12 | subagent_client.py | Catch SectionDraft `ValidationError` and re-prompt instead of raising |
+| F13 | subagent_runner.py | Subagent reprompt_budget 1 → 2 |
+| F14 | subagent_client.py | Subagent `max_tokens` 2048 → 6144 |
+| F15 | subagent_client.py | Empty submit_section also re-prompts |
+| F16 | subagent_runner.py | Wrap subagent.draft() in try/except; placeholder SectionDraft on failure so the run completes |
+| F17 | equity_research.yaml | Planner prompt now explicitly lists the six baseline EODHD calls to declare, with path-slicing guidance |
+
+**Server state:** running with `OPENLIA_USE_SUBAGENT_RUNNER=1` + `OPENLIA_DEFAULT_SUBAGENT_MODEL_ID=1a271c9a-cdc4-4b49-a0d2-1644817cf6bb` (gpt-5.4-mini). Code state is whatever was on `feat/background-report-generation` at the moment of the last `openlia serve` restart (12:01 PM EDT) — that includes F1-F16 but NOT F17. To see F17 in action, restart the server again and trigger a fresh NET run.
+
+**Cost reduction achieved:** from baseline ~$1.50/report (per memory observation 6867) to **~$0.40 / $0.43** under both runners. ≥3× cheaper. The user's ≤$0.50 design target is met.
+
+**Quality direction:** the subagent path produces materially more prose depth (3597 vs 1744 words) at the cost of structured citations/charts. A hybrid finalization layer is the natural next step.
 
 ---
 
