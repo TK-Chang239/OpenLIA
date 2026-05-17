@@ -29,10 +29,6 @@ const session = (over: Partial<Record<string, unknown>>) => ({
   ...over,
 });
 
-const reportsById = {
-  r_msft: { id: "r_msft", title: "MSFT Initiation Report", department: "equity_research", report_type: "initiation", created_at: "2026-05-01T00:00:00Z" },
-};
-
 describe("ChatHistoryList", () => {
   beforeEach(() => {
     listSessions.mockReset();
@@ -87,43 +83,5 @@ describe("ChatHistoryList", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^delete$/i }));
     await waitFor(() => expect(deleteSession).toHaveBeenCalledWith("other"));
     expect(onActiveDeleted).not.toHaveBeenCalled();
-  });
-
-  it("shows 'Discussion: <report title>' for bound sessions; default title otherwise", async () => {
-    listSessions.mockResolvedValue({
-      items: [
-        session({ id: "s1", title: "Equity Research", attached_report_id: null }),
-        session({ id: "s2", title: null, attached_report_id: "r_msft" }),
-      ],
-    });
-    render(
-      <ChatHistoryList
-        department="secretary"
-        activeSessionId={null}
-        onSelect={() => undefined}
-        reportsById={reportsById as any}
-      />,
-    );
-    await screen.findByText("Equity Research");
-    expect(screen.getByText(/discussion: msft initiation report/i)).toBeInTheDocument();
-  });
-
-  it("shows the paperclip icon next to bound sessions only", async () => {
-    listSessions.mockResolvedValue({
-      items: [
-        session({ id: "s1", title: "Equity Research", attached_report_id: null }),
-        session({ id: "s2", title: null, attached_report_id: "r_msft" }),
-      ],
-    });
-    render(
-      <ChatHistoryList
-        department="secretary"
-        activeSessionId={null}
-        onSelect={() => undefined}
-        reportsById={reportsById as any}
-      />,
-    );
-    await screen.findByText("Equity Research");
-    expect(screen.getAllByTestId("attached-report-icon")).toHaveLength(1);
   });
 });

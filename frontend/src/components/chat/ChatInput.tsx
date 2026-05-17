@@ -13,10 +13,6 @@ interface Props {
   /** Seeds the textarea on mount (or whenever the seed changes to a new
    *  non-empty value). Used by the Home → Secretary "?prompt=" prefill. */
   initialValue?: string;
-  /** When true, renders a disabled placeholder instead of the interactive composer. */
-  disabled?: boolean;
-  /** Accessible label shown on the disabled placeholder. */
-  disabledReason?: string;
 }
 
 const MAX_HEIGHT = 120;
@@ -60,24 +56,7 @@ export function ChatInput({
   placeholder,
   leftSlot,
   initialValue,
-  disabled,
-  disabledReason,
 }: Props): JSX.Element {
-  if (disabled) {
-    return (
-      <div className="flex-shrink-0 px-6 py-4 bg-bg-base">
-        <div className="mx-auto max-w-[720px]">
-          <div
-            className="composer composer--disabled rounded-[10px] border border-border-subtle bg-bg-elevated p-4 text-sm text-text-tertiary opacity-60 cursor-not-allowed"
-            aria-label={disabledReason}
-            role="status"
-          >
-            {disabledReason ?? "Chat is unavailable."}
-          </div>
-        </div>
-      </div>
-    );
-  }
   const [value, setValue] = useState(initialValue ?? "");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentErrors, setAttachmentErrors] = useState<string[]>([]);

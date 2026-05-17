@@ -3,9 +3,6 @@ import type { UserBubbleAttachment } from "./UserBubble";
 import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, getSession, listMessages } from "../../api/chat";
 import { ChatInput } from "./ChatInput";
-import { ChatHeader } from "./ChatHeader";
-import { fetchReportDetail } from "../../api/reports";
-import type { ReportListItem } from "../../api/reports";
 import { ModelPicker } from "./ModelPicker";
 import { ResponseLengthPicker } from "./ResponseLengthPicker";
 import { ToolPicker } from "./ToolPicker";
@@ -107,9 +104,6 @@ export function ChatInterface({
   const [responseLength, setResponseLength] = useState<ResponseLength | null>(
     null,
   );
-  const [attachedReportId, setAttachedReportId] = useState<string | null>(null);
-  const [attachedReport, setAttachedReport] = useState<ReportListItem | null>(null);
-  const [locked, setLocked] = useState(false);
   const lastSentRef = useRef<string>("");
   const persistedStreamRef = useRef<string | null>(null);
   const pendingAttachmentsRef = useRef<Map<string, UserBubbleAttachment[]>>(
@@ -127,9 +121,6 @@ export function ChatInterface({
     setLoadError(null);
     setHistory([]);
     setSentOnce(false);
-    setAttachedReportId(null);
-    setAttachedReport(null);
-    setLocked(false);
     persistedStreamRef.current = null;
     reset();
     // Fire the session GET in parallel to refresh the disabled-tool lists
@@ -141,7 +132,6 @@ export function ChatInterface({
         setDisabledConnectorIds(s.disabled_connector_ids ?? []);
         setDisabledSkillIds(s.disabled_skill_ids ?? []);
         setResponseLength(s.response_length ?? null);
-        setAttachedReportId(s.attached_report_id ?? null);
       })
       .catch(() => {
         if (cancelled) return;
@@ -171,43 +161,6 @@ export function ChatInterface({
     // `reset` is a stable useCallback([]) from useChatStream.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
-
-  // Resolve the attached report whenever the session's attached_report_id changes.
-  // A null schema (tombstoned) means the report is gone — lock the chat.
-  useEffect(() => {
-    if (!attachedReportId) return;
-    let cancelled = false;
-    fetchReportDetail(attachedReportId)
-      .then((detail) => {
-        if (cancelled) return;
-        if (detail.schema === null) {
-          // Tombstoned: lock the chat, surface what metadata we have.
-          setLocked(true);
-          setAttachedReport(null);
-        } else {
-          setLocked(false);
-          // Build a minimal ReportListItem from the detail schema so ChatHeader
-          // can render the title without a separate listReports call.
-          const cover = detail.schema.cover;
-          setAttachedReport({
-            id: attachedReportId,
-            department: detail.schema.department ?? detail.department ?? "",
-            report_type: "",
-            title: cover?.title ?? detail.title ?? attachedReportId,
-            created_at: detail.schema.generated_at ?? detail.created_at ?? "",
-          } as ReportListItem);
-        }
-      })
-      .catch(() => {
-        if (cancelled) return;
-        // Fetch failed — treat as unavailable, lock the chat.
-        setLocked(true);
-        setAttachedReport(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [attachedReportId]);
 
   const onSend = (text: string, attachments?: File[]) => {
     if (!sessionId) return;
@@ -322,23 +275,8 @@ export function ChatInterface({
     );
   }
 
-  const sessionForHeader = {
-    id: sessionId,
-    department: "unknown" as any,
-    title: "",
-    is_pinned: false,
-    is_archived: false,
-    created_at: "",
-    attached_report_id: attachedReportId,
-  };
-
   return (
     <div className="relative flex h-full flex-col">
-      <ChatHeader
-        session={sessionForHeader}
-        attachedReport={attachedReport}
-        locked={locked}
-      />
       <div className="flex items-center justify-end gap-3 px-4 pt-2">
         <MemoryDrawerToggle
           open={memoryDrawerOpen}
@@ -492,8 +430,6 @@ export function ChatInterface({
         isStreaming={isStreaming}
         placeholder={inputPlaceholder}
         initialValue={initialDraft ?? undefined}
-        disabled={locked}
-        disabledReason={locked ? "The report this discussion was about can no longer be fetched. I'm unable to answer any questions about it." : undefined}
         leftSlot={
           departmentId ? (
             <div className="flex items-center gap-2">

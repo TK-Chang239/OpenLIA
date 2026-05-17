@@ -4,7 +4,6 @@ import { MemoryRouter } from "react-router-dom";
 
 import EquityResearch from "./EquityResearch";
 import { FileViewerProvider } from "../../components/viewer/FileViewerContext";
-import { ToastProvider } from "../../components/primitives/Toast";
 
 vi.mock("../../auth/AuthContext", () => ({
   useAuth: () => ({
@@ -90,11 +89,9 @@ vi.mock("../../api/reports", async () => {
 const renderPage = (initialEntries: string[] = ["/equity-research"]) =>
   render(
     <MemoryRouter initialEntries={initialEntries}>
-      <ToastProvider>
-        <FileViewerProvider>
-          <EquityResearch />
-        </FileViewerProvider>
-      </ToastProvider>
+      <FileViewerProvider>
+        <EquityResearch />
+      </FileViewerProvider>
     </MemoryRouter>,
   );
 
@@ -120,7 +117,6 @@ beforeEach(() => {
 afterEach(() => {
   globalThis.fetch = originalFetch as typeof fetch;
   vi.clearAllMocks();
-  localStorage.removeItem("chat_followup_intro_toast_seen");
 });
 
 function submitInput(value: string) {
@@ -428,74 +424,6 @@ describe("EquityResearchPage", () => {
       expect(screen.getByTestId("er-report-card")).toBeInTheDocument();
     });
     expect(screen.queryByTestId("er-report-tool-chips")).not.toBeInTheDocument();
-  });
-
-  it("shows implicit-binding intro toast on first report.saved (NEW-16-01)", async () => {
-    localStorage.removeItem("chat_followup_intro_toast_seen");
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      body: sseBody([
-        {
-          event: "report.start",
-          data: { report_id: "r_t1", department: "equity_research", mode: "stock_initiation", section_titles: [] },
-        },
-        { event: "report.complete", data: { report_id: "r_t1", schema: {} } },
-        { event: "report.saved", data: { report_id: "r_t1" } },
-      ]),
-    }) as unknown as Response);
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    renderPage();
-    await act(async () => {
-      submitInput("AAPL");
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("toast-region")).toBeInTheDocument();
-      expect(screen.getByTestId("toast-item")).toHaveTextContent(
-        /report linked to this chat/i,
-      );
-    });
-    expect(localStorage.getItem("chat_followup_intro_toast_seen")).toBe("1");
-  });
-
-  it("does not show intro toast when localStorage flag is already set (NEW-16-02)", async () => {
-    localStorage.setItem("chat_followup_intro_toast_seen", "1");
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      body: sseBody([
-        { event: "report.complete", data: { report_id: "r_t2", schema: {} } },
-        { event: "report.saved", data: { report_id: "r_t2" } },
-      ]),
-    }) as unknown as Response);
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    renderPage();
-    await act(async () => {
-      submitInput("TSLA");
-    });
-
-    // Give React time to flush any pending effects.
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 100));
-    });
-
-    expect(screen.queryByTestId("toast-item")).not.toBeInTheDocument();
-  });
-
-  it("shows redirect toast when redirectSessionId is set (NEW-16-03)", async () => {
-    // The redirect toast fires when dispatchReport receives redirect=true from
-    // the backend. We test by accessing the internal state via a component
-    // that manually sets redirectSessionId — but since that's internal state,
-    // we instead verify the toast renders with the correct text and Open button
-    // by triggering via a custom event that the component will eventually expose.
-    // For now verify the toast label text is correct by checking the Toast API
-    // renders when a redirect scenario is simulated through the component.
-    // This test is a structural placeholder that confirms the Toast import and
-    // redirect toast label are correct.
-    expect(true).toBe(true);
   });
 
   it("follow-up chat hits the ER chat URL with session_id (NEW-14-01)", async () => {

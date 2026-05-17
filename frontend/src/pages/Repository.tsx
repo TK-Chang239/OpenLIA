@@ -7,7 +7,6 @@ import { deleteReport, reportPdfUrl } from "../api/reports";
 import { DeleteReportDialog } from "../components/report/DeleteReportDialog";
 import { useRepoList } from "../hooks/useRepoList";
 import { useFileViewer } from "../components/viewer/FileViewerContext";
-import { useSavedReportsOptional } from "../components/repo/SavedReportsContext";
 import { useToast } from "../components/primitives/Toast";
 import { departmentLabel } from "../lib/department-colors";
 import { RepoFilterBar } from "../components/repo/RepoFilterBar";
@@ -61,7 +60,6 @@ function formatDate(iso: string): string {
 export default function Repository(): JSX.Element {
   const list = useRepoList();
   const { open: openViewer } = useFileViewer();
-  const savedReports = useSavedReportsOptional();
   const toast = useToast();
   const [facets, setFacets] = useState<RepoFacets>({ departments: [], total: 0 });
   const [pendingRemove, setPendingRemove] = useState<RepoRow | null>(null);
@@ -142,7 +140,6 @@ export default function Repository(): JSX.Element {
     list.removeRow(row.id);
     try {
       await deleteReport(row.report_id);
-      savedReports?.markUnsaved(row.report_id);
       toast.push({
         title: "Report deleted permanently.",
         durationMs: 3000,
@@ -165,7 +162,6 @@ export default function Repository(): JSX.Element {
     list.removeRow(row.id);
     try {
       await unsaveFromRepo(row.report_id);
-      savedReports?.markUnsaved(row.report_id);
       toast.push({
         title: "Removed from Repository",
         durationMs: 4000,
@@ -174,7 +170,6 @@ export default function Repository(): JSX.Element {
           onClick: async () => {
             try {
               await saveToRepo(row.report_id);
-              savedReports?.markSaved(row.report_id);
               list.restoreRow(row, removedIndex);
               toast.push({ title: "Report restored.", tone: "success", durationMs: 2000 });
             } catch {

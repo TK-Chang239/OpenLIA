@@ -64,14 +64,6 @@ class ChatSession(Base, TimestampMixin):
     # discipline). The Secretary chat runtime injects a length directive
     # into the system prompt only for ``concise`` / ``detailed``.
     response_length: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # Optional report bound to this session at creation (used by
-    # "Ask in Secretary" handoffs from report viewers). ``NULL`` when
-    # the session was created without an attached report.
-    attached_report_id: Mapped[str | None] = mapped_column(
-        String(36),
-        ForeignKey("reports.id", ondelete="SET NULL", use_alter=True),
-        nullable=True,
-    )
 
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", cascade="all, delete-orphan", passive_deletes=True
@@ -153,17 +145,6 @@ class Report(Base, TimestampMixin):
     # the DELETE /reports/{id} route set this via the shared
     # services/reports.py::tombstone_report function.
     expired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
-    # Background report generation fields (Task 6).
-    # status: NULL for legacy sync reports; 'generating' | 'complete' |
-    #   'failed' | 'cancelled' for background-generated reports.
-    status: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    # Short reason string set on terminal failure/cancellation.
-    failure_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    # Serialised GenerateReportIn body — used by the retry flow to
-    # re-submit the same request without the client resending it.
-    original_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # Wall-clock time when the background task was submitted.
-    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     __table_args__ = (
         Index("ix_reports_user_id_department", "user_id", "department"),
         Index("ix_reports_user_id_created_at", "user_id", "created_at"),

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import ClassVar
 
 from openlia.llm.runtime.cancellation import CancellationToken
@@ -17,12 +16,12 @@ from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.content import RepoItem, Report
 from openlia_server.db.models.dashboard import MrAssessmentCache, RsSnapshot
+from openlia_server.db.models.graph import GraphArtifactSummary
 from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.base import BaseExecutor, JobOutcome
 from openlia_server.scheduler.registry import JobStatus, JobType
 from openlia_server.services.reports import tombstone_report
-from openlia_server.services.scheduler import sweep_expired_reports
 
 SESSIONS_RETENTION_DAYS = 7
 PASSWORD_RESET_RETENTION_DAYS = 90
@@ -147,12 +146,23 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         if tombstone_report(session, report_id=rid):
             reports_tombstoned += 1
 
-    bundle_dir_env = os.environ.get("OPENLIA_REPORT_BUNDLE_DIR")
-    bundle_dir: Path | None = (
-        Path(bundle_dir_env) if bundle_dir_env else Path.home() / ".openlia" / "report_bundles"
+    orphan_ids = list(
+        session.execute(
+            select(Report.id).where(
+                Report.user_id.is_(None),
+                Report.created_at < report_cutoff,
+            )
+        ).scalars()
     )
-    deleted_ids = sweep_expired_reports(session=session, bundle_dir=bundle_dir)
-    reports_hard_deleted = len(deleted_ids)
+    if orphan_ids:
+        session.execute(
+            delete(GraphArtifactSummary).where(
+                GraphArtifactSummary.artifact_kind == "report",
+                GraphArtifactSummary.artifact_id.in_(orphan_ids),
+            )
+        )
+        session.execute(delete(Report).where(Report.id.in_(orphan_ids)))
+    reports_hard_deleted = len(orphan_ids)
 
     return {
         "sessions_deleted": int(sessions_deleted),
