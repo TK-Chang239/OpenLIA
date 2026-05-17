@@ -156,3 +156,34 @@ async def test_subagent_reprompts_on_uncited_numeric_claim() -> None:
     draft = await client.draft(_request())
     assert draft.citations_used == ["c1"]
     assert len(provider.captured_requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_subagent_reprompts_on_invalid_block_shape() -> None:
+    sp = _valid_section_plan()
+    bad_blocks = {
+        "section_id": sp.section_id,
+        "blocks": [
+            {"type": "text", "content": " ".join(["w"] * 200)},
+            {"type": "line_chart", "title": "X"},
+        ],  # missing required `series`
+        "citations_used": ["c1"],
+        "word_count": 200,
+        "open_questions": [],
+    }
+    fixed = _ok_draft_args(sp.section_id, content=" ".join(["w"] * 200), citations=["c1"])
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="t0", name=SECTION_DRAFT_TOOL_NAME, arguments=bad_blocks)],
+                ),
+                ("tool_calls", [ToolCall(id="t1", name=SECTION_DRAFT_TOOL_NAME, arguments=fixed)]),
+            ]
+        )
+    )
+    client = SubagentClient(provider=provider, reprompt_budget=1)
+    draft = await client.draft(_request())
+    assert all(b["type"] == "text" for b in draft.blocks)
+    assert len(provider.captured_requests) == 2
