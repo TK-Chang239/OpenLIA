@@ -76,6 +76,7 @@ from openlia_server.routes.guardrail_events import build_guardrail_events_router
 from openlia_server.routes.jobs import build_jobs_router
 from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
+from openlia_server.routes.notifications_stream import build_notifications_stream_router
 from openlia_server.routes.portfolio import build_portfolio_router
 from openlia_server.routes.reports import build_reports_router
 from openlia_server.routes.reports_revise import build_reports_revise_router
@@ -554,6 +555,17 @@ def create_app(
     app.include_router(build_llm_slot_defaults_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
+    app.include_router(
+        build_notifications_stream_router(db_session_factory=factory, mode=mode)
+    )
+
+    # Shared per-process presence registry; created once here so all routes
+    # (notifications_stream, reports_revise, chat_sessions) share the same
+    # instance without each constructing a private fallback.
+    if getattr(app.state, "user_presence_registry", None) is None:
+        from openlia_server.services.user_presence_registry import UserPresenceRegistry
+
+        app.state.user_presence_registry = UserPresenceRegistry()
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_stream_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_revise_router(db_session_factory=factory, mode=mode))
