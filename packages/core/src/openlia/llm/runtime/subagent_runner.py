@@ -143,7 +143,29 @@ class SubagentReportRunner:
         department_id: str,
         user_id: str | None,
         request: ReportRequest,
+        cancel_token: Any = None,
+        attachments: Any = None,
+        model_id_override: str | None = None,
+        disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
     ) -> AsyncIterator[SseEvent]:
+        # SubagentReportRunner accepts the same call surface as the classic
+        # ReportRunner so the server's RefreshingReportRunner can drop in
+        # either runner without branching on call style. Honored:
+        #   - cancel_token: checked at phase boundaries; full mid-LLM
+        #     cancellation is a v2 concern.
+        # Accepted-but-ignored (v1):
+        #   - attachments: subagent runner uses planned eager fetch, not
+        #     user-attached docs. Wire-through is a follow-up.
+        #   - model_id_override: subagent runner reads from per-role
+        #     resolver. Override semantics for a two-role pipeline need a
+        #     design call; treated as a future enhancement.
+        #   - disabled_skill_ids: subagents have no tools, so skills don't
+        #     apply. Ignored.
+        del attachments, model_id_override, disabled_skill_ids
+
+        def _cancelled() -> bool:
+            return cancel_token is not None and getattr(cancel_token, "is_cancelled", False)
+
         from datetime import UTC, datetime
 
         from openlia.llm.runtime.editor_client import (
@@ -206,8 +228,16 @@ class SubagentReportRunner:
             return
         plan = plan_or_err
 
+        if _cancelled():
+            yield ReportError(report_id=report_id, error_class="cancelled", message="cancelled")
+            return
+
         yield ReportPhase(report_id=report_id, phase="eager_fetch")
         fetched_data = await self._eager_fetch(plan, department_id=department_id)
+
+        if _cancelled():
+            yield ReportError(report_id=report_id, error_class="cancelled", message="cancelled")
+            return
 
         yield ReportPhase(report_id=report_id, phase="section_drafting")
         resolved_sub = self._resolve(
@@ -238,6 +268,9 @@ class SubagentReportRunner:
         subagent_role = load_section_subagent_role()
         schema_strictness = _load_schema_strictness()
         for section in plan.sections:
+            if _cancelled():
+                yield ReportError(report_id=report_id, error_class="cancelled", message="cancelled")
+                return
             section_data = self._slice_for_section(section, fetched_data)
             req = SubagentRequest(
                 role_prompt=subagent_role,
@@ -259,6 +292,10 @@ class SubagentReportRunner:
             prior_summaries.append(
                 summarize_section_draft(draft, title=sections_by_id[section.section_id].title)
             )
+
+        if _cancelled():
+            yield ReportError(report_id=report_id, error_class="cancelled", message="cancelled")
+            return
 
         yield ReportPhase(report_id=report_id, phase="editing")
 
