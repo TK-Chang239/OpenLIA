@@ -11,6 +11,7 @@ import { crumbsForPath, stampsForNow } from "./shellState";
 import { FileViewerProvider, useFileViewer } from "../components/viewer/FileViewerContext";
 import { FileViewer } from "../components/viewer/FileViewer";
 import { ToastProvider } from "../components/primitives/Toast";
+import { SavedReportsProvider } from "../components/repo/SavedReportsContext";
 import { useDeptHealth } from "../store/dept-health";
 
 interface AppLayoutProps {
@@ -75,11 +76,13 @@ export function AppLayout({ children }: AppLayoutProps = {}): JSX.Element {
   return (
     <MobileNavProvider>
       <ToastProvider>
-        <FileViewerProvider>
-          <ChatHeaderProvider>
-            <AppLayoutInner>{children}</AppLayoutInner>
-          </ChatHeaderProvider>
-        </FileViewerProvider>
+        <SavedReportsProvider>
+          <FileViewerProvider>
+            <ChatHeaderProvider>
+              <AppLayoutInner>{children}</AppLayoutInner>
+            </ChatHeaderProvider>
+          </FileViewerProvider>
+        </SavedReportsProvider>
       </ToastProvider>
     </MobileNavProvider>
   );
