@@ -3,19 +3,191 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
-from datetime import datetime
+from collections import defaultdict
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import ChatAttachment, ChatMessage, Report
+from openlia_server.db.models.content import ChatAttachment, ChatMessage, ChatSession, Report
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
+
+_REVISE_TOOL_NAME = "revise_report"
+_SOURCE_CHAT_LOCKS: dict[str, Any] = defaultdict(lambda: __import__("asyncio").Lock())
+
+
+def _chat_followup_enabled() -> bool:
+    return os.environ.get("OPENLIA_REPORT_CHAT_ENABLED", "0") == "1"
+
+
+def _revision_flag_on() -> bool:
+    return os.environ.get("OPENLIA_REVISION_PASS_ENABLED", "0") == "1"
+
+
+async def _trigger_revision(
+    *,
+    db: Session,
+    user_id: str,
+    source_report_id: str,
+    chat_session_id: str,
+    revision_brief: str,
+    sections_to_focus: list[str] | None,
+    request: Request,
+) -> str:
+    """Insert a new revision Report row and submit to the background registry.
+
+    Returns the new ``report_id``. Mirrors the core logic in
+    ``reports_revise.revise_report_ep`` so the chat-route intercept path
+    can trigger revision without an internal HTTP round-trip.
+    """
+    import asyncio
+
+    source_row = db.get(Report, source_report_id)
+    if source_row is None or source_row.user_id != user_id:
+        raise HTTPException(404, "report not found")
+
+    async with _SOURCE_CHAT_LOCKS[chat_session_id]:
+        new_report_id = f"r_{uuid.uuid4().hex[:12]}"
+        new_row = Report(
+            id=new_report_id,
+            user_id=user_id,
+            department=source_row.department,
+            report_type=source_row.report_type,
+            title=source_row.title,
+            content_markdown="",
+            content_structured={},
+            model_ref="",
+            status="generating",
+            started_at=datetime.now(UTC),
+            original_request={
+                "kind": "revision",
+                "source_report_id": source_report_id,
+                "chat_session_id": chat_session_id,
+                "revision_brief": revision_brief,
+                "sections_to_focus": sections_to_focus,
+            },
+        )
+        db.add(new_row)
+        db.commit()
+
+    registry: Any = getattr(request.app.state, "bg_report_registry", None)
+    presence: Any = getattr(request.app.state, "user_presence_registry", None)
+
+    if registry is None:
+        from openlia_server.services.background_report_registry import BackgroundReportRegistry
+
+        registry = BackgroundReportRegistry()
+
+    if presence is None:
+        from openlia_server.services.user_presence_registry import UserPresenceRegistry
+
+        presence = UserPresenceRegistry()
+
+    bundle_dir = Path(
+        os.environ.get("OPENLIA_REPORT_BUNDLE_DIR") or Path.home() / ".openlia" / "report_bundles"
+    )
+
+    resolve_fn = getattr(request.app.state, "revision_resolve", None)
+    flagship_factory = getattr(request.app.state, "revision_flagship_provider_factory", None)
+
+    if resolve_fn is None or flagship_factory is None:
+        from openlia.llm.adapters import build_adapter
+        from openlia.llm.resolver import resolve as _resolve
+
+        def resolve_fn(  # type: ignore[misc]
+            *,
+            department_id: str,
+            user_id: str | None,
+            registry: Any,
+            role: str = "flagship",
+            model_id_override: str | None = None,
+        ):
+            return _resolve(
+                department_id=department_id,
+                registry=registry,
+                user_id=user_id,
+            )
+
+        def flagship_factory(resolved: Any) -> Any:  # type: ignore[misc]
+            return build_adapter(
+                kind=resolved.provider_kind,
+                credentials=resolved.credentials,
+                model=resolved.model_ref,
+                capabilities=resolved.capabilities,
+            )
+
+    from openlia.llm.runtime.prompts import PromptLoader
+    from openlia.llm.runtime.revision_runner import RevisionRunner
+
+    from openlia_server.services.revision_wrapper import run_wrapped_revision
+
+    prompts = PromptLoader()
+
+    runner = RevisionRunner(
+        prompts=prompts,
+        resolve=resolve_fn,
+        registry=registry,
+        flagship_provider_factory=flagship_factory,
+        report_id_factory=lambda: new_report_id,
+        bundle_dir=bundle_dir,
+        db_session_factory=None,  # type: ignore[arg-type]
+    )
+
+    runner_coro = runner.run(
+        department_id=source_row.department,
+        user_id=user_id,
+        source_report_id=source_report_id,
+        chat_session_id=chat_session_id,
+        revision_brief=revision_brief,
+        sections_to_focus=sections_to_focus,
+    )
+
+    task = registry.submit(
+        user_id=user_id,
+        report_id=new_report_id,
+        runner_coro=runner_coro,
+    )
+
+    async def _subscribe():
+        from openlia.llm.runtime.events import ReportComplete, ReportError
+
+        queue: Any = asyncio.Queue(maxsize=512)
+        task.subscriber_queues.add(queue)
+        try:
+            while True:
+                ev = await queue.get()
+                yield ev
+                if isinstance(ev, (ReportComplete, ReportError)):
+                    return
+        finally:
+            task.subscriber_queues.discard(queue)
+
+    _wrapper_task = asyncio.create_task(
+        run_wrapped_revision(
+            runner_coro=_subscribe(),
+            new_report_id=new_report_id,
+            source_chat_session_id=chat_session_id,
+            user_id=user_id,
+            db_session_factory=None,  # type: ignore[arg-type]
+            presence=presence,
+            registry=registry,
+        )
+    )
+    getattr(request.app.state, "_revision_tasks", set()).add(_wrapper_task)
+    _wrapper_task.add_done_callback(
+        lambda t: getattr(request.app.state, "_revision_tasks", set()).discard(t)
+    )
+
+    return new_report_id
 
 
 def _attach_report_as_context(
@@ -62,6 +234,7 @@ class SessionOut(BaseModel):
     is_pinned: bool
     is_archived: bool
     created_at: datetime
+    attached_report_id: str | None = None
     model_id: str | None = None
     disabled_connector_ids: list[str] = Field(default_factory=list)
     disabled_skill_ids: list[str] = Field(default_factory=list)
@@ -132,6 +305,10 @@ class MessageListOut(BaseModel):
     items: list[MessageOut]
 
 
+class MessageIn(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
 def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
     router = APIRouter(prefix="/chat/sessions", tags=["chat-sessions"])
     require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
@@ -162,11 +339,32 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> SessionOut:
-        row = svc.create_session(db, user_id=user.id, department=body.department, title=body.title)
+        # Idempotent reuse: if this user already has a session bound to this
+        # report, return it instead of creating a duplicate.
+        if body.attached_report_id:
+            existing = (
+                db.query(ChatSession)
+                .filter(
+                    ChatSession.user_id == user.id,
+                    ChatSession.attached_report_id == body.attached_report_id,
+                )
+                .first()
+            )
+            if existing is not None:
+                return SessionOut.model_validate(existing, from_attributes=True)
+
+        row = svc.create_session(
+            db,
+            user_id=user.id,
+            department=body.department,
+            title=body.title,
+            attached_report_id=body.attached_report_id,
+        )
         if body.attached_report_id:
             _attach_report_as_context(
                 db, session_id=row.id, user_id=user.id, report_id=body.attached_report_id
             )
+            db.commit()
         return SessionOut.model_validate(row, from_attributes=True)
 
     @router.get("/by-department/{department}", response_model=SessionOut)
@@ -293,6 +491,127 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
             raise HTTPException(
                 status_code=404, detail={"code": "not_found", "message": str(exc)}
             ) from exc
+
+    @router.post("/{session_id}/messages")
+    async def post_message_ep(
+        session_id: str,
+        body: MessageIn,
+        request: Request,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict:
+        """Pre-flight message endpoint.
+
+        When the session has ``attached_report_id``, loads the bundle and
+        checks whether the report context is still accessible. Returns
+        ``{"locked": True, "lock_message": ...}`` when the bundle is missing
+        or the report is tombstoned. Returns ``{"ok": True}`` otherwise so
+        the caller can proceed to the SSE stream endpoint.
+
+        When ``OPENLIA_REVISION_PASS_ENABLED=1`` is also set, runs the LLM
+        turn and intercepts any ``revise_report`` tool calls — triggering the
+        revision pipeline and returning ``{"revision_started": True,
+        "new_report_id": ...}`` instead of ``{"ok": True}``.
+        """
+        try:
+            session_row = svc.get_session(db, session_id=session_id, user_id=user.id)
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": "not_found", "message": str(exc)}
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=403, detail={"code": "forbidden", "message": str(exc)}
+            ) from exc
+
+        if session_row.attached_report_id and _chat_followup_enabled():
+            from openlia.llm.runtime.tools import ToolDispatcher
+            from openlia.llm.runtime.web_search import WebSearchResolution
+
+            from openlia_server.services.report_chat_context import (
+                build_chat_context_for_session,
+            )
+            from openlia_server.services.runtime import _EmptyDataDispatcher
+
+            bundle_dir = Path(
+                os.environ.get("OPENLIA_REPORT_BUNDLE_DIR")
+                or Path.home() / ".openlia" / "report_bundles"
+            )
+
+            report = db.get(Report, session_row.attached_report_id)
+            is_tombstoned = report is None or getattr(report, "expired_at", None) is not None
+
+            dispatcher = ToolDispatcher(
+                data_dispatcher=_EmptyDataDispatcher(),
+                web_search=WebSearchResolution(False, None, None),
+            )
+
+            context_result = build_chat_context_for_session(
+                attached_report_id=session_row.attached_report_id,
+                bundle_dir=bundle_dir,
+                report_is_tombstoned=is_tombstoned,
+                dispatcher=dispatcher,
+                department_id=session_row.department,
+                has_web_search=False,
+            )
+            if context_result.locked:
+                return {"locked": True, "lock_message": context_result.lock_message}
+
+            # When revision flag is on, run the LLM turn and intercept any
+            # ``revise_report`` tool calls — do not dispatch them to ToolDispatcher.
+            if _revision_flag_on():
+                from openlia.llm.runtime.events import ChatToolCallStart
+                from openlia.llm.runtime.messages import ChatMessage as RuntimeChatMessage
+
+                rows = svc.list_messages(db, session_id=session_id, user_id=user.id)
+                messages = [RuntimeChatMessage(role=r.role, content=r.content) for r in rows]
+                # Append the incoming user message so the LLM sees it.
+                messages.append(RuntimeChatMessage(role="user", content=body.content))
+
+                factory = getattr(request.app.state, "chat_runner_factory", None)
+                if factory is not None:
+                    runner = factory()
+                    revise_calls: list[dict[str, Any]] = []
+                    async for event in runner.run(
+                        department_id=session_row.department,
+                        user_id=user.id,
+                        messages=messages,
+                    ):
+                        if isinstance(event, ChatToolCallStart):
+                            if event.tool_name == _REVISE_TOOL_NAME:
+                                revise_calls.append(
+                                    {
+                                        "call_id": event.call_id,
+                                        "args_preview": event.args_preview or "",
+                                    }
+                                )
+
+                    if revise_calls:
+                        # Parse revision_brief from the first revise_report call's
+                        # args_preview (best-effort; fall back to empty string).
+                        first_args_str = revise_calls[0].get("args_preview", "")
+                        try:
+                            first_args = json.loads(first_args_str)
+                        except (json.JSONDecodeError, ValueError):
+                            first_args = {}
+                        revision_brief: str = first_args.get("revision_brief", "")
+                        sections_to_focus: list[str] | None = first_args.get("sections_to_focus")
+
+                        new_report_id = await _trigger_revision(
+                            db=db,
+                            user_id=user.id,
+                            source_report_id=session_row.attached_report_id,
+                            chat_session_id=session_id,
+                            revision_brief=revision_brief,
+                            sections_to_focus=sections_to_focus,
+                            request=request,
+                        )
+                        return {
+                            "revision_started": True,
+                            "new_report_id": new_report_id,
+                        }
+
+        return {"ok": True}
 
     @router.get("/{session_id}/messages", response_model=MessageListOut)
     def list_messages_ep(
