@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import copy
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from openlia.llm.adapters._content import CACHE_BREAKPOINT_MARKER
 from openlia.llm.base import LLMProvider
 from openlia.llm.runtime.section_draft import OpenQuestion, SectionDraft
-from openlia.llm.types import LLMRequest, Message, ToolSchema
+from openlia.llm.types import LLMRequest, LLMResponse, Message, ToolSchema
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import validate_report_payload
 
@@ -99,10 +100,12 @@ class EditorClient:
         provider: LLMProvider,
         repair_budget: int = 1,
         max_output_tokens: int = 8192,
+        on_done: Callable[[LLMResponse], None] | None = None,
     ) -> None:
         self._provider = provider
         self._repair_budget = repair_budget
         self._max_output_tokens = max_output_tokens
+        self._on_done = on_done
 
     async def compose(self, request: EditorRequest) -> dict[str, Any]:
         system = _system_prompt(request)
@@ -121,6 +124,8 @@ class EditorClient:
                     max_tokens=self._max_output_tokens,
                 )
             )
+            if self._on_done is not None:
+                self._on_done(response)
             call = next((c for c in response.tool_calls if c.name == EDITOR_TOOL_NAME), None)
             if call is None:
                 raise ValueError("editor returned no submit_report call")

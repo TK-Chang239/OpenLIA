@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,7 +25,7 @@ from openlia.llm.adapters._content import CACHE_BREAKPOINT_MARKER
 from openlia.llm.base import LLMProvider
 from openlia.llm.runtime.plan_schema import SectionPlan
 from openlia.llm.runtime.section_draft import PriorSection, SectionDraft
-from openlia.llm.types import LLMRequest, Message, ToolSchema
+from openlia.llm.types import LLMRequest, LLMResponse, Message, ToolSchema
 from openlia.reports.validator import validate_report_payload
 
 SECTION_DRAFT_TOOL_NAME = "submit_section"
@@ -104,9 +105,16 @@ def _user_prompt(req: SubagentRequest) -> str:
 
 
 class SubagentClient:
-    def __init__(self, *, provider: LLMProvider, reprompt_budget: int = 1) -> None:
+    def __init__(
+        self,
+        *,
+        provider: LLMProvider,
+        reprompt_budget: int = 1,
+        on_done: Callable[[LLMResponse], None] | None = None,
+    ) -> None:
         self._provider = provider
         self._reprompt_budget = reprompt_budget
+        self._on_done = on_done
 
     async def draft(self, request: SubagentRequest) -> SectionDraft:
         system = _system_prompt(request)
@@ -128,6 +136,8 @@ class SubagentClient:
                     max_tokens=2048,
                 )
             )
+            if self._on_done is not None:
+                self._on_done(response)
             call = next((c for c in response.tool_calls if c.name == SECTION_DRAFT_TOOL_NAME), None)
             if call is None:
                 raise ValueError("subagent returned no submit_section call")
