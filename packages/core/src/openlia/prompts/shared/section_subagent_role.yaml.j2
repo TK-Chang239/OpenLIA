@@ -37,4 +37,33 @@ data you need for this section is provided inline in the request.
 
 ## Output
 
-Call `submit_section` exactly once with a SectionDraft payload.
+Call `submit_section` exactly once with a SectionDraft payload. The
+payload MUST include ALL of these top-level keys:
+
+- `section_id` (string): the section_id from the plan, verbatim
+- `blocks` (non-empty list of block objects): your narrative + any
+  metric_cards / tables / charts. At minimum, one text block.
+- `citations_used` (list of citation id strings): the ids you cite
+  inline; empty list `[]` is acceptable only if you cite nothing.
+- `word_count` (integer): the total word count across all text-bearing
+  blocks. Hit the word_budget within +/-20%.
+- `open_questions` (list of strings): describe any data gaps; empty
+  list `[]` if none.
+
+A minimal valid payload:
+
+```
+{
+  "section_id": "company_overview",
+  "blocks": [
+    {"type": "text", "content": "Company X is a software firm headquartered in Y..."}
+  ],
+  "citations_used": ["1"],
+  "word_count": 220,
+  "open_questions": []
+}
+```
+
+If you omit any of those keys, the call is rejected and you must
+re-submit. The most common mistake is omitting `blocks`. Do not omit
+`blocks`.
