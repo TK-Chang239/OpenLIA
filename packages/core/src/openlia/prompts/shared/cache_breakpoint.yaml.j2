@@ -4,4 +4,14 @@
 {# Adapters that support prompt caching (Anthropic) split here and tag #}
 {# the prefix with cache_control. Adapters that don't strip the marker #}
 {# entirely so the model never sees it. #}
+{# #}
+{# CONTRACT — nothing above this marker may interpolate per-turn or #}
+{# per-report dynamic data. Today's date, search budgets, framework #}
+{# JSON, and anything else that varies between consecutive LLM calls #}
+{# within a single report MUST be rendered below the marker (or in the #}
+{# user message). Breaking this contract poisons the OpenAI auto-cache #}
+{# and the Anthropic cache_control prefix, regressing the per-report #}
+{# cost back to non-cached pricing. Lock this guard with the #}
+{# test_report_system_prompt_static_prefix_* tests in #}
+{# test_report_validation_repair.py. #}
 <!-- OPENLIA_CACHE_BREAKPOINT -->

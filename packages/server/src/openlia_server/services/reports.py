@@ -17,14 +17,16 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from openlia.reports.schema import ReportSchema
 from openlia.reports.validator import validate_report_payload
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from openlia_server.db.models.content import Report
+from openlia_server.db.models.content import RepoItem, Report, ReportVersion
+from openlia_server.db.models.graph import GraphArtifactSummary
 
 
 class ReportNotFoundError(LookupError):
@@ -203,3 +205,36 @@ def get_report_for_user(db: Session, *, user_id: str, report_id: str) -> Report 
     """Return the report iff it exists and `user_id` is the owner."""
     stmt = select(Report).where(Report.id == report_id).where(Report.user_id == user_id)
     return db.execute(stmt).scalar_one_or_none()
+
+
+def tombstone_report(db: Session, *, report_id: str) -> bool:
+    """Tombstone a report. Returns True if state changed, False otherwise.
+
+    Single canonical write that produces a tombstoned report: body fields
+    blanked, ``report_versions`` / ``repo_items`` / ``graph_artifact_summaries``
+    deleted, ``expired_at`` stamped. Both ``DELETE /reports/{id}`` and the
+    nightly maintenance sweep invoke this so there is one end state.
+
+    Idempotent: returns False if the report is missing or already
+    tombstoned. The caller commits.
+    """
+    report = db.get(Report, report_id)
+    if report is None:
+        return False
+    if report.expired_at is not None:
+        return False
+
+    db.execute(delete(ReportVersion).where(ReportVersion.report_id == report_id))
+    db.execute(delete(RepoItem).where(RepoItem.report_id == report_id))
+    db.execute(
+        delete(GraphArtifactSummary).where(
+            GraphArtifactSummary.artifact_kind == "report",
+            GraphArtifactSummary.artifact_id == report_id,
+        )
+    )
+
+    report.content_markdown = ""
+    report.content_structured = {}
+    report.expired_at = datetime.now(UTC)
+    db.add(report)
+    return True

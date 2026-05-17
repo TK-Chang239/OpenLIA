@@ -126,9 +126,9 @@ async def test_anthropic_payload_passes_string_when_no_marker() -> None:
 async def test_openai_strips_marker() -> None:
     adapter = OpenAIAdapter(credentials=_creds("sk-x"), model="gpt-4o", capabilities=Capabilities())
     with respx.mock() as mock:
-        route = mock.post("https://api.openai.com/v1/chat/completions").respond(
-            200, json=_OPENAI_OK
-        )
+        route = mock.post(
+            "https://api.openai.com/v1/chat/completions",
+        ).respond(200, json=_OPENAI_OK)
         await adapter.generate(SAMPLE_REQUEST)
     sent = json.loads(route.calls.last.request.content)
     sys_msg = next(m for m in sent["messages"] if m["role"] == "system")

@@ -43,7 +43,14 @@ def _inherit_session_defaults_from_last_session(
     )
 
 
-def create_session(db: Session, *, user_id: str, department: str, title: str) -> ChatSession:
+def create_session(
+    db: Session,
+    *,
+    user_id: str,
+    department: str,
+    title: str,
+    attached_report_id: str | None = None,
+) -> ChatSession:
     (
         inherited_connectors,
         inherited_skills,
@@ -59,6 +66,7 @@ def create_session(db: Session, *, user_id: str, department: str, title: str) ->
         disabled_connector_ids=inherited_connectors,
         disabled_skill_ids=inherited_skills,
         response_length=inherited_response_length,
+        attached_report_id=attached_report_id,
     )
     db.add(row)
     db.commit()

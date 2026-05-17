@@ -6,19 +6,23 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import ClassVar
 
 from openlia.llm.runtime.cancellation import CancellationToken
-from sqlalchemy import delete, update
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
+from openlia_server.db.models.content import RepoItem, Report
 from openlia_server.db.models.dashboard import MrAssessmentCache, RsSnapshot
 from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.base import BaseExecutor, JobOutcome
 from openlia_server.scheduler.registry import JobStatus, JobType
+from openlia_server.services.reports import tombstone_report
+from openlia_server.services.scheduler import sweep_expired_reports
 
 SESSIONS_RETENTION_DAYS = 7
 PASSWORD_RESET_RETENTION_DAYS = 90
@@ -27,6 +31,7 @@ RS_SNAPSHOT_RETENTION_DAYS = 90
 NOTIFICATION_RETENTION_DAYS = 30
 JOB_RUN_RETENTION_DAYS = 90
 LIA_GUARDRAIL_LOG_RETENTION_DAYS_DEFAULT = 365
+UNSAVED_REPORT_RETENTION_DAYS_DEFAULT = 7
 
 
 def run_maintenance_once(session: Session) -> dict[str, int]:
@@ -116,6 +121,39 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         or 0
     )
 
+    # Unsaved-report retention: tombstone owned reports past the cutoff
+    # with no repo_items pointer; hard-delete user-less orphans separately
+    # (no chat history to anchor, no user to view).
+    report_retention_days = int(
+        os.environ.get(
+            "OPENLIA_UNSAVED_REPORT_RETENTION_DAYS",
+            UNSAVED_REPORT_RETENTION_DAYS_DEFAULT,
+        )
+    )
+    report_cutoff = now - timedelta(days=report_retention_days)
+
+    candidate_ids = list(
+        session.execute(
+            select(Report.id).where(
+                Report.user_id.is_not(None),
+                Report.expired_at.is_(None),
+                Report.created_at < report_cutoff,
+                ~exists().where(RepoItem.report_id == Report.id),
+            )
+        ).scalars()
+    )
+    reports_tombstoned = 0
+    for rid in candidate_ids:
+        if tombstone_report(session, report_id=rid):
+            reports_tombstoned += 1
+
+    bundle_dir_env = os.environ.get("OPENLIA_REPORT_BUNDLE_DIR")
+    bundle_dir: Path | None = (
+        Path(bundle_dir_env) if bundle_dir_env else Path.home() / ".openlia" / "report_bundles"
+    )
+    deleted_ids = sweep_expired_reports(session=session, bundle_dir=bundle_dir)
+    reports_hard_deleted = len(deleted_ids)
+
     return {
         "sessions_deleted": int(sessions_deleted),
         "password_resets_expired": int(password_resets_expired),
@@ -125,6 +163,8 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         "notifications_deleted": int(notifications_deleted),
         "job_runs_deleted": int(job_runs_deleted),
         "lia_guardrail_events_deleted": int(lia_guardrail_events_deleted),
+        "reports_tombstoned": int(reports_tombstoned),
+        "reports_hard_deleted": int(reports_hard_deleted),
     }
 
 

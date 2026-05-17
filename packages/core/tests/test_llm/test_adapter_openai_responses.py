@@ -91,6 +91,88 @@ async def test_generate_appends_native_web_search_tool() -> None:
     assert {"type": "web_search"} in captured["body"]["tools"]
 
 
+async def test_generate_translates_chat_completions_tool_choice_to_responses_shape() -> None:
+    """The runtime emits chat-completions-shape tool_choice for openai
+    provider_kind: `{"type":"function","function":{"name":"X"}}`. The
+    Responses API rejects the nested `function` object — it expects the
+    flat shape `{"type":"function","name":"X"}`. The adapter must
+    translate verbatim chat-shape into Responses-shape before POSTing,
+    so the runtime doesn't need to know which inner endpoint the router
+    will pick for this turn."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tools=[
+                    ToolSchema(
+                        name="submit_report",
+                        description="submit",
+                        parameters={"type": "object"},
+                    ),
+                ],
+                tool_choice={
+                    "type": "function",
+                    "function": {"name": "submit_report"},
+                },
+            )
+        )
+    sent = captured["body"]["tool_choice"]
+    assert sent == {"type": "function", "name": "submit_report"}, sent
+
+
+async def test_generate_passes_string_tool_choice_through_unchanged() -> None:
+    """String-form tool_choice values ("auto", "none", "required") are
+    valid on both APIs and must not be mangled by the translation."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tool_choice="required",
+            )
+        )
+    assert captured["body"]["tool_choice"] == "required"
+
+
+async def test_generate_passes_already_flat_tool_choice_through_unchanged() -> None:
+    """If a caller (or future runtime version) already emits the flat
+    Responses-API shape, the adapter must leave it alone."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured["body"] = json.loads(request.read())
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                tool_choice={"type": "function", "name": "submit_report"},
+            )
+        )
+    assert captured["body"]["tool_choice"] == {
+        "type": "function",
+        "name": "submit_report",
+    }
+
+
 async def test_generate_renders_function_tools_in_responses_shape() -> None:
     """Function-tool ToolSchema entries render as Responses-shape
     `{"type":"function","name":...,"parameters":...}` (top-level fields,
@@ -526,3 +608,114 @@ async def test_stream_targets_responses_endpoint_with_stream_true() -> None:
             pass
     assert captured["path"] == "/v1/responses"
     assert captured["body"]["stream"] is True
+
+
+async def test_generate_preserves_instructions_across_calls() -> None:
+    """Two sequential generate() calls with the same system prompt must
+    produce a byte-identical `instructions` field, so the Responses API
+    auto-cache can hit on the static prefix."""
+    adapter = _adapter()
+    captured: list[dict] = []
+
+    def _capture(request):
+        captured.append(json.loads(request.read()))
+        return _ok_response(_assistant_ok())
+
+    system = "static prefix\n<!-- OPENLIA_CACHE_BREAKPOINT -->\ndynamic suffix"
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        for _ in range(2):
+            await adapter.generate(
+                LLMRequest(system=system, messages=[Message(role="user", content="hi")])
+            )
+    assert captured[0]["instructions"] == captured[1]["instructions"]
+    assert "static prefix" in captured[0]["instructions"]
+
+
+async def test_generate_surfaces_cached_input_tokens() -> None:
+    """OpenAI Responses returns cached prefix counts under
+    `usage.input_tokens_details.cached_tokens`. The adapter must expose
+    that value on LLMResponse so the runtime can record cache hits."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").respond(
+            200,
+            json={
+                "id": "resp_test",
+                "status": "completed",
+                "output": _assistant_ok(),
+                "usage": {
+                    "input_tokens": 80_000,
+                    "output_tokens": 200,
+                    "input_tokens_details": {"cached_tokens": 76_000},
+                },
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.input_tokens == 80_000
+    assert resp.cached_input_tokens == 76_000
+
+
+async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> None:
+    """When the provider response does not report cache details, the
+    field falls back to 0 so downstream consumers can always read it."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(
+            side_effect=lambda r: _ok_response(_assistant_ok())
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.cached_input_tokens == 0
+
+
+async def test_multi_turn_cache_hit_rate_at_least_fifty_percent_from_turn_two() -> None:
+    """Replay-style assertion: across a 3-turn report-style run where the
+    provider auto-caches the static prefix, cumulative cached_input_tokens
+    starting from turn 2 must be at least 50% of cumulative input_tokens.
+
+    The mock simulates realistic numbers — 0% cache on turn 0 (first call
+    warms the cache), then >=90% cache on turns 1 and 2 once the prefix
+    is established. The test guards the wire path adapter→LLMResponse so
+    a regression that drops cache details would surface here too."""
+    adapter = _adapter()
+    turn_responses = [
+        # Turn 0: cold prefix, no cache.
+        {"input_tokens": 80_000, "output_tokens": 200, "cached": 0},
+        # Turn 1: prefix now cacheable; suffix added by tool result.
+        {"input_tokens": 95_000, "output_tokens": 300, "cached": 75_000},
+        # Turn 2: same stable prefix; new suffix.
+        {"input_tokens": 100_000, "output_tokens": 250, "cached": 80_000},
+    ]
+    iter_responses = iter(turn_responses)
+
+    def _serve(request):
+        u = next(iter_responses)
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp_test",
+                "status": "completed",
+                "output": _assistant_ok(),
+                "usage": {
+                    "input_tokens": u["input_tokens"],
+                    "output_tokens": u["output_tokens"],
+                    "input_tokens_details": {"cached_tokens": u["cached"]},
+                },
+            },
+        )
+
+    collected: list = []
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_serve)
+        for _ in range(3):
+            collected.append(
+                await adapter.generate(LLMRequest(messages=[Message(role="user", content="x")]))
+            )
+
+    # Per-turn surface assertions.
+    assert [r.cached_input_tokens for r in collected] == [0, 75_000, 80_000]
+
+    # Cumulative hit rate from turn 2 onward (turns 1..2 in zero-indexed).
+    total_input_after_turn_one = sum(r.input_tokens for r in collected[1:])
+    total_cached_after_turn_one = sum(r.cached_input_tokens for r in collected[1:])
+    assert total_cached_after_turn_one / total_input_after_turn_one >= 0.5

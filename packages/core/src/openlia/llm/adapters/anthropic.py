@@ -264,6 +264,7 @@ class AnthropicAdapter(LLMProvider):
             finish_reason=body.get("stop_reason", "end_turn"),
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
+            cached_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
             tool_calls=tool_calls,
             citations=citations,
             server_tool_calls=server_tool_calls,

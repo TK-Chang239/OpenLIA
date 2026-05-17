@@ -193,6 +193,42 @@ export interface StartOptions {
   attachments?: File[];
 }
 
+/**
+ * Attach-only variant: given a persisted report_id, open a GET-based
+ * EventSource against `/reports/{id}/stream` and drive the same reducer.
+ * Returns the stream state so callers can observe progress on a report
+ * that was already started (e.g. after a page reload with ?report_id=).
+ */
+export function useReportStreamAttach(reportId: string | null): ReportStreamState {
+  const [state, dispatch] = useReducer(reducer, INITIAL);
+  useEffect(() => {
+    if (!reportId) return;
+    const es = new EventSource(`/reports/${reportId}/stream`);
+    const handle = (event: string) => (e: MessageEvent) => {
+      try {
+        dispatch({ kind: "EVENT", event, data: JSON.parse(e.data as string) });
+      } catch {
+        // ignore malformed frames
+      }
+    };
+    for (const evt of [
+      "report.start",
+      "report.phase",
+      "report.section.start",
+      "report.section.complete",
+      "report.tool_call.start",
+      "report.tool_call",
+      "report.complete",
+      "report.saved",
+      "report.error",
+    ]) {
+      es.addEventListener(evt, handle(evt) as EventListener);
+    }
+    return () => es.close();
+  }, [reportId]);
+  return state;
+}
+
 export function useReportStream() {
   const [state, dispatch] = useReducer(reducer, INITIAL);
   const abortRef = useRef<AbortController | null>(null);

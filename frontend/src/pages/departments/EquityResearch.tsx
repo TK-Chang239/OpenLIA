@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import {
   type ChatMessage,
@@ -15,8 +15,13 @@ import {
   listMessages,
   patchSession,
 } from "../../api/chat";
-import { saveReportToRepo } from "../../api/repo";
-import { fetchReport, listReports, type ReportSchema } from "../../api/reports";
+import { saveReportToRepo, unsaveFromRepo } from "../../api/repo";
+import {
+  deleteReport,
+  fetchReport,
+  listReports,
+  type ReportSchema,
+} from "../../api/reports";
 import { AssistantMessage } from "../../components/chat/AssistantMessage";
 import { ErrorMessage } from "../../components/chat/ErrorMessage";
 import { MessageList } from "../../components/chat/MessageList";
@@ -31,11 +36,17 @@ import { ReportCard } from "../../components/equity-research/ReportCard";
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
-import { useReportStream } from "../../components/report/useReportStream";
+import {
+  useReportStream,
+  useReportStreamAttach,
+} from "../../components/report/useReportStream";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
+import { useToast } from "../../components/primitives/Toast";
 import { useAuth } from "../../auth/AuthContext";
 import { useChatHeaderRegistry } from "../../layouts/ChatHeaderContext";
 import { useErConfig } from "../../hooks/useErConfig";
+
+const CHAT_FOLLOWUP_INTRO_TOAST_KEY = "chat_followup_intro_toast_seen";
 
 interface PersistedToolCall {
   call_id: string;
@@ -96,10 +107,16 @@ export default function EquityResearch(): JSX.Element {
   const { config, patch } = useErConfig();
   const { user } = useAuth();
   const fileViewer = useFileViewer();
+  const toast = useToast();
+  const navigate = useNavigate();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tickerParam = searchParams.get("ticker");
   const promptParam = searchParams.get("prompt");
+  const reportIdParam = searchParams.get("report_id");
+
+  // Reattach to an in-progress (or completed) background report via ?report_id.
+  useReportStreamAttach(reportIdParam);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [input, setInput] = useState(tickerParam ?? "");
@@ -109,6 +126,11 @@ export default function EquityResearch(): JSX.Element {
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [schema, setSchema] = useState<ReportSchema | null>(null);
+  const [restoredExpiredAt, setRestoredExpiredAt] = useState<string | null>(null);
+  const [restoredTombstone, setRestoredTombstone] = useState<{
+    title: string;
+    createdAt: string;
+  } | null>(null);
   const [restoredReportId, setRestoredReportId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [genStartedAt, setGenStartedAt] = useState<number | null>(null);
@@ -163,6 +185,24 @@ export default function EquityResearch(): JSX.Element {
     sessionIdRef.current = sessionId;
   });
 
+  // Re-anchor the report card when the server re-attaches a new report to this
+  // session (e.g. after a revision). The event is fired by AppLayout's
+  // NotificationsWatcher via the useNotificationsStream hook.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { session_id, new_report_id } = (e as CustomEvent<{ session_id: string; new_report_id: string }>).detail;
+      if (session_id !== sessionIdRef.current) return;
+      setRestoredReportId(new_report_id);
+      setRestoredExpiredAt(null);
+      setRestoredTombstone(null);
+      void fetchReport(new_report_id)
+        .then((s) => setSchema(s))
+        .catch(() => {/* leave existing card if re-fetch fails */});
+    };
+    window.addEventListener("openlia:attached_report_changed", handler);
+    return () => window.removeEventListener("openlia:attached_report_changed", handler);
+  }, []);
+
   // Pre-fill from ?prompt= and clear the query so manual edits don't re-fire.
   useEffect(() => {
     if (!promptParam) return;
@@ -190,6 +230,8 @@ export default function EquityResearch(): JSX.Element {
       setHistory([]);
       setHistoryLoaded(false);
       setRestoredReportId(null);
+      setRestoredExpiredAt(null);
+      setRestoredTombstone(null);
       // Pre-session toggle state stays in React+localStorage; do not
       // reset it here, otherwise a fresh mount would clobber the
       // toggles the user picked on the prior visit.
@@ -199,13 +241,20 @@ export default function EquityResearch(): JSX.Element {
     setHistoryLoaded(false);
     setHistory([]);
     setRestoredReportId(null);
+    setRestoredExpiredAt(null);
+    setRestoredTombstone(null);
     persistedStreamRef.current = null;
     void Promise.all([
       getSession(sessionId).catch(() => null),
       listMessages(sessionId).catch(() => null),
-      listReports({ department: "equity_research", session_id: sessionId }).catch(
-        () => null,
-      ),
+      // include_expired=true so a tombstoned report's metadata still
+      // surfaces here — the ReportCard renders a "no longer available"
+      // anchor in conversation history without breaking the chat flow.
+      listReports({
+        department: "equity_research",
+        session_id: sessionId,
+        include_expired: true,
+      }).catch(() => null),
     ]).then(async ([sess, msgs, reports]) => {
       if (cancelled) return;
       if (sess) {
@@ -220,6 +269,13 @@ export default function EquityResearch(): JSX.Element {
       setHistoryLoaded(true);
       const latest = reports?.items?.[0];
       if (latest) {
+        if (latest.expired_at) {
+          // Tombstone: skip fetchReport (no schema to load).
+          setRestoredReportId(latest.id);
+          setRestoredExpiredAt(latest.expired_at);
+          setRestoredTombstone({ title: latest.title, createdAt: latest.created_at });
+          return;
+        }
         try {
           const sch = await fetchReport(latest.id);
           if (cancelled) return;
@@ -285,6 +341,22 @@ export default function EquityResearch(): JSX.Element {
     setGenDurationSec((Date.now() - genStartedAt) / 1000);
   }, [reportState.status, genStartedAt, genDurationSec]);
 
+  // Persist report_id into the URL so a page reload can reattach via
+  // useReportStreamAttach. Only writes when a fresh generation completes
+  // (i.e. ?report_id is not already in the URL from a prior reattach).
+  useEffect(() => {
+    if (reportState.status !== "complete" || !reportState.reportId) return;
+    if (reportIdParam === reportState.reportId) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("report_id", reportState.reportId!);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [reportState.status, reportState.reportId, reportIdParam, setSearchParams]);
+
   // Fetch the persisted schema once the server signals report.saved.
   useEffect(() => {
     if (reportState.status !== "complete" || !reportState.reportId) return;
@@ -302,6 +374,41 @@ export default function EquityResearch(): JSX.Element {
       cancelled = true;
     };
   }, [reportState.status, reportState.reportId, schema]);
+
+  // Implicit-binding one-time intro toast: fires on the first report.saved
+  // the user sees, then never again (localStorage flag).
+  useEffect(() => {
+    if (reportState.status !== "complete" || !reportState.reportId) return;
+    if (localStorage.getItem(CHAT_FOLLOWUP_INTRO_TOAST_KEY) === "1") return;
+    localStorage.setItem(CHAT_FOLLOWUP_INTRO_TOAST_KEY, "1");
+    toast.push({
+      title: "Report linked to this chat — ask follow-up questions below.",
+      tone: "info",
+      durationMs: 6000,
+    });
+  }, [reportState.status, reportState.reportId, toast]);
+
+  // Redirect toast: fired when the backend signals this report was generated
+  // in a new session because the current session was already bound.
+  // The redirect_session_id is passed via dispatchReport's return value when
+  // the background-generate endpoint is used (redirect=true path).
+  const [redirectSessionId, setRedirectSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!redirectSessionId) return;
+    const targetId = redirectSessionId;
+    setRedirectSessionId(null);
+    toast.push({
+      title: "Generating new report in a separate thread.",
+      tone: "info",
+      durationMs: 8000,
+      undo: {
+        label: "Open",
+        onClick: () => {
+          void navigate(`/chat/${targetId}`);
+        },
+      },
+    });
+  }, [redirectSessionId, toast, navigate]);
 
   const dispatchReport = useCallback(
     async (text: string, attachments?: File[]) => {
@@ -406,7 +513,8 @@ export default function EquityResearch(): JSX.Element {
     setGenStartedAt(null);
     resetReportRef.current();
     chatStreamResetRef.current();
-  }, []);
+    fileViewer.close();
+  }, [fileViewer]);
 
   const handleNewChat = useCallback(() => {
     setSessionId(null);
@@ -421,7 +529,8 @@ export default function EquityResearch(): JSX.Element {
     setInput("");
     resetReportRef.current();
     chatStreamResetRef.current();
-  }, []);
+    fileViewer.close();
+  }, [fileViewer]);
 
   // Publish chat-header state to the global TopBar so the breadcrumb
   // dropdown + New Chat button render. Register on welcome state too
@@ -447,6 +556,20 @@ export default function EquityResearch(): JSX.Element {
 
   const handleSave = async (id: string) => {
     await saveReportToRepo(id);
+  };
+
+  const handleUnsave = async (id: string) => {
+    await unsaveFromRepo(id);
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteReport(id);
+    // Card flips to tombstone state on next render via expiredAt prop.
+    setRestoredExpiredAt(new Date().toISOString());
+    setSchema(null);
+    setRestoredTombstone((prev) =>
+      prev ?? { title: schema?.cover.title ?? "Report", createdAt: new Date().toISOString() },
+    );
   };
 
   const openReport = (id: string) => {
@@ -538,6 +661,7 @@ export default function EquityResearch(): JSX.Element {
               ) : null}
 
               {schema &&
+              !restoredExpiredAt &&
               (reportState.status === "complete" || restoredReportId) ? (
                 <div data-testid="er-report-card">
                   <ReportCard
@@ -553,6 +677,26 @@ export default function EquityResearch(): JSX.Element {
                     citationsCount={schema.citations?.length ?? 0}
                     onOpen={openReport}
                     onSave={handleSave}
+                    onUnsave={handleUnsave}
+                    onDelete={handleDelete}
+                  />
+                </div>
+              ) : null}
+
+              {restoredExpiredAt && restoredReportId && restoredTombstone ? (
+                <div data-testid="er-report-card-tombstone-wrap">
+                  <ReportCard
+                    reportId={restoredReportId}
+                    mode={config.report_mode}
+                    ticker={ticker ?? null}
+                    companyName={company ?? null}
+                    subject={subject || sessionTitle || ""}
+                    createdAt={restoredTombstone.createdAt}
+                    preview=""
+                    onOpen={openReport}
+                    onDownload={handleDownload}
+                    onSave={handleSave}
+                    expiredAt={restoredExpiredAt}
                   />
                 </div>
               ) : null}

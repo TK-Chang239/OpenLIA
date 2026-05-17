@@ -177,6 +177,90 @@ async def test_test_connection_returns_structured_failure_on_auth() -> None:
     assert tr.error_class == "AuthError"
 
 
+async def test_generate_preserves_system_prefix_across_calls() -> None:
+    """Two sequential generate() calls with the same system prompt must
+    produce a byte-identical system message in the wire payload, so
+    OpenAI's auto prompt cache can hit on the static prefix."""
+    adapter = _adapter()
+    captured: list[dict] = []
+
+    def _capture(request):
+        captured.append(json.loads(request.read()))
+        import httpx as _httpx
+
+        return _httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    system = "static prefix\n<!-- OPENLIA_CACHE_BREAKPOINT -->\ndynamic suffix"
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").mock(side_effect=_capture)
+        for _ in range(2):
+            await adapter.generate(
+                LLMRequest(system=system, messages=[Message(role="user", content="hi")])
+            )
+    assert captured[0]["messages"][0] == captured[1]["messages"][0]
+    # The static prefix must remain in the rendered system content.
+    assert "static prefix" in captured[0]["messages"][0]["content"]
+
+
+async def test_generate_surfaces_cached_input_tokens() -> None:
+    """OpenAI Chat Completions returns cached prefix counts under
+    `usage.prompt_tokens_details.cached_tokens`. The adapter must expose
+    that value on LLMResponse so the runtime can measure cache hit rate."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "hi"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 50_000,
+                    "completion_tokens": 100,
+                    "prompt_tokens_details": {"cached_tokens": 47_500},
+                },
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.input_tokens == 50_000
+    assert resp.cached_input_tokens == 47_500
+
+
+async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> None:
+    """When the provider response does not report cache details, the field
+    falls back to 0 so downstream consumers can always read it."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "hi"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 1},
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.cached_input_tokens == 0
+
+
 async def test_stream_yields_delta_chunks_with_finish_reason() -> None:
     adapter = _adapter()
     sse_body = (
