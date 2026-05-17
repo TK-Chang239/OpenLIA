@@ -123,6 +123,25 @@ report:
       Call data tools as needed to collect financials, analyst views,
       recent news, and any other inputs the framework requests.
 
+      USE THE DATA YOU FETCHED. Every tool result returned in this
+      conversation is yours to read — small payloads are delivered
+      inline (e.g., `eodhd__get_live_stock_prices` returns
+      `{close, previousClose, change, change_p, volume, ...}` as a
+      compact dict, not a ref). Extract real numbers from those
+      inline payloads into `cover.key_metrics`:
+        - Stock Price → `close` from get_live_stock_prices (format
+          as `"$197.56"`); delta is `change_p` (format as `"-1.13%"`).
+        - Market Cap → most recent value from
+          `get_historical_market_capitalization_data` (the SDK returns
+          a dict keyed by date; pick the latest).
+        - Other metrics — pull from `get_fundamentals_data.Highlights`
+          / `Valuation` if you fetched it.
+      Only write `"No data available"` when (a) you actually called
+      the relevant tool and got back an empty payload or an error, OR
+      (b) you searched the web for the data and came up empty. Never
+      emit `"No data available"` for a field whose source payload is
+      present in your conversation.
+
       When you call submit_report, populate BOTH `cover` AND `sections`:
       - `cover.title`, `cover.subtitle`, `cover.tagline` are REQUIRED strings.
         The framework's `cover.instructions` tells you what to write into each.
