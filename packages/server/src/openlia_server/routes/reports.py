@@ -505,6 +505,10 @@ class ReportListItem(BaseModel):
     created_at: str
     source_session_id: str | None = None
     expired_at: str | None = None
+    status: str | None = None
+    failure_reason: str | None = None
+    original_request: dict | None = None
+    started_at: str | None = None
 
 
 class ReportListOut(BaseModel):
@@ -577,6 +581,10 @@ def build_reports_router(
                     created_at=r.created_at.isoformat() if r.created_at else "",
                     source_session_id=r.source_session_id,
                     expired_at=r.expired_at.isoformat() if r.expired_at else None,
+                    status=r.status,
+                    failure_reason=r.failure_reason,
+                    original_request=r.original_request,
+                    started_at=r.started_at.isoformat() if r.started_at else None,
                 )
                 for r in rows
             ]
