@@ -755,12 +755,15 @@ def build_reports_router(
     @router.post("/{report_id}/retry")
     async def retry_report_ep(
         report_id: str,
+        request: Request,
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> dict:
         """Retry a failed or cancelled report using its persisted original_request.
 
-        Creates a new 'generating' row from the original GenerateReportIn payload.
+        When original_request.kind == 'revision', routes to _execute_revise so the
+        retry re-uses the /revise path (preserving source_report_id, revision_brief).
+        Otherwise, creates a new 'generating' row from the GenerateReportIn payload.
         The failed row is retained for audit. Returns {report_id, status} of the
         new row.
         """
@@ -779,6 +782,24 @@ def build_reports_router(
                 status.HTTP_400_BAD_REQUEST,
                 "Report has no persisted original_request",
             )
+
+        if row.original_request.get("kind") == "revision":
+            from openlia_server.routes.reports_revise import ReviseReportIn, _execute_revise
+
+            revise_body = ReviseReportIn(
+                chat_session_id=row.original_request["chat_session_id"],
+                revision_brief=row.original_request["revision_brief"],
+                sections_to_focus=row.original_request.get("sections_to_focus"),
+            )
+            return await _execute_revise(
+                db=session,
+                user=user,
+                source_report_id=row.original_request["source_report_id"],
+                body=revise_body,
+                db_session_factory=db_session_factory,
+                app_state=request.app.state,
+            )
+
         body = GenerateReportIn(**row.original_request)
         return await generate_report_bg(body=body, user=user, session=session)
 
@@ -788,7 +809,7 @@ def build_reports_router(
         request: Request,
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
-    ) -> dict:
+    ) -> Response:
         # Ownership check first — 404 hides existence from non-owners.
         row = session.execute(
             select(Report).where(Report.id == report_id, Report.user_id == user.id)
@@ -805,13 +826,17 @@ def build_reports_router(
             row.status = "cancelled"
             row.failure_reason = "user_cancelled"
             session.commit()
-            return {"ok": True, "action": "cancelled"}
+            return Response(
+                content=_json.dumps({"ok": True, "action": "cancelled"}),
+                status_code=status.HTTP_200_OK,
+                media_type="application/json",
+            )
         # Already finished — tombstone (soft-delete).
         # tombstone_report is idempotent: re-deleting an already-tombstoned
-        # report is a no-op (returns False).
+        # report is a no-op (returns False) but still 204s.
         tombstone_report(session, report_id=report_id)
         session.commit()
-        return {"ok": True, "action": "deleted"}
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/{report_id}/render", response_class=HTMLResponse)
     async def render_report_html(
