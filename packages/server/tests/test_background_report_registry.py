@@ -88,3 +88,44 @@ async def test_list_active_returns_only_running_tasks_for_user() -> None:
     # cleanup
     registry.cancel_user("u1")
     registry.cancel_user("u2")
+
+
+@pytest.mark.asyncio
+async def test_event_ring_truncates_at_ring_size() -> None:
+    """The per-task event_ring keeps only EVENT_RING_SIZE entries."""
+    registry = BackgroundReportRegistry()
+
+    async def chatty():
+        for i in range(EVENT_RING_SIZE * 3):
+            yield {"i": i}
+
+    task = registry.submit(user_id="u1", report_id="r1", runner_coro=chatty())
+    await asyncio.wait_for(task.asyncio_task, timeout=2.0)
+    assert len(task.event_ring) == EVENT_RING_SIZE
+    # Last item retained
+    assert task.event_ring[-1]["i"] == EVENT_RING_SIZE * 3 - 1
+
+
+@pytest.mark.asyncio
+async def test_fanout_drops_oldest_on_full_subscriber_queue() -> None:
+    """When a subscriber queue fills, the producer drops the oldest
+    item and pushes the new one (drop-oldest policy)."""
+    registry = BackgroundReportRegistry()
+
+    async def chatty():
+        for i in range(2000):
+            yield {"i": i}
+
+    task = registry.submit(user_id="u1", report_id="r1", runner_coro=chatty())
+    # Attach a tiny queue BEFORE the chatty runner gets far.
+    tiny_q: asyncio.Queue = asyncio.Queue(maxsize=4)
+    task.subscriber_queues.add(tiny_q)
+    await asyncio.wait_for(task.asyncio_task, timeout=2.0)
+    # Tiny queue should be full or near-full; whatever's in it must be
+    # tail items (oldest dropped).
+    drained = []
+    while not tiny_q.empty():
+        drained.append(tiny_q.get_nowait())
+    assert drained, "queue should retain at least one item"
+    assert all(item["i"] >= 1500 for item in drained), \
+        "drop-oldest policy should keep only the most recent items"
