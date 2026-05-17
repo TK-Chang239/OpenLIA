@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Protocol
 
 from openlia.llm.capabilities import capabilities_for
 from openlia.llm.exceptions import ModelNotConfiguredError
@@ -84,64 +83,3 @@ def resolve_system_role(*, role_id: str, registry: ModelRegistry) -> ResolvedMod
     if row is None:
         raise ModelNotConfiguredError(slot_kind="system_role", slot_id=role_id)
     return _to_resolved(row)
-
-
-Role = Literal["flagship", "subagent"]
-
-
-class _SupportsModelPick(Protocol):
-    def get_model_pick(
-        self, *, department_id: str, user_id: str | None, role: Role
-    ) -> str | None: ...
-
-
-class _SupportsResolve(Protocol):
-    def resolve(self, model_id: str) -> ResolvedModel: ...
-
-
-WarnFn = Callable[[str, str], None]
-
-
-def resolve_role(
-    *,
-    department_id: str,
-    user_id: str | None,
-    role: Role,
-    registry: _SupportsResolve,
-    prefs: _SupportsModelPick,
-    server_defaults: dict[tuple[str, Role], str],
-    warn: WarnFn,
-) -> ResolvedModel:
-    """Resolve the model to use for a (department, user, role).
-
-    Order:
-      1. Per-user pick from ``prefs``
-      2. Server default from ``server_defaults``
-      3. If ``role=='subagent'`` and nothing matched, fall back to
-         flagship and call ``warn`` so the caller can emit a trace.
-      4. Otherwise raise ``ModelNotConfiguredError``.
-    """
-    pick = prefs.get_model_pick(department_id=department_id, user_id=user_id, role=role)
-    if pick:
-        return registry.resolve(pick)
-
-    default = server_defaults.get((department_id, role))
-    if default:
-        return registry.resolve(default)
-
-    if role == "subagent":
-        warn(
-            "report.warning.subagent_unconfigured",
-            "Subagent model not configured; falling back to flagship.",
-        )
-        return resolve_role(
-            department_id=department_id,
-            user_id=user_id,
-            role="flagship",
-            registry=registry,
-            prefs=prefs,
-            server_defaults=server_defaults,
-            warn=warn,
-        )
-
-    raise ModelNotConfiguredError(slot_kind="department", slot_id=department_id)

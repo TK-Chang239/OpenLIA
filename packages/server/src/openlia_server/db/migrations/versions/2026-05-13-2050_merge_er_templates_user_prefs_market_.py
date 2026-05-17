@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from alembic import op
+import sqlalchemy as sa
+
+
 # revision identifiers, used by Alembic.
 revision: str = 'a4a4885e1e30'
-down_revision: str | Sequence[str] | None = (
-    "20260512_0000_er_templates",
-    "20260513_0100_user_prefs_market_basket",
-)
+down_revision: str | Sequence[str] | None = ('20260512_0000_er_templates', '20260513_0100_user_prefs_market_basket')
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -8,7 +8,9 @@ based on the user's latest message. Pure function — no DB, no LLM call.
 from __future__ import annotations
 
 import pytest
+
 from openlia_server.services.exemplar_selector import select_exemplars
+
 
 # ---- snapshot triggers -----------------------------------------------------
 

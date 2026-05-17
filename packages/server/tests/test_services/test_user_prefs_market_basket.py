@@ -9,9 +9,10 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy.orm import Session
+
 from openlia_server.db.models.auth import User
 from openlia_server.services import user_prefs as svc
-from sqlalchemy.orm import Session
 
 
 @pytest.fixture
