@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ from openlia.llm.runtime.events import (
     SseEvent,
 )
 from openlia.llm.runtime.messages import ReportRequest
-from openlia.llm.runtime.plan_schema import ReportPlan
+from openlia.llm.runtime.plan_schema import DataPath, ReportPlan
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.types import (
@@ -223,3 +224,30 @@ class SubagentReportRunner:
             error_class="plan_invalid",
             message=str(last_err or "plan invalid"),
         )
+
+
+@dataclass
+class UniqueToolCall:
+    tool_name: str
+    tool_arguments: dict[str, Any]
+    attached: list[DataPath] = field(default_factory=list)
+
+
+def dedupe_data_paths(plan: ReportPlan) -> list[UniqueToolCall]:
+    """Walk every section's data_paths, dedupe by (tool_name, args),
+    return one ``UniqueToolCall`` per distinct dispatch. Each entry's
+    ``attached`` list holds every DataPath that wanted that ref so the
+    caller can later slice the result by ``path`` and assign each subagent
+    its own slice."""
+    by_key: dict[tuple[str, frozenset[tuple[str, Any]]], UniqueToolCall] = {}
+    for section in plan.sections:
+        for dp in section.data_paths:
+            if dp.tool_name is None:
+                continue  # `ref`-only paths resolve against earlier dispatches
+            key = (dp.tool_name, frozenset((dp.tool_arguments or {}).items()))
+            entry = by_key.setdefault(
+                key,
+                UniqueToolCall(tool_name=dp.tool_name, tool_arguments=dp.tool_arguments or {}),
+            )
+            entry.attached.append(dp)
+    return list(by_key.values())
