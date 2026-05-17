@@ -41,6 +41,25 @@ Report payload strictness:
   and `sparkline`. `citations` is a TOP-LEVEL field on the report payload —
   do NOT nest it under `rail`. `meta_stats` is server-computed; do NOT emit
   it at any level (top-level or nested).
+- `rail` itself does NOT accept `source_ids`. The `source_ids` field lives
+  on each individual `Metric` inside `rail.quick_stats`, never on `rail`.
+- Source attribution: every Metric (in `metric_cards` or `rail.quick_stats`),
+  every `key_finding`, every `pull_quote`, every `quote`, and every quantitative
+  cell in a table or chart MUST carry its citation either via inline `[N]`
+  brackets in adjacent text OR via the block's own `source_ids: ["1", "2", ...]`
+  field. Empty `source_ids: []` on a block that contains numbers is the
+  primary quality regression we track — do not leave it empty when the
+  attached data has a known source.
+- Chart blocks MUST contain real data. A chart block with empty `series: []`,
+  `slices: []`, or `bar_series: []` is rejected at finalization. If you do not
+  have data for a chart, omit the chart block entirely and explain the gap in
+  an adjacent `text` block. Never emit a chart "for shape" with no underlying
+  values.
+- "Data not available" / "N/A" / "Not disclosed" is a last resort and must
+  be earned: before emitting it, you must have made at least one targeted
+  `web_search` for the specific data point. If the data is in a payload you
+  already fetched, read it. The phrase is a contract that the data does not
+  exist publicly, not a shortcut for not having time to look.
 - If validation fails, you will receive the error list as a `submit_report`
   tool result. Fix every listed field and call `submit_report` again with
   the corrected payload.
