@@ -4,9 +4,7 @@ import random
 import string
 from pathlib import Path
 
-import pytest
-
-from openlia.llm.runtime.plan_schema import DataPath, ReportPlan, SectionPlan
+from openlia.llm.runtime.plan_schema import ReportPlan
 from openlia.llm.runtime.report_context_bundle import (
     BUNDLE_DEFAULT_MAX_BYTES,
     ReportContextBundle,
