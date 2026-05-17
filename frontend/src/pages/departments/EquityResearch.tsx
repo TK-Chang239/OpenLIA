@@ -38,7 +38,10 @@ import { ReportCard } from "../../components/equity-research/ReportCard";
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
-import { useReportStream } from "../../components/report/useReportStream";
+import {
+  useReportStream,
+  useReportStreamAttach,
+} from "../../components/report/useReportStream";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
 import { useToast } from "../../components/primitives/Toast";
 import { useAuth } from "../../auth/AuthContext";
@@ -112,6 +115,10 @@ export default function EquityResearch(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const tickerParam = searchParams.get("ticker");
   const promptParam = searchParams.get("prompt");
+  const reportIdParam = searchParams.get("report_id");
+
+  // Reattach to an in-progress (or completed) background report via ?report_id.
+  useReportStreamAttach(reportIdParam);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [input, setInput] = useState(tickerParam ?? "");
@@ -335,6 +342,22 @@ export default function EquityResearch(): JSX.Element {
     if (genDurationSec !== null) return;
     setGenDurationSec((Date.now() - genStartedAt) / 1000);
   }, [reportState.status, genStartedAt, genDurationSec]);
+
+  // Persist report_id into the URL so a page reload can reattach via
+  // useReportStreamAttach. Only writes when a fresh generation completes
+  // (i.e. ?report_id is not already in the URL from a prior reattach).
+  useEffect(() => {
+    if (reportState.status !== "complete" || !reportState.reportId) return;
+    if (reportIdParam === reportState.reportId) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("report_id", reportState.reportId!);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [reportState.status, reportState.reportId, reportIdParam, setSearchParams]);
 
   // Fetch the persisted schema once the server signals report.saved.
   useEffect(() => {
