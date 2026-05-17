@@ -31,6 +31,7 @@ def _personal_client(db_session, monkeypatch):
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_BACKGROUND_REPORTS_ENABLED", "1")
+    monkeypatch.setenv("OPENLIA_REPORT_CHAT_ENABLED", "1")
     app = create_app(db_session_factory=session_mod.SessionLocal)
     with TestClient(app) as client:
         yield client

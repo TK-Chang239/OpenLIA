@@ -92,6 +92,7 @@ def _personal_app(db_session, monkeypatch, _bundle_dir: Path):
     db_session.commit()
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_REPORT_BUNDLE_DIR", str(_bundle_dir))
+    monkeypatch.setenv("OPENLIA_REPORT_CHAT_ENABLED", "1")
     return create_app(db_session_factory=session_mod.SessionLocal)
 
 

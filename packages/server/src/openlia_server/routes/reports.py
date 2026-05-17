@@ -533,6 +533,10 @@ def _bg_enabled() -> bool:
     return os.environ.get("OPENLIA_BACKGROUND_REPORTS_ENABLED", "0") == "1"
 
 
+def _chat_followup_enabled() -> bool:
+    return os.environ.get("OPENLIA_REPORT_CHAT_ENABLED", "0") == "1"
+
+
 def build_reports_router(
     *,
     db_session_factory: Callable[[], DBSession],
@@ -664,7 +668,7 @@ def build_reports_router(
             session.add(row)
             session.flush()  # obtain report_id in DB before binding
 
-            if source_session is not None:
+            if source_session is not None and _chat_followup_enabled():
                 # Implicit binding: conditional UPDATE — only sets the column
                 # when it is still NULL, avoiding overwrites in race conditions.
                 updated = session.execute(
@@ -706,6 +710,9 @@ def build_reports_router(
                 }
 
             session.commit()
+            # Backward-compatible behavior: report exists; chat session is not bound.
+            if source_session is not None:
+                return {"session_id": source_id, "report_id": report_id, "redirect": False}
             return {"report_id": report_id, "status": "generating"}
 
     @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)

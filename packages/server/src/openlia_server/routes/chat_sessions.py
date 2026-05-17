@@ -20,6 +20,10 @@ from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
 
 
+def _chat_followup_enabled() -> bool:
+    return os.environ.get("OPENLIA_REPORT_CHAT_ENABLED", "0") == "1"
+
+
 def _attach_report_as_context(
     db: Session, *, session_id: str, user_id: str, report_id: str
 ) -> None:
@@ -348,7 +352,7 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
                 status_code=403, detail={"code": "forbidden", "message": str(exc)}
             ) from exc
 
-        if session_row.attached_report_id:
+        if session_row.attached_report_id and _chat_followup_enabled():
             from openlia.llm.runtime.tools import ToolDispatcher
             from openlia.llm.runtime.web_search import WebSearchResolution
 
