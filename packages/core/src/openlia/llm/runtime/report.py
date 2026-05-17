@@ -329,6 +329,35 @@ def _inject_server_fields(
     payload.pop("report_metadata", None)
     payload.pop("report_mode", None)
     payload.pop("page_furniture", None)
+    # meta_stats is server-computed; drop any model-authored copy at the
+    # root so strict validation doesn't fail on a stale snapshot.
+    payload.pop("meta_stats", None)
+
+    rail = payload.get("rail")
+    if isinstance(rail, dict):
+        # Model recurrently nests `citations` and `meta_stats` under rail
+        # despite the prompt rule. Hoist citations to root (root wins on
+        # id collision), drop meta_stats outright.
+        misplaced = rail.pop("citations", None)
+        rail.pop("meta_stats", None)
+        if isinstance(misplaced, list) and misplaced:
+            existing = payload.get("citations")
+            if not isinstance(existing, list):
+                existing = []
+            existing_ids = {
+                c["id"]
+                for c in existing
+                if isinstance(c, dict) and isinstance(c.get("id"), str)
+            }
+            for cit in misplaced:
+                if not isinstance(cit, dict):
+                    continue
+                cid = cit.get("id")
+                if not isinstance(cid, str) or cid in existing_ids:
+                    continue
+                existing.append(cit)
+                existing_ids.add(cid)
+            payload["citations"] = existing
 
     payload["schema_version"] = "2.0"
     payload["department"] = department_id
