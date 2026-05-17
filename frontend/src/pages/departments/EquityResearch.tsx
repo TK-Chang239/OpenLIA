@@ -434,7 +434,8 @@ export default function EquityResearch(): JSX.Element {
     setGenStartedAt(null);
     resetReportRef.current();
     chatStreamResetRef.current();
-  }, []);
+    fileViewer.close();
+  }, [fileViewer]);
 
   const handleNewChat = useCallback(() => {
     setSessionId(null);
@@ -449,7 +450,8 @@ export default function EquityResearch(): JSX.Element {
     setInput("");
     resetReportRef.current();
     chatStreamResetRef.current();
-  }, []);
+    fileViewer.close();
+  }, [fileViewer]);
 
   // Publish chat-header state to the global TopBar so the breadcrumb
   // dropdown + New Chat button render. Register on welcome state too
