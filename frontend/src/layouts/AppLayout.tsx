@@ -1,5 +1,5 @@
 import { useEffect, type JSX, type ReactNode } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { TopBar } from "../components/shell/TopBar";
 import { MobileTabBar } from "../components/sidebar/MobileTabBar";
@@ -10,12 +10,27 @@ import { DevPanel } from "../components/dev/DevPanel";
 import { crumbsForPath, stampsForNow } from "./shellState";
 import { FileViewerProvider, useFileViewer } from "../components/viewer/FileViewerContext";
 import { FileViewer } from "../components/viewer/FileViewer";
-import { ToastProvider } from "../components/primitives/Toast";
+import { ToastProvider, useToast } from "../components/primitives/Toast";
 import { SavedReportsProvider } from "../components/repo/SavedReportsContext";
 import { useDeptHealth } from "../store/dept-health";
+import { useNotificationsStream } from "../app/useNotificationsStream";
 
 interface AppLayoutProps {
   children?: ReactNode;
+}
+
+function NotificationsWatcher(): null {
+  const navigate = useNavigate();
+  const { push } = useToast();
+  useNotificationsStream({
+    navigate,
+    toast: {
+      success: (msg, opts) => push({ title: msg, tone: "success", undo: opts?.action }),
+      error: (msg, opts) => push({ title: msg, tone: "error", undo: opts?.action }),
+      info: (msg, opts) => push({ title: msg, tone: "info", undo: opts?.action }),
+    },
+  });
+  return null;
 }
 
 function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
@@ -41,6 +56,7 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
       >
         Skip to content
       </a>
+      <NotificationsWatcher />
       <Sidebar />
       <MobileSidebarOverlay open={open} onOpenChange={setOpen} />
       <section
