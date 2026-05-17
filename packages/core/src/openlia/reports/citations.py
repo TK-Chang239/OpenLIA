@@ -153,6 +153,11 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
     """
     citations: list[dict] = []
     by_key: dict[str, str] = {}
+    # body-as-emitted -> new numeric cid. Lets us translate source_ids
+    # arrays (which the writer sometimes fills with raw bracket bodies
+    # like "c1" or "eodhd__get_fundamentals_data(NET.US)") to the same
+    # ids the rewrite step assigned.
+    raw_body_to_cid: dict[str, str] = {}
 
     def _intern(parsed: dict) -> str:
         key = parsed["normalized_url"]
@@ -171,11 +176,34 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
         )
         return cid
 
+    def _intern_body(body: str) -> str:
+        """Translate a raw bracket body (or whatever the writer put in
+        source_ids) into a numeric citation id. Caches by raw body so
+        the same string used twice maps to the same id."""
+        body = body.strip()
+        if body in raw_body_to_cid:
+            return raw_body_to_cid[body]
+        # Already numeric (e.g., "1", "2") — pass through.
+        if body.isdigit():
+            raw_body_to_cid[body] = body
+            return body
+        # Common writer shorthand: "c1", "c2" — the leading 'c' is just
+        # a prefix the model invents; the numeric tail is the citation
+        # index. Pass the tail through so we don't intern a fake.
+        m = re.fullmatch(r"c(\d+)", body)
+        if m:
+            cid = m.group(1)
+            raw_body_to_cid[body] = cid
+            return cid
+        parsed = _parse_provider(body) or _parse_web_tuple(body) or _parse_malformed(body)
+        cid = _intern(parsed)
+        raw_body_to_cid[body] = cid
+        return cid
+
     def _rewrite(text: str) -> str:
         def _sub(m: re.Match[str]) -> str:
             body = m.group(1)
-            parsed = _parse_provider(body) or _parse_web_tuple(body) or _parse_malformed(body)
-            cid = _intern(parsed)
+            cid = _intern_body(body)
             return f"[{cid}]"
 
         return _BRACKET.sub(_sub, text)
@@ -235,9 +263,34 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
                         if isinstance(v, str) and v:
                             row[k] = _rewrite(v)
 
+    def _remap_source_ids(seq: list) -> list[str]:
+        """Translate every entry in source_ids through _intern_body so a
+        block's source_ids match the numeric citation ids the rewrite
+        pass produced. Keeps unique order."""
+        out: list[str] = []
+        seen: set[str] = set()
+        for entry in seq:
+            if not isinstance(entry, str):
+                continue
+            cid = _intern_body(entry)
+            if cid not in seen:
+                seen.add(cid)
+                out.append(cid)
+        return out
+
+    def _normalize_block_source_ids(block: dict) -> None:
+        if isinstance(block.get("source_ids"), list):
+            block["source_ids"] = _remap_source_ids(block["source_ids"])
+        btype = block.get("type")
+        if btype == "metric_cards":
+            for m in block.get("metrics") or []:
+                if isinstance(m, dict) and isinstance(m.get("source_ids"), list):
+                    m["source_ids"] = _remap_source_ids(m["source_ids"])
+
     for section in payload.get("sections", []):
         for block in section.get("blocks", []):
             _rewrite_block(block)
+            _normalize_block_source_ids(block)
 
     # Rail.quick_stats are Metric objects with label/value strings.
     rail = payload.get("rail")
@@ -298,10 +351,15 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
 
     if isinstance(rail, dict):
         for m in rail.get("quick_stats") or []:
-            if isinstance(m, dict) and not m.get("source_ids"):
-                refs = _collect_refs(m.get("label"), m.get("value"), m.get("context"))
-                if refs:
-                    m["source_ids"] = refs
+            if isinstance(m, dict):
+                if isinstance(m.get("source_ids"), list):
+                    m["source_ids"] = _remap_source_ids(m["source_ids"])
+                if not m.get("source_ids"):
+                    refs = _collect_refs(
+                        m.get("label"), m.get("value"), m.get("context")
+                    )
+                    if refs:
+                        m["source_ids"] = refs
 
     # Third pass: structural cleanup. Charts with no data are a known
     # writer drift — the model declares the chart it wishes existed but

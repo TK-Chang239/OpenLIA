@@ -50,6 +50,10 @@ Report payload strictness:
   field. Empty `source_ids: []` on a block that contains numbers is the
   primary quality regression we track — do not leave it empty when the
   attached data has a known source.
+- `source_ids` entries must be the SAME numeric strings used in inline
+  `[N]` brackets — i.e., `"1"`, `"2"`, `"3"`, not `"c1"` or `"cite-1"` or
+  the raw provider body. The server interns inline brackets and assigns
+  numeric ids; your `source_ids` arrays must reference those same ids.
 - Chart blocks MUST contain real data. A chart block with empty `series: []`,
   `slices: []`, or `bar_series: []` is rejected at finalization. If you do not
   have data for a chart, omit the chart block entirely and explain the gap in
