@@ -224,3 +224,40 @@ async def test_revision_runner_happy_path(
     final = [e for e in events if isinstance(e, ReportComplete)][-1]
     assert final.schema["cover"]["title"] == "MSFT (revised)"
     assert final.schema["department"] == "equity_research"
+
+
+@pytest.mark.asyncio
+async def test_revision_runner_fails_when_source_bundle_missing(
+    prompts_root: Path,
+    bundle_dir: Path,
+    seeded_source_report: str,
+    seeded_chat_with_messages: str,
+    db_session_factory,
+) -> None:
+    bundle_dir.mkdir(exist_ok=True)
+    # No bundle file written for this source_report_id.
+    flagship = FakeProvider(script=FakeProviderScript(turns=[]))  # not used
+    runner = RevisionRunner(
+        prompts=PromptLoader(root=prompts_root),
+        resolve=_resolve,
+        registry=object(),
+        flagship_provider_factory=lambda r: flagship,
+        report_id_factory=lambda: "r_revised",
+        bundle_dir=bundle_dir,
+        db_session_factory=db_session_factory,
+    )
+    events = []
+    async for ev in runner.run(
+        department_id="equity_research",
+        user_id="u_1",
+        source_report_id="r_nope",  # bundle file does NOT exist
+        chat_session_id=seeded_chat_with_messages,
+        revision_brief="x",
+        sections_to_focus=None,
+    ):
+        events.append(ev)
+    types = [type(e).__name__ for e in events]
+    assert "ReportError" in types
+    assert "ReportComplete" not in types
+    err = next(e for e in events if type(e).__name__ == "ReportError")
+    assert "bundle" in err.message.lower() or err.error_class == "bundle_missing"
