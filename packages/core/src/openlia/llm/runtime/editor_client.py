@@ -11,8 +11,9 @@ from __future__ import annotations
 import copy
 import json
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from openlia.llm.adapters._content import CACHE_BREAKPOINT_MARKER
 from openlia.llm.base import LLMProvider
@@ -24,8 +25,9 @@ from openlia.reports.validator import validate_report_payload
 EDITOR_TOOL_NAME = "submit_report"
 
 
-@dataclass(frozen=True)
-class EditorRequest:
+class EditorRequest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     role_prompt: str
     style_guide: str
     schema_strictness: str
@@ -34,6 +36,10 @@ class EditorRequest:
     section_drafts: list[SectionDraft]
     open_questions: list[OpenQuestion]
     framework_cover_instructions: str
+    # NEW (all optional; None preserves original-report editor behavior):
+    revision_brief: str | None = None
+    sections_to_focus: list[str] | None = None
+    chat_transcript_excerpt: str | None = None
 
 
 # Server-controlled fields the editor must not emit; mirrors the
@@ -84,13 +90,30 @@ def _user_prompt(req: EditorRequest) -> str:
     drafts_blob = json.dumps([d.model_dump() for d in req.section_drafts], default=str, indent=2)
     open_blob = json.dumps([q.model_dump() for q in req.open_questions], default=str, indent=2)
     themes_list = "\n- ".join(req.cross_section_themes)
-    return (
+    base = (
         f"## Company thesis\n{req.company_thesis}\n\n"
         f"## Cross-section themes\n- {themes_list}\n\n"
         f"## Section drafts (verbatim from subagents)\n```json\n{drafts_blob}\n```\n\n"
         f"## Open questions\n```json\n{open_blob}\n```\n\n"
         f"## Cover instructions\n{req.framework_cover_instructions}\n"
     )
+    if req.revision_brief is not None:
+        base += (
+            f"\n## Revision brief\n{req.revision_brief}\n"
+            f"\n## Sections to focus on\n"
+            + (
+                "\n- ".join(req.sections_to_focus)
+                if req.sections_to_focus
+                else "(no specific focus — apply the brief broadly)"
+            )
+            + "\n"
+        )
+        if req.chat_transcript_excerpt:
+            base += (
+                f"\n## Chat transcript excerpt (the discussion that led to this revision)\n"
+                f"```\n{req.chat_transcript_excerpt}\n```\n"
+            )
+    return base
 
 
 class EditorClient:
