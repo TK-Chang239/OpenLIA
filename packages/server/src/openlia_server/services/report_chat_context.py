@@ -14,6 +14,7 @@ to render the locked-chat UI or proceed with normal chat handling.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -25,6 +26,45 @@ LOCK_MESSAGE = (
     "The report this discussion was about can no longer be fetched. "
     "I'm unable to answer any questions about it."
 )
+
+REVISE_TOOL_NAME = "revise_report"
+_REVISE_TOOL = ToolSchema(
+    name=REVISE_TOOL_NAME,
+    description=(
+        "Consolidate the original report and this discussion into a "
+        "revised report. Call this when the user explicitly asks for a "
+        "'final', 'revised', 'consolidated', 'updated', or 'final "
+        "version' of the report. Do NOT call this for summary or recap "
+        "requests — only when the user wants a NEW report saved."
+    ),
+    parameters={
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["revision_brief"],
+        "properties": {
+            "revision_brief": {
+                "type": "string",
+                "description": (
+                    "2-4 sentence summary derived from the chat "
+                    "discussion: what's wrong with the original, what's "
+                    "missing, what structural changes the user asked for."
+                ),
+            },
+            "sections_to_focus": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional section_ids the editor should pay extra "
+                    "attention to."
+                ),
+            },
+        },
+    },
+)
+
+
+def _revision_flag_on() -> bool:
+    return os.environ.get("OPENLIA_REVISION_PASS_ENABLED", "0") == "1"
 
 
 @dataclass
@@ -67,4 +107,6 @@ def build_chat_context_for_session(
     ] = []  # caller provides via dispatcher.build(...) in production wiring
     if not any(t.name == "read_payload" for t in base_tools):
         base_tools.append(_READ_PAYLOAD_SCHEMA)
+    if _revision_flag_on():
+        base_tools.append(_REVISE_TOOL)
     return ChatContextResult(locked=False, lock_message="", tools=base_tools)
