@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -131,6 +133,10 @@ class MessageOut(BaseModel):
 
 class MessageListOut(BaseModel):
     items: list[MessageOut]
+
+
+class MessageIn(BaseModel):
+    content: str = Field(..., min_length=1)
 
 
 def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
@@ -315,6 +321,67 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
             raise HTTPException(
                 status_code=404, detail={"code": "not_found", "message": str(exc)}
             ) from exc
+
+    @router.post("/{session_id}/messages")
+    def post_message_ep(
+        session_id: str,
+        body: MessageIn,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict:
+        """Pre-flight message endpoint.
+
+        When the session has ``attached_report_id``, loads the bundle and
+        checks whether the report context is still accessible. Returns
+        ``{"locked": True, "lock_message": ...}`` when the bundle is missing
+        or the report is tombstoned. Returns ``{"ok": True}`` otherwise so
+        the caller can proceed to the SSE stream endpoint.
+        """
+        try:
+            session_row = svc.get_session(db, session_id=session_id, user_id=user.id)
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404, detail={"code": "not_found", "message": str(exc)}
+            ) from exc
+        except PermissionError as exc:
+            raise HTTPException(
+                status_code=403, detail={"code": "forbidden", "message": str(exc)}
+            ) from exc
+
+        if session_row.attached_report_id:
+            from openlia.llm.runtime.tools import ToolDispatcher
+            from openlia.llm.runtime.web_search import WebSearchResolution
+
+            from openlia_server.services.report_chat_context import (
+                build_chat_context_for_session,
+            )
+            from openlia_server.services.runtime import _EmptyDataDispatcher
+
+            bundle_dir = Path(
+                os.environ.get("OPENLIA_REPORT_BUNDLE_DIR")
+                or Path.home() / ".openlia" / "report_bundles"
+            )
+
+            report = db.get(Report, session_row.attached_report_id)
+            is_tombstoned = report is None or getattr(report, "expired_at", None) is not None
+
+            dispatcher = ToolDispatcher(
+                data_dispatcher=_EmptyDataDispatcher(),
+                web_search=WebSearchResolution(False, None, None),
+            )
+
+            context_result = build_chat_context_for_session(
+                attached_report_id=session_row.attached_report_id,
+                bundle_dir=bundle_dir,
+                report_is_tombstoned=is_tombstoned,
+                dispatcher=dispatcher,
+                department_id=session_row.department,
+                has_web_search=False,
+            )
+            if context_result.locked:
+                return {"locked": True, "lock_message": context_result.lock_message}
+
+        return {"ok": True}
 
     @router.get("/{session_id}/messages", response_model=MessageListOut)
     def list_messages_ep(
