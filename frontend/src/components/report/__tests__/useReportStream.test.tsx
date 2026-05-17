@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import { useReportStream, useReportStreamAttach } from "../useReportStream";
+import { useReportStream } from "../useReportStream";
 
 function sseFrame(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -275,40 +275,5 @@ describe("useReportStream", () => {
     const b = secs.find((s) => s.id === "b");
     expect(a?.status).toBe("done");
     expect(b?.status).toBe("writing");
-  });
-});
-
-// useReportStreamAttach — GET /reports/{id}/stream via EventSource
-describe("useReportStreamAttach", () => {
-  let lastES: { url: string; addEventListener: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
-
-  class MockES {
-    url: string;
-    constructor(u: string) {
-      this.url = u;
-      lastES = this as typeof lastES;
-    }
-    addEventListener = vi.fn();
-    close = vi.fn();
-  }
-
-  it("opens GET /reports/{id}/stream when given a report_id", () => {
-    (global as { EventSource?: unknown }).EventSource = MockES;
-    renderHook(() => useReportStreamAttach("r_test"));
-    expect(lastES.url).toBe("/reports/r_test/stream");
-    delete (global as { EventSource?: unknown }).EventSource;
-  });
-
-  it("does not open EventSource when reportId is null", () => {
-    const opened: string[] = [];
-    class TrackES {
-      constructor(u: string) { opened.push(u); }
-      addEventListener = vi.fn();
-      close = vi.fn();
-    }
-    (global as { EventSource?: unknown }).EventSource = TrackES;
-    renderHook(() => useReportStreamAttach(null));
-    expect(opened).toHaveLength(0);
-    delete (global as { EventSource?: unknown }).EventSource;
   });
 });

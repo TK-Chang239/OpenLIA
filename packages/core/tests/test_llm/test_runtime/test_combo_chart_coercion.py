@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+
 from openlia.llm.runtime.report import (
     _apply_coercion_fallback,
     _inject_server_fields,
