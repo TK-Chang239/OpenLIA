@@ -19,6 +19,7 @@ ReportPhaseName = Literal[
     "eager_fetch",
     "section_drafting",
     "editing",
+    "loading_context",
 ]
 _ALLOWED_PHASES: tuple[str, ...] = (
     "planning",
@@ -28,6 +29,7 @@ _ALLOWED_PHASES: tuple[str, ...] = (
     "eager_fetch",
     "section_drafting",
     "editing",
+    "loading_context",
 )
 
 
