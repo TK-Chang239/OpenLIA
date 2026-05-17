@@ -694,7 +694,6 @@ export default function EquityResearch(): JSX.Element {
                     createdAt={restoredTombstone.createdAt}
                     preview=""
                     onOpen={openReport}
-                    onDownload={handleDownload}
                     onSave={handleSave}
                     expiredAt={restoredExpiredAt}
                   />

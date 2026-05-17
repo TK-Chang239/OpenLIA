@@ -127,5 +127,6 @@ async def test_fanout_drops_oldest_on_full_subscriber_queue() -> None:
     while not tiny_q.empty():
         drained.append(tiny_q.get_nowait())
     assert drained, "queue should retain at least one item"
-    assert all(item["i"] >= 1500 for item in drained), \
+    assert all(item["i"] >= 1500 for item in drained), (
         "drop-oldest policy should keep only the most recent items"
+    )

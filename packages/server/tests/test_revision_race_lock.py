@@ -2,6 +2,7 @@
 chat must result in BOTH eventually completing successfully — the
 second waits for the first via the per-chat lock. After both, the
 source chat is re-anchored to ONE of them."""
+
 from __future__ import annotations
 
 import asyncio

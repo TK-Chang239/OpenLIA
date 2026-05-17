@@ -629,9 +629,7 @@ def create_app(
     app.include_router(build_llm_slot_defaults_router(db_session_factory=factory, mode=mode))
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
-    app.include_router(
-        build_notifications_stream_router(db_session_factory=factory, mode=mode)
-    )
+    app.include_router(build_notifications_stream_router(db_session_factory=factory, mode=mode))
 
     # Shared per-process presence registry; lifespan sets both keys.
     # This guard covers tests that call create_app() without entering

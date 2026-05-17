@@ -2,6 +2,7 @@
 """When the failed report's original_request.kind == 'revision', the
 Retry button POSTs to /revise (with the persisted source_report_id and
 revision_brief) instead of /generate."""
+
 from __future__ import annotations
 
 import uuid
