@@ -227,3 +227,75 @@ describe("ReportCard", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/chat/sess_new");
   });
 });
+
+describe("ReportCard — status variants", () => {
+  it("renders the GeneratingPlaceholderCard variant for status=generating", () => {
+    const report = {
+      id: "r1",
+      status: "generating" as const,
+      started_at: new Date(Date.now() - 5000).toISOString(),
+      original_request: { user_input: "MSFT" },
+    };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/MSFT/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("renders the FailedReportCard variant for status=failed", () => {
+    const report = {
+      id: "r1",
+      status: "failed" as const,
+      failure_reason: "provider error: 429",
+    };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/provider error/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("Cancel button calls DELETE /reports/{id}", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({ ok: true } as any);
+    window.confirm = vi.fn(() => true);
+    const report = {
+      id: "r1",
+      status: "generating" as const,
+      started_at: new Date().toISOString(),
+      original_request: { user_input: "MSFT" },
+    };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchSpy).toHaveBeenCalledWith("/reports/r1", { method: "DELETE" });
+    fetchSpy.mockRestore();
+  });
+
+  it("Retry button calls POST /reports/{id}/retry and navigates to the new report", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ report_id: "r_new" }),
+    } as any);
+    const navigate = vi.fn();
+    const report = { id: "r1", status: "failed" as const, failure_reason: "x" };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} navigate={navigate} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchSpy).toHaveBeenCalledWith("/reports/r1/retry", { method: "POST" });
+    expect(navigate).toHaveBeenCalledWith("/equity-research?report_id=r_new");
+    fetchSpy.mockRestore();
+  });
+});
