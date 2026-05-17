@@ -108,6 +108,9 @@ def _section_titles(framework: dict[str, Any]) -> list[str]:
     return [str(s.get("title", "")) for s in (framework.get("sections") or [])]
 
 
+TraceFn = Callable[[str, str, "dict[str, Any] | None"], None]
+
+
 class SubagentReportRunner:
     def __init__(
         self,
@@ -121,6 +124,7 @@ class SubagentReportRunner:
         report_id_factory: Callable[[], str] | None = None,
         frameworks_root: Path | None = None,
         plan_repair_turns: int = 1,
+        trace: TraceFn | None = None,
     ) -> None:
         self._prompts = prompts
         self._tools = tools
@@ -131,6 +135,7 @@ class SubagentReportRunner:
         self._report_id_factory = report_id_factory or (lambda: f"r_{uuid.uuid4().hex[:12]}")
         self._frameworks_root = frameworks_root or _default_frameworks_root()
         self._plan_repair_turns = plan_repair_turns
+        self._trace: TraceFn = trace or (lambda *a: None)
 
     async def run(
         self,
@@ -142,7 +147,7 @@ class SubagentReportRunner:
         from datetime import UTC, datetime
 
         from openlia.llm.runtime.editor_client import (
-            EDITOR_TOOL_NAME,  # noqa: F401  -- imported for symmetry
+            EDITOR_TOOL_NAME,
             EditorClient,
             EditorRequest,
         )
@@ -154,7 +159,7 @@ class SubagentReportRunner:
         from openlia.llm.runtime.report import _finalize_submit_payload
         from openlia.llm.runtime.section_draft import OpenQuestion, PriorSection, SectionDraft
         from openlia.llm.runtime.subagent_client import (
-            SECTION_DRAFT_TOOL_NAME,  # noqa: F401
+            SECTION_DRAFT_TOOL_NAME,
             SubagentClient,
             SubagentRequest,
         )
@@ -190,6 +195,7 @@ class SubagentReportRunner:
             flagship=flagship,
             system=planning_system,
             framework=framework,
+            report_id=report_id,
         )
         if isinstance(plan_or_err, ReportError):
             yield ReportError(
@@ -211,7 +217,21 @@ class SubagentReportRunner:
             role="subagent",
         )
         subagent_provider = self._subagent_factory(resolved_sub)
-        subagent = SubagentClient(provider=subagent_provider)
+
+        def _subagent_on_done(resp: Any) -> None:
+            self._trace(
+                "llm.call.done",
+                f"drafting ({SECTION_DRAFT_TOOL_NAME})",
+                {
+                    "report_id": report_id,
+                    "phase": "drafting",
+                    "input_tokens": resp.input_tokens,
+                    "output_tokens": resp.output_tokens,
+                    "cached_input_tokens": resp.cached_input_tokens,
+                },
+            )
+
+        subagent = SubagentClient(provider=subagent_provider, on_done=_subagent_on_done)
         prior_summaries: list[PriorSection] = []
         drafts: list[SectionDraft] = []
         sections_by_id = {s.section_id: s for s in plan.sections}
@@ -241,7 +261,26 @@ class SubagentReportRunner:
             )
 
         yield ReportPhase(report_id=report_id, phase="editing")
-        editor = EditorClient(provider=flagship, repair_budget=1, max_output_tokens=8192)
+
+        def _editor_on_done(resp: Any) -> None:
+            self._trace(
+                "llm.call.done",
+                f"editing ({EDITOR_TOOL_NAME})",
+                {
+                    "report_id": report_id,
+                    "phase": "editing",
+                    "input_tokens": resp.input_tokens,
+                    "output_tokens": resp.output_tokens,
+                    "cached_input_tokens": resp.cached_input_tokens,
+                },
+            )
+
+        editor = EditorClient(
+            provider=flagship,
+            repair_budget=1,
+            max_output_tokens=8192,
+            on_done=_editor_on_done,
+        )
         open_qs: list[OpenQuestion] = [
             OpenQuestion(section_id=d.section_id, question=q)
             for d in drafts
@@ -321,6 +360,7 @@ class SubagentReportRunner:
         flagship: LLMProvider,
         system: str,
         framework: dict[str, Any],
+        report_id: str,
     ) -> ReportPlan | ReportError:
         tools = [_plan_report_tool()]
         tool_choice = _force_plan_choice(flagship.kind)
@@ -336,6 +376,17 @@ class SubagentReportRunner:
                     tool_choice=tool_choice,
                     max_tokens=4096,
                 )
+            )
+            self._trace(
+                "llm.call.done",
+                f"planning ({PLAN_REPORT_TOOL_NAME})",
+                {
+                    "report_id": report_id,
+                    "phase": "planning",
+                    "input_tokens": response.input_tokens,
+                    "output_tokens": response.output_tokens,
+                    "cached_input_tokens": response.cached_input_tokens,
+                },
             )
             call = next(
                 (c for c in response.tool_calls if c.name == PLAN_REPORT_TOOL_NAME),
