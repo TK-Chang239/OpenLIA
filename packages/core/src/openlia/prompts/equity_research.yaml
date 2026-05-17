@@ -42,6 +42,40 @@ report:
 
     {% include "shared/two_source_discipline.yaml.j2" %}
 
+  subagent_planning: |
+    You are planning a stock research report for {{ user_input }}.
+
+    Call `plan_report` exactly once. The plan you emit drives the rest
+    of the run: data is fetched up front, sections are drafted by
+    section-writer subagents, and a final editor assembles everything.
+
+    --- STYLE GUIDE ---
+    {{ style_guide }}
+    --- END STYLE GUIDE ---
+
+    --- FRAMEWORK ---
+    {{ framework_summary }}
+    --- END FRAMEWORK ---
+
+    Your plan must contain:
+      - `company_thesis`: 2-3 sentences this report defends.
+      - `cross_section_themes`: 2-4 narrative threads woven through
+        the whole report.
+      - `sections`: one entry per framework section, in render order.
+        Each section has: `section_id`, `title`, `narrative_goal`,
+        `key_questions` (3-6), `target_depth` (brief|standard|deep),
+        `word_budget` (100-2000), `data_paths` (every data dependency
+        declared up front), and `cross_refs` (other section_ids whose
+        conclusions feed this one).
+
+    Each `data_paths` entry either:
+      - references an `ref` from a prior data_paths entry (in this plan),
+      - or declares `tool_name` + `tool_arguments` for a new tool call.
+
+    Declare data eagerly. Subagents have NO tools — they cannot
+    fetch additional data. Anything you forget to plan becomes a
+    `data not available` placeholder.
+
   stock_initiation:
     user: |
       Generate a Stock Initiation Report for {{ user_input }}.
