@@ -140,10 +140,43 @@ Per the user's latest instruction: full authority to fix conceptual/design issue
 - **Empty-chart handling.** Considered: (a) keep empty chart and let renderer show "no data" graphic, (b) coerce empty chart to a text block with the chart title, (c) drop the block entirely. Chose (c) — empty charts are noise; if the model had data it would have emitted it. The adjacent text block already explains the section, so the drop is invisible to a quality reader.
 - **rail.source_ids handling.** Considered: (a) extend `Rail` schema to accept `source_ids` for backward compatibility with the model's drift, (b) strip it server-side. Chose (b) — the field is meaningless on Rail (sources belong on the individual Metric children inside quick_stats). Accepting it would just hide a quality problem.
 
-**Deferred (queued for next iteration):**
-- Web-search telemetry gap (16 searches happened, 0 logged to dev-events).
-- "Data not available" pattern enforcement (prompt nudge applied, but validator-level enforcement would be stronger).
-- Sub-3 citations for a 14-section report is still a smell even after F1+F2 — the writer might be reusing the same 3 tool calls across all sections. Need to check after re-running.
+**Iteration 1 followup — F6 added.**
+
+Verifying iter-1 fixes by offline-applying the patched `normalize_report` to the existing NET payload surfaced an extra issue: the writer emits `source_ids: ["c1", "c2"]` (the `c`-prefixed shorthand) on tables/charts/key_findings/quick_stats, but every inline `[N]` reference and every citation id in `payload.citations` uses bare numeric strings (`"1"`, `"2"`). Result: `source_ids` references pointed at nothing real.
+
+| # | Fix | Type | Files |
+|---|-----|------|-------|
+| F6 | `_intern_body()` translates `c1` → `1`, `c2` → `2`, passes bare digits through, and interns any other free-form body as a new citation. Applied to every `source_ids` array. | Mechanical | `packages/core/src/openlia/reports/citations.py` |
+| F6b | Strictness prompt now says explicitly: "`source_ids` entries must be the SAME numeric strings used in inline `[N]` brackets — not `"c1"` or `"cite-1"` or the raw provider body." | Conceptual | `packages/core/src/openlia/prompts/shared/report_schema_strictness.yaml.j2` |
+
+**Offline verification result on the existing NET payload:**
+- 22 `source_ids` arrays remapped from `c1`/`c2` shorthand to numeric ids
+- 4 empty charts dropped (`industry_overview/combo_chart`, `products_and_services/pie_chart`, `historical_financials/combo_chart`, `financial_projections/combo_chart`)
+- `rail.source_ids` stripped (would have prevented the single validation-failure repair turn)
+- Citation count remained at 3 (correct — no fake citations spawned by the `c`-prefix passthrough)
+
+**Deferred to a follow-up session (queued; require live re-run after server restart):**
+- **Server restart blocked.** The running server (PID 78017, started 2026-05-16 20:11) has the pre-fix code. The sandbox denies `kill` / `pkill`, so I cannot recycle the server to validate the fixes end-to-end. The fixes ARE in code on `feat/subagent-report-architecture` (commits `5236d9e` and `16f5f23`) and the offline verification confirms they transform the payload as intended. To see them in a live run, the user (or an authorized session) needs to restart the server.
+- **Web-search telemetry gap.** `meta_stats.web_search_queries` says 16, dev-events.jsonl has 0 `report.web_search.invoked` entries. The SSE stream emits them but the dev-events trace doesn't. Likely a missing `trace()` call in the OpenAI Responses adapter when it routes a `web_search_call` content item.
+- **Sub-3 citation diversity.** Even after F1/F2/F6, total citations stays at 3 because the writer only invoked 4 distinct data tools and never invoked web_search via the function-call path. With the prompt nudge against premature "data not available" the model should reach further on a fresh run; need to verify with a post-restart report.
+- **`rail.source_ids` validation-failure-then-repair.** The post-process strip prevents the validator from ever seeing the field, but the LLM still emits it. Net effect should be: no validation failure, no repair turn → another ~$0.05–0.10 saved per report. Confirm post-restart.
+- **Run signature for SubagentReportRunner end-to-end.** Already aligned in commit `a8e5a97`. Subagent runner can be enabled with `OPENLIA_USE_SUBAGENT_RUNNER=1` + `OPENLIA_DEFAULT_SUBAGENT_MODEL_ID=1a271c9a-cdc4-4b49-a0d2-1644817cf6bb` (gpt-5.4-mini) at server start.
+
+**Conclusion of iteration 1.** Three categories of formatting bugs (citation undercounting, source_ids c-prefix orphans, empty chart blocks) fixed at the finalization layer. Prompt strengthened to nudge the writer away from each pattern. Analysis quality was already good — the underlying writer produces professional-level prose with proper bull/bear bracketing; the visible-quality regression was almost entirely in the post-processing pipeline. Cost dropped from ~$1.50 baseline to **$0.40 on this run**, well under the design's ≤$0.50 target. Cache hit ratio 84%. The cache fixes from the merged PR #122 are doing exactly what they should.
+
+---
+
+## Status at session-end
+
+- **Plan 1** fully shipped on `feat/subagent-report-architecture`. 18/18 tasks plus `a8e5a97` signature-alignment plus `5236d9e`+`16f5f23` analysis-loop fixes.
+- **Plans 2/3/4** intentionally deferred — see decision block above.
+- **Analysis loop** completed 1 full iteration plus offline verification. Cannot proceed to iterations 2-8 in this session because the running server cannot be restarted under the current sandbox. The fixes are committed; once the server is recycled, the next report on any ticker (NET, MSFT, GOOG, etc.) should show:
+  - More numeric `source_ids` populated on tables, charts, metric_cards, rail.quick_stats
+  - Empty chart blocks dropped instead of rendered as blanks
+  - `rail.source_ids` never reaching the validator
+  - No `c1`/`c2` orphan refs
+
+**To resume:** restart server with `pkill -9 -f "openlia serve"; uv run openlia serve` (and optionally add `OPENLIA_USE_SUBAGENT_RUNNER=1` + `OPENLIA_DEFAULT_SUBAGENT_MODEL_ID=<mini-uuid>` to exercise the new pipeline). Then re-run `python3 scripts/analyze_report.py <report_id>` for each fresh ticker and compare against this iteration's baseline. Plan for up to 7 more iterations.
 
 ---
 
