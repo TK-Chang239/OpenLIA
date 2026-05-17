@@ -139,6 +139,7 @@ class SubagentReportRunner:
         frameworks_root: Path | None = None,
         plan_repair_turns: int = 1,
         trace: TraceFn | None = None,
+        bundle_dir: Path | None = None,
     ) -> None:
         self._prompts = prompts
         self._tools = tools
@@ -150,6 +151,9 @@ class SubagentReportRunner:
         self._frameworks_root = frameworks_root or _default_frameworks_root()
         self._plan_repair_turns = plan_repair_turns
         self._trace: TraceFn = trace or (lambda *a: None)
+        self._bundle_dir: Path = bundle_dir if bundle_dir is not None else (
+            Path.home() / ".openlia" / "report_bundles"
+        )
 
     async def run(
         self,
@@ -275,7 +279,11 @@ class SubagentReportRunner:
                 },
             )
 
-        subagent = SubagentClient(provider=subagent_provider, on_done=_subagent_on_done)
+        subagent = SubagentClient(
+            provider=subagent_provider,
+            reprompt_budget=2,  # mini-model needs 2 reprompts to land schema
+            on_done=_subagent_on_done,
+        )
         prior_summaries: list[PriorSection] = []
         drafts: list[SectionDraft] = []
         sections_by_id = {s.section_id: s for s in plan.sections}
