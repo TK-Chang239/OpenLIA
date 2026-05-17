@@ -742,3 +742,105 @@ async def test_coercion_fallback_runs_when_repair_turns_exhausted(
     assert all(isinstance(h, dict) and "key" in h and "label" in h for h in table["headers"])
     chart = final.schema["sections"][0]["blocks"][0]
     assert "note" not in (chart.get("options") or {})
+
+
+# ---------- Defect 2: fallback path must still merge provider citations + meta_stats ----------
+
+
+@pytest.mark.asyncio
+async def test_fallback_path_merges_provider_citations_and_stamps_meta_stats(
+    prompts_root: Path,
+    frameworks_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the model exhausts repair turns by repeatedly misplacing citations
+    under rail (`rail.citations: Extra inputs are not permitted`), the
+    fallback path must still:
+      1. surface provider-emitted citations into `schema["citations"]`
+         (the runner has been accumulating them via response.citations),
+      2. stamp `meta_stats` server-side so sources_count/sections_count/
+         model_id land in the persisted report.
+    Without this, the user-visible report has empty footnotes and a
+    blank meta panel — the exact regression seen in r_df2fad6a0961.
+    """
+    from openlia.llm.types import Citation
+
+    import openlia.llm.runtime.report as report_module
+
+    monkeypatch.setattr(report_module, "MAX_WRITING_TURNS", 2)
+
+    rail_citations_payload: dict[str, Any] = {
+        "cover": {
+            "title": "AAPL Initiation",
+            "subtitle": "Coverage initiation",
+            "tagline": "x",
+        },
+        "sections": [
+            {
+                "id": "overview",
+                "title": "Overview",
+                "blocks": [{"type": "text", "content": "Body."}],
+            }
+        ],
+        "rail": {
+            "verdict": {"stance": "hold", "rationale": "x"},
+            "citations": [{"id": "1", "title": "misplaced"}],
+        },
+    }
+    bad = ToolCall(id="t_bad", name="submit_report", arguments=rail_citations_payload)
+    provider_cite = Citation(
+        id="c-web-1",
+        kind="web",
+        url="https://example.com/aapl",
+        title="AAPL coverage",
+        source="example.com",
+    )
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", []),  # end fetching phase
+                (
+                    "tool_calls_with_searches",
+                    {"tool_calls": [bad], "citations": (provider_cite,)},
+                ),
+                (
+                    "tool_calls_with_searches",
+                    {"tool_calls": [bad], "citations": (provider_cite,)},
+                ),
+            ]
+        )
+    )
+    data = FakeDataDispatcher(manifest={"equity_research": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_resolve,
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_fallback_cites",
+    )
+    events = await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+    final = events[-1]
+    assert isinstance(final, ReportComplete)
+    # Provider citation surfaces at the root.
+    cite_ids = {c.get("id") for c in final.schema.get("citations") or []}
+    assert "c-web-1" in cite_ids, (
+        f"provider citation lost in fallback path; got citations={final.schema.get('citations')}"
+    )
+    # Server-stamped meta_stats present with correct counts.
+    meta = final.schema.get("meta_stats") or {}
+    assert meta.get("sections_count") == 1
+    assert meta.get("sources_count", 0) >= 1
+    assert meta.get("model_id")

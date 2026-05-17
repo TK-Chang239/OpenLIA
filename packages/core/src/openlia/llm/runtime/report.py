@@ -1570,6 +1570,14 @@ class ReportRunner:
             )
             schema_payload = normalize_report(schema_payload)
             schema_payload = _apply_coercion_fallback(schema_payload)
+            _merge_provider_citations(schema_payload, provider_citations)
+            schema_payload["meta_stats"] = _build_meta_stats(
+                schema_payload,
+                model_id=resolved.model_ref,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                web_search_count=web_search_count,
+            )
             self._trace(
                 "report.coercion_applied",
                 "strict validation exhausted; coercion fallback applied",
