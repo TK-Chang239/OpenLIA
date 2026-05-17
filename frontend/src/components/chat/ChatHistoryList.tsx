@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Pin, Archive, ArchiveRestore, Trash, Pencil, Search } from "lucide-react";
+import { Pin, Archive, ArchiveRestore, Trash, Pencil, Search, Paperclip } from "lucide-react";
 
 import {
   type ChatSession,
@@ -8,6 +8,8 @@ import {
   listSessions,
   patchSession,
 } from "../../api/chat";
+import type { ReportListItem } from "../../api/reports";
+import { departmentLabel } from "../../lib/department-colors";
 import { ConfirmDialog } from "../primitives/ConfirmDialog";
 
 interface Props {
@@ -20,6 +22,15 @@ interface Props {
   /** Imperative refresh trigger from the parent (e.g. after creating a
    *  session in the TopBar). Bumping this number re-fetches the list. */
   refreshKey?: number;
+  /** Lookup map used to resolve attached_report_id → report title. */
+  reportsById?: Record<string, ReportListItem>;
+}
+
+function displayTitle(session: ChatSession, reportsById: Record<string, ReportListItem>): string {
+  if (session.attached_report_id && reportsById[session.attached_report_id]) {
+    return `Discussion: ${reportsById[session.attached_report_id].title}`;
+  }
+  return session.title || departmentLabel(session.department);
 }
 
 const SEARCH_DEBOUNCE_MS = 250;
@@ -30,6 +41,7 @@ export function ChatHistoryList({
   onSelect,
   onActiveDeleted,
   refreshKey = 0,
+  reportsById = {},
 }: Props): JSX.Element {
   const [items, setItems] = useState<ChatSession[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -128,10 +140,19 @@ export function ChatHistoryList({
           <button
             type="button"
             onClick={() => onSelect(s.id)}
-            className="flex-1 truncate text-left"
+            className="flex min-w-0 flex-1 items-center gap-1 truncate text-left"
             title={showError ? renameError?.message : undefined}
           >
-            {s.title}
+            {s.attached_report_id && (
+              <span
+                data-testid="attached-report-icon"
+                title="Discussing a report"
+                className="shrink-0 text-[--color-text-tertiary]"
+              >
+                <Paperclip size={11} aria-hidden />
+              </span>
+            )}
+            <span className="truncate">{displayTitle(s, reportsById)}</span>
             {showError ? (
               <span className="ml-2 text-[10px] text-[--color-feedback-error]" role="status">
                 {renameError?.message}

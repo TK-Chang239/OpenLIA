@@ -7,12 +7,34 @@ import {
   FileText,
   Globe,
   Layers,
+  MessageSquare,
   Trash2,
 } from "lucide-react";
 import { type JSX, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { ReportMode } from "../../api/equity-research";
+import { createSession } from "../../api/chat";
 import { DeleteReportDialog } from "../report/DeleteReportDialog";
+import { useSavedReportsOptional } from "../repo/SavedReportsContext";
+import type { FailedReport } from "./FailedReportCard";
+import { FailedReportCard } from "./FailedReportCard";
+import type { GeneratingReport } from "./GeneratingPlaceholderCard";
+import { GeneratingPlaceholderCard } from "./GeneratingPlaceholderCard";
+
+// ─── Status-based report object (background generation) ──────────────────────
+
+export type ReportStatus = "generating" | "failed" | "cancelled" | "complete";
+
+export interface BgReport {
+  id: string;
+  status: ReportStatus;
+  started_at?: string | null;
+  original_request?: { user_input?: string | null } | null;
+  failure_reason?: string | null;
+}
+
+// ─── Flat-props API for completed reports ─────────────────────────────────────
 
 const MODE_TITLE: Record<ReportMode, string> = {
   stock_initiation: "Stock Initiation Report",
@@ -29,7 +51,7 @@ function ageDays(iso: string, now: number = Date.now()): number {
   return (now - t) / MS_PER_DAY;
 }
 
-interface Props {
+interface CompletedProps {
   reportId: string;
   mode: ReportMode;
   /** Resolved ticker (e.g. "AAPL"). Falls back to the raw subject if missing. */
@@ -68,7 +90,7 @@ function formatDate(iso: string): string {
   });
 }
 
-export function ReportCard({
+function CompletedReportCard({
   reportId,
   mode,
   ticker,
@@ -86,13 +108,17 @@ export function ReportCard({
   onDelete,
   initialSaved = false,
   expiredAt = null,
-}: Props): JSX.Element {
+}: CompletedProps): JSX.Element {
   const reduce = useReducedMotion();
-  const [saved, setSaved] = useState(initialSaved);
+  const navigate = useNavigate();
+  const savedCtx = useSavedReportsOptional();
+  const [localSaved, setLocalSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
+  const [discussing, setDiscussing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const saved = savedCtx ? savedCtx.isSaved(reportId) || localSaved : localSaved;
   const isExpired = expiredAt != null;
   const isOldSaved = !isExpired && saved && ageDays(createdAt) >= RETENTION_DAYS;
 
@@ -103,11 +129,13 @@ export function ReportCard({
       if (saved) {
         if (onUnsave) {
           await onUnsave(reportId);
-          setSaved(false);
+          setLocalSaved(false);
+          savedCtx?.markUnsaved(reportId);
         }
       } else {
         await onSave(reportId);
-        setSaved(true);
+        setLocalSaved(true);
+        savedCtx?.markSaved(reportId);
       }
     } finally {
       setSaving(false);
@@ -122,6 +150,22 @@ export function ReportCard({
       setDeleteOpen(false);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDiscuss = async () => {
+    if (discussing) return;
+    setDiscussing(true);
+    try {
+      const title = ticker ?? subject;
+      const session = await createSession({
+        department: "equity_research",
+        title,
+        attached_report_id: reportId,
+      });
+      navigate(`/chat/${session.id}`);
+    } finally {
+      setDiscussing(false);
     }
   };
 
@@ -271,6 +315,16 @@ export function ReportCard({
           Open Report
         </button>
 
+        <button
+          type="button"
+          onClick={() => void handleDiscuss()}
+          disabled={discussing}
+          className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
+        >
+          <MessageSquare size={13} strokeWidth={1.7} />
+          Discuss
+        </button>
+
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
@@ -344,4 +398,34 @@ export function ReportCard({
       />
     </motion.article>
   );
+}
+
+// ─── Dispatcher ───────────────────────────────────────────────────────────────
+
+interface BgReportProps {
+  report: BgReport;
+  navigate?: (path: string) => void;
+}
+
+export function ReportCard(props: BgReportProps): JSX.Element;
+export function ReportCard(props: CompletedProps): JSX.Element;
+export function ReportCard(props: BgReportProps | CompletedProps): JSX.Element {
+  const routerNavigate = useNavigate();
+
+  if ("report" in props) {
+    const { report, navigate: nav } = props;
+    const go = nav ?? routerNavigate;
+    switch (report.status) {
+      case "generating":
+        return <GeneratingPlaceholderCard report={report as GeneratingReport} />;
+      case "failed":
+      case "cancelled":
+        return <FailedReportCard report={report as FailedReport} navigate={go} />;
+      case "complete":
+      default:
+        return <div className="card card--complete" />;
+    }
+  }
+
+  return <CompletedReportCard {...props} />;
 }
