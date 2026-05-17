@@ -82,9 +82,12 @@ class ReportRequest:
     # ``_resolve_search_budget`` in ``llm.runtime.report``.
     web_search_budget_override: int | None = None
     # Phase 6: when True, uncited concrete claims become validation
-    # errors and trigger the strict-validation retry loop. Default False
-    # keeps the warn-only path.
-    citations_strict: bool = False
+    # errors and trigger the strict-validation retry loop. Default True
+    # as of 2026-05-17 — explicit user decision after iteration 1 of the
+    # equity-research analysis loop showed under-citation was the primary
+    # quality regression. The repair-turn cost (~$0.05-0.10 per failure)
+    # is worth the citation discipline.
+    citations_strict: bool = True
 
     def __post_init__(self) -> None:
         if self.length not in _ALLOWED_LENGTHS:

@@ -215,12 +215,37 @@ A validator-side enforcement would be stronger (reject any section whose total n
 
 ---
 
-### Open questions for the user
+### Open questions for the user — RESOLVED by 2026-05-17 ~11:40 EDT
 
-1. **Is `enforce_uncited_concrete_claims(strict=True)` safe to flip on by default?** Today it's controlled by `request.citations_strict`. If on by default, every report with an uncited numeric claim would burn a repair turn — better quality but ~+10–20% cost in the failure tail.
-2. **Cost-quality knob.** The fixes pull cost from $1.50 to $0.40 mostly through cache wins. Spending another $0.10–0.20 on stricter validation (F8 + strict citations) likely pushes accuracy/depth materially higher. Worth the trade?
-3. **Plan 2–4 deferral.** The decision to skip Plans 2 (chat-on-report), 3 (background generation), 4 (revision pass) needs your confirmation. They produce clean spec files + plan files, ready to run via `/subagent-driven-development` next session.
-4. **Subagent runner activation.** Ready to enable with two env vars. Worth dedicating a follow-up session to running the full subagent pipeline against the same tickers and comparing depth/cost against the classic runner.
+1. ~~Strict citations by default?~~ **YES** → F8 applied: `ReportRequest.citations_strict` default flipped to `True`. Test `test_report_request_defaults_to_warn_mode` renamed to `test_report_request_defaults_to_strict_mode`.
+2. ~~Cost-quality knob?~~ **YES, accept +$0.10–0.20.**
+3. ~~Plan 2/3/4 deferral?~~ **NO** → executing all three.
+4. ~~Subagent runner activation?~~ **YES** → server restarted with `OPENLIA_USE_SUBAGENT_RUNNER=1` + `OPENLIA_DEFAULT_SUBAGENT_MODEL_ID=1a271c9a-cdc4-4b49-a0d2-1644817cf6bb`.
+
+---
+
+### Iteration 3 — first live run on new subagent-architecture server
+
+**Run id:** `r_5a71f8053479`
+
+**Outcome: FAILED in planning phase.** Flagship called `plan_report` twice, both times returning empty `{}` args. Validation failed (`company_thesis`, `sections`, `cross_section_themes` all missing).
+
+**Root cause:** Output token cap `max_tokens=4096` was too tight. Plan 1 Task 12 spec said 4096; in practice the planning call needed to fit:
+- `company_thesis` (≈80 tokens)
+- 14 SectionPlans × ~200 tokens each = ≈2800
+- `cross_section_themes` (≈80 tokens)
+- Plus model reasoning budget before the tool call
+
+Output token counts in the failed run hit exactly 4096 on both attempts (truncated). The model burned its output budget on reasoning and never emitted the tool-call payload.
+
+**Fixes applied (F9-F10):**
+
+| # | Fix | Type | Files |
+|---|-----|------|-------|
+| F9 | Planning `max_tokens=4096` → `16384`. Comment explains the iter-3 truncation root cause. | Mechanical | `packages/core/src/openlia/llm/runtime/subagent_runner.py` |
+| F10 | `_framework_summary()` now includes each section's `instructions` field, not just `id` + `title`. The flagship planner gets real per-section guidance; without it, the model had nothing concrete to plan against and produced empty args even before truncation became fatal. | Conceptual | `packages/core/src/openlia/llm/runtime/subagent_runner.py` |
+
+**Iteration 3 retry — run `r_a489e8f4ce0b`** triggered after F9+F10 on restarted server. Status: in progress at time of writing.
 
 ---
 

@@ -95,9 +95,23 @@ def _load_style_guide(frameworks_root: Path, mode: str) -> str:
 
 
 def _framework_summary(framework: dict[str, Any]) -> str:
+    """Render the framework's section list with per-section instructions
+    so the flagship planner has enough context to write a real plan
+    rather than emitting empty arguments. Earlier versions returned only
+    `<id>: <title>` pairs; the planner then truncated mid-tool-call on
+    every run because the prompt didn't give it enough substance to
+    anchor a 14-section plan."""
     sections = framework.get("sections", []) or []
-    lines = [f"- {s.get('id')}: {s.get('title')}" for s in sections]
-    return "Sections (render order):\n" + "\n".join(lines)
+    lines: list[str] = ["Sections (render order):"]
+    for s in sections:
+        sid = s.get("id")
+        title = s.get("title")
+        instr = (s.get("instructions") or "").strip()
+        if instr:
+            lines.append(f"- {sid} ({title}): {instr}")
+        else:
+            lines.append(f"- {sid}: {title}")
+    return "\n".join(lines)
 
 
 def _section_ids_in_framework(framework: dict[str, Any]) -> set[str]:
@@ -411,7 +425,14 @@ class SubagentReportRunner:
                     messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
-                    max_tokens=4096,
+                    # Planning produces 14 SectionPlans + thesis + themes; the
+                    # JSON shape needs ~3-5k tokens minimum, plus the model
+                    # consumes meaningful reasoning budget before emitting. The
+                    # iter-3 run with cap=4096 returned empty {} args twice
+                    # because the response was truncated mid-tool-call. 16384
+                    # gives substantial headroom for reasoning + structured
+                    # output.
+                    max_tokens=16384,
                 )
             )
             self._trace(
@@ -482,7 +503,14 @@ def dedupe_data_paths(plan: ReportPlan) -> list[UniqueToolCall]:
         for dp in section.data_paths:
             if dp.tool_name is None:
                 continue  # `ref`-only paths resolve against earlier dispatches
-            key = (dp.tool_name, frozenset((dp.tool_arguments or {}).items()))
+            # tool_arguments can hold list / dict values; JSON-serialize with
+            # sorted keys for a hashable, deterministic dedup key. The earlier
+            # frozenset(items()) approach blew up on list values
+            # ("unhashable type: 'list'").
+            key = (
+                dp.tool_name,
+                json.dumps(dp.tool_arguments or {}, sort_keys=True, default=str),
+            )
             entry = by_key.setdefault(
                 key,
                 UniqueToolCall(tool_name=dp.tool_name, tool_arguments=dp.tool_arguments or {}),
