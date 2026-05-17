@@ -159,6 +159,24 @@ class _NoopEarningsRecentAdapter:
 log = logging.getLogger(__name__)
 
 
+def sweep_orphaned_generating_reports(db_session_factory: Callable) -> int:
+    """Mark any 'generating' report rows as 'failed' with reason 'server_restart_interrupted'.
+
+    Called once at startup to clean up rows left in the 'generating' state by a
+    previous server process that exited while a background report job was running.
+    Returns the number of rows updated.
+    """
+    from openlia_server.db.models.content import Report
+
+    with db_session_factory() as session:
+        orphans = session.query(Report).filter(Report.status == "generating").all()
+        for row in orphans:
+            row.status = "failed"
+            row.failure_reason = "server_restart_interrupted"
+        session.commit()
+    return len(orphans)
+
+
 class _SchedulerAdapter:
     """Thin wrapper around APScheduler's AsyncScheduler.
 
@@ -276,6 +294,13 @@ def _make_lifespan(
             # uses Alembic migrations so create_all is a no-op there.
             if engine.url.drivername == "sqlite":
                 Base.metadata.create_all(engine)
+
+        # Sweep any 'generating' rows left over from a previous server process
+        # that exited mid-run. Must run before any report background tasks start.
+        _sweep_sf = db_session_factory or _default_session_factory
+        swept = sweep_orphaned_generating_reports(_sweep_sf)
+        if swept:
+            log.info("startup sweep: marked %d orphaned 'generating' report(s) as failed", swept)
 
         # Validate prompt slots once at boot. PromptSlotNotFound propagates
         # and prevents the server from starting if any slot is missing.
