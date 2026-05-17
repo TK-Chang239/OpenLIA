@@ -315,6 +315,18 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        from openlia_server.routes.reports import _resolve_frontend_dist
+        from openlia_server.services.render_base_url import (
+            RenderBaseUrlResolver,
+            default_probe,
+        )
+
+        app.state.render_base_url_resolver = RenderBaseUrlResolver(
+            server_url=os.environ.get("OPENLIA_SERVER_URL", "http://127.0.0.1:8000"),
+            is_spa_served_locally=lambda: _resolve_frontend_dist() is not None,
+            probe=default_probe,
+        )
+
         # Background report registry + user presence — single instances for the
         # lifetime of this server process. Routes read from app.state so there
         # is no shared mutable module-level state.

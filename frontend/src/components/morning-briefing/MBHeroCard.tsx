@@ -1,7 +1,7 @@
-import { ArrowRight, Download } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import type { RecentReport } from "../../api/morning-briefing";
-import { reportPdfUrl } from "../../api/reports";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 import { DEMO_BRIEFING_META } from "../../lib/morning-briefing/demo-data";
 
 interface Props {
@@ -127,16 +127,9 @@ export function MBHeroCard({ report, onOpen }: Props) {
           Open briefing
           <ArrowRight size={14} />
         </button>
-        <a
-          href={reportPdfUrl(report.id)}
-          download
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md text-[13.5px] border border-[--color-border-secondary] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
-          data-testid="mb-hero-download"
-        >
-          <Download size={14} />
-          Download
-        </a>
+        <span data-testid="mb-hero-download" onClick={(e) => e.stopPropagation()}>
+          <ReportDownloadButton reportId={report.id} variant="primary" />
+        </span>
       </div>
     </article>
   );

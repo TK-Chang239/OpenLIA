@@ -40,7 +40,7 @@ def test_no_exemplars_selected_renders_general_only(
     assert "what's the dollar doing this week" in out.lower()
     # conditional exemplars must NOT render
     assert "Market Snapshot — Wednesday" not in out  # snapshot exemplar title
-    assert "thoughts on NVDA here?" not in out         # single_stock exemplar
+    assert "thoughts on NVDA here?" not in out  # single_stock exemplar
     assert "QQQ-SPY spread at the open" not in out  # continuation
 
 

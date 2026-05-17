@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 import { createSession, listSessions, listMessages, deleteSession, patchSession } from "../chat";
 import { saveToRepo, unsaveFromRepo, listRepoItems } from "../repo";
-import { downloadUrlForReport, downloadUrlForAttachment } from "../files";
+import { downloadUrlForAttachment } from "../files";
 
 const UUID1 = "00000000-0000-4000-8000-000000000001";
 const UUID2 = "00000000-0000-4000-8000-000000000002";
@@ -95,10 +95,6 @@ describe("repo api", () => {
 });
 
 describe("files helpers", () => {
-  it("downloadUrlForReport returns correct URL", () => {
-    expect(downloadUrlForReport(UUID1)).toBe(`/api/reports/${UUID1}/download`);
-  });
-
   it("downloadUrlForAttachment returns correct URL", () => {
     expect(downloadUrlForAttachment(UUID2)).toBe(`/api/chat/attachments/${UUID2}/download`);
   });

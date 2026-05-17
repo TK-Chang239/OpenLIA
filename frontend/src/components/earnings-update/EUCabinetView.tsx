@@ -9,7 +9,6 @@ interface Props {
   reports: RecentReport[];
   onBack: () => void;
   onOpenReport: (id: string) => void;
-  onDownload: (id: string) => void;
   onRemove: (id: string) => Promise<void>;
   onQueryChange?: (q: string, ticker: string) => void;
 }
@@ -27,7 +26,6 @@ export function EUCabinetView({
   reports,
   onBack,
   onOpenReport,
-  onDownload,
   onRemove,
   onQueryChange,
 }: Props) {
@@ -127,7 +125,6 @@ export function EUCabinetView({
               report={r}
               onOpen={onOpenReport}
               showExtras
-              onDownload={onDownload}
               onRemove={(id) => setPendingRemoval(id)}
             />
           ))}

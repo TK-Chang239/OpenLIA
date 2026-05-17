@@ -1,11 +1,11 @@
 import type { JSX, KeyboardEvent, MouseEvent } from "react";
-import { Download, FileText, Trash2 } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import type { RepoRow } from "../../api/repo";
 import { departmentBadgeClass, departmentLabel } from "../../lib/department-colors";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 export interface RepoListItemProps {
   row: RepoRow;
-  downloadUrl: string;
   onOpen: (row: RepoRow) => void;
   onRemove: (row: RepoRow) => void;
 }
@@ -29,7 +29,6 @@ function fileExt(filename: string): string {
 
 export function RepoListItem({
   row,
-  downloadUrl,
   onOpen,
   onRemove,
 }: RepoListItemProps): JSX.Element {
@@ -97,16 +96,7 @@ export function RepoListItem({
         className="ml-2 flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
         onClick={stop}
       >
-        <a
-          href={downloadUrl}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`Download ${row.filename}`}
-          className="flex h-[30px] w-[30px] items-center justify-center rounded-[5px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-active] hover:text-[--color-text-primary]"
-          onClick={stop}
-        >
-          <Download size={14} strokeWidth={1.6} />
-        </a>
+        <ReportDownloadButton reportId={row.report_id} />
         <button
           type="button"
           aria-label={`Remove ${row.filename}`}

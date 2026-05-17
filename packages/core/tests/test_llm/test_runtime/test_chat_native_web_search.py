@@ -116,9 +116,7 @@ async def test_chat_streaming_request_carries_native_web_search_when_variant_nat
     search resolution is native, this streaming request must declare
     `native_tools=("web_search",)` so the adapter swaps in the
     provider-native tool block before sending."""
-    provider = FakeProvider(
-        script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])])
-    )
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])]))
     runner = _build_runner(prompts_root=prompts_root, provider=provider, variant="native")
 
     await _collect(
@@ -141,9 +139,7 @@ async def test_chat_streaming_request_omits_native_web_search_when_variant_not_n
     `native_tools` must stay empty so the adapter does NOT add a native
     tool block (would either duplicate the configured tool, guardrail
     G-6, or expose a tool the user hasn't paid for)."""
-    provider = FakeProvider(
-        script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])])
-    )
+    provider = FakeProvider(script=FakeProviderScript(turns=[("final", ""), ("tokens", ["ok"])]))
     runner = _build_runner(prompts_root=prompts_root, provider=provider, variant=None)
 
     await _collect(

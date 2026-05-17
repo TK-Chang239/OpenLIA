@@ -70,9 +70,7 @@ def test_rescue_skips_when_no_configured_adapter() -> None:
 
     rescued = _rescue_failed_searches(
         response,
-        web_search_resolution=WebSearchResolution(
-            available=True, variant="native", adapter=None
-        ),
+        web_search_resolution=WebSearchResolution(available=True, variant="native", adapter=None),
         seen=seen,
         trace=lambda *_args, **_kw: None,
     )

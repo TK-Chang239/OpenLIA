@@ -4,7 +4,7 @@ import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { FileDownloadButton } from "../chat/FileDownloadButton";
-import { ReportDownloadMenu } from "../chat/ReportDownloadMenu";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
 interface Props {
   filename: string;
@@ -38,11 +38,7 @@ export function ViewerHeader({
           <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={initialSaved} />
         ) : null}
         {source.kind === "report" ? (
-          <ReportDownloadMenu
-            variant="viewer-header"
-            reportId={source.reportId}
-            filename={filename}
-          />
+          <ReportDownloadButton reportId={source.reportId} />
         ) : (
           <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         )}

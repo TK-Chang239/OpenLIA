@@ -70,9 +70,7 @@ def test_metric_with_source_ids_emits_no_warning() -> None:
 
 
 def test_key_finding_without_source_ids_emits_warning() -> None:
-    schema = _make_schema(
-        KeyFindingBlock(type="key_finding", content="Margins inflected upward.")
-    )
+    schema = _make_schema(KeyFindingBlock(type="key_finding", content="Margins inflected upward."))
     warnings = find_uncited_concrete_claims(schema)
     assert len(warnings) == 1
     assert warnings[0].slot == "key_finding"

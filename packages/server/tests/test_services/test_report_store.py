@@ -90,9 +90,7 @@ def _schema_with_cover(cover: Cover) -> ReportSchema:
             disclaimer="Not advice.",
         ),
         cover=cover,
-        sections=[
-            Section(id="s", title="S", blocks=[TextBlock(type="text", content="x")])
-        ],
+        sections=[Section(id="s", title="S", blocks=[TextBlock(type="text", content="x")])],
     )
 
 
@@ -112,9 +110,7 @@ def test_derive_title_sector_research():
 
 
 def test_derive_title_earnings_with_period():
-    schema = _schema_with_cover(
-        _cover(eyebrow="Earnings Update · Q1 FY2026 · 16:30 ET")
-    )
+    schema = _schema_with_cover(_cover(eyebrow="Earnings Update · Q1 FY2026 · 16:30 ET"))
     assert derive_report_title("earnings_analysis", schema) == "AAPL Q1 FY2026 Earnings"
 
 

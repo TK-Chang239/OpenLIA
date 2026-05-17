@@ -148,9 +148,9 @@ describe("Repository page", () => {
     ).toBeNull();
   });
 
-  it("Download anchor click does not open viewer", async () => {
+  it("Download button click does not open viewer", async () => {
     renderPage();
-    const dl = await screen.findByRole("link", { name: /Download AAPL.pdf/ });
+    const dl = await screen.findByRole("button", { name: /download report/i });
     fireEvent.click(dl);
     expect(screen.queryByTestId("file-viewer")).not.toBeInTheDocument();
   });

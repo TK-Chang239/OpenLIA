@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { ArrowRight, Download } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import type { RecentReport } from "../../api/morning-briefing";
-import { reportPdfUrl } from "../../api/reports";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
 import { DEMO_BRIEFING_META } from "../../lib/morning-briefing/demo-data";
 
 interface MBReportCardProps {
@@ -129,16 +129,9 @@ export function MBReportCard({ report, onOpen, now }: MBReportCardProps) {
           Open
           <ArrowRight size={13} />
         </button>
-        <a
-          href={reportPdfUrl(report.id)}
-          download
-          onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-[13px] border border-[--color-border-secondary] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
-          data-testid="mb-report-download"
-        >
-          <Download size={13} />
-          Download
-        </a>
+        <span data-testid="mb-report-download" onClick={(e) => e.stopPropagation()}>
+          <ReportDownloadButton reportId={report.id} variant="primary" />
+        </span>
       </div>
     </article>
   );

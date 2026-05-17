@@ -126,7 +126,6 @@ def create_report(
     mode: str,
     schema: ReportSchema,
     model_ref: str = "",
-    content_markdown: str = "",
     subject: str | None = None,
     title: str | None = None,
     source_session_id: str | None = None,
@@ -140,7 +139,9 @@ def create_report(
         report_type=mode,
         title=resolved_title,
         subject=subject,
-        content_markdown=content_markdown,
+        # content_markdown column kept on the model (non-null) but no longer
+        # populated — PDF/DOCX exports replaced the markdown download path.
+        content_markdown="",
         content_structured=schema.model_dump(mode="json"),
         source_session_id=source_session_id,
         model_ref=model_ref,

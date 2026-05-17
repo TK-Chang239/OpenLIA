@@ -43,7 +43,7 @@ beforeEach(() => {
 describe("Phase 12 targeted gaps", () => {
   it("CodeRenderer falls back to language-text when no language hint", async () => {
     mockFetchText("alpha");
-    render(<CodeRenderer source={{ kind: "report", reportId: "1" }} />);
+    render(<CodeRenderer source={{ kind: "attachment", attachmentId: "1" }} />);
     await waitFor(() => expect(screen.getByText(/alpha/)).toBeInTheDocument());
     const code = document.querySelector("code.language-text");
     expect(code).toBeTruthy();
@@ -51,7 +51,7 @@ describe("Phase 12 targeted gaps", () => {
 
   it("CsvRenderer keeps the header row sticky", async () => {
     mockFetchText("a,b\n1,2");
-    render(<CsvRenderer source={{ kind: "report", reportId: "2" }} />);
+    render(<CsvRenderer source={{ kind: "attachment", attachmentId: "2" }} />);
     await waitFor(() => expect(screen.getByText("a")).toBeInTheDocument());
     const thead = document.querySelector("thead");
     expect(thead?.className).toMatch(/sticky/);
@@ -69,13 +69,13 @@ describe("Phase 12 targeted gaps", () => {
   it("UnsupportedRenderer surfaces a download link", () => {
     render(
       <UnsupportedRenderer
-        source={{ kind: "report", reportId: "5" }}
+        source={{ kind: "attachment", attachmentId: "5" }}
         filename="bin.exe"
       />,
     );
     expect(
       screen.getByRole("link", { name: /download the file to view it/i }),
-    ).toHaveAttribute("href", "/api/reports/5/download");
+    ).toHaveAttribute("href", "/api/chat/attachments/5/download");
   });
 
   it("UserBubble caps width via max-w (truncation guard)", () => {

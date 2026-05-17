@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -17,12 +16,7 @@ from openlia_server.db.models.content import (
     ChatAttachment,
     ChatMessage,
     ChatSession,
-    Report,
 )
-
-
-class ReportNotFound(Exception):
-    """Raised when no Report row matches the requested ID."""
 
 
 class AttachmentNotFound(Exception):
@@ -39,14 +33,6 @@ class FileGone(Exception):
 
 class Forbidden(Exception):
     """Raised when the row exists but does not belong to this user."""
-
-
-class UnsupportedFormat(Exception):
-    """Raised when ``?format=`` does not match an available export."""
-
-
-ReportFormat = Literal["md", "pdf", "docx"]
-SUPPORTED_FORMATS: tuple[ReportFormat, ...] = ("md", "pdf", "docx")
 
 
 def _safe_filename(name: str) -> str:
@@ -66,43 +52,6 @@ class StoredFile:
     path: Path
     media_type: str
     filename: str
-
-
-def resolve_report_download(
-    db: Session,
-    *,
-    user_id: str,
-    report_id: str,
-    format: str | None = None,
-) -> InMemoryFile:
-    """Resolve a report download to an in-memory blob.
-
-    Always serves the stored markdown today; ``format`` is accepted on the
-    contract surface but only ``"md"`` (or ``None``) round-trips. PDF/DOCX
-    require the report-export pipeline (Phase 13) and surface
-    ``UnsupportedFormat`` until wired here.
-    """
-    fmt: ReportFormat = (format or "md").lower()  # type: ignore[assignment]
-    if fmt not in SUPPORTED_FORMATS:
-        raise UnsupportedFormat(f"format {format!r} not supported")
-
-    row = db.get(Report, report_id)
-    if row is None:
-        raise ReportNotFound(report_id)
-    if row.user_id != user_id:
-        raise Forbidden(report_id)
-
-    safe_title = _safe_filename(row.title or "report")
-
-    if fmt == "md":
-        return InMemoryFile(
-            content=row.content_markdown.encode(),
-            media_type="text/markdown",
-            filename=f"{safe_title}.md",
-        )
-    # PDF/DOCX: not generated synchronously today. Surface a clean error;
-    # the route maps it to 415.
-    raise UnsupportedFormat(f"format {fmt!r} not yet wired")
 
 
 def resolve_attachment_download(

@@ -137,9 +137,7 @@ def enforce_required_rail(schema: ReportSchema, *, department_id: str) -> None:
         details.append(
             {
                 "path": "rail.verdict",
-                "message": (
-                    "required_rail: rail.verdict.rating is required for this report type."
-                ),
+                "message": ("required_rail: rail.verdict.rating is required for this report type."),
                 "input_value": "",
                 "input_type": "verdict",
             }
@@ -148,9 +146,7 @@ def enforce_required_rail(schema: ReportSchema, *, department_id: str) -> None:
     present = {m.label.strip().casefold() for m in quick_stats}
     missing = [label for label in required_labels if label.casefold() not in present]
     for label in missing:
-        msg = (
-            f"required_rail: rail.quick_stats is missing required label {label!r}."
-        )
+        msg = f"required_rail: rail.quick_stats is missing required label {label!r}."
         errors.append(("rail.quick_stats", msg))
         details.append(
             {

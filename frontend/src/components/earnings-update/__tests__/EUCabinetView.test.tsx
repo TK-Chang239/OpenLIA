@@ -27,7 +27,6 @@ describe("EUCabinetView", () => {
         reports={reports}
         onBack={() => {}}
         onOpenReport={() => {}}
-        onDownload={() => {}}
         onRemove={async () => {}}
       />,
     );
@@ -41,7 +40,6 @@ describe("EUCabinetView", () => {
         reports={reports}
         onBack={() => {}}
         onOpenReport={() => {}}
-        onDownload={() => {}}
         onRemove={async () => {}}
       />,
     );
@@ -58,7 +56,6 @@ describe("EUCabinetView", () => {
         reports={reports}
         onBack={() => {}}
         onOpenReport={() => {}}
-        onDownload={() => {}}
         onRemove={async () => {}}
       />,
     );
@@ -77,7 +74,6 @@ describe("EUCabinetView", () => {
         reports={reports}
         onBack={() => {}}
         onOpenReport={() => {}}
-        onDownload={() => {}}
         onRemove={onRemove}
       />,
     );
@@ -99,7 +95,6 @@ describe("EUCabinetView", () => {
         reports={reports}
         onBack={onBack}
         onOpenReport={() => {}}
-        onDownload={() => {}}
         onRemove={async () => {}}
       />,
     );

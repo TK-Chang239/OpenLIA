@@ -17,7 +17,7 @@ vi.mock("pdfjs-dist", () => ({
 
 describe("PdfRenderer", () => {
   it("renders a page navigator", async () => {
-    render(<PdfRenderer source={{ kind: "report", reportId: "9" }} />);
+    render(<PdfRenderer source={{ kind: "attachment", attachmentId: "9" }} />);
     expect(await screen.findByText(/page 1 of 3/i)).toBeInTheDocument();
   });
 });

@@ -4,14 +4,14 @@ import {
   Archive,
   CalendarClock,
   ChevronLeft,
-  Download,
   Printer,
   Settings as SettingsIcon,
   Zap,
 } from "lucide-react";
 
 import { type RecentReport } from "../../api/morning-briefing";
-import { fetchReport, reportPdfUrl, type ReportSchema } from "../../api/reports";
+import { fetchReport, type ReportSchema } from "../../api/reports";
+import { ReportDownloadButton } from "../../components/report/ReportDownloadButton";
 import { MBArchiveView } from "../../components/morning-briefing/MBArchiveView";
 import { MBRunNowView } from "../../components/morning-briefing/MBRunNowView";
 import { MBScheduleView } from "../../components/morning-briefing/MBScheduleView";
@@ -134,16 +134,9 @@ export default function MorningBriefing() {
             · {new Date(viewing.created_at).toLocaleString()}
           </span>
           <div className="flex-1" />
-          <a
-            href={reportPdfUrl(viewing.id)}
-            download={`${viewing.title}.pdf`}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong]"
-            style={{ borderColor: "var(--color-border-secondary)" }}
-            data-testid="mb-viewer-download"
-          >
-            <Download size={13} />
-            Download
-          </a>
+          <span data-testid="mb-viewer-download">
+            <ReportDownloadButton reportId={viewing.id} variant="primary" />
+          </span>
           <button
             type="button"
             onClick={() => window.print()}
