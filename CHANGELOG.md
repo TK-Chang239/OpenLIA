@@ -6,6 +6,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Report retention.** Reports not saved to the Repository are now
+  automatically expired 7 days after generation. Saved reports persist
+  indefinitely until manually deleted. Expired and manually-deleted reports
+  leave a "no longer available" tombstone in the originating chat artifact
+  card so conversation history stays intact; they no longer surface in the
+  Repository or other department listings. The retention window is
+  configurable via the `OPENLIA_UNSAVED_REPORT_RETENTION_DAYS` env var
+  (default `7`). `DELETE /reports/{id}` now tombstones rather than dropping
+  the row; export endpoints return **410 Gone** on tombstoned reports.
+  **Migration note:** the first nightly sweep after deploying will
+  tombstone any pre-existing reports already past the retention window.
+
 ### Added
 - Morning Briefing follow-up Q&A: the shared `ChatInterface` + `ReportThumbnail`
   are wired into the MB page with a side-by-side viewer and a dedicated Chat

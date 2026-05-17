@@ -1,9 +1,39 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { Bookmark, Clock, FileText, Globe, Layers } from "lucide-react";
+import {
+  Bookmark,
+  Clock,
+  FileText,
+  Globe,
+  Layers,
+  MessageSquare,
+  Trash2,
+} from "lucide-react";
 import { type JSX, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { ReportMode } from "../../api/equity-research";
+import { createSession } from "../../api/chat";
+import { DeleteReportDialog } from "../report/DeleteReportDialog";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
+import { useSavedReportsOptional } from "../repo/SavedReportsContext";
+import type { FailedReport } from "./FailedReportCard";
+import { FailedReportCard } from "./FailedReportCard";
+import type { GeneratingReport } from "./GeneratingPlaceholderCard";
+import { GeneratingPlaceholderCard } from "./GeneratingPlaceholderCard";
+
+// ─── Status-based report object (background generation) ──────────────────────
+
+export type ReportStatus = "generating" | "failed" | "cancelled" | "complete";
+
+export interface BgReport {
+  id: string;
+  status: ReportStatus;
+  started_at?: string | null;
+  original_request?: { user_input?: string | null } | null;
+  failure_reason?: string | null;
+}
+
+// ─── Flat-props API for completed reports ─────────────────────────────────────
 
 const MODE_TITLE: Record<ReportMode, string> = {
   stock_initiation: "Stock Initiation Report",
@@ -11,7 +41,16 @@ const MODE_TITLE: Record<ReportMode, string> = {
   sector_research: "Sector Research Report",
 };
 
-interface Props {
+const RETENTION_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
+function ageDays(iso: string, now: number = Date.now()): number {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 0;
+  return (now - t) / MS_PER_DAY;
+}
+
+interface CompletedProps {
   reportId: string;
   mode: ReportMode;
   /** Resolved ticker (e.g. "AAPL"). Falls back to the raw subject if missing. */
@@ -30,7 +69,13 @@ interface Props {
   citationsCount?: number;
   onOpen: (reportId: string) => void;
   onSave: (reportId: string) => void | Promise<void>;
+  /** Soft-unsave: removes the repo_items pointer. Only invoked when age < 7d. */
+  onUnsave?: (reportId: string) => void | Promise<void>;
+  /** Hard delete: tombstones the report. Only invoked when age >= 7d and saved. */
+  onDelete?: (reportId: string) => void | Promise<void>;
   initialSaved?: boolean;
+  /** ISO timestamp; when set, render the tombstone variant. */
+  expiredAt?: string | null;
 }
 
 function formatDate(iso: string): string {
@@ -43,7 +88,7 @@ function formatDate(iso: string): string {
   });
 }
 
-export function ReportCard({
+function CompletedReportCard({
   reportId,
   mode,
   ticker,
@@ -56,20 +101,68 @@ export function ReportCard({
   citationsCount,
   onOpen,
   onSave,
+  onUnsave,
+  onDelete,
   initialSaved = false,
-}: Props): JSX.Element {
+  expiredAt = null,
+}: CompletedProps): JSX.Element {
   const reduce = useReducedMotion();
-  const [saved, setSaved] = useState(initialSaved);
+  const navigate = useNavigate();
+  const savedCtx = useSavedReportsOptional();
+  const [localSaved, setLocalSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
+  const [discussing, setDiscussing] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
-  const handleSave = async () => {
-    if (saving || saved) return;
+  const saved = savedCtx ? savedCtx.isSaved(reportId) || localSaved : localSaved;
+  const isExpired = expiredAt != null;
+  const isOldSaved = !isExpired && saved && ageDays(createdAt) >= RETENTION_DAYS;
+
+  const handleSaveToggle = async () => {
+    if (saving) return;
     setSaving(true);
     try {
-      await onSave(reportId);
-      setSaved(true);
+      if (saved) {
+        if (onUnsave) {
+          await onUnsave(reportId);
+          setLocalSaved(false);
+          savedCtx?.markUnsaved(reportId);
+        }
+      } else {
+        await onSave(reportId);
+        setLocalSaved(true);
+        savedCtx?.markSaved(reportId);
+      }
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (deleting || !onDelete) return;
+    setDeleting(true);
+    try {
+      await onDelete(reportId);
+      setDeleteOpen(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDiscuss = async () => {
+    if (discussing) return;
+    setDiscussing(true);
+    try {
+      const title = ticker ?? subject;
+      const session = await createSession({
+        department: "equity_research",
+        title,
+        attached_report_id: reportId,
+      });
+      navigate(`/chat/${session.id}`);
+    } finally {
+      setDiscussing(false);
     }
   };
 
@@ -90,6 +183,47 @@ export function ReportCard({
   }
   if (companyName) subParts.push(<span key="company">{companyName}</span>);
   subParts.push(<span key="date">{date}</span>);
+
+  if (isExpired) {
+    return (
+      <motion.article
+        initial={reduce ? { opacity: 0 } : { opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: "easeOut" }}
+        className="max-w-[560px] overflow-hidden rounded-[12px] border border-[--color-border-subtle] bg-[--color-bg-base] opacity-80"
+        data-testid="er-report-card-tombstone"
+      >
+        <header className="flex items-start gap-3 px-[18px] pt-4 pb-3">
+          <div
+            aria-hidden="true"
+            className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-[--color-border-subtle] bg-[--color-surface-hover] text-[--color-text-tertiary]"
+          >
+            <FileText size={16} strokeWidth={1.6} />
+          </div>
+          <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+            <span className="text-[15px] font-semibold tracking-[-0.005em] text-[--color-text-secondary]">
+              {MODE_TITLE[mode]}
+            </span>
+            <span className="flex flex-wrap items-center gap-[5px] truncate font-mono text-[11px] tracking-[0.02em] text-[--color-text-tertiary]">
+              {subParts.map((p, i) => (
+                <span key={i} className="inline-flex items-center gap-[5px]">
+                  {p}
+                  {i < subParts.length - 1 ? (
+                    <span aria-hidden="true" className="text-[--color-text-tertiary]">
+                      ·
+                    </span>
+                  ) : null}
+                </span>
+              ))}
+            </span>
+          </div>
+        </header>
+        <p className="m-0 px-[18px] pb-[18px] text-[13px] italic leading-[1.6] text-[--color-text-tertiary]">
+          Report no longer available — automatically expired after 7 days.
+        </p>
+      </motion.article>
+    );
+  }
 
   return (
     <motion.article
@@ -178,27 +312,87 @@ export function ReportCard({
           Open Report
         </button>
 
+        <button
+          type="button"
+          onClick={() => void handleDiscuss()}
+          disabled={discussing}
+          className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
+        >
+          <MessageSquare size={13} strokeWidth={1.7} />
+          Discuss
+        </button>
+
         <ReportDownloadButton reportId={reportId} variant="primary" />
 
         <div className="flex-1" />
 
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          aria-label={saved ? "Saved to Repository" : "Save to Repository"}
-          aria-pressed={saved}
-          disabled={saving}
-          className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
-        >
-          <Bookmark
-            size={14}
-            strokeWidth={1.7}
-            fill={saved ? "currentColor" : "none"}
-            data-testid="bookmark-icon"
-          />
-          {saved ? "Saved" : "Save to Repo"}
-        </button>
+        {isOldSaved ? (
+          <button
+            type="button"
+            onClick={() => setDeleteOpen(true)}
+            aria-label="Delete report"
+            disabled={deleting}
+            className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[13px] text-[--color-feedback-error] transition-colors hover:bg-[--color-surface-hover] disabled:opacity-50"
+          >
+            <Trash2 size={14} strokeWidth={1.7} data-testid="delete-icon" />
+            Delete
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void handleSaveToggle()}
+            aria-label={saved ? "Saved to Repository" : "Save to Repository"}
+            aria-pressed={saved}
+            disabled={saving}
+            className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
+          >
+            <Bookmark
+              size={14}
+              strokeWidth={1.7}
+              fill={saved ? "currentColor" : "none"}
+              data-testid="bookmark-icon"
+            />
+            {saved ? "Saved" : "Save to Repo"}
+          </button>
+        )}
       </div>
+
+      <DeleteReportDialog
+        open={deleteOpen}
+        reportTitle={MODE_TITLE[mode]}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={handleDeleteConfirm}
+      />
     </motion.article>
   );
+}
+
+// ─── Dispatcher ───────────────────────────────────────────────────────────────
+
+interface BgReportProps {
+  report: BgReport;
+  navigate?: (path: string) => void;
+}
+
+export function ReportCard(props: BgReportProps): JSX.Element;
+export function ReportCard(props: CompletedProps): JSX.Element;
+export function ReportCard(props: BgReportProps | CompletedProps): JSX.Element {
+  const routerNavigate = useNavigate();
+
+  if ("report" in props) {
+    const { report, navigate: nav } = props;
+    const go = nav ?? routerNavigate;
+    switch (report.status) {
+      case "generating":
+        return <GeneratingPlaceholderCard report={report as GeneratingReport} />;
+      case "failed":
+      case "cancelled":
+        return <FailedReportCard report={report as FailedReport} navigate={go} />;
+      case "complete":
+      default:
+        return <div className="card card--complete" />;
+    }
+  }
+
+  return <CompletedReportCard {...props} />;
 }

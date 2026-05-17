@@ -1,32 +1,54 @@
-"""Reports API: list/read/delete and PDF export."""
+"""Reports API: list/read/delete, PDF export, and background generation."""
 
 from __future__ import annotations
 
+import asyncio
 import html as html_escape
 import json as _json
 import os
 import re
+import uuid
+from collections import defaultdict
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import Report
+from openlia_server.db.models.content import ChatSession, Report
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.routes.chat_sessions import _attach_report_as_context
 from openlia_server.services.report_docx import assemble_docx
 from openlia_server.services.report_export import capture_chart_pngs, export_report_pdf
 from openlia_server.services.reports import (
     ReportNotFoundError,
     get_report,
     get_report_for_user,
+    tombstone_report,
 )
+from openlia_server.services.subject_normalize import normalize_subject
+
+_EXPIRED_DETAIL = {
+    "code": "report_expired",
+    "message": "This report has expired and is no longer available.",
+}
+
+
+def _is_tombstoned(session: DBSession, *, report_id: str, user_id: str) -> bool:
+    """Return True iff the report exists, is owned by the caller, and has
+    been tombstoned. Returns False on missing-or-unowned rows so the
+    caller can fall through to its normal 404 path.
+    """
+    expired_at = session.execute(
+        select(Report.expired_at).where(Report.id == report_id, Report.user_id == user_id)
+    ).scalar_one_or_none()
+    return expired_at is not None
 
 _FILENAME_INVALID = re.compile(r'[\x00-\x1f/\\:*?"<>|]')
 _FILENAME_SEPARATORS = re.compile("[\\s_\u2013\u2014]+")
@@ -541,10 +563,46 @@ class ReportListItem(BaseModel):
     title: str
     created_at: str
     source_session_id: str | None = None
+    expired_at: str | None = None
+    status: str | None = None
+    failure_reason: str | None = None
+    original_request: dict | None = None
+    started_at: str | None = None
 
 
 class ReportListOut(BaseModel):
     items: list[ReportListItem]
+
+
+class GenerateReportIn(BaseModel):
+    department_id: str
+    mode: str
+    user_input: str
+    enabled_sections: list[str] = []
+    length: str = "standard"
+    # Optional: the chat session that triggered this generation. When set and
+    # the session's attached_report_id is NULL, the handler implicitly binds
+    # the new report to that session (Task 8 — implicit binding).
+    source_session_id: str | None = None
+
+
+# Module-level lock map keyed by source_session_id. Prevents two concurrent
+# requests from the same chat session both seeing attached_report_id=NULL and
+# both binding. Per-process only; multi-process deployments should use a DB
+# advisory lock instead (flagged as a v2 concern).
+_SOURCE_SESSION_LOCKS: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
+
+
+def _bg_enabled() -> bool:
+    return os.environ.get("OPENLIA_BACKGROUND_REPORTS_ENABLED", "0") == "1"
+
+
+def _chat_followup_enabled() -> bool:
+    return os.environ.get("OPENLIA_REPORT_CHAT_ENABLED", "0") == "1"
+
+
+def _revision_flag_on() -> bool:
+    return os.environ.get("OPENLIA_REVISION_PASS_ENABLED", "0") == "1"
 
 
 def build_reports_router(
@@ -560,6 +618,7 @@ def build_reports_router(
     async def list_reports(
         department: str | None = None,
         session_id: str | None = None,
+        include_expired: bool = Query(False),
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> ReportListOut:
@@ -568,6 +627,8 @@ def build_reports_router(
             stmt = stmt.where(Report.department == department)
         if session_id is not None:
             stmt = stmt.where(Report.source_session_id == session_id)
+        if not include_expired:
+            stmt = stmt.where(Report.expired_at.is_(None))
         rows = list(session.execute(stmt).scalars())
         return ReportListOut(
             items=[
@@ -578,6 +639,11 @@ def build_reports_router(
                     title=r.title,
                     created_at=r.created_at.isoformat() if r.created_at else "",
                     source_session_id=r.source_session_id,
+                    expired_at=r.expired_at.isoformat() if r.expired_at else None,
+                    status=r.status,
+                    failure_reason=r.failure_reason,
+                    original_request=r.original_request,
+                    started_at=r.started_at.isoformat() if r.started_at else None,
                 )
                 for r in rows
             ]
@@ -589,25 +655,247 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> dict:
-        try:
-            schema = get_report(session, report_id=report_id, user_id=user.id)
-        except ReportNotFoundError as exc:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
-        return {"schema": schema.model_dump(mode="json")}
-
-    @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
-    async def delete_report(
-        report_id: str,
-        user: User = require_auth,
-        session: DBSession = Depends(session_dep),
-    ) -> None:
         row = session.execute(
             select(Report).where(Report.id == report_id, Report.user_id == user.id)
         ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
-        session.delete(row)
+        if row.expired_at is not None:
+            # Tombstoned: body is blanked, schema validation would fail.
+            # Return the metadata stub so chat-history surfaces can render
+            # a "no longer available" card without a separate fetch.
+            return {
+                "schema": None,
+                "expired_at": row.expired_at.isoformat(),
+                "title": row.title,
+                "department": row.department,
+                "created_at": row.created_at.isoformat() if row.created_at else "",
+            }
+        # Background report in a terminal or in-progress state without a
+        # schema yet: return metadata so the client can poll/retry/render
+        # appropriate UI (generating spinner, cancelled card, error card).
+        if row.status in ("generating", "cancelled", "failed"):
+            return {
+                "schema": None,
+                "expired_at": None,
+                "status": row.status,
+                "failure_reason": getattr(row, "failure_reason", None),
+                "original_request": row.original_request,
+            }
+        try:
+            schema = get_report(session, report_id=report_id, user_id=user.id)
+        except ReportNotFoundError as exc:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found") from exc
+        return {"schema": schema.model_dump(mode="json"), "expired_at": None}
+
+    @router.post("/generate")
+    async def generate_report_bg(
+        body: GenerateReportIn,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        """Submit a background report generation task.
+
+        When OPENLIA_BACKGROUND_REPORTS_ENABLED=1, inserts a 'generating'
+        row immediately and returns {report_id, status}. The real generation
+        runs asynchronously; the client polls GET /reports/{id}.
+
+        Implicit binding (Task 8): when source_session_id is given and that
+        session's attached_report_id is NULL, set it to the new report id.
+        If the session was already bound (race), create a new session for
+        the new report and return redirect=True.
+        """
+        if not _bg_enabled():
+            raise HTTPException(
+                status.HTTP_501_NOT_IMPLEMENTED,
+                "background report generation is not enabled",
+            )
+        source_id = body.source_session_id
+        # Validate source session ownership before acquiring lock.
+        source_session: ChatSession | None = None
+        if source_id is not None:
+            source_session = session.execute(
+                select(ChatSession).where(
+                    ChatSession.id == source_id,
+                    ChatSession.user_id == user.id,
+                )
+            ).scalar_one_or_none()
+            if source_session is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "source session not found")
+
+        async with _SOURCE_SESSION_LOCKS[source_id or ""]:
+            report_id = f"r_{uuid.uuid4().hex[:12]}"
+            row = Report(
+                id=report_id,
+                user_id=user.id,
+                department=body.department_id,
+                report_type=body.mode,
+                title=f"{body.department_id} — {body.user_input}",
+                content_markdown="",
+                content_structured={},
+                model_ref="",
+                status="generating",
+                original_request=body.model_dump(),
+                started_at=datetime.now(UTC),
+                source_session_id=source_id,
+            )
+            session.add(row)
+            session.flush()  # obtain report_id in DB before binding
+
+            if source_session is not None and _chat_followup_enabled():
+                # Subject-keyed re-anchor (Task 11): when the revision flag is
+                # on and the incoming subject matches the bound report's subject,
+                # re-anchor the session to the new report instead of spawning a
+                # new thread.
+                if _revision_flag_on() and source_session.attached_report_id is not None:
+                    bound_report = session.get(Report, source_session.attached_report_id)
+                    bound_subject = normalize_subject(
+                        (bound_report.original_request or {}).get("user_input", "")
+                        if bound_report
+                        else ""
+                    )
+                    new_subject = normalize_subject(body.user_input)
+                    if bound_subject and new_subject and bound_subject == new_subject:
+                        # Same ticker — re-anchor source session to new report.
+                        source_session.attached_report_id = report_id
+                        session.commit()
+                        return {
+                            "session_id": source_id,
+                            "report_id": report_id,
+                            "redirect": False,
+                        }
+
+                # Implicit binding: conditional UPDATE — only sets the column
+                # when it is still NULL, avoiding overwrites in race conditions.
+                updated = session.execute(
+                    update(ChatSession)
+                    .where(
+                        ChatSession.id == source_id,
+                        ChatSession.attached_report_id.is_(None),
+                    )
+                    .values(attached_report_id=report_id)
+                ).rowcount
+                session.commit()
+                if updated == 1:
+                    # Successfully bound: source session now owns this report.
+                    return {
+                        "session_id": source_id,
+                        "report_id": report_id,
+                        "redirect": False,
+                    }
+                # Race: source session was already bound by another request.
+                # Create a new session for this report so the user still gets
+                # a chat context (Task 9 will wire the redirect in the client).
+                new_session = ChatSession(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    department=source_session.department,
+                    title=source_session.title or f"{body.department_id} — {body.user_input}",
+                    attached_report_id=report_id,
+                )
+                session.add(new_session)
+                session.flush()
+                _attach_report_as_context(
+                    session, session_id=new_session.id, user_id=user.id, report_id=report_id
+                )
+                session.commit()
+                return {
+                    "session_id": new_session.id,
+                    "report_id": report_id,
+                    "redirect": True,
+                }
+
+            session.commit()
+            # Backward-compatible behavior: report exists; chat session is not bound.
+            if source_session is not None:
+                return {"session_id": source_id, "report_id": report_id, "redirect": False}
+            return {"report_id": report_id, "status": "generating"}
+
+    @router.post("/{report_id}/retry")
+    async def retry_report_ep(
+        report_id: str,
+        request: Request,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        """Retry a failed or cancelled report using its persisted original_request.
+
+        When original_request.kind == 'revision', routes to _execute_revise so the
+        retry re-uses the /revise path (preserving source_report_id, revision_brief).
+        Otherwise, creates a new 'generating' row from the GenerateReportIn payload.
+        The failed row is retained for audit. Returns {report_id, status} of the
+        new row.
+        """
+        row = session.execute(
+            select(Report).where(Report.id == report_id, Report.user_id == user.id)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+        if row.status not in ("failed", "cancelled"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Only failed or cancelled reports can be retried",
+            )
+        if row.original_request is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Report has no persisted original_request",
+            )
+
+        if row.original_request.get("kind") == "revision":
+            from openlia_server.routes.reports_revise import ReviseReportIn, _execute_revise
+
+            revise_body = ReviseReportIn(
+                chat_session_id=row.original_request["chat_session_id"],
+                revision_brief=row.original_request["revision_brief"],
+                sections_to_focus=row.original_request.get("sections_to_focus"),
+            )
+            return await _execute_revise(
+                db=session,
+                user=user,
+                source_report_id=row.original_request["source_report_id"],
+                body=revise_body,
+                db_session_factory=db_session_factory,
+                app_state=request.app.state,
+            )
+
+        body = GenerateReportIn(**row.original_request)
+        return await generate_report_bg(body=body, user=user, session=session)
+
+    @router.delete("/{report_id}")
+    async def delete_report(
+        report_id: str,
+        request: Request,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> Response:
+        # Ownership check first — 404 hides existence from non-owners.
+        row = session.execute(
+            select(Report).where(Report.id == report_id, Report.user_id == user.id)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+        if row.status == "generating":
+            # Cancel in-flight background task when present in this process.
+            registry = getattr(request.app.state, "bg_report_registry", None)
+            if registry is not None:
+                registry.cancel(report_id)
+            # Persist cancelled status immediately so the next GET sees it
+            # without waiting for the wrapper coroutine's CancelledError path.
+            row.status = "cancelled"
+            row.failure_reason = "user_cancelled"
+            session.commit()
+            return Response(
+                content=_json.dumps({"ok": True, "action": "cancelled"}),
+                status_code=status.HTTP_200_OK,
+                media_type="application/json",
+            )
+        # Already finished — tombstone (soft-delete).
+        # tombstone_report is idempotent: re-deleting an already-tombstoned
+        # report is a no-op (returns False) but still 204s.
+        tombstone_report(session, report_id=report_id)
         session.commit()
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.get("/{report_id}/render", response_class=HTMLResponse)
     async def render_report_html(
@@ -628,6 +916,8 @@ def build_reports_router(
              tables, and disclaimer baked in. Used by Playwright for PDF
              export when the bundle path isn't reachable.
         """
+        if _is_tombstoned(session, report_id=report_id, user_id=user.id):
+            raise HTTPException(status.HTTP_410_GONE, detail=_EXPIRED_DETAIL)
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
@@ -653,6 +943,8 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> Response:
+        if _is_tombstoned(session, report_id=report_id, user_id=user.id):
+            raise HTTPException(status.HTTP_410_GONE, detail=_EXPIRED_DETAIL)
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:
@@ -723,6 +1015,8 @@ def build_reports_router(
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
     ) -> Response:
+        if _is_tombstoned(session, report_id=report_id, user_id=user.id):
+            raise HTTPException(status.HTTP_410_GONE, detail=_EXPIRED_DETAIL)
         try:
             schema = get_report(session, report_id=report_id, user_id=user.id)
         except ReportNotFoundError as exc:

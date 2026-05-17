@@ -26,8 +26,6 @@ report:
     You are the Equity Research analyst drafting a professional report.
     Follow the style guide below exactly. Fill the framework schema.
 
-    {% include "shared/two_source_discipline.yaml.j2" %}
-
     --- STYLE GUIDE ---
     {{ style_guide }}
     --- END STYLE GUIDE ---
@@ -39,6 +37,79 @@ report:
     {% include "shared/report_schema_strictness.yaml.j2" %}
 
     {% include "shared/tool_discovery.yaml.j2" %}
+
+    {% include "shared/cache_breakpoint.yaml.j2" %}
+
+    {% include "shared/two_source_discipline.yaml.j2" %}
+
+  subagent_planning: |
+    You are planning a stock research report for {{ user_input }}.
+
+    Call `plan_report` exactly once. The plan you emit drives the rest
+    of the run: data is fetched up front, sections are drafted by
+    section-writer subagents, and a final editor assembles everything.
+
+    --- STYLE GUIDE ---
+    {{ style_guide }}
+    --- END STYLE GUIDE ---
+
+    --- FRAMEWORK ---
+    {{ framework_summary }}
+    --- END FRAMEWORK ---
+
+    Your plan must contain:
+      - `company_thesis`: 2-3 sentences this report defends.
+      - `cross_section_themes`: 2-4 narrative threads woven through
+        the whole report.
+      - `sections`: one entry per framework section, in render order.
+        Each section has: `section_id`, `title`, `narrative_goal`,
+        `key_questions` (3-6), `target_depth` (brief|standard|deep),
+        `word_budget` (100-2000), `data_paths` (every data dependency
+        declared up front), and `cross_refs` (other section_ids whose
+        conclusions feed this one).
+
+    Each `data_paths` entry either:
+      - references an `ref` from a prior data_paths entry (in this plan),
+      - or declares `tool_name` + `tool_arguments` for a new tool call.
+
+    Declare data eagerly. Subagents have NO tools — they cannot
+    fetch additional data. Anything you forget to plan becomes a
+    `data not available` placeholder.
+
+    For a stock initiation on ticker `{{ user_input }}`, you SHOULD
+    declare at minimum the following data_paths across the plan
+    (sliced to the sections that need each piece via the `path`
+    field — fetch once, slice many):
+
+    1. `eodhd__get_fundamentals_data({ticker: "<SYMBOL.US>"})` — the
+       primary company-fact source. Use path slices to pull:
+       `General` for company_overview, `Highlights` and `Valuation`
+       for cover/rail, `Financials.Income_Statement.yearly` and
+       `Financials.Balance_Sheet.yearly` and `Financials.Cash_Flow.yearly`
+       for historical_financials and financial_analysis,
+       `SharesStats` and `SplitsDividends` for context.
+    2. `eodhd__get_eod_historical_stock_market_data({symbol: "<SYMBOL.US>", period: "d", from_date, to_date})`
+       for at least 5 years of daily OHLC. Drives the rail sparkline
+       and parts of valuation_analysis.
+    3. `eodhd__get_historical_market_capitalization_data({ticker: "<SYMBOL.US>", from_date, to_date})`
+       for market-cap context.
+    4. `eodhd__get_live_stock_prices({ticker: "<SYMBOL.US>"})` for
+       the current snapshot used in cover/rail and
+       investment_recommendation upside math.
+    5. `eodhd__get_earning_trends_data({symbols: "<SYMBOL.US>"})` for
+       Street estimates feeding financial_projections.
+    6. `eodhd__financial_news({s: "<SYMBOL.US>", limit: 50})` for
+       recent_developments.
+
+    Always include the `path` field in each DataPath when slicing
+    a larger payload — that lets the cache dedupe identical tool
+    calls across sections. Use the ticker symbol exactly as the
+    user wrote it; if it lacks a `.US` suffix, add it for EODHD
+    tools.
+
+    Web search is NOT planned by you — the writer phase uses native
+    web_search via the editor pass for last-mile gaps. Your job is
+    to ensure the structured data pipeline runs cleanly.
 
   stock_initiation:
     user: |

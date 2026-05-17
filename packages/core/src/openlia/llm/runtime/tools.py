@@ -412,6 +412,7 @@ class ToolDispatcher:
         *,
         has_web_search: bool,
         extra_tools: tuple[dict[str, Any], ...] = (),
+        expose_escalation: bool = True,
     ) -> list[ToolSchema]:
         mapped_raw = await self._data.list_requirement_tools(department_id)
         mapped: list[ToolSchema] = [
@@ -434,7 +435,15 @@ class ToolDispatcher:
         # escalation actually yields candidates; if it doesn't, the
         # `request_additional_tools` dispatch returns `ok=False` with
         # a "no tools matched" message, which the model handles.
-        header: list[ToolSchema] = [_REQUEST_ADDITIONAL_TOOLS_SCHEMA]
+        # After the first successful escalation in a single run, the runtime
+        # passes `expose_escalation=False` so request_additional_tools is
+        # dropped from the tool list. Reasons: (1) the model already has the
+        # expanded tool set in the cached prefix; (2) re-exposing the
+        # meta-tool tempts the model into speculative re-calls that mutate
+        # the prefix bytes and invalidate the OpenAI/Anthropic prompt cache.
+        # Observed in run r_f03c92dd8c30: turn 5 re-called this tool, turn 6
+        # dropped to 0% cache hit on 66K input tokens.
+        header: list[ToolSchema] = [_REQUEST_ADDITIONAL_TOOLS_SCHEMA] if expose_escalation else []
         # Guardrail G-6: native exposes web_search through provider-side
         # adapter swap (e.g. Anthropic's web_search_20250305 tool block).
         # Suppress the generic schema in that case to avoid the model
@@ -961,8 +970,12 @@ class ToolDispatcher:
             result = apply_path(payload, path)
         except PathParseError:
             msg = (
-                f"Invalid path syntax: {path!r}. Supported forms: key, key.subkey, "
-                "rows[i], rows[i:j], rows.column."
+                f"Invalid path syntax: {path!r}. "
+                "Supported forms: key, key.subkey, rows[i], rows[i:j], rows.column. "
+                "Names accept letters, digits, underscore, and hyphen interior "
+                "(e.g. yearly.2026-01-31). For keys that contain dots, spaces, or "
+                'other punctuation use bracket-string syntax: yearly["2026-01-31"] '
+                "or data['some key']."
             )
             self._emit_read_payload_result(ref, path, "parse_error", 0, False)
             return ToolCallResult(

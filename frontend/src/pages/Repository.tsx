@@ -3,8 +3,11 @@ import type { JSX, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { fetchRepoFacets, saveToRepo, unsaveFromRepo, type RepoFacets, type RepoRow } from "../api/repo";
+import { deleteReport } from "../api/reports";
+import { DeleteReportDialog } from "../components/report/DeleteReportDialog";
 import { useRepoList } from "../hooks/useRepoList";
 import { useFileViewer } from "../components/viewer/FileViewerContext";
+import { useSavedReportsOptional } from "../components/repo/SavedReportsContext";
 import { useToast } from "../components/primitives/Toast";
 import { departmentLabel } from "../lib/department-colors";
 import { RepoFilterBar } from "../components/repo/RepoFilterBar";
@@ -16,6 +19,18 @@ import { RepoEmptyState } from "../components/repo/RepoEmptyState";
 import { RemoveConfirmDialog } from "../components/repo/RemoveConfirmDialog";
 
 const STAGGER = 0.06;
+const RETENTION_DAYS = 7;
+const MS_PER_DAY = 86_400_000;
+
+function ageDays(iso: string, now: number = Date.now()): number {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 0;
+  return (now - t) / MS_PER_DAY;
+}
+
+function isPastRetention(row: RepoRow): boolean {
+  return ageDays(row.generated_at) >= RETENTION_DAYS;
+}
 
 function Reveal({
   delay,
@@ -46,9 +61,11 @@ function formatDate(iso: string): string {
 export default function Repository(): JSX.Element {
   const list = useRepoList();
   const { open: openViewer } = useFileViewer();
+  const savedReports = useSavedReportsOptional();
   const toast = useToast();
   const [facets, setFacets] = useState<RepoFacets>({ departments: [], total: 0 });
   const [pendingRemove, setPendingRemove] = useState<RepoRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<RepoRow | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const openParam = searchParams.get("open");
   const openParamHandledRef = useRef<string | null>(null);
@@ -117,6 +134,29 @@ export default function Repository(): JSX.Element {
     setSearchParams(next, { replace: true });
   }, [openParam, list.loading, list.rows, toast, searchParams, setSearchParams]);
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const row = pendingDelete;
+    setPendingDelete(null);
+    const removedIndex = list.rows.findIndex((r) => r.id === row.id);
+    list.removeRow(row.id);
+    try {
+      await deleteReport(row.report_id);
+      savedReports?.markUnsaved(row.report_id);
+      toast.push({
+        title: "Report deleted permanently.",
+        durationMs: 3000,
+      });
+    } catch {
+      list.restoreRow(row, removedIndex);
+      toast.push({
+        title: "Failed to delete. Try again.",
+        tone: "error",
+        durationMs: 4000,
+      });
+    }
+  };
+
   const confirmRemove = async () => {
     if (!pendingRemove) return;
     const row = pendingRemove;
@@ -125,6 +165,7 @@ export default function Repository(): JSX.Element {
     list.removeRow(row.id);
     try {
       await unsaveFromRepo(row.report_id);
+      savedReports?.markUnsaved(row.report_id);
       toast.push({
         title: "Removed from Repository",
         durationMs: 4000,
@@ -133,6 +174,7 @@ export default function Repository(): JSX.Element {
           onClick: async () => {
             try {
               await saveToRepo(row.report_id);
+              savedReports?.markSaved(row.report_id);
               list.restoreRow(row, removedIndex);
               toast.push({ title: "Report restored.", tone: "success", durationMs: 2000 });
             } catch {
@@ -258,7 +300,13 @@ export default function Repository(): JSX.Element {
                 key={row.id}
                 row={row}
                 onOpen={handleOpen}
-                onRemove={(r) => setPendingRemove(r)}
+                onRemove={(r) => {
+                  if (isPastRetention(r)) {
+                    setPendingDelete(r);
+                  } else {
+                    setPendingRemove(r);
+                  }
+                }}
               />
             ))}
           </ul>
@@ -284,6 +332,13 @@ export default function Repository(): JSX.Element {
         filename={pendingRemove?.filename ?? ""}
         onCancel={() => setPendingRemove(null)}
         onConfirm={() => void confirmRemove()}
+      />
+
+      <DeleteReportDialog
+        open={pendingDelete !== null}
+        reportTitle={pendingDelete?.filename ?? ""}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => void confirmDelete()}
       />
     </div>
   );

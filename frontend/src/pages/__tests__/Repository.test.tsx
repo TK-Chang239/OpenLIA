@@ -45,6 +45,7 @@ const listRepoItemsFiltered = vi.fn();
 const fetchRepoFacets = vi.fn();
 const saveToRepo = vi.fn();
 const unsaveFromRepo = vi.fn();
+const deleteReport = vi.fn();
 
 vi.mock("../../api/repo", async () => {
   return {
@@ -57,6 +58,7 @@ vi.mock("../../api/repo", async () => {
 
 vi.mock("../../api/reports", () => ({
   reportPdfUrl: (id: string) => `/api/reports/${id}/export/pdf`,
+  deleteReport: (...a: unknown[]) => deleteReport(...a),
 }));
 
 import Repository from "../Repository";
@@ -77,14 +79,17 @@ function renderPage(initial: string = "/repository") {
   );
 }
 
+// Recent dates: within the 7-day retention window so the existing tests
+// exercise the soft-remove path. A separate test below covers the
+// post-retention "Delete" path with an explicitly old row.
 const SAMPLE_ROW = {
   id: "i1",
   report_id: "r1",
   department: "equity_research",
   title: "AAPL",
   filename: "AAPL.pdf",
-  generated_at: "2026-04-20T10:00:00Z",
-  saved_at: "2026-04-22T10:00:00Z",
+  generated_at: new Date(Date.now() - 86_400_000).toISOString(),
+  saved_at: new Date(Date.now() - 3_600_000).toISOString(),
 };
 
 describe("Repository page", () => {
@@ -247,6 +252,35 @@ describe("Repository page", () => {
     await waitFor(() => {
       const rows = screen.getAllByTestId("repo-row");
       expect(rows[1]).toHaveTextContent("MSFT.pdf");
+    });
+  });
+
+  it("opens DeleteReportDialog and calls deleteReport for rows >= 7 days old", async () => {
+    const OLD_ROW = {
+      ...SAMPLE_ROW,
+      id: "old1",
+      report_id: "rOld",
+      filename: "Old.pdf",
+      generated_at: new Date(Date.now() - 8 * 86_400_000).toISOString(),
+    };
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [OLD_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    deleteReport.mockResolvedValueOnce(undefined);
+    renderPage();
+    const removeBtn = await screen.findByRole("button", { name: /Remove Old.pdf/ });
+    fireEvent.click(removeBtn);
+    // The destructive DeleteReportDialog (not the soft RemoveConfirmDialog) opens.
+    expect(screen.getByTestId("delete-report-dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => {
+      expect(deleteReport).toHaveBeenCalledWith("rOld");
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Report deleted permanently/i)).toBeInTheDocument();
     });
   });
 });

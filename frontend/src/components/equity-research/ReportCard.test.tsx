@@ -1,7 +1,23 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import { ReportCard } from "./ReportCard";
+import * as chatApi from "../../api/chat";
+
+const mockNavigate = vi.fn();
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return { ...actual, useNavigate: () => mockNavigate };
+});
+
+function renderCard(props: React.ComponentProps<typeof ReportCard>) {
+  return render(
+    <MemoryRouter>
+      <ReportCard {...props} />
+    </MemoryRouter>,
+  );
+}
 
 const baseProps = {
   reportId: "r1",
@@ -14,7 +30,11 @@ const baseProps = {
 
 describe("ReportCard", () => {
   it("renders the mode title and subject line", () => {
-    render(<ReportCard {...baseProps} onOpen={() => {}} onSave={() => {}} />);
+    renderCard({
+      ...baseProps,
+      onOpen: () => {},
+      onSave: () => {},
+    });
     expect(screen.getByText(/stock update report/i)).toBeInTheDocument();
     expect(screen.getByText(/AAPL/)).toBeInTheDocument();
     expect(screen.getByText(/Apple Inc\./)).toBeInTheDocument();
@@ -22,30 +42,32 @@ describe("ReportCard", () => {
 
   it("calls onOpen when Open Report is clicked", () => {
     const onOpen = vi.fn();
-    render(<ReportCard {...baseProps} onOpen={onOpen} onSave={() => {}} />);
+    renderCard({
+      ...baseProps,
+      onOpen,
+      onSave: () => {},
+    });
     fireEvent.click(screen.getByRole("button", { name: /open report/i }));
     expect(onOpen).toHaveBeenCalledWith("r1");
   });
 
   it("renders sector research label without companyName", () => {
-    render(
-      <ReportCard
-        reportId="r2"
-        mode="sector_research"
-        subject="Semiconductors"
-        companyName={null}
-        createdAt="2026-04-09T12:00:00Z"
-        preview="x"
-        onOpen={() => {}}
-        onSave={() => {}}
-      />,
-    );
+    renderCard({
+      reportId: "r2",
+      mode: "sector_research",
+      subject: "Semiconductors",
+      companyName: null,
+      createdAt: "2026-04-09T12:00:00Z",
+      preview: "x",
+      onOpen: () => {},
+      onSave: () => {},
+    });
     expect(screen.getByText(/sector research report/i)).toBeInTheDocument();
     expect(screen.getByText(/Semiconductors/)).toBeInTheDocument();
   });
 
   it("renders a shared download button (delegated component)", () => {
-    render(<ReportCard {...baseProps} onOpen={() => {}} onSave={() => {}} />);
+    renderCard({ ...baseProps, onOpen: () => {}, onSave: () => {} });
     expect(
       screen.getByRole("button", { name: /download report/i }),
     ).toBeInTheDocument();
@@ -53,7 +75,13 @@ describe("ReportCard", () => {
 
   it("clicking Save flips the bookmark to saved", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined);
-    render(<ReportCard {...baseProps} onOpen={() => {}} onSave={onSave} />);
+    const recentCreatedAt = new Date(Date.now() - 86_400_000).toISOString();
+    renderCard({
+      ...baseProps,
+      createdAt: recentCreatedAt,
+      onOpen: () => {},
+      onSave,
+    });
     const saveBtn = screen.getByRole("button", { name: /save to repo/i });
     fireEvent.click(saveBtn);
     await waitFor(() => {
@@ -64,5 +92,169 @@ describe("ReportCard", () => {
         screen.getByRole("button", { name: /saved to repo/i }),
       ).toBeInTheDocument();
     });
+  });
+
+  it("renders tombstone variant when expiredAt is set", () => {
+    renderCard({
+      ...baseProps,
+      expiredAt: "2026-05-15T12:00:00Z",
+      onOpen: () => {},
+      onSave: () => {},
+    });
+    expect(screen.getByTestId("er-report-card-tombstone")).toBeInTheDocument();
+    expect(screen.getByText(/no longer available/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /open report/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /save to repo/i })).toBeNull();
+  });
+
+  it("clicking Saved when within 7 days calls onUnsave (soft remove)", async () => {
+    const recentCreatedAt = new Date(Date.now() - 86_400_000).toISOString();
+    const onUnsave = vi.fn().mockResolvedValue(undefined);
+    renderCard({
+      ...baseProps,
+      createdAt: recentCreatedAt,
+      initialSaved: true,
+      onOpen: () => {},
+      onSave: () => {},
+      onUnsave,
+    });
+    const savedBtn = screen.getByRole("button", { name: /saved to repository/i });
+    fireEvent.click(savedBtn);
+    await waitFor(() => {
+      expect(onUnsave).toHaveBeenCalledWith("r1");
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /save to repository/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows Delete button instead of bookmark when saved and age >= 7 days", () => {
+    const oldCreatedAt = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    renderCard({
+      ...baseProps,
+      createdAt: oldCreatedAt,
+      initialSaved: true,
+      onOpen: () => {},
+      onSave: () => {},
+      onDelete: vi.fn(),
+    });
+    expect(
+      screen.getByRole("button", { name: /delete report/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("bookmark-icon")).toBeNull();
+  });
+
+  it("Delete button opens confirm dialog and dispatches onDelete on confirm", async () => {
+    const oldCreatedAt = new Date(Date.now() - 8 * 86_400_000).toISOString();
+    const onDelete = vi.fn().mockResolvedValue(undefined);
+    renderCard({
+      ...baseProps,
+      createdAt: oldCreatedAt,
+      initialSaved: true,
+      onOpen: () => {},
+      onSave: () => {},
+      onDelete,
+    });
+    fireEvent.click(screen.getByRole("button", { name: /delete report/i }));
+    expect(screen.getByTestId("delete-report-dialog")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await waitFor(() => {
+      expect(onDelete).toHaveBeenCalledWith("r1");
+    });
+  });
+
+  it("shows a Discuss button and navigates to the returned chat session on click", async () => {
+    mockNavigate.mockClear();
+    const createSpy = vi
+      .spyOn(chatApi, "createSession")
+      .mockResolvedValue({ id: "sess_new", attached_report_id: "r1" } as any);
+    renderCard({
+      ...baseProps,
+      onOpen: () => {},
+      onSave: () => {},
+    });
+    fireEvent.click(screen.getByRole("button", { name: /discuss/i }));
+    await waitFor(() =>
+      expect(createSpy).toHaveBeenCalledWith({
+        department: "equity_research",
+        title: "AAPL",
+        attached_report_id: "r1",
+      }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith("/chat/sess_new");
+  });
+});
+
+describe("ReportCard — status variants", () => {
+  it("renders the GeneratingPlaceholderCard variant for status=generating", () => {
+    const report = {
+      id: "r1",
+      status: "generating" as const,
+      started_at: new Date(Date.now() - 5000).toISOString(),
+      original_request: { user_input: "MSFT" },
+    };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/MSFT/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  it("renders the FailedReportCard variant for status=failed", () => {
+    const report = {
+      id: "r1",
+      status: "failed" as const,
+      failure_reason: "provider error: 429",
+    };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/provider error/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("Cancel button calls DELETE /reports/{id}", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({ ok: true } as any);
+    window.confirm = vi.fn(() => true);
+    const report = {
+      id: "r1",
+      status: "generating" as const,
+      started_at: new Date().toISOString(),
+      original_request: { user_input: "MSFT" },
+    };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchSpy).toHaveBeenCalledWith("/reports/r1", { method: "DELETE" });
+    fetchSpy.mockRestore();
+  });
+
+  it("Retry button calls POST /reports/{id}/retry and navigates to the new report", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ report_id: "r_new" }),
+    } as any);
+    const navigate = vi.fn();
+    const report = { id: "r1", status: "failed" as const, failure_reason: "x" };
+    render(
+      <MemoryRouter>
+        <ReportCard report={report} navigate={navigate} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fetchSpy).toHaveBeenCalledWith("/reports/r1/retry", { method: "POST" });
+    expect(navigate).toHaveBeenCalledWith("/equity-research?report_id=r_new");
+    fetchSpy.mockRestore();
   });
 });

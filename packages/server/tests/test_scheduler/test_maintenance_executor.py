@@ -224,6 +224,161 @@ def test_run_maintenance_once_prunes_every_target(db_session: Session) -> None:
     assert runs == set(expected["job_runs"])
 
 
+def _mk_report(
+    db: Session,
+    *,
+    rid: str,
+    user_id: str | None,
+    created_at: datetime,
+    title: str = "Stock Initiation",
+) -> None:
+    from openlia_server.db.models.content import Report
+
+    row = Report(
+        id=rid,
+        user_id=user_id,
+        department="equity_research",
+        report_type="stock_initiation",
+        title=title,
+        subject="AAPL",
+        content_markdown="# Body",
+        content_structured={"cover": {"title": title}},
+        model_ref="test-model",
+        created_at=created_at,
+        updated_at=created_at,
+    )
+    db.add(row)
+    db.flush()
+
+
+def _mk_repo_item(db: Session, *, report_id: str, user_id: str) -> None:
+    from openlia_server.db.models.content import RepoItem
+
+    db.add(RepoItem(id=f"ri-{report_id}", user_id=user_id, report_id=report_id))
+    db.flush()
+
+
+def _ensure_user(db: Session, *, uid: str = "u_1") -> None:
+    if db.get(User, uid) is None:
+        db.add(
+            User(
+                id=uid,
+                email=f"{uid}@e.com",
+                display_name=uid,
+                password_hash="h",
+                is_admin=False,
+                is_disabled=False,
+            )
+        )
+        db.flush()
+
+
+def test_sweep_tombstones_old_unsaved_owned_report(db_session: Session) -> None:
+    from openlia_server.db.models.content import Report
+
+    _ensure_user(db_session)
+    now = datetime.now(UTC)
+    _mk_report(db_session, rid="r_old", user_id="u_1", created_at=now - timedelta(days=8))
+    _mk_report(db_session, rid="r_new", user_id="u_1", created_at=now - timedelta(days=1))
+    db_session.commit()
+
+    summary = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary["reports_tombstoned"] == 1
+    assert summary["reports_hard_deleted"] == 0
+
+    db_session.expire_all()
+    r_old = db_session.get(Report, "r_old")
+    assert r_old is not None
+    assert r_old.expired_at is not None
+    assert r_old.content_markdown == ""
+    assert r_old.content_structured == {}
+
+    r_new = db_session.get(Report, "r_new")
+    assert r_new is not None
+    assert r_new.expired_at is None
+    assert r_new.content_markdown == "# Body"
+
+
+def test_sweep_skips_old_saved_report(db_session: Session) -> None:
+    from openlia_server.db.models.content import Report
+
+    _ensure_user(db_session)
+    now = datetime.now(UTC)
+    _mk_report(db_session, rid="r_saved", user_id="u_1", created_at=now - timedelta(days=30))
+    _mk_repo_item(db_session, report_id="r_saved", user_id="u_1")
+    db_session.commit()
+
+    summary = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary["reports_tombstoned"] == 0
+    db_session.expire_all()
+    row = db_session.get(Report, "r_saved")
+    assert row.expired_at is None
+    assert row.content_markdown == "# Body"
+
+
+def test_sweep_hard_deletes_orphan_reports(db_session: Session) -> None:
+    from openlia_server.db.models.content import Report
+
+    now = datetime.now(UTC)
+    _mk_report(db_session, rid="r_orphan_old", user_id=None, created_at=now - timedelta(days=8))
+    _mk_report(db_session, rid="r_orphan_new", user_id=None, created_at=now - timedelta(days=2))
+    db_session.commit()
+
+    summary = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary["reports_hard_deleted"] == 1
+    assert summary["reports_tombstoned"] == 0
+
+    db_session.expire_all()
+    assert db_session.get(Report, "r_orphan_old") is None
+    assert db_session.get(Report, "r_orphan_new") is not None
+
+
+def test_sweep_is_idempotent(db_session: Session) -> None:
+    _ensure_user(db_session)
+    now = datetime.now(UTC)
+    _mk_report(db_session, rid="r_old", user_id="u_1", created_at=now - timedelta(days=8))
+    db_session.commit()
+
+    summary_1 = run_maintenance_once(db_session)
+    db_session.commit()
+    summary_2 = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary_1["reports_tombstoned"] == 1
+    assert summary_2["reports_tombstoned"] == 0
+
+
+def test_sweep_respects_env_retention_override(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openlia_server.db.models.content import Report
+
+    monkeypatch.setenv("OPENLIA_UNSAVED_REPORT_RETENTION_DAYS", "30")
+    _ensure_user(db_session)
+    now = datetime.now(UTC)
+    _mk_report(db_session, rid="r_10d", user_id="u_1", created_at=now - timedelta(days=10))
+    db_session.commit()
+
+    summary = run_maintenance_once(db_session)
+    db_session.commit()
+
+    assert summary["reports_tombstoned"] == 0
+    db_session.expire_all()
+    assert db_session.get(Report, "r_10d").expired_at is None
+
+
+def test_sweep_summary_contains_both_new_keys(db_session: Session) -> None:
+    summary = run_maintenance_once(db_session)
+    assert "reports_tombstoned" in summary
+    assert "reports_hard_deleted" in summary
+
+
 @pytest.mark.asyncio
 async def test_maintenance_executor_writes_completed_job_run(session_factory) -> None:
     with session_factory() as s:

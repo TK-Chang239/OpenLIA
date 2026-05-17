@@ -18,9 +18,11 @@ Report payload strictness:
 - Chart blocks (line_chart, bar_chart, area_chart, pie_chart,
   candlestick_chart, waterfall_chart, scatter_plot, heatmap, treemap,
   combo_chart) accept `options` with ONLY three keys:
-  `{height, show_legend, show_grid}`. No `note`, no `caption`, no `subtitle`
-  inside options — put commentary in the chart `title` or an adjacent
-  `text` block.
+  `{height, show_legend, show_grid}`. `options.height` is an enum string —
+  one of `"small"`, `"medium"`, or `"tall"`. Pixel integers like `320` or
+  `"320px"` are rejected. `show_legend` and `show_grid` are booleans.
+  No `note`, no `caption`, no `subtitle` inside options — put commentary in
+  the chart `title` or an adjacent `text` block.
 - `combo_chart.bar_series` and `combo_chart.line_series` items must be shaped
   `{"name": str, "values": [float, ...]}` (one value per `categories` entry).
   Do NOT use `data` for these series — that key is reserved for
@@ -35,6 +37,42 @@ Report payload strictness:
   (min 2 points). Flat numeric arrays like `[120.5, 121.2]` and bare pairs
   like `[[1, 120.5], [2, 121.2]]` are rejected.
   Example: `[{"x": 0, "y": 120.5}, {"x": 1, "y": 121.2}, {"x": 2, "y": 119.8}]`.
+- `rail` (optional sticky right-rail) accepts ONLY `verdict`, `quick_stats`,
+  and `sparkline`. `citations` is a TOP-LEVEL field on the report payload —
+  do NOT nest it under `rail`. `meta_stats` is server-computed; do NOT emit
+  it at any level (top-level or nested).
+- `rail` itself does NOT accept `source_ids`. The `source_ids` field lives
+  on each individual `Metric` inside `rail.quick_stats`, never on `rail`.
+- Source attribution: every Metric (in `metric_cards` or `rail.quick_stats`),
+  every `key_finding`, every `pull_quote`, every `quote`, and every quantitative
+  cell in a table or chart MUST carry its citation either via inline `[N]`
+  brackets in adjacent text OR via the block's own `source_ids: ["1", "2", ...]`
+  field. Empty `source_ids: []` on a block that contains numbers is the
+  primary quality regression we track — do not leave it empty when the
+  attached data has a known source.
+- `source_ids` entries must be the SAME numeric strings used in inline
+  `[N]` brackets — i.e., `"1"`, `"2"`, `"3"`, not `"c1"` or `"cite-1"` or
+  the raw provider body. The server interns inline brackets and assigns
+  numeric ids; your `source_ids` arrays must reference those same ids.
+- Chart blocks MUST contain real data. A chart block with empty `series: []`,
+  `slices: []`, or `bar_series: []` is rejected at finalization. If you do not
+  have data for a chart, omit the chart block entirely and explain the gap in
+  an adjacent `text` block. Never emit a chart "for shape" with no underlying
+  values.
+- "Data not available" / "N/A" / "Not disclosed" is a last resort and must
+  be earned: before emitting it, you must have made at least one targeted
+  `web_search` for the specific data point. If the data is in a payload you
+  already fetched, read it. The phrase is a contract that the data does not
+  exist publicly, not a shortcut for not having time to look.
+- NEVER submit a section whose entire content is a single "data not available"
+  message. If a section's data is genuinely missing for ALL its key
+  questions, the section's narrative must still discuss what IS publicly
+  known about the company's position on that topic (competitive backdrop,
+  qualitative observations, industry-wide signals). A 6-word section is
+  always a quality failure — at minimum 200 words of substantive narrative
+  per section, supported by adjacent qualitative claims where quantitative
+  precision is missing. Treat "data not available" as a metric-card label,
+  not a section's content.
 - If validation fails, you will receive the error list as a `submit_report`
   tool result. Fix every listed field and call `submit_report` again with
   the corrected payload.

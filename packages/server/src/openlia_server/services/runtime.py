@@ -14,6 +14,7 @@ inject a system prompt and run through the chat builder.
 from __future__ import annotations
 
 import logging
+import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -30,6 +31,7 @@ from openlia.llm.runtime.chat import ChatRunner
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.recall_artifacts import RecallArtifactsHandler
 from openlia.llm.runtime.report import ReportRunner
+from openlia.llm.runtime.subagent_runner import SubagentReportRunner
 from openlia.llm.runtime.tools import ToolDispatcher
 from openlia.llm.runtime.web_search import WebSearchResolution, resolve_web_search
 from openlia.llm.types import ResolvedModel
@@ -98,6 +100,21 @@ def _resolve_web_search_for(*, resolved: ResolvedModel) -> WebSearchResolution:
         resolved=resolved,
         search_adapter_factory=lambda: None,
     )
+
+
+def select_report_runner_class(
+    *, department_id: str
+) -> type[ReportRunner] | type[SubagentReportRunner]:
+    """Route equity_research to SubagentReportRunner when feature flag set.
+
+    Behind ``OPENLIA_USE_SUBAGENT_RUNNER=1``: equity_research department
+    runs through the subagent-architecture report runner. All other
+    departments (and the default-off case) keep using the classic
+    ``ReportRunner``.
+    """
+    if os.environ.get("OPENLIA_USE_SUBAGENT_RUNNER") == "1" and department_id == "equity_research":
+        return SubagentReportRunner
+    return ReportRunner
 
 
 def _empty_skill_registry() -> SkillRegistry:
@@ -323,7 +340,7 @@ def _build_report_runner_with_registry(
     skill_registry: SkillRegistry | None = None,
     disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
     disabled_skill_ids: tuple[str, ...] | frozenset[str] = (),
-) -> ReportRunner:
+) -> ReportRunner | SubagentReportRunner:
     """Build a per-run ``ReportRunner`` wired to the v2 connector dispatcher.
 
     ``disabled_connector_ids`` and ``disabled_skill_ids`` flow from the
@@ -363,6 +380,49 @@ def _build_report_runner_with_registry(
             capabilities=resolved.capabilities,
         )
 
+    runner_cls = select_report_runner_class(department_id=department_id)
+    if runner_cls is SubagentReportRunner:
+        # SubagentReportRunner expects resolve(...role=...). The classic
+        # resolve() doesn't accept role. Build a role-aware closure that
+        # picks the subagent model from env when role=="subagent" and
+        # falls back to flagship resolution otherwise.
+        def _resolve_with_role(
+            *,
+            department_id: str,
+            user_id: str | None,
+            registry,
+            role: str = "flagship",
+            model_id_override: str | None = None,
+        ):
+            if role == "subagent":
+                sub_model_id = os.environ.get("OPENLIA_DEFAULT_SUBAGENT_MODEL_ID")
+                if sub_model_id:
+                    row = registry.get_by_id(sub_model_id)
+                    if row is not None:
+                        from openlia.llm.resolver import _to_resolved
+                        return _to_resolved(row)
+                # Soft fallback to flagship, warned via dev events.
+                _trace(
+                    "report.warning.subagent_unconfigured",
+                    "subagent model unset or unknown; falling back to flagship.",
+                    {"department_id": department_id},
+                )
+            return resolve(
+                department_id=department_id,
+                registry=registry,
+                user_id=user_id,
+                model_id_override=model_id_override,
+            )
+
+        return SubagentReportRunner(
+            prompts=prompts,
+            tools=tools,
+            resolve=_resolve_with_role,
+            registry=registry,
+            flagship_provider_factory=_provider_factory,
+            subagent_provider_factory=_provider_factory,
+            trace=_trace,
+        )
     return ReportRunner(
         prompts=prompts,
         tools=tools,
