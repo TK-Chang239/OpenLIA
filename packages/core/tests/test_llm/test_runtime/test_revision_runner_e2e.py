@@ -271,20 +271,32 @@ async def test_revision_runner_copies_source_bundle_to_revised_id(
     seeded_chat_with_messages: str,
     db_session_factory,
 ) -> None:
-    flagship = FakeProvider(script=FakeProviderScript(turns=[
-        ("tool_calls", [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())]),
-    ]))
+    flagship = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())],
+                ),
+            ]
+        )
+    )
     runner = RevisionRunner(
-        prompts=PromptLoader(root=prompts_root), resolve=_resolve, registry=object(),
+        prompts=PromptLoader(root=prompts_root),
+        resolve=_resolve,
+        registry=object(),
         flagship_provider_factory=lambda r: flagship,
         report_id_factory=lambda: "r_revised",
-        bundle_dir=bundle_dir, db_session_factory=db_session_factory,
+        bundle_dir=bundle_dir,
+        db_session_factory=db_session_factory,
     )
     async for _ in runner.run(
-        department_id="equity_research", user_id="u_1",
+        department_id="equity_research",
+        user_id="u_1",
         source_report_id=seeded_source_report,
         chat_session_id=seeded_chat_with_messages,
-        revision_brief="x", sections_to_focus=None,
+        revision_brief="x",
+        sections_to_focus=None,
     ):
         pass
     source_bytes = (bundle_dir / f"{seeded_source_report}.json.gz").read_bytes()

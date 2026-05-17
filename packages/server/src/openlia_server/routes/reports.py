@@ -50,6 +50,7 @@ def _is_tombstoned(session: DBSession, *, report_id: str, user_id: str) -> bool:
     ).scalar_one_or_none()
     return expired_at is not None
 
+
 _FILENAME_INVALID = re.compile(r'[\x00-\x1f/\\:*?"<>|]')
 _FILENAME_SEPARATORS = re.compile("[\\s_\u2013\u2014]+")
 _FILENAME_REPEAT_DASH = re.compile(r"-{2,}")

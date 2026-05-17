@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -9,30 +10,37 @@ from openlia_server.db import bootstrap as bootstrap_module
 from openlia_server.db import session as session_mod
 from sqlalchemy import text
 
+_QUOTED = re.compile(r'"([^"]+)"')
+
 
 def _latest_revision() -> str:
     versions_dir = Path(bootstrap_module.__file__).parent / "migrations" / "versions"
-    revisions: dict[str, str | None] = {}  # rev_id -> down_revision
+    # rev_id -> set of parent rev_ids (a merge migration has multiple parents)
+    revisions: dict[str, set[str]] = {}
     for path in versions_dir.glob("*.py"):
         text_body = path.read_text()
-        rev_id: str | None = None
-        down_rev: str | None = None
-        for line in text_body.splitlines():
-            stripped = line.strip()
-            if stripped.startswith("revision:") and rev_id is None:
-                # Match: `revision: str = "..."`
-                rev_id = stripped.split('"')[1] if '"' in stripped else None
-            elif stripped.startswith("down_revision:"):
-                if '"' in stripped:
-                    down_rev = stripped.split('"')[1]
-                else:
-                    down_rev = None
-        if rev_id:
-            revisions[rev_id] = down_rev
+        # `revision: str = "<id>"` — first occurrence wins.
+        rev_match = re.search(r"^\s*revision\s*:?[^=]*=\s*\"([^\"]+)\"", text_body, re.MULTILINE)
+        if not rev_match:
+            continue
+        rev_id = rev_match.group(1)
+        # `down_revision: ... = "<id>"`  OR  `... = ("<id>", "<id>", ...)`
+        # The tuple form spans multiple lines, so match through the closing paren.
+        down_match = re.search(
+            r"^\s*down_revision\s*:?[^=]*=\s*(.+?)(?:\n\s*(?:branch_labels|depends_on)\s*:?)",
+            text_body,
+            re.MULTILINE | re.DOTALL,
+        )
+        parents: set[str] = set()
+        if down_match:
+            parents = set(_QUOTED.findall(down_match.group(1)))
+        revisions[rev_id] = parents
     if not revisions:
         raise AssertionError("no migration revisions discovered")
-    parents = {down for down in revisions.values() if down}
-    heads = [rev for rev in revisions if rev not in parents]
+    all_parents: set[str] = set()
+    for ps in revisions.values():
+        all_parents |= ps
+    heads = [rev for rev in revisions if rev not in all_parents]
     assert len(heads) == 1, f"expected one head, found {heads}"
     return heads[0]
 

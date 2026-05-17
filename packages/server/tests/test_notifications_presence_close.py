@@ -29,28 +29,26 @@ def _make_app(db_session, monkeypatch):
     db_session.commit()
 
     monkeypatch.setenv("OPENLIA_MODE", "personal")
-    app = create_app(db_session_factory=session_mod.SessionLocal)
-    presence = UserPresenceRegistry()
-    app.state.user_presence_registry = presence
-    return app, presence
+    return create_app(db_session_factory=session_mod.SessionLocal)
 
 
 @pytest.fixture
-def _app_and_presence(db_session, monkeypatch):
+def _app(db_session, monkeypatch):
     return _make_app(db_session, monkeypatch)
 
 
 @pytest.fixture
-def test_client(_app_and_presence):
-    app, _ = _app_and_presence
-    with TestClient(app) as client:
+def test_client(_app):
+    # Startup populates app.state.user_presence_registry. The TestClient
+    # context must enter before reading app.state, otherwise we'd grab the
+    # pre-startup registry which the routes never touch.
+    with TestClient(_app) as client:
         yield client
 
 
 @pytest.fixture
-def app_presence(_app_and_presence):
-    _, presence = _app_and_presence
-    return presence
+def app_presence(_app, test_client) -> UserPresenceRegistry:
+    return _app.state.user_presence_registry
 
 
 @pytest.fixture

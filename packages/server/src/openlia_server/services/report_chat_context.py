@@ -53,10 +53,7 @@ _REVISE_TOOL = ToolSchema(
             "sections_to_focus": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": (
-                    "Optional section_ids the editor should pay extra "
-                    "attention to."
-                ),
+                "description": ("Optional section_ids the editor should pay extra attention to."),
             },
         },
     },
