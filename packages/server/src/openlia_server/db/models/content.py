@@ -157,6 +157,8 @@ class Report(Base, TimestampMixin):
     # status: NULL for legacy sync reports; 'generating' | 'complete' |
     #   'failed' | 'cancelled' for background-generated reports.
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Short reason string set on terminal failure/cancellation.
+    failure_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Serialised GenerateReportIn body — used by the retry flow to
     # re-submit the same request without the client resending it.
     original_request: Mapped[dict | None] = mapped_column(JSON, nullable=True)
