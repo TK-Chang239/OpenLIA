@@ -1,6 +1,7 @@
 """Creating a chat session with attached_report_id stores the column
 on the session row (in addition to the existing seed-message behavior
 from _attach_report_as_context)."""
+
 from __future__ import annotations
 
 import pytest
