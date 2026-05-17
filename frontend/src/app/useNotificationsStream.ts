@@ -9,9 +9,10 @@ interface Toaster {
 interface Options {
   navigate: (path: string) => void;
   toast: Toaster;
+  onAttachedReportChanged?: (data: { session_id: string; new_report_id: string }) => void;
 }
 
-export function useNotificationsStream({ navigate, toast }: Options): void {
+export function useNotificationsStream({ navigate, toast, onAttachedReportChanged }: Options): void {
   useEffect(() => {
     const es = new EventSource("/notifications/stream");
     es.addEventListener("report.complete", (e) => {
@@ -32,6 +33,10 @@ export function useNotificationsStream({ navigate, toast }: Options): void {
         action: { label: "Open", onClick: () => navigate(`/reports/${data.report_id}`) },
       });
     });
+    es.addEventListener("chat.attached_report_changed", (e) => {
+      const data = JSON.parse((e as MessageEvent).data);
+      onAttachedReportChanged?.(data);
+    });
     return () => es.close();
-  }, [navigate, toast]);
+  }, [navigate, toast, onAttachedReportChanged]);
 }
