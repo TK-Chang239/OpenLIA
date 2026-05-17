@@ -431,13 +431,49 @@ class SubagentReportRunner:
             )
             res = res_list[0]
             payload = res.payload
+            # ToolDispatcher externalizes large payloads into its
+            # _payload_store, returning a stub with a `ref` field instead
+            # of raw data. The classic ReportRunner reads through stubs
+            # via read_payload tool calls. The subagent runner has no
+            # tools — it needs the raw payload to slice. If the result is
+            # a stub, read the full payload directly from the store.
+            if (
+                isinstance(payload, dict)
+                and "ref" in payload
+                and payload.get("ref")
+                and hasattr(self._tools, "_payload_store")
+                and payload["ref"] in self._tools._payload_store
+            ):
+                payload = self._tools._payload_store[payload["ref"]]
             for dp in entry.attached:
                 key = (
                     f"{entry.tool_name}"
                     f"({json.dumps(entry.tool_arguments, sort_keys=True)})"
                     f":{dp.path or ''}"
                 )
-                value = payload if dp.path is None else apply_path(payload, dp.path)
+                try:
+                    value = payload if dp.path is None else apply_path(payload, dp.path)
+                except Exception as exc:
+                    # apply_path raises PathResolveError if the key is
+                    # missing. The plan may declare paths that don't
+                    # exist in the actual payload (e.g., framework
+                    # changed, vendor returned different shape).
+                    # Substitute a small marker dict so the subagent
+                    # sees the data was attempted but unavailable rather
+                    # than the run dying with an opaque KeyError.
+                    self._trace(
+                        "report.warning.eager_fetch_slice_failed",
+                        f"path {dp.path!r} not in payload: {exc!s}",
+                        {
+                            "tool": entry.tool_name,
+                            "path": dp.path,
+                            "purpose": dp.purpose,
+                        },
+                    )
+                    value = {
+                        "_unavailable": True,
+                        "_reason": f"path {dp.path!r} not in payload",
+                    }
                 results[key] = value
         return results
 
