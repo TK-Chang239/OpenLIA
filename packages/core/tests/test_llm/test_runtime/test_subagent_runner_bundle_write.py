@@ -2,6 +2,7 @@
 immediately before yielding ReportComplete. If the write fails (disk
 full, permissions), the runner emits a warning trace and still yields
 ReportComplete — the report itself is valid."""
+
 from __future__ import annotations
 
 import json
@@ -10,13 +11,12 @@ from textwrap import dedent
 
 import pytest
 from _fakes import FakeDataDispatcher, FakeProvider, FakeProviderScript
-
+from openlia.llm.runtime.editor_client import EDITOR_TOOL_NAME
 from openlia.llm.runtime.events import ReportComplete
 from openlia.llm.runtime.messages import ReportRequest
 from openlia.llm.runtime.prompts import PromptLoader
 from openlia.llm.runtime.report_context_bundle import load_bundle
 from openlia.llm.runtime.subagent_client import SECTION_DRAFT_TOOL_NAME
-from openlia.llm.runtime.editor_client import EDITOR_TOOL_NAME
 from openlia.llm.runtime.subagent_runner import (
     PLAN_REPORT_TOOL_NAME,
     SubagentReportRunner,
@@ -33,9 +33,14 @@ from openlia.llm.types import (
 
 def _resolved() -> ResolvedModel:
     return ResolvedModel(
-        provider_kind="fake", provider_id="p1", model_id="m1", model_ref="fake-1",
+        provider_kind="fake",
+        provider_id="p1",
+        model_id="m1",
+        model_ref="fake-1",
         credentials=ProviderCredentials(api_key="k", base_url=None),
-        capabilities=Capabilities(streaming=True, tool_calling=True, structured_output=True, max_output_tokens=8192),
+        capabilities=Capabilities(
+            streaming=True, tool_calling=True, structured_output=True, max_output_tokens=8192
+        ),
         overrides={},
     )
 
@@ -72,10 +77,16 @@ def prompts_root(tmp_path: Path) -> Path:
 def frameworks_root(tmp_path: Path) -> Path:
     root = tmp_path / "frameworks"
     root.mkdir()
-    (root / "stock_initiation.json").write_text(json.dumps({
-        "title": "Stock Initiation",
-        "sections": [{"id": "company_overview", "title": "Overview", "instructions": "..."}]
-    }))
+    (root / "stock_initiation.json").write_text(
+        json.dumps(
+            {
+                "title": "Stock Initiation",
+                "sections": [
+                    {"id": "company_overview", "title": "Overview", "instructions": "..."}
+                ],
+            }
+        )
+    )
     (root / "stock_initiation_style_guide.md").write_text("# Style\n")
     return root
 
@@ -84,12 +95,18 @@ def _plan_args() -> dict:
     return {
         "company_thesis": "thesis",
         "cross_section_themes": ["t1", "t2"],
-        "sections": [{
-            "section_id": "company_overview", "title": "Overview",
-            "narrative_goal": "g", "key_questions": ["q1", "q2", "q3"],
-            "target_depth": "standard", "word_budget": 200,
-            "data_paths": [], "cross_refs": [],
-        }],
+        "sections": [
+            {
+                "section_id": "company_overview",
+                "title": "Overview",
+                "narrative_goal": "g",
+                "key_questions": ["q1", "q2", "q3"],
+                "target_depth": "standard",
+                "word_budget": 200,
+                "data_paths": [],
+                "cross_refs": [],
+            }
+        ],
     }
 
 
@@ -97,15 +114,22 @@ def _draft_args(content: str) -> dict:
     return {
         "section_id": "company_overview",
         "blocks": [{"type": "text", "content": content}],
-        "citations_used": ["c1"], "word_count": len(content.split()), "open_questions": [],
+        "citations_used": ["c1"],
+        "word_count": len(content.split()),
+        "open_questions": [],
     }
 
 
 def _editor_args() -> dict:
     return {
         "cover": {"title": "MSFT", "subtitle": "Initiation", "tagline": "Constructive"},
-        "sections": [{"id": "company_overview", "title": "Overview",
-                      "blocks": [{"type": "text", "content": "Final body."}]}],
+        "sections": [
+            {
+                "id": "company_overview",
+                "title": "Overview",
+                "blocks": [{"type": "text", "content": "Final body."}],
+            }
+        ],
     }
 
 
@@ -113,14 +137,36 @@ def _editor_args() -> dict:
 async def test_runner_writes_bundle_to_specified_dir(
     prompts_root: Path, frameworks_root: Path, tmp_path: Path
 ) -> None:
-    flagship = FakeProvider(script=FakeProviderScript(turns=[
-        ("tool_calls", [ToolCall(id="p0", name=PLAN_REPORT_TOOL_NAME, arguments=_plan_args())]),
-        ("tool_calls", [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())]),
-    ]))
-    subagent = FakeProvider(script=FakeProviderScript(turns=[
-        ("tool_calls", [ToolCall(id="s0", name=SECTION_DRAFT_TOOL_NAME,
-                                 arguments=_draft_args(" ".join(["w"] * 200)))]),
-    ]))
+    flagship = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="p0", name=PLAN_REPORT_TOOL_NAME, arguments=_plan_args())],
+                ),
+                (
+                    "tool_calls",
+                    [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())],
+                ),
+            ]
+        )
+    )
+    subagent = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [
+                        ToolCall(
+                            id="s0",
+                            name=SECTION_DRAFT_TOOL_NAME,
+                            arguments=_draft_args(" ".join(["w"] * 200)),
+                        )
+                    ],
+                ),
+            ]
+        )
+    )
     bundle_dir = tmp_path / "bundles"
     runner = SubagentReportRunner(
         prompts=PromptLoader(root=prompts_root),
@@ -128,7 +174,8 @@ async def test_runner_writes_bundle_to_specified_dir(
             data_dispatcher=FakeDataDispatcher(manifest={"equity_research": {}}),
             web_search=WebSearchResolution(False, None, None),
         ),
-        resolve=_resolve, registry=object(),
+        resolve=_resolve,
+        registry=object(),
         flagship_provider_factory=lambda r: flagship,
         subagent_provider_factory=lambda r: subagent,
         report_id_factory=lambda: "r_bundle",
@@ -137,7 +184,8 @@ async def test_runner_writes_bundle_to_specified_dir(
     )
     events = []
     async for ev in runner.run(
-        department_id="equity_research", user_id="u_1",
+        department_id="equity_research",
+        user_id="u_1",
         request=ReportRequest(mode="stock_initiation", user_input="MSFT"),
     ):
         events.append(ev)
@@ -155,14 +203,36 @@ async def test_runner_continues_when_bundle_write_fails(
 ) -> None:
     """If persist_bundle raises (disk full, permission error), the runner
     emits a warning trace and still yields ReportComplete."""
-    flagship = FakeProvider(script=FakeProviderScript(turns=[
-        ("tool_calls", [ToolCall(id="p0", name=PLAN_REPORT_TOOL_NAME, arguments=_plan_args())]),
-        ("tool_calls", [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())]),
-    ]))
-    subagent = FakeProvider(script=FakeProviderScript(turns=[
-        ("tool_calls", [ToolCall(id="s0", name=SECTION_DRAFT_TOOL_NAME,
-                                 arguments=_draft_args(" ".join(["w"] * 200)))]),
-    ]))
+    flagship = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="p0", name=PLAN_REPORT_TOOL_NAME, arguments=_plan_args())],
+                ),
+                (
+                    "tool_calls",
+                    [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())],
+                ),
+            ]
+        )
+    )
+    subagent = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [
+                        ToolCall(
+                            id="s0",
+                            name=SECTION_DRAFT_TOOL_NAME,
+                            arguments=_draft_args(" ".join(["w"] * 200)),
+                        )
+                    ],
+                ),
+            ]
+        )
+    )
     bundle_dir = tmp_path / "readonly"
     bundle_dir.mkdir()
     bundle_dir.chmod(0o400)  # read-only -> mkdir of subdir works but write fails
@@ -174,7 +244,8 @@ async def test_runner_continues_when_bundle_write_fails(
                 data_dispatcher=FakeDataDispatcher(manifest={"equity_research": {}}),
                 web_search=WebSearchResolution(False, None, None),
             ),
-            resolve=_resolve, registry=object(),
+            resolve=_resolve,
+            registry=object(),
             flagship_provider_factory=lambda r: flagship,
             subagent_provider_factory=lambda r: subagent,
             report_id_factory=lambda: "r_fail",
@@ -184,13 +255,16 @@ async def test_runner_continues_when_bundle_write_fails(
         )
         events = []
         async for ev in runner.run(
-            department_id="equity_research", user_id="u_1",
+            department_id="equity_research",
+            user_id="u_1",
             request=ReportRequest(mode="stock_initiation", user_input="MSFT"),
         ):
             events.append(ev)
-        assert any(isinstance(e, ReportComplete) for e in events), \
+        assert any(isinstance(e, ReportComplete) for e in events), (
             "ReportComplete must still fire even when bundle write fails"
-        assert any(c == "report.warning.bundle_persist_failed" for c, _, _ in traces), \
+        )
+        assert any(c == "report.warning.bundle_persist_failed" for c, _, _ in traces), (
             "warning event must be recorded"
+        )
     finally:
         bundle_dir.chmod(0o755)
