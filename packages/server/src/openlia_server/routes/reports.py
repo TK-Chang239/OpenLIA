@@ -30,6 +30,7 @@ from openlia_server.services.reports import (
     get_report,
     tombstone_report,
 )
+from openlia_server.services.subject_normalize import normalize_subject
 
 _EXPIRED_DETAIL = {
     "code": "report_expired",
@@ -537,6 +538,10 @@ def _chat_followup_enabled() -> bool:
     return os.environ.get("OPENLIA_REPORT_CHAT_ENABLED", "0") == "1"
 
 
+def _revision_flag_on() -> bool:
+    return os.environ.get("OPENLIA_REVISION_PASS_ENABLED", "0") == "1"
+
+
 def build_reports_router(
     *,
     db_session_factory: Callable[[], DBSession],
@@ -599,13 +604,15 @@ def build_reports_router(
                 "department": row.department,
                 "created_at": row.created_at.isoformat() if row.created_at else "",
             }
-        # Background report still generating: no schema yet, but return
-        # metadata including original_request so the client can poll/retry.
-        if row.status == "generating":
+        # Background report in a terminal or in-progress state without a
+        # schema yet: return metadata so the client can poll/retry/render
+        # appropriate UI (generating spinner, cancelled card, error card).
+        if row.status in ("generating", "cancelled", "failed"):
             return {
                 "schema": None,
                 "expired_at": None,
                 "status": row.status,
+                "failure_reason": getattr(row, "failure_reason", None),
                 "original_request": row.original_request,
             }
         try:
@@ -669,6 +676,27 @@ def build_reports_router(
             session.flush()  # obtain report_id in DB before binding
 
             if source_session is not None and _chat_followup_enabled():
+                # Subject-keyed re-anchor (Task 11): when the revision flag is
+                # on and the incoming subject matches the bound report's subject,
+                # re-anchor the session to the new report instead of spawning a
+                # new thread.
+                if _revision_flag_on() and source_session.attached_report_id is not None:
+                    bound_report = session.get(Report, source_session.attached_report_id)
+                    bound_subject = normalize_subject(
+                        (bound_report.original_request or {}).get("user_input", "")
+                        if bound_report else ""
+                    )
+                    new_subject = normalize_subject(body.user_input)
+                    if bound_subject and new_subject and bound_subject == new_subject:
+                        # Same ticker — re-anchor source session to new report.
+                        source_session.attached_report_id = report_id
+                        session.commit()
+                        return {
+                            "session_id": source_id,
+                            "report_id": report_id,
+                            "redirect": False,
+                        }
+
                 # Implicit binding: conditional UPDATE — only sets the column
                 # when it is still NULL, avoiding overwrites in race conditions.
                 updated = session.execute(
@@ -715,22 +743,36 @@ def build_reports_router(
                 return {"session_id": source_id, "report_id": report_id, "redirect": False}
             return {"report_id": report_id, "status": "generating"}
 
-    @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)
+    @router.delete("/{report_id}")
     async def delete_report(
         report_id: str,
+        request: Request,
         user: User = require_auth,
         session: DBSession = Depends(session_dep),
-    ) -> None:
+    ) -> dict:
         # Ownership check first — 404 hides existence from non-owners.
         row = session.execute(
             select(Report).where(Report.id == report_id, Report.user_id == user.id)
         ).scalar_one_or_none()
         if row is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+        if row.status == "generating":
+            # Cancel in-flight background task when present in this process.
+            registry = getattr(request.app.state, "bg_report_registry", None)
+            if registry is not None:
+                registry.cancel(report_id)
+            # Persist cancelled status immediately so the next GET sees it
+            # without waiting for the wrapper coroutine's CancelledError path.
+            row.status = "cancelled"
+            row.failure_reason = "user_cancelled"
+            session.commit()
+            return {"ok": True, "action": "cancelled"}
+        # Already finished — tombstone (soft-delete).
         # tombstone_report is idempotent: re-deleting an already-tombstoned
-        # report is a no-op (returns False) but still 204s.
+        # report is a no-op (returns False).
         tombstone_report(session, report_id=report_id)
         session.commit()
+        return {"ok": True, "action": "deleted"}
 
     @router.get("/{report_id}/render", response_class=HTMLResponse)
     async def render_report_html(
