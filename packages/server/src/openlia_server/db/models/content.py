@@ -64,6 +64,14 @@ class ChatSession(Base, TimestampMixin):
     # discipline). The Secretary chat runtime injects a length directive
     # into the system prompt only for ``concise`` / ``detailed``.
     response_length: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Optional report bound to this session at creation (used by
+    # "Ask in Secretary" handoffs from report viewers). ``NULL`` when
+    # the session was created without an attached report.
+    attached_report_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("reports.id", ondelete="SET NULL", use_alter=True),
+        nullable=True,
+    )
 
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", cascade="all, delete-orphan", passive_deletes=True
