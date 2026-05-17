@@ -133,15 +133,56 @@ class SubagentClient:
                     messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
-                    max_tokens=2048,
+                    # Section drafts can be 600-2000 words of prose plus block
+                    # JSON. 2048 was too tight; 6144 covers reasoning + output
+                    # without bleeding into the editor budget.
+                    max_tokens=6144,
                 )
             )
             if self._on_done is not None:
                 self._on_done(response)
             call = next((c for c in response.tool_calls if c.name == SECTION_DRAFT_TOOL_NAME), None)
             if call is None:
-                raise ValueError("subagent returned no submit_section call")
-            draft = SectionDraft.model_validate(call.arguments)
+                # No submit_section call at all — treat as a structural
+                # issue and re-prompt rather than bubbling. The subagent
+                # sometimes calls a non-existent tool or returns prose-only.
+                if attempt == self._reprompt_budget:
+                    raise ValueError("subagent returned no submit_section call")
+                messages.append(
+                    Message(
+                        role="user",
+                        content=(
+                            "You did not call submit_section. Call it exactly "
+                            "once with a SectionDraft payload: section_id, "
+                            "blocks (non-empty), citations_used, word_count, "
+                            "open_questions."
+                        ),
+                    )
+                )
+                continue
+            try:
+                draft = SectionDraft.model_validate(call.arguments)
+            except Exception as exc:
+                # Mini model frequently omits required SectionDraft fields
+                # (most often `blocks` itself). Pre-Plan-1-iteration-4 we
+                # bubbled this as a hard ReportError; instead treat it as a
+                # validation guardrail and let the model try again.
+                if attempt == self._reprompt_budget:
+                    raise
+                issue_msg = f"SectionDraft schema invalid: {exc!s}"
+                messages.append(
+                    Message(role="assistant", content="", tool_calls=(call,))
+                )
+                messages.append(
+                    Message(
+                        role="tool",
+                        content=json.dumps(
+                            {"issues": [issue_msg], "hint": "Fix and re-submit."}
+                        ),
+                        tool_call_id=call.id,
+                    )
+                )
+                continue
             issues = self._validate_draft(draft, request.this_section)
             if not issues:
                 return draft
