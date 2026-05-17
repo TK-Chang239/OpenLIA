@@ -91,6 +91,8 @@ from openlia_server.routes.setup import build_setup_router
 from openlia_server.scheduler.service import SchedulerService
 from openlia_server.scheduler.settings import SchedulerSettings
 from openlia_server.scheduler.wiring import build_scheduler_service
+from openlia_server.services.auto_cancel_sweep import auto_cancel_loop
+from openlia_server.services.background_report_registry import BackgroundReportRegistry
 from openlia_server.services.eu_scan_planner import EuScanPlannerImpl
 from openlia_server.services.pt_config import PtConfigService
 from openlia_server.services.pt_runner import PtRunner
@@ -100,6 +102,7 @@ from openlia_server.services.runtime import (
     build_chat_runner,
     build_report_runner,
 )
+from openlia_server.services.user_presence_registry import UserPresenceRegistry
 
 # Per-department expected prompt slots; validated at startup so a missing or
 # renamed slot fails the boot rather than the first user request.
@@ -312,6 +315,26 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        # Background report registry + user presence — single instances for the
+        # lifetime of this server process. Routes read from app.state so there
+        # is no shared mutable module-level state.
+        # user_presence is the canonical Task-16 key; user_presence_registry is
+        # the legacy alias kept for existing route handlers.
+        app.state.bg_report_registry = BackgroundReportRegistry()
+        _presence = UserPresenceRegistry()
+        app.state.user_presence = _presence
+        app.state.user_presence_registry = _presence
+        _sweep_sf2 = db_session_factory or _default_session_factory
+        _sweep_task = asyncio.create_task(
+            auto_cancel_loop(
+                presence=app.state.user_presence,
+                registry=app.state.bg_report_registry,
+                db_session_factory=_sweep_sf2,
+                grace_seconds=int(os.environ.get("OPENLIA_AUTO_CANCEL_GRACE_SECONDS", "90")),
+                poll_seconds=int(os.environ.get("OPENLIA_AUTO_CANCEL_POLL_SECONDS", "15")),
+            )
+        )
+
         # Phase 10: populate dept-health cache. Every dept-route handler
         # and every scheduled-job pre-flight reads from app.state.dept_health.
         from openlia_server.services.dept_health import compute_all as _compute_all_health
@@ -434,6 +457,9 @@ def _make_lifespan(
                 try:
                     yield
                 finally:
+                    _sweep_task.cancel()
+                    for task in list(app.state.bg_report_registry._by_report_id.values()):
+                        task.asyncio_task.cancel()
                     await scheduler_svc.shutdown()
                     await browser_launcher.shutdown()
                     await _cancel_wizard_background_tasks(app)
@@ -444,6 +470,9 @@ def _make_lifespan(
         try:
             yield
         finally:
+            _sweep_task.cancel()
+            for task in list(app.state.bg_report_registry._by_report_id.values()):
+                task.asyncio_task.cancel()
             await browser_launcher.shutdown()
             await _cancel_wizard_background_tasks(app)
 
@@ -462,6 +491,14 @@ async def _cancel_wizard_background_tasks(app: FastAPI) -> None:
             await asyncio.gather(*pending, return_exceptions=True)
         except Exception:
             pass
+
+
+def get_registry(request: Request) -> BackgroundReportRegistry:
+    return request.app.state.bg_report_registry
+
+
+def get_presence(request: Request) -> UserPresenceRegistry:
+    return request.app.state.user_presence
 
 
 def create_app(
@@ -584,13 +621,13 @@ def create_app(
         build_notifications_stream_router(db_session_factory=factory, mode=mode)
     )
 
-    # Shared per-process presence registry; created once here so all routes
-    # (notifications_stream, reports_revise, chat_sessions) share the same
-    # instance without each constructing a private fallback.
+    # Shared per-process presence registry; lifespan sets both keys.
+    # This guard covers tests that call create_app() without entering
+    # the lifespan (i.e. without TestClient or ASGILifespan).
     if getattr(app.state, "user_presence_registry", None) is None:
-        from openlia_server.services.user_presence_registry import UserPresenceRegistry
-
-        app.state.user_presence_registry = UserPresenceRegistry()
+        _fallback_presence = UserPresenceRegistry()
+        app.state.user_presence_registry = _fallback_presence
+        app.state.user_presence = _fallback_presence
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_stream_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_revise_router(db_session_factory=factory, mode=mode))
