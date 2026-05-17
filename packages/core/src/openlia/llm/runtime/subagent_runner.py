@@ -304,7 +304,39 @@ class SubagentReportRunner:
                 fetched_data=section_data,
                 prior_section_summaries=list(prior_summaries),
             )
-            draft = await subagent.draft(req)
+            try:
+                draft = await subagent.draft(req)
+            except Exception as exc:
+                # Subagent exhausted retry budget without producing a
+                # valid SectionDraft. Substitute a placeholder so the
+                # report can still complete and the editor can paper over
+                # the gap rather than the whole run failing.
+                self._trace(
+                    "report.warning.subagent_failed",
+                    f"section {section.section_id} subagent failed: {exc!s}",
+                    {"report_id": report_id, "section_id": section.section_id},
+                )
+                draft = SectionDraft.model_validate(
+                    {
+                        "section_id": section.section_id,
+                        "blocks": [
+                            {
+                                "type": "text",
+                                "content": (
+                                    f"Section narrative could not be produced "
+                                    f"by the section writer (subagent error). "
+                                    f"Available data for this section is "
+                                    f"described below in tables/charts if any."
+                                ),
+                            }
+                        ],
+                        "citations_used": [],
+                        "word_count": 28,
+                        "open_questions": [
+                            f"subagent failed to render {section.section_id}: {exc!s}"
+                        ],
+                    }
+                )
             drafts.append(draft)
             yield ReportSectionComplete(
                 report_id=report_id,
