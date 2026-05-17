@@ -261,3 +261,32 @@ async def test_revision_runner_fails_when_source_bundle_missing(
     assert "ReportComplete" not in types
     err = next(e for e in events if type(e).__name__ == "ReportError")
     assert "bundle" in err.message.lower() or err.error_class == "bundle_missing"
+
+
+@pytest.mark.asyncio
+async def test_revision_runner_copies_source_bundle_to_revised_id(
+    prompts_root: Path,
+    bundle_dir: Path,
+    seeded_source_report: str,
+    seeded_chat_with_messages: str,
+    db_session_factory,
+) -> None:
+    flagship = FakeProvider(script=FakeProviderScript(turns=[
+        ("tool_calls", [ToolCall(id="e0", name=EDITOR_TOOL_NAME, arguments=_editor_args())]),
+    ]))
+    runner = RevisionRunner(
+        prompts=PromptLoader(root=prompts_root), resolve=_resolve, registry=object(),
+        flagship_provider_factory=lambda r: flagship,
+        report_id_factory=lambda: "r_revised",
+        bundle_dir=bundle_dir, db_session_factory=db_session_factory,
+    )
+    async for _ in runner.run(
+        department_id="equity_research", user_id="u_1",
+        source_report_id=seeded_source_report,
+        chat_session_id=seeded_chat_with_messages,
+        revision_brief="x", sections_to_focus=None,
+    ):
+        pass
+    source_bytes = (bundle_dir / f"{seeded_source_report}.json.gz").read_bytes()
+    new_bytes = (bundle_dir / "r_revised.json.gz").read_bytes()
+    assert source_bytes == new_bytes
