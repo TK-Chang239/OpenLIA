@@ -1380,7 +1380,11 @@ class ReportRunner:
                             "Reminders: do NOT include page_furniture, schema_version, "
                             "department, or generated_at (server-set); ChartOptions accepts "
                             "only {height, show_legend, show_grid}; table headers must be "
-                            "objects with {key, label}; metric value/delta must be strings."
+                            "objects with {key, label}; metric value/delta must be strings. "
+                            "If any failing path starts with `rail.`: `rail` accepts ONLY "
+                            "`verdict`, `quick_stats`, `sparkline`. Move `citations` to the "
+                            "ROOT of the payload (sibling of `cover`/`sections`), and drop "
+                            "`meta_stats` entirely (server-computed)."
                         ),
                     }
                     conversation.append(

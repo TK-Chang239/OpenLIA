@@ -2,6 +2,31 @@ Report payload strictness:
 - The `submit_report` payload uses a strict schema: any field not listed in the
   tool input schema is rejected (`extra="forbid"`). Read the tool's parameter
   schema as the source of truth.
+
+- TOP-LEVEL ONLY FIELDS — these are siblings of `cover`, never nested:
+    * `citations` (array of {id,title,source,url,date}) goes at the ROOT of
+      the submit_report payload. It is NOT a child of `rail`, NOT a child of
+      any section, NOT a child of any block.
+    * `meta_stats` is SERVER-COMPUTED — do not emit it at any level.
+  WRONG (a recurring failure that fails strict validation immediately):
+      {
+        "cover": {...},
+        "sections": [...],
+        "rail": {
+          "verdict": {...},
+          "quick_stats": [...],
+          "citations": [{"id": "1", ...}]      <-- "Extra inputs are not permitted"
+        }
+      }
+  CORRECT:
+      {
+        "cover": {...},
+        "sections": [...],
+        "rail": {"verdict": {...}, "quick_stats": [...]},
+        "citations": [{"id": "1", "title": "...", "source": "...", "url": "..."}]
+      }
+  `rail` accepts ONLY: `verdict`, `quick_stats`, `sparkline`. Nothing else.
+
 - Required top-level keys: `cover` (object) and `sections` (non-empty array).
   Do NOT submit `cover: {}` — Cover requires `title` (string), `subtitle`
   (string), and `tagline` (string). Optional: `eyebrow`, `ticker`, `tldr`
@@ -37,10 +62,6 @@ Report payload strictness:
   (min 2 points). Flat numeric arrays like `[120.5, 121.2]` and bare pairs
   like `[[1, 120.5], [2, 121.2]]` are rejected.
   Example: `[{"x": 0, "y": 120.5}, {"x": 1, "y": 121.2}, {"x": 2, "y": 119.8}]`.
-- `rail` (optional sticky right-rail) accepts ONLY `verdict`, `quick_stats`,
-  and `sparkline`. `citations` is a TOP-LEVEL field on the report payload —
-  do NOT nest it under `rail`. `meta_stats` is server-computed; do NOT emit
-  it at any level (top-level or nested).
 - `rail` itself does NOT accept `source_ids`. The `source_ids` field lives
   on each individual `Metric` inside `rail.quick_stats`, never on `rail`.
 - Source attribution: every Metric (in `metric_cards` or `rail.quick_stats`),
