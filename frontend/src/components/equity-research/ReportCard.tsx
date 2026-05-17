@@ -13,6 +13,7 @@ import { type JSX, useState } from "react";
 
 import type { ReportMode } from "../../api/equity-research";
 import { DeleteReportDialog } from "../report/DeleteReportDialog";
+import { useSavedReportsOptional } from "../repo/SavedReportsContext";
 
 const MODE_TITLE: Record<ReportMode, string> = {
   stock_initiation: "Stock Initiation Report",
@@ -88,11 +89,13 @@ export function ReportCard({
   expiredAt = null,
 }: Props): JSX.Element {
   const reduce = useReducedMotion();
-  const [saved, setSaved] = useState(initialSaved);
+  const savedCtx = useSavedReportsOptional();
+  const [localSaved, setLocalSaved] = useState(initialSaved);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const saved = savedCtx ? savedCtx.isSaved(reportId) || localSaved : localSaved;
   const isExpired = expiredAt != null;
   const isOldSaved = !isExpired && saved && ageDays(createdAt) >= RETENTION_DAYS;
 
@@ -103,11 +106,13 @@ export function ReportCard({
       if (saved) {
         if (onUnsave) {
           await onUnsave(reportId);
-          setSaved(false);
+          setLocalSaved(false);
+          savedCtx?.markUnsaved(reportId);
         }
       } else {
         await onSave(reportId);
-        setSaved(true);
+        setLocalSaved(true);
+        savedCtx?.markSaved(reportId);
       }
     } finally {
       setSaving(false);
