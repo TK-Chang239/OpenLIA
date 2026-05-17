@@ -78,6 +78,8 @@ from openlia_server.routes.mr_schedules import build_mr_schedule_router
 from openlia_server.routes.notifications import build_notifications_router
 from openlia_server.routes.portfolio import build_portfolio_router
 from openlia_server.routes.reports import build_reports_router
+from openlia_server.routes.reports_revise import build_reports_revise_router
+from openlia_server.routes.reports_stream import build_reports_stream_router
 from openlia_server.routes.settings import (
     build_llm_providers_admin_router,
 )
@@ -553,6 +555,8 @@ def create_app(
     app.include_router(build_jobs_router(db_session_factory=factory, mode=mode))
     app.include_router(build_notifications_router(db_session_factory=factory, mode=mode))
     app.include_router(build_reports_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_reports_stream_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_reports_revise_router(db_session_factory=factory, mode=mode))
     from openlia_server.routes.department_model_pref import (
         build_department_model_pref_router,
     )
