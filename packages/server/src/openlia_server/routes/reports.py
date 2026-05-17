@@ -684,7 +684,8 @@ def build_reports_router(
                     bound_report = session.get(Report, source_session.attached_report_id)
                     bound_subject = normalize_subject(
                         (bound_report.original_request or {}).get("user_input", "")
-                        if bound_report else ""
+                        if bound_report
+                        else ""
                     )
                     new_subject = normalize_subject(body.user_input)
                     if bound_subject and new_subject and bound_subject == new_subject:
@@ -742,6 +743,36 @@ def build_reports_router(
             if source_session is not None:
                 return {"session_id": source_id, "report_id": report_id, "redirect": False}
             return {"report_id": report_id, "status": "generating"}
+
+    @router.post("/{report_id}/retry")
+    async def retry_report_ep(
+        report_id: str,
+        user: User = require_auth,
+        session: DBSession = Depends(session_dep),
+    ) -> dict:
+        """Retry a failed or cancelled report using its persisted original_request.
+
+        Creates a new 'generating' row from the original GenerateReportIn payload.
+        The failed row is retained for audit. Returns {report_id, status} of the
+        new row.
+        """
+        row = session.execute(
+            select(Report).where(Report.id == report_id, Report.user_id == user.id)
+        ).scalar_one_or_none()
+        if row is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "report not found")
+        if row.status not in ("failed", "cancelled"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Only failed or cancelled reports can be retried",
+            )
+        if row.original_request is None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Report has no persisted original_request",
+            )
+        body = GenerateReportIn(**row.original_request)
+        return await generate_report_bg(body=body, user=user, session=session)
 
     @router.delete("/{report_id}")
     async def delete_report(
