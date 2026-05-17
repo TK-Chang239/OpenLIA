@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
-from openlia_server.db.models.content import ChatAttachment, ChatMessage, Report
+from openlia_server.db.models.content import ChatAttachment, ChatMessage, ChatSession, Report
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import chat_sessions as svc
 
@@ -163,6 +163,20 @@ def build_chat_sessions_router(*, db_session_factory, mode: str) -> APIRouter:
         db: Session = Depends(session_dep),
         user: User = require_auth,
     ) -> SessionOut:
+        # Idempotent reuse: if this user already has a session bound to this
+        # report, return it instead of creating a duplicate.
+        if body.attached_report_id:
+            existing = (
+                db.query(ChatSession)
+                .filter(
+                    ChatSession.user_id == user.id,
+                    ChatSession.attached_report_id == body.attached_report_id,
+                )
+                .first()
+            )
+            if existing is not None:
+                return SessionOut.model_validate(existing, from_attributes=True)
+
         row = svc.create_session(
             db,
             user_id=user.id,
