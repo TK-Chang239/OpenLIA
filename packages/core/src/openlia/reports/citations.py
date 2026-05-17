@@ -233,9 +233,7 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
         # bullet_list items
         if btype == "bullet_list":
             items = block.get("items") or []
-            block["items"] = [
-                _rewrite(it) if isinstance(it, str) else it for it in items
-            ]
+            block["items"] = [_rewrite(it) if isinstance(it, str) else it for it in items]
         # comparison_split: left + right blocks each have title + items
         if btype == "comparison_split":
             for side in ("left", "right"):
@@ -244,9 +242,7 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
                     if isinstance(sd.get("title"), str):
                         sd["title"] = _rewrite(sd["title"])
                     items = sd.get("items") or []
-                    sd["items"] = [
-                        _rewrite(it) if isinstance(it, str) else it for it in items
-                    ]
+                    sd["items"] = [_rewrite(it) if isinstance(it, str) else it for it in items]
         # metric_cards: each metric's label/value
         if btype == "metric_cards":
             for m in block.get("metrics") or []:
@@ -355,9 +351,7 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(m.get("source_ids"), list):
                     m["source_ids"] = _remap_source_ids(m["source_ids"])
                 if not m.get("source_ids"):
-                    refs = _collect_refs(
-                        m.get("label"), m.get("value"), m.get("context")
-                    )
+                    refs = _collect_refs(m.get("label"), m.get("value"), m.get("context"))
                     if refs:
                         m["source_ids"] = refs
 
@@ -366,9 +360,17 @@ def normalize_report(payload: dict[str, Any]) -> dict[str, Any]:
     # leaves series empty. An empty chart renders as a blank box and is
     # worse than no block at all, so we drop them.
     _CHART_TYPES = {
-        "line_chart", "bar_chart", "area_chart", "pie_chart",
-        "candlestick_chart", "waterfall_chart", "scatter_plot",
-        "heatmap", "treemap", "combo_chart", "stacked_bar_chart",
+        "line_chart",
+        "bar_chart",
+        "area_chart",
+        "pie_chart",
+        "candlestick_chart",
+        "waterfall_chart",
+        "scatter_plot",
+        "heatmap",
+        "treemap",
+        "combo_chart",
+        "stacked_bar_chart",
     }
     for section in payload.get("sections", []):
         kept_blocks: list[dict] = []

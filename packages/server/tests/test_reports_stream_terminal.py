@@ -76,9 +76,7 @@ def seeded_completed_report(db_session):
     from sqlalchemy import select
 
     with session_mod.SessionLocal() as s:
-        return s.execute(
-            select(Report).where(Report.id == "r_terminal_complete")
-        ).scalar_one()
+        return s.execute(select(Report).where(Report.id == "r_terminal_complete")).scalar_one()
 
 
 @pytest.fixture
@@ -89,9 +87,7 @@ def seeded_failed_report(db_session):
     from sqlalchemy import select
 
     with session_mod.SessionLocal() as s:
-        return s.execute(
-            select(Report).where(Report.id == "r_terminal_failed")
-        ).scalar_one()
+        return s.execute(select(Report).where(Report.id == "r_terminal_failed")).scalar_one()
 
 
 @pytest.fixture
@@ -162,9 +158,7 @@ def test_failed_report_yields_one_synthetic_error_frame(
     with test_client.stream("GET", f"/reports/{rid}/stream") as resp:
         text = "".join(chunk for chunk in resp.iter_text(chunk_size=4096))
     assert (
-        "event: report.error" in text
-        or "report.error" in text.lower()
-        or "failed" in text.lower()
+        "event: report.error" in text or "report.error" in text.lower() or "failed" in text.lower()
     )
 
 

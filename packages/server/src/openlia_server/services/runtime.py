@@ -400,6 +400,7 @@ def _build_report_runner_with_registry(
                     row = registry.get_by_id(sub_model_id)
                     if row is not None:
                         from openlia.llm.resolver import _to_resolved
+
                         return _to_resolved(row)
                 # Soft fallback to flagship, warned via dev events.
                 _trace(

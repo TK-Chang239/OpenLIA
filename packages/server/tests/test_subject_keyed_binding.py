@@ -2,6 +2,7 @@
 checks SUBJECT equality (lowercased + trimmed) instead of just
 attached_report_id-is-None. Same ticker re-anchors; different ticker
 spawns a new thread."""
+
 from __future__ import annotations
 
 import uuid
@@ -77,18 +78,22 @@ def seeded_bound_chat_session_msft(db_session):
 
 
 def test_same_ticker_in_bound_chat_re_anchors(
-    monkeypatch: pytest.MonkeyPatch, test_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_client: TestClient,
     seeded_bound_chat_session_msft,
 ) -> None:
     monkeypatch.setenv("OPENLIA_REVISION_PASS_ENABLED", "1")
     src_id = seeded_bound_chat_session_msft.id
     original_attached = seeded_bound_chat_session_msft.attached_report_id
-    resp = test_client.post("/reports/generate", json={
-        "source_session_id": src_id,
-        "department_id": "equity_research",
-        "mode": "stock_initiation",
-        "user_input": "msft",  # same ticker, different case
-    })
+    resp = test_client.post(
+        "/reports/generate",
+        json={
+            "source_session_id": src_id,
+            "department_id": "equity_research",
+            "mode": "stock_initiation",
+            "user_input": "msft",  # same ticker, different case
+        },
+    )
     assert resp.status_code == 200
     assert resp.json()["redirect"] is False
     sess = test_client.get(f"/chat/sessions/{src_id}")
@@ -98,18 +103,22 @@ def test_same_ticker_in_bound_chat_re_anchors(
 
 
 def test_different_ticker_in_bound_chat_spawns_new_thread(
-    monkeypatch: pytest.MonkeyPatch, test_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_client: TestClient,
     seeded_bound_chat_session_msft,
 ) -> None:
     monkeypatch.setenv("OPENLIA_REVISION_PASS_ENABLED", "1")
     src_id = seeded_bound_chat_session_msft.id
     original_attached = seeded_bound_chat_session_msft.attached_report_id
-    resp = test_client.post("/reports/generate", json={
-        "source_session_id": src_id,
-        "department_id": "equity_research",
-        "mode": "stock_initiation",
-        "user_input": "AAPL",  # different ticker
-    })
+    resp = test_client.post(
+        "/reports/generate",
+        json={
+            "source_session_id": src_id,
+            "department_id": "equity_research",
+            "mode": "stock_initiation",
+            "user_input": "AAPL",  # different ticker
+        },
+    )
     assert resp.status_code == 200
     assert resp.json()["redirect"] is True
     assert resp.json()["session_id"] != src_id
@@ -119,17 +128,21 @@ def test_different_ticker_in_bound_chat_spawns_new_thread(
 
 
 def test_flag_off_preserves_strict_immutability(
-    monkeypatch: pytest.MonkeyPatch, test_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    test_client: TestClient,
     seeded_bound_chat_session_msft,
 ) -> None:
     monkeypatch.delenv("OPENLIA_REVISION_PASS_ENABLED", raising=False)
     src_id = seeded_bound_chat_session_msft.id
-    resp = test_client.post("/reports/generate", json={
-        "source_session_id": src_id,
-        "department_id": "equity_research",
-        "mode": "stock_initiation",
-        "user_input": "msft",  # same ticker
-    })
+    resp = test_client.post(
+        "/reports/generate",
+        json={
+            "source_session_id": src_id,
+            "department_id": "equity_research",
+            "mode": "stock_initiation",
+            "user_input": "msft",  # same ticker
+        },
+    )
     # When flag is off, chat-followup §4's original "immutable" rule applies
     # and same-ticker still spawns a new thread.
     assert resp.json()["redirect"] is True

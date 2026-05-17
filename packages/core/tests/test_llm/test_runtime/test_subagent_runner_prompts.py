@@ -1,5 +1,6 @@
 """Render the two new shared partials and verify they exist + carry
 the required cache-friendly content (no per-turn interpolations)."""
+
 from __future__ import annotations
 
 from pathlib import Path
