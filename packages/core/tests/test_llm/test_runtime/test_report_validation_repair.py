@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from textwrap import dedent
@@ -389,6 +390,123 @@ def test_report_system_prompt_anchors_current_date(tmp_path: Path) -> None:
     assert "2026-05-14" in rendered
     assert "training cutoff" in rendered.lower()
     assert "web_search" in rendered
+
+
+# ---------- Cost guard: fetching-phase output token cap ----------
+
+
+@pytest.mark.asyncio
+async def test_fetching_turn_caps_max_output_tokens(
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
+) -> None:
+    """Fetching turns must cap max_output_tokens to a small value
+    (~2048) so a model that "gives up" calling tools can't burn the
+    full ~16K output budget on inline prose. Observed in run
+    r_f03c92dd8c30 turn 6: 13,151 output tokens with zero tool calls."""
+    from openlia.llm.runtime.report import FETCHING_MAX_OUTPUT_TOKENS
+
+    good_call = ToolCall(id="t_good", name="submit_report", arguments=_strict_valid_payload())
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", []),  # fetching turn 0: ends loop
+                ("tool_calls", [good_call]),  # writing turn: submit_report
+            ]
+        ),
+        capabilities=Capabilities(
+            streaming=True,
+            tool_calling=True,
+            structured_output=True,
+            max_output_tokens=16_000,
+        ),
+    )
+
+    def _resolve_high_max(*, department_id, user_id, registry, model_id_override=None):
+        return dataclasses.replace(_resolved(), capabilities=provider.capabilities)
+
+    data = FakeDataDispatcher(manifest={"equity_research": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_resolve_high_max,
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_cap",
+    )
+    await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+
+    fetching_request = provider.captured_requests[0]
+    assert fetching_request.max_tokens == FETCHING_MAX_OUTPUT_TOKENS
+    assert FETCHING_MAX_OUTPUT_TOKENS <= 2048
+
+
+# ---------- Cost guard: request_additional_tools dropped after first call ----------
+
+
+@pytest.mark.asyncio
+async def test_request_additional_tools_dropped_after_first_call(
+    prompts_root: Path, frameworks_root: Path, tmp_path: Path
+) -> None:
+    """Once the runtime has expanded the tool registry once, the
+    request_additional_tools meta-tool must be absent from subsequent
+    fetching turns. A second mid-loop call mutates the prefix bytes and
+    invalidates the OpenAI/Anthropic prompt cache. Observed in run
+    r_f03c92dd8c30: turn 5 called request_additional_tools again, and
+    turn 6 dropped to 0% cache hit on 66K input tokens."""
+    escalate_call = ToolCall(
+        id="t_esc",
+        name="request_additional_tools",
+        arguments={"reason": "load tools"},
+    )
+    good_call = ToolCall(id="t_good", name="submit_report", arguments=_strict_valid_payload())
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                ("tool_calls", [escalate_call]),  # fetching turn 0: escalate
+                ("tool_calls", []),  # fetching turn 1: end loop
+                ("tool_calls", [good_call]),  # writing turn: submit_report
+            ]
+        )
+    )
+    data = FakeDataDispatcher(manifest={"equity_research": {}})
+    runner = ReportRunner(
+        prompts=PromptLoader(root=prompts_root),
+        tools=ToolDispatcher(
+            data_dispatcher=data,
+            web_search=WebSearchResolution(False, None, None),
+        ),
+        resolve=_resolve,
+        registry=_Registry(),
+        provider_factory=lambda r: provider,
+        skill_registry=_empty_skill_registry(tmp_path),
+        frameworks_root=frameworks_root,
+        report_id_factory=lambda: "r_drop",
+    )
+    await _collect(
+        runner.run(
+            department_id="equity_research",
+            user_id="u_1",
+            request=ReportRequest(mode="stock_initiation", user_input="AAPL"),
+        )
+    )
+
+    # Turn 0 (the escalation turn) must offer request_additional_tools.
+    turn_0_tools = {t.name for t in (provider.captured_requests[0].tools or [])}
+    assert "request_additional_tools" in turn_0_tools
+    # Turn 1 (after escalation) must NOT offer it. Caches stay warm.
+    turn_1_tools = {t.name for t in (provider.captured_requests[1].tools or [])}
+    assert "request_additional_tools" not in turn_1_tools
 
 
 # ---------- Step 3 contract: validation failure → repair turn with feedback ----------

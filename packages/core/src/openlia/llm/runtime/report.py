@@ -93,6 +93,16 @@ def _get_max_writing_turns() -> int:
 
 MAX_WRITING_TURNS = _get_max_writing_turns()
 
+# Hard cap on output tokens during the fetching loop. Fetching turns
+# emit only tool-call arguments (read_payload paths, eodhd__ args,
+# request_additional_tools) — never prose. A 2048 ceiling is enough
+# headroom for any tool's arguments while preventing the runaway
+# scenario where a model that "gives up" calling tools writes a full
+# inline report draft and burns the model's max_output_tokens budget.
+# Observed in run r_f03c92dd8c30 turn 6: 13,151 output tokens with
+# zero tool calls. Writing phase is unchanged (keeps the full budget).
+FETCHING_MAX_OUTPUT_TOKENS = 2048
+
 _SUBMIT_REPORT_DESCRIPTION = (
     "Submit the final report. Call exactly once with the structured payload. "
     "Keys MUST be `cover` and `sections` matching the framework. "
@@ -1052,7 +1062,10 @@ class ReportRunner:
                             system=system,
                             tools=tools or None,
                             tool_choice=turn_tool_choice,
-                            max_tokens=resolved.capabilities.max_output_tokens,
+                            max_tokens=min(
+                                resolved.capabilities.max_output_tokens,
+                                FETCHING_MAX_OUTPUT_TOKENS,
+                            ),
                             native_tools=native_tools,
                             web_search_max_uses=web_search_max_uses,
                         )
@@ -1181,7 +1194,9 @@ class ReportRunner:
                 return
             escalated = any(c.name == "request_additional_tools" for c in response.tool_calls)
             if escalated:
-                tools = await self._tools.build(department_id, has_web_search=True)
+                tools = await self._tools.build(
+                    department_id, has_web_search=True, expose_escalation=False
+                )
 
         yield ReportPhase(report_id=report_id, phase="writing")
         if cancel_token is not None and cancel_token.is_cancelled:
