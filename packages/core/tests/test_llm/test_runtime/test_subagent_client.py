@@ -69,3 +69,57 @@ async def test_subagent_calls_model_with_no_tools_other_than_submit_section() ->
     assert tool_names == {SECTION_DRAFT_TOOL_NAME}
     # Force tool_choice == submit_section
     assert isinstance(req.tool_choice, dict) and "submit_section" in str(req.tool_choice)
+
+
+@pytest.mark.asyncio
+async def test_subagent_reprompts_on_underweight_word_count() -> None:
+    sp = _valid_section_plan()  # word_budget=200
+    # Turn 0: half the budget (rejected). Turn 1: in range.
+    underweight = _ok_draft_args(sp.section_id, content=" ".join(["w"] * 80), citations=["c1"])
+    inrange = _ok_draft_args(sp.section_id, content=" ".join(["w"] * 200), citations=["c1"])
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="t0", name=SECTION_DRAFT_TOOL_NAME, arguments=underweight)],
+                ),
+                (
+                    "tool_calls",
+                    [ToolCall(id="t1", name=SECTION_DRAFT_TOOL_NAME, arguments=inrange)],
+                ),
+            ]
+        )
+    )
+    client = SubagentClient(provider=provider, reprompt_budget=1)
+    draft = await client.draft(_request())
+    assert draft.word_count == 200
+    assert len(provider.captured_requests) == 2
+    # The reprompt turn must contain a tool result message naming the issue.
+    second = provider.captured_requests[1].messages
+    repair_msg = [m for m in second if m.role == "tool"]
+    assert repair_msg and "word_count" in repair_msg[-1].content
+
+
+@pytest.mark.asyncio
+async def test_subagent_accepts_after_budget_exhausted() -> None:
+    sp = _valid_section_plan()
+    bad = _ok_draft_args(sp.section_id, content=" ".join(["w"] * 50), citations=["c1"])
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="t0", name=SECTION_DRAFT_TOOL_NAME, arguments=bad)],
+                ),
+                (
+                    "tool_calls",
+                    [ToolCall(id="t1", name=SECTION_DRAFT_TOOL_NAME, arguments=bad)],
+                ),
+            ]
+        )
+    )
+    client = SubagentClient(provider=provider, reprompt_budget=1)
+    draft = await client.draft(_request())
+    # Accept the last attempt with an open_question flag.
+    assert any("word_count" in q for q in draft.open_questions)

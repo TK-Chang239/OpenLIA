@@ -107,20 +107,61 @@ class SubagentClient:
     async def draft(self, request: SubagentRequest) -> SectionDraft:
         system = _system_prompt(request)
         user = _user_prompt(request)
-        messages = [Message(role="user", content=user)]
+        messages: list[Message] = [Message(role="user", content=user)]
         tools = [_submit_section_tool()]
         tool_choice = _force_submit_section_choice(self._provider.kind)
-        response = await self._provider.generate(
-            LLMRequest(
-                system=system,
-                messages=messages,
-                tools=tools,
-                tool_choice=tool_choice,
-                max_tokens=2048,
+
+        last_draft: SectionDraft | None = None
+        last_issues: list[str] = []
+
+        for attempt in range(self._reprompt_budget + 1):
+            response = await self._provider.generate(
+                LLMRequest(
+                    system=system,
+                    messages=messages,
+                    tools=tools,
+                    tool_choice=tool_choice,
+                    max_tokens=2048,
+                )
             )
-        )
-        # Pick the submit_section call.
-        call = next((c for c in response.tool_calls if c.name == SECTION_DRAFT_TOOL_NAME), None)
-        if call is None:
-            raise ValueError("subagent returned no submit_section call")
-        return SectionDraft.model_validate(call.arguments)
+            call = next((c for c in response.tool_calls if c.name == SECTION_DRAFT_TOOL_NAME), None)
+            if call is None:
+                raise ValueError("subagent returned no submit_section call")
+            draft = SectionDraft.model_validate(call.arguments)
+            issues = self._validate_draft(draft, request.this_section)
+            if not issues:
+                return draft
+            last_draft = draft
+            last_issues = issues
+            # If this was the last allowed attempt, fall through to flag.
+            if attempt == self._reprompt_budget:
+                break
+            # Otherwise: append assistant + tool repair messages and loop.
+            messages.append(Message(role="assistant", content="", tool_calls=(call,)))
+            messages.append(
+                Message(
+                    role="tool",
+                    content=json.dumps({"issues": issues, "hint": "Fix and re-submit."}),
+                    tool_call_id=call.id,
+                )
+            )
+
+        # Accepted last attempt; flag the issues.
+        assert last_draft is not None
+        flagged_open = list(last_draft.open_questions)
+        flagged_open.extend(f"[auto-flag] {i}" for i in last_issues)
+        return last_draft.model_copy(update={"open_questions": flagged_open})
+
+    def _validate_draft(self, draft: SectionDraft, sp: SectionPlan) -> list[str]:
+        issues: list[str] = []
+        lo, hi = int(sp.word_budget * 0.8), int(sp.word_budget * 1.2)
+        if not (lo <= draft.word_count <= hi):
+            issues.append(
+                f"word_count={draft.word_count} outside +/-20% of word_budget={sp.word_budget} "
+                f"(allowed range {lo}-{hi})."
+            )
+        if draft.section_id != sp.section_id:
+            issues.append(
+                f"section_id={draft.section_id!r} does not match expected {sp.section_id!r}."
+            )
+        return issues
