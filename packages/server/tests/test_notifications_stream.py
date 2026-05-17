@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
 from openlia_server.services.user_presence_registry import UserPresenceRegistry
 
 # ---------------------------------------------------------------------------
@@ -11,9 +12,31 @@ from openlia_server.services.user_presence_registry import UserPresenceRegistry
 # ---------------------------------------------------------------------------
 
 
-def _make_app(db_session, monkeypatch):
-    from openlia_server.app import create_app
-    from openlia_server.db import session as session_mod
+def _make_fake_request(presence: UserPresenceRegistry) -> MagicMock:
+    """Minimal fake FastAPI Request with presence in app.state."""
+    req = MagicMock()
+    req.app.state.user_presence_registry = presence
+    return req
+
+
+def _make_fake_user(user_id: str = "local") -> MagicMock:
+    user = MagicMock()
+    user.id = user_id
+    return user
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def presence() -> UserPresenceRegistry:
+    return UserPresenceRegistry()
+
+
+@pytest.fixture
+def test_user(db_session):
     from openlia_server.db.models.auth import User
 
     user = User(
@@ -27,45 +50,6 @@ def _make_app(db_session, monkeypatch):
     )
     db_session.add(user)
     db_session.commit()
-
-    monkeypatch.setenv("OPENLIA_MODE", "personal")
-    return create_app(db_session_factory=session_mod.SessionLocal)
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def _app_and_client(db_session, monkeypatch):
-    app = _make_app(db_session, monkeypatch)
-    presence = UserPresenceRegistry()
-    # Enter the TestClient context so the lifespan runs (populates app.state),
-    # then overwrite with a test-controlled presence instance so route handlers
-    # and app_presence fixture share the same object.
-    with TestClient(app) as client:
-        app.state.user_presence_registry = presence
-        app.state.user_presence = presence
-        yield client, presence
-
-
-@pytest.fixture
-def test_client(_app_and_client) -> TestClient:
-    client, _ = _app_and_client
-    return client
-
-
-@pytest.fixture
-def app_presence(_app_and_client) -> UserPresenceRegistry:
-    _, presence = _app_and_client
-    return presence
-
-
-@pytest.fixture
-def test_user(db_session):
-    from openlia_server.db.models.auth import User
-
     return db_session.get(User, "local")
 
 
@@ -74,25 +58,78 @@ def test_user(db_session):
 # ---------------------------------------------------------------------------
 
 
-def test_get_notifications_stream_returns_eventstream(
-    test_client: TestClient,
+@pytest.mark.asyncio
+async def test_get_notifications_stream_returns_eventstream(
+    presence: UserPresenceRegistry,
 ) -> None:
-    # The endpoint yields an immediate connect heartbeat so TestClient.stream
-    # unblocks as soon as that first byte arrives.
-    with test_client.stream("GET", "/notifications/stream") as resp:
-        assert resp.status_code == 200
-        assert resp.headers["content-type"].startswith("text/event-stream")
-        # Consume the initial heartbeat so the context is fully entered.
-        next(resp.iter_bytes(chunk_size=4096), None)
+    """The SSE handler returns a StreamingResponse with text/event-stream
+    media type and immediately yields a connect heartbeat as the first frame."""
+    from fastapi.responses import StreamingResponse
+
+    # Build a minimal router to access the handler directly.
+    from openlia_server.db import session as session_mod
+    from openlia_server.routes.notifications_stream import build_notifications_stream_router
+
+    router = build_notifications_stream_router(
+        db_session_factory=session_mod.SessionLocal,
+        mode="personal",
+        heartbeat_seconds=30,
+    )
+
+    # The handler is the first (and only GET) route endpoint.
+    handler = next(
+        r.endpoint for r in router.routes if getattr(r, "methods", None) == {"GET"}
+    )
+
+    req = _make_fake_request(presence)
+    user = _make_fake_user()
+    response = await handler(request=req, user=user)
+
+    assert isinstance(response, StreamingResponse)
+    assert response.media_type == "text/event-stream"
+
+    # Collect the first frame from the generator.
+    frames: list[bytes] = []
+    async for chunk in response.body_iterator:
+        frames.append(chunk)
+        break  # Stop after the first frame (initial heartbeat).
+
+    assert frames, "Generator yielded no frames"
+    assert b"heartbeat" in frames[0]
 
 
-def test_open_notification_stream_registers_user_in_presence(
-    test_client: TestClient, app_presence: UserPresenceRegistry, test_user
+@pytest.mark.asyncio
+async def test_open_notification_stream_registers_user_in_presence(
+    presence: UserPresenceRegistry, test_user
 ) -> None:
-    with test_client.stream("GET", "/notifications/stream") as resp:
-        # Consuming the initial heartbeat confirms that presence.attach() has run.
-        next(resp.iter_bytes(chunk_size=4096), None)
-        # User has an open connection — must NOT be in the disconnect map.
-        assert test_user.id not in app_presence.users_with_no_connections()
-    # Stream closed → presence.detach() ran → user IS in the disconnect map.
-    assert test_user.id in app_presence.users_with_no_connections()
+    """Calling the handler attaches the user to the presence registry;
+    exiting the generator detaches them."""
+    from openlia_server.db import session as session_mod
+    from openlia_server.routes.notifications_stream import build_notifications_stream_router
+
+    router = build_notifications_stream_router(
+        db_session_factory=session_mod.SessionLocal,
+        mode="personal",
+        heartbeat_seconds=30,
+    )
+    handler = next(
+        r.endpoint for r in router.routes if getattr(r, "methods", None) == {"GET"}
+    )
+
+    req = _make_fake_request(presence)
+    user = _make_fake_user(test_user.id)
+    response = await handler(request=req, user=user)
+
+    # Consume the generator to just after the first yield; attach() must
+    # have been called by then.
+    gen: AsyncIterator[bytes] = response.body_iterator
+    await gen.__anext__()  # consume initial heartbeat
+
+    # User has an active connection — not in disconnect map.
+    assert test_user.id not in presence.users_with_no_connections()
+
+    # Close the generator (triggers finally: presence.detach).
+    await gen.aclose()
+
+    # User's connection is gone — now in disconnect map.
+    assert test_user.id in presence.users_with_no_connections()
