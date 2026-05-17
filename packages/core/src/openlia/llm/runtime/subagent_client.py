@@ -16,6 +16,7 @@ across all subagents in a single run.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,6 +27,8 @@ from openlia.llm.runtime.section_draft import PriorSection, SectionDraft
 from openlia.llm.types import LLMRequest, Message, ToolSchema
 
 SECTION_DRAFT_TOOL_NAME = "submit_section"
+
+_NUMERIC_CLAIM_RE = re.compile(r"\b(\d+(?:[.,]\d+)*\s*%?|\$\s*\d+(?:[.,]\d+)*(?:[KMB])?)\b")
 
 
 @dataclass(frozen=True)
@@ -163,5 +166,16 @@ class SubagentClient:
         if draft.section_id != sp.section_id:
             issues.append(
                 f"section_id={draft.section_id!r} does not match expected {sp.section_id!r}."
+            )
+        has_numeric_claim = False
+        for block in draft.blocks:
+            if block.get("type") == "text":
+                if _NUMERIC_CLAIM_RE.search(str(block.get("content", ""))):
+                    has_numeric_claim = True
+                    break
+        if has_numeric_claim and not draft.citations_used:
+            issues.append(
+                "TextBlocks contain numeric claims (digits, percentages, "
+                "$amounts) but citations_used is empty. Add citation ids."
             )
         return issues

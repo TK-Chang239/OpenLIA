@@ -123,3 +123,36 @@ async def test_subagent_accepts_after_budget_exhausted() -> None:
     draft = await client.draft(_request())
     # Accept the last attempt with an open_question flag.
     assert any("word_count" in q for q in draft.open_questions)
+
+
+@pytest.mark.asyncio
+async def test_subagent_reprompts_on_uncited_numeric_claim() -> None:
+    sp = _valid_section_plan()
+    uncited = _ok_draft_args(
+        sp.section_id,
+        content="Revenue grew 12.5% YoY to $245B in FY25 " + " ".join(["w"] * 190),
+        citations=[],
+    )
+    cited = _ok_draft_args(
+        sp.section_id,
+        content="Revenue grew 12.5% YoY to $245B in FY25 " + " ".join(["w"] * 190),
+        citations=["c1"],
+    )
+    provider = FakeProvider(
+        script=FakeProviderScript(
+            turns=[
+                (
+                    "tool_calls",
+                    [ToolCall(id="t0", name=SECTION_DRAFT_TOOL_NAME, arguments=uncited)],
+                ),
+                (
+                    "tool_calls",
+                    [ToolCall(id="t1", name=SECTION_DRAFT_TOOL_NAME, arguments=cited)],
+                ),
+            ]
+        )
+    )
+    client = SubagentClient(provider=provider, reprompt_budget=1)
+    draft = await client.draft(_request())
+    assert draft.citations_used == ["c1"]
+    assert len(provider.captured_requests) == 2
