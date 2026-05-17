@@ -11,26 +11,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-ReportPhaseName = Literal[
-    "planning",
-    "fetching_data",
-    "writing",
-    "finalizing",
-    "eager_fetch",
-    "section_drafting",
-    "editing",
-    "loading_context",
-]
-_ALLOWED_PHASES: tuple[str, ...] = (
-    "planning",
-    "fetching_data",
-    "writing",
-    "finalizing",
-    "eager_fetch",
-    "section_drafting",
-    "editing",
-    "loading_context",
-)
+ReportPhaseName = Literal["fetching_data", "writing", "finalizing"]
+_ALLOWED_PHASES: tuple[str, ...] = ("fetching_data", "writing", "finalizing")
 
 
 def _utc_now_iso() -> str:

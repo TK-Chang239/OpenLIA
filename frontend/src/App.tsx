@@ -3,7 +3,6 @@ import { RouterProvider } from "react-router-dom";
 import type { createBrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import { useTimezoneAutoCapture } from "./auth/useTimezoneAutoCapture";
-import { useBeforeUnloadBeacon } from "./app/useBeforeUnloadBeacon";
 import { router as defaultRouter } from "./router/routes";
 import { ErrorBoundary } from "./components/shell/ErrorBoundary";
 
@@ -15,7 +14,6 @@ interface AppProps {
 
 function AuthedShell({ router }: { router: AppRouter }): JSX.Element {
   useTimezoneAutoCapture();
-  useBeforeUnloadBeacon();
   return <RouterProvider router={router} />;
 }
 

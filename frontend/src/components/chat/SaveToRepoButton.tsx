@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
 import { saveToRepo, unsaveFromRepo } from "../../api/repo";
-import { useSavedReportsOptional } from "../repo/SavedReportsContext";
 
 export type SaveToRepoVariant = "chip" | "viewer-header";
 
@@ -20,19 +19,16 @@ export function SaveToRepoButton({
   variant,
   onChange,
 }: SaveToRepoButtonProps): JSX.Element {
-  const ctx = useSavedReportsOptional();
-  const [localSaved, setLocalSaved] = useState<boolean>(initialSaved);
+  const [saved, setSaved] = useState<boolean>(initialSaved);
   const [hovering, setHovering] = useState<boolean>(false);
   const [status, setStatus] = useState<Status>("idle");
   const [announcement, setAnnouncement] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Mirror initialSaved prop into local state whenever the prop changes.
+  // Keep local state in sync if the parent flips `initialSaved`.
   useEffect(() => {
-    setLocalSaved(initialSaved);
+    setSaved(initialSaved);
   }, [initialSaved]);
-
-  const saved = ctx ? ctx.isSaved(reportId) || localSaved : localSaved;
 
   const ariaLabel = saved ? "Remove from repository" : "Save to repository";
 
@@ -43,14 +39,12 @@ export function SaveToRepoButton({
     try {
       if (saved) {
         await unsaveFromRepo(reportId);
-        setLocalSaved(false);
-        ctx?.markUnsaved(reportId);
+        setSaved(false);
         setAnnouncement("Report removed from Repository");
         onChange?.(false);
       } else {
         await saveToRepo(reportId);
-        setLocalSaved(true);
-        ctx?.markSaved(reportId);
+        setSaved(true);
         setAnnouncement("Report saved to Repository");
         onChange?.(true);
       }
