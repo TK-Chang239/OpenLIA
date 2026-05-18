@@ -23,7 +23,6 @@ def test_unknown_block_returns_none() -> None:
     assert reg.get("unknown") is None
 
 
-@pytest.mark.skip(reason="enabled after Tasks 3.3 + 3.4")
 def test_default_registry_has_text_table_chart_combo() -> None:
     from openlia.llm.runtime.report_v2.packer.blocks import (
         chart_combo,  # noqa: F401
