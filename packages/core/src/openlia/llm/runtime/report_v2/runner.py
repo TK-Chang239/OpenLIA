@@ -61,7 +61,11 @@ from openlia.llm.runtime.report_v2.packer.blocks import (  # noqa: F401
     timeline,
 )
 from openlia.llm.runtime.report_v2.packer.blocks.registry import default_block_registry
-from openlia.llm.runtime.report_v2.packer.validator import validate_section
+from openlia.llm.runtime.report_v2.packer.parser import parse_section_file
+from openlia.llm.runtime.report_v2.packer.validator import (
+    cross_section_numeric_consistency,
+    validate_section,
+)
 from openlia.llm.runtime.report_v2.sections.dispatcher import (
     SectionDispatch,
     dispatch_sections,
@@ -134,7 +138,8 @@ class WavedReportRunner:
         sse_emitter: Callable[[Any], Awaitable[None]] | None = None,
         report_id: str | None = None,
     ) -> None:
-        assert report_type == "stock_initiation", "only stock_initiation supported in v1"
+        if report_type != "stock_initiation":
+            raise ValueError("only stock_initiation supported in v1")
         self.report_type = report_type
         self.ticker = ticker
         self.dispatcher = dispatcher
@@ -299,6 +304,28 @@ class WavedReportRunner:
                 "W5_synthesis", duration_ms=int((time.monotonic() - t0) * 1000)
             )
 
+            # Cross-section consistency check (between W5 and W6)
+            # Parse all sections with markdown and run the cross-section validator.
+            # Findings with severity=="error" are logged as telemetry warnings —
+            # no retries, as these emerge from multi-section state.
+            all_completed = [
+                r for r in (*body_results, *synth_results) if r.markdown is not None
+            ]
+            parsed_sections = []
+            for r in all_completed:
+                try:
+                    parsed_sections.append(parse_section_file(r.markdown))
+                except Exception:
+                    pass  # malformed section — skip; per-section validator caught it
+            cross_findings = cross_section_numeric_consistency(parsed_sections)
+            for finding in cross_findings:
+                if finding.severity == "error":
+                    self.telemetry.record_cross_section_finding(
+                        check=finding.check,
+                        sections=finding.section_id,
+                        detail=finding.detail,
+                    )
+
             # W6: assemble final report
             await self._emit(ReportPhase(report_id=rid, phase="finalizing"))
             t0 = time.monotonic()
@@ -323,5 +350,5 @@ class WavedReportRunner:
             )
             raise
 
-        await self._emit(ReportComplete(report_id=rid, schema={}))
+        await self._emit(ReportComplete(report_id=rid, schema=schema.model_dump(mode="json")))
         return ReportRunOutput(schema=schema, telemetry=self.telemetry)

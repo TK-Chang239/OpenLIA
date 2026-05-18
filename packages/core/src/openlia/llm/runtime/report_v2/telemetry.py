@@ -13,6 +13,13 @@ class WaveTimings:
 
 
 @dataclass
+class CrossSectionFinding:
+    check: str
+    sections: str  # comma-joined section ids
+    detail: str
+
+
+@dataclass
 class ReportTelemetry:
     sections: dict[str, dict[str, Any]] = field(default_factory=dict)
     section_states: Counter = field(default_factory=Counter)
@@ -20,6 +27,7 @@ class ReportTelemetry:
     wave_timings: WaveTimings = field(default_factory=WaveTimings)
     search_sentinels: dict[str, list[str]] = field(default_factory=dict)
     auto_repair_fixes: Counter = field(default_factory=Counter)
+    cross_section_findings: list[CrossSectionFinding] = field(default_factory=list)
 
     def record_section(self, result: SectionResult) -> None:
         self.sections[result.section_id] = {
@@ -42,6 +50,11 @@ class ReportTelemetry:
     def record_auto_repair(self, fix_label: str) -> None:
         self.auto_repair_fixes[fix_label] += 1
 
+    def record_cross_section_finding(self, *, check: str, sections: str, detail: str) -> None:
+        self.cross_section_findings.append(
+            CrossSectionFinding(check=check, sections=sections, detail=detail)
+        )
+
     def snapshot(self) -> dict[str, Any]:
         return {
             "sections": dict(self.sections),
@@ -50,4 +63,8 @@ class ReportTelemetry:
             "wave_ms": dict(self.wave_timings.durations_ms),
             "search_sentinels": dict(self.search_sentinels),
             "auto_repair_fixes": dict(self.auto_repair_fixes),
+            "cross_section_findings": [
+                {"check": f.check, "sections": f.sections, "detail": f.detail}
+                for f in self.cross_section_findings
+            ],
         }
