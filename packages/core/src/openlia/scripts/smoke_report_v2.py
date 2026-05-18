@@ -81,14 +81,17 @@ class _EodhdDispatcher:
     Failures are printed to stdout so they are visible during smoke testing.
     """
 
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: Any, default_ticker: str = "") -> None:
         self._client = client
+        self._default_ticker = default_ticker
 
     async def dispatch(self, provider: str, tool: str, args: dict[str, Any]) -> Any:
         if provider != "eodhd":
             # "news" and any other provider: no connector wired; baseline skips None.
             return None
-        ticker = args.get("ticker", "")
+        ticker = args.get("ticker", "").strip()
+        if not ticker:
+            ticker = self._default_ticker
         method_name = self._method_for(tool)
         if method_name is None:
             return None
@@ -195,7 +198,7 @@ def _build_runner(
 
     # EODHD client — ExtendedAPIClient wraps eodhd.APIClient.
     eodhd_client = ExtendedAPIClient(api_key=eodhd_token)
-    dispatcher = _EodhdDispatcher(eodhd_client)
+    dispatcher = _EodhdDispatcher(eodhd_client, default_ticker=ticker)
 
     websearch = _NoOpWebSearch()
 
@@ -226,7 +229,9 @@ def _build_runner(
         preflight_provider=preflight_provider,
         body_writer=body_writer,
         synthesis_writer=synthesis_writer,
-        concurrency_limit=3,
+        preflight_concurrency=3,
+        body_concurrency=1,
+        synthesis_concurrency=1,
     )
 
 
