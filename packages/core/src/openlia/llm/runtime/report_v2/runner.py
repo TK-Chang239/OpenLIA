@@ -328,9 +328,7 @@ class WavedReportRunner:
             # Parse all sections with markdown and run the cross-section validator.
             # Findings with severity=="error" are logged as telemetry warnings —
             # no retries, as these emerge from multi-section state.
-            all_completed = [
-                r for r in (*body_results, *synth_results) if r.markdown is not None
-            ]
+            all_completed = [r for r in (*body_results, *synth_results) if r.markdown is not None]
             parsed_sections = []
             for r in all_completed:
                 try:

@@ -1,6 +1,7 @@
 """Deterministic JSONPath-style extractors. Stateless helpers; the
 register_fact decorations live in the per-report-type module
 (e.g. stock_initiation.py) so importing this module has no side effects."""
+
 from __future__ import annotations
 
 from typing import Any

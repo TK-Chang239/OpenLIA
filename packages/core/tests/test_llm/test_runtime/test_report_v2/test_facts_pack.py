@@ -72,6 +72,7 @@ def test_compile_compute_inherits_union_of_sources() -> None:
 def test_slice_for_section_returns_only_requested_names() -> None:
     reg = FactRegistry()
     for n in ["a", "b", "c"]:
+
         @reg.register(n, tier="deterministic", depends_on=[])
         def _f(payloads, facts, _name=n):
             return Fact(name=_name, value=1, source_ids=[1], extractor="deterministic")

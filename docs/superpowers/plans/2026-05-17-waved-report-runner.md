@@ -5178,36 +5178,48 @@ Document findings. If any class of mismatch repeats across tickers, file an issu
 
 ### Task 8.1: Flip the default
 
+**Implementation note (2026-05-18):** The flag is not in `config.py`; it
+is read directly from the environment in
+`packages/server/src/openlia_server/services/runtime.py` by
+`select_report_runner_class`. The flip happens there.
+
 **Files:**
-- Modify: `packages/core/src/openlia/config.py`
+- Modify: `packages/server/src/openlia_server/services/runtime.py`
+- Modify: `packages/server/tests/test_services/test_runtime_v2_routing.py`
+- Modify: `packages/server/tests/test_subagent_routing.py`
 
-- [ ] **Step 1: Change the default**
+- [ ] **Step 1: Invert the env check**
 
-In `config.py`, change the default for `report_v2_enabled` from `False` to `True`. Update the existing test that asserts the off-default.
+In `select_report_runner_class`, change from opt-in (`== "true"`) to
+opt-out: unset / empty / anything other than `{false,0,no,off}` selects
+`WavedReportRunnerHost` for `equity_research`.
 
 - [ ] **Step 2: Update tests**
 
-In `test_config.py`, the `test_report_v2_flag_defaults_off` test should now be renamed/inverted:
-
-```python
-def test_report_v2_flag_defaults_on(monkeypatch) -> None:
-    monkeypatch.delenv("OPENLIA_REPORT_V2_ENABLED", raising=False)
-    from openlia.config import load_config
-    cfg = load_config()
-    assert cfg.report_v2_enabled is True
-```
+- `test_runtime_v2_routing.py`: rename the no-flag case from
+  `test_flag_off_equity_research_returns_report_runner` to
+  `test_flag_unset_equity_research_defaults_to_waved` and assert
+  `WavedReportRunnerHost`. The `=false` case keeps asserting
+  `ReportRunner`.
+- `test_subagent_routing.py`: the two tests that previously relied on
+  v2 being off by default must now set
+  `OPENLIA_REPORT_V2_ENABLED=false` explicitly.
 
 - [ ] **Step 3: Run all tests**
 
-Run: `uv run pytest packages/core/tests/ -v`
+Run: `uv run pytest packages/server/tests/`
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/core/src/openlia/config.py packages/core/tests/test_config.py
-git commit -m "feat(config): flip report_v2_enabled default to True (cutover)"
+git add packages/server/src/openlia_server/services/runtime.py \
+        packages/server/tests/test_services/test_runtime_v2_routing.py \
+        packages/server/tests/test_subagent_routing.py
+git commit -m "feat(report_v2): flip default to on for equity_research"
 ```
+
+Landed as commit `1704a37` on `fix/report-strictness`, 2026-05-18.
 
 ### Task 8.2: Stabilization window
 

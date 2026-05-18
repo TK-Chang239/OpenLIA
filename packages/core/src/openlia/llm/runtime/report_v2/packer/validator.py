@@ -1,4 +1,5 @@
 """Semantic validation (5A). Five enumerated checks."""
+
 from __future__ import annotations
 
 import json
@@ -102,15 +103,11 @@ def quantitative_claim_near_citation(parsed: ParsedSection) -> list[ValidationFi
     return findings
 
 
-def fetched_but_unused(
-    parsed: ParsedSection, *, facts_slice: dict
-) -> list[ValidationFinding]:
+def fetched_but_unused(parsed: ParsedSection, *, facts_slice: dict) -> list[ValidationFinding]:
     """Flag facts in the slice that never appear in prose or block YAML dumps."""
     prose = _prose_text(parsed).lower()
     block_dumps = " ".join(
-        json.dumps(s.data).lower()
-        for s in parsed.segments
-        if isinstance(s, FencedBlockSegment)
+        json.dumps(s.data).lower() for s in parsed.segments if isinstance(s, FencedBlockSegment)
     )
     haystack = prose + " " + block_dumps
     findings = []

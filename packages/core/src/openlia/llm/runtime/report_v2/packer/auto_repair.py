@@ -1,4 +1,5 @@
 """Soft fixes applied before declaring a hard fail."""
+
 from __future__ import annotations
 
 import difflib
@@ -68,9 +69,7 @@ def _rename_block_tags(outcome: RepairOutcome, *, known_tags: list[str]) -> Repa
             continue
         best = _best_match(tag, known_tags)
         if best:
-            new_md = re.sub(
-                rf"^```{re.escape(tag)}$", f"```{best}", new_md, flags=re.MULTILINE
-            )
+            new_md = re.sub(rf"^```{re.escape(tag)}$", f"```{best}", new_md, flags=re.MULTILINE)
             outcome.fixes_applied.append(f"rename_block_tag: {tag} -> {best}")
         else:
             outcome.warnings.append(f"unknown_block_tag: {tag}")

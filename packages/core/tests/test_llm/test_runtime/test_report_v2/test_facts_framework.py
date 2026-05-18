@@ -9,8 +9,13 @@ from openlia.llm.runtime.report_v2.facts.registry import default_registry
 
 FACTS_PATH = (
     Path(__file__).parent.parent.parent.parent.parent
-    / "src" / "openlia" / "llm" / "runtime" / "report_v2"
-    / "frameworks" / "stock_initiation.facts.json"
+    / "src"
+    / "openlia"
+    / "llm"
+    / "runtime"
+    / "report_v2"
+    / "frameworks"
+    / "stock_initiation.facts.json"
 )
 
 
@@ -39,12 +44,21 @@ def test_cover_section_includes_key_metrics_facts() -> None:
 @pytest.mark.parametrize(
     "section_id",
     [
-        "company_overview", "industry_overview", "products_and_services",
-        "business_model", "management_team", "historical_financials",
-        "financial_analysis", "financial_projections", "valuation_analysis",
-        "competitive_analysis", "recent_developments",
-        "competitive_advantages_and_weaknesses", "risk_analysis",
-        "investment_recommendation", "cover",
+        "company_overview",
+        "industry_overview",
+        "products_and_services",
+        "business_model",
+        "management_team",
+        "historical_financials",
+        "financial_analysis",
+        "financial_projections",
+        "valuation_analysis",
+        "competitive_analysis",
+        "recent_developments",
+        "competitive_advantages_and_weaknesses",
+        "risk_analysis",
+        "investment_recommendation",
+        "cover",
     ],
 )
 def test_every_framework_section_declares_facts(section_id: str) -> None:

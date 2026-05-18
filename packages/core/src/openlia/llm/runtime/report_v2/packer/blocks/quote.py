@@ -6,9 +6,7 @@ from openlia.llm.runtime.report_v2.packer.blocks.registry import register_block
 from openlia.reports.schema import QuoteBlock, Tag
 
 
-def _assemble(
-    *, data: dict[str, Any], citation_ids: list[int], manifest_resolver
-) -> QuoteBlock:
+def _assemble(*, data: dict[str, Any], citation_ids: list[int], manifest_resolver) -> QuoteBlock:
     sources = list(data.get("sources", []))
     tag = None
     if "tag" in data and data["tag"] is not None:

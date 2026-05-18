@@ -161,18 +161,18 @@ class _NoOpWebSearch:
 # ---------------------------------------------------------------------------
 
 
-def _build_provider(
-    *, provider_kind: str, api_key: str, model_id: str
-) -> tuple[Any, Any]:
+def _build_provider(*, provider_kind: str, api_key: str, model_id: str) -> tuple[Any, Any]:
     """Construct provider adapter + ResolvedModel for the given kind."""
     from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
 
     if provider_kind == "openai":
         from openlia.llm.adapters.openai import OpenAIAdapter
+
         adapter_cls = OpenAIAdapter
         env_var = "OPENAI_API_KEY"
     elif provider_kind == "anthropic":
         from openlia.llm.adapters.anthropic import AnthropicAdapter
+
         adapter_cls = AnthropicAdapter
         env_var = "ANTHROPIC_API_KEY"
     else:
@@ -219,16 +219,10 @@ def _build_runner(
     # - Preflight (structured output): cheaper mini model (default gpt-5.4-mini).
     if provider_kind == "openai":
         body_model_id = os.environ.get("OPENLIA_SMOKE_BODY_MODEL", "gpt-5.4").strip()
-        preflight_model_id = os.environ.get(
-            "OPENLIA_SMOKE_PREFLIGHT_MODEL", "gpt-5.4-mini"
-        ).strip()
+        preflight_model_id = os.environ.get("OPENLIA_SMOKE_PREFLIGHT_MODEL", "gpt-5.4-mini").strip()
     else:
-        body_model_id = os.environ.get(
-            "OPENLIA_SMOKE_BODY_MODEL", "claude-sonnet-4-6"
-        ).strip()
-        preflight_model_id = os.environ.get(
-            "OPENLIA_SMOKE_PREFLIGHT_MODEL", body_model_id
-        ).strip()
+        body_model_id = os.environ.get("OPENLIA_SMOKE_BODY_MODEL", "claude-sonnet-4-6").strip()
+        preflight_model_id = os.environ.get("OPENLIA_SMOKE_PREFLIGHT_MODEL", body_model_id).strip()
 
     body_provider, body_resolved = _build_provider(
         provider_kind=provider_kind, api_key=llm_api_key, model_id=body_model_id
@@ -385,9 +379,7 @@ def main() -> None:
     args = parser.parse_args()
 
     llm_api_key, provider_kind, eodhd_token = _check_env()
-    asyncio.run(
-        _run(args.ticker, args.report_type, llm_api_key, provider_kind, eodhd_token)
-    )
+    asyncio.run(_run(args.ticker, args.report_type, llm_api_key, provider_kind, eodhd_token))
 
 
 if __name__ == "__main__":

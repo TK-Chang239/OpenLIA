@@ -1,4 +1,5 @@
 """Parse a section Markdown file into frontmatter + ordered segments."""
+
 from __future__ import annotations
 
 import re
@@ -44,11 +45,16 @@ def _autoquote_frontmatter(fm_text: str) -> str:
             continue
         key, value = m.group(1), m.group(2)
         # Skip already-quoted values, collections, booleans, numbers, or empty.
-        if not value or value[0] in ("'", '"', "[", "{") or value.lower() in (
-            "true",
-            "false",
-            "null",
-            "~",
+        if (
+            not value
+            or value[0] in ("'", '"', "[", "{")
+            or value.lower()
+            in (
+                "true",
+                "false",
+                "null",
+                "~",
+            )
         ):
             out_lines.append(line)
             continue

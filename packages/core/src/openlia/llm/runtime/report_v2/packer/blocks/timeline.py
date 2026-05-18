@@ -6,9 +6,7 @@ from openlia.llm.runtime.report_v2.packer.blocks.registry import register_block
 from openlia.reports.schema import Tag, TimelineBlock, TimelineEvent
 
 
-def _assemble(
-    *, data: dict[str, Any], citation_ids: list[int], manifest_resolver
-) -> TimelineBlock:
+def _assemble(*, data: dict[str, Any], citation_ids: list[int], manifest_resolver) -> TimelineBlock:
     events = []
     for e in data["events"]:
         e = dict(e)

@@ -8,7 +8,7 @@ from openlia.llm.runtime.report_v2.packer.parser import (
     parse_section_file,
 )
 
-SECTION_FILE = '''---
+SECTION_FILE = """---
 section_id: industry_overview
 title: Industry Overview
 sources_used: [1, 3, 7]
@@ -34,7 +34,7 @@ sources: [12]
 ```
 
 Continuing analysis [7].
-'''
+"""
 
 
 def test_parse_extracts_frontmatter() -> None:
@@ -81,7 +81,7 @@ def test_parse_missing_frontmatter_raises() -> None:
 
 
 def test_parse_malformed_fence_yaml_raises_with_block_index() -> None:
-    bad = '''---
+    bad = """---
 section_id: x
 title: X
 sources_used: []
@@ -93,13 +93,13 @@ sources_used: []
 title: ok
 columns: this is not valid yaml: [it has, a colon issue, in: structure
 ```
-'''
+"""
     with pytest.raises(ValueError, match="block 0"):
         parse_section_file(bad)
 
 
 def test_parser_autoquotes_title_with_colon() -> None:
-    content = '''---
+    content = """---
 section_id: industry_overview
 title: Industry Overview: Network Security, Edge Infrastructure
 sources_used: [1]
@@ -114,13 +114,13 @@ synthesis_hooks:
 ## Body
 
 Prose here [1].
-'''
+"""
     parsed = parse_section_file(content)
     assert parsed.frontmatter["title"] == "Industry Overview: Network Security, Edge Infrastructure"
 
 
 def test_parser_preserves_already_quoted_values() -> None:
-    content = '''---
+    content = """---
 section_id: s
 title: "Industry: Tech"
 sources_used: []
@@ -135,13 +135,13 @@ synthesis_hooks:
 ## Body
 
 Text.
-'''
+"""
     parsed = parse_section_file(content)
     assert parsed.frontmatter["title"] == "Industry: Tech"
 
 
 def test_parser_yaml_error_becomes_valueerror() -> None:
-    content = '''---
+    content = """---
 section_id: s
 title: [unclosed
 sources_used: []
@@ -150,6 +150,6 @@ sources_used: []
 ## Body
 
 Text.
-'''
+"""
     with pytest.raises(ValueError, match="frontmatter YAML invalid"):
         parse_section_file(content)

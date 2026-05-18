@@ -7,7 +7,7 @@ from openlia.llm.runtime.report_v2.sections.synthesis_hooks import (
 )
 from openlia.llm.runtime.report_v2.types import SectionResult, SectionTerminalState
 
-_SECTION_WITH_HOOKS = '''\
+_SECTION_WITH_HOOKS = """\
 ---
 section_id: industry_overview
 title: Industry Overview
@@ -23,7 +23,7 @@ synthesis_hooks:
 ## Body
 
 Prose here.
-'''
+"""
 
 
 def test_extract_hooks_returns_typed_hook() -> None:
@@ -51,7 +51,7 @@ def test_extract_hooks_missing_returns_none() -> None:
     assert extract_hooks_from_section_result(result) is None
 
 
-_SECTION_WITH_LIST_HOOKS = '''\
+_SECTION_WITH_LIST_HOOKS = """\
 ---
 section_id: industry_overview
 title: Industry Overview
@@ -67,9 +67,9 @@ synthesis_hooks:
 ## Body
 
 Prose here.
-'''
+"""
 
-_SECTION_WITH_MALFORMED_HOOKS = '''\
+_SECTION_WITH_MALFORMED_HOOKS = """\
 ---
 section_id: industry_overview
 title: Industry Overview
@@ -80,9 +80,9 @@ synthesis_hooks: "this is a string"
 ## Body
 
 Prose here.
-'''
+"""
 
-_SECTION_WITH_PARTIAL_HOOKS = '''\
+_SECTION_WITH_PARTIAL_HOOKS = """\
 ---
 section_id: industry_overview
 title: Industry Overview
@@ -94,7 +94,7 @@ synthesis_hooks:
 ## Body
 
 Prose here.
-'''
+"""
 
 
 def test_extract_hooks_tolerates_list_wrapping() -> None:

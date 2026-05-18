@@ -2,6 +2,7 @@
 
 Cache-ordered: stable across runs -> stable within run -> per-section dynamic.
 """
+
 from __future__ import annotations
 
 from openlia.llm.runtime.report_v2.manifest.manifest import Manifest
@@ -192,15 +193,17 @@ def assemble_body_section_prompt(
     facts_slice: dict[str, Fact],
     word_target: int,
 ) -> str:
-    return "\n\n".join([
-        system_role,
-        f"STYLE GUIDE:\n{style_guide}",
-        f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
-        f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
-        f"FACTS FOR THIS SECTION:\n{_format_facts_slice(facts_slice)}",
-        f"Word target: {word_target}",
-        _OUTPUT_FORMAT_REMINDER,
-    ])
+    return "\n\n".join(
+        [
+            system_role,
+            f"STYLE GUIDE:\n{style_guide}",
+            f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
+            f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
+            f"FACTS FOR THIS SECTION:\n{_format_facts_slice(facts_slice)}",
+            f"Word target: {word_target}",
+            _OUTPUT_FORMAT_REMINDER,
+        ]
+    )
 
 
 def assemble_synthesis_section_prompt(
@@ -213,13 +216,15 @@ def assemble_synthesis_section_prompt(
     facts_slice: dict[str, Fact],
     word_target: int,
 ) -> str:
-    return "\n\n".join([
-        system_role,
-        f"STYLE GUIDE:\n{style_guide}",
-        f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
-        f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
-        f"SYNTHESIS HOOKS FROM BODY SECTIONS:\n{synthesis_hooks_bundle}",
-        f"FACTS FOR THIS SECTION:\n{_format_facts_slice(facts_slice)}",
-        f"Word target: {word_target}",
-        _OUTPUT_FORMAT_REMINDER,
-    ])
+    return "\n\n".join(
+        [
+            system_role,
+            f"STYLE GUIDE:\n{style_guide}",
+            f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
+            f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
+            f"SYNTHESIS HOOKS FROM BODY SECTIONS:\n{synthesis_hooks_bundle}",
+            f"FACTS FOR THIS SECTION:\n{_format_facts_slice(facts_slice)}",
+            f"Word target: {word_target}",
+            _OUTPUT_FORMAT_REMINDER,
+        ]
+    )

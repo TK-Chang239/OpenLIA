@@ -90,9 +90,7 @@ class _NullDispatcherShim:
     """
 
     async def dispatch(self, provider: str, tool: str, args: dict[str, Any]) -> Any:
-        raise RuntimeError(
-            f"no connector dispatcher available; cannot dispatch {provider}__{tool}"
-        )
+        raise RuntimeError(f"no connector dispatcher available; cannot dispatch {provider}__{tool}")
 
 
 # ---- WebSearch shim ---------------------------------------------------------
@@ -114,9 +112,7 @@ class _WebSearchShim:
             adapter = self._resolution.adapter
             if adapter is not None:
                 results = await adapter.search(query)
-                return [
-                    {"title": r.title, "url": r.url, "snippet": r.snippet} for r in results
-                ]
+                return [{"title": r.title, "url": r.url, "snippet": r.snippet} for r in results]
         return []
 
 
