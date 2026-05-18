@@ -154,8 +154,10 @@ class Report(Base, TimestampMixin):
     # services/reports.py::tombstone_report function.
     expired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     # Background report generation fields (Task 6).
-    # status: NULL for legacy sync reports; 'generating' | 'complete' |
-    #   'failed' | 'cancelled' for background-generated reports.
+    # status: 'generating' | 'complete' | 'failed' | 'cancelled'. Sync paths
+    # persist with 'complete' (services/reports.py); background paths set
+    # 'generating' on stub-row create and transition on terminal events.
+    # Legacy rows may carry NULL — kept nullable on the model for back-compat.
     status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # Short reason string set on terminal failure/cancellation.
     failure_reason: Mapped[str | None] = mapped_column(String(512), nullable=True)
