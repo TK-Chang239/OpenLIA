@@ -82,7 +82,13 @@ Body sections MUST include a `synthesis_hooks` mapping in the frontmatter with E
     bear_case_inputs:
       - "Bullet point with [N] citation marker"
 
-Do NOT wrap `synthesis_hooks` in a list. There is ONE hook per section.\
+Do NOT wrap `synthesis_hooks` in a list. There is ONE hook per section.
+
+YAML safety: if any string value contains a colon (`:`), wrap the value in double quotes. Example:
+  title: "Industry Overview: Network Security and Edge"
+  (NOT: title: Industry Overview: Network Security and Edge)
+This applies to title, eyebrow, tagline, thesis_contribution, and any other free-form string \
+in the frontmatter.\
 """
 
 

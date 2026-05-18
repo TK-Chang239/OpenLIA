@@ -10,6 +10,7 @@ import yaml
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)$", re.DOTALL)
 _FENCE_RE = re.compile(r"^```([\w:]+)\n(.*?)\n```", re.DOTALL | re.MULTILINE)
 _CITATION_RE = re.compile(r"\[(\d+)\]")
+_FM_LINE_RE = re.compile(r"^(\s*[a-z_][a-z0-9_]*\s*:)\s+(.+?)\s*$", re.IGNORECASE)
 
 
 @dataclass
@@ -31,6 +32,33 @@ Segment = TextSegment | FencedBlockSegment
 class ParsedSection:
     frontmatter: dict[str, Any]
     segments: list[Segment]
+
+
+def _autoquote_frontmatter(fm_text: str) -> str:
+    """Auto-quote unquoted scalar values containing colons before YAML parsing."""
+    out_lines = []
+    for line in fm_text.split("\n"):
+        m = _FM_LINE_RE.match(line)
+        if not m:
+            out_lines.append(line)
+            continue
+        key, value = m.group(1), m.group(2)
+        # Skip already-quoted values, collections, booleans, numbers, or empty.
+        if not value or value[0] in ("'", '"', "[", "{") or value.lower() in (
+            "true",
+            "false",
+            "null",
+            "~",
+        ):
+            out_lines.append(line)
+            continue
+        # Auto-quote if the value contains a colon-space sequence or a trailing colon.
+        if ": " in value or value.endswith(":"):
+            safe = value.replace('"', '\\"')
+            out_lines.append(f'{key} "{safe}"')
+        else:
+            out_lines.append(line)
+    return "\n".join(out_lines)
 
 
 def _normalize(content: str) -> str:
@@ -60,7 +88,11 @@ def parse_section_file(content: str) -> ParsedSection:
     if not fm_match:
         raise ValueError("missing or malformed frontmatter")
 
-    frontmatter = yaml.safe_load(fm_match.group(1)) or {}
+    fm_text = _autoquote_frontmatter(fm_match.group(1))
+    try:
+        frontmatter = yaml.safe_load(fm_text) or {}
+    except yaml.YAMLError as e:
+        raise ValueError(f"frontmatter YAML invalid: {e}") from e
     body = fm_match.group(2)
 
     segments: list[Segment] = []

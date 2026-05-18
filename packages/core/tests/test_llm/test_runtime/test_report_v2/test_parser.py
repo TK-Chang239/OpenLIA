@@ -96,3 +96,60 @@ columns: this is not valid yaml: [it has, a colon issue, in: structure
 '''
     with pytest.raises(ValueError, match="block 0"):
         parse_section_file(bad)
+
+
+def test_parser_autoquotes_title_with_colon() -> None:
+    content = '''---
+section_id: industry_overview
+title: Industry Overview: Network Security, Edge Infrastructure
+sources_used: [1]
+synthesis_hooks:
+  thesis_contribution: "Edge expanding fast."
+  bull_case_inputs:
+    - "Strong growth [1]"
+  bear_case_inputs:
+    - "Margin pressure [1]"
+---
+
+## Body
+
+Prose here [1].
+'''
+    parsed = parse_section_file(content)
+    assert parsed.frontmatter["title"] == "Industry Overview: Network Security, Edge Infrastructure"
+
+
+def test_parser_preserves_already_quoted_values() -> None:
+    content = '''---
+section_id: s
+title: "Industry: Tech"
+sources_used: []
+synthesis_hooks:
+  thesis_contribution: "Something."
+  bull_case_inputs:
+    - "Bull [1]"
+  bear_case_inputs:
+    - "Bear [1]"
+---
+
+## Body
+
+Text.
+'''
+    parsed = parse_section_file(content)
+    assert parsed.frontmatter["title"] == "Industry: Tech"
+
+
+def test_parser_yaml_error_becomes_valueerror() -> None:
+    content = '''---
+section_id: s
+title: [unclosed
+sources_used: []
+---
+
+## Body
+
+Text.
+'''
+    with pytest.raises(ValueError, match="frontmatter YAML invalid"):
+        parse_section_file(content)
