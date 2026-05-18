@@ -69,6 +69,7 @@ def assemble_report(
     department: str,
     ticker: str,
     generated_at: datetime,
+    on_omitted_block: Callable[[str, str, str], None] | None = None,
 ) -> ReportSchema:
     """Convert wave output into a validated ReportSchema."""
     id_map = _resolve_marker_to_cid(manifest)
@@ -86,10 +87,27 @@ def assemble_report(
         section_id = fm.get("section_id", sr.section_id)
         title = fm.get("title", section_id)
         blocks: list[Block] = []
-        for seg in parsed.segments:
-            block = _segment_to_block(seg, manifest_resolver=resolver)
-            if block is not None:
-                blocks.append(block)
+        for idx, seg in enumerate(parsed.segments):
+            block_type = seg.block_type if isinstance(seg, FencedBlockSegment) else "text"
+            try:
+                block = _segment_to_block(seg, manifest_resolver=resolver)
+                if block is not None:
+                    blocks.append(block)
+            except Exception as exc:
+                summary = str(exc)[:120]
+                print(
+                    f"[assembler] section {section_id} block #{idx} ({block_type}): "
+                    f"omitted due to assembly error: {type(exc).__name__}: {summary}",
+                    flush=True,
+                )
+                if on_omitted_block is not None:
+                    on_omitted_block(section_id, block_type, type(exc).__name__)
+                blocks.append(
+                    TextBlock(
+                        type="text",
+                        content=f"[block omitted: {block_type} failed to assemble — see telemetry]",
+                    )
+                )
         assembled_sections.append(Section(id=section_id, title=title, blocks=blocks))
 
     return ReportSchema(

@@ -20,6 +20,13 @@ class CrossSectionFinding:
 
 
 @dataclass
+class OmittedBlock:
+    section_id: str
+    block_type: str
+    reason: str
+
+
+@dataclass
 class ReportTelemetry:
     sections: dict[str, dict[str, Any]] = field(default_factory=dict)
     section_states: Counter = field(default_factory=Counter)
@@ -28,6 +35,7 @@ class ReportTelemetry:
     search_sentinels: dict[str, list[str]] = field(default_factory=dict)
     auto_repair_fixes: Counter = field(default_factory=Counter)
     cross_section_findings: list[CrossSectionFinding] = field(default_factory=list)
+    omitted_blocks: list[OmittedBlock] = field(default_factory=list)
 
     def record_section(self, result: SectionResult) -> None:
         self.sections[result.section_id] = {
@@ -55,7 +63,15 @@ class ReportTelemetry:
             CrossSectionFinding(check=check, sections=sections, detail=detail)
         )
 
+    def record_omitted_block(self, section_id: str, block_type: str, reason: str) -> None:
+        self.omitted_blocks.append(
+            OmittedBlock(section_id=section_id, block_type=block_type, reason=reason)
+        )
+
     def snapshot(self) -> dict[str, Any]:
+        omitted_counts: Counter = Counter()
+        for ob in self.omitted_blocks:
+            omitted_counts[f"{ob.section_id}/{ob.block_type}"] += 1
         return {
             "sections": dict(self.sections),
             "section_states": dict(self.section_states),
@@ -67,4 +83,9 @@ class ReportTelemetry:
                 {"check": f.check, "sections": f.sections, "detail": f.detail}
                 for f in self.cross_section_findings
             ],
+            "omitted_blocks": [
+                {"section_id": ob.section_id, "block_type": ob.block_type, "reason": ob.reason}
+                for ob in self.omitted_blocks
+            ],
+            "omitted_block_counts": dict(omitted_counts),
         }
