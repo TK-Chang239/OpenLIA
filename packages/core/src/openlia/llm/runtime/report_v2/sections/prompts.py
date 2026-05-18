@@ -9,7 +9,40 @@ from openlia.llm.runtime.report_v2.types import Fact
 
 # All 22 supported fenced block tags.
 _OUTPUT_FORMAT_REMINDER = """\
-Output format: Markdown file.
+CRITICAL OUTPUT FORMAT — your response must be the section file content EXACTLY in this shape, \
+with no preamble, no markdown code fences, no explanations before or after:
+
+---
+section_id: <the section_id from your brief>
+title: <Human Readable Title>
+sources_used: [<list of [N] manifest ids you cite in this section>]
+synthesis_hooks:
+  thesis_contribution: "<one sentence>"
+  bull_case_inputs:
+    - "<bullet with [N] citation marker>"
+  bear_case_inputs:
+    - "<bullet with [N] citation marker>"
+---
+
+## <Section Title>
+
+<your prose here, with [N] inline citation markers>
+
+```chart:bar
+title: ...
+sources: [N]
+```
+
+<more prose>
+
+YOUR RESPONSE MUST:
+- Start with `---` on its very first line (no leading whitespace, no preamble, no code fences)
+- End immediately after the last word of your final prose paragraph or fenced block \
+(no trailing explanation, no closing code fence)
+- Use exactly `---` (three hyphens on a line by themselves) to open AND close the YAML frontmatter
+- Include the `synthesis_hooks` mapping (NOT a list — a single object)
+
+Output format details:
 - YAML frontmatter with: section_id, title, sources_used (list of [N] manifest ids you cite), \
 synthesis_hooks (only for body sections)
 - Markdown body for prose; use [N] inline markers to cite manifest entries

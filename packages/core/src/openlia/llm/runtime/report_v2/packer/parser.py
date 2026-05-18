@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-_FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---\n(.*)$", re.DOTALL)
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)$", re.DOTALL)
 _FENCE_RE = re.compile(r"^```([\w:]+)\n(.*?)\n```", re.DOTALL | re.MULTILINE)
 _CITATION_RE = re.compile(r"\[(\d+)\]")
 
@@ -33,8 +33,30 @@ class ParsedSection:
     segments: list[Segment]
 
 
+def _normalize(content: str) -> str:
+    # Normalize line endings.
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
+    # Strip leading whitespace.
+    content = content.lstrip()
+    # Strip markdown code-fence wrapping.
+    fence_match = re.match(r"^```(?:markdown|md)?\s*\n(.*?)\n```\s*$", content, re.DOTALL)
+    if fence_match:
+        content = fence_match.group(1)
+    # Strip leading prose preamble (anything before the first `---` line).
+    # Only do this if a closing `---` also exists — i.e. a valid YAML block follows.
+    lines = content.split("\n")
+    for i, line in enumerate(lines):
+        if line.strip() == "---":
+            for j in range(i + 1, len(lines)):
+                if lines[j].strip() == "---":
+                    return "\n".join(lines[i:])
+            break  # No closing `---`; leave content as-is and let regex fail.
+    return content
+
+
 def parse_section_file(content: str) -> ParsedSection:
-    fm_match = _FRONTMATTER_RE.match(content.lstrip())
+    content = _normalize(content)
+    fm_match = _FRONTMATTER_RE.match(content)
     if not fm_match:
         raise ValueError("missing or malformed frontmatter")
 
