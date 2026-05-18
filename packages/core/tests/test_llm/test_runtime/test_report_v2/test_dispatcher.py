@@ -113,3 +113,41 @@ async def test_dispatch_runs_sections_in_parallel() -> None:
     )
     assert len(results) == 5
     assert writer.write.await_count == 5
+
+
+@pytest.mark.asyncio
+async def test_dispatch_respects_concurrency_semaphore() -> None:
+    """At most 2 concurrent write() calls in flight when Semaphore(2) is passed."""
+    import asyncio
+
+    max_concurrent = 0
+    current_concurrent = 0
+
+    async def _tracked_write(prompt: str) -> str:
+        nonlocal max_concurrent, current_concurrent
+        current_concurrent += 1
+        if current_concurrent > max_concurrent:
+            max_concurrent = current_concurrent
+        await asyncio.sleep(0)  # yield to let other coroutines attempt to acquire
+        current_concurrent -= 1
+        return GOOD_MD
+
+    writer = AsyncMock()
+    writer.write.side_effect = _tracked_write
+
+    dispatches = [
+        SectionDispatch(section_id=f"s{i}", prompt="x", target_word_count=600, facts_slice={})
+        for i in range(10)
+    ]
+    semaphore = asyncio.Semaphore(2)
+    results = await dispatch_sections(
+        dispatches=dispatches,
+        writer=writer,
+        validator=lambda p, **kw: [],
+        max_retries=1,
+        known_block_tags=["text"],
+        concurrency_semaphore=semaphore,
+    )
+    assert len(results) == 10
+    assert writer.write.await_count == 10
+    assert max_concurrent <= 2
