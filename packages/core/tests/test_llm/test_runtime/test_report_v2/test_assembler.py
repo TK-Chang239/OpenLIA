@@ -131,6 +131,49 @@ def test_assemble_produces_valid_reportschema() -> None:
     assert len(thesis.blocks) >= 1
 
 
+def test_assemble_populates_rail_quick_stats_from_facts_pack() -> None:
+    """Rail.quick_stats must be populated whenever the underlying facts
+    are present. Previously the assembler returned rail=None entirely so
+    the right sidebar rendered empty in the browser."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+
+    assert report.rail is not None
+    labels = {m.label for m in report.rail.quick_stats}
+    # All four facts in the fixture should land in the rail
+    assert "Sector" in labels
+    assert "Market Cap" in labels
+    assert "P/E (TTM)" in labels
+    # Source attribution must travel with each metric
+    for m in report.rail.quick_stats:
+        assert m.source_ids and m.source_ids[0].startswith("c")
+
+
+def test_assemble_populates_meta_stats_from_outputs() -> None:
+    """MetaStats.sources_count and sections_count are deterministic from
+    the assembled outputs. Sidebar stats panel renders these."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+
+    assert report.meta_stats is not None
+    assert report.meta_stats.sources_count == len(report.citations)
+    assert report.meta_stats.sections_count == len(report.sections)
+    # est_read_minutes is bounded by word count; never zero when sections have text
+    assert report.meta_stats.est_read_minutes >= 1
+
+
 def test_assemble_fills_cover_key_metrics_from_facts_pack() -> None:
     report = assemble_report(
         manifest=_make_manifest(),
