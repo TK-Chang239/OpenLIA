@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import os
 import socket
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Final
 from urllib.parse import urlparse
 
-_DEFAULT_VITE_URL: Final[str] = "http://127.0.0.1:5173"
+# Probed in order. 8080 is this project's configured Vite port
+# (frontend/vite.config.ts); 5173 is the upstream Vite default and
+# kept as a fallback for forks that change the port back.
+_DEFAULT_VITE_URLS: Final[tuple[str, ...]] = (
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:5173",
+)
 
 
 class RenderBaseUrlResolver:
@@ -17,7 +23,8 @@ class RenderBaseUrlResolver:
       2. server's own URL, if `is_spa_served_locally()` returns True
          (which means the FastAPI process is mounting frontend/dist itself
          per OPENLIA_FRONTEND_DIST, so /reports/:id/render resolves)
-      3. Vite dev server at http://127.0.0.1:5173, if `probe` returns True
+      3. Vite dev server: probe each URL in `vite_urls`; first that
+         answers wins. Defaults are :8080 (this project) then :5173.
       4. None — caller surfaces a 503 with a remediation hint
     """
 
@@ -27,12 +34,12 @@ class RenderBaseUrlResolver:
         server_url: str,
         is_spa_served_locally: Callable[[], bool],
         probe: Callable[[str], bool],
-        vite_url: str = _DEFAULT_VITE_URL,
+        vite_urls: Iterable[str] = _DEFAULT_VITE_URLS,
     ) -> None:
         self._server_url = server_url.rstrip("/")
         self._is_spa_served_locally = is_spa_served_locally
         self._probe = probe
-        self._vite_url = vite_url.rstrip("/")
+        self._vite_urls = tuple(url.rstrip("/") for url in vite_urls)
         self._cached: str | None = None
 
     def resolve(self) -> str | None:
@@ -45,9 +52,10 @@ class RenderBaseUrlResolver:
         if self._is_spa_served_locally():
             self._cached = self._server_url
             return self._cached
-        if self._probe(self._vite_url):
-            self._cached = self._vite_url
-            return self._cached
+        for url in self._vite_urls:
+            if self._probe(url):
+                self._cached = url
+                return self._cached
         return None
 
     def invalidate(self) -> None:

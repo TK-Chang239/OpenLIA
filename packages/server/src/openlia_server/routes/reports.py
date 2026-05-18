@@ -963,7 +963,7 @@ def build_reports_router(
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "Report rendering requires a built frontend (set OPENLIA_FRONTEND_DIST) "
-                "or a running Vite dev server on :5173. Set "
+                "or a running Vite dev server on :8080 (or :5173). Set "
                 "OPENLIA_REPORT_RENDER_BASE_URL to override.",
             )
 
@@ -1035,7 +1035,7 @@ def build_reports_router(
             raise HTTPException(
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "Report rendering requires a built frontend (set OPENLIA_FRONTEND_DIST) "
-                "or a running Vite dev server on :5173.",
+                "or a running Vite dev server on :8080 (or :5173).",
             )
 
         payload = schema.model_dump(mode="json")
