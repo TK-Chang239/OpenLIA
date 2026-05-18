@@ -37,9 +37,31 @@ def extract_hooks_from_section_result(result: SectionResult) -> SynthesisHook | 
     raw = parsed.frontmatter.get("synthesis_hooks")
     if not raw:
         return None
+
+    # Defensive: some writers wrap the single hook in a list — unwrap it.
+    if isinstance(raw, list):
+        if raw and isinstance(raw[0], dict):
+            raw = raw[0]
+        else:
+            reason = "list with no dict element" if raw else "empty list"
+            print(
+                f"[synthesis_hooks] section {result.section_id!r}: malformed/missing hooks"
+                f" ({reason}); skipping",
+                flush=True,
+            )
+            return None
+
+    if not isinstance(raw, dict):
+        print(
+            f"[synthesis_hooks] section {result.section_id!r}: malformed/missing hooks"
+            f" (expected dict, got {type(raw).__name__!r}); skipping",
+            flush=True,
+        )
+        return None
+
     return SynthesisHook(
         section_id=result.section_id,
-        thesis_contribution=raw.get("thesis_contribution", ""),
+        thesis_contribution=raw.get("thesis_contribution") or "",
         bull_case_inputs=list(raw.get("bull_case_inputs") or []),
         bear_case_inputs=list(raw.get("bear_case_inputs") or []),
     )
