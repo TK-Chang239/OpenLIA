@@ -181,6 +181,70 @@ def test_group_recursive_assembles_child_blocks() -> None:
     assert block.blocks[1].source_ids == ["c1"]
 
 
+def test_key_finding_accepts_text_alias() -> None:
+    # Report 82e063b6 shipped 7 omitted key_finding blocks because the LLM
+    # reached for ``text`` instead of ``content``. Aliases must survive.
+    entry = default_block_registry.get("key_finding")
+    assert entry is not None
+    block = entry.assembler(
+        data={"text": "Margins expanded 220bps."},
+        citation_ids=[],
+        manifest_resolver=_resolver,
+    )
+    assert isinstance(block, KeyFindingBlock)
+    assert block.content == "Margins expanded 220bps."
+
+
+def test_pull_quote_accepts_quote_alias() -> None:
+    entry = default_block_registry.get("pull_quote")
+    assert entry is not None
+    block = entry.assembler(
+        data={"quote": "We are accelerating.", "author": "CFO"},
+        citation_ids=[],
+        manifest_resolver=_resolver,
+    )
+    assert isinstance(block, PullQuoteBlock)
+    assert block.text == "We are accelerating."
+    assert block.attribution == "CFO"
+
+
+def test_callout_grid_accepts_body_alias() -> None:
+    entry = default_block_registry.get("callout_grid")
+    assert entry is not None
+    block = entry.assembler(
+        data={
+            "items": [
+                {"heading": "Pillar 1", "body": "Workflow automation."},
+                {"title": "Pillar 2", "description": "AI integration."},
+            ]
+        },
+        citation_ids=[],
+        manifest_resolver=_resolver,
+    )
+    assert isinstance(block, CalloutGridBlock)
+    assert block.items[0].title == "Pillar 1"
+    assert block.items[0].description == "Workflow automation."
+    assert block.items[1].title == "Pillar 2"
+
+
+def test_timeline_accepts_date_and_event_aliases() -> None:
+    entry = default_block_registry.get("timeline")
+    assert entry is not None
+    block = entry.assembler(
+        data={
+            "events": [
+                {"date": "2024-Q3", "event": "Launched Now Assist."},
+                {"when": "2024-11", "what": "Acquired Element AI."},
+            ]
+        },
+        citation_ids=[],
+        manifest_resolver=_resolver,
+    )
+    assert isinstance(block, TimelineBlock)
+    assert block.events[0].when == "2024-Q3"
+    assert block.events[0].what == "Launched Now Assist."
+
+
 def test_group_raises_on_unknown_child_type() -> None:
     entry = default_block_registry.get("group")
     assert entry is not None

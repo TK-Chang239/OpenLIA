@@ -187,6 +187,118 @@ metrics:
 sources: [1]
 ```
 
+```key_finding
+content: "Revenue grew at a 30% CAGR over 2020-2024, outpacing the peer median of 18%."
+sources: [1, 3]
+```
+
+```pull_quote
+text: "Our platform is becoming the system of record for the AI-native enterprise."
+attribution: "Bill McDermott, CEO"
+source: "Q4 2024 earnings call"
+timestamp: "2025-01-29"
+sources: [2]
+```
+
+```callout_grid
+columns: 3
+items:
+  - eyebrow: "Pillar 1"
+    title: "Workflow automation"
+    description: "Now serves as the system of record across IT, HR, and customer service."
+  - eyebrow: "Pillar 2"
+    title: "AI integration"
+    description: "Generative-AI co-pilots embedded into every workflow surface."
+  - eyebrow: "Pillar 3"
+    title: "Industry verticals"
+    description: "Pre-packaged solutions for telecom, banking, and public sector."
+sources: [1]
+```
+
+```timeline
+title: "Recent catalysts"
+events:
+  - when: "2024-Q3"
+    what: "Launched Now Assist AI suite across all workflows"
+    impact: "Lifted ARR guidance by 2 percentage points"
+    impact_tag: {label: "Beat", tone: "positive"}
+  - when: "2024-11"
+    what: "Acquired Element AI for $230M"
+    impact: "Adds NLP and computer-vision research talent"
+  - when: "2025-Q1"
+    what: "Reorganized go-to-market into industry-aligned squads"
+```
+
+```chart:pie
+title: "Revenue mix by geography"
+segments:
+  - label: "North America"
+    value: 65
+  - label: "EMEA"
+    value: 22
+  - label: "APAC"
+    value: 13
+donut: true
+sources: [1]
+```
+
+```chart:waterfall
+title: "FY24 revenue bridge ($M)"
+items:
+  - label: "FY23 revenue"
+    value: 8971
+    type: "total"
+  - label: "Existing customer expansion"
+    value: 1645
+    type: "increase"
+  - label: "New logos"
+    value: 882
+    type: "increase"
+  - label: "Churn"
+    value: -220
+    type: "decrease"
+  - label: "FY24 revenue"
+    value: 11278
+    type: "total"
+sources: [1]
+```
+
+```table
+title: "Peer multiples"
+headers:
+  - {key: "company", label: "Company"}
+  - {key: "pe", label: "P/E (TTM)", align: "right"}
+  - {key: "growth", label: "Rev growth %", align: "right"}
+rows:
+  - {company: "ServiceNow", pe: "56.6x", growth: "23%"}
+  - {company: "Workday", pe: "44.1x", growth: "16%"}
+  - {company: "Salesforce", pe: "28.9x", growth: "11%"}
+sources: [1, 2]
+```
+
+```bullet_list
+items:
+  - "Backlog of $20.6B at the end of Q4, up 26% year on year"
+  - "Net retention rate of 124%, the highest in the peer set"
+  - "Operating cash flow margin expanded 220 basis points"
+tone: "positive"
+```
+
+```quote
+text: "We see ==durable acceleration== in subscription bookings."
+speaker: "Gina Mastantuono"
+role: "CFO, ServiceNow"
+timestamp: "Q4 2024 earnings call"
+tag: {label: "Guidance", tone: "positive"}
+sources: [3]
+```
+
+```rating_badge
+rating: "BUY"
+previous_rating: "HOLD"
+change_date: "2026-05-18"
+```
+
 ```comparison_split
 left:
   title: "Bull Case"
