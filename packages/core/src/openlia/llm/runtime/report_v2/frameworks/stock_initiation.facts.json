@@ -1,0 +1,20 @@
+{
+  "report_type": "stock_initiation",
+  "sections": {
+    "cover": ["company_name", "sector", "market_cap", "pe_ratio_ttm"],
+    "company_overview": ["company_name", "sector", "market_cap"],
+    "industry_overview": ["sector"],
+    "products_and_services": ["company_name"],
+    "business_model": ["company_name", "revenue_cagr_3y", "gross_margin_ttm"],
+    "management_team": ["company_name"],
+    "historical_financials": ["revenue_annual", "gross_profit_annual", "revenue_cagr_3y", "gross_margin_ttm"],
+    "financial_analysis": ["revenue_cagr_3y", "gross_margin_ttm"],
+    "financial_projections": ["revenue_annual", "revenue_cagr_3y"],
+    "valuation_analysis": ["market_cap", "pe_ratio_ttm", "revenue_cagr_3y"],
+    "competitive_analysis": ["sector"],
+    "recent_developments": ["company_name"],
+    "competitive_advantages_and_weaknesses": ["sector", "gross_margin_ttm"],
+    "risk_analysis": ["sector", "revenue_cagr_3y"],
+    "investment_recommendation": ["company_name", "market_cap", "pe_ratio_ttm", "revenue_cagr_3y"]
+  }
+}
