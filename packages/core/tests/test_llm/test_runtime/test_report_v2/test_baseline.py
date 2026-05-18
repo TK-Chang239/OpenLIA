@@ -11,14 +11,18 @@ from openlia.llm.runtime.report_v2.manifest.baseline import (
 
 
 def test_baseline_catalog_has_expected_calls() -> None:
+    """Tool names must match the EODHD connector's actual cached_tools.
+    See packages/core/src/openlia/llm/runtime/report_v2/manifest/baseline.py
+    for the full rationale on which tools were dropped/renamed."""
     names = {(c.provider, c.tool) for c in BASELINE_STOCK_INITIATION}
-    assert ("eodhd", "get_fundamentals_data") in names
-    assert ("eodhd", "get_holders") in names
-    assert ("eodhd", "get_insider_transactions") in names
-    assert ("eodhd", "get_historical_prices") in names
-    assert ("eodhd", "get_live_prices") in names
-    assert ("news", "recent_news") in names
-    assert len(BASELINE_STOCK_INITIATION) >= 10
+    assert ("eodhd", "get_fundamentals_data") in names  # hard requirement for fact extractors
+    assert ("eodhd", "get_live_stock_prices") in names
+    assert ("eodhd", "get_historical_market_capitalization_data") in names
+    assert ("eodhd", "get_eod_historical_stock_market_data") in names
+    assert ("eodhd", "get_earning_trends_data") in names
+    assert ("eodhd", "get_insider_transactions_data") in names
+    assert ("eodhd", "financial_news") in names
+    assert len(BASELINE_STOCK_INITIATION) >= 6
 
 
 @pytest.mark.asyncio
