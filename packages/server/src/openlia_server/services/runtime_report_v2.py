@@ -269,9 +269,10 @@ class WavedReportRunnerHost:
         websearch_shim = _WebSearchShim(web_search_resolution)
 
         # 5. Build connector dispatcher shim.
-        #    ToolDispatcher wraps a DataProviderDispatcher as _data_dispatcher.
-        #    The real v2 connector dispatcher is inside ReportDispatcherBridge.
-        data_dispatcher = getattr(self._tools, "_data_dispatcher", None)
+        #    ToolDispatcher stores its DataProviderDispatcher as ``_data``
+        #    (see core/llm/runtime/tools.py:367). The real v2 connector
+        #    Dispatcher is inside ReportDispatcherBridge as ``.dispatcher``.
+        data_dispatcher = getattr(self._tools, "_data", None)
         if data_dispatcher is not None and hasattr(data_dispatcher, "dispatcher"):
             # ReportDispatcherBridge — unwrap the inner Dispatcher.
             dispatcher_shim: Any = _V2DispatcherShim(data_dispatcher.dispatcher)
