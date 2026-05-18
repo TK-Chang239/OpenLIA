@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from openlia.llm.runtime.report_v2.packer.blocks import table, text  # noqa: F401 trigger registration
+from openlia.llm.runtime.report_v2.packer.blocks import (  # noqa: F401 trigger registration
+    table,
+    text,
+)
 from openlia.llm.runtime.report_v2.packer.blocks.registry import default_block_registry
 from openlia.reports.schema import TableBlock, TextBlock
 

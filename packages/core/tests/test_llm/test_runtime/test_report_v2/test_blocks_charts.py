@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.runtime.report_v2.packer.blocks import (  # noqa: F401 trigger registration
     chart_area,
     chart_bar,
