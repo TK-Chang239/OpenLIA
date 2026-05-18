@@ -263,6 +263,7 @@ def _build_runner(
         preflight_provider=preflight_provider,
         body_writer=body_writer,
         synthesis_writer=synthesis_writer,
+        concurrency_limit=3,
     )
 
 

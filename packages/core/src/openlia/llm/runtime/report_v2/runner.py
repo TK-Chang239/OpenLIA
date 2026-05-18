@@ -137,6 +137,7 @@ class WavedReportRunner:
         max_retries: int = 1,
         sse_emitter: Callable[[Any], Awaitable[None]] | None = None,
         report_id: str | None = None,
+        concurrency_limit: int = 4,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -152,6 +153,7 @@ class WavedReportRunner:
         self.max_retries = max_retries
         self.sse_emitter = sse_emitter
         self.report_id = report_id or uuid.uuid4().hex
+        self.concurrency_limit = concurrency_limit
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -171,6 +173,7 @@ class WavedReportRunner:
             (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
         )
         rid = self.report_id
+        semaphore = asyncio.Semaphore(self.concurrency_limit)
 
         await self._emit(
             ReportStart(
@@ -198,18 +201,18 @@ class WavedReportRunner:
             t0 = time.monotonic()
             all_sections = (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
             known_facts = default_registry.names()
-            preflights = await asyncio.gather(
-                *(
-                    run_section_preflight(
+
+            async def _bounded_preflight(sid: str) -> Any:
+                async with semaphore:
+                    return await run_section_preflight(
                         provider=self.preflight_provider,
                         section_id=sid,
                         section_brief=DEFAULT_BRIEFS[sid],
                         manifest=manifest,
                         known_fact_names=known_facts,
                     )
-                    for sid in all_sections
-                )
-            )
+
+            preflights = await asyncio.gather(*(_bounded_preflight(sid) for sid in all_sections))
             for d in preflights:
                 if d.proposed_facts:
                     self.telemetry.record_proposed_facts(d.section_id, d.proposed_facts)
@@ -260,6 +263,7 @@ class WavedReportRunner:
                 validator=validate_section,
                 max_retries=self.max_retries,
                 known_block_tags=default_block_registry.tags(),
+                concurrency_semaphore=semaphore,
             )
             for r in body_results:
                 self.telemetry.record_section(r)
@@ -297,6 +301,7 @@ class WavedReportRunner:
                 validator=validate_section,
                 max_retries=self.max_retries,
                 known_block_tags=default_block_registry.tags(),
+                concurrency_semaphore=semaphore,
             )
             for r in synth_results:
                 self.telemetry.record_section(r)

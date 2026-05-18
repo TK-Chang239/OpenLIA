@@ -39,6 +39,7 @@ async def _dispatch_one(
     validator: Callable[..., list[ValidationFinding]],
     max_retries: int,
     known_block_tags: list[str],
+    concurrency_semaphore: asyncio.Semaphore | None = None,
 ) -> SectionResult:
     attempts = 0
     failed_attempts: list[str] = []
@@ -47,7 +48,11 @@ async def _dispatch_one(
 
     while attempts <= max_retries:
         attempts += 1
-        raw = await writer.write(prompt)
+        if concurrency_semaphore is not None:
+            async with concurrency_semaphore:
+                raw = await writer.write(prompt)
+        else:
+            raw = await writer.write(prompt)
         repair = repair_section(raw, known_tags=known_block_tags)
         markdown = repair.markdown
         try:
@@ -121,6 +126,7 @@ async def dispatch_sections(
     validator: Callable[..., list[ValidationFinding]],
     max_retries: int,
     known_block_tags: list[str],
+    concurrency_semaphore: asyncio.Semaphore | None = None,
 ) -> list[SectionResult]:
     tasks = [
         _dispatch_one(
@@ -129,6 +135,7 @@ async def dispatch_sections(
             validator=validator,
             max_retries=max_retries,
             known_block_tags=known_block_tags,
+            concurrency_semaphore=concurrency_semaphore,
         )
         for d in dispatches
     ]
