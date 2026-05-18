@@ -199,9 +199,9 @@ def _build_runner(
     )
     from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
 
-    # Model: claude-sonnet-4-5 — good quality / cost balance for smoke testing.
+    # Model: claude-sonnet-4-6 — good quality / cost balance for smoke testing.
     # Override via ANTHROPIC_SMOKE_MODEL env var if desired.
-    model_id = os.environ.get("ANTHROPIC_SMOKE_MODEL", "claude-sonnet-4-5-20251120").strip()
+    model_id = os.environ.get("ANTHROPIC_SMOKE_MODEL", "claude-sonnet-4-6").strip()
 
     credentials = ProviderCredentials(
         api_key=anthropic_key,
