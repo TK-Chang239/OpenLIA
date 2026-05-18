@@ -21,7 +21,9 @@ from openlia.reports.schema import (
     Block,
     Citation,
     Cover,
+    MetaStats,
     Metric,
+    Rail,
     ReportSchema,
     Section,
     TextBlock,
@@ -77,6 +79,7 @@ def assemble_report(
     resolver = _make_resolver(id_map)
     citations = _build_citations(manifest)
     cover = _build_cover(facts_pack, ticker=ticker)
+    rail = _build_rail(facts_pack)
 
     assembled_sections: list[Section] = []
     for sr in sections:
@@ -111,13 +114,17 @@ def assemble_report(
                 )
         assembled_sections.append(Section(id=section_id, title=title, blocks=blocks))
 
+    meta_stats = _build_meta_stats(citations=citations, sections=assembled_sections)
+
     return ReportSchema(
         schema_version="2.0",
         department=department,
         generated_at=generated_at,
         cover=cover,
         sections=assembled_sections,
+        rail=rail,
         citations=citations,
+        meta_stats=meta_stats,
     )
 
 
@@ -213,7 +220,7 @@ def _build_cover(facts_pack: FactsPack, *, ticker: str) -> Cover:
         key_metrics.append(
             Metric(
                 label="P/E (TTM)",
-                value=f"{pe_ratio}x",
+                value=f"{float(pe_ratio):.1f}x",
                 source_ids=pe_source_ids,
             )
         )
@@ -224,6 +231,58 @@ def _build_cover(facts_pack: FactsPack, *, ticker: str) -> Cover:
         ticker=ticker,
         tagline="Equity Research Initiation",
         key_metrics=key_metrics,
+    )
+
+
+def _build_rail(facts_pack: FactsPack) -> Rail:
+    """Build the right-rail summary from FactsPack.
+
+    Pulls every deterministic/compute fact that's available — keeps the
+    rail useful even when only the fundamentals payload landed. Verdict
+    and sparkline are deferred: verdict requires model output (rating /
+    target / upside live in the investment_recommendation section);
+    sparkline needs an EOD-history fact extractor that doesn't exist yet.
+    """
+    facts = facts_pack.facts
+    quick_stats: list[Metric] = []
+
+    def _push_fact(label: str, fact_name: str, formatter: Callable[[Any], str]) -> None:
+        if fact_name not in facts:
+            return
+        fact = facts[fact_name]
+        if fact.value is None:
+            return
+        source_ids = [f"c{sid}" for sid in fact.source_ids]
+        quick_stats.append(Metric(label=label, value=formatter(fact.value), source_ids=source_ids))
+
+    _push_fact("Sector", "sector", lambda v: str(v))
+    _push_fact("Market Cap", "market_cap", _format_market_cap)
+    _push_fact("P/E (TTM)", "pe_ratio_ttm", lambda v: f"{float(v):.1f}x")
+    _push_fact("Revenue CAGR (3y)", "revenue_cagr_3y", lambda v: f"{v * 100:.1f}%")
+    _push_fact("Gross Margin (TTM)", "gross_margin_ttm", lambda v: f"{v * 100:.1f}%")
+
+    return Rail(quick_stats=quick_stats)
+
+
+def _build_meta_stats(*, citations: list[Citation], sections: list[Section]) -> MetaStats:
+    """Build server-authoritative report stats.
+
+    Deterministic from assembler inputs — model_id, tokens_used, and
+    web_search_queries would require threading through from the runner,
+    so they stay None here and can be patched in by the runtime layer
+    if needed."""
+    word_count = 0
+    for section in sections:
+        for block in section.blocks:
+            content = getattr(block, "content", None)
+            if isinstance(content, str):
+                word_count += len(content.split())
+    est_read_minutes = max(1, round(word_count / 250)) if word_count else 0
+
+    return MetaStats(
+        sources_count=len(citations),
+        sections_count=len(sections),
+        est_read_minutes=est_read_minutes,
     )
 
 

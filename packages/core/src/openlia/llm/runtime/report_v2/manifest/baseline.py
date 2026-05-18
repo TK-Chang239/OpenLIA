@@ -21,23 +21,37 @@ class BaselineCall:
     args: dict[str, Any] = field(default_factory=dict)
 
     def identifier(self) -> str:
-        ticker = self.args.get("ticker") or self.args.get("query") or ""
+        # EODHD exposes the ticker under different keys depending on the
+        # tool (`ticker`, `symbol`, `symbols`, `code`, `s`). Check all of
+        # them so the manifest identifier carries the ticker suffix and
+        # downstream fact extractors can scope payloads by symbol.
+        ticker = (
+            self.args.get("ticker")
+            or self.args.get("symbol")
+            or self.args.get("symbols")
+            or self.args.get("code")
+            or self.args.get("s")
+            or self.args.get("query")
+            or ""
+        )
         return f"{self.tool}/{ticker}" if ticker else self.tool
 
 
+# Tool names + arg keys are matched against the EODHD connector's actual
+# cached_tools (see DB connectors row). Income statement / balance sheet /
+# cash flow / holders are not separate endpoints — that data ships inside
+# get_fundamentals_data, so they're not requested here.
 BASELINE_STOCK_INITIATION: tuple[BaselineCall, ...] = (
-    BaselineCall("eodhd", "get_live_prices", {"ticker": "{ticker}"}),
-    BaselineCall("eodhd", "get_fundamentals_data", {"ticker": "{ticker}"}),
-    BaselineCall("eodhd", "get_historical_market_cap", {"ticker": "{ticker}"}),
-    BaselineCall("eodhd", "get_historical_prices", {"ticker": "{ticker}", "lookback": "60d"}),
-    BaselineCall("eodhd", "get_historical_prices_long", {"ticker": "{ticker}", "lookback": "5y"}),
-    BaselineCall("eodhd", "get_income_statement", {"ticker": "{ticker}", "years": 5}),
-    BaselineCall("eodhd", "get_balance_sheet", {"ticker": "{ticker}", "years": 5}),
-    BaselineCall("eodhd", "get_cash_flow", {"ticker": "{ticker}", "years": 5}),
-    BaselineCall("eodhd", "get_earnings_trends", {"ticker": "{ticker}"}),
-    BaselineCall("eodhd", "get_holders", {"ticker": "{ticker}"}),
-    BaselineCall("eodhd", "get_insider_transactions", {"ticker": "{ticker}"}),
-    BaselineCall("news", "recent_news", {"ticker": "{ticker}", "lookback_days": 30}),
+    BaselineCall("eodhd", "get_fundamentals_data", {"ticker": "{ticker}.US"}),
+    BaselineCall("eodhd", "get_live_stock_prices", {"ticker": "{ticker}.US"}),
+    BaselineCall(
+        "eodhd", "get_historical_market_capitalization_data", {"ticker": "{ticker}.US"}
+    ),
+    BaselineCall("eodhd", "get_eod_historical_stock_market_data", {"symbol": "{ticker}.US"}),
+    BaselineCall("eodhd", "get_earning_trends_data", {"symbols": "{ticker}.US"}),
+    BaselineCall("eodhd", "get_insider_transactions_data", {"code": "{ticker}"}),
+    BaselineCall("eodhd", "get_historical_dividends_data", {"ticker": "{ticker}.US"}),
+    BaselineCall("eodhd", "financial_news", {"s": "{ticker}.US"}),
 )
 
 

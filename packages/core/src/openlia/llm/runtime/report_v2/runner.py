@@ -369,5 +369,6 @@ class WavedReportRunner:
             )
             raise
 
+        schema.telemetry = self.telemetry.snapshot()
         await self._emit(ReportComplete(report_id=rid, schema=schema.model_dump(mode="json")))
         return ReportRunOutput(schema=schema, telemetry=self.telemetry)
