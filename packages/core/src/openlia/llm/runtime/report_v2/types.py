@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+ExtractorTier = Literal["deterministic", "compute", "llm"]
+ManifestKind = Literal["fetch", "search"]
+
+
+class ManifestEntry(_Strict):
+    """One source of truth, citable as [N] across the run."""
+
+    id: int = Field(ge=1)
+    kind: ManifestKind
+    provider: str
+    identifier: str  # tool name + args fingerprint, or search query
+    raw_payload: Any
+    retrieved_at: datetime | str
+
+
+class Fact(_Strict):
+    """A named, citation-tagged value produced by the registry."""
+
+    name: str
+    value: Any
+    source_ids: list[int] = Field(min_length=1)
+    extractor: ExtractorTier
+    depends_on: list[str] = Field(default_factory=list)
+
+
+class SectionTerminalState(StrEnum):
+    SUCCESS = "success"
+    DEGRADED = "degraded"
+    EXHAUSTED = "exhausted"
+
+
+class SectionResult(_Strict):
+    section_id: str
+    state: SectionTerminalState
+    attempts: int = Field(ge=1)
+    markdown: str | None = None
+    failed_attempts: list[str] = Field(default_factory=list)
+    validation_errors: list[str] = Field(default_factory=list)
+    synthesis_hooks: dict[str, Any] | None = None
+
+    @field_validator("markdown")
+    @classmethod
+    def _markdown_required_unless_exhausted(cls, v: str | None, info: Any) -> str | None:
+        state = info.data.get("state")
+        if state == SectionTerminalState.EXHAUSTED:
+            return v
+        if v is None or not v.strip():
+            raise ValueError("markdown required for success/degraded states")
+        return v
