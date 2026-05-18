@@ -115,4 +115,20 @@ async def run_section_preflight(
         known_facts="\n".join(f"- {n}" for n in sorted(known_fact_names)),
     )
     raw = await provider.structured_output(prompt=prompt, schema=PREFLIGHT_OUTPUT_SCHEMA)
+    raw["proposed_facts"] = _coerce_proposed_facts(raw.get("proposed_facts", []))
     return PreflightDeclaration.model_validate({"section_id": section_id, **raw})
+
+
+def _coerce_proposed_facts(items: list[Any]) -> list[str]:
+    """Models sometimes return dicts like {fact_name, reason} instead of bare strings.
+    Extract the fact_name field; fall back to str() of the whole item.
+    """
+    out: list[str] = []
+    for item in items:
+        if isinstance(item, str):
+            out.append(item)
+        elif isinstance(item, dict):
+            name = item.get("fact_name") or item.get("name")
+            if isinstance(name, str) and name:
+                out.append(name)
+    return out
