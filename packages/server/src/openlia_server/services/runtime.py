@@ -390,14 +390,14 @@ def _build_report_runner_with_registry(
         )
 
     runner_cls = select_report_runner_class(department_id=department_id)
-    # Lazy import to avoid circular imports when the flag is off.
-    _WavedHost = None
-    if os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").lower() == "true":
-        from openlia_server.services.runtime_report_v2 import (
-            WavedReportRunnerHost as _WavedHost,  # type: ignore[assignment]
-        )
+    # Lazy import — safe at runtime (call-site, not module load) so any
+    # import cycle has already resolved. select_report_runner_class is the
+    # authoritative routing decision; we just need the class to compare.
+    from openlia_server.services.runtime_report_v2 import (
+        WavedReportRunnerHost as _WavedHost,
+    )
 
-    if _WavedHost is not None and runner_cls is _WavedHost:
+    if runner_cls is _WavedHost:
         return _WavedHost(
             prompts=prompts,
             tools=tools,
