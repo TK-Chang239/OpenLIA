@@ -105,13 +105,22 @@ def _resolve_web_search_for(*, resolved: ResolvedModel) -> WebSearchResolution:
 def select_report_runner_class(
     *, department_id: str
 ) -> type[ReportRunner] | type[SubagentReportRunner]:
-    """Route equity_research to SubagentReportRunner when feature flag set.
+    """Route equity_research to WavedReportRunnerHost or SubagentReportRunner when flagged.
 
-    Behind ``OPENLIA_USE_SUBAGENT_RUNNER=1``: equity_research department
-    runs through the subagent-architecture report runner. All other
-    departments (and the default-off case) keep using the classic
-    ``ReportRunner``.
+    Priority:
+    1. ``OPENLIA_REPORT_V2_ENABLED=true`` + ``equity_research`` →
+       ``WavedReportRunnerHost`` (waved six-wave runner).
+    2. ``OPENLIA_USE_SUBAGENT_RUNNER=1`` + ``equity_research`` →
+       ``SubagentReportRunner``.
+    3. Default → classic ``ReportRunner``.
     """
+    if (
+        department_id == "equity_research"
+        and os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").lower() == "true"
+    ):
+        from openlia_server.services.runtime_report_v2 import WavedReportRunnerHost
+
+        return WavedReportRunnerHost  # type: ignore[return-value]
     if os.environ.get("OPENLIA_USE_SUBAGENT_RUNNER") == "1" and department_id == "equity_research":
         return SubagentReportRunner
     return ReportRunner
@@ -340,7 +349,7 @@ def _build_report_runner_with_registry(
     skill_registry: SkillRegistry | None = None,
     disabled_connector_ids: tuple[str, ...] | frozenset[str] = (),
     disabled_skill_ids: tuple[str, ...] | frozenset[str] = (),
-) -> ReportRunner | SubagentReportRunner:
+) -> ReportRunner | SubagentReportRunner | Any:
     """Build a per-run ``ReportRunner`` wired to the v2 connector dispatcher.
 
     ``disabled_connector_ids`` and ``disabled_skill_ids`` flow from the
@@ -381,6 +390,24 @@ def _build_report_runner_with_registry(
         )
 
     runner_cls = select_report_runner_class(department_id=department_id)
+    # Lazy import to avoid circular imports when the flag is off.
+    _WavedHost = None
+    if os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").lower() == "true":
+        from openlia_server.services.runtime_report_v2 import (
+            WavedReportRunnerHost as _WavedHost,  # type: ignore[assignment]
+        )
+
+    if _WavedHost is not None and runner_cls is _WavedHost:
+        return _WavedHost(
+            prompts=prompts,
+            tools=tools,
+            resolve=resolve,
+            registry=registry,
+            flagship_provider_factory=_provider_factory,
+            subagent_provider_factory=_provider_factory,
+            provider_factory=_provider_factory,
+            trace=_trace,
+        )
     if runner_cls is SubagentReportRunner:
         # SubagentReportRunner expects resolve(...role=...). The classic
         # resolve() doesn't accept role. Build a role-aware closure that
