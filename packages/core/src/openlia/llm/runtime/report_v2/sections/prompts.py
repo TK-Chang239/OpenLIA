@@ -98,17 +98,40 @@ title: "Revenue by segment"
 categories: ["Segment A", "Segment B", "Segment C"]
 series:
   - name: "FY2024 Revenue"
-    data: [120, 85, 50]
+    values: [120, 85, 50]
 sources: [1, 3]
 ```
 
 ```chart:line
 title: "Revenue trend"
+categories: ["2020", "2021", "2022", "2023", "2024"]
 series:
   - name: "Revenue ($M)"
-    data: [100, 120, 145, 180, 220]
+    values: [100, 120, 145, 180, 220]
 x_label: "Year"
 y_label: "Revenue ($M)"
+sources: [1]
+```
+
+```chart:area
+title: "Cumulative growth"
+categories: ["2020", "2021", "2022", "2023", "2024"]
+series:
+  - name: "Customers (M)"
+    values: [1.2, 1.8, 2.5, 3.4, 4.6]
+sources: [1]
+```
+
+```chart:scatter
+title: "Growth vs valuation"
+series:
+  - name: "Peers"
+    points:
+      - {x: 12.5, y: 30.1}
+      - {x: 18.3, y: 42.6}
+      - {x: 24.0, y: 55.0}
+x_label: "Revenue growth %"
+y_label: "EV/Sales"
 sources: [1]
 ```
 
@@ -117,12 +140,16 @@ title: "Revenue vs margin"
 categories: ["2020", "2021", "2022", "2023", "2024"]
 bar_series:
   - name: "Revenue ($B)"
-    data: [0.43, 0.65, 0.97, 1.30, 1.67]
+    values: [0.43, 0.65, 0.97, 1.30, 1.67]
 line_series:
   - name: "Gross margin (%)"
-    data: [76, 77, 75, 77, 77]
+    values: [76, 77, 75, 77, 77]
 sources: [1]
 ```
+
+CHART SERIES KEY — every series in bar/line/area/combo uses ``values: [n, n, n]`` \
+(a flat list of numbers aligned to ``categories``). Scatter uses ``points: [{x, y}, ...]``. \
+DO NOT use ``data:`` for the y-values list — it is not a valid key and your chart will render empty.
 
 ```metric_cards
 metrics:
