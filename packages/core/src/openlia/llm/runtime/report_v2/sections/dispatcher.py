@@ -46,8 +46,6 @@ def _maybe_write_diagnostic(result: SectionResult) -> None:
         return
     if not result.failed_attempts:
         return
-    if not _is_parse_error(result.validation_errors):
-        return
     try:
         _DIAGNOSTIC_DIR.mkdir(parents=True, exist_ok=True)
         out = _DIAGNOSTIC_DIR / f"{result.section_id}.md"

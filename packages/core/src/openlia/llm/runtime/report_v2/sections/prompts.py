@@ -156,7 +156,22 @@ If you cannot construct a valid chart block with these exact field names, use a 
 CITATION PROXIMITY RULE: every quantitative figure in prose (revenue, margins, percentages, \
 dollar amounts, ratios, growth rates, counts) MUST have an inline [N] citation marker within \
 ~10 words of the figure. Bare numbers without nearby citations will fail validation. Years \
-(e.g., "2024", "founded in 2009") are NOT quantitative figures and do not need citations.\
+(e.g., "2024", "founded in 2009") are NOT quantitative figures and do not need citations.
+
+NEVER USE TOMBSTONE LANGUAGE. The following phrases (and any close variant) will fail validation \
+and waste your retry budget:
+  - "no data available"
+  - "data not provided"
+  - "data unavailable"
+  - "N/A" or "n/a" (as standalone prose)
+  - "TBD"
+  - "unable to determine"
+
+If a specific fact you would like to cite is not in the manifest or facts slice, REWRITE the \
+sentence so it does not need that fact. Use what IS available, frame qualitatively, or omit the \
+point entirely. Manifest entries and the facts slice are your ONLY source of truth — write to \
+their strengths, not around their gaps. A shorter, factually grounded section beats a complete \
+section padded with disclaimers.\
 """
 
 
