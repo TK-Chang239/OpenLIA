@@ -21,7 +21,7 @@ class ValidationFinding:
 
 
 _TOMBSTONE_RE = re.compile(
-    r"\b(no data available|n/?a|tbd|data not provided|unable to determine|data unavailable)\b",
+    r"\b(no data available|n/a|tbd|data not provided|unable to determine|data unavailable)\b",
     re.IGNORECASE,
 )
 
