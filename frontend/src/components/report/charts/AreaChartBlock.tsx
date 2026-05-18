@@ -7,12 +7,57 @@ export interface AreaSeries {
   data: { x: string | number; y: number }[];
 }
 
+interface AreaSeriesInput {
+  name?: string;
+  data?: unknown;
+  values?: unknown;
+}
+
 export interface AreaChartBlockProps {
   type: 'area_chart';
   title: string;
-  series: AreaSeries[];
+  // Canonical: ``categories`` + ``series[].values``; legacy ``data: [{x,y}]``
+  // still accepted on read for back-compat with persisted reports.
+  series: AreaSeriesInput[];
+  categories?: string[];
   stacked?: boolean;
   options?: { show_legend?: boolean; show_grid?: boolean };
+}
+
+function normalizeAreaSeries(
+  rawSeries: AreaSeriesInput[] | undefined,
+  rawCategories: string[] | undefined,
+): { series: AreaSeries[]; xs: string[] } {
+  const list = Array.isArray(rawSeries) ? rawSeries : [];
+  const declared = Array.isArray(rawCategories) ? rawCategories.map(String) : [];
+  let derived: string[] = [];
+  if (declared.length === 0) {
+    const firstData = list[0]?.data;
+    if (Array.isArray(firstData) && firstData.every((d) => d && typeof d === 'object' && 'x' in d)) {
+      derived = (firstData as { x: unknown }[]).map((d) => String(d.x));
+    }
+  }
+  const xs = declared.length > 0 ? declared : derived;
+  const series = list.map((s) => {
+    const name = typeof s?.name === 'string' ? s.name : '';
+    const candidate = Array.isArray(s?.values)
+      ? (s.values as unknown[])
+      : Array.isArray(s?.data)
+        ? (s.data as unknown[])
+        : [];
+    const dataPoints = candidate.map((entry, i): { x: string | number; y: number } => {
+      if (entry && typeof entry === 'object' && 'y' in (entry as object)) {
+        const obj = entry as { x?: unknown; y?: unknown };
+        return {
+          x: typeof obj.x === 'number' || typeof obj.x === 'string' ? obj.x : xs[i] ?? i,
+          y: typeof obj.y === 'number' ? obj.y : 0,
+        };
+      }
+      return { x: xs[i] ?? i, y: typeof entry === 'number' ? entry : 0 };
+    });
+    return { name, data: dataPoints };
+  });
+  return { series, xs };
 }
 
 const { W, H } = CHART_VIEWBOX;
@@ -20,16 +65,21 @@ const { L, R, T, B } = CHART_PADDING;
 
 export function AreaChartBlock({
   title,
-  series,
+  series: rawSeries,
+  categories: rawCategories,
   stacked = false,
   options,
 }: AreaChartBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
   const { figureRef, tooltipNode, hover } = useChartTooltip();
+  const { series, xs } = useMemo(
+    () => normalizeAreaSeries(rawSeries, rawCategories),
+    [rawSeries, rawCategories],
+  );
 
   const chart = useMemo(() => {
-    const cats = series[0]?.data.map((d) => String(d.x)) ?? [];
+    const cats = xs.length > 0 ? xs : series[0]?.data.map((d) => String(d.x)) ?? [];
     if (cats.length === 0) return null;
     const stacked_cum: number[][] = [];
     let running = new Array(cats.length).fill(0);
@@ -48,7 +98,7 @@ export function AreaChartBlock({
     const yMax = ticks[ticks.length - 1]!;
     const xStep = cats.length > 1 ? (W - L - R) / (cats.length - 1) : 0;
     return { cats, ticks, yMin, yMax, xStep, stacked_cum };
-  }, [series, stacked]);
+  }, [series, stacked, xs]);
 
   if (!chart) {
     return (

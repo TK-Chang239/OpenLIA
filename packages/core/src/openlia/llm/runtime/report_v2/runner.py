@@ -109,8 +109,114 @@ DEFAULT_WORD_TARGETS: dict[str, int] = {sid: 600 for sid in BODY_SECTIONS_STOCK_
     "cover": 250,
 }
 
+_SECTION_BRIEFS: dict[str, str] = {
+    "company_overview": (
+        "Section: company_overview. Cover ticker, sector, headquarters, "
+        "headcount, founding date, key milestones, and core value "
+        "proposition. Preferred exhibits: ``metric_cards`` for headline "
+        "stats (market cap, P/E, revenue scale, headcount), ``key_finding`` "
+        "for the positioning one-liner, ``pull_quote`` for the mission or "
+        "CEO line."
+    ),
+    "industry_overview": (
+        "Section: industry_overview. Describe market size, growth, "
+        "structure, and where the company sits. Preferred exhibits: "
+        "``chart:pie`` or ``chart:treemap`` for market share or "
+        "segmentation, ``chart:bar`` for player ranking once there are "
+        "three or more competitors, ``callout_grid`` for market segments, "
+        "``table`` for TAM/SAM/SOM."
+    ),
+    "products_and_services": (
+        "Section: products_and_services. Walk through product families, "
+        "pricing, and customer types. Preferred exhibits: ``callout_grid`` "
+        "with eyebrow + description for each product or module family, "
+        "``table`` for a feature matrix, ``bullet_list`` for a tight "
+        "list of capabilities."
+    ),
+    "business_model": (
+        "Section: business_model. Cover revenue model, unit economics, "
+        "moats, and distribution. Preferred exhibits: ``callout_grid`` for "
+        "revenue pillars, ``chart:pie`` for revenue mix when disclosed, "
+        "``comparison_split`` for the model vs. its nearest alternative, "
+        "``key_finding``."
+    ),
+    "management_team": (
+        "Section: management_team. Profile the C-suite and board with "
+        "named individuals. Preferred exhibits: ``table`` for the officer "
+        "and director list with role + background, ``key_finding`` for "
+        "notable hires or departures."
+    ),
+    "historical_financials": (
+        "Section: historical_financials. Show revenue, profitability, "
+        "cash, and balance-sheet trends. Preferred exhibits: ``chart:combo``"
+        " for revenue bars plus a margin line across multiple years, "
+        "``chart:line`` for a single-metric trend, ``table`` for the "
+        "multi-period KPI grid."
+    ),
+    "financial_analysis": (
+        "Section: financial_analysis. Decompose margins, capital "
+        "efficiency, and ratios. Preferred exhibits: ``chart:line`` for "
+        "margin trends, ``table`` for KPIs vs. peers, ``waterfall_chart`` "
+        "for a revenue or EBITDA bridge, ``key_finding``."
+    ),
+    "financial_projections": (
+        "Section: financial_projections. Forward look on revenue, margins, "
+        "FCF. Preferred exhibits: ``chart:line`` for the 3-5 year "
+        "projection curve, ``chart:combo`` for revenue + growth %, "
+        "``table`` for assumptions plus outputs."
+    ),
+    "valuation_analysis": (
+        "Section: valuation_analysis. Multiples, DCF, peer comp. Preferred "
+        "exhibits: ``table`` for the peer multiples matrix, "
+        "``chart:scatter`` for P/E vs. growth, ``comparison_split`` for "
+        "bull / base / bear cases, ``waterfall_chart`` for a DCF bridge."
+    ),
+    "competitive_analysis": (
+        "Section: competitive_analysis. Name competitors and quantify "
+        "where the company stands. Preferred exhibits: ``comparison_split``"
+        " for subject vs. top rival, ``table`` for a feature or share "
+        "matrix. Peer revenue ranking is owned by ``industry_overview`` — "
+        "reference it in prose here and use a different exhibit family."
+    ),
+    "recent_developments": (
+        "Section: recent_developments. Catalysts and news flow in the "
+        "last twelve months. Preferred exhibits: ``timeline`` with dated "
+        "events and ``impact_tag`` annotations whenever you have at least "
+        "three dated events, ``key_finding`` for the single most important "
+        "development, ``bullet_list`` for a tight catalog when dates are "
+        "not available."
+    ),
+    "competitive_advantages_and_weaknesses": (
+        "Section: competitive_advantages_and_weaknesses. Preferred "
+        "exhibits: ``comparison_split`` for strengths (left tone positive) "
+        "vs. weaknesses (right tone negative), ``callout_grid`` for moats "
+        "by type, ``key_finding`` for the durable advantage."
+    ),
+    "risk_analysis": (
+        "Section: risk_analysis. Preferred exhibits: ``callout_grid`` for "
+        "risk categories (market, regulatory, execution, financial), "
+        "``comparison_split`` for controlled vs. uncontrolled risks, "
+        "``timeline`` for known risk events."
+    ),
+    "investment_recommendation": (
+        "Section: investment_recommendation. Preferred exhibits: "
+        "``rating_badge`` for the BUY/HOLD/SELL call with "
+        "``previous_rating`` and ``change_date``, ``metric_cards`` for "
+        "price target / upside / time horizon, ``pull_quote`` for the "
+        "one-sentence thesis."
+    ),
+    "cover": (
+        "Section: cover. Headline summary. Preferred content: a tldr list "
+        "of 3-5 short bullets and ``key_metrics`` (the server already "
+        "populates market cap and P/E). The cover renders best as text "
+        "and metrics; leave exhibit blocks to the body sections."
+    ),
+}
+
 DEFAULT_BRIEFS: dict[str, str] = {
-    sid: f"Section: {sid}. Write a substantive analytical section."
+    sid: _SECTION_BRIEFS.get(
+        sid, f"Section: {sid}. Write a substantive analytical section."
+    )
     for sid in (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
 }
 

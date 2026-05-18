@@ -60,7 +60,11 @@ def test_line_chart_requires_series():
         title="Margin",
         series=[{"name": "M%", "data": [{"x": "Q1", "y": 46.6}]}],
     )
-    assert c.series[0]["name"] == "M%"
+    assert c.series[0].name == "M%"
+    # Legacy ``data: [{x, y}]`` shape is normalized to ``values`` and
+    # x-axis labels are lifted onto the block's ``categories`` field.
+    assert c.series[0].values == [46.6]
+    assert c.categories == ["Q1"]
 
 
 def test_bar_chart_requires_categories_and_series():
