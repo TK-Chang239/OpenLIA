@@ -41,8 +41,12 @@ def _require_env(name: str) -> str:
     return value
 
 
-def _check_env() -> tuple[str, str]:
-    """Verify required env vars. Returns (anthropic_key, eodhd_token)."""
+def _check_env() -> tuple[str, str, str]:
+    """Verify required env vars. Returns (llm_api_key, llm_provider, eodhd_token).
+
+    Provider selected by OPENLIA_SMOKE_PROVIDER env var (default 'openai').
+    Acceptable: 'openai', 'anthropic'. Picks the matching API_KEY env var.
+    """
     v2_flag = os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").strip()
     if not v2_flag or v2_flag.lower() in ("0", "false", "no"):
         print(
@@ -52,9 +56,17 @@ def _check_env() -> tuple[str, str]:
             file=sys.stderr,
         )
         sys.exit(1)
-    anthropic_key = _require_env("ANTHROPIC_API_KEY")
+    provider = os.environ.get("OPENLIA_SMOKE_PROVIDER", "openai").strip().lower()
+    if provider not in ("openai", "anthropic"):
+        print(
+            f"ERROR: OPENLIA_SMOKE_PROVIDER must be 'openai' or 'anthropic', got {provider!r}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    key_var = "OPENAI_API_KEY" if provider == "openai" else "ANTHROPIC_API_KEY"
+    llm_api_key = _require_env(key_var)
     eodhd_token = _require_env("EODHD_API_TOKEN")
-    return anthropic_key, eodhd_token
+    return llm_api_key, provider, eodhd_token
 
 
 # ---------------------------------------------------------------------------
@@ -149,31 +161,24 @@ class _NoOpWebSearch:
 # ---------------------------------------------------------------------------
 
 
-def _build_runner(
-    ticker: str,
-    report_type: str,
-    anthropic_key: str,
-    eodhd_token: str,
-) -> Any:
-    """Construct WavedReportRunner with real Anthropic + EODHD providers."""
-    from openlia.data.eodhd_extended import ExtendedAPIClient
-    from openlia.llm.adapters.anthropic import AnthropicAdapter
-    from openlia.llm.runtime.report_v2.runner import WavedReportRunner
-    from openlia.llm.runtime.report_v2.writers import (
-        ProviderSectionWriter,
-        ProviderStructuredOutput,
-    )
+def _build_provider(
+    *, provider_kind: str, api_key: str, model_id: str
+) -> tuple[Any, Any]:
+    """Construct provider adapter + ResolvedModel for the given kind."""
     from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
 
-    # Model: claude-sonnet-4-6 — good quality / cost balance for smoke testing.
-    # Override via ANTHROPIC_SMOKE_MODEL env var if desired.
-    model_id = os.environ.get("ANTHROPIC_SMOKE_MODEL", "claude-sonnet-4-6").strip()
+    if provider_kind == "openai":
+        from openlia.llm.adapters.openai import OpenAIAdapter
+        adapter_cls = OpenAIAdapter
+        env_var = "OPENAI_API_KEY"
+    elif provider_kind == "anthropic":
+        from openlia.llm.adapters.anthropic import AnthropicAdapter
+        adapter_cls = AnthropicAdapter
+        env_var = "ANTHROPIC_API_KEY"
+    else:
+        raise ValueError(f"unsupported provider_kind: {provider_kind}")
 
-    credentials = ProviderCredentials(
-        api_key=anthropic_key,
-        base_url=None,
-        env_var_name="ANTHROPIC_API_KEY",
-    )
+    credentials = ProviderCredentials(api_key=api_key, base_url=None, env_var_name=env_var)
     capabilities = Capabilities(
         streaming=False,
         tool_calling=True,
@@ -181,20 +186,60 @@ def _build_runner(
         max_context_tokens=200_000,
         max_output_tokens=8192,
     )
-    provider = AnthropicAdapter(
-        credentials=credentials,
-        model=model_id,
-        capabilities=capabilities,
-    )
+    provider = adapter_cls(credentials=credentials, model=model_id, capabilities=capabilities)
     resolved = ResolvedModel(
-        provider_kind="anthropic",
-        provider_id="anthropic",
+        provider_kind=provider_kind,
+        provider_id=provider_kind,
         model_id=model_id,
         model_ref=model_id,
         credentials=credentials,
         capabilities=capabilities,
         overrides={},
     )
+    return provider, resolved
+
+
+def _build_runner(
+    ticker: str,
+    report_type: str,
+    llm_api_key: str,
+    provider_kind: str,
+    eodhd_token: str,
+) -> Any:
+    """Construct WavedReportRunner with selected LLM provider + EODHD."""
+    from openlia.data.eodhd_extended import ExtendedAPIClient
+    from openlia.llm.runtime.report_v2.runner import WavedReportRunner
+    from openlia.llm.runtime.report_v2.writers import (
+        ProviderSectionWriter,
+        ProviderStructuredOutput,
+    )
+
+    # Two-model strategy:
+    # - Body & synthesis writers: stronger model (default gpt-5.4 or claude-sonnet-4-6).
+    # - Preflight (structured output): cheaper mini model (default gpt-5.4-mini).
+    if provider_kind == "openai":
+        body_model_id = os.environ.get("OPENLIA_SMOKE_BODY_MODEL", "gpt-5.4").strip()
+        preflight_model_id = os.environ.get(
+            "OPENLIA_SMOKE_PREFLIGHT_MODEL", "gpt-5.4-mini"
+        ).strip()
+    else:
+        body_model_id = os.environ.get(
+            "OPENLIA_SMOKE_BODY_MODEL", "claude-sonnet-4-6"
+        ).strip()
+        preflight_model_id = os.environ.get(
+            "OPENLIA_SMOKE_PREFLIGHT_MODEL", body_model_id
+        ).strip()
+
+    body_provider, body_resolved = _build_provider(
+        provider_kind=provider_kind, api_key=llm_api_key, model_id=body_model_id
+    )
+    preflight_provider_obj, preflight_resolved = _build_provider(
+        provider_kind=provider_kind, api_key=llm_api_key, model_id=preflight_model_id
+    )
+
+    print(f"  provider: {provider_kind}")
+    print(f"  body/synthesis model: {body_model_id}")
+    print(f"  preflight model: {preflight_model_id}")
 
     # EODHD client — ExtendedAPIClient wraps eodhd.APIClient.
     eodhd_client = ExtendedAPIClient(api_key=eodhd_token)
@@ -203,20 +248,20 @@ def _build_runner(
     websearch = _NoOpWebSearch()
 
     body_writer = ProviderSectionWriter(
-        provider=provider,
-        resolved_model=resolved,
+        provider=body_provider,
+        resolved_model=body_resolved,
         max_tokens=8192,
         temperature=0.7,
     )
     synthesis_writer = ProviderSectionWriter(
-        provider=provider,
-        resolved_model=resolved,
+        provider=body_provider,
+        resolved_model=body_resolved,
         max_tokens=8192,
         temperature=0.7,
     )
     preflight_provider = ProviderStructuredOutput(
-        provider=provider,
-        resolved_model=resolved,
+        provider=preflight_provider_obj,
+        resolved_model=preflight_resolved,
         max_tokens=4096,
         temperature=0.0,
     )
@@ -311,10 +356,16 @@ def _print_summary(ticker: str, output: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def _run(ticker: str, report_type: str, anthropic_key: str, eodhd_token: str) -> None:
-    runner = _build_runner(ticker, report_type, anthropic_key, eodhd_token)
+async def _run(
+    ticker: str,
+    report_type: str,
+    llm_api_key: str,
+    provider_kind: str,
+    eodhd_token: str,
+) -> None:
     print(f"Starting WavedReportRunner: {report_type} / {ticker}")
-    print("(This will make live API calls to Anthropic and EODHD.)")
+    runner = _build_runner(ticker, report_type, llm_api_key, provider_kind, eodhd_token)
+    print(f"(Live API calls to {provider_kind.upper()} and EODHD.)")
     print()
     output = await runner.run()
     _print_summary(ticker, output)
@@ -333,8 +384,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    anthropic_key, eodhd_token = _check_env()
-    asyncio.run(_run(args.ticker, args.report_type, anthropic_key, eodhd_token))
+    llm_api_key, provider_kind, eodhd_token = _check_env()
+    asyncio.run(
+        _run(args.ticker, args.report_type, llm_api_key, provider_kind, eodhd_token)
+    )
 
 
 if __name__ == "__main__":
