@@ -96,6 +96,38 @@ def test_build_chat_runner_threads_disabled_connector_ids_to_dispatcher(
     assert not any(n.startswith("eodhd__") for n in names)
 
 
+def test_build_report_runner_returns_waved_host_by_default(
+    db_session: DBSession,
+    monkeypatch,
+) -> None:
+    """V2 is default-on for equity_research since 2026-05-18. With the env
+    var unset, _build_report_runner_with_registry must hand back a
+    WavedReportRunnerHost — not the v1 ReportRunner. Regression guard for
+    the routing bug where the call site required env=="true" while
+    select_report_runner_class had already moved to default-on semantics.
+    """
+    from datetime import date
+
+    monkeypatch.delenv("OPENLIA_REPORT_V2_ENABLED", raising=False)
+    _seed_validated_eodhd(db_session)
+    from openlia.llm.runtime.web_search import WebSearchResolution
+    from openlia_server.services.llm_registry import SQLModelRegistry
+    from openlia_server.services.runtime import _build_report_runner_with_registry
+    from openlia_server.services.runtime_report_v2 import WavedReportRunnerHost
+
+    registry = SQLModelRegistry(db_session)
+    runner = _build_report_runner_with_registry(
+        registry,
+        web_search=WebSearchResolution(False, None, None),
+        db=db_session,
+        user_id="u1",
+        department_id="equity_research",
+        run_id="r_test",
+        run_date=date.today(),
+    )
+    assert isinstance(runner, WavedReportRunnerHost)
+
+
 def test_build_report_runner_threads_disabled_connector_ids_to_dispatcher(
     db_session: DBSession,
 ) -> None:
