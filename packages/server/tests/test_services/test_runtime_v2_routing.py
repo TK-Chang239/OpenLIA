@@ -1,7 +1,8 @@
 """Tests for select_report_runner_class routing to WavedReportRunnerHost.
 
-Tests the flag-on path (OPENLIA_REPORT_V2_ENABLED=true) and the flag-off
-path (default -> ReportRunner).
+V2 is default-on for equity_research since 2026-05-18. Tests cover the
+default-on path, the explicit-disable path (OPENLIA_REPORT_V2_ENABLED=false),
+and interactions with the subagent flag.
 """
 
 from __future__ import annotations
@@ -43,25 +44,31 @@ class TestSelectReportRunnerClass:
         result = select(department_id="equity_research")
         assert result is WavedReportRunnerHost
 
-    def test_flag_off_equity_research_returns_report_runner(self, monkeypatch) -> None:
-        """No flag set -> classic ReportRunner for equity_research."""
+    def test_flag_unset_equity_research_defaults_to_waved(self, monkeypatch) -> None:
+        """No flag set -> WavedReportRunnerHost for equity_research (default-on)."""
         select = _fresh_select(monkeypatch, {})
-        from openlia.llm.runtime.report import ReportRunner
+        from openlia_server.services.runtime_report_v2 import WavedReportRunnerHost
 
         result = select(department_id="equity_research")
-        assert result is ReportRunner
+        assert result is WavedReportRunnerHost
 
-    def test_flag_off_other_dept_returns_report_runner(self, monkeypatch) -> None:
-        """Other departments always get ReportRunner regardless of flag."""
+    def test_other_dept_always_returns_report_runner(self, monkeypatch) -> None:
+        """Other departments always get classic ReportRunner regardless of flag."""
         select = _fresh_select(monkeypatch, {"OPENLIA_REPORT_V2_ENABLED": "true"})
         from openlia.llm.runtime.report import ReportRunner
 
         result = select(department_id="macro_research")
         assert result is ReportRunner
 
-    def test_subagent_flag_still_works_when_v2_disabled(self, monkeypatch) -> None:
-        """OPENLIA_USE_SUBAGENT_RUNNER=1 without v2 flag -> SubagentReportRunner."""
-        select = _fresh_select(monkeypatch, {"OPENLIA_USE_SUBAGENT_RUNNER": "1"})
+    def test_subagent_flag_works_only_when_v2_explicitly_disabled(self, monkeypatch) -> None:
+        """OPENLIA_USE_SUBAGENT_RUNNER=1 plus explicit v2-disable -> SubagentReportRunner."""
+        select = _fresh_select(
+            monkeypatch,
+            {
+                "OPENLIA_USE_SUBAGENT_RUNNER": "1",
+                "OPENLIA_REPORT_V2_ENABLED": "false",
+            },
+        )
         from openlia.llm.runtime.subagent_runner import SubagentReportRunner
 
         result = select(department_id="equity_research")

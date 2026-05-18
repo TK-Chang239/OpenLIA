@@ -108,16 +108,16 @@ def select_report_runner_class(
     """Route equity_research to WavedReportRunnerHost or SubagentReportRunner when flagged.
 
     Priority:
-    1. ``OPENLIA_REPORT_V2_ENABLED=true`` + ``equity_research`` →
-       ``WavedReportRunnerHost`` (waved six-wave runner).
-    2. ``OPENLIA_USE_SUBAGENT_RUNNER=1`` + ``equity_research`` →
+    1. ``equity_research`` + ``OPENLIA_REPORT_V2_ENABLED`` not explicitly disabled →
+       ``WavedReportRunnerHost`` (waved six-wave runner). Default-on since 2026-05-18;
+       opt out by setting ``OPENLIA_REPORT_V2_ENABLED=false`` (or ``0`` / ``no``).
+    2. ``OPENLIA_USE_SUBAGENT_RUNNER=1`` + ``equity_research`` (and v2 explicitly disabled) →
        ``SubagentReportRunner``.
-    3. Default → classic ``ReportRunner``.
+    3. Default for other departments → classic ``ReportRunner``.
     """
-    if (
-        department_id == "equity_research"
-        and os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").lower() == "true"
-    ):
+    v2_flag = os.environ.get("OPENLIA_REPORT_V2_ENABLED", "").strip().lower()
+    v2_disabled = v2_flag in ("false", "0", "no", "off")
+    if department_id == "equity_research" and not v2_disabled:
         from openlia_server.services.runtime_report_v2 import WavedReportRunnerHost
 
         return WavedReportRunnerHost  # type: ignore[return-value]
