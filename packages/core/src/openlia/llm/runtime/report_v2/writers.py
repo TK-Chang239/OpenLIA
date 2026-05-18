@@ -5,14 +5,12 @@ Two concrete adapters wrapping ``LLMProvider.generate``:
 - ``ProviderSectionWriter`` — plain text generation for body and synthesis sections.
 - ``ProviderStructuredOutput`` — forced tool call for structured JSON output.
 
-``tool_choice`` is sent in the OpenAI / OpenRouter shape::
+``tool_choice`` shape is provider-specific:
 
-    {"type": "function", "function": {"name": "<tool_name>"}}
-
-Anthropic adapters expect ``{"type": "tool", "name": "..."}`` and Gemini uses
-``{"function_calling_config": {...}}``.  The runtime / provider adapter is
-responsible for translating this field before forwarding to the upstream API;
-these classes pass it through verbatim.
+- OpenAI / OpenRouter: ``{"type": "function", "function": {"name": "<tool>"}}``
+- Anthropic:           ``{"type": "tool", "name": "<tool>"}``
+- Gemini:              ``{"function_calling_config": {"mode": "ANY",
+  "allowed_function_names": ["<tool>"]}}``
 """
 
 from __future__ import annotations
@@ -22,6 +20,20 @@ from typing import Any
 
 from openlia.llm.base import LLMProvider
 from openlia.llm.types import LLMRequest, Message, ResolvedModel, ToolSchema
+
+
+def _force_tool_choice(provider_kind: str, tool_name: str) -> dict[str, Any]:
+    """Return the provider-correct ``tool_choice`` dict for a forced single-tool call."""
+    if provider_kind == "anthropic":
+        return {"type": "tool", "name": tool_name}
+    if provider_kind == "gemini":
+        return {
+            "function_calling_config": {
+                "mode": "ANY",
+                "allowed_function_names": [tool_name],
+            }
+        }
+    return {"type": "function", "function": {"name": tool_name}}
 
 
 @dataclass
@@ -71,7 +83,7 @@ class ProviderStructuredOutput:
         request = LLMRequest(
             messages=[Message(role="user", content=prompt)],
             tools=[tool],
-            tool_choice={"type": "function", "function": {"name": self.tool_name}},
+            tool_choice=_force_tool_choice(self.provider.kind, self.tool_name),
             max_tokens=self.max_tokens,
             temperature=self.temperature,
         )
