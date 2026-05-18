@@ -63,3 +63,25 @@ def test_section_result_records_attempts() -> None:
     )
     assert result.attempts == 2
     assert len(result.failed_attempts) == 2
+
+
+def test_section_result_markdown_validation_degraded_empty_rejected() -> None:
+    """Markdown required for degraded state."""
+    with pytest.raises(ValidationError):
+        SectionResult(
+            section_id="overview",
+            state=SectionTerminalState.DEGRADED,
+            attempts=1,
+            markdown="",
+        )
+
+
+def test_section_result_markdown_validation_exhausted_accepts_none() -> None:
+    """Exhausted state allows None markdown."""
+    result = SectionResult(
+        section_id="overview",
+        state=SectionTerminalState.EXHAUSTED,
+        attempts=3,
+        markdown=None,
+    )
+    assert result.markdown is None

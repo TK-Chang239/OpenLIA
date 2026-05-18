@@ -11,7 +11,15 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# Extractor tier — how a registered fact is produced.
+#   deterministic: pure JSONPath/Pydantic against fixed-shape payloads (e.g. EODHD)
+#   compute: pure-math on already-extracted facts (e.g. CAGR, margins)
+#   llm: tiny Haiku structured-output call for fuzzy judgment (e.g. peer_set)
 ExtractorTier = Literal["deterministic", "compute", "llm"]
+
+# Manifest entry kind — what produced the source.
+#   fetch: structured tool call against a data provider
+#   search: web/news search query
 ManifestKind = Literal["fetch", "search"]
 
 
