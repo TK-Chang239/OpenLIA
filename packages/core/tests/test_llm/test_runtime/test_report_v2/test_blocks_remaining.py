@@ -227,6 +227,29 @@ def test_callout_grid_accepts_body_alias() -> None:
     assert block.items[1].title == "Pillar 2"
 
 
+def test_timeline_accepts_synonym_tone_on_impact_tag() -> None:
+    # Report 99f7d9cc shipped one omitted timeline because the LLM used
+    # tone='good' on an impact_tag (outside the Tone enum). Tag.tone
+    # alias normalization keeps the block alive.
+    entry = default_block_registry.get("timeline")
+    assert entry is not None
+    block = entry.assembler(
+        data={
+            "events": [
+                {
+                    "when": "2024-Q4",
+                    "what": "Launched AI suite",
+                    "impact_tag": {"label": "Beat", "tone": "good"},
+                }
+            ]
+        },
+        citation_ids=[],
+        manifest_resolver=_resolver,
+    )
+    assert isinstance(block, TimelineBlock)
+    assert block.events[0].impact_tag.tone == "positive"
+
+
 def test_timeline_accepts_date_and_event_aliases() -> None:
     entry = default_block_registry.get("timeline")
     assert entry is not None

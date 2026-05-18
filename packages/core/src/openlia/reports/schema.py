@@ -115,11 +115,42 @@ DeltaDirection = Literal["up", "down", "flat"]
 Tone = Literal["positive", "negative", "neutral", "warn"]
 
 
+_TONE_ALIASES: dict[str, str] = {
+    # Positive synonyms
+    "good": "positive", "beat": "positive", "win": "positive", "up": "positive",
+    "green": "positive", "favorable": "positive", "strong": "positive",
+    "bull": "positive", "bullish": "positive",
+    # Negative synonyms
+    "bad": "negative", "miss": "negative", "loss": "negative", "down": "negative",
+    "red": "negative", "unfavorable": "negative", "weak": "negative",
+    "bear": "negative", "bearish": "negative",
+    # Warn synonyms
+    "warning": "warn", "caution": "warn", "risk": "warn", "yellow": "warn",
+    "alert": "warn",
+    # Neutral synonyms
+    "info": "neutral", "informational": "neutral", "unknown": "neutral",
+    "n/a": "neutral", "na": "neutral",
+}
+
+
 class Tag(_Strict):
     """Inline chip used by metrics, timeline events, and quote attribution."""
 
     label: str
     tone: Tone = "neutral"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_tone(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+        tone = raw.get("tone")
+        if isinstance(tone, str):
+            mapped = _TONE_ALIASES.get(tone.strip().lower())
+            if mapped is not None:
+                raw = dict(raw)
+                raw["tone"] = mapped
+        return raw
 
 
 class Metric(_Strict):
