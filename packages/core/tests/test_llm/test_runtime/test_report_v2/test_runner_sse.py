@@ -122,6 +122,12 @@ async def test_runner_emits_lifecycle_events_in_order() -> None:
     assert emitted[-1].report_id == runner.report_id
     assert emitted[-1].schema, "ReportComplete.schema must be non-empty"
     assert "cover" in emitted[-1].schema, "ReportComplete.schema must contain cover"
+    # Telemetry must travel with the schema so it gets persisted into the
+    # reports row (content_structured.telemetry) for post-hoc diagnosis.
+    telemetry = emitted[-1].schema.get("telemetry")
+    assert telemetry is not None, "ReportComplete.schema must embed telemetry"
+    assert "section_states" in telemetry
+    assert "wave_ms" in telemetry
 
     # Exactly 6 ReportPhase events (one per wave)
     phase_events = [e for e in emitted if isinstance(e, ReportPhase)]

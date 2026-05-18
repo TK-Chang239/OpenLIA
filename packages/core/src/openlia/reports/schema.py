@@ -432,6 +432,11 @@ class ReportSchema(_Strict):
     rail: Rail | None = None
     citations: list[Citation] = Field(default_factory=list)
     meta_stats: MetaStats | None = None
+    # WavedReportRunner v2 diagnostics: per-section SUCCESS/DEGRADED/EXHAUSTED
+    # states, wave timings, auto-repair fix counts, omitted blocks, cross-
+    # section findings. Populated by ReportTelemetry.snapshot(). NULL for
+    # v1 reports and any pre-telemetry rows.
+    telemetry: dict[str, Any] | None = None
 
 
 TreemapNode.model_rebuild()
