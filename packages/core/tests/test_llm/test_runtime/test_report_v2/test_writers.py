@@ -68,6 +68,7 @@ async def test_provider_structured_output_extracts_tool_call_arguments() -> None
     expected = {"rating": "buy", "price_target": 120.0}
     tool_call = ToolCall(id="call_abc", name="emit", arguments=expected)
     provider = AsyncMock()
+    provider.kind = "openai"
     provider.generate.return_value = _llm_response(tool_calls=[tool_call])
 
     structured = ProviderStructuredOutput(
@@ -94,3 +95,50 @@ async def test_provider_structured_output_extracts_tool_call_arguments() -> None
     assert call_args.tools[0].parameters == schema
     assert call_args.tool_choice == {"type": "function", "function": {"name": "emit"}}
     assert call_args.temperature == 0.0
+
+
+@pytest.mark.asyncio
+async def test_provider_structured_output_anthropic_uses_correct_tool_choice() -> None:
+    tool_call = ToolCall(id="call_ant", name="emit", arguments={"value": 1})
+    provider = AsyncMock()
+    provider.kind = "anthropic"
+    provider.generate.return_value = _llm_response(tool_calls=[tool_call])
+
+    structured = ProviderStructuredOutput(
+        provider=provider,
+        resolved_model=_resolved_model(),
+    )
+    await structured.structured_output(
+        prompt="Emit something.",
+        schema={"type": "object", "properties": {"value": {"type": "integer"}}},
+    )
+
+    call_args = provider.generate.call_args[0][0]
+    assert isinstance(call_args, LLMRequest)
+    assert call_args.tool_choice == {"type": "tool", "name": "emit"}
+
+
+@pytest.mark.asyncio
+async def test_provider_structured_output_gemini_uses_correct_tool_choice() -> None:
+    tool_call = ToolCall(id="call_gem", name="emit", arguments={"value": 2})
+    provider = AsyncMock()
+    provider.kind = "gemini"
+    provider.generate.return_value = _llm_response(tool_calls=[tool_call])
+
+    structured = ProviderStructuredOutput(
+        provider=provider,
+        resolved_model=_resolved_model(),
+    )
+    await structured.structured_output(
+        prompt="Emit something.",
+        schema={"type": "object", "properties": {"value": {"type": "integer"}}},
+    )
+
+    call_args = provider.generate.call_args[0][0]
+    assert isinstance(call_args, LLMRequest)
+    assert call_args.tool_choice == {
+        "function_calling_config": {
+            "mode": "ANY",
+            "allowed_function_names": ["emit"],
+        }
+    }
