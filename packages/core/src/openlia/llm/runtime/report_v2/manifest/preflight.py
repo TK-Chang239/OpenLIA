@@ -76,6 +76,8 @@ class StructuredOutputProvider(Protocol):
 
 _PROMPT_TEMPLATE = """You are the pre-flight planner for section {section_id}.
 
+SUBJECT TICKER: {ticker}
+
 SECTION BRIEF:
 {section_brief}
 
@@ -88,7 +90,8 @@ REGISTERED FACT NAMES YOU CAN ASSUME ARE COMPUTED:
 Declare what additional data you need to write this section well.
 Output JSON with three fields:
 - searches: web search queries (with brief intent labels)
-- fetches: structured tool calls (provider, tool, args)
+- fetches: structured tool calls (provider, tool, args). When constructing fetch args
+  that require a ticker symbol, use the SUBJECT TICKER above (e.g. {{"ticker": "{ticker}"}}).
 - proposed_facts: NEW fact names you think should exist but aren't in the registered list above.
   These are telemetry-only — they will NOT be added at runtime. Use this to signal gaps.
 
@@ -102,9 +105,11 @@ async def run_section_preflight(
     section_brief: str,
     manifest: Manifest,
     known_fact_names: list[str],
+    ticker: str = "",
 ) -> PreflightDeclaration:
     prompt = _PROMPT_TEMPLATE.format(
         section_id=section_id,
+        ticker=ticker,
         section_brief=section_brief,
         manifest_list=manifest.as_prompt_list() or "(empty)",
         known_facts="\n".join(f"- {n}" for n in sorted(known_fact_names)),
