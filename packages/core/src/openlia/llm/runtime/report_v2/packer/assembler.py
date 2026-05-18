@@ -220,7 +220,7 @@ def _build_cover(facts_pack: FactsPack, *, ticker: str) -> Cover:
         key_metrics.append(
             Metric(
                 label="P/E (TTM)",
-                value=f"{pe_ratio}x",
+                value=f"{float(pe_ratio):.1f}x",
                 source_ids=pe_source_ids,
             )
         )
@@ -257,7 +257,7 @@ def _build_rail(facts_pack: FactsPack) -> Rail:
 
     _push_fact("Sector", "sector", lambda v: str(v))
     _push_fact("Market Cap", "market_cap", _format_market_cap)
-    _push_fact("P/E (TTM)", "pe_ratio_ttm", lambda v: f"{v}x")
+    _push_fact("P/E (TTM)", "pe_ratio_ttm", lambda v: f"{float(v):.1f}x")
     _push_fact("Revenue CAGR (3y)", "revenue_cagr_3y", lambda v: f"{v * 100:.1f}%")
     _push_fact("Gross Margin (TTM)", "gross_margin_ttm", lambda v: f"{v * 100:.1f}%")
 
