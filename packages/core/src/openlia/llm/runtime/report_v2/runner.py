@@ -357,6 +357,7 @@ class WavedReportRunner:
                 department="equity_research",
                 ticker=self.ticker,
                 generated_at=datetime.now(UTC),
+                on_omitted_block=self.telemetry.record_omitted_block,
             )
             self.telemetry.record_wave("W6_pack", duration_ms=int((time.monotonic() - t0) * 1000))
 

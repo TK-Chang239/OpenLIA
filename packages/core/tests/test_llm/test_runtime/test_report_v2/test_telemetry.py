@@ -1,14 +1,29 @@
 from __future__ import annotations
 
-from openlia.llm.runtime.report_v2.telemetry import ReportTelemetry, WaveTimings
+from openlia.llm.runtime.report_v2.telemetry import ReportTelemetry
 from openlia.llm.runtime.report_v2.types import SectionResult, SectionTerminalState
 
 
 def test_telemetry_records_section_outcomes() -> None:
     t = ReportTelemetry()
-    t.record_section(SectionResult(section_id="a", state=SectionTerminalState.SUCCESS, attempts=1, markdown="..."))
-    t.record_section(SectionResult(section_id="b", state=SectionTerminalState.DEGRADED, attempts=2, markdown="..."))
-    t.record_section(SectionResult(section_id="c", state=SectionTerminalState.EXHAUSTED, attempts=2, failed_attempts=["x", "y"]))
+    t.record_section(
+        SectionResult(
+            section_id="a", state=SectionTerminalState.SUCCESS, attempts=1, markdown="..."
+        )
+    )
+    t.record_section(
+        SectionResult(
+            section_id="b", state=SectionTerminalState.DEGRADED, attempts=2, markdown="..."
+        )
+    )
+    t.record_section(
+        SectionResult(
+            section_id="c",
+            state=SectionTerminalState.EXHAUSTED,
+            attempts=2,
+            failed_attempts=["x", "y"],
+        )
+    )
 
     snap = t.snapshot()
     assert snap["section_states"]["success"] == 1
@@ -42,3 +57,19 @@ def test_telemetry_records_search_sentinels() -> None:
     snap = t.snapshot()
     assert "industry_overview" in snap["search_sentinels"]
     assert "edge platform market share 2026" in snap["search_sentinels"]["industry_overview"]
+
+
+def test_telemetry_records_omitted_blocks() -> None:
+    t = ReportTelemetry()
+    t.record_omitted_block("financials", "bar_chart", "ValidationError")
+    t.record_omitted_block("financials", "bar_chart", "ValidationError")
+    snap = t.snapshot()
+
+    # Raw list must contain both entries
+    assert len(snap["omitted_blocks"]) == 2
+    assert snap["omitted_blocks"][0]["section_id"] == "financials"
+    assert snap["omitted_blocks"][0]["block_type"] == "bar_chart"
+    assert snap["omitted_blocks"][0]["reason"] == "ValidationError"
+
+    # Count by section/block_type
+    assert snap["omitted_block_counts"]["financials/bar_chart"] == 2

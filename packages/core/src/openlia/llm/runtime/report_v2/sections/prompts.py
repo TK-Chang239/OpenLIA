@@ -88,7 +88,44 @@ YAML safety: if any string value contains a colon (`:`), wrap the value in doubl
   title: "Industry Overview: Network Security and Edge"
   (NOT: title: Industry Overview: Network Security and Edge)
 This applies to title, eyebrow, tagline, thesis_contribution, and any other free-form string \
-in the frontmatter.\
+in the frontmatter.
+
+CHART BLOCK SHAPES — use these exact field names and shapes:
+
+```chart:bar
+title: "Revenue by segment"
+categories: ["Segment A", "Segment B", "Segment C"]
+series:
+  - name: "FY2024 Revenue"
+    data: [120, 85, 50]
+sources: [1, 3]
+```
+
+```chart:line
+title: "Revenue trend"
+series:
+  - name: "Revenue ($M)"
+    data: [100, 120, 145, 180, 220]
+x_label: "Year"
+y_label: "Revenue ($M)"
+sources: [1]
+```
+
+```chart:combo
+title: "Revenue vs margin"
+labels: ["2020", "2021", "2022", "2023", "2024"]
+bar_series:
+  - name: "Revenue ($B)"
+    data: [0.43, 0.65, 0.97, 1.30, 1.67]
+line_series:
+  - name: "Gross margin (%)"
+    data: [76, 77, 75, 77, 77]
+sources: [1]
+```
+
+If you cannot construct a valid chart block with these exact field names, use a `table` or \
+`metric_cards` block instead. DO NOT invent alternate chart field names like \
+`data: {labels, values}` — they will be rejected.\
 """
 
 

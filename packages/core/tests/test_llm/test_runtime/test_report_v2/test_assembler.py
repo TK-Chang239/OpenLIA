@@ -182,3 +182,95 @@ def test_assemble_citations_built_from_manifest() -> None:
     c2 = next(c for c in report.citations if c.id == "c2")
     assert c2.source == "tavily"
     assert c2.title == "AAPL competitive advantages"
+
+
+# ---------------------------------------------------------------------------
+# Malformed block handling
+# ---------------------------------------------------------------------------
+
+_MALFORMED_BAR_CHART_MARKDOWN = """\
+---
+section_id: financials
+title: Financials
+sources_used: [1]
+---
+
+Introduction paragraph.
+
+```chart:bar
+title: "Revenue by segment"
+data:
+  labels: ["A", "B", "C"]
+  values: [10, 20, 30]
+sources: [1]
+```
+
+Closing paragraph after the bad chart.
+"""
+
+
+def _make_sections_with_malformed_block() -> list[SectionResult]:
+    return [
+        SectionResult(
+            section_id="financials",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_MALFORMED_BAR_CHART_MARKDOWN,
+        ),
+    ]
+
+
+def test_assemble_omits_block_on_assembly_error_continues() -> None:
+    """Bad bar_chart (data instead of categories+series) must be omitted; section still present."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_sections_with_malformed_block(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+
+    # Section must be present despite the bad block
+    section_ids = [s.id for s in report.sections]
+    assert "financials" in section_ids
+
+    financials = next(s for s in report.sections if s.id == "financials")
+
+    # The bad chart block must not appear — replaced by a fallback TextBlock
+    block_contents = [
+        b.content for b in financials.blocks if hasattr(b, "content")
+    ]
+    assert any("block omitted" in c for c in block_contents), (
+        "Expected a fallback TextBlock noting the omitted block"
+    )
+
+    # The intro/closing prose TextBlocks must still be present
+    non_fallback = [
+        c for c in block_contents if "block omitted" not in c
+    ]
+    assert len(non_fallback) >= 1, "Prose blocks around the bad chart must survive"
+
+
+def test_assemble_invokes_on_omitted_block_callback() -> None:
+    """on_omitted_block callback must be called with (section_id, block_type, reason)."""
+    calls: list[tuple[str, str, str]] = []
+
+    def _cb(section_id: str, block_type: str, reason: str) -> None:
+        calls.append((section_id, block_type, reason))
+
+    assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_sections_with_malformed_block(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+        on_omitted_block=_cb,
+    )
+
+    assert len(calls) == 1
+    section_id, block_type, reason = calls[0]
+    assert section_id == "financials"
+    assert block_type == "chart:bar"
+    assert reason  # non-empty exception class name
