@@ -117,9 +117,11 @@ async def test_runner_emits_lifecycle_events_in_order() -> None:
     assert isinstance(emitted[0], ReportStart)
     assert emitted[0].report_id == runner.report_id
 
-    # Last event must be ReportComplete
+    # Last event must be ReportComplete with a non-empty schema payload
     assert isinstance(emitted[-1], ReportComplete)
     assert emitted[-1].report_id == runner.report_id
+    assert emitted[-1].schema, "ReportComplete.schema must be non-empty"
+    assert "cover" in emitted[-1].schema, "ReportComplete.schema must contain cover"
 
     # Exactly 6 ReportPhase events (one per wave)
     phase_events = [e for e in emitted if isinstance(e, ReportPhase)]
