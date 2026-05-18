@@ -1,13 +1,23 @@
 """WavedReportRunner — orchestrates six waves end-to-end."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import time
+import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import resources
 from typing import Any
+
+from openlia.llm.runtime.events import (
+    ReportComplete,
+    ReportError,
+    ReportPhase,
+    ReportStart,
+)
 
 # Force registration of all deterministic + compute facts
 from openlia.llm.runtime.report_v2.facts.extractors import stock_initiation  # noqa: F401
@@ -88,9 +98,7 @@ SYNTHESIS_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
     "cover",
 )
 
-DEFAULT_WORD_TARGETS: dict[str, int] = {
-    sid: 600 for sid in BODY_SECTIONS_STOCK_INITIATION
-} | {
+DEFAULT_WORD_TARGETS: dict[str, int] = {sid: 600 for sid in BODY_SECTIONS_STOCK_INITIATION} | {
     "competitive_advantages_and_weaknesses": 500,
     "risk_analysis": 500,
     "investment_recommendation": 400,
@@ -123,6 +131,8 @@ class WavedReportRunner:
         system_role: str = "You are an equity research section writer.",
         style_guide: str = "Institutional tone, precise, cited.",
         max_retries: int = 1,
+        sse_emitter: Callable[[Any], Awaitable[None]] | None = None,
+        report_id: str | None = None,
     ) -> None:
         assert report_type == "stock_initiation", "only stock_initiation supported in v1"
         self.report_type = report_type
@@ -135,7 +145,13 @@ class WavedReportRunner:
         self.system_role = system_role
         self.style_guide = style_guide
         self.max_retries = max_retries
+        self.sse_emitter = sse_emitter
+        self.report_id = report_id or uuid.uuid4().hex
         self.telemetry = ReportTelemetry()
+
+    async def _emit(self, event: Any) -> None:
+        if self.sse_emitter is not None:
+            await self.sse_emitter(event)
 
     def _load_facts_framework(self) -> dict[str, list[str]]:
         path = (
@@ -146,127 +162,166 @@ class WavedReportRunner:
 
     async def run(self) -> ReportRunOutput:
         framework = self._load_facts_framework()
-
-        # W1: baseline fetch
-        t0 = time.monotonic()
-        manifest = await run_baseline(
-            catalog=materialize(BASELINE_STOCK_INITIATION, ticker=self.ticker),
-            dispatcher=self.dispatcher,
+        all_section_ids = list(
+            (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
         )
-        self.telemetry.record_wave("W1_baseline", duration_ms=int((time.monotonic() - t0) * 1000))
+        rid = self.report_id
 
-        # W2: per-section preflight + aggregate + execute
-        t0 = time.monotonic()
-        all_sections = (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
-        known_facts = default_registry.names()
-        preflights = await asyncio.gather(*(
-            run_section_preflight(
-                provider=self.preflight_provider,
-                section_id=sid,
-                section_brief=DEFAULT_BRIEFS[sid],
+        await self._emit(
+            ReportStart(
+                report_id=rid,
+                department="equity_research",
+                mode=self.report_type,
+                section_titles=all_section_ids,
+            )
+        )
+
+        try:
+            # W1: baseline fetch
+            await self._emit(ReportPhase(report_id=rid, phase="fetching_data"))
+            t0 = time.monotonic()
+            manifest = await run_baseline(
+                catalog=materialize(BASELINE_STOCK_INITIATION, ticker=self.ticker),
+                dispatcher=self.dispatcher,
+            )
+            self.telemetry.record_wave(
+                "W1_baseline", duration_ms=int((time.monotonic() - t0) * 1000)
+            )
+
+            # W2: per-section preflight + aggregate + execute
+            await self._emit(ReportPhase(report_id=rid, phase="planning"))
+            t0 = time.monotonic()
+            all_sections = (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
+            known_facts = default_registry.names()
+            preflights = await asyncio.gather(
+                *(
+                    run_section_preflight(
+                        provider=self.preflight_provider,
+                        section_id=sid,
+                        section_brief=DEFAULT_BRIEFS[sid],
+                        manifest=manifest,
+                        known_fact_names=known_facts,
+                    )
+                    for sid in all_sections
+                )
+            )
+            for d in preflights:
+                if d.proposed_facts:
+                    self.telemetry.record_proposed_facts(d.section_id, d.proposed_facts)
+            work = aggregate_declarations(list(preflights))
+            await execute_aggregated(
+                work=work,
                 manifest=manifest,
-                known_fact_names=known_facts,
+                dispatcher=self.dispatcher,
+                websearch=self.websearch,
             )
-            for sid in all_sections
-        ))
-        for d in preflights:
-            if d.proposed_facts:
-                self.telemetry.record_proposed_facts(d.section_id, d.proposed_facts)
-        work = aggregate_declarations(list(preflights))
-        await execute_aggregated(
-            work=work,
-            manifest=manifest,
-            dispatcher=self.dispatcher,
-            websearch=self.websearch,
-        )
-        self.telemetry.record_wave("W2_preflight", duration_ms=int((time.monotonic() - t0) * 1000))
+            self.telemetry.record_wave(
+                "W2_preflight", duration_ms=int((time.monotonic() - t0) * 1000)
+            )
 
-        # W3: compile facts pack
-        t0 = time.monotonic()
-        requested = sorted({n for names in framework.values() for n in names})
-        pack = compile_pack(
-            registry=default_registry,
-            manifest=manifest.entries,
-            requested_facts=requested,
-        )
-        self.telemetry.record_wave("W3_facts", duration_ms=int((time.monotonic() - t0) * 1000))
+            # W3: compile facts pack
+            await self._emit(ReportPhase(report_id=rid, phase="loading_context"))
+            t0 = time.monotonic()
+            requested = sorted({n for names in framework.values() for n in names})
+            pack = compile_pack(
+                registry=default_registry,
+                manifest=manifest.entries,
+                requested_facts=requested,
+            )
+            self.telemetry.record_wave("W3_facts", duration_ms=int((time.monotonic() - t0) * 1000))
 
-        # W4: body sections
-        t0 = time.monotonic()
-        body_dispatches = [
-            SectionDispatch(
-                section_id=sid,
-                prompt=assemble_body_section_prompt(
-                    system_role=self.system_role,
-                    style_guide=self.style_guide,
-                    framework_brief=DEFAULT_BRIEFS[sid],
-                    manifest=manifest,
+            # W4: body sections
+            await self._emit(ReportPhase(report_id=rid, phase="section_drafting"))
+            t0 = time.monotonic()
+            body_dispatches = [
+                SectionDispatch(
+                    section_id=sid,
+                    prompt=assemble_body_section_prompt(
+                        system_role=self.system_role,
+                        style_guide=self.style_guide,
+                        framework_brief=DEFAULT_BRIEFS[sid],
+                        manifest=manifest,
+                        facts_slice=pack.slice_for(framework[sid]),
+                        word_target=DEFAULT_WORD_TARGETS[sid],
+                    ),
+                    target_word_count=DEFAULT_WORD_TARGETS[sid],
                     facts_slice=pack.slice_for(framework[sid]),
-                    word_target=DEFAULT_WORD_TARGETS[sid],
-                ),
-                target_word_count=DEFAULT_WORD_TARGETS[sid],
-                facts_slice=pack.slice_for(framework[sid]),
+                )
+                for sid in BODY_SECTIONS_STOCK_INITIATION
+            ]
+            body_results = await dispatch_sections(
+                dispatches=body_dispatches,
+                writer=self.body_writer,
+                validator=validate_section,
+                max_retries=self.max_retries,
+                known_block_tags=default_block_registry.tags(),
             )
-            for sid in BODY_SECTIONS_STOCK_INITIATION
-        ]
-        body_results = await dispatch_sections(
-            dispatches=body_dispatches,
-            writer=self.body_writer,
-            validator=validate_section,
-            max_retries=self.max_retries,
-            known_block_tags=default_block_registry.tags(),
-        )
-        for r in body_results:
-            self.telemetry.record_section(r)
-        self.telemetry.record_wave("W4_body", duration_ms=int((time.monotonic() - t0) * 1000))
+            for r in body_results:
+                self.telemetry.record_section(r)
+            self.telemetry.record_wave("W4_body", duration_ms=int((time.monotonic() - t0) * 1000))
 
-        # W5: synthesis sections
-        t0 = time.monotonic()
-        hooks = [
-            h
-            for h in (extract_hooks_from_section_result(r) for r in body_results)
-            if h is not None
-        ]
-        bundle = SynthesisHooksBundle(hooks=hooks).render()
-        synth_dispatches = [
-            SectionDispatch(
-                section_id=sid,
-                prompt=assemble_synthesis_section_prompt(
-                    system_role=self.system_role,
-                    style_guide=self.style_guide,
-                    framework_brief=DEFAULT_BRIEFS[sid],
-                    manifest=manifest,
-                    synthesis_hooks_bundle=bundle,
+            # W5: synthesis sections
+            await self._emit(ReportPhase(report_id=rid, phase="editing"))
+            t0 = time.monotonic()
+            hooks = [
+                h
+                for h in (extract_hooks_from_section_result(r) for r in body_results)
+                if h is not None
+            ]
+            bundle = SynthesisHooksBundle(hooks=hooks).render()
+            synth_dispatches = [
+                SectionDispatch(
+                    section_id=sid,
+                    prompt=assemble_synthesis_section_prompt(
+                        system_role=self.system_role,
+                        style_guide=self.style_guide,
+                        framework_brief=DEFAULT_BRIEFS[sid],
+                        manifest=manifest,
+                        synthesis_hooks_bundle=bundle,
+                        facts_slice=pack.slice_for(framework[sid]),
+                        word_target=DEFAULT_WORD_TARGETS[sid],
+                    ),
+                    target_word_count=DEFAULT_WORD_TARGETS[sid],
                     facts_slice=pack.slice_for(framework[sid]),
-                    word_target=DEFAULT_WORD_TARGETS[sid],
-                ),
-                target_word_count=DEFAULT_WORD_TARGETS[sid],
-                facts_slice=pack.slice_for(framework[sid]),
+                )
+                for sid in SYNTHESIS_SECTIONS_STOCK_INITIATION
+            ]
+            synth_results = await dispatch_sections(
+                dispatches=synth_dispatches,
+                writer=self.synthesis_writer,
+                validator=validate_section,
+                max_retries=self.max_retries,
+                known_block_tags=default_block_registry.tags(),
             )
-            for sid in SYNTHESIS_SECTIONS_STOCK_INITIATION
-        ]
-        synth_results = await dispatch_sections(
-            dispatches=synth_dispatches,
-            writer=self.synthesis_writer,
-            validator=validate_section,
-            max_retries=self.max_retries,
-            known_block_tags=default_block_registry.tags(),
-        )
-        for r in synth_results:
-            self.telemetry.record_section(r)
-        self.telemetry.record_wave("W5_synthesis", duration_ms=int((time.monotonic() - t0) * 1000))
+            for r in synth_results:
+                self.telemetry.record_section(r)
+            self.telemetry.record_wave(
+                "W5_synthesis", duration_ms=int((time.monotonic() - t0) * 1000)
+            )
 
-        # W6: assemble final report
-        t0 = time.monotonic()
-        all_results = list(body_results) + list(synth_results)
-        schema = assemble_report(
-            manifest=manifest,
-            facts_pack=pack,
-            sections=all_results,
-            department="equity_research",
-            ticker=self.ticker,
-            generated_at=datetime.now(UTC),
-        )
-        self.telemetry.record_wave("W6_pack", duration_ms=int((time.monotonic() - t0) * 1000))
+            # W6: assemble final report
+            await self._emit(ReportPhase(report_id=rid, phase="finalizing"))
+            t0 = time.monotonic()
+            all_results = list(body_results) + list(synth_results)
+            schema = assemble_report(
+                manifest=manifest,
+                facts_pack=pack,
+                sections=all_results,
+                department="equity_research",
+                ticker=self.ticker,
+                generated_at=datetime.now(UTC),
+            )
+            self.telemetry.record_wave("W6_pack", duration_ms=int((time.monotonic() - t0) * 1000))
 
+        except Exception as exc:
+            await self._emit(
+                ReportError(
+                    report_id=rid,
+                    error_class=type(exc).__name__,
+                    message=str(exc),
+                )
+            )
+            raise
+
+        await self._emit(ReportComplete(report_id=rid, schema={}))
         return ReportRunOutput(schema=schema, telemetry=self.telemetry)
