@@ -25,7 +25,7 @@ _TOMBSTONE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|bn|b|m|k|x|usd|\$)?", re.IGNORECASE)
+_NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|bn|b|m|k|x|usd|\$)", re.IGNORECASE)
 # Accept single ([1]) and multi-id ([1, 2, 3]) citation markers.
 _CITATION_RE = re.compile(r"\[\d+(?:\s*,\s*\d+)*\]")
 _YEAR_RE = re.compile(r"^(19|20)\d{2}$")
