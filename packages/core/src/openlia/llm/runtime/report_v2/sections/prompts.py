@@ -113,7 +113,7 @@ sources: [1]
 
 ```chart:combo
 title: "Revenue vs margin"
-labels: ["2020", "2021", "2022", "2023", "2024"]
+categories: ["2020", "2021", "2022", "2023", "2024"]
 bar_series:
   - name: "Revenue ($B)"
     data: [0.43, 0.65, 0.97, 1.30, 1.67]
@@ -123,9 +123,40 @@ line_series:
 sources: [1]
 ```
 
+```metric_cards
+metrics:
+  - label: "Market Cap"
+    value: "$69.83B"
+  - label: "P/E (TTM)"
+    value: "245x"
+    delta: "+12%"
+    delta_direction: "up"
+sources: [1]
+```
+
+```comparison_split
+left:
+  title: "Bull Case"
+  tone: "positive"
+  items:
+    - "Edge network expansion accelerates [1]"
+    - "Workers platform monetization ramps [2]"
+right:
+  title: "Bear Case"
+  tone: "negative"
+  items:
+    - "Multiple compression risk at current valuation [3]"
+    - "Hyperscaler competition intensifies [4]"
+```
+
 If you cannot construct a valid chart block with these exact field names, use a `table` or \
 `metric_cards` block instead. DO NOT invent alternate chart field names like \
-`data: {labels, values}` — they will be rejected.\
+`data: {labels, values}` — they will be rejected.
+
+CITATION PROXIMITY RULE: every quantitative figure in prose (revenue, margins, percentages, \
+dollar amounts, ratios, growth rates, counts) MUST have an inline [N] citation marker within \
+~10 words of the figure. Bare numbers without nearby citations will fail validation. Years \
+(e.g., "2024", "founded in 2009") are NOT quantitative figures and do not need citations.\
 """
 
 

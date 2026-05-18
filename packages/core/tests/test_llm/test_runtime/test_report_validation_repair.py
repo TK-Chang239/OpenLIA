@@ -764,9 +764,8 @@ async def test_fallback_path_merges_provider_citations_and_stamps_meta_stats(
     Without this, the user-visible report has empty footnotes and a
     blank meta panel — the exact regression seen in r_df2fad6a0961.
     """
-    from openlia.llm.types import Citation
-
     import openlia.llm.runtime.report as report_module
+    from openlia.llm.types import Citation
 
     monkeypatch.setattr(report_module, "MAX_WRITING_TURNS", 2)
 

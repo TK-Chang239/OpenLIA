@@ -25,8 +25,10 @@ _TOMBSTONE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_NUMBER_RE = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:%|bn|b|m|k|x|usd|\$)?\b", re.IGNORECASE)
-_CITATION_RE = re.compile(r"\[(\d+)\]")
+_NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|bn|b|m|k|x|usd|\$)?", re.IGNORECASE)
+# Accept single ([1]) and multi-id ([1, 2, 3]) citation markers.
+_CITATION_RE = re.compile(r"\[\d+(?:\s*,\s*\d+)*\]")
+_YEAR_RE = re.compile(r"^(19|20)\d{2}$")
 
 _CITATION_PROXIMITY_TOKENS = 12
 
@@ -79,7 +81,11 @@ def quantitative_claim_near_citation(parsed: ParsedSection) -> list[ValidationFi
             continue
         tokens = seg.text.split()
         for i, tok in enumerate(tokens):
-            if not _NUMBER_RE.fullmatch(tok.strip(".,;:")):
+            stripped = tok.strip(".,;:")
+            if not _NUMBER_RE.fullmatch(stripped):
+                continue
+            # Years (1900-2099) are not financial claims; skip them.
+            if _YEAR_RE.match(stripped):
                 continue
             window_start = max(0, i - _CITATION_PROXIMITY_TOKENS)
             window_end = min(len(tokens), i + _CITATION_PROXIMITY_TOKENS + 1)

@@ -51,9 +51,10 @@ def _maybe_write_diagnostic(result: SectionResult) -> None:
     try:
         _DIAGNOSTIC_DIR.mkdir(parents=True, exist_ok=True)
         out = _DIAGNOSTIC_DIR / f"{result.section_id}.md"
-        out.write_text(result.failed_attempts[0], encoding="utf-8")
+        # Write the LAST failed attempt (the one matching validation_errors).
+        out.write_text(result.failed_attempts[-1], encoding="utf-8")
         print(
-            f"[diagnostic] wrote failed first attempt of {result.section_id} to {out}",
+            f"[diagnostic] wrote last failed attempt of {result.section_id} to {out}",
             flush=True,
         )
     except Exception as exc:
