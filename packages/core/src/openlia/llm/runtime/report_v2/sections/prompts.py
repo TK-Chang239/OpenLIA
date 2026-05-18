@@ -151,6 +151,36 @@ CHART SERIES KEY — every series in bar/line/area/combo uses ``values: [n, n, n
 (a flat list of numbers aligned to ``categories``). Scatter uses ``points: [{x, y}, ...]``. \
 DO NOT use ``data:`` for the y-values list — it is not a valid key and your chart will render empty.
 
+EXHIBIT SELECTION — choose the block type that matches the data SHAPE, not just because \
+"every section needs a chart". Bar charts are the wrong default for most data we have.
+
+- Single value (one number, even with a label) → ``metric_cards`` or ``key_finding``. \
+A one-bar ``chart:bar`` is not a chart — it is a value with axes. NEVER do this.
+- Series over time, one metric → ``chart:line`` or ``chart:area``. NOT bar.
+- Series over time, two correlated metrics (e.g., revenue + margin %) → ``chart:combo``.
+- Composition / share of a whole → ``chart:pie``, ``chart:treemap``, or stacked \
+``chart:bar`` (only when ≥3 categories).
+- Ranked items where rank itself is the message → ``chart:bar`` horizontal, max 8 rows.
+- Events / catalysts in time order → ``timeline``.
+- Two-sided framing (bull/bear, pros/cons, strengths/weaknesses, before/after) → \
+``comparison_split``.
+- N concept callouts (3-6 pillars, drivers, frameworks, product families) → ``callout_grid``.
+- Multi-row, multi-column structured data (KPIs, peer matrices, officer rosters) → ``table``.
+- Notable quote or earnings-call line → ``quote`` (attributed) or ``pull_quote`` (editorial).
+
+VARIETY MANDATE: at most ONE chart block per section. Across the full report no more than \
+HALF of all chart blocks may be ``chart:bar``. If the natural exhibit for this section is \
+bar but another section already uses bar, prefer a different family here (table, \
+callout_grid, comparison_split). The framework brief lists the preferred exhibits for \
+this specific section — start from that list.
+
+DUPLICATE AVOIDANCE: do not re-plot a metric that a peer section owns. If \
+``historical_financials`` owns the revenue trend, ``company_overview`` and \
+``recent_developments`` reference it in prose — they do not redraw it. \
+"Market capitalization snapshot" is a metric card, not a chart. \
+"Workflow exposure by solution family" and "product architecture by workflow family" \
+are the same chart wearing two titles — pick one.
+
 ```metric_cards
 metrics:
   - label: "Market Cap"

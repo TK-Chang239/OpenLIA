@@ -109,8 +109,111 @@ DEFAULT_WORD_TARGETS: dict[str, int] = {sid: 600 for sid in BODY_SECTIONS_STOCK_
     "cover": 250,
 }
 
+_SECTION_BRIEFS: dict[str, str] = {
+    "company_overview": (
+        "Section: company_overview. Cover ticker, sector, headquarters, "
+        "headcount, founding date, key milestones, and core value proposition. "
+        "Preferred exhibits: ``metric_cards`` (market cap, P/E, revenue scale, "
+        "headcount), ``key_finding`` (positioning one-liner), ``pull_quote`` "
+        "(mission/CEO). DO NOT use ``chart:bar`` for a single metric — pick "
+        "``metric_cards``."
+    ),
+    "industry_overview": (
+        "Section: industry_overview. Describe market size, growth, structure, "
+        "and where the company sits. Preferred exhibits: ``chart:pie`` or "
+        "``chart:treemap`` (market share / segmentation), ``chart:bar`` "
+        "(player ranking — only when ≥3 competitors), ``callout_grid`` "
+        "(market segments), ``table`` (TAM/SAM/SOM)."
+    ),
+    "products_and_services": (
+        "Section: products_and_services. Walk through product families, "
+        "pricing, customer types. Preferred exhibits: ``callout_grid`` "
+        "(product/module families with eyebrow + description), ``table`` "
+        "(feature matrix), ``bullet_list``. AVOID bar_chart — categorical "
+        "lists belong in callout_grid or table."
+    ),
+    "business_model": (
+        "Section: business_model. Cover revenue model, unit economics, "
+        "moats, distribution. Preferred exhibits: ``callout_grid`` (revenue "
+        "pillars), ``chart:pie`` (revenue mix if disclosed), "
+        "``comparison_split`` (model vs. nearest alternative), ``key_finding``."
+    ),
+    "management_team": (
+        "Section: management_team. Profile the C-suite and board with named "
+        "individuals. Preferred exhibits: ``table`` (officer / director list "
+        "with role + background), ``key_finding`` (notable hires or "
+        "departures). AVOID generic bar_charts about 'scale indicators' — "
+        "they are unrelated to management."
+    ),
+    "historical_financials": (
+        "Section: historical_financials. Show revenue, profitability, cash, "
+        "and balance-sheet trends. Preferred exhibits: ``chart:combo`` "
+        "(revenue bars + margin line over 5y), ``chart:line`` (single-metric "
+        "trends), ``table`` (multi-period KPI grid). AVOID single-bar "
+        "summaries — show the trend."
+    ),
+    "financial_analysis": (
+        "Section: financial_analysis. Decompose margins, capital efficiency, "
+        "and ratios. Preferred exhibits: ``chart:line`` (margin trends), "
+        "``table`` (KPI vs. peers), ``waterfall_chart`` (revenue/EBITDA "
+        "bridge), ``key_finding``."
+    ),
+    "financial_projections": (
+        "Section: financial_projections. Forward look on revenue, margins, "
+        "FCF. Preferred exhibits: ``chart:line`` (projection 3-5y), "
+        "``chart:combo`` (revenue + growth %), ``table`` (assumptions + "
+        "outputs). AVOID bar_chart for a single year's projection — show "
+        "the curve."
+    ),
+    "valuation_analysis": (
+        "Section: valuation_analysis. Multiples, DCF, peer comp. Preferred "
+        "exhibits: ``table`` (peer multiples matrix), ``chart:scatter`` (P/E "
+        "vs. growth), ``comparison_split`` (bull / base / bear), "
+        "``waterfall_chart`` (DCF bridge)."
+    ),
+    "competitive_analysis": (
+        "Section: competitive_analysis. Name competitors and quantify the "
+        "gap. Preferred exhibits: ``comparison_split`` (subject vs. top "
+        "rival), ``chart:bar`` horizontal (ranked share or revenue), "
+        "``table`` (feature/share matrix)."
+    ),
+    "recent_developments": (
+        "Section: recent_developments. Catalysts and news flow in the last "
+        "12 months. Preferred exhibits: ``timeline`` (dated events with "
+        "impact_tag), ``bullet_list``, ``key_finding`` (single most "
+        "important development). AVOID bar_chart of a market cap trend — "
+        "that is ``chart:line`` territory."
+    ),
+    "competitive_advantages_and_weaknesses": (
+        "Section: competitive_advantages_and_weaknesses. Preferred exhibits: "
+        "``comparison_split`` (strengths vs. weaknesses, left tone positive, "
+        "right tone negative), ``callout_grid`` (moats by type), "
+        "``key_finding``."
+    ),
+    "risk_analysis": (
+        "Section: risk_analysis. Preferred exhibits: ``callout_grid`` (risk "
+        "categories: market, regulatory, execution, financial), "
+        "``comparison_split`` (controlled vs. uncontrolled), ``timeline`` "
+        "(known risk events). AVOID bar_chart 'risk concentration' — "
+        "qualitative risks are not a sortable bar."
+    ),
+    "investment_recommendation": (
+        "Section: investment_recommendation. Preferred exhibits: "
+        "``rating_badge`` (BUY/HOLD/SELL with previous_rating + change_date), "
+        "``metric_cards`` (price target, upside, time horizon), "
+        "``pull_quote`` (the one-sentence thesis)."
+    ),
+    "cover": (
+        "Section: cover. Headline summary. Preferred content: tldr list "
+        "(3-5 short bullets), ``key_metrics`` (already populated server-side "
+        "for market cap / P/E). No chart blocks belong on the cover."
+    ),
+}
+
 DEFAULT_BRIEFS: dict[str, str] = {
-    sid: f"Section: {sid}. Write a substantive analytical section."
+    sid: _SECTION_BRIEFS.get(
+        sid, f"Section: {sid}. Write a substantive analytical section."
+    )
     for sid in (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
 }
 
