@@ -145,6 +145,7 @@ def create_report(
         content_structured=schema.model_dump(mode="json"),
         source_session_id=source_session_id,
         model_ref=model_ref,
+        status="complete",
     )
     session.add(row)
     session.flush()
@@ -188,6 +189,7 @@ def save_report(
         model_ref=model_ref,
         token_usage=token_usage,
         generation_duration_ms=generation_duration_ms,
+        status="complete",
     )
     db.add(report)
     db.flush()
