@@ -329,6 +329,33 @@ def _inject_server_fields(
     payload.pop("report_metadata", None)
     payload.pop("report_mode", None)
     payload.pop("page_furniture", None)
+    # meta_stats is server-computed; drop any model-authored copy at the
+    # root so strict validation doesn't fail on a stale snapshot.
+    payload.pop("meta_stats", None)
+
+    rail = payload.get("rail")
+    if isinstance(rail, dict):
+        # Model recurrently nests `citations` and `meta_stats` under rail
+        # despite the prompt rule. Hoist citations to root (root wins on
+        # id collision), drop meta_stats outright.
+        misplaced = rail.pop("citations", None)
+        rail.pop("meta_stats", None)
+        if isinstance(misplaced, list) and misplaced:
+            existing = payload.get("citations")
+            if not isinstance(existing, list):
+                existing = []
+            existing_ids = {
+                c["id"] for c in existing if isinstance(c, dict) and isinstance(c.get("id"), str)
+            }
+            for cit in misplaced:
+                if not isinstance(cit, dict):
+                    continue
+                cid = cit.get("id")
+                if not isinstance(cid, str) or cid in existing_ids:
+                    continue
+                existing.append(cit)
+                existing_ids.add(cid)
+            payload["citations"] = existing
 
     payload["schema_version"] = "2.0"
     payload["department"] = department_id
@@ -1380,7 +1407,11 @@ class ReportRunner:
                             "Reminders: do NOT include page_furniture, schema_version, "
                             "department, or generated_at (server-set); ChartOptions accepts "
                             "only {height, show_legend, show_grid}; table headers must be "
-                            "objects with {key, label}; metric value/delta must be strings."
+                            "objects with {key, label}; metric value/delta must be strings. "
+                            "If any failing path starts with `rail.`: `rail` accepts ONLY "
+                            "`verdict`, `quick_stats`, `sparkline`. Move `citations` to the "
+                            "ROOT of the payload (sibling of `cover`/`sections`), and drop "
+                            "`meta_stats` entirely (server-computed)."
                         ),
                     }
                     conversation.append(
@@ -1566,6 +1597,14 @@ class ReportRunner:
             )
             schema_payload = normalize_report(schema_payload)
             schema_payload = _apply_coercion_fallback(schema_payload)
+            _merge_provider_citations(schema_payload, provider_citations)
+            schema_payload["meta_stats"] = _build_meta_stats(
+                schema_payload,
+                model_id=resolved.model_ref,
+                total_input_tokens=total_input_tokens,
+                total_output_tokens=total_output_tokens,
+                web_search_count=web_search_count,
+            )
             self._trace(
                 "report.coercion_applied",
                 "strict validation exhausted; coercion fallback applied",
