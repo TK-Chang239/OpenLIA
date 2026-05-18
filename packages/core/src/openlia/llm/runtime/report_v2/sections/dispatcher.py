@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from openlia.llm.runtime.report_v2.packer.auto_repair import repair_section
@@ -28,8 +29,38 @@ class SectionDispatch:
     facts_slice: dict[str, Fact]
 
 
+_DIAGNOSTIC_DIR = Path("/tmp/report_v2_failed_sections")
+_PARSE_ERROR_TERMS = ("frontmatter", "parse")
+
+
 def _format_errors(findings: list[ValidationFinding]) -> str:
     return "\n".join(f"- {f.check}: {f.detail}" for f in findings)
+
+
+def _is_parse_error(errors: list[str]) -> bool:
+    return any(term in e for e in errors for term in _PARSE_ERROR_TERMS)
+
+
+def _maybe_write_diagnostic(result: SectionResult) -> None:
+    if result.state != SectionTerminalState.EXHAUSTED:
+        return
+    if not result.failed_attempts:
+        return
+    if not _is_parse_error(result.validation_errors):
+        return
+    try:
+        _DIAGNOSTIC_DIR.mkdir(parents=True, exist_ok=True)
+        out = _DIAGNOSTIC_DIR / f"{result.section_id}.md"
+        out.write_text(result.failed_attempts[0], encoding="utf-8")
+        print(
+            f"[diagnostic] wrote failed first attempt of {result.section_id} to {out}",
+            flush=True,
+        )
+    except Exception as exc:
+        print(
+            f"[diagnostic] warning: could not write diagnostic for {result.section_id}: {exc}",
+            flush=True,
+        )
 
 
 async def _dispatch_one(
@@ -70,13 +101,7 @@ async def _dispatch_one(
                     "\n\nRe-emit the section."
                 )
                 continue
-            return SectionResult(
-                section_id=d.section_id,
-                state=SectionTerminalState.EXHAUSTED,
-                attempts=attempts,
-                failed_attempts=failed_attempts,
-                validation_errors=[f.detail for f in last_errors],
-            )
+            break
 
         errors = [
             f
@@ -110,13 +135,15 @@ async def _dispatch_one(
                 f"{_format_errors(errors)}\n\nRe-emit the section. Address each error explicitly."
             )
 
-    return SectionResult(
+    exhausted = SectionResult(
         section_id=d.section_id,
         state=SectionTerminalState.EXHAUSTED,
         attempts=attempts,
         failed_attempts=failed_attempts,
         validation_errors=[f.detail for f in last_errors],
     )
+    _maybe_write_diagnostic(exhausted)
+    return exhausted
 
 
 async def dispatch_sections(
@@ -128,8 +155,30 @@ async def dispatch_sections(
     known_block_tags: list[str],
     concurrency_semaphore: asyncio.Semaphore | None = None,
 ) -> list[SectionResult]:
-    tasks = [
-        _dispatch_one(
+    # Use sequential iteration with fail-fast only when concurrency is capped to 1.
+    # fail-fast only fires when concurrency_semaphore caps to 1.
+    sequential = (
+        concurrency_semaphore is not None
+        and getattr(concurrency_semaphore, "_value", None) == 1
+    )
+    if not sequential:
+        tasks = [
+            _dispatch_one(
+                d=d,
+                writer=writer,
+                validator=validator,
+                max_retries=max_retries,
+                known_block_tags=known_block_tags,
+                concurrency_semaphore=concurrency_semaphore,
+            )
+            for d in dispatches
+        ]
+        return list(await asyncio.gather(*tasks))
+
+    # Sequential loop with fail-fast on systemic parse error in first section.
+    results: list[SectionResult] = []
+    for i, d in enumerate(dispatches):
+        result = await _dispatch_one(
             d=d,
             writer=writer,
             validator=validator,
@@ -137,6 +186,27 @@ async def dispatch_sections(
             known_block_tags=known_block_tags,
             concurrency_semaphore=concurrency_semaphore,
         )
-        for d in dispatches
-    ]
-    return list(await asyncio.gather(*tasks))
+        results.append(result)
+        if (
+            i == 0
+            and result.state == SectionTerminalState.EXHAUSTED
+            and _is_parse_error(result.validation_errors)
+        ):
+            print(
+                "[dispatch] first section exhausted on parse error; skipping remaining sections.",
+                flush=True,
+            )
+            for remaining in dispatches[i + 1 :]:
+                results.append(
+                    SectionResult(
+                        section_id=remaining.section_id,
+                        state=SectionTerminalState.EXHAUSTED,
+                        attempts=0,
+                        failed_attempts=[],
+                        validation_errors=[
+                            "skipped: prior section exhausted on systemic parse error"
+                        ],
+                    )
+                )
+            return results
+    return results
