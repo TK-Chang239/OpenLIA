@@ -3,11 +3,99 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+def _coerce_numeric_list(raw: Any) -> list[float] | None:
+    """Best-effort coercion of a heterogeneous list to ``list[float]``.
+
+    Returns ``None`` if the input is not a list-like at all so callers can
+    fall through to other normalization paths."""
+    if not isinstance(raw, list):
+        return None
+    out: list[float] = []
+    for item in raw:
+        if isinstance(item, int | float) and not isinstance(item, bool):
+            out.append(float(item))
+        elif isinstance(item, dict) and "y" in item:
+            try:
+                out.append(float(item["y"]))
+            except (TypeError, ValueError):
+                out.append(0.0)
+        else:
+            try:
+                out.append(float(item))
+            except (TypeError, ValueError):
+                out.append(0.0)
+    return out
+
+
+class _Series(_Strict):
+    """Shared base for chart series with ``data → values`` back-compat.
+
+    The LLM prompt historically asked for ``data: [n, n, n]`` for every chart
+    family. The packer used to splat ``**payload`` straight into the block,
+    so the frontend (which expects ``values``) silently rendered empty bars.
+    These validators map both shapes to the canonical ``values`` form."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_data_to_values(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+        if "values" in raw and raw["values"] is not None:
+            return raw
+        if "data" in raw and raw["data"] is not None:
+            coerced = _coerce_numeric_list(raw["data"])
+            if coerced is not None:
+                raw = dict(raw)
+                raw["values"] = coerced
+                raw.pop("data", None)
+        return raw
+
+
+class BarSeries(_Series):
+    name: str
+    values: list[float] = Field(default_factory=list)
+
+
+class LineSeries(_Series):
+    name: str
+    values: list[float] = Field(default_factory=list)
+
+
+class AreaSeries(_Series):
+    name: str
+    values: list[float] = Field(default_factory=list)
+
+
+class ScatterPoint(_Strict):
+    x: float
+    y: float
+
+
+class ScatterSeries(_Strict):
+    """Scatter is genuinely 2D so it keeps point-pair shape; ``data`` and
+    ``points`` are both accepted as aliases for the canonical key."""
+
+    name: str
+    points: list[ScatterPoint] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_data_to_points(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+        if "points" in raw and raw["points"] is not None:
+            return raw
+        if "data" in raw and isinstance(raw["data"], list):
+            raw = dict(raw)
+            raw["points"] = raw.pop("data")
+        return raw
 
 
 Align = Literal["left", "center", "right"]
@@ -27,11 +115,42 @@ DeltaDirection = Literal["up", "down", "flat"]
 Tone = Literal["positive", "negative", "neutral", "warn"]
 
 
+_TONE_ALIASES: dict[str, str] = {
+    # Positive synonyms
+    "good": "positive", "beat": "positive", "win": "positive", "up": "positive",
+    "green": "positive", "favorable": "positive", "strong": "positive",
+    "bull": "positive", "bullish": "positive",
+    # Negative synonyms
+    "bad": "negative", "miss": "negative", "loss": "negative", "down": "negative",
+    "red": "negative", "unfavorable": "negative", "weak": "negative",
+    "bear": "negative", "bearish": "negative",
+    # Warn synonyms
+    "warning": "warn", "caution": "warn", "risk": "warn", "yellow": "warn",
+    "alert": "warn",
+    # Neutral synonyms
+    "info": "neutral", "informational": "neutral", "unknown": "neutral",
+    "n/a": "neutral", "na": "neutral",
+}
+
+
 class Tag(_Strict):
     """Inline chip used by metrics, timeline events, and quote attribution."""
 
     label: str
     tone: Tone = "neutral"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_tone(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+        tone = raw.get("tone")
+        if isinstance(tone, str):
+            mapped = _TONE_ALIASES.get(tone.strip().lower())
+            if mapped is not None:
+                raw = dict(raw)
+                raw["tone"] = mapped
+        return raw
 
 
 class Metric(_Strict):
@@ -182,21 +301,47 @@ class QuoteBlock(_Strict):
     source_ids: list[str] = Field(default_factory=list)
 
 
+def _backfill_categories_from_data(raw: Any) -> Any:
+    """Pull x-axis labels off ``series[0].data: [{x, y}]`` if the block has
+    no top-level ``categories`` — the legacy line/area writer shape."""
+    if not isinstance(raw, dict):
+        return raw
+    if raw.get("categories"):
+        return raw
+    series = raw.get("series") or []
+    if not series or not isinstance(series[0], dict):
+        return raw
+    data = series[0].get("data")
+    if not isinstance(data, list) or not data:
+        return raw
+    if not all(isinstance(d, dict) and "x" in d for d in data):
+        return raw
+    raw = dict(raw)
+    raw["categories"] = [str(d["x"]) for d in data]
+    return raw
+
+
 class LineChartBlock(_Strict):
     type: Literal["line_chart"]
     title: str
-    series: Annotated[list[dict[str, Any]], Field(min_length=1)]
+    categories: list[str] = Field(default_factory=list)
+    series: Annotated[list[LineSeries], Field(min_length=1)]
     x_label: str | None = None
     y_label: str | None = None
     source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_categories(cls, raw: Any) -> Any:
+        return _backfill_categories_from_data(raw)
 
 
 class BarChartBlock(_Strict):
     type: Literal["bar_chart"]
     title: str
     categories: Annotated[list[str], Field(min_length=1)]
-    series: Annotated[list[dict[str, Any]], Field(min_length=1)]
+    series: Annotated[list[BarSeries], Field(min_length=1)]
     orientation: Literal["vertical", "horizontal"] = "vertical"
     stacked: bool = False
     source_ids: list[str] = Field(default_factory=list)
@@ -206,10 +351,16 @@ class BarChartBlock(_Strict):
 class AreaChartBlock(_Strict):
     type: Literal["area_chart"]
     title: str
-    series: Annotated[list[dict[str, Any]], Field(min_length=1)]
+    categories: list[str] = Field(default_factory=list)
+    series: Annotated[list[AreaSeries], Field(min_length=1)]
     stacked: bool = False
     source_ids: list[str] = Field(default_factory=list)
     options: ChartOptions = Field(default_factory=ChartOptions)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backfill_categories(cls, raw: Any) -> Any:
+        return _backfill_categories_from_data(raw)
 
 
 class PieSegment(_Strict):
@@ -265,7 +416,7 @@ class WaterfallBlock(_Strict):
 class ScatterBlock(_Strict):
     type: Literal["scatter_plot"]
     title: str
-    series: Annotated[list[dict[str, Any]], Field(min_length=1)]
+    series: Annotated[list[ScatterSeries], Field(min_length=1)]
     x_label: str | None = None
     y_label: str | None = None
     source_ids: list[str] = Field(default_factory=list)

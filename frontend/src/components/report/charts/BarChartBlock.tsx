@@ -32,15 +32,24 @@ export function BarChartBlock({
   const showGrid = options?.show_grid !== false;
   const { figureRef, tooltipNode, hover, activeKey } = useChartTooltip();
 
-  // Defensive normalization: LLM-generated payloads sometimes ship a series
-  // entry with missing/null ``values``. Coerce to [] so downstream indexing
-  // never throws on ``s.values[ci]``.
+  // LLM-generated payloads (and any persisted rows from before the schema
+  // typed series classes shipped) sometimes ship ``data`` instead of
+  // ``values``. Mirror ComboChartBlock's coercion so old reports still
+  // render their bars instead of degenerating to height-1 stubs.
   const series = useMemo<BarSeries[]>(
     () =>
-      (rawSeries ?? []).map((s) => ({
-        name: s?.name ?? '',
-        values: Array.isArray(s?.values) ? s.values : [],
-      })),
+      (rawSeries ?? []).map((s) => {
+        const raw = (s ?? {}) as { name?: unknown; values?: unknown; data?: unknown };
+        const candidate = Array.isArray(raw.values)
+          ? raw.values
+          : Array.isArray(raw.data)
+            ? raw.data
+            : [];
+        return {
+          name: typeof raw.name === 'string' ? raw.name : '',
+          values: (candidate as unknown[]).map((v) => (typeof v === 'number' ? v : 0)),
+        };
+      }),
     [rawSeries],
   );
 

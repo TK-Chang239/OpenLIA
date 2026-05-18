@@ -10,10 +10,65 @@ export interface LineSeries {
 export interface LineChartBlockProps {
   type: 'line_chart';
   title: string;
-  series: LineSeries[];
+  // Canonical shape: ``categories: string[]`` + ``series[].values: number[]``.
+  // Legacy ``series[].data: [{x, y}]`` shape is still accepted on read for
+  // back-compat with reports persisted before the schema normalization.
+  series: LineSeriesInput[];
+  categories?: string[];
   x_label?: string;
   y_label?: string;
   options?: { show_legend?: boolean; show_grid?: boolean };
+}
+
+interface LineSeriesInput {
+  name?: string;
+  data?: unknown;
+  values?: unknown;
+}
+
+function normalizeLineSeries(
+  rawSeries: LineSeriesInput[] | undefined,
+  rawCategories: string[] | undefined,
+): { series: LineSeries[]; xs: string[] } {
+  const list = Array.isArray(rawSeries) ? rawSeries : [];
+  const declaredCats = Array.isArray(rawCategories) ? rawCategories.map(String) : [];
+
+  // Capture x-axis labels from the first series shaped as ``data: [{x, y}]``
+  // so we keep the legacy display unchanged.
+  let derivedCats: string[] = [];
+  if (declaredCats.length === 0) {
+    const firstData = list[0]?.data;
+    if (Array.isArray(firstData) && firstData.every((d) => d && typeof d === 'object' && 'x' in d)) {
+      derivedCats = (firstData as { x: unknown }[]).map((d) => String(d.x));
+    }
+  }
+  const xs = declaredCats.length > 0 ? declaredCats : derivedCats;
+
+  const series = list.map((s) => {
+    const name = typeof s?.name === 'string' ? s.name : '';
+    const candidate = Array.isArray(s?.values)
+      ? (s.values as unknown[])
+      : Array.isArray(s?.data)
+        ? (s.data as unknown[])
+        : [];
+    const dataPoints = candidate.map((entry, i): { x: string | number; y: number } => {
+      if (entry && typeof entry === 'object' && 'y' in (entry as object)) {
+        const obj = entry as { x?: unknown; y?: unknown };
+        return {
+          x: typeof obj.x === 'number' || typeof obj.x === 'string' ? obj.x : xs[i] ?? i,
+          y: typeof obj.y === 'number' ? obj.y : 0,
+        };
+      }
+      return { x: xs[i] ?? i, y: typeof entry === 'number' ? entry : 0 };
+    });
+    return { name, data: dataPoints };
+  });
+
+  // If categories weren't supplied either way, fall back to whatever the
+  // first normalized series ended up exposing — keeps the legacy x-tick
+  // rendering loop unchanged.
+  const finalXs = xs.length > 0 ? xs : series[0]?.data.map((d) => String(d.x)) ?? [];
+  return { series, xs: finalXs };
 }
 
 const W = 720;
@@ -53,11 +108,16 @@ function formatValue(v: number | undefined): string {
 
 export function LineChartBlock({
   title,
-  series,
+  series: rawSeries,
+  categories: rawCategories,
   options,
 }: LineChartBlockProps) {
+  const { series, xs: normalizedXs } = useMemo(
+    () => normalizeLineSeries(rawSeries, rawCategories),
+    [rawSeries, rawCategories],
+  );
   const chart = useMemo(() => {
-    const xs = series[0]?.data.map((d) => String(d.x)) ?? [];
+    const xs = normalizedXs;
     const allY = series.flatMap((s) => s.data.map((d) => d.y));
     const minY = Math.min(...allY);
     const maxY = Math.max(...allY);
@@ -70,7 +130,7 @@ export function LineChartBlock({
       yMax === yMin ? PAD_T + (H - PAD_T - PAD_B) / 2 : PAD_T + ((yMax - y) / (yMax - yMin)) * (H - PAD_T - PAD_B);
 
     return { xs, ticks, yMin, yMax, xStep, yToPx };
-  }, [series]);
+  }, [series, normalizedXs]);
 
   const showGrid = options?.show_grid !== false;
   const showLegend = options?.show_legend !== false;

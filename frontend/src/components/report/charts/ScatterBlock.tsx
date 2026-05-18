@@ -4,22 +4,51 @@ import { useChartTooltip } from './useChartTooltip';
 
 export interface ScatterSeries { name: string; data: { x: number; y: number }[]; }
 
+interface ScatterSeriesInput {
+  name?: string;
+  data?: unknown;
+  points?: unknown;
+}
+
 export interface ScatterBlockProps {
   type: 'scatter_plot';
   title: string;
-  series: ScatterSeries[];
+  // Canonical key is ``points``; ``data`` still accepted for back-compat
+  // with reports persisted before the schema normalization.
+  series: ScatterSeriesInput[];
   x_label?: string;
   y_label?: string;
   options?: { show_legend?: boolean; show_grid?: boolean };
 }
 
+function normalizeScatterSeries(raw: ScatterSeriesInput[] | undefined): ScatterSeries[] {
+  return (Array.isArray(raw) ? raw : []).map((s) => {
+    const name = typeof s?.name === 'string' ? s.name : '';
+    const candidate = Array.isArray(s?.points)
+      ? (s.points as unknown[])
+      : Array.isArray(s?.data)
+        ? (s.data as unknown[])
+        : [];
+    const data = candidate.flatMap((entry) => {
+      if (!entry || typeof entry !== 'object') return [];
+      const obj = entry as { x?: unknown; y?: unknown };
+      const x = typeof obj.x === 'number' ? obj.x : Number(obj.x);
+      const y = typeof obj.y === 'number' ? obj.y : Number(obj.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) return [{ x, y }];
+      return [];
+    });
+    return { name, data };
+  });
+}
+
 const { W, H } = CHART_VIEWBOX;
 const { L, R, T, B } = CHART_PADDING;
 
-export function ScatterBlock({ title, series, x_label, y_label, options }: ScatterBlockProps) {
+export function ScatterBlock({ title, series: rawSeries, x_label, y_label, options }: ScatterBlockProps) {
   const showLegend = options?.show_legend !== false;
   const showGrid = options?.show_grid !== false;
   const { figureRef, tooltipNode, hover } = useChartTooltip();
+  const series = useMemo(() => normalizeScatterSeries(rawSeries), [rawSeries]);
 
   const chart = useMemo(() => {
     const xs = series.flatMap((s) => s.data.map((d) => d.x));

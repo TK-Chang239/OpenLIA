@@ -47,6 +47,27 @@ describe('BarChartBlock', () => {
     );
     expect(container.querySelectorAll('.report-bars-h__row')).toHaveLength(2);
   });
+
+  it('renders bars when persisted series uses `data` instead of `values`', () => {
+    // Reports written before the schema normalization shipped ``data: [n, n]``
+    // straight from the LLM prompt. The renderer must coerce so old rows
+    // are not stuck displaying empty axes.
+    const { container } = render(
+      <BarChartBlock
+        type="bar_chart"
+        title="Legacy"
+        categories={['A', 'B']}
+        // @ts-expect-error — exercising legacy persisted shape
+        series={[{ name: 's1', data: [12, 34] }]}
+      />,
+    );
+    const rects = container.querySelectorAll('svg rect');
+    expect(rects).toHaveLength(2);
+    // Both bars must have non-trivial height — height-1 fallback means
+    // the coercion failed to surface real values.
+    const heights = Array.from(rects).map((r) => Number(r.getAttribute('height') ?? 0));
+    expect(Math.max(...heights)).toBeGreaterThan(1);
+  });
 });
 
 describe('AreaChartBlock', () => {
