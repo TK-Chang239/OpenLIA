@@ -21,10 +21,20 @@ def _facts_slice() -> dict:
 
 def _manifest() -> Manifest:
     m = Manifest()
-    m.append(kind="fetch", provider="eodhd", identifier="get_fundamentals_data/NET.US",
-             raw_payload={}, retrieved_at="t")
-    m.append(kind="search", provider="websearch", identifier="edge market 2025",
-             raw_payload=[], retrieved_at="t")
+    m.append(
+        kind="fetch",
+        provider="eodhd",
+        identifier="get_fundamentals_data/NET.US",
+        raw_payload={},
+        retrieved_at="t",
+    )
+    m.append(
+        kind="search",
+        provider="websearch",
+        identifier="edge market 2025",
+        raw_payload=[],
+        retrieved_at="t",
+    )
     return m
 
 
@@ -69,8 +79,12 @@ def test_synthesis_prompt_includes_hooks_after_framework_brief() -> None:
 
 def test_facts_slice_renders_with_citation_tags() -> None:
     parts = assemble_body_section_prompt(
-        system_role="x", style_guide="y", framework_brief="z",
-        manifest=_manifest(), facts_slice=_facts_slice(), word_target=500,
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        facts_slice=_facts_slice(),
+        word_target=500,
     )
     assert "market_cap" in parts
     assert "sources: [1]" in parts or "[1]" in parts

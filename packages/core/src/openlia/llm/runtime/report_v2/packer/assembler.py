@@ -1,4 +1,5 @@
 """Assembler: converts SectionResult list + FactsPack + Manifest into ReportSchema."""
+
 from __future__ import annotations
 
 import importlib
@@ -160,9 +161,7 @@ def _segment_to_block(
 
         # Block YAML uses "sources" (integer manifest IDs), not "source_ids".
         sources_from_yaml: list[int] = [
-            int(s)
-            for s in (seg.data.get("sources") or [])
-            if str(s).lstrip("-").isdigit()
+            int(s) for s in (seg.data.get("sources") or []) if str(s).lstrip("-").isdigit()
         ]
         citation_ids = manifest_resolver(sources_from_yaml)
         return entry.assembler(

@@ -238,17 +238,13 @@ def test_assemble_omits_block_on_assembly_error_continues() -> None:
     financials = next(s for s in report.sections if s.id == "financials")
 
     # The bad chart block must not appear — replaced by a fallback TextBlock
-    block_contents = [
-        b.content for b in financials.blocks if hasattr(b, "content")
-    ]
+    block_contents = [b.content for b in financials.blocks if hasattr(b, "content")]
     assert any("block omitted" in c for c in block_contents), (
         "Expected a fallback TextBlock noting the omitted block"
     )
 
     # The intro/closing prose TextBlocks must still be present
-    non_fallback = [
-        c for c in block_contents if "block omitted" not in c
-    ]
+    non_fallback = [c for c in block_contents if "block omitted" not in c]
     assert len(non_fallback) >= 1, "Prose blocks around the bad chart must survive"
 
 

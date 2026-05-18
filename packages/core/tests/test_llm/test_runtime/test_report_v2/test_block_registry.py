@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from openlia.llm.runtime.report_v2.packer.blocks.registry import (
     BlockRegistry,
     default_block_registry,

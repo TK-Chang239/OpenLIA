@@ -9,9 +9,7 @@ from openlia.llm.runtime.report_v2.packer.blocks.registry import (
 from openlia.reports.schema import GroupBlock
 
 
-def _assemble(
-    *, data: dict[str, Any], citation_ids: list[int], manifest_resolver
-) -> GroupBlock:
+def _assemble(*, data: dict[str, Any], citation_ids: list[int], manifest_resolver) -> GroupBlock:
     child_blocks = []
     for item in data["blocks"]:
         tag = item["type"]

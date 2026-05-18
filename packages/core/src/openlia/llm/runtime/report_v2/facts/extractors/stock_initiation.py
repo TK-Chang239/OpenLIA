@@ -2,6 +2,7 @@
 
 Importing this module triggers registration with the default_registry.
 """
+
 from __future__ import annotations
 
 from openlia.llm.runtime.report_v2.facts.extractors.compute import cagr, union_source_ids

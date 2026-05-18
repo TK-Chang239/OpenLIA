@@ -5,8 +5,7 @@ from openlia.llm.runtime.report_v2.packer.auto_repair import (
     repair_section,
 )
 
-
-SECTION_WITH_BAD_TAG = '''---
+SECTION_WITH_BAD_TAG = """---
 section_id: x
 title: X
 sources_used: [1]
@@ -20,7 +19,7 @@ Some prose [1].
 title: T
 series: [{name: a, values: [1,2,3]}]
 ```
-'''
+"""
 
 
 def test_repair_renames_known_tag_typos() -> None:

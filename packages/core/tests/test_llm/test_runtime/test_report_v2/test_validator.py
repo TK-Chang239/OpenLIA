@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from openlia.llm.runtime.report_v2.packer.parser import (
-    FencedBlockSegment,
     ParsedSection,
     TextSegment,
 )
@@ -88,7 +87,9 @@ def test_fetched_but_unused_passes_when_fact_in_prose() -> None:
 def test_cross_section_numeric_consistency_flags_mismatched_claims() -> None:
     sec_a = _parsed([_text("Revenue CAGR 3y of 23.4% over the period [1].", citation_ids=[1])])
     sec_a.frontmatter["section_id"] = "financial_analysis"
-    sec_b = _parsed([_text("Revenue CAGR 3y of 24.7% across the projection [1].", citation_ids=[1])])
+    sec_b = _parsed(
+        [_text("Revenue CAGR 3y of 24.7% across the projection [1].", citation_ids=[1])]
+    )
     sec_b.frontmatter["section_id"] = "valuation_analysis"
 
     findings = cross_section_numeric_consistency([sec_a, sec_b])

@@ -3,6 +3,7 @@
 The provider protocol is intentionally narrow: structured_output(prompt, schema) -> dict.
 Phase 5 wires this to the real provider; Phase 1 tests use AsyncMock.
 """
+
 from __future__ import annotations
 
 from typing import Any, Protocol

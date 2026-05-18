@@ -35,6 +35,7 @@ def test_duplicate_registration_rejected() -> None:
         return Fact(name="x", value=1, source_ids=[1], extractor="deterministic")
 
     with pytest.raises(ValueError, match="already registered"):
+
         @reg.register("x", tier="compute", depends_on=[])
         def _b(payloads, facts):
             return Fact(name="x", value=2, source_ids=[1], extractor="compute")

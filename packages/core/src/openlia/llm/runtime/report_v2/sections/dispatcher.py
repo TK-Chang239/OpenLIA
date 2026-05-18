@@ -1,4 +1,5 @@
 """Parallel section writer dispatch with per-section retry and terminal-state tracking."""
+
 from __future__ import annotations
 
 import asyncio
@@ -89,15 +90,12 @@ async def _dispatch_one(
             parsed = parse_section_file(markdown)
         except ValueError as e:
             last_errors = [
-                ValidationFinding(
-                    check="parse_error", section_id=d.section_id, detail=str(e)
-                )
+                ValidationFinding(check="parse_error", section_id=d.section_id, detail=str(e))
             ]
             failed_attempts.append(raw)
             if attempts <= max_retries:
                 prompt = (
-                    f"{d.prompt}\n\nPREVIOUS ATTEMPT FAILED PARSE:\n{e}"
-                    "\n\nRe-emit the section."
+                    f"{d.prompt}\n\nPREVIOUS ATTEMPT FAILED PARSE:\n{e}\n\nRe-emit the section."
                 )
                 continue
             break
@@ -157,8 +155,7 @@ async def dispatch_sections(
     # Use sequential iteration with fail-fast only when concurrency is capped to 1.
     # fail-fast only fires when concurrency_semaphore caps to 1.
     sequential = (
-        concurrency_semaphore is not None
-        and getattr(concurrency_semaphore, "_value", None) == 1
+        concurrency_semaphore is not None and getattr(concurrency_semaphore, "_value", None) == 1
     )
     if not sequential:
         tasks = [

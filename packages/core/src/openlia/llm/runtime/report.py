@@ -345,9 +345,7 @@ def _inject_server_fields(
             if not isinstance(existing, list):
                 existing = []
             existing_ids = {
-                c["id"]
-                for c in existing
-                if isinstance(c, dict) and isinstance(c.get("id"), str)
+                c["id"] for c in existing if isinstance(c, dict) and isinstance(c.get("id"), str)
             }
             for cit in misplaced:
                 if not isinstance(cit, dict):
