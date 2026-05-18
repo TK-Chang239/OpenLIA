@@ -66,38 +66,11 @@ def _check_env() -> tuple[str, str]:
 # that routes every "eodhd" call to ExtendedAPIClient methods and ignores
 # the "news" provider (baseline skips None results gracefully).
 #
-# Tool name → method mapping covers every call in BASELINE_STOCK_INITIATION.
-# The SDK uses camelCase internally but exposes snake_case Python methods.
+# Tool name → SDK method mapping via _method_for().  Multiple tool names map
+# to the same SDK call when their data lives inside the same payload (e.g.
+# income_statement, balance_sheet, cash_flow, holders, earnings_trends all live
+# inside the fundamentals dict returned by get_fundamentals_data).
 # ---------------------------------------------------------------------------
-
-# Maps (provider, tool) → method name on ExtendedAPIClient.
-# Only "eodhd" provider is handled; "news" falls through to None.
-_TOOL_MAP: dict[str, str] = {
-    "get_live_prices": "get_live_stock_prices",
-    "get_fundamentals_data": "get_fundamental_data",
-    "get_historical_market_cap": "get_historical_market_capitalization",
-    "get_historical_prices": "get_prices_eod",
-    "get_historical_prices_long": "get_prices_eod",
-    "get_income_statement": "get_fundamental_data",
-    "get_balance_sheet": "get_fundamental_data",
-    "get_cash_flow": "get_fundamental_data",
-    "get_earnings_trends": "get_fundamental_data",
-    "get_holders": "get_fundamental_data",
-    "get_insider_transactions": "get_insider_transactions",
-}
-
-# These tools consolidate into get_fundamental_data with a filter key.
-# Assumption: the runner only needs the raw payload, not a pre-filtered view.
-_FUNDAMENTAL_TOOLS: frozenset[str] = frozenset(
-    {
-        "get_fundamentals_data",
-        "get_income_statement",
-        "get_balance_sheet",
-        "get_cash_flow",
-        "get_earnings_trends",
-        "get_holders",
-    }
-)
 
 
 class _EodhdDispatcher:
@@ -105,68 +78,58 @@ class _EodhdDispatcher:
 
     If ExtendedAPIClient lacks a method for a given tool name, the call returns
     None and run_baseline skips the entry — no crash, degraded manifest at worst.
-
-    Args for "get_historical_prices_long" add a long lookback period so the
-    5-year price history is fetched correctly.
+    Failures are printed to stdout so they are visible during smoke testing.
     """
 
     def __init__(self, client: Any) -> None:
         self._client = client
 
     async def dispatch(self, provider: str, tool: str, args: dict[str, Any]) -> Any:
-        if provider == "news":
-            # No news connector wired in standalone mode; baseline skips None.
-            return None
-
         if provider != "eodhd":
+            # "news" and any other provider: no connector wired; baseline skips None.
+            return None
+        ticker = args.get("ticker", "")
+        method_name = self._method_for(tool)
+        if method_name is None:
+            return None
+        method = getattr(self._client, method_name, None)
+        if method is None:
+            print(
+                f"  [EODHD warn] SDK has no method {method_name!r} (tool={tool!r})",
+                flush=True,
+            )
+            return None
+        loop = asyncio.get_event_loop()
+        try:
+            return await loop.run_in_executor(None, lambda: method(ticker))
+        except Exception as e:
+            # Surface the failure so it is visible during smoke testing.
+            print(
+                f"  [EODHD warn] {tool}({ticker}) → {type(e).__name__}: {e}",
+                flush=True,
+            )
             return None
 
-        ticker = args.get("ticker", "")
-
-        # All fundamental-data variants map to get_fundamental_data.
-        if tool in _FUNDAMENTAL_TOOLS:
-            method = getattr(self._client, "get_fundamental_data", None)
-            if method is None:
-                return None
-            # get_fundamental_data(symbol) → returns nested fundamentals dict.
-            return await asyncio.get_event_loop().run_in_executor(None, method, ticker)
-
+    @staticmethod
+    def _method_for(tool: str) -> str | None:
+        # Multiple tool names map to the same SDK method when their data lives
+        # inside the same payload (fundamentals contains income/balance/cashflow).
+        if tool in {
+            "get_fundamentals_data",
+            "get_income_statement",
+            "get_balance_sheet",
+            "get_cash_flow",
+            "get_earnings_trends",
+            "get_holders",
+        }:
+            return "get_fundamentals_data"
         if tool == "get_live_prices":
-            method = getattr(self._client, "get_live_stock_prices", None)
-            if method is None:
-                return None
-            return await asyncio.get_event_loop().run_in_executor(None, method, ticker)
-
-        if tool == "get_historical_market_cap":
-            method = getattr(self._client, "get_historical_market_capitalization", None)
-            if method is None:
-                return None
-            return await asyncio.get_event_loop().run_in_executor(None, method, ticker)
-
-        if tool in ("get_historical_prices", "get_historical_prices_long"):
-            method = getattr(self._client, "get_prices_eod", None)
-            if method is None:
-                return None
-            lookback = args.get("lookback", "60d")
-            # get_prices_eod(symbol, from_date, to_date, period) — use period="d".
-            # Simplified: pass only symbol; SDK returns full history.
-            # If SDK requires date range, this will fall through to None gracefully.
-            try:
-                return await asyncio.get_event_loop().run_in_executor(
-                    None, lambda: method(ticker)
-                )
-            except TypeError:
-                # Some SDK versions require date args — return None to degrade gracefully.
-                _ = lookback  # consumed to avoid unused-variable warning
-                return None
-
+            return "get_live_stock_prices"
         if tool == "get_insider_transactions":
-            method = getattr(self._client, "get_insider_transactions", None)
-            if method is None:
-                return None
-            return await asyncio.get_event_loop().run_in_executor(None, method, ticker)
-
-        # Unknown tool — return None so baseline skips gracefully.
+            return "get_insider_transactions_data"
+        if tool in {"get_historical_prices", "get_historical_prices_long"}:
+            return "get_historical_data"
+        # get_historical_market_cap has no direct SDK method in this version.
         return None
 
 
