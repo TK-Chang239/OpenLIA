@@ -51,6 +51,92 @@ def test_extract_hooks_missing_returns_none() -> None:
     assert extract_hooks_from_section_result(result) is None
 
 
+_SECTION_WITH_LIST_HOOKS = '''\
+---
+section_id: industry_overview
+title: Industry Overview
+sources_used: [1]
+synthesis_hooks:
+  - thesis_contribution: "Edge platform TAM expanding."
+    bull_case_inputs:
+      - "Market 28% CAGR [12]"
+    bear_case_inputs:
+      - "Hyperscalers compressing margins [3]"
+---
+
+## Body
+
+Prose here.
+'''
+
+_SECTION_WITH_MALFORMED_HOOKS = '''\
+---
+section_id: industry_overview
+title: Industry Overview
+sources_used: [1]
+synthesis_hooks: "this is a string"
+---
+
+## Body
+
+Prose here.
+'''
+
+_SECTION_WITH_PARTIAL_HOOKS = '''\
+---
+section_id: industry_overview
+title: Industry Overview
+sources_used: [1]
+synthesis_hooks:
+  thesis_contribution: "Edge platform TAM expanding."
+---
+
+## Body
+
+Prose here.
+'''
+
+
+def test_extract_hooks_tolerates_list_wrapping() -> None:
+    result = SectionResult(
+        section_id="industry_overview",
+        state=SectionTerminalState.SUCCESS,
+        attempts=1,
+        markdown=_SECTION_WITH_LIST_HOOKS,
+    )
+    hook = extract_hooks_from_section_result(result)
+    assert hook is not None
+    assert hook.section_id == "industry_overview"
+    assert hook.thesis_contribution.startswith("Edge")
+    assert hook.bull_case_inputs == ["Market 28% CAGR [12]"]
+    assert hook.bear_case_inputs == ["Hyperscalers compressing margins [3]"]
+
+
+def test_extract_hooks_returns_none_on_malformed_shape() -> None:
+    result = SectionResult(
+        section_id="industry_overview",
+        state=SectionTerminalState.SUCCESS,
+        attempts=1,
+        markdown=_SECTION_WITH_MALFORMED_HOOKS,
+    )
+    hook = extract_hooks_from_section_result(result)
+    assert hook is None
+
+
+def test_extract_hooks_tolerates_missing_fields() -> None:
+    result = SectionResult(
+        section_id="industry_overview",
+        state=SectionTerminalState.SUCCESS,
+        attempts=1,
+        markdown=_SECTION_WITH_PARTIAL_HOOKS,
+    )
+    hook = extract_hooks_from_section_result(result)
+    assert hook is not None
+    assert hook.thesis_contribution == "Edge platform TAM expanding."
+    assert hook.bull_case_inputs == []
+    assert hook.bear_case_inputs == []
+
+
 def test_bundle_renders_compact_for_synthesis_prompt() -> None:
     hooks = [
         SynthesisHook(

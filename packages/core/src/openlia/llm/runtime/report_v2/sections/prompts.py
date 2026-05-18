@@ -37,7 +37,19 @@ synthesis_hooks (only for body sections)
 ```group, \
 ```text
 - Each block carries a `sources: [N, ...]` list of manifest ids
-- Do not invent citations; only cite [N] markers that resolve to entries in the manifest above.\
+- Do not invent citations; only cite [N] markers that resolve to entries in the manifest above.
+
+Body sections MUST include a `synthesis_hooks` mapping in the frontmatter with EXACTLY this shape \
+(a single object, not a list):
+
+  synthesis_hooks:
+    thesis_contribution: "One sentence on what this section contributes to the investment thesis."
+    bull_case_inputs:
+      - "Bullet point with [N] citation marker"
+    bear_case_inputs:
+      - "Bullet point with [N] citation marker"
+
+Do NOT wrap `synthesis_hooks` in a list. There is ONE hook per section.\
 """
 
 
