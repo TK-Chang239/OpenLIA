@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
+import { niceTicks, formatTick, yScale, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
 import { useChartTooltip } from './useChartTooltip';
 
 type ItemType = 'total' | 'increase' | 'decrease';
@@ -13,12 +13,21 @@ export interface WaterfallBlockProps {
   options?: { show_grid?: boolean };
 }
 
-const { W, H } = CHART_VIEWBOX;
-const { L, R, T, B } = CHART_PADDING;
+const W = CHART_VIEWBOX.W;
+const { L, R, T } = CHART_PADDING;
+// Waterfall labels are inherently descriptive ("Existing customer expansion",
+// "FY24 revenue") and routinely exceed the per-slot width when 5+ items are
+// charted side-by-side, producing overlapping text. When that happens we
+// rotate the labels -30°, extend the SVG height to make room for the rotated
+// label region, and show every label (no decimation).
 
 export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
   const showGrid = options?.show_grid !== false;
   const { figureRef, tooltipNode, hover } = useChartTooltip();
+  const longLabels = items.length > 5 || items.some((it) => it.label.length > 12);
+  const labelExtraH = longLabels ? 40 : 0;
+  const H = CHART_VIEWBOX.H + labelExtraH;
+  const B = CHART_PADDING.B + labelExtraH;
 
   const chart = useMemo(() => {
     if (items.length === 0) return null;
@@ -53,7 +62,6 @@ export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
 
   const slot = (W - L - R) / chart.bars.length;
   const barW = Math.max(2, slot * 0.62);
-  const visibleX = visibleXLabels(chart.bars.map((b) => b.label));
 
   return (
     <figure className="report-chart" ref={figureRef}>
@@ -125,19 +133,22 @@ export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
           );
         })}
 
-        {chart.bars.map((b, i) =>
-          visibleX[i] ? (
+        {chart.bars.map((b, i) => {
+          const cx = L + i * slot + slot / 2;
+          const cy = H - B + 14;
+          return (
             <text
               key={`x-${i}`}
               className="tick-label"
-              x={L + i * slot + slot / 2}
-              y={H - B + 14}
-              textAnchor="middle"
+              x={cx}
+              y={cy}
+              textAnchor={longLabels ? 'end' : 'middle'}
+              transform={longLabels ? `rotate(-30 ${cx} ${cy})` : undefined}
             >
               {b.label}
             </text>
-          ) : null,
-        )}
+          );
+        })}
       </svg>
       {tooltipNode}
     </figure>

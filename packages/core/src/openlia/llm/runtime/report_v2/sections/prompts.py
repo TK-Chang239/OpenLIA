@@ -152,13 +152,20 @@ CHART SERIES KEY — every series in bar/line/area/combo uses ``values: [n, n, n
 
 EXHIBIT SELECTION — choose the block type that matches the data SHAPE.
 
-- Single value (one number with a label) fits ``metric_cards`` or ``key_finding``.
-- One metric over time fits ``chart:line`` or ``chart:area``.
-- Two correlated metrics over time (e.g., revenue + margin %) fit ``chart:combo``.
+- One to three independent scalars (single KPI, or a couple of unrelated KPIs like \
+"operating margin" + "revenue growth") fit ``metric_cards`` or ``key_finding``. Reserve \
+``chart:line`` and ``chart:bar`` for series of four or more aligned points.
+- A single metric tracked over four or more time periods fits ``chart:line`` or \
+``chart:area``. The x-axis must be ordered (years, quarters, months); plotting \
+unordered or categorical labels on a line chart is misleading.
+- Two correlated metrics sharing a time axis (e.g., revenue + margin %) fit ``chart:combo``.
 - Composition or share of a whole fits ``chart:pie``, ``chart:treemap``, or stacked \
 ``chart:bar`` once the categorical axis has three or more items.
-- Ranked items where the ranking itself is the message fit ``chart:bar`` horizontal, \
-up to eight rows.
+- Ranked items fit ``chart:bar``. Plot the UNDERLYING METRIC VALUE (market share %, \
+revenue $, customer count, etc.) — never plot ordinal rank numbers like 1, 2, 3, 4. \
+Sort categories DESCENDING by that metric so the largest is first, and surface the \
+metric unit in the title (e.g., "CRM Market Share by Vendor (%)" not "CRM Vendor Ranking"). \
+Up to eight rows.
 - Events or catalysts in time order fit ``timeline``.
 - Two-sided framings (bull/bear, pros/cons, strengths/weaknesses, before/after) fit \
 ``comparison_split``.

@@ -88,3 +88,47 @@ def test_facts_slice_renders_with_citation_tags() -> None:
     )
     assert "market_cap" in parts
     assert "sources: [1]" in parts or "[1]" in parts
+
+
+def test_prompt_instructs_ranking_charts_to_plot_underlying_metric() -> None:
+    """Ranking charts must plot the actual metric (share %, revenue $), not ordinal ranks.
+
+    Real-world failure: equity research report for CRM emitted a horizontal bar chart
+    with values [1, 2, 3, 4, 5, 6] for vendor ranking — the ordinal positions instead
+    of market-share percentages, with Salesforce shown smallest despite leading the
+    market. The prompt must steer the LLM toward plotting the underlying metric and
+    sorting descending.
+    """
+    parts = assemble_body_section_prompt(
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        facts_slice=_facts_slice(),
+        word_target=500,
+    )
+    assert "UNDERLYING METRIC VALUE" in parts
+    assert "DESCENDING" in parts
+    # Explicit prohibition on ordinal-rank values like 1, 2, 3, 4.
+    assert "ordinal rank" in parts
+
+
+def test_prompt_restricts_line_charts_to_ordered_series_of_4plus_points() -> None:
+    """Line charts require a continuous/time-ordered x-axis with at least 4 points.
+
+    Real-world failure: a line chart connected two unrelated scalars
+    ("operating margin" → "revenue growth"), which falsely implies a series.
+    Such 1-3 independent KPIs should use metric_cards instead.
+    """
+    parts = assemble_body_section_prompt(
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        facts_slice=_facts_slice(),
+        word_target=500,
+    )
+    assert "four or more aligned points" in parts
+    assert "four or more time periods" in parts
+    # metric_cards is the correct alternative for 1-3 independent scalars.
+    assert "metric_cards" in parts

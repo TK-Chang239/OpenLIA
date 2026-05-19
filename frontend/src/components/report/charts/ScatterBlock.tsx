@@ -43,6 +43,11 @@ function normalizeScatterSeries(raw: ScatterSeriesInput[] | undefined): ScatterS
 
 const { W, H } = CHART_VIEWBOX;
 const { L, R, T, B } = CHART_PADDING;
+// Inset the data plot area horizontally so dots at xMin/xMax don't render
+// directly on the y-axis line (where their left half overlaps with y-tick
+// labels) or against the right edge. 10px each side comfortably clears the
+// 3.5px dot radius plus the y-tick text gutter.
+const X_INSET = 10;
 
 export function ScatterBlock({ title, series: rawSeries, x_label, y_label, options }: ScatterBlockProps) {
   const showLegend = options?.show_legend !== false;
@@ -75,10 +80,12 @@ export function ScatterBlock({ title, series: rawSeries, x_label, y_label, optio
     );
   }
 
+  const xPlotLeft = L + X_INSET;
+  const xPlotRight = W - R - X_INSET;
   const xToPx = (x: number) =>
     chart.xMax === chart.xMin
-      ? (L + W - R) / 2
-      : L + ((x - chart.xMin) / (chart.xMax - chart.xMin)) * (W - L - R);
+      ? (xPlotLeft + xPlotRight) / 2
+      : xPlotLeft + ((x - chart.xMin) / (chart.xMax - chart.xMin)) * (xPlotRight - xPlotLeft);
 
   return (
     <figure className="report-chart" ref={figureRef}>

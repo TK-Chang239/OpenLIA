@@ -26,8 +26,14 @@ export function niceTicks(min: number, max: number, count = 4): number[] {
   else if (err <= 0.35) mult = 5;
   else if (err <= 0.75) mult = 2;
   const niceStep = mult * step;
-  const niceMin = Math.floor(min / niceStep) * niceStep;
-  const niceMax = Math.ceil(max / niceStep) * niceStep;
+  let niceMin = Math.floor(min / niceStep) * niceStep;
+  let niceMax = Math.ceil(max / niceStep) * niceStep;
+  // Guarantee one step of headroom above the data so a bar whose value lands
+  // exactly on a tick boundary (e.g., max=100 with niceStep=10) doesn't render
+  // flush against the top of the plot area — visually that reads as the bar
+  // exceeding the y-axis. Same idea below 0 when min is negative.
+  if (max > 0 && niceMax <= max) niceMax += niceStep;
+  if (min < 0 && niceMin >= min) niceMin -= niceStep;
   const ticks: number[] = [];
   for (let v = niceMin; v <= niceMax + niceStep / 2; v += niceStep) {
     ticks.push(Number(v.toFixed(8)));
