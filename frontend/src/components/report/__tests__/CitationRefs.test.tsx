@@ -34,4 +34,15 @@ describe('CitationRefs', () => {
     expect(wrapper).toBeTruthy();
     expect(wrapper?.querySelectorAll('a.citation-ref')).toHaveLength(1);
   });
+
+  it('strips the leading "c" prefix from displayed labels (anchor keeps full id)', () => {
+    render(<CitationRefs ids={['c14', 'c16']} />);
+    expect(screen.getByText('[14]')).toBeInTheDocument();
+    expect(screen.getByText('[16]')).toBeInTheDocument();
+    expect(screen.queryByText('[c14]')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Source c14' })).toHaveAttribute(
+      'href',
+      '#cite-c14',
+    );
+  });
 });

@@ -106,12 +106,10 @@ def assemble_report(
                 )
                 if on_omitted_block is not None:
                     on_omitted_block(section_id, block_type, type(exc).__name__)
-                blocks.append(
-                    TextBlock(
-                        type="text",
-                        content=f"[block omitted: {block_type} failed to assemble — see telemetry]",
-                    )
-                )
+                # Drop the failed block silently — telemetry above is the
+                # diagnostic channel. Earlier versions emitted a user-visible
+                # "[block omitted: ...]" text block, which leaked into PDFs.
+        _strip_leading_title_heading(blocks, title)
         assembled_sections.append(Section(id=section_id, title=title, blocks=blocks))
 
     meta_stats = _build_meta_stats(citations=citations, sections=assembled_sections)
@@ -131,6 +129,32 @@ def assemble_report(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _strip_leading_title_heading(blocks: list[Block], section_title: str) -> None:
+    """Drop a leading "# Title" or "## Title" line from the first text block
+    when it duplicates the section title.
+
+    The section title is already rendered as an H2 by ReportSection; LLMs
+    reliably also emit it as a markdown heading on the first line of prose,
+    which causes the title to appear twice in the rendered report.
+    Compares case-insensitively and ignores trailing punctuation/whitespace.
+    """
+    if not blocks or not section_title:
+        return
+    head = blocks[0]
+    content = getattr(head, "content", None)
+    if not isinstance(content, str) or not content:
+        return
+    lines = content.split("\n", 1)
+    first = lines[0].strip()
+    rest = lines[1] if len(lines) > 1 else ""
+    if not (first.startswith("# ") or first.startswith("## ")):
+        return
+    heading_text = first.lstrip("# ").strip().rstrip(":.,;").strip()
+    if heading_text.casefold() != section_title.strip().casefold():
+        return
+    head.content = rest.lstrip("\n")
 
 
 def _resolve_marker_to_cid(manifest: Manifest) -> dict[int, str]:
