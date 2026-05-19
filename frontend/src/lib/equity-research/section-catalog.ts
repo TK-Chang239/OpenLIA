@@ -19,7 +19,7 @@ export const SECTION_CATALOG: Record<ReportMode, SectionEntry[]> = {
     { id: "financial_analysis", title: "Financial Analysis" },
     { id: "financial_projections", title: "Financial Projections" },
     { id: "valuation_analysis", title: "Valuation Analysis" },
-    { id: "investment_recommendation", title: "Investment Recommendation" },
+    { id: "investment_recommendation", title: "Analyst View" },
   ],
   stock_update: [
     { id: "investment_thesis", title: "Investment Thesis / Key Takeaway" },

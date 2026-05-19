@@ -343,7 +343,14 @@ If a specific fact you would like to cite is not in the manifest or facts slice,
 sentence so it does not need that fact. Use what IS available, frame qualitatively, or omit the \
 point entirely. Manifest entries and the facts slice are your ONLY source of truth — write to \
 their strengths, not around their gaps. A shorter, factually grounded section beats a complete \
-section padded with disclaimers.\
+section padded with disclaimers.
+
+TABLE CELL DISCIPLINE — when the facts slice contains a `peer_*` mapping keyed by ticker \
+(e.g. `peer_pe_ratio_ttm: {'MSFT': 38.2, 'ORCL': 25.1, ...}`), peer-table cells for those \
+metrics MUST contain the formatted numeric value from the mapping (with one decimal and the \
+correct unit: `38.2x`, `16.5%`, `69.4%`). Do not emit cell placeholders like `See fundamentals`, \
+`NM from cited set`, `See source`, or any other deflection. If a peer is absent from the \
+mapping for a given metric, drop that row entirely — never substitute a placeholder string.\
 """
 
 

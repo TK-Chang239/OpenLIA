@@ -146,10 +146,10 @@ def test_assemble_populates_rail_quick_stats_from_facts_pack() -> None:
 
     assert report.rail is not None
     labels = {m.label for m in report.rail.quick_stats}
-    # All four facts in the fixture should land in the rail
+    # Sector and Market Cap are always present when the facts exist.
+    # P/E falls back to TTM when Forward isn't in the fixture.
     assert "Sector" in labels
     assert "Market Cap" in labels
-    assert "P/E (TTM)" in labels
     # Source attribution must travel with each metric
     for m in report.rail.quick_stats:
         assert m.source_ids and m.source_ids[0].startswith("c")
@@ -353,7 +353,366 @@ def test_assemble_strips_duplicate_leading_heading() -> None:
     )
     section = report.sections[0]
     assert section.title == "Company Overview"
-    first = section.blocks[0]
-    assert hasattr(first, "content")
-    assert not first.content.lstrip().startswith("## Company Overview")
-    assert "Salesforce.com Inc." in first.content
+    # First text block in the section (the deterministic identity card may
+    # be prepended ahead of LLM-authored content under the new policy)
+    text_block = next(b for b in section.blocks if hasattr(b, "content"))
+    assert not text_block.content.lstrip().startswith("## Company Overview")
+    assert "Salesforce.com Inc." in text_block.content
+
+
+# ---------------------------------------------------------------------------
+# Cover/Rail enrichment (lift structured blocks from synthesis sections)
+# ---------------------------------------------------------------------------
+
+
+_COVER_SECTION_WITH_STRUCTURED_BLOCKS = """\
+---
+section_id: cover
+title: Apple Inc.
+sources_used: [1]
+---
+
+Apple is a high-quality consumer hardware franchise with deepening services attach. [1]
+
+```pull_quote
+text: Apple's services flywheel turns 2bn+ devices into durable recurring revenue.
+sources: [1]
+```
+
+```bullet_list
+items:
+  - Hardware demand has stabilized after a two-year reset, easing the top-line drag.
+  - Services and accessories now contribute a growing share of operating profit.
+  - Capital returns remain aggressive even as gross margins reach new highs.
+  - AI integration adds a credible refresh-cycle driver into 2027.
+```
+
+```metric_cards
+metrics:
+  - label: "Market Cap"
+    value: "$3.10T"
+    source_ids: ["c1"]
+  - label: "P/E (TTM)"
+    value: "30.1x"
+    source_ids: ["c1"]
+  - label: "Revenue (TTM)"
+    value: "$385.0B"
+    source_ids: ["c1"]
+  - label: "Gross Margin"
+    value: "45.2%"
+    source_ids: ["c1"]
+```
+
+Closing context paragraph for the cover body. [1]
+"""
+
+
+_INVESTMENT_REC_SECTION_WITH_RATING = """\
+---
+section_id: investment_recommendation
+title: Investment Recommendation
+sources_used: [1]
+---
+
+We initiate at BUY with conviction. [1]
+
+```rating_badge
+rating: BUY
+previous_rating: HOLD
+change_date: "2026-05-19"
+```
+
+```metric_cards
+metrics:
+  - label: "Price Target"
+    value: "$245"
+    source_ids: ["c1"]
+  - label: "Upside"
+    value: "+18%"
+    source_ids: ["c1"]
+  - label: "Time Horizon"
+    value: "12 months"
+    source_ids: ["c1"]
+```
+
+The thesis rests on services attach and AI-driven refresh. [1]
+"""
+
+
+def _make_cover_and_rec_sections() -> list[SectionResult]:
+    return [
+        SectionResult(
+            section_id="cover",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_COVER_SECTION_WITH_STRUCTURED_BLOCKS,
+        ),
+        SectionResult(
+            section_id="investment_recommendation",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_INVESTMENT_REC_SECTION_WITH_RATING,
+        ),
+    ]
+
+
+def test_cover_lifts_bullet_list_into_tldr_with_executive_summary_label() -> None:
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    assert len(report.cover.tldr) == 4
+    assert report.cover.tldr[0].startswith("Hardware demand")
+    assert report.cover.tldr_label == "Executive Summary"
+
+
+def test_cover_lifts_pull_quote_into_tagline() -> None:
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    assert "services flywheel" in report.cover.tagline
+    assert report.cover.tagline != "Equity Research Initiation"
+
+
+def test_cover_lifts_metric_cards_when_larger_than_deterministic() -> None:
+    """LLM-authored metric_cards override the deterministic 2-metric fallback
+    when they contain at least as many metrics."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    labels = [m.label for m in report.cover.key_metrics]
+    assert "Revenue (TTM)" in labels
+    assert "Gross Margin" in labels
+
+
+def test_cover_eyebrow_populated_from_generated_at() -> None:
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    assert report.cover.eyebrow == "Research Briefing · 2026-05-17"
+
+
+def test_cover_lifted_blocks_removed_from_body_section() -> None:
+    """Lifted blocks must not appear twice (hero panel + body)."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    cover_section = next(s for s in report.sections if s.id == "cover")
+    types_in_body = {type(b).__name__ for b in cover_section.blocks}
+    assert "BulletListBlock" not in types_in_body
+    assert "PullQuoteBlock" not in types_in_body
+    assert "MetricCardsBlock" not in types_in_body
+    # Prose text blocks must survive
+    assert "TextBlock" in types_in_body
+
+
+def test_rail_verdict_is_none_when_no_analyst_facts() -> None:
+    """Under the no-advocacy policy, rail.verdict comes from
+    deterministic analyst facts (not from LLM rating_badge). With no
+    analyst_consensus_rating fact in the pack, verdict must be None."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    assert report.rail.verdict is None
+
+
+def test_llm_rating_badge_is_stripped_from_analyst_section() -> None:
+    """The LLM is no longer allowed to emit a rating_badge in the
+    analyst_view section. Defense-in-depth: if it does, the assembler
+    must strip it before the report ships."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    analyst = next(s for s in report.sections if s.id == "investment_recommendation")
+    types = {type(b).__name__ for b in analyst.blocks}
+    assert "RatingBadgeBlock" not in types
+
+
+def test_analyst_section_title_normalized_to_analyst_view() -> None:
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    analyst = next(s for s in report.sections if s.id == "investment_recommendation")
+    assert analyst.title == "Analyst View"
+
+
+def _facts_pack_with_analyst_data() -> FactsPack:
+    """Facts pack carrying the deterministic analyst-section inputs."""
+    return FactsPack(
+        facts={
+            "company_name": Fact(
+                name="company_name",
+                value="Apple Inc.",
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "sector": Fact(
+                name="sector",
+                value="Technology",
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "market_cap": Fact(
+                name="market_cap",
+                value=3_000_000_000_000,
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "pe_ratio_ttm": Fact(
+                name="pe_ratio_ttm",
+                value=29.5,
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "analyst_consensus_rating": Fact(
+                name="analyst_consensus_rating",
+                value="Buy",
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "analyst_target_mean": Fact(
+                name="analyst_target_mean",
+                value=245.0,
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "analyst_count": Fact(
+                name="analyst_count",
+                value=42,
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "analyst_rating_distribution": Fact(
+                name="analyst_rating_distribution",
+                value={"StrongBuy": 18, "Buy": 16, "Hold": 6, "Sell": 2},
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "current_price": Fact(
+                name="current_price",
+                value=200.0,
+                source_ids=[1],
+                extractor="deterministic",
+            ),
+            "consensus_upside_pct": Fact(
+                name="consensus_upside_pct",
+                value=0.225,
+                source_ids=[1],
+                extractor="compute",
+            ),
+        }
+    )
+
+
+def test_analyst_section_gets_deterministic_rating_distribution_chart() -> None:
+    """When analyst facts are present, the assembler prepends a bar_chart
+    of the rating distribution and a metric_cards consensus card to the
+    analyst_view section, ahead of any LLM-authored content."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_facts_pack_with_analyst_data(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    analyst = next(s for s in report.sections if s.id == "investment_recommendation")
+    type_names = [type(b).__name__ for b in analyst.blocks]
+    # Deterministic blocks must come FIRST
+    assert type_names[0] == "BarChartBlock"
+    assert type_names[1] == "MetricCardsBlock"
+    # Rating distribution should carry the labelled buckets in order
+    bar = analyst.blocks[0]
+    assert bar.title == "Analyst rating distribution"
+    assert bar.categories == ["Strong Buy", "Buy", "Hold", "Sell"]
+    assert bar.series[0].values == [18.0, 16.0, 6.0, 2.0]
+
+
+def test_rail_verdict_built_from_analyst_consensus_facts() -> None:
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_facts_pack_with_analyst_data(),
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    assert report.rail.verdict is not None
+    assert report.rail.verdict.rating == "Consensus: Buy"
+    assert report.rail.verdict.target == "$245.00"
+    assert "+22.5%" in report.rail.verdict.upside
+
+
+def test_analyst_section_omits_block_when_no_coverage() -> None:
+    """When analyst facts are absent, no deterministic block is prepended;
+    the section falls through to whatever LLM-authored content shipped
+    (or nothing). Rail.verdict is also None."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),  # no analyst facts in this fixture
+        sections=_make_cover_and_rec_sections(),
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    analyst = next(s for s in report.sections if s.id == "investment_recommendation")
+    types = [type(b).__name__ for b in analyst.blocks]
+    assert "BarChartBlock" not in types
+    assert report.rail.verdict is None
+
+
+def test_cover_falls_back_when_synthesis_blocks_missing() -> None:
+    """When the cover section omits structured blocks, the deterministic
+    tagline (`Company Research Briefing`) and empty tldr remain in place.
+    Rail verdict is None because no analyst facts were registered."""
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=_make_sections(),  # no cover section
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    assert report.cover.tagline == "Company Research Briefing"
+    assert report.cover.tldr == []
+    assert report.cover.tldr_label is None
+    assert report.rail.verdict is None
