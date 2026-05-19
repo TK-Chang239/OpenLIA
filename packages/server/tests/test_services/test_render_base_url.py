@@ -43,8 +43,8 @@ def test_falls_through_to_vite_probe(monkeypatch: pytest.MonkeyPatch) -> None:
         probe=fake_probe,
     )
     # Default probes :8080 first (this project's Vite port); first hit wins.
-    assert resolver.resolve() == "http://127.0.0.1:8080"
-    assert probes == ["http://127.0.0.1:8080"]
+    assert resolver.resolve() == "http://localhost:8080"
+    assert probes == ["http://localhost:8080"]
 
 
 def test_probes_fallback_vite_port_when_first_closed(
@@ -65,8 +65,8 @@ def test_probes_fallback_vite_port_when_first_closed(
         probe=fake_probe,
     )
     # When :8080 is closed but :5173 answers, the resolver should pick :5173.
-    assert resolver.resolve() == "http://127.0.0.1:5173"
-    assert probes == ["http://127.0.0.1:8080", "http://127.0.0.1:5173"]
+    assert resolver.resolve() == "http://localhost:5173"
+    assert probes == ["http://localhost:8080", "http://localhost:5173"]
 
 
 def test_returns_none_when_no_path(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,7 +101,7 @@ def test_invalidate_re_resolves(monkeypatch: pytest.MonkeyPatch) -> None:
     assert resolver.resolve() is None
     rounds["n"] = 1
     resolver.invalidate()
-    assert resolver.resolve() == "http://127.0.0.1:8080"
+    assert resolver.resolve() == "http://localhost:8080"
 
 
 def test_default_probe_returns_false_for_closed_port() -> None:

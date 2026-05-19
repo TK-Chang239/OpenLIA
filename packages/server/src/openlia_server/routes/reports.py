@@ -427,26 +427,22 @@ def _furniture_template(side_dict: dict[str, str] | None, *, kind: str) -> str |
 
 
 def _resolve_frontend_dist() -> str | None:
-    """Return abs path of frontend/dist if a built bundle is present.
+    """Return abs path of frontend/dist if a built bundle is being served.
 
-    Mirrors `_mount_frontend` resolution order (env var → docker → repo).
-    Returns None when no bundle exists (dev/test contexts).
+    Must agree with `_mount_frontend` (app.py): the SPA is only "served
+    locally" when OPENLIA_FRONTEND_DIST is set and points to a real bundle.
+    A stale repo `frontend/dist/` must NOT count — `_mount_frontend` does
+    not mount it, so claiming it's served here would make the
+    RenderBaseUrlResolver route Playwright to the backend, whose
+    `/assets/*` requests would 404 and the SPA would never boot.
+    Returns None in dev/test contexts (no env var, no built bundle).
     """
-    candidates: list[str] = []
     dist_env = os.environ.get("OPENLIA_FRONTEND_DIST")
-    if dist_env:
-        candidates.append(dist_env)
-    else:
-        candidates.append("/app/frontend/dist")
-        here = os.path.dirname(os.path.abspath(__file__))
-        repo_dist = os.path.normpath(
-            os.path.join(here, "..", "..", "..", "..", "..", "frontend", "dist")
-        )
-        candidates.append(repo_dist)
-    for c in candidates:
-        d = os.path.abspath(c)
-        if os.path.isdir(d) and os.path.isfile(os.path.join(d, "index.html")):
-            return d
+    if not dist_env:
+        return None
+    d = os.path.abspath(dist_env)
+    if os.path.isdir(d) and os.path.isfile(os.path.join(d, "index.html")):
+        return d
     return None
 
 

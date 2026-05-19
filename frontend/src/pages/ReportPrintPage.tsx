@@ -49,6 +49,11 @@ export default function ReportPrintPage(): JSX.Element {
       .catch((e: unknown) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e));
+          // Signal readiness on failure too so headless drivers don't
+          // hang for their full timeout — they can read the error DOM.
+          if (typeof window !== 'undefined') {
+            window.__REPORT_READY__ = true;
+          }
         }
       });
     return () => {
