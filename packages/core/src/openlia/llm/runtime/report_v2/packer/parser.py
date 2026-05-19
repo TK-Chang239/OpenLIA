@@ -88,6 +88,24 @@ def _normalize(content: str) -> str:
     return content
 
 
+def _close_unclosed_fence(body: str) -> str:
+    """Append a closing ``` if the body ends with an open code fence.
+
+    The LLM sometimes forgets the closing fence on the last block of a
+    section. Without this repair, the entire fenced block (and any prose
+    after it) is silently kept as plain text — the YAML spec then leaks
+    into the rendered report as a literal markdown code block.
+    Tracks state line-by-line so nested-looking patterns can't confuse it.
+    """
+    in_fence = False
+    for line in body.split("\n"):
+        if line.startswith("```"):
+            in_fence = not in_fence
+    if in_fence:
+        return body.rstrip() + "\n```"
+    return body
+
+
 def parse_section_file(content: str) -> ParsedSection:
     content = _normalize(content)
     fm_match = _FRONTMATTER_RE.match(content)
@@ -99,7 +117,7 @@ def parse_section_file(content: str) -> ParsedSection:
         frontmatter = yaml.safe_load(fm_text) or {}
     except yaml.YAMLError as e:
         raise ValueError(f"frontmatter YAML invalid: {e}") from e
-    body = fm_match.group(2)
+    body = _close_unclosed_fence(fm_match.group(2))
 
     segments: list[Segment] = []
     cursor = 0

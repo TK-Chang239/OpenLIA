@@ -28,6 +28,10 @@ export function PieChartBlock({
 }: PieChartBlockProps) {
   const showLegend = options?.show_legend !== false;
   const total = segments.reduce((acc, s) => acc + s.value, 0) || 1;
+  // When values are already expressed as percentages (sum ≈ 100), the raw
+  // value and the computed fraction are the same number — suppress the
+  // duplicate in the legend so it shows "94.0%" instead of "94.0 94.0%".
+  const valuesAlreadyPercent = Math.abs(total - 100) < 1;
   const rInner = donut ? R_OUTER * 0.6 : 0;
   const { figureRef, tooltipNode, hover } = useChartTooltip();
 
@@ -79,7 +83,12 @@ export function PieChartBlock({
                 />
                 <span className="report-pie__label">{a.label}</span>
                 <span className="report-pie__value">
-                  {formatTick(a.value)} <em>{(a.fraction * 100).toFixed(1)}%</em>
+                  {/* When the source values are already in percent (sum ≈ 100),
+                      showing both the raw value and the computed fraction makes
+                      "94.0 94.0%" — duplicated. Drop the parenthetical value in
+                      that case and show the percentage alone. */}
+                  {valuesAlreadyPercent ? null : <>{formatTick(a.value)} </>}
+                  <em>{(a.fraction * 100).toFixed(1)}%</em>
                 </span>
               </li>
             ))}

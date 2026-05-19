@@ -153,3 +153,39 @@ Text.
 """
     with pytest.raises(ValueError, match="frontmatter YAML invalid"):
         parse_section_file(content)
+
+
+def test_unclosed_fence_is_repaired_into_real_block() -> None:
+    """If the LLM forgets the closing ``` on the last fence in a section,
+    the parser must recover it as a fenced block rather than letting the
+    whole fence body leak into the preceding text segment."""
+    content = """---
+section_id: industry
+title: Industry Overview
+sources_used: [17, 19]
+---
+
+Some intro prose [17].
+
+```table
+title: "Salesforce position in the CRM value chain"
+headers:
+  - {key: "layer", label: "Market layer"}
+rows:
+  - {layer: "Core CRM"}
+sources: [17, 19]
+"""
+    parsed = parse_section_file(content)
+    types = [
+        "fenced" if hasattr(seg, "block_type") else "text"
+        for seg in parsed.segments
+    ]
+    assert "fenced" in types, (
+        "unclosed fence must be auto-closed and parsed as a fenced block, "
+        f"got segment types {types}"
+    )
+    fenced = next(
+        seg for seg in parsed.segments if hasattr(seg, "block_type")
+    )
+    assert fenced.block_type == "table"
+    assert fenced.data["title"] == "Salesforce position in the CRM value chain"

@@ -454,13 +454,28 @@ body {
   .report__toc {
     display: none \!important;
   }
-  /* Avoid splitting key blocks across pages. */
+  /* Keep headings glued to the first line of their content. */
   .report__main h2,
-  .report__main h3,
-  .report__main table,
-  .chart {
+  .report__main h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  /* Charts (and their legends) must never split — half a chart is meaningless.
+     The export pipeline wraps each chart in <div data-block-path data-block-type>,
+     so targeting [data-block-type] catches every chart wrapper without
+     needing per-chart class names. */
+  [data-block-type],
+  .report-chart,
+  .report-pie__legend,
+  .report-chart__legend {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+  /* Tables intentionally allowed to split. Forcing whole tables to one page
+     caused large whitespace gaps when a long table pushed onto the next page.
+     Repeat the header row on continuation so context is preserved. */
+  .report__main table thead {
+    display: table-header-group;
   }
 }
 

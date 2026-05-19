@@ -264,7 +264,10 @@ def _make_sections_with_malformed_block() -> list[SectionResult]:
 
 
 def test_assemble_omits_block_on_assembly_error_continues() -> None:
-    """Bad bar_chart (data instead of categories+series) must be omitted; section still present."""
+    """Bad bar_chart (data instead of categories+series) must be dropped
+    silently; section, surrounding prose, and other blocks must still be present.
+    Diagnostic info is surfaced via the on_omitted_block callback and console,
+    not via a user-visible placeholder block."""
     report = assemble_report(
         manifest=_make_manifest(),
         facts_pack=_make_facts_pack(),
@@ -280,15 +283,16 @@ def test_assemble_omits_block_on_assembly_error_continues() -> None:
 
     financials = next(s for s in report.sections if s.id == "financials")
 
-    # The bad chart block must not appear — replaced by a fallback TextBlock
+    # No placeholder leak: the old "[block omitted: ...]" text block was
+    # diagnostic-only and ended up visible in PDFs — it must not appear.
     block_contents = [b.content for b in financials.blocks if hasattr(b, "content")]
-    assert any("block omitted" in c for c in block_contents), (
-        "Expected a fallback TextBlock noting the omitted block"
+    assert not any("block omitted" in c for c in block_contents), (
+        "Failed blocks must be dropped silently, not rendered as a placeholder"
     )
 
-    # The intro/closing prose TextBlocks must still be present
-    non_fallback = [c for c in block_contents if "block omitted" not in c]
-    assert len(non_fallback) >= 1, "Prose blocks around the bad chart must survive"
+    # The intro/closing prose TextBlocks must still be present (the bad
+    # chart sits between them).
+    assert len(block_contents) >= 1, "Prose blocks around the bad chart must survive"
 
 
 def test_assemble_invokes_on_omitted_block_callback() -> None:
@@ -313,3 +317,43 @@ def test_assemble_invokes_on_omitted_block_callback() -> None:
     assert section_id == "financials"
     assert block_type == "chart:bar"
     assert reason  # non-empty exception class name
+
+
+_DUPLICATE_HEADING_MARKDOWN = """---
+section_id: company_overview
+title: Company Overview
+sources_used: [1]
+---
+
+## Company Overview
+
+Salesforce.com Inc. is an enterprise software company [1].
+"""
+
+
+def test_assemble_strips_duplicate_leading_heading() -> None:
+    """A leading "## Section Title" line in the first text block duplicates
+    the section H2 already rendered by ReportSection. The assembler must
+    strip it so the heading doesn't appear twice in the rendered PDF."""
+    sections = [
+        SectionResult(
+            section_id="company_overview",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_DUPLICATE_HEADING_MARKDOWN,
+        ),
+    ]
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=sections,
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+    section = report.sections[0]
+    assert section.title == "Company Overview"
+    first = section.blocks[0]
+    assert hasattr(first, "content")
+    assert not first.content.lstrip().startswith("## Company Overview")
+    assert "Salesforce.com Inc." in first.content
