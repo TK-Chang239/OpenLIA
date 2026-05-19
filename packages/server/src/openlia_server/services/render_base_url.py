@@ -9,9 +9,13 @@ from urllib.parse import urlparse
 # Probed in order. 8080 is this project's configured Vite port
 # (frontend/vite.config.ts); 5173 is the upstream Vite default and
 # kept as a fallback for forks that change the port back.
+#
+# Host is `localhost` (not `127.0.0.1`) so getaddrinfo returns both the
+# IPv4 and IPv6 entries: Vite on macOS frequently binds IPv6-only
+# (`[::1]:8080`), which a literal `127.0.0.1` probe would miss.
 _DEFAULT_VITE_URLS: Final[tuple[str, ...]] = (
-    "http://127.0.0.1:8080",
-    "http://127.0.0.1:5173",
+    "http://localhost:8080",
+    "http://localhost:5173",
 )
 
 
