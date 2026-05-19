@@ -106,7 +106,7 @@ DEFAULT_WORD_TARGETS: dict[str, int] = {sid: 600 for sid in BODY_SECTIONS_STOCK_
     "competitive_advantages_and_weaknesses": 500,
     "risk_analysis": 500,
     "investment_recommendation": 400,
-    "cover": 250,
+    "cover": 400,
 }
 
 _SECTION_BRIEFS: dict[str, str] = {
@@ -166,10 +166,17 @@ _SECTION_BRIEFS: dict[str, str] = {
         "``table`` for assumptions plus outputs."
     ),
     "valuation_analysis": (
-        "Section: valuation_analysis. Multiples, DCF, peer comp. Preferred "
-        "exhibits: ``table`` for the peer multiples matrix, "
-        "``chart:scatter`` for P/E vs. growth, ``comparison_split`` for "
-        "bull / base / bear cases, ``waterfall_chart`` for a DCF bridge."
+        "Section: valuation_analysis. Multiples, DCF, peer comp — present "
+        "the math, not a recommendation. Preferred exhibits: ``table`` for "
+        "the peer multiples matrix (P/E, P/B, EV/EBITDA, PEG, 3Y growth — "
+        "the server pre-builds the peer matrix from facts; you may augment "
+        "with additional cited rows), ``chart:scatter`` for P/E vs. growth, "
+        "``comparison_split`` for sensitivity scenarios labeled by "
+        "methodology (e.g. 'Conservative · 18x EPS' vs 'Optimistic · "
+        "28x EPS'), ``waterfall_chart`` for a DCF bridge. Do not author a "
+        "single 'price target' — show the methodology's output and let the "
+        "reader compare it to analyst consensus (rendered separately in "
+        "Analyst View)."
     ),
     "competitive_analysis": (
         "Section: competitive_analysis. Name competitors and quantify "
@@ -199,17 +206,38 @@ _SECTION_BRIEFS: dict[str, str] = {
         "``timeline`` for known risk events."
     ),
     "investment_recommendation": (
-        "Section: investment_recommendation. Preferred exhibits: "
-        "``rating_badge`` for the BUY/HOLD/SELL call with "
-        "``previous_rating`` and ``change_date``, ``metric_cards`` for "
-        "price target / upside / time horizon, ``pull_quote`` for the "
-        "one-sentence thesis."
+        "Section: Analyst View (information aggregation; no advocacy). The "
+        "server pre-populates the rating distribution chart, consensus "
+        "price-target metric_cards, and rating-badge from EODHD AnalystRatings "
+        "— do NOT emit those blocks yourself. Your job: (1) a "
+        "``comparison_split`` with 'Bull-case arguments' (left) vs "
+        "'Bear-case arguments' (right), each item an argument observed in "
+        "analyst notes / news / management commentary with a citation; "
+        "(2) when news_search surfaced upgrades/downgrades, a ``table`` of "
+        "recent rating changes (Date, Firm, Action, From -> To, Target "
+        "Price), each row cited; (3) a closing 3-4 sentence prose paragraph "
+        "summarizing what the consensus reflects, citing sources. Use "
+        "third-person sourcing language: 'JPMorgan rates Buy [c12]', "
+        "'consensus reflects a Hold [c1]'. Never write 'we recommend', "
+        "'our rating', 'our target', 'we view this as'."
     ),
     "cover": (
-        "Section: cover. Headline summary. Preferred content: a tldr list "
-        "of 3-5 short bullets and ``key_metrics`` (the server already "
-        "populates market cap and P/E). The cover renders best as text "
-        "and metrics; leave exhibit blocks to the body sections."
+        "Section: cover. Headline summary that drives the report's hero "
+        "panel. Required blocks, in this order: (1) a ``pull_quote`` "
+        "containing a single neutral framing sentence (what this report "
+        "covers and why it matters; one full sentence, <=240 chars, no "
+        "quotes around it, no recommendation language) — this becomes "
+        "the cover tagline; (2) a ``bullet_list`` of 3-5 short, "
+        "declarative ``Key findings`` — neutral, evidence-based, each "
+        "phrased as an observation citable to sources, NOT as a "
+        "recommendation; this is lifted as the Executive Summary; (3) a "
+        "``metric_cards`` block with 4-5 headline metrics — this "
+        "replaces the server-built deterministic metrics if present. "
+        "Wrap one short prose paragraph (3-5 sentences) before and "
+        "after the metric_cards to provide context. Do not emit "
+        "exhibit blocks like charts or tables. Do not use phrases like "
+        "'we recommend', 'our view', 'investment thesis' — frame as "
+        "'what the data shows', not what to do about it."
     ),
 }
 
@@ -237,7 +265,17 @@ class WavedReportRunner:
         body_writer: Any,
         synthesis_writer: Any,
         system_role: str = "You are an equity research section writer.",
-        style_guide: str = "Institutional tone, precise, cited.",
+        style_guide: str = (
+            "Institutional tone, precise, cited. INFORMATION-AGGREGATION ONLY: "
+            "this report gathers and synthesizes information for the reader. "
+            "Never recommend an action. Never write 'we recommend', 'we "
+            "initiate at', 'our rating', 'our price target', 'our view is', "
+            "'we view this as', 'investment thesis', or any first-person "
+            "advocacy. Any buy/hold/sell language must be attributed to a "
+            "specific cited source (e.g. 'JPMorgan rates Buy [c12]', "
+            "'consensus reflects a Hold [c1]'). Frame conclusions as 'what "
+            "the data shows', not 'what to do about it'."
+        ),
         max_retries: int = 1,
         sse_emitter: Callable[[Any], Awaitable[None]] | None = None,
         report_id: str | None = None,

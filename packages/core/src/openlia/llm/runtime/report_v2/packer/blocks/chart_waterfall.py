@@ -27,11 +27,7 @@ def _assemble(
     if not raw_items:
         raise KeyError("items")
     items = [_normalize_item(i) for i in raw_items]
-    payload = {
-        k: v
-        for k, v in data.items()
-        if k not in ("sources", "items", "steps", "data")
-    }
+    payload = {k: v for k, v in data.items() if k not in ("sources", "items", "steps", "data")}
     return WaterfallBlock(
         type="waterfall_chart",
         items=items,

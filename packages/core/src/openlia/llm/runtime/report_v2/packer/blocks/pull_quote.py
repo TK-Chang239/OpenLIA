@@ -16,9 +16,7 @@ def _assemble(
     text = data.get("text") or data.get("quote") or data.get("content")
     if text is None:
         raise KeyError("text")
-    attribution = (
-        data.get("attribution") or data.get("author") or data.get("speaker")
-    )
+    attribution = data.get("attribution") or data.get("author") or data.get("speaker")
     return PullQuoteBlock(
         type="pull_quote",
         text=text,

@@ -61,6 +61,27 @@ class PayloadView:
             out.append((self._ticker_from_identifier(ident), ident))
         return out
 
+    def subject_identifier_for(self, tool: str) -> str | None:
+        """Find the subject's manifest identifier for a specific baseline tool by name.
+
+        Generic counterpart to `subject_fundamentals_identifier` — given a tool
+        like "get_live_stock_prices" or "get_eod_historical_stock_market_data",
+        returns the manifest identifier (or None if absent). Prefers an exact
+        ticker match, falls back to the first identifier with that prefix.
+        """
+        prefix = f"{tool}/"
+        candidates = [k for k in self._by_identifier if k.startswith(prefix)]
+        if not candidates:
+            return None
+        if self.subject_ticker is not None:
+            wanted = self.subject_ticker.upper()
+            for k in candidates:
+                suffix = k[len(prefix) :]
+                suffix_ticker = suffix.split(".", 1)[0].upper()
+                if suffix_ticker == wanted:
+                    return k
+        return candidates[0]
+
 
 @dataclass
 class FactsPack:

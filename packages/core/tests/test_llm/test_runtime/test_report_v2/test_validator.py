@@ -6,6 +6,7 @@ from openlia.llm.runtime.report_v2.packer.parser import (
 )
 from openlia.llm.runtime.report_v2.packer.validator import (
     ValidationFinding,
+    advocacy_language,
     cross_section_numeric_consistency,
     fetched_but_unused,
     quantitative_claim_near_citation,
@@ -122,3 +123,65 @@ def test_fetched_but_unused_severity_is_warning() -> None:
     parsed = _parsed([_text("The company exists.")])
     findings = fetched_but_unused(parsed, facts_slice={"market_cap": object()})
     assert all(f.severity == "warning" for f in findings)
+
+
+# ---------------------------------------------------------------------------
+# no-advocacy policy: first-person advocacy flagged; cited third-person
+# attribution NOT flagged.
+# ---------------------------------------------------------------------------
+
+
+def test_advocacy_flags_we_recommend() -> None:
+    parsed = _parsed([_text("We recommend BUY on Salesforce because of strong fundamentals.")])
+    findings = advocacy_language(parsed)
+    assert any(f.check == "advocacy_language" for f in findings)
+
+
+def test_advocacy_flags_our_rating() -> None:
+    parsed = _parsed([_text("Our rating is Hold pending clarity on the upgrade cycle.")])
+    findings = advocacy_language(parsed)
+    assert len(findings) == 1
+
+
+def test_advocacy_flags_our_price_target() -> None:
+    parsed = _parsed([_text("Our price target of $245 implies 18% upside.")])
+    findings = advocacy_language(parsed)
+    assert len(findings) == 1
+
+
+def test_advocacy_flags_we_view_this_as() -> None:
+    parsed = _parsed([_text("We view this as an attractive entry point.")])
+    findings = advocacy_language(parsed)
+    assert len(findings) == 1
+
+
+def test_advocacy_flags_investment_thesis_unattributed() -> None:
+    parsed = _parsed([_text("The investment thesis rests on platform expansion.")])
+    findings = advocacy_language(parsed)
+    assert len(findings) == 1
+
+
+def test_advocacy_does_not_flag_cited_third_person_rating() -> None:
+    """`JPMorgan rates Buy [c12]` is a report of source data, not advocacy."""
+    parsed = _parsed([_text("JPMorgan rates Buy with a $300 target [c12].")])
+    findings = advocacy_language(parsed)
+    assert findings == []
+
+
+def test_advocacy_does_not_flag_consensus_reflects() -> None:
+    parsed = _parsed([_text("Consensus reflects a Hold with mean target $245 [c1].")])
+    findings = advocacy_language(parsed)
+    assert findings == []
+
+
+def test_advocacy_does_not_flag_management_thesis() -> None:
+    """`Investment thesis as described by management` is reportage, not advocacy."""
+    parsed = _parsed([_text("Investment thesis as described by management centers on AI [c4].")])
+    findings = advocacy_language(parsed)
+    assert findings == []
+
+
+def test_advocacy_check_runs_in_validate_section() -> None:
+    parsed = _parsed([_text("We initiate at BUY.")])
+    findings = validate_section(parsed, facts_slice={}, target_word_count=10)
+    assert any(f.check == "advocacy_language" for f in findings)

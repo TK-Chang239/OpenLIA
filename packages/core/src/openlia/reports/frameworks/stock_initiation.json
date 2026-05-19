@@ -91,13 +91,13 @@
     },
     {
       "id": "investment_recommendation",
-      "title": "Investment Recommendation",
-      "instructions": "Provide the final investment verdict. State the current stock price and date. Use a rating badge block to show the recommendation (Buy / Hold / Sell, or Overweight / Equal Weight / Underweight). Summarize the bull case and bear case in 2-3 sentences each. State the target price and expected upside/downside. End with a key finding block containing the single most important reason to invest or not invest in this stock.",
+      "title": "Analyst View",
+      "instructions": "Summarize the analyst landscape as INFORMATION GATHERED FROM SOURCES, not as advocacy. Do NOT recommend a buy / hold / sell action. Do NOT produce your own price target. The server pre-populates the rating distribution (Strong Buy / Buy / Hold / Sell / Strong Sell counts), consensus price target band (mean / high / low / N analysts), and consensus rating label from EODHD AnalystRatings — leave those deterministic blocks untouched. Your job: (1) a comparison_split with 'Bull-case arguments' on the left and 'Bear-case arguments' on the right — each item must be an argument observed in analyst notes / news / management commentary, with a citation; never write 'we believe' or 'our view is'. (2) If recent upgrades/downgrades surfaced in news_search, write a table of recent rating changes (Date, Firm, Action, From → To, Target Price) — each row cited. (3) A closing prose paragraph (3-4 sentences) summarizing what the analyst consensus reflects, citing sources. Use third-person sourcing: 'JPMorgan rates Buy [c12]', 'consensus reflects a Hold [c1]'. No first-person advocacy anywhere in this section.",
       "blocks": []
     }
   ],
   "rail": {
-    "instructions": "Populate the Rail object. rail.verdict is REQUIRED: rating (Buy/Hold/Sell or Overweight/Equal-Weight/Underweight) plus optional previous_rating, target price, upside %, and as_of date. rail.quick_stats is REQUIRED to include ALL of these labels (exact spelling, case-insensitive match): 'Market Cap', 'Sector', 'Exchange', '52W Range', 'ADTV (3mo)', 'P/E (fwd)'. You may add extra metrics beyond these. rail.sparkline: 60-day daily close points labeled 'Last 60 days'.",
+    "instructions": "Populate the Rail object. rail.verdict and rail.quick_stats are SERVER-BUILT from facts (analyst consensus rating and target come from EODHD AnalystRatings; quick_stats include Market Cap, Sector, Exchange, 52W Range, ADTV (3mo), and Forward P/E from the manifest). Do NOT author rail content directly. rail.sparkline (optional): 60-day daily close points labeled 'Last 60 days'.",
     "verdict": null,
     "quick_stats": [],
     "sparkline": null

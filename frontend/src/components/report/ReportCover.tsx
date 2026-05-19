@@ -34,7 +34,7 @@ function MetricCell({ metric }: { metric: NonNullable<ReportCoverData['key_metri
 }
 
 export function ReportCover({ cover }: ReportCoverProps) {
-  const tldrLabel = cover.tldr_label ?? 'TL;DR';
+  const tldrLabel = cover.tldr_label ?? 'Executive Summary';
   return (
     <header className="report-cover">
       {cover.eyebrow ? <div className="report-cover__eyebrow">{cover.eyebrow}</div> : null}
