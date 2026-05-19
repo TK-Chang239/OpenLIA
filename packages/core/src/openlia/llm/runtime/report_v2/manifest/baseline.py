@@ -44,9 +44,7 @@ class BaselineCall:
 BASELINE_STOCK_INITIATION: tuple[BaselineCall, ...] = (
     BaselineCall("eodhd", "get_fundamentals_data", {"ticker": "{ticker}.US"}),
     BaselineCall("eodhd", "get_live_stock_prices", {"ticker": "{ticker}.US"}),
-    BaselineCall(
-        "eodhd", "get_historical_market_capitalization_data", {"ticker": "{ticker}.US"}
-    ),
+    BaselineCall("eodhd", "get_historical_market_capitalization_data", {"ticker": "{ticker}.US"}),
     BaselineCall("eodhd", "get_eod_historical_stock_market_data", {"symbol": "{ticker}.US"}),
     BaselineCall("eodhd", "get_earning_trends_data", {"symbols": "{ticker}.US"}),
     BaselineCall("eodhd", "get_insider_transactions_data", {"code": "{ticker}"}),

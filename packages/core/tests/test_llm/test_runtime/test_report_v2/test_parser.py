@@ -176,16 +176,11 @@ rows:
 sources: [17, 19]
 """
     parsed = parse_section_file(content)
-    types = [
-        "fenced" if hasattr(seg, "block_type") else "text"
-        for seg in parsed.segments
-    ]
+    types = ["fenced" if hasattr(seg, "block_type") else "text" for seg in parsed.segments]
     assert "fenced" in types, (
         "unclosed fence must be auto-closed and parsed as a fenced block, "
         f"got segment types {types}"
     )
-    fenced = next(
-        seg for seg in parsed.segments if hasattr(seg, "block_type")
-    )
+    fenced = next(seg for seg in parsed.segments if hasattr(seg, "block_type"))
     assert fenced.block_type == "table"
     assert fenced.data["title"] == "Salesforce position in the CRM value chain"

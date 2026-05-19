@@ -1,20 +1,96 @@
 {
   "report_type": "stock_initiation",
   "sections": {
-    "cover": ["company_name", "sector", "market_cap", "pe_ratio_ttm"],
-    "company_overview": ["company_name", "sector", "market_cap"],
+    "cover": [
+      "company_name",
+      "sector",
+      "market_cap",
+      "current_price",
+      "pe_ratio_ttm",
+      "pe_ratio_forward",
+      "revenue_ttm",
+      "revenue_annual",
+      "net_margin_ttm",
+      "gross_margin_ttm",
+      "exchange",
+      "price_range_52w",
+      "avg_daily_volume_3m",
+      "analyst_consensus_rating",
+      "analyst_target_mean",
+      "consensus_upside_pct"
+    ],
+    "company_overview": [
+      "company_name",
+      "sector",
+      "market_cap",
+      "ipo_date",
+      "headquarters",
+      "employees",
+      "exchange",
+      "revenue_ttm",
+      "ebitda_ttm"
+    ],
     "industry_overview": ["sector"],
     "products_and_services": ["company_name"],
     "business_model": ["company_name", "revenue_cagr_3y", "gross_margin_ttm"],
     "management_team": ["company_name"],
-    "historical_financials": ["revenue_annual", "gross_profit_annual", "revenue_cagr_3y", "gross_margin_ttm"],
-    "financial_analysis": ["revenue_cagr_3y", "gross_margin_ttm", "peer_revenue_cagr_3y", "peer_gross_margin_ttm"],
-    "financial_projections": ["revenue_annual", "revenue_cagr_3y"],
-    "valuation_analysis": ["market_cap", "pe_ratio_ttm", "revenue_cagr_3y", "peer_pe_ratio_ttm", "peer_revenue_cagr_3y"],
+    "historical_financials": [
+      "revenue_years",
+      "revenue_annual",
+      "cogs_annual",
+      "gross_profit_annual",
+      "operating_income_annual",
+      "net_income_annual",
+      "eps_annual",
+      "total_assets_annual",
+      "total_liabilities_annual",
+      "equity_annual",
+      "cash_annual",
+      "total_debt_annual",
+      "revenue_cagr_3y",
+      "gross_margin_ttm"
+    ],
+    "financial_analysis": [
+      "revenue_cagr_3y",
+      "gross_margin_ttm",
+      "operating_margin_ttm",
+      "net_margin_ttm",
+      "gross_margin_annual",
+      "operating_margin_annual",
+      "net_margin_annual",
+      "peer_revenue_cagr_3y",
+      "peer_gross_margin_ttm"
+    ],
+    "financial_projections": [
+      "revenue_annual",
+      "revenue_cagr_3y",
+      "operating_income_annual",
+      "net_income_annual",
+      "eps_annual"
+    ],
+    "valuation_analysis": [
+      "market_cap",
+      "pe_ratio_ttm",
+      "pe_ratio_forward",
+      "revenue_cagr_3y",
+      "peer_pe_ratio_ttm",
+      "peer_price_to_book",
+      "peer_ev_to_ebitda",
+      "peer_peg_ratio",
+      "peer_revenue_cagr_3y"
+    ],
     "competitive_analysis": ["sector"],
     "recent_developments": ["company_name"],
     "competitive_advantages_and_weaknesses": ["sector", "gross_margin_ttm"],
     "risk_analysis": ["sector", "revenue_cagr_3y"],
-    "investment_recommendation": ["company_name", "market_cap", "pe_ratio_ttm", "revenue_cagr_3y"]
+    "investment_recommendation": [
+      "company_name",
+      "current_price",
+      "analyst_consensus_rating",
+      "analyst_target_mean",
+      "analyst_count",
+      "analyst_rating_distribution",
+      "consensus_upside_pct"
+    ]
   }
 }
