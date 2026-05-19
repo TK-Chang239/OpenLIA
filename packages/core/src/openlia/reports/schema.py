@@ -60,17 +60,17 @@ class _Series(_Strict):
 
 class BarSeries(_Series):
     name: str
-    values: list[float] = Field(default_factory=list)
+    values: Annotated[list[float], Field(min_length=1)]
 
 
 class LineSeries(_Series):
     name: str
-    values: list[float] = Field(default_factory=list)
+    values: Annotated[list[float], Field(min_length=1)]
 
 
 class AreaSeries(_Series):
     name: str
-    values: list[float] = Field(default_factory=list)
+    values: Annotated[list[float], Field(min_length=1)]
 
 
 class ScatterPoint(_Strict):
@@ -117,19 +117,37 @@ Tone = Literal["positive", "negative", "neutral", "warn"]
 
 _TONE_ALIASES: dict[str, str] = {
     # Positive synonyms
-    "good": "positive", "beat": "positive", "win": "positive", "up": "positive",
-    "green": "positive", "favorable": "positive", "strong": "positive",
-    "bull": "positive", "bullish": "positive",
+    "good": "positive",
+    "beat": "positive",
+    "win": "positive",
+    "up": "positive",
+    "green": "positive",
+    "favorable": "positive",
+    "strong": "positive",
+    "bull": "positive",
+    "bullish": "positive",
     # Negative synonyms
-    "bad": "negative", "miss": "negative", "loss": "negative", "down": "negative",
-    "red": "negative", "unfavorable": "negative", "weak": "negative",
-    "bear": "negative", "bearish": "negative",
+    "bad": "negative",
+    "miss": "negative",
+    "loss": "negative",
+    "down": "negative",
+    "red": "negative",
+    "unfavorable": "negative",
+    "weak": "negative",
+    "bear": "negative",
+    "bearish": "negative",
     # Warn synonyms
-    "warning": "warn", "caution": "warn", "risk": "warn", "yellow": "warn",
+    "warning": "warn",
+    "caution": "warn",
+    "risk": "warn",
+    "yellow": "warn",
     "alert": "warn",
     # Neutral synonyms
-    "info": "neutral", "informational": "neutral", "unknown": "neutral",
-    "n/a": "neutral", "na": "neutral",
+    "info": "neutral",
+    "informational": "neutral",
+    "unknown": "neutral",
+    "n/a": "neutral",
+    "na": "neutral",
 }
 
 

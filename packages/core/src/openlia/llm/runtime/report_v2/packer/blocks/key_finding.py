@@ -13,12 +13,7 @@ def _assemble(
     # The LLM occasionally reaches for ``text``/``finding``/``body`` instead
     # of the canonical ``content``. Accept the obvious aliases so a single
     # field-name slip does not blank the block.
-    content = (
-        data.get("content")
-        or data.get("text")
-        or data.get("finding")
-        or data.get("body")
-    )
+    content = data.get("content") or data.get("text") or data.get("finding") or data.get("body")
     if content is None:
         raise KeyError("content")
     return KeyFindingBlock(

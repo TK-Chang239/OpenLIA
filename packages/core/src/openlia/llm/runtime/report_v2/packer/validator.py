@@ -38,6 +38,19 @@ _NUMERIC_CLAIM_RE = re.compile(
     re.IGNORECASE,
 )
 
+# First-person advocacy patterns banned under the no-advocacy policy.
+# The report reports what sources said; it does not author judgments.
+# Third-person attributed language with a citation is fine — that's why
+# the check is bounded to first-person constructions only.
+_ADVOCACY_RE = re.compile(
+    r"\b(?:"
+    r"we\s+(?:recommend|initiate|rate|view\s+this|view\s+the|believe|expect|forecast|are\s+(?:buyers|sellers)\s+of)"
+    r"|our\s+(?:rating|view|call|recommendation|price\s+target|target\s+price|thesis|stance)"
+    r"|investment\s+(?:thesis|case)\b(?!\s+(?:as\s+described|presented|outlined|laid\s+out|by\s+the\s+company))"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def _section_id(parsed: ParsedSection) -> str:
     return str(parsed.frontmatter.get("section_id", "?"))
@@ -70,6 +83,27 @@ def tombstone_regex(parsed: ParsedSection) -> list[ValidationFinding]:
                     check="tombstone_regex",
                     section_id=_section_id(parsed),
                     detail="tombstone phrase in prose",
+                )
+            )
+    return findings
+
+
+def advocacy_language(parsed: ParsedSection) -> list[ValidationFinding]:
+    """Flag first-person advocacy ("we recommend", "our rating", "investment
+    thesis"). Third-person attributed language with a citation
+    ("JPMorgan rates Buy [c12]") is not flagged — only the first-person
+    constructions that signal the report itself is making the call."""
+    findings: list[ValidationFinding] = []
+    for seg in parsed.segments:
+        if not isinstance(seg, TextSegment):
+            continue
+        match = _ADVOCACY_RE.search(seg.text)
+        if match:
+            findings.append(
+                ValidationFinding(
+                    check="advocacy_language",
+                    section_id=_section_id(parsed),
+                    detail=f"first-person advocacy phrase: {match.group(0)!r}",
                 )
             )
     return findings
@@ -160,10 +194,11 @@ def validate_section(
     facts_slice: dict,
     target_word_count: int,
 ) -> list[ValidationFinding]:
-    """Run all four per-section checks (NOT cross-section)."""
+    """Run all five per-section checks (NOT cross-section)."""
     return [
         *word_count_minimum(parsed, target=target_word_count),
         *tombstone_regex(parsed),
+        *advocacy_language(parsed),
         *quantitative_claim_near_citation(parsed),
         *fetched_but_unused(parsed, facts_slice=facts_slice),
     ]

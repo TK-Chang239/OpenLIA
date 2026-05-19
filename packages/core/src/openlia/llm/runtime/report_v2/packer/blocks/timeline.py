@@ -14,14 +14,7 @@ def _normalize_event(raw: Any) -> TimelineEvent:
     if isinstance(raw, str):
         return TimelineEvent(when="", what=raw)
     e = dict(raw)
-    when = (
-        e.get("when")
-        or e.get("date")
-        or e.get("time")
-        or e.get("year")
-        or e.get("period")
-        or ""
-    )
+    when = e.get("when") or e.get("date") or e.get("time") or e.get("year") or e.get("period") or ""
     what = (
         e.get("what")
         or e.get("event")
