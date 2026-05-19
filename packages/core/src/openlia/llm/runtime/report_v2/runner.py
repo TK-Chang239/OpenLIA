@@ -214,9 +214,7 @@ _SECTION_BRIEFS: dict[str, str] = {
 }
 
 DEFAULT_BRIEFS: dict[str, str] = {
-    sid: _SECTION_BRIEFS.get(
-        sid, f"Section: {sid}. Write a substantive analytical section."
-    )
+    sid: _SECTION_BRIEFS.get(sid, f"Section: {sid}. Write a substantive analytical section.")
     for sid in (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
 }
 
@@ -356,6 +354,7 @@ class WavedReportRunner:
                 registry=default_registry,
                 manifest=manifest.entries,
                 requested_facts=requested,
+                subject_ticker=self.ticker,
             )
             self.telemetry.record_wave("W3_facts", duration_ms=int((time.monotonic() - t0) * 1000))
 
