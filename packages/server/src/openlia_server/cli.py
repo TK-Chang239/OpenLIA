@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import socket
+import subprocess
 import uuid
 from datetime import UTC, datetime
 
@@ -117,6 +119,72 @@ def _default_port() -> int:
     return 8080
 
 
+def _find_listener_pid(host: str, port: int) -> int | None:
+    """Best-effort lookup of the PID squatting on `port` via lsof.
+
+    We deliberately do not pass `-sTCP:LISTEN` — on macOS that filter combined
+    with `-iTCP:<port>` returns no hits even when a process IS the listener.
+    A bind can also fail with no live LISTEN socket at all: a dead server's
+    ESTABLISHED socket holds the local 4-tuple until the remote end closes,
+    so the offender is the dead-server PID, not the client still connected to
+    it. We ask lsof for every TCP socket on the port and rank candidates:
+
+      1. LISTEN socket (NAME has no `->`).
+      2. Server side of an ESTABLISHED connection (`:{port}->...`).
+      3. Anything else holding a socket on the port.
+
+    Host is unused; lsof's `-i@host:port` form misbehaves with wildcard binds.
+    """
+    del host  # see docstring
+    try:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-Fpn"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    listener_pid: int | None = None
+    server_pid: int | None = None
+    any_pid: int | None = None
+    current_pid: int | None = None
+    port_suffix = f":{port}"
+    for line in result.stdout.splitlines():
+        if line.startswith("p") and line[1:].isdigit():
+            current_pid = int(line[1:])
+            if any_pid is None:
+                any_pid = current_pid
+            continue
+        if not line.startswith("n") or current_pid is None:
+            continue
+        name = line[1:]
+        if "->" not in name:
+            listener_pid = current_pid
+            break
+        if server_pid is None:
+            local, _, _remote = name.partition("->")
+            if local.endswith(port_suffix):
+                server_pid = current_pid
+    return listener_pid or server_pid or any_pid
+
+
+def _check_port_available(host: str, port: int) -> int | None:
+    """Probe whether (host, port) can be bound. Returns None if free, otherwise
+    the PID of the current listener (or 0 when the PID can't be determined).
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+    except OSError:
+        pid = _find_listener_pid(host, port)
+        return pid if pid is not None else 0
+    finally:
+        sock.close()
+    return None
+
+
 @app.command()
 def serve(
     host: str = typer.Option(None, help="Bind address (defaults to OPENLIA_HOST)."),
@@ -136,6 +204,21 @@ def serve(
     bootstrap()
     bind_host = host if host is not None else _default_host()
     bind_port = port if port is not None else _default_port()
+    # Preflight bind check. uvicorn would otherwise emit a cryptic
+    # `[Errno 48] address already in use` after the banner has printed and
+    # the lifespan has started — leaving the user staring at a "Listening on..."
+    # line that's a lie. Catch it up front, name the squatter, and exit.
+    if not reload:
+        listener_pid = _check_port_available(bind_host, bind_port)
+        if listener_pid is not None:
+            who = f"PID {listener_pid}" if listener_pid else "another process"
+            echo_error(f"port {bind_port} on {bind_host} is already in use by {who}.")
+            typer.echo("Either:", err=True)
+            if listener_pid:
+                typer.echo(f"  - stop the existing server:  kill {listener_pid}", err=True)
+            typer.echo("  - pick a different port:     openlia serve --port <PORT>", err=True)
+            typer.echo("  - or set OPENLIA_PORT=<PORT> in your environment", err=True)
+            raise typer.Exit(code=1)
     mode = os.environ.get("OPENLIA_MODE", "personal").lower()
     scheduler_env = os.environ.get("OPENLIA_SCHEDULER_ENABLED", "true").lower()
     scheduler_enabled = scheduler_env not in {"false", "0", "no"}
