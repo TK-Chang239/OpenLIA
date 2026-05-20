@@ -33,12 +33,13 @@
       "ebitda_ttm",
       "fiscal_year_end_latest"
     ],
-    "industry_overview": ["sector"],
+    "industry_overview": ["sector", "catalysts_recent"],
     "products_and_services": [
       "company_name",
       "segment_revenue_latest",
       "segment_share_latest",
-      "segment_revenue_yoy"
+      "segment_revenue_yoy",
+      "catalysts_recent"
     ],
     "business_model": [
       "company_name",
@@ -157,9 +158,10 @@
       "peer_market_cap",
       "peer_revenue_ttm",
       "peer_net_margin_ttm",
-      "peer_operating_margin_ttm"
+      "peer_operating_margin_ttm",
+      "catalysts_recent"
     ],
-    "recent_developments": ["company_name"],
+    "recent_developments": ["company_name", "catalysts_recent"],
     "competitive_advantages_and_weaknesses": ["sector", "gross_margin_ttm"],
     "risk_analysis": [
       "sector",
@@ -167,7 +169,8 @@
       "net_cash_annual",
       "net_cash",
       "short_interest_pct",
-      "cash_runway_quarters"
+      "cash_runway_quarters",
+      "catalysts_recent"
     ],
     "investment_recommendation": [
       "company_name",
@@ -177,7 +180,8 @@
       "analyst_count",
       "analyst_rating_distribution",
       "consensus_upside_pct",
-      "football_field"
+      "football_field",
+      "catalysts_recent"
     ]
   }
 }

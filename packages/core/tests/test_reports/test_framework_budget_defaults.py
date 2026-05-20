@@ -15,8 +15,12 @@ from pathlib import Path
 import pytest
 from openlia.llm.runtime.report import _default_frameworks_root
 
+# `stock_initiation` raised from 10 -> 20 in WS3-A (P8). The catalyst
+# pack handles the broad fresh-catalyst scan upfront; the larger budget
+# leaves room for per-section deep dives (e.g. valuation_analysis sell-side
+# note pulls, competitive_analysis peer-feature checks).
 EXPECTED: dict[str, int] = {
-    "stock_initiation": 10,
+    "stock_initiation": 20,
     "stock_update": 5,
     "sector_research": 15,
     "earnings_update": 6,
