@@ -88,7 +88,23 @@ class TemplateSpec(BaseModel):
         return self
 
     def section_by_id(self, section_id: str) -> SectionSpec | None:
-        for section in (*self.body_sections, *self.synthesis_sections):
+        for section in self._iter_sections():
             if section.id == section_id:
                 return section
         return None
+
+    def _iter_sections(self):
+        yield from self.body_sections
+        yield from self.synthesis_sections
+
+    @property
+    def meta_sections(self) -> tuple[SectionSpec, ...]:
+        """Sections with `dispatch_tier == "meta"`.
+
+        Meta sections run after every body + synthesis section completes and
+        receive the concatenated body + synthesis markdown in their prompt.
+        Templates declare meta sections by setting `dispatch_tier="meta"` on
+        the `SectionSpec` (e.g. in markdown frontmatter for uploaded
+        templates).
+        """
+        return tuple(s for s in self._iter_sections() if s.dispatch_tier == "meta")
