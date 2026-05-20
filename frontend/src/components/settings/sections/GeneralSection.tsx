@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getPrefs,
   updatePrefs,
@@ -7,6 +8,7 @@ import {
   ApiError,
   type LangCode,
 } from '../../../api/settings';
+import { setUiLanguage } from '../../../i18n';
 import { useDirtyForm } from '../useDirtyForm';
 import { SaveButton, SaveState } from '../SaveButton';
 import { SettingGroup } from '../SettingGroup';
@@ -40,6 +42,7 @@ const EMPTY: Prefs = {
 };
 
 export function GeneralSection(): JSX.Element {
+  const { t } = useTranslation();
   const form = useDirtyForm<Prefs>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saveState, setSaveState] = useState<SaveState>('idle');
@@ -87,6 +90,12 @@ export function GeneralSection(): JSX.Element {
       const next = await updatePrefs(patch);
       form.setValues(next);
       form.markSaved();
+      // Reflect the chosen system language immediately so the rest of
+      // the page (and the sidebar, welcome screens, etc.) re-render
+      // without waiting for a refresh.
+      if (next.display_language === 'zh-TW' || next.display_language === 'en') {
+        setUiLanguage(next.display_language);
+      }
       setSaveState('saved');
       setTimeout(() => setSaveState('idle'), 1500);
     } catch (e) {
@@ -96,20 +105,37 @@ export function GeneralSection(): JSX.Element {
     }
   };
 
-  if (loading) return <p className="text-sm text-text-secondary">Loading...</p>;
+  if (loading) return <p className="text-sm text-text-secondary">{t('common.loading')}</p>;
+
+  const themeLabels: Record<Theme, string> = {
+    system: t('settings.general.theme_system'),
+    light: t('settings.general.theme_light'),
+    dark: t('settings.general.theme_dark'),
+  };
+
+  const reportLangLabels: Record<LangCode, string> = {
+    en: t('settings.general.language_option_en'),
+    'zh-TW': t('settings.general.language_option_zh_tw'),
+    both: t('settings.general.language_option_both'),
+  };
 
   return (
     <div className="max-w-2xl space-y-6">
       <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-text-primary">General</h1>
+        <h1 className="text-xl font-semibold text-text-primary">{t('settings.general.title')}</h1>
         <SaveButton state={saveState} isDirty={form.isDirty} onClick={save} />
       </header>
 
       <InlineFeedback kind={error ? 'error' : null} message={error ?? ''} />
 
-      <SettingGroup title="Profile" description="Name shown in the sidebar and reports.">
+      <SettingGroup
+        title={t('settings.general.profile_title')}
+        description={t('settings.general.profile_description')}
+      >
         <label className="block">
-          <span className="block text-sm font-medium text-text-primary">Display name</span>
+          <span className="block text-sm font-medium text-text-primary">
+            {t('settings.general.display_name')}
+          </span>
           <input
             type="text"
             value={form.values.display_name}
@@ -120,27 +146,30 @@ export function GeneralSection(): JSX.Element {
         </label>
       </SettingGroup>
 
-      <SettingGroup title="Notifications" description="Alerts when reports and scheduled jobs finish.">
+      <SettingGroup
+        title={t('settings.general.notifications_title')}
+        description={t('settings.general.notifications_description')}
+      >
         <ToggleSwitch
-          label="In-app notifications"
+          label={t('settings.general.notify_inapp')}
           checked={form.values.notify_inapp}
           onChange={(v) => form.setField('notify_inapp', v)}
         />
         <ToggleSwitch
-          label="Email notifications"
-          description="Requires SMTP setup by an admin."
+          label={t('settings.general.notify_email')}
+          description={t('settings.general.notify_email_hint')}
           checked={form.values.notify_email}
           onChange={(v) => form.setField('notify_email', v)}
         />
       </SettingGroup>
 
-      <SettingGroup title="Appearance">
-        <div role="radiogroup" aria-label="Theme" className="flex gap-2">
-          {THEMES.map((t) => (
+      <SettingGroup title={t('settings.general.appearance_title')}>
+        <div role="radiogroup" aria-label={t('settings.general.appearance_title')} className="flex gap-2">
+          {THEMES.map((th) => (
             <label
-              key={t}
+              key={th}
               className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm ${
-                form.values.theme === t
+                form.values.theme === th
                   ? 'border-accent-primary bg-accent-primary/10 text-accent-primary'
                   : 'border-border-subtle text-text-primary hover:bg-surface-hover'
               }`}
@@ -148,25 +177,27 @@ export function GeneralSection(): JSX.Element {
               <input
                 type="radio"
                 name="theme"
-                value={t}
-                checked={form.values.theme === t}
-                onChange={() => form.setField('theme', t)}
+                value={th}
+                checked={form.values.theme === th}
+                onChange={() => form.setField('theme', th)}
                 className="sr-only"
               />
-              {t[0].toUpperCase() + t.slice(1)}
+              {themeLabels[th]}
             </label>
           ))}
         </div>
       </SettingGroup>
 
       <SettingGroup
-        title="Language"
-        description="Controls the system interface, chat responses, and generated report output."
+        title={t('settings.general.language_title')}
+        description={t('settings.general.language_description')}
       >
         <label className="block">
-          <span className="block text-sm font-medium text-text-primary">System language</span>
+          <span className="block text-sm font-medium text-text-primary">
+            {t('settings.general.language_system_label')}
+          </span>
           <span className="block text-xs text-text-secondary">
-            Language used across menus, settings, and welcome screens.
+            {t('settings.general.language_system_hint')}
           </span>
           <select
             value={form.values.display_language}
@@ -175,16 +206,18 @@ export function GeneralSection(): JSX.Element {
           >
             {UI_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
-                {l.label}
+                {reportLangLabels[l.code]}
               </option>
             ))}
           </select>
         </label>
 
         <label className="block">
-          <span className="block text-sm font-medium text-text-primary">Chat response language</span>
+          <span className="block text-sm font-medium text-text-primary">
+            {t('settings.general.language_chat_label')}
+          </span>
           <span className="block text-xs text-text-secondary">
-            Language Lia uses when replying to your chat messages.
+            {t('settings.general.language_chat_hint')}
           </span>
           <select
             value={form.values.response_language}
@@ -193,16 +226,18 @@ export function GeneralSection(): JSX.Element {
           >
             {UI_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
-                {l.label}
+                {reportLangLabels[l.code]}
               </option>
             ))}
           </select>
         </label>
 
         <label className="block">
-          <span className="block text-sm font-medium text-text-primary">Report output language</span>
+          <span className="block text-sm font-medium text-text-primary">
+            {t('settings.general.language_report_label')}
+          </span>
           <span className="block text-xs text-text-secondary">
-            Language used in equity research, earnings, and morning briefing reports.
+            {t('settings.general.language_report_hint')}
           </span>
           <select
             value={form.values.report_language}
@@ -211,7 +246,7 @@ export function GeneralSection(): JSX.Element {
           >
             {REPORT_LANGUAGES.map((l) => (
               <option key={l.code} value={l.code}>
-                {l.label}
+                {reportLangLabels[l.code]}
               </option>
             ))}
           </select>

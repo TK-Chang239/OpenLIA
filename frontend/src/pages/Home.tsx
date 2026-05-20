@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { motion } from "framer-motion";
 import {
   GREETING_BANK,
+  GREETING_BANK_ZH_TW,
   pickGreeting,
+  pickGreetingBank,
   localDaySeed,
   timeOfDayGreeting,
 } from "./home/greetings";
@@ -17,14 +20,15 @@ import { useAuth } from "../auth/AuthContext";
 
 const STAGGER = 0.06;
 
-function firstName(displayName: string | null | undefined): string {
-  if (!displayName) return "there";
+function firstName(displayName: string | null | undefined, fallback: string): string {
+  if (!displayName) return fallback;
   const trimmed = displayName.trim();
-  if (!trimmed) return "there";
+  if (!trimmed) return fallback;
   return trimmed.split(/\s+/)[0];
 }
 
 export default function Home(): JSX.Element {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [now, setNow] = useState<Date>(() => new Date());
 
@@ -35,10 +39,11 @@ export default function Home(): JSX.Element {
     return () => window.clearInterval(id);
   }, []);
 
-  const phrase = pickGreeting(GREETING_BANK, localDaySeed(now));
+  const bank = pickGreetingBank(GREETING_BANK, GREETING_BANK_ZH_TW);
+  const phrase = pickGreeting(bank, localDaySeed(now));
   const [pre, post] = phrase.template.split("{accent}");
   const tod = timeOfDayGreeting(now);
-  const name = firstName(user?.display_name);
+  const name = firstName(user?.display_name, t("welcome.greeting_hello"));
 
   return (
     <div className="mx-auto w-full max-w-[760px] px-8 pt-10 pb-16 flex flex-col gap-7">

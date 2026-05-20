@@ -1,0 +1,242 @@
+{
+  "common": {
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "loading": "Loading…",
+    "refresh": "Refresh",
+    "ok": "OK",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search",
+    "error_generic": "Something went wrong.",
+    "try_again": "Try again",
+    "yes": "Yes",
+    "no": "No",
+    "are_you_sure": "Are you sure?",
+    "this_cannot_be_undone": "This cannot be undone.",
+    "personal": "PERSONAL",
+    "company": "COMPANY"
+  },
+  "nav": {
+    "section_general": "General",
+    "section_departments": "Departments",
+    "home": "Home",
+    "secretary": "Secretary",
+    "portfolio": "Portfolio",
+    "repository": "Repository",
+    "memory": "Memory",
+    "equity_research": "Equity Research",
+    "earnings_update": "Earnings Update",
+    "morning_briefing": "Morning Briefing",
+    "retail_sentiment": "Retail Sentiment",
+    "macro_research": "Macro Research",
+    "panic_thermometer": "Panic Thermometer",
+    "settings": "Settings",
+    "main_navigation": "Main navigation",
+    "collapse": "Collapse",
+    "collapse_sidebar": "Collapse sidebar",
+    "expand_sidebar": "Expand sidebar",
+    "open_navigation": "Open navigation",
+    "new_chat": "New Chat"
+  },
+  "welcome": {
+    "greeting_morning": "Good morning",
+    "greeting_afternoon": "Good afternoon",
+    "greeting_evening": "Good evening",
+    "greeting_night": "Good night",
+    "greeting_hello": "Hello",
+    "accent_today": "today",
+    "accent_this_evening": "this evening",
+    "accent_this_morning": "this morning",
+    "accent_right_now": "right now",
+    "accent_at_the_open": "at the open",
+    "equity_research_subtitle": "Initiate coverage on a name, refresh a thesis after an event, or take a sector apart from the top down.",
+    "secretary_subtitle": "Ask anything. I can pull market data, statements, news, your portfolio, and your repository."
+  },
+  "home": {
+    "morning_briefing_card_title": "Morning Briefing",
+    "portfolio_card_title": "Total Portfolio · NAV",
+    "suggested_today": "Suggested · today",
+    "ticker": "Ticker",
+    "recent": "Recent",
+    "nav": "NAV",
+    "vs_spx": "vs SPX",
+    "drawdown": "Drawdown",
+    "exposure": "Exposure"
+  },
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "general": "General",
+      "models": "Models",
+      "timezone": "Timezone",
+      "account": "Account",
+      "skills": "Skills",
+      "admin": "Admin",
+      "disclaimer": "Disclaimer",
+      "guardrails": "Guardrails"
+    },
+    "general": {
+      "title": "General",
+      "profile_title": "Profile",
+      "profile_description": "Name shown in the sidebar and reports.",
+      "display_name": "Display name",
+      "notifications_title": "Notifications",
+      "notifications_description": "Alerts when reports and scheduled jobs finish.",
+      "notify_inapp": "In-app notifications",
+      "notify_email": "Email notifications",
+      "notify_email_hint": "Requires SMTP setup by an admin.",
+      "appearance_title": "Appearance",
+      "theme_system": "System",
+      "theme_light": "Light",
+      "theme_dark": "Dark",
+      "language_title": "Language",
+      "language_description": "Controls the system interface, chat responses, and generated report output.",
+      "language_system_label": "System language",
+      "language_system_hint": "Language used across menus, settings, and welcome screens.",
+      "language_chat_label": "Chat response language",
+      "language_chat_hint": "Language Lia uses when replying to your chat messages.",
+      "language_report_label": "Report output language",
+      "language_report_hint": "Language used in equity research, earnings, and morning briefing reports.",
+      "language_option_en": "English",
+      "language_option_zh_tw": "繁體中文 (Traditional Chinese)",
+      "language_option_both": "Both (English + 繁體中文)"
+    },
+    "account": {
+      "title": "Account",
+      "email_section_title": "Change Email",
+      "new_email": "New email",
+      "current_password": "Current password",
+      "change_email_button": "Change email",
+      "email_updated": "Email updated.",
+      "change_password_section_title": "Change Password",
+      "active_sessions_section_title": "Active Sessions",
+      "must_change_password_banner": "You must change your password before continuing."
+    },
+    "timezone": {
+      "title": "Timezone"
+    },
+    "models": {
+      "title": "Models"
+    },
+    "disclaimer": {
+      "title": "Disclaimer"
+    },
+    "guardrails": {
+      "title": "Guardrails"
+    },
+    "skills": {
+      "title": "Skills"
+    },
+    "admin": {
+      "title": "Admin"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in",
+      "email_label": "Email",
+      "password_label": "Password",
+      "submit": "Log in",
+      "forgot_password": "Forgot password?",
+      "register_link": "Need an account? Sign up",
+      "loading": "Signing in…"
+    },
+    "register": {
+      "title": "Create an account",
+      "email_label": "Email",
+      "password_label": "Password",
+      "confirm_password_label": "Confirm password",
+      "display_name_label": "Display name (optional)",
+      "submit": "Create account",
+      "loading": "Creating account…",
+      "login_link": "Already have an account? Log in",
+      "registration_closed": "Registration is closed."
+    },
+    "forgot": {
+      "title": "Reset your password",
+      "submit": "Send reset link",
+      "back_to_login": "Back to log in"
+    },
+    "reset": {
+      "title": "Set a new password",
+      "new_password_label": "New password",
+      "confirm_new_password_label": "Confirm new password",
+      "submit": "Reset password"
+    },
+    "must_change": {
+      "title": "You must change your password",
+      "submit": "Change password"
+    }
+  },
+  "chat": {
+    "input_helper": "Enter to send · Shift+Enter for new line",
+    "thinking": "Thinking…",
+    "load_failed": "Failed to load messages",
+    "report_unavailable": "The report this discussion was about can no longer be fetched. I'm unable to answer any questions about it.",
+    "ask_followup_placeholder": "Ask a follow-up question about the company, sector, or report…"
+  },
+  "equity_research": {
+    "ticker_placeholder": "Enter a ticker, company, or sector (e.g., AAPL, Semiconductors)…",
+    "mode": "Mode",
+    "mode_stock_initiation": "Stock Initiation",
+    "mode_stock_update": "Stock Update",
+    "mode_sector_research": "Sector Research",
+    "length_concise": "Concise",
+    "length_normal": "Normal",
+    "length_elaborative": "Elaborative",
+    "change_mode_aria": "Change report mode and length"
+  },
+  "earnings": {
+    "no_prints_today": "No prints today yet",
+    "no_prints_this_week": "No prints earlier this week",
+    "up_next_24h": "Up next · within 24 hours",
+    "earlier_this_week": "Earlier this week",
+    "calendar_wiring_pending": "Earnings calendar wiring pending"
+  },
+  "macro": {
+    "frameworks_aria": "Macro frameworks",
+    "framework_debt_cycle": "Debt Cycle",
+    "framework_four_seasons": "Four Seasons",
+    "framework_all_weather": "All-Weather",
+    "framework_world_order": "World Order",
+    "framework_five_forces": "Five Forces",
+    "auto_refresh_aria": "Auto-refresh interval",
+    "auto_refresh_5min": "Auto-refresh · 5 min",
+    "auto_refresh_15min": "Auto-refresh · 15 min",
+    "auto_refresh_off": "Auto-refresh · Off"
+  },
+  "morning_briefing": {
+    "tab_overview": "Overview",
+    "tab_metrics": "Metrics Deep Dive",
+    "tab_evidence": "Evidence",
+    "tab_insights": "Insights",
+    "run_now": "Run Now",
+    "running": "Running…"
+  },
+  "panic_thermometer": {
+    "title": "Panic Thermometer"
+  },
+  "memory_page": {
+    "title": "Memory",
+    "subtitle": "Cross-session beliefs",
+    "pending_proposals": "Pending proposals",
+    "confirmed_beliefs": "Confirmed beliefs"
+  },
+  "report": {
+    "executive_summary": "Executive Summary",
+    "lias_call": "Lia's Call",
+    "related_links": "Related links",
+    "delete_report": "Delete Report",
+    "download": "Download",
+    "download_pdf": "PDF",
+    "download_json": "JSON",
+    "download_markdown": "Markdown"
+  }
+}
