@@ -61,6 +61,7 @@ class TestServeFlags:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
         monkeypatch.setattr("openlia_server.cli.bootstrap", fake_bootstrap)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.delenv("OPENLIA_SCHEDULER_ENABLED", raising=False)
 
         result = cli_runner.invoke(app, ["serve", "--no-scheduler", "--port", "1234"])
@@ -81,6 +82,7 @@ class TestServeFlags:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.setenv("OPENLIA_SCHEDULER_ENABLED", "true")
 
         result = cli_runner.invoke(app, ["serve"])
@@ -99,6 +101,7 @@ class TestServeBanner:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.setenv("OPENLIA_MODE", "personal")
         monkeypatch.delenv("OPENLIA_SCHEDULER_ENABLED", raising=False)
 
@@ -125,6 +128,7 @@ class TestServeBanner:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", lambda *a, **k: None)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.setenv("OPENLIA_MODE", "personal")
 
         result = cli_runner.invoke(app, ["serve", "--port", "8000"])
@@ -141,8 +145,72 @@ class TestServeBanner:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", lambda *a, **k: None)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.setenv("OPENLIA_MODE", "personal")
 
         result = cli_runner.invoke(app, ["serve", "--port", "8000"])
         assert result.exit_code == 0, result.output
         assert "Setup wizard" not in result.output
+
+
+class TestServePortInUse:
+    def test_port_in_use_with_known_pid_exits_with_actionable_error(
+        self, cli_runner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        called: dict[str, bool] = {}
+
+        def fake_uvicorn(*a: object, **k: object) -> None:
+            called["uvicorn"] = True
+
+        monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
+        monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: 4242)
+        monkeypatch.setenv("OPENLIA_MODE", "personal")
+
+        result = cli_runner.invoke(app, ["serve", "--port", "8080"])
+        assert result.exit_code == 1, result.output
+        assert "uvicorn" not in called
+        # Banner must NOT print when we're about to bail out.
+        assert "OpenLIA v" not in result.output
+        assert "port 8080" in result.output
+        assert "PID 4242" in result.output
+        assert "kill 4242" in result.output
+        assert "--port" in result.output
+
+    def test_port_in_use_unknown_pid_still_exits_with_guidance(
+        self, cli_runner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("openlia_server.cli.uvicorn.run", lambda *a, **k: None)
+        monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: 0)
+        monkeypatch.setenv("OPENLIA_MODE", "personal")
+
+        result = cli_runner.invoke(app, ["serve", "--port", "8080"])
+        assert result.exit_code == 1, result.output
+        assert "another process" in result.output
+        assert "OPENLIA_PORT" in result.output
+        # No PID, so don't suggest a `kill` command we can't fill in.
+        assert "kill " not in result.output
+
+    def test_reload_mode_skips_preflight_check(
+        self, cli_runner, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Under --reload, uvicorn's reloader manages the child that owns the
+        # bind. The parent we'd be probing from doesn't bind itself, so the
+        # preflight check would just be noise.
+        def boom(host: str, port: int) -> int:
+            raise AssertionError("preflight must be skipped under --reload")
+
+        called: dict[str, bool] = {}
+
+        def fake_uvicorn(*a: object, **k: object) -> None:
+            called["uvicorn"] = True
+
+        monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
+        monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", boom)
+        monkeypatch.setenv("OPENLIA_MODE", "personal")
+
+        result = cli_runner.invoke(app, ["serve", "--reload", "--port", "8080"])
+        assert result.exit_code == 0, result.output
+        assert called.get("uvicorn") is True

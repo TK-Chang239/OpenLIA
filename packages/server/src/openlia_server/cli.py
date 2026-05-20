@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import socket
+import subprocess
 import uuid
 from datetime import UTC, datetime
 
@@ -117,6 +119,41 @@ def _default_port() -> int:
     return 8080
 
 
+def _find_listener_pid(host: str, port: int) -> int | None:
+    """Best-effort lookup of the PID listening on (host, port) via lsof.
+    Returns None when lsof is unavailable or the listener can't be identified.
+    """
+    try:
+        result = subprocess.run(
+            ["lsof", "-nP", f"-iTCP@{host}:{port}", "-sTCP:LISTEN", "-Fp"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    for line in result.stdout.splitlines():
+        if line.startswith("p") and line[1:].isdigit():
+            return int(line[1:])
+    return None
+
+
+def _check_port_available(host: str, port: int) -> int | None:
+    """Probe whether (host, port) can be bound. Returns None if free, otherwise
+    the PID of the current listener (or 0 when the PID can't be determined).
+    """
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((host, port))
+    except OSError:
+        pid = _find_listener_pid(host, port)
+        return pid if pid is not None else 0
+    finally:
+        sock.close()
+    return None
+
+
 @app.command()
 def serve(
     host: str = typer.Option(None, help="Bind address (defaults to OPENLIA_HOST)."),
@@ -136,6 +173,21 @@ def serve(
     bootstrap()
     bind_host = host if host is not None else _default_host()
     bind_port = port if port is not None else _default_port()
+    # Preflight bind check. uvicorn would otherwise emit a cryptic
+    # `[Errno 48] address already in use` after the banner has printed and
+    # the lifespan has started — leaving the user staring at a "Listening on..."
+    # line that's a lie. Catch it up front, name the squatter, and exit.
+    if not reload:
+        listener_pid = _check_port_available(bind_host, bind_port)
+        if listener_pid is not None:
+            who = f"PID {listener_pid}" if listener_pid else "another process"
+            echo_error(f"port {bind_port} on {bind_host} is already in use by {who}.")
+            typer.echo("Either:", err=True)
+            if listener_pid:
+                typer.echo(f"  - stop the existing server:  kill {listener_pid}", err=True)
+            typer.echo("  - pick a different port:     openlia serve --port <PORT>", err=True)
+            typer.echo("  - or set OPENLIA_PORT=<PORT> in your environment", err=True)
+            raise typer.Exit(code=1)
     mode = os.environ.get("OPENLIA_MODE", "personal").lower()
     scheduler_env = os.environ.get("OPENLIA_SCHEDULER_ENABLED", "true").lower()
     scheduler_enabled = scheduler_env not in {"false", "0", "no"}
