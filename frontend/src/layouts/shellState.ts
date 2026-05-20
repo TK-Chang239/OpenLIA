@@ -8,10 +8,13 @@ function titleCase(segment: string): string {
     .join(" ");
 }
 
-const STATIC_ROOTS: Record<string, string> = {
-  "/settings": "Settings",
+const STATIC_ROOTS: Record<string, { label: string; labelKey: string }> = {
+  "/settings": { label: "Settings", labelKey: "nav.settings" },
 };
 
+/** Returns breadcrumb segments as i18n keys (e.g. ``nav.home``).
+ *  Callers should resolve each via ``t(crumb, { defaultValue: crumb })`` so
+ *  unknown segments (e.g. sub-route titles) render as-is. */
 export function crumbsForPath(pathname: string): string[] {
   const all = [...CORE_NAV, ...DEPARTMENT_NAV];
   const hit = all.find(
@@ -19,28 +22,28 @@ export function crumbsForPath(pathname: string): string[] {
   );
 
   let rootPath: string | null = null;
-  let rootLabel: string | null = null;
+  let rootKey: string | null = null;
   if (hit && hit.path !== "/") {
     rootPath = hit.path;
-    rootLabel = hit.label;
+    rootKey = hit.labelKey;
   } else if (!hit) {
-    for (const [prefix, label] of Object.entries(STATIC_ROOTS)) {
+    for (const [prefix, info] of Object.entries(STATIC_ROOTS)) {
       if (pathname === prefix || pathname.startsWith(prefix + "/")) {
         rootPath = prefix;
-        rootLabel = label;
+        rootKey = info.labelKey;
         break;
       }
     }
   }
 
-  if (!rootPath || !rootLabel) return ["Home"];
+  if (!rootPath || !rootKey) return ["nav.home"];
 
   const remainder = pathname.slice(rootPath.length).replace(/^\/+/, "");
-  if (!remainder) return ["Home", rootLabel];
+  if (!remainder) return ["nav.home", rootKey];
 
   const segments = remainder.split("/").filter(Boolean);
-  if (segments.length === 0) return ["Home", rootLabel];
-  return ["Home", rootLabel, titleCase(segments[0])];
+  if (segments.length === 0) return ["nav.home", rootKey];
+  return ["nav.home", rootKey, titleCase(segments[0])];
 }
 
 export function stampsForNow(): string[] {

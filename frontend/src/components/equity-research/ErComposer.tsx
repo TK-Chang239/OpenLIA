@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { ReportLength, ReportMode } from "../../api/equity-research";
 import { PendingAttachmentChip } from "../chat/PendingAttachmentChip";
@@ -34,25 +35,15 @@ const ALLOWED_MIMES = new Set([
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
 
-function _validateFile(f: File): string | null {
-  if (f.size > PER_FILE_MAX_BYTES) {
-    return `${f.name}: too large (max 25 MB)`;
-  }
-  if (!ALLOWED_MIMES.has(f.type)) {
-    return `${f.name}: file type not supported`;
-  }
-  return null;
-}
-
-const MODE_PILL_LABEL: Record<ReportMode, string> = {
-  stock_initiation: "Stock Initiation",
-  stock_update: "Stock Update",
-  sector_research: "Sector Research",
+const MODE_KEY: Record<ReportMode, string> = {
+  stock_initiation: "equity_research.mode_stock_initiation",
+  stock_update: "equity_research.mode_stock_update",
+  sector_research: "equity_research.mode_sector_research",
 };
-const LENGTH_PILL_LABEL: Record<ReportLength, string> = {
-  concise: "Concise",
-  normal: "Normal",
-  elaborative: "Elaborative",
+const LENGTH_KEY: Record<ReportLength, string> = {
+  concise: "equity_research.length_concise",
+  normal: "equity_research.length_normal",
+  elaborative: "equity_research.length_elaborative",
 };
 
 interface Props {
@@ -87,12 +78,23 @@ export function ErComposer({
   initialValue,
   disabled,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const helperId = useId();
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentErrors, setAttachmentErrors] = useState<string[]>([]);
   const seededRef = useRef<string | null>(initialValue ?? null);
+
+  const validateFile = (f: File): string | null => {
+    if (f.size > PER_FILE_MAX_BYTES) {
+      return t("chat.attachment_too_large", { name: f.name });
+    }
+    if (!ALLOWED_MIMES.has(f.type)) {
+      return t("chat.attachment_unsupported", { name: f.name });
+    }
+    return null;
+  };
 
   useLayoutEffect(() => {
     if (!initialValue) return;
@@ -133,7 +135,7 @@ export function ErComposer({
     const accepted: File[] = [];
     const errors: string[] = [];
     for (const f of incoming) {
-      const err = _validateFile(f);
+      const err = validateFile(f);
       if (err) {
         errors.push(err);
       } else {
@@ -144,7 +146,7 @@ export function ErComposer({
       const combined = [...prev, ...accepted];
       if (combined.length > PER_MESSAGE_MAX_FILES) {
         errors.push(
-          `only ${PER_MESSAGE_MAX_FILES} files per message — extra files ignored`,
+          t("chat.attachment_limit", { limit: PER_MESSAGE_MAX_FILES }),
         );
         return combined.slice(0, PER_MESSAGE_MAX_FILES);
       }
@@ -170,7 +172,7 @@ export function ErComposer({
         <textarea
           ref={taRef}
           id={`${helperId}-ta`}
-          aria-label="Equity research prompt"
+          aria-label={t("equity_research.aria_prompt")}
           aria-describedby={helperId}
           rows={1}
           value={value}
@@ -208,7 +210,7 @@ export function ErComposer({
         <div className="flex items-center gap-2 px-2 py-[6px] pl-[10px]">
           <button
             type="button"
-            aria-label="Attach files"
+            aria-label={t("chat.aria_attach_files")}
             onClick={() => fileInputRef.current?.click()}
             className="inline-flex items-center justify-center rounded-md p-[7px] text-[--color-text-secondary] transition-colors duration-normal ease-out hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
           >
@@ -227,7 +229,7 @@ export function ErComposer({
           <button
             type="button"
             onClick={onModeClick}
-            aria-label="Change report mode and length"
+            aria-label={t("equity_research.change_mode_aria")}
             className="inline-flex items-center gap-2 rounded-full border border-[--color-border-subtle] bg-[--color-bg-base] py-[5px] pl-2 pr-[10px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
           >
             <span
@@ -235,10 +237,10 @@ export function ErComposer({
               className="h-1.5 w-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_5px_rgba(212,255,0,0.6)]"
             />
             <strong className="font-medium tracking-[0.06em] text-[--color-text-primary]">
-              {MODE_PILL_LABEL[mode]}
+              {t(MODE_KEY[mode])}
             </strong>
             <span className="text-[--color-text-tertiary]">·</span>
-            <span>{LENGTH_PILL_LABEL[length]}</span>
+            <span>{t(LENGTH_KEY[length])}</span>
             <ChevronDown
               size={10}
               strokeWidth={2}
@@ -256,15 +258,15 @@ export function ErComposer({
             id={helperId}
             className="hidden font-mono text-[10px] tracking-[0.08em] uppercase text-[--color-text-tertiary] sm:inline"
           >
-            <span aria-hidden="true">↵</span> Send
+            <span aria-hidden="true">↵</span> {t("chat.kbd_send")}
             <span className="mx-2 text-[--color-border-subtle]">·</span>
-            <span aria-hidden="true">⇧↵</span> New line
+            <span aria-hidden="true">⇧↵</span> {t("chat.kbd_new_line")}
           </span>
 
           {isStreaming ? (
             <button
               type="button"
-              aria-label="Stop generating"
+              aria-label={t("chat.aria_stop_generating")}
               onClick={onStop}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[--color-accent-primary] text-[--color-accent-on] transition-colors duration-normal ease-out hover:bg-[--color-accent-hover] active:scale-[0.95]"
             >
@@ -273,7 +275,7 @@ export function ErComposer({
           ) : (
             <button
               type="button"
-              aria-label="Send"
+              aria-label={t("chat.aria_send")}
               onClick={submit}
               disabled={sendDisabled}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[--color-accent-primary] text-[--color-accent-on] transition-all duration-normal ease-out hover:bg-[--color-accent-hover] active:scale-[0.95] disabled:cursor-not-allowed disabled:opacity-40"
