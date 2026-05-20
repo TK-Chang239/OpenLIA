@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { type JSX, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import type { ReportMode } from "../../api/equity-research";
 import { createSession } from "../../api/chat";
@@ -35,10 +36,10 @@ export interface BgReport {
 
 // ─── Flat-props API for completed reports ─────────────────────────────────────
 
-const MODE_TITLE: Record<ReportMode, string> = {
-  stock_initiation: "Stock Initiation Report",
-  stock_update: "Stock Update Report",
-  sector_research: "Sector Research Report",
+const MODE_TITLE_KEY: Record<ReportMode, string> = {
+  stock_initiation: "equity_research.report_card.stock_initiation_title",
+  stock_update: "equity_research.report_card.stock_update_title",
+  sector_research: "equity_research.report_card.sector_research_title",
 };
 
 const RETENTION_DAYS = 7;
@@ -106,6 +107,7 @@ function CompletedReportCard({
   initialSaved = false,
   expiredAt = null,
 }: CompletedProps): JSX.Element {
+  const { t } = useTranslation();
   const reduce = useReducedMotion();
   const navigate = useNavigate();
   const savedCtx = useSavedReportsOptional();
@@ -202,7 +204,7 @@ function CompletedReportCard({
           </div>
           <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
             <span className="text-[15px] font-semibold tracking-[-0.005em] text-[--color-text-secondary]">
-              {MODE_TITLE[mode]}
+              {t(MODE_TITLE_KEY[mode])}
             </span>
             <span className="flex flex-wrap items-center gap-[5px] truncate font-mono text-[11px] tracking-[0.02em] text-[--color-text-tertiary]">
               {subParts.map((p, i) => (
@@ -219,7 +221,7 @@ function CompletedReportCard({
           </div>
         </header>
         <p className="m-0 px-[18px] pb-[18px] text-[13px] italic leading-[1.6] text-[--color-text-tertiary]">
-          Report no longer available — automatically expired after 7 days.
+          {t("equity_research.report_card.expired_note")}
         </p>
       </motion.article>
     );
@@ -241,7 +243,7 @@ function CompletedReportCard({
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <span className="text-[15px] font-semibold tracking-[-0.005em] text-[--color-text-primary]">
-            {MODE_TITLE[mode]}
+            {t(MODE_TITLE_KEY[mode])}
           </span>
           <span className="flex flex-wrap items-center gap-[5px] truncate font-mono text-[11px] tracking-[0.02em] text-[--color-text-secondary]">
             {subParts.map((p, i) => (
@@ -261,7 +263,7 @@ function CompletedReportCard({
             aria-hidden="true"
             className="h-[5px] w-[5px] rounded-full bg-[--color-feedback-success] shadow-[0_0_4px_rgba(168,204,0,0.7)]"
           />
-          Ready
+          {t("equity_research.report_card.ready")}
         </span>
       </header>
 
@@ -272,7 +274,7 @@ function CompletedReportCard({
           onClick={() => onOpen(reportId)}
           className="font-medium text-[--color-text-primary] hover:text-[--color-feedback-success]"
         >
-          read more →
+          {t("equity_research.report_card.read_more")}
         </button>
       </p>
 
@@ -284,19 +286,19 @@ function CompletedReportCard({
           {sectionsCount ? (
             <span className="inline-flex items-center gap-[5px]">
               <Layers size={11} strokeWidth={1.6} />
-              {sectionsCount} sections
+              {t("equity_research.report_card.sections_count", { count: sectionsCount })}
             </span>
           ) : null}
           {generatedSeconds != null ? (
             <span className="inline-flex items-center gap-[5px]">
               <Clock size={11} strokeWidth={1.6} />
-              Generated in {generatedSeconds.toFixed(1)}s
+              {t("equity_research.report_card.generated_in", { seconds: generatedSeconds.toFixed(1) })}
             </span>
           ) : null}
           {citationsCount ? (
             <span className="inline-flex items-center gap-[5px]">
               <Globe size={11} strokeWidth={1.6} />
-              {citationsCount} sources cited
+              {t("equity_research.report_card.sources_cited", { count: citationsCount })}
             </span>
           ) : null}
         </div>
@@ -309,7 +311,7 @@ function CompletedReportCard({
           className="inline-flex h-[30px] items-center gap-[6px] rounded-md bg-[--color-accent-primary] px-3 text-[13px] font-medium text-[--color-accent-on] transition-colors hover:bg-[--color-accent-hover]"
         >
           <FileText size={13} strokeWidth={1.7} />
-          Open Report
+          {t("equity_research.report_card.open_report")}
         </button>
 
         <button
@@ -319,7 +321,7 @@ function CompletedReportCard({
           className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
         >
           <MessageSquare size={13} strokeWidth={1.7} />
-          Discuss
+          {t("equity_research.report_card.discuss")}
         </button>
 
         <ReportDownloadButton reportId={reportId} variant="primary" />
@@ -330,18 +332,22 @@ function CompletedReportCard({
           <button
             type="button"
             onClick={() => setDeleteOpen(true)}
-            aria-label="Delete report"
+            aria-label={t("equity_research.settings.delete_report_aria")}
             disabled={deleting}
             className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[13px] text-[--color-feedback-error] transition-colors hover:bg-[--color-surface-hover] disabled:opacity-50"
           >
             <Trash2 size={14} strokeWidth={1.7} data-testid="delete-icon" />
-            Delete
+            {t("equity_research.report_card.delete")}
           </button>
         ) : (
           <button
             type="button"
             onClick={() => void handleSaveToggle()}
-            aria-label={saved ? "Saved to Repository" : "Save to Repository"}
+            aria-label={
+              saved
+                ? t("equity_research.report_card.saved_to_repository_aria")
+                : t("equity_research.report_card.save_to_repository_aria")
+            }
             aria-pressed={saved}
             disabled={saving}
             className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-50"
@@ -352,14 +358,14 @@ function CompletedReportCard({
               fill={saved ? "currentColor" : "none"}
               data-testid="bookmark-icon"
             />
-            {saved ? "Saved" : "Save to Repo"}
+            {saved ? t("equity_research.report_card.saved") : t("equity_research.report_card.save_to_repo")}
           </button>
         )}
       </div>
 
       <DeleteReportDialog
         open={deleteOpen}
-        reportTitle={MODE_TITLE[mode]}
+        reportTitle={t(MODE_TITLE_KEY[mode])}
         onCancel={() => setDeleteOpen(false)}
         onConfirm={handleDeleteConfirm}
       />
