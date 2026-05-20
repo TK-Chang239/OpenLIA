@@ -102,6 +102,8 @@ EXPECTED_TABLES = {
     "portfolio_quotes",
     "portfolio_quote_intraday",
     "portfolio_quote_daily",
+    # --- Custom report templates (PR 9) ---
+    "report_templates",
 }
 
 
