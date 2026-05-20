@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
+from fastapi import HTTPException
 from openlia.llm.runtime.events import ReportComplete, ReportStart
 from openlia_server.db.models.auth import User
+from openlia_server.db.models.report_templates import ReportTemplate
 from openlia_server.services.equity_research_runner import (
     EquityResearchRunner,
     ReportSavedEvent,
@@ -153,3 +157,76 @@ async def test_runner_threads_report_length_via_resolve_active(
         pass
     assert fake_report_runner.last_request is not None
     assert fake_report_runner.last_request.length == "long"
+
+
+@pytest.mark.asyncio
+async def test_runner_resolves_and_forwards_framework_template_spec(
+    db_session, user, fake_report_runner
+):
+    spec = {
+        "name": "custom_framework",
+        "global_preface": "preamble",
+        "body_sections": [{"id": "s1", "title": "S1", "brief": "do s1"}],
+        "synthesis_sections": [],
+    }
+    tid = str(uuid.uuid4())
+    db_session.add(
+        ReportTemplate(
+            id=tid,
+            user_id=user,
+            name="custom_framework",
+            template_spec_json=spec,
+            source_markdown=None,
+        )
+    )
+    db_session.commit()
+
+    fake_report_runner.queue_events([ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA)])
+    runner = EquityResearchRunner(db_session=db_session, inner=fake_report_runner)
+    async for _ in runner.run_report(
+        user_id=user,
+        mode="stock_update",
+        user_input="AAPL",
+        session_id=None,
+        report_template_id=tid,
+    ):
+        pass
+
+    last = fake_report_runner.last_request
+    assert last is not None
+    assert last.framework_template_id == tid
+    assert last.framework_template_spec == spec
+
+
+@pytest.mark.asyncio
+async def test_runner_404_when_report_template_id_missing(db_session, user, fake_report_runner):
+    runner = EquityResearchRunner(db_session=db_session, inner=fake_report_runner)
+    with pytest.raises(HTTPException) as err:
+        async for _ in runner.run_report(
+            user_id=user,
+            mode="stock_update",
+            user_input="AAPL",
+            session_id=None,
+            report_template_id="does-not-exist",
+        ):
+            pass
+    assert err.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_runner_does_not_resolve_when_report_template_id_omitted(
+    db_session, user, fake_report_runner
+):
+    fake_report_runner.queue_events([ReportComplete(report_id="r_1", schema=MINIMAL_SCHEMA)])
+    runner = EquityResearchRunner(db_session=db_session, inner=fake_report_runner)
+    async for _ in runner.run_report(
+        user_id=user,
+        mode="stock_update",
+        user_input="AAPL",
+        session_id=None,
+    ):
+        pass
+    last = fake_report_runner.last_request
+    assert last is not None
+    assert last.framework_template_spec is None
+    assert last.framework_template_id is None

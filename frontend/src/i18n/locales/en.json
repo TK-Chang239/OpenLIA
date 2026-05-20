@@ -477,6 +477,10 @@
     "settings_label": "Settings"
   },
   "equity_research": {
+    "framework_template": {
+      "label": "Framework",
+      "default_option": "Default"
+    },
     "ticker_placeholder": "Enter a ticker, company, or sector (e.g., AAPL, Semiconductors)…",
     "followup_placeholder": "Ask a follow-up question about the company, sector, or report…",
     "aria_prompt": "Equity research prompt",

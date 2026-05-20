@@ -477,6 +477,10 @@
     "settings_label": "設定"
   },
   "equity_research": {
+    "framework_template": {
+      "label": "框架",
+      "default_option": "預設"
+    },
     "ticker_placeholder": "輸入代號、公司名稱或產業（例如：AAPL、半導體）…",
     "followup_placeholder": "針對該公司、產業或報告，提出後續問題…",
     "aria_prompt": "個股研究輸入框",
