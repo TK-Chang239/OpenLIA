@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export interface ReportHeaderProps {
   left: string;
@@ -80,6 +81,7 @@ function PrinterIcon() {
 }
 
 export function ReportHeader({ left, right, printHref }: ReportHeaderProps) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const progress = useScrollProgress(ref);
   return (
@@ -93,8 +95,8 @@ export function ReportHeader({ left, right, printHref }: ReportHeaderProps) {
             target="_blank"
             rel="noopener noreferrer"
             className="report-furniture__print"
-            title="Open print view"
-            aria-label="Open print view"
+            title={t('report.title_open_print_view')}
+            aria-label={t('report.aria_open_print_view')}
           >
             <PrinterIcon />
           </a>
@@ -103,7 +105,7 @@ export function ReportHeader({ left, right, printHref }: ReportHeaderProps) {
       <span
         className="report-furniture__progress"
         role="progressbar"
-        aria-label="Report scroll progress"
+        aria-label={t('report.aria_report_scroll_progress')}
         aria-valuenow={Math.round(progress * 100)}
         aria-valuemin={0}
         aria-valuemax={100}

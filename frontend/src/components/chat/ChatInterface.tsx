@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { UserBubbleAttachment } from "./UserBubble";
 import { AnimatePresence } from "framer-motion";
 import { type ChatMessage, getSession, listMessages } from "../../api/chat";
@@ -92,6 +93,7 @@ export function ChatInterface({
   mode = "personal",
   departmentId,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const aboutGate = useDisclaimerGate(mode);
   const [aboutOpen, setAboutOpen] = useState(false);
   // Drawer state lives per-component-instance — re-mounts (e.g. session
@@ -162,7 +164,7 @@ export function ChatInterface({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : "Failed to load messages");
+        setLoadError(err instanceof Error ? err.message : t("chat.load_failed"));
         setLoaded(true);
       });
     return () => {
@@ -317,7 +319,7 @@ export function ChatInterface({
   if (!sessionId) {
     return (
       <div className="flex h-full items-center justify-center text-[--color-text-tertiary]">
-        No chat session selected.
+        {t("chat.no_session_selected")}
       </div>
     );
   }
@@ -348,7 +350,7 @@ export function ChatInterface({
           onClick={() => setAboutOpen(true)}
           className="text-xs text-slate-500 underline"
         >
-          (?) About Lia
+          {t("chat.about_lia")}
         </button>
       </div>
       {aboutOpen && aboutGate.disclaimer && (
@@ -493,7 +495,7 @@ export function ChatInterface({
         placeholder={inputPlaceholder}
         initialValue={initialDraft ?? undefined}
         disabled={locked}
-        disabledReason={locked ? "The report this discussion was about can no longer be fetched. I'm unable to answer any questions about it." : undefined}
+        disabledReason={locked ? t("chat.report_unavailable") : undefined}
         leftSlot={
           departmentId ? (
             <div className="flex items-center gap-2">

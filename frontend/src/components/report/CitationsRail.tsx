@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { Citation } from '../../api/reports';
 import { displayCitationTitle } from './CitationsSection';
 
@@ -14,10 +16,11 @@ function composePreview(c: Citation): string {
 }
 
 export function CitationsRail({ citations }: CitationsRailProps) {
+  const { t } = useTranslation();
   if (citations.length === 0) return null;
   return (
     <section className="report-rail__card report-rail__citations">
-      <div className="report-rail__card-label">Sources</div>
+      <div className="report-rail__card-label">{t('report.sources')}</div>
       <ol className="report-rail__citations-list">
         {citations.map((c) => {
           const preview = composePreview(c);

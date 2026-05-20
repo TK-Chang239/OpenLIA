@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Cpu } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   getEnabledModels,
@@ -14,6 +15,7 @@ import {
  *  departments (writes ``user_prefs.preferred_model_id``). Visual: design's
  *  bordered mono-10px pill in the composer toolbar with left icon + chevron. */
 export function ModelPicker(): JSX.Element | null {
+  const { t } = useTranslation();
   const [models, setModels] = useState<RosterEntry[] | null>(null);
   const [modelId, setModelId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -76,7 +78,7 @@ export function ModelPicker(): JSX.Element | null {
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          aria-label="Choose LLM model"
+          aria-label={t("chat.aria_choose_model")}
           disabled={busy}
           className="inline-flex items-center gap-[6px] rounded-sm border px-2 py-[4px] font-mono text-[10px] uppercase transition-colors duration-normal ease-out disabled:opacity-60 hover:border-border-strong hover:text-text-primary"
           style={{
