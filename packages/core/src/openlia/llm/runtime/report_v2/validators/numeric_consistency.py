@@ -744,8 +744,27 @@ _FIRST_PERSON_RE = re.compile(
 )
 
 
-def _check_first_person(section_id: str, prose: str) -> list[ValidatorFailure]:
-    if section_id not in {"analyst_view", "investment_recommendation"}:
+_LEGACY_FIRST_PERSON_SECTIONS: frozenset[str] = frozenset(
+    {"analyst_view", "investment_recommendation"}
+)
+
+
+def _check_first_person(
+    section_id: str,
+    prose: str,
+    voice_only_sections: frozenset[str] | None = None,
+) -> list[ValidatorFailure]:
+    """Flag first-person advocacy phrasing.
+
+    When `voice_only_sections` is None, falls back to the legacy hardcoded
+    allowlist so callers that don't pass a template continue to work.
+    Otherwise gates only on sections that opted in via
+    `SectionSpec.voice="third_person_only"`.
+    """
+    allowlist = (
+        voice_only_sections if voice_only_sections is not None else _LEGACY_FIRST_PERSON_SECTIONS
+    )
+    if section_id not in allowlist:
         return []
     failures: list[ValidatorFailure] = []
     for m in _FIRST_PERSON_RE.finditer(prose):
@@ -849,14 +868,25 @@ def validate_sections(
     tolerance_pct: float = 1.0,
     arithmetic_tolerance_pct: float = 0.5,
     identity_tolerance_pct: float = 2.0,
+    template: Any = None,
 ) -> ValidatorReport:
     """Run every WS4 check against `section_files` (section_id -> markdown).
 
     Returns a structured report; the caller decides what to do with hard vs
-    soft failures.
+    soft failures. When `template` is provided, first-person voice gating is
+    driven by per-section `voice` flags; without a template the legacy
+    hardcoded allowlist applies.
     """
     report = ValidatorReport()
     numbers_inspected_counter = [0]
+
+    voice_only_sections: frozenset[str] | None = None
+    if template is not None:
+        voice_only_sections = frozenset(
+            s.id
+            for s in (*template.body_sections, *template.synthesis_sections)
+            if s.voice == "third_person_only"
+        )
 
     for section_id, markdown in section_files.items():
         if markdown is None:
@@ -878,8 +908,8 @@ def validate_sections(
         report.failures.extend(
             _check_arithmetic(section_id, markdown, facts, arithmetic_tolerance_pct)
         )
-        # 6. First-person voice (analyst_view only)
-        report.failures.extend(_check_first_person(section_id, markdown))
+        # 6. First-person voice (per-section voice flag, or legacy allowlist)
+        report.failures.extend(_check_first_person(section_id, markdown, voice_only_sections))
         # 7. Tombstone phrases
         report.failures.extend(_check_tombstones(section_id, markdown))
         # 5. Date-stamp coverage (soft)
