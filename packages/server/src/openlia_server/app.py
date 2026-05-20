@@ -858,6 +858,10 @@ def create_app(
 
     app.include_router(build_repo_router(db_session_factory=factory, mode=mode))
 
+    from openlia_server.routes.report_templates import build_report_templates_router
+
+    app.include_router(build_report_templates_router(db_session_factory=factory, mode=mode))
+
     from openlia_server.routes.files import build_files_router
 
     app.include_router(build_files_router(db_session_factory=factory, mode=mode))
