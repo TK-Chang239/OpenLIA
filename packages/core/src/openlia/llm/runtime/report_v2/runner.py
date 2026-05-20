@@ -71,6 +71,10 @@ from openlia.llm.runtime.report_v2.packer.validator import (
     cross_section_numeric_consistency,
     validate_section,
 )
+from openlia.llm.runtime.report_v2.scanners import (
+    MaterialEventError,
+    scan_manifest,
+)
 from openlia.llm.runtime.report_v2.sections.dispatcher import (
     SectionDispatch,
     dispatch_sections,
@@ -290,6 +294,7 @@ class WavedReportRunner:
         synthesis_concurrency: int = 1,
         language: str | None = None,
         freshness_override: bool = False,
+        material_events_override: bool = False,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -320,6 +325,9 @@ class WavedReportRunner:
         # When True, hard-block freshness violations are logged but the runner
         # proceeds. Default False: stale data refuses to render.
         self.freshness_override = freshness_override
+        # When True, hard-block material events (Chapter 11, restatement, etc.)
+        # detected after `data_as_of` are logged but the runner proceeds.
+        self.material_events_override = material_events_override
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -450,6 +458,44 @@ class WavedReportRunner:
                         f"(as_of={v.data_as_of}, age={v.age_days}d > "
                         f"budget={v.budget_days}d) — proceeding due to "
                         f"freshness_override=True",
+                        flush=True,
+                    )
+
+            # WS3-B: material-events gate. Scans manifest news entries for
+            # the seven event classes (Chapter 11, emergence, going-private,
+            # M&A target, delisting, splits, restatements). Events dated
+            # after the oldest data_as_of carry hard_block / warning_banner
+            # severity; events on or before are demoted to informational.
+            events = scan_manifest(
+                manifest.entries,
+                subject_ticker=self.ticker,
+                as_of_date=banner_oldest,
+            )
+            hard_events = [e for e in events if e.severity == "hard_block"]
+            banner_events: list[dict[str, Any]] = [
+                {
+                    "event_class": e.event_class,
+                    "event_date": (e.event_date.isoformat() if e.event_date is not None else None),
+                    "confidence": e.confidence,
+                    "severity": e.severity,
+                    "evidence": list(e.evidence),
+                    "description": e.description,
+                }
+                for e in events
+            ]
+            self.telemetry.record_material_events_banner(
+                events=banner_events,
+                override=self.material_events_override,
+            )
+            if hard_events and not self.material_events_override:
+                raise MaterialEventError(hard_events)
+            if hard_events:
+                for e in hard_events:
+                    print(
+                        f"[runner] WARN material event {e.event_class!r} "
+                        f"detected (date={e.event_date}, "
+                        f"confidence={e.confidence}) — proceeding due to "
+                        f"material_events_override=True",
                         flush=True,
                     )
 
