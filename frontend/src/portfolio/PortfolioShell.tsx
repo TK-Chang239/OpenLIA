@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 import {
   createGroup,
@@ -36,6 +37,7 @@ import { useSparklines } from "./useSparklines";
 import { useValueSeries } from "./useValueSeries";
 
 function ShellInner({ market }: { market: Market }): JSX.Element {
+  const { t } = useTranslation();
   const toast = useToast();
   const navigate = useNavigate();
   const { holdings, loading, reload, remove } = useHoldings(market);
@@ -70,7 +72,7 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
     setRefreshCadence(next);
     void updatePortfolioPrefs({ refresh_cadence: next }).catch((e) => {
       toast.push({
-        title: `Failed to save cadence: ${(e as Error).message}`,
+        title: t("portfolio_page.failed_save_cadence", { message: (e as Error).message }),
         tone: "error",
       });
     });
@@ -91,12 +93,12 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
     try {
       await refreshPrices(market);
       await refresh();
-      toast.push({ title: "Prices refreshed", tone: "success" });
+      toast.push({ title: t("portfolio_page.prices_refreshed"), tone: "success" });
     } catch (e) {
       const err = e as Error & { retryAfter?: number; status?: number };
       const msg =
         err.status === 429 && err.retryAfter
-          ? `Try again in ${err.retryAfter} seconds`
+          ? t("portfolio_page.retry_in_seconds", { seconds: err.retryAfter })
           : err.message;
       toast.push({ title: msg, tone: "error" });
     } finally {
@@ -123,11 +125,11 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
     const snapshot = await remove(h.id);
     if (!snapshot) return;
     toast.push({
-      title: `${snapshot.ticker} removed`,
+      title: t("portfolio_page.removed_undo", { ticker: snapshot.ticker }),
       tone: "info",
       durationMs: 5000,
       undo: {
-        label: "Undo",
+        label: t("portfolio_page.undo"),
         onClick: () => {
           void createHolding(
             {
@@ -178,10 +180,10 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
                 className="rounded-md border border-[--color-feedback-error] bg-[--color-bg-elevated] px-4 py-2 text-xs text-[--color-text-secondary]"
                 data-testid="fx-unavailable-banner"
               >
-                Multi-currency totals unavailable — configure an FX-capable
-                connector to aggregate{" "}
-                {analytics.currencies_present?.join(", ") ?? ""} into{" "}
-                {analytics.display_currency ?? "USD"}.
+                {t("portfolio_page.fx_unavailable", {
+                  currencies: analytics.currencies_present?.join(", ") ?? "",
+                  display: analytics.display_currency ?? "USD",
+                })}
               </div>
             </Reveal>
           ) : null}
@@ -197,9 +199,9 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
                 data-testid="period-return-banner"
               >
                 <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-                  {range} RETURN ·{" "}
+                  {range} {t("portfolio_page.period_return")} ·{" "}
                   {valueSeries.actual_span
-                    ? `since ${valueSeries.actual_span.start}`
+                    ? t("portfolio_page.since", { date: valueSeries.actual_span.start })
                     : ""}
                 </span>{" "}
                 <span
@@ -227,7 +229,7 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
               onRowClick={onRowClick}
               onManageGroups={() => {
                 toast.push({
-                  title: "Group management is in the holding edit form",
+                  title: t("portfolio_page.manage_groups_hint"),
                   tone: "info",
                   durationMs: 4000,
                 });
@@ -260,7 +262,7 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
         onSaved={async () => {
           await reload();
           await reloadGroups();
-          toast.push({ title: "Holding saved", tone: "success" });
+          toast.push({ title: t("portfolio_page.holding_saved"), tone: "success" });
         }}
       />
 
@@ -270,7 +272,10 @@ function ShellInner({ market }: { market: Market }): JSX.Element {
         onImported={async (res) => {
           if (res.created.length) await reload();
           toast.push({
-            title: `Imported ${res.created.length}; ${res.errors.length} errors`,
+            title: t("portfolio_page.import_summary", {
+              created: res.created.length,
+              errors: res.errors.length,
+            }),
             tone: res.errors.length ? "error" : "success",
           });
         }}
