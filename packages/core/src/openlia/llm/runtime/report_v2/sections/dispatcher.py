@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Protocol
 
 from openlia.llm.runtime.report_v2.packer.auto_repair import repair_section
+from openlia.llm.runtime.report_v2.packer.block_shape import (
+    BlockShapeError,
+    enforce_block_shapes,
+)
 from openlia.llm.runtime.report_v2.packer.parser import parse_section_file
 from openlia.llm.runtime.report_v2.packer.validator import ValidationFinding
 from openlia.llm.runtime.report_v2.types import (
@@ -99,6 +103,32 @@ async def _dispatch_one(
                 )
                 continue
             break
+
+        # WS8: shape-gate every block before any other validation runs. A
+        # broken exhibit (single-row peer table, single-dot scatter,
+        # placeholder axis, broken waterfall) is rejected here so the
+        # section is sent back for regeneration with the specific defects.
+        try:
+            enforce_block_shapes(parsed)
+        except BlockShapeError as e:
+            last_errors = [
+                ValidationFinding(
+                    check="block_shape",
+                    section_id=d.section_id,
+                    detail=defect,
+                )
+                for defect in e.defects
+            ]
+            failed_attempts.append(raw)
+            if attempts <= max_retries:
+                prompt = (
+                    f"{d.prompt}\n\nYOUR PREVIOUS ATTEMPT FAILED BLOCK SHAPE VALIDATION:\n"
+                    + "\n".join(f"- {defect}" for defect in e.defects)
+                    + "\n\nRe-emit the section. Fix every defect listed above; if the "
+                    "data needed for a broken exhibit is not available, drop the exhibit "
+                    "instead of emitting it with placeholder values."
+                )
+            continue
 
         errors = [
             f
