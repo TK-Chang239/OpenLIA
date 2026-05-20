@@ -37,6 +37,7 @@ class ReportTelemetry:
     cross_section_findings: list[CrossSectionFinding] = field(default_factory=list)
     omitted_blocks: list[OmittedBlock] = field(default_factory=list)
     freshness_banner: dict[str, Any] | None = None
+    material_events_banner: dict[str, Any] | None = None
 
     def record_section(self, result: SectionResult) -> None:
         self.sections[result.section_id] = {
@@ -87,6 +88,23 @@ class ReportTelemetry:
             "override": override,
         }
 
+    def record_material_events_banner(
+        self,
+        *,
+        events: list[dict[str, Any]],
+        override: bool,
+    ) -> None:
+        """Record the material-events banner block for the cover/manifest surface.
+
+        Surfaced via the schema's telemetry dict so the renderer can show a
+        warning banner per event (e.g. Chapter 11 detected on YYYY-MM-DD).
+        `override` is True when the runner was invoked with
+        `material_events_override=True` and proceeded despite a hard_block."""
+        self.material_events_banner = {
+            "events": events,
+            "override": override,
+        }
+
     def snapshot(self) -> dict[str, Any]:
         omitted_counts: Counter = Counter()
         for ob in self.omitted_blocks:
@@ -108,4 +126,5 @@ class ReportTelemetry:
             ],
             "omitted_block_counts": dict(omitted_counts),
             "freshness_banner": self.freshness_banner,
+            "material_events_banner": self.material_events_banner,
         }
