@@ -1,4 +1,5 @@
 import { BookOpen, SearchX } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export interface RepoEmptyStateProps {
   mode: "no-saved" | "no-match";
@@ -6,6 +7,7 @@ export interface RepoEmptyStateProps {
 }
 
 export function RepoEmptyState({ mode, onClearFilters }: RepoEmptyStateProps): JSX.Element {
+  const { t } = useTranslation();
   if (mode === "no-saved") {
     return (
       <div
@@ -13,9 +15,9 @@ export function RepoEmptyState({ mode, onClearFilters }: RepoEmptyStateProps): J
         data-testid="repo-empty-no-saved"
       >
         <BookOpen size={40} strokeWidth={1.5} className="text-[--color-text-tertiary]" />
-        <p className="text-base font-medium text-[--color-text-primary]">No saved reports yet.</p>
+        <p className="text-base font-medium text-[--color-text-primary]">{t("repository.empty_no_saved")}</p>
         <p className="text-sm text-[--color-text-secondary]">
-          Save a report from any department to see it here.
+          {t("repository.empty_no_saved_sub")}
         </p>
       </div>
     );
@@ -27,10 +29,10 @@ export function RepoEmptyState({ mode, onClearFilters }: RepoEmptyStateProps): J
     >
       <SearchX size={40} strokeWidth={1.5} className="text-[--color-text-tertiary]" />
       <p className="text-base font-medium text-[--color-text-primary]">
-        No reports match your search.
+        {t("repository.empty_no_match")}
       </p>
       <p className="text-sm text-[--color-text-secondary]">
-        Try adjusting your filters or search terms.
+        {t("repository.empty_no_match_sub")}
       </p>
       {onClearFilters ? (
         <button
@@ -38,7 +40,7 @@ export function RepoEmptyState({ mode, onClearFilters }: RepoEmptyStateProps): J
           onClick={onClearFilters}
           className="text-sm text-[--color-accent-primary] hover:underline"
         >
-          Clear filters
+          {t("repository.empty_clear_filters")}
         </button>
       ) : null}
     </div>

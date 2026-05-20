@@ -1,6 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Plus, X } from "lucide-react";
 import { type JSX, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   type CustomSection,
@@ -16,20 +17,20 @@ import { SECTION_CATALOG } from "../../lib/equity-research/section-catalog";
 import { CustomSectionRow } from "./CustomSectionRow";
 import { TemplateInfoCard, TemplatePickerSection } from "./TemplatePickerSection";
 
-const MODE_LABELS: Record<ReportMode, string> = {
-  stock_initiation: "Stock Initiation",
-  stock_update: "Stock Update",
-  sector_research: "Sector Research",
+const MODE_KEY: Record<ReportMode, string> = {
+  stock_initiation: "equity_research.mode_stock_initiation",
+  stock_update: "equity_research.mode_stock_update",
+  sector_research: "equity_research.mode_sector_research",
 };
-const MODE_FULL_LABEL: Record<ReportMode, string> = {
-  stock_initiation: "Stock Initiation Report",
-  stock_update: "Stock Update Report",
-  sector_research: "Sector Research Report",
+const MODE_FULL_KEY: Record<ReportMode, string> = {
+  stock_initiation: "equity_research.mode_full_stock_initiation",
+  stock_update: "equity_research.mode_full_stock_update",
+  sector_research: "equity_research.mode_full_sector_research",
 };
-const LENGTH_LABELS: Record<ReportLength, string> = {
-  concise: "Concise",
-  normal: "Normal",
-  elaborative: "Elaborative",
+const LENGTH_KEY: Record<ReportLength, string> = {
+  concise: "equity_research.length_concise",
+  normal: "equity_research.length_normal",
+  elaborative: "equity_research.length_elaborative",
 };
 
 interface Props {
@@ -88,6 +89,7 @@ export function ReportSettingsModal({
   onClose,
   onSave,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<ReportMode>(config.report_mode);
   const [length, setLength] = useState<ReportLength>(config.report_length);
   const [sections, setSections] = useState(config.sections_by_mode);
@@ -175,12 +177,12 @@ export function ReportSettingsModal({
     }
   };
 
-  const modeOptions = (Object.keys(MODE_LABELS) as ReportMode[]).map((v) => ({
+  const modeOptions = (Object.keys(MODE_KEY) as ReportMode[]).map((v) => ({
     value: v,
-    label: MODE_LABELS[v],
+    label: t(MODE_KEY[v]),
   }));
-  const lengthOptions = (Object.keys(LENGTH_LABELS) as ReportLength[]).map(
-    (v) => ({ value: v, label: LENGTH_LABELS[v] }),
+  const lengthOptions = (Object.keys(LENGTH_KEY) as ReportLength[]).map(
+    (v) => ({ value: v, label: t(LENGTH_KEY[v]) }),
   );
 
   return (
@@ -190,12 +192,12 @@ export function ReportSettingsModal({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-full max-w-[520px] -translate-x-1/2 -translate-y-1/2 flex-col rounded-[14px] border border-[--color-border-subtle] bg-[--color-bg-elevated] shadow-[0_16px_40px_rgba(13,13,11,0.18)]">
           <div className="flex items-center border-b border-[--color-border-subtle] px-[22px] py-[18px]">
             <Dialog.Title className="m-0 text-[16px] font-semibold tracking-[-0.005em] text-[--color-text-primary]">
-              Report Settings
+              {t("equity_research.settings.title")}
             </Dialog.Title>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t("equity_research.settings.close_aria")}
               className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
             >
               <X size={14} strokeWidth={2} />
@@ -205,10 +207,10 @@ export function ReportSettingsModal({
           <div className="flex-1 overflow-y-auto">
             <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
               <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                Report Mode
+                {t("equity_research.settings.section_report_mode")}
               </span>
               <Segmented
-                ariaLabel="Report Mode"
+                ariaLabel={t("equity_research.settings.section_report_mode")}
                 value={mode}
                 options={modeOptions}
                 onChange={setMode}
@@ -217,10 +219,10 @@ export function ReportSettingsModal({
 
             <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
               <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                Report Length
+                {t("equity_research.settings.section_report_length")}
               </span>
               <Segmented
-                ariaLabel="Report Length"
+                ariaLabel={t("equity_research.settings.section_report_length")}
                 value={length}
                 options={lengthOptions}
                 onChange={setLength}
@@ -243,7 +245,7 @@ export function ReportSettingsModal({
             {templateActive && activeTemplate ? (
               <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
                 <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                  Template Structure
+                  {t("equity_research.settings.section_template_structure")}
                 </span>
                 <TemplateInfoCard template={activeTemplate} />
               </section>
@@ -251,9 +253,9 @@ export function ReportSettingsModal({
               <>
                 <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
                   <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                    Sections ·{" "}
+                    {t("equity_research.settings.section_sections")} ·{" "}
                     <strong className="font-medium text-[--color-text-primary]">
-                      {MODE_FULL_LABEL[mode]}
+                      {t(MODE_FULL_KEY[mode])}
                     </strong>
                   </span>
                   <ul className="m-0 mt-1 flex list-none flex-col p-0">
@@ -298,7 +300,7 @@ export function ReportSettingsModal({
 
                 <section className="px-[22px] py-[18px]">
                   <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                    Custom Sections
+                    {t("equity_research.settings.section_custom_sections")}
                   </span>
                   {customs[mode].map((c, i) => (
                     <CustomSectionRow
@@ -318,8 +320,8 @@ export function ReportSettingsModal({
                   {pendingCustom ? (
                     <div className="mb-2 space-y-2 rounded-md border border-[--color-border-subtle] p-2">
                       <input
-                        aria-label="New custom section title"
-                        placeholder="Title"
+                        aria-label={t("equity_research.settings.custom_title_aria")}
+                        placeholder={t("equity_research.settings.custom_title_placeholder")}
                         autoFocus
                         className="w-full rounded-sm border border-[--color-border-subtle] bg-[--color-bg-input] px-2 py-1 text-sm"
                         value={pendingCustom.title}
@@ -331,8 +333,8 @@ export function ReportSettingsModal({
                         }
                       />
                       <textarea
-                        aria-label="New custom section description"
-                        placeholder="Description (optional)"
+                        aria-label={t("equity_research.settings.custom_desc_aria")}
+                        placeholder={t("equity_research.settings.custom_desc_placeholder")}
                         rows={2}
                         className="w-full rounded-sm border border-[--color-border-subtle] bg-[--color-bg-input] px-2 py-1 text-xs"
                         value={pendingCustom.description ?? ""}
@@ -349,7 +351,7 @@ export function ReportSettingsModal({
                           onClick={() => setPendingCustom(null)}
                           className="h-7 px-2 text-sm text-[--color-text-secondary] hover:text-[--color-text-primary]"
                         >
-                          Cancel
+                          {t("equity_research.settings.cancel")}
                         </button>
                         <button
                           type="button"
@@ -357,7 +359,7 @@ export function ReportSettingsModal({
                           disabled={!pendingCustom.title}
                           className="h-7 rounded-sm bg-[--color-accent-primary] px-2 text-sm text-[--color-accent-on] disabled:opacity-40"
                         >
-                          Add section
+                          {t("equity_research.settings.add_section_button")}
                         </button>
                       </div>
                     </div>
@@ -370,7 +372,7 @@ export function ReportSettingsModal({
                       className="inline-flex h-7 items-center gap-[6px] rounded-md border border-dashed border-[--color-border-strong] bg-transparent px-[11px] font-display text-[12px] text-[--color-text-secondary] transition-all hover:border-solid hover:border-[--color-feedback-success] hover:bg-[rgba(212,255,0,0.05)] hover:text-[--color-feedback-success]"
                     >
                       <Plus size={11} strokeWidth={2} />
-                      Add custom section
+                      {t("equity_research.settings.add_custom_section")}
                     </button>
                   )}
                 </section>
@@ -379,13 +381,10 @@ export function ReportSettingsModal({
 
             <section className="border-t border-[--color-border-subtle] px-[22px] py-[18px]">
               <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                Web Search Budget
+                {t("equity_research.settings.section_web_search_budget")}
               </span>
               <p className="mb-[14px] text-[12.5px] leading-[1.5] text-[--color-text-secondary]">
-                Web search supplements your data connectors for qualitative
-                context (news, strategy, regulatory updates). It does not
-                substitute for financial data tools. Leave blank to use the
-                framework default for each mode.
+                {t("equity_research.settings.web_search_help")}
               </p>
               <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
                 {(Object.keys(WEB_SEARCH_BUDGET_DEFAULTS) as ReportMode[]).map(
@@ -395,20 +394,22 @@ export function ReportSettingsModal({
                       className="flex items-center justify-between gap-3"
                     >
                       <span className="text-[13.5px] text-[--color-text-primary]">
-                        {MODE_LABELS[m]}
+                        {t(MODE_KEY[m])}
                       </span>
                       <div className="flex items-center gap-[8px]">
                         <input
                           type="text"
                           inputMode="numeric"
-                          aria-label={`Web search budget for ${MODE_LABELS[m]}`}
+                          aria-label={t("equity_research.settings.web_search_aria", {
+                            mode: t(MODE_KEY[m]),
+                          })}
                           value={budgetInputs[m]}
                           onChange={(e) => setBudget(m, e.target.value)}
                           placeholder={String(WEB_SEARCH_BUDGET_DEFAULTS[m])}
                           className="h-7 w-[64px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-2 text-right text-[13px] tabular-nums text-[--color-text-primary] placeholder:text-[--color-text-tertiary]"
                         />
                         <span className="text-[12px] text-[--color-text-tertiary]">
-                          searches
+                          {t("equity_research.settings.searches_suffix")}
                         </span>
                       </div>
                     </li>
@@ -424,14 +425,14 @@ export function ReportSettingsModal({
               onClick={onClose}
               className="inline-flex h-9 items-center rounded-md border border-[--color-border-subtle] bg-transparent px-4 font-display text-[13.5px] font-medium text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
             >
-              Cancel
+              {t("equity_research.settings.cancel")}
             </button>
             <button
               type="button"
               onClick={save}
               className="inline-flex h-9 items-center rounded-md bg-[--color-accent-primary] px-4 font-display text-[13.5px] font-medium text-[--color-accent-on] hover:bg-[--color-accent-hover]"
             >
-              Save Settings
+              {t("equity_research.settings.save")}
             </button>
           </div>
         </Dialog.Content>

@@ -1,5 +1,6 @@
 import type { JSX, MutableRefObject } from "react";
 import { Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { RepoFacets } from "../../api/repo";
 import { FiltersDropdown } from "./FiltersDropdown";
 
@@ -38,6 +39,7 @@ export function RepoFilterBar({
   searchInputRef,
   onApplyFilters,
 }: RepoFilterBarProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center gap-3 border-b border-[--color-border-subtle] px-6 py-3">
       <div className="relative h-9 flex-1">
@@ -49,8 +51,8 @@ export function RepoFilterBar({
         <input
           ref={searchInputRef}
           type="search"
-          aria-label="Search filename"
-          placeholder="Search reports by filename..."
+          aria-label={t("repository.search_filename_aria")}
+          placeholder={t("repository.search_filename_placeholder")}
           value={q}
           onChange={(e) => onQChange(e.target.value)}
           className="h-full w-full rounded-[--radius-md] border border-[--color-border-subtle] bg-[--color-bg-elevated] pl-9 pr-3 text-[13.5px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] outline-none transition-[border-color,box-shadow] focus:border-[--color-text-secondary] focus:shadow-[0_0_0_3px_rgba(212,255,0,0.10)]"

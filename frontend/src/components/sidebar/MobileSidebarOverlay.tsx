@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import * as Dialog from "@radix-ui/react-dialog";
 import { LogOut, Settings, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { CORE_NAV, DEPARTMENT_NAV } from "./navData";
 import { NavItem } from "./NavItem";
 import { useAuth } from "../../auth/AuthContext";
@@ -17,6 +18,7 @@ export function MobileSidebarOverlay({
   open,
   onOpenChange,
 }: MobileSidebarOverlayProps): JSX.Element {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const { status, logout } = useAuth();
@@ -46,7 +48,7 @@ export function MobileSidebarOverlay({
           className="fixed inset-y-0 left-0 z-50 flex h-full w-[260px] flex-col bg-sidebar-bg shadow-xl outline-none md:hidden"
           style={{ color: "var(--color-sidebar-text)" }}
         >
-          <Dialog.Title className="sr-only">Navigation</Dialog.Title>
+          <Dialog.Title className="sr-only">{t("shell.navigation_label")}</Dialog.Title>
           <header className="flex items-center justify-between px-3 py-3 border-b border-border-subtle">
             <span
               className="font-display text-[15px] font-semibold tracking-tight"
@@ -55,7 +57,7 @@ export function MobileSidebarOverlay({
               OpenLia
             </span>
             <Dialog.Close
-              aria-label="Close navigation"
+              aria-label={t("shell.close_navigation_aria")}
               className="rounded-md p-1.5"
               style={{ color: "var(--color-sidebar-text)" }}
             >
@@ -66,7 +68,7 @@ export function MobileSidebarOverlay({
             {CORE_NAV.map((entry) => (
               <NavItem
                 key={entry.id}
-                label={entry.label}
+                label={t(entry.labelKey, { defaultValue: entry.label })}
                 icon={entry.icon}
                 path={entry.path}
                 collapsed={false}
@@ -82,12 +84,12 @@ export function MobileSidebarOverlay({
                 fontWeight: 500,
               }}
             >
-              Departments
+              {t("nav.section_departments")}
             </div>
             {DEPARTMENT_NAV.map((entry) => (
               <NavItem
                 key={entry.id}
-                label={entry.label}
+                label={t(entry.labelKey, { defaultValue: entry.label })}
                 icon={entry.icon}
                 path={entry.path}
                 collapsed={false}
@@ -103,7 +105,7 @@ export function MobileSidebarOverlay({
             style={{ borderTop: "1px solid var(--color-sidebar-divider)" }}
           >
             <NavItem
-              label="Settings"
+              label={t("nav.settings")}
               icon={Settings}
               path="/settings"
               collapsed={false}
@@ -115,12 +117,12 @@ export function MobileSidebarOverlay({
                 onClick={() => {
                   void handleSignOut();
                 }}
-                aria-label="Sign out"
+                aria-label={t("shell.sign_out")}
                 className="w-full flex items-center gap-2 px-2 py-[9px] text-[13px] rounded-md"
                 style={{ color: "var(--color-sidebar-text)" }}
               >
                 <LogOut size={16} strokeWidth={1.5} />
-                <span>Sign out</span>
+                <span>{t("shell.sign_out")}</span>
               </button>
             )}
           </footer>
