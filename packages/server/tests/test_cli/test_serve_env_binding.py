@@ -33,6 +33,7 @@ class TestServeEnvBinding:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.setenv("OPENLIA_HOST", "0.0.0.0")
         monkeypatch.setenv("OPENLIA_PORT", "9000")
 
@@ -49,6 +50,7 @@ class TestServeEnvBinding:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.setenv("OPENLIA_HOST", "0.0.0.0")
         monkeypatch.setenv("OPENLIA_PORT", "9000")
 
@@ -67,6 +69,7 @@ class TestServeEnvBinding:
 
         monkeypatch.setattr("openlia_server.cli.uvicorn.run", fake_uvicorn)
         monkeypatch.setattr("openlia_server.cli.bootstrap", lambda: None)
+        monkeypatch.setattr("openlia_server.cli._check_port_available", lambda h, p: None)
         monkeypatch.delenv("OPENLIA_HOST", raising=False)
         monkeypatch.delenv("OPENLIA_PORT", raising=False)
         monkeypatch.setenv("OPENLIA_MODE", "personal")
