@@ -534,6 +534,14 @@ class Cover(_Strict):
     tldr: list[str] = Field(default_factory=list)
     tldr_label: str | None = None
     key_metrics: list[Metric] = Field(default_factory=list)
+    # Deterministic consensus block (WS5). Populated by the runner from
+    # the analyst_consensus_rating / analyst_target_mean /
+    # consensus_upside_pct facts. The LLM never authors these; absence
+    # means the analyst-data slice is unavailable for this ticker.
+    consensus_rating: str | None = None
+    consensus_target_mean: float | None = None
+    consensus_upside_pct: float | None = None
+    consensus_source_ids: list[str] = Field(default_factory=list)
 
 
 class PageFurniture(_Strict):
