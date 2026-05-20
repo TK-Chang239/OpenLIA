@@ -246,6 +246,7 @@ def load_stock_initiation_template() -> TemplateSpec:
         identity_equations=IDENTITY_EQUATIONS,
         material_event_classes=tuple(sorted(ALL_MATERIAL_EVENT_CLASSES)),
         catalyst_classes=tuple(sorted(ALL_CATALYST_CLASSES)),
+        industry_modes=("generic", "saas", "semis", "distressed"),
     )
 
 

@@ -491,31 +491,52 @@ class WavedReportRunner:
                     mode_as_of = None
             else:
                 mode_as_of = None
-            auto_mode: ReportMode = select_report_mode(pack.facts, events, as_of=mode_as_of)
+            _available_modes = (
+                frozenset(self.template.industry_modes)
+                if self.template.industry_modes
+                else frozenset()
+            )
+            auto_mode: ReportMode | None = (
+                select_report_mode(
+                    pack.facts,
+                    events,
+                    as_of=mode_as_of,
+                    available_modes=_available_modes if _available_modes else None,
+                )
+                if _available_modes
+                else None
+            )
             if self.report_mode_override is not None:
-                chosen_mode: ReportMode = self.report_mode_override
+                chosen_mode: ReportMode | None = self.report_mode_override
                 auto_selected = False
             else:
                 chosen_mode = auto_mode
                 auto_selected = True
-            overlay = load_overlay(chosen_mode)
-            framework = apply_facts_overlay(framework, overlay)
-            section_emphasis = overlay_section_emphasis(overlay)
-            mode_label = report_mode_label(overlay)
+            if chosen_mode is None:
+                # Template declares no industry modes — skip overlay entirely.
+                overlay: dict[str, Any] = {}
+                section_emphasis: dict[str, str] = {}
+                mode_label: str | None = None
+            else:
+                overlay = load_overlay(chosen_mode)
+                framework = apply_facts_overlay(framework, overlay)
+                section_emphasis = overlay_section_emphasis(overlay)
+                mode_label = report_mode_label(overlay)
             section_briefs: dict[str, str] = dict(DEFAULT_BRIEFS)
             for sid, emphasis in section_emphasis.items():
                 base = section_briefs.get(sid, "")
                 section_briefs[sid] = (base + "\n\n" + emphasis).strip() if base else emphasis
-            self.telemetry.record_report_mode_banner(
-                mode=chosen_mode,
-                label=mode_label,
-                auto_selected=auto_selected,
-            )
-            print(
-                f"[runner] industry-mode overlay applied: mode={chosen_mode!r} "
-                f"(auto_selected={auto_selected}, label={mode_label!r})",
-                flush=True,
-            )
+            if chosen_mode is not None:
+                self.telemetry.record_report_mode_banner(
+                    mode=chosen_mode,
+                    label=mode_label,
+                    auto_selected=auto_selected,
+                )
+                print(
+                    f"[runner] industry-mode overlay applied: mode={chosen_mode!r} "
+                    f"(auto_selected={auto_selected}, label={mode_label!r})",
+                    flush=True,
+                )
 
             # WS2: peer-set sufficiency gate. An initiation report must carry
             # at least two peers; shipping a single-row peer table is a P1
