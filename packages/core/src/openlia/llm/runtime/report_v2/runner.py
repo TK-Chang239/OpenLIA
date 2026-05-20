@@ -23,6 +23,11 @@ from openlia.llm.runtime.events import (
 from openlia.llm.runtime.report_v2.facts.extractors import stock_initiation  # noqa: F401
 from openlia.llm.runtime.report_v2.facts.pack import compile_pack
 from openlia.llm.runtime.report_v2.facts.registry import default_registry
+from openlia.llm.runtime.report_v2.freshness import (
+    StaleDataError,
+    check_freshness,
+    oldest_data_as_of,
+)
 from openlia.llm.runtime.report_v2.manifest.aggregator import (
     aggregate_declarations,
     execute_aggregated,
@@ -284,6 +289,7 @@ class WavedReportRunner:
         body_concurrency: int = 1,
         synthesis_concurrency: int = 1,
         language: str | None = None,
+        freshness_override: bool = False,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -311,6 +317,9 @@ class WavedReportRunner:
             self.preflight_concurrency = preflight_concurrency
             self.body_concurrency = body_concurrency
             self.synthesis_concurrency = synthesis_concurrency
+        # When True, hard-block freshness violations are logged but the runner
+        # proceeds. Default False: stale data refuses to render.
+        self.freshness_override = freshness_override
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -399,6 +408,50 @@ class WavedReportRunner:
                 subject_ticker=self.ticker,
             )
             self.telemetry.record_wave("W3_facts", duration_ms=int((time.monotonic() - t0) * 1000))
+
+            # WS10-B: per-fact freshness gate. Runs after facts are compiled
+            # and before any section generation. Hard-block violations refuse
+            # to render unless `freshness_override=True`, in which case the
+            # runner proceeds and surfaces a STALE DATA cover banner via
+            # telemetry.
+            now = datetime.now(UTC)
+            violations = check_freshness(pack.facts, as_of=now)
+            hard = [v for v in violations if v.severity == "hard_block"]
+            banner_oldest = oldest_data_as_of(pack.facts)
+            banner_violations: list[dict[str, Any]] = [
+                {
+                    "fact_name": v.fact_name,
+                    "data_as_of": (
+                        v.data_as_of.isoformat()
+                        if isinstance(v.data_as_of, datetime)
+                        else v.data_as_of
+                    ),
+                    "age_days": v.age_days,
+                    "budget_days": v.budget_days,
+                    "severity": v.severity,
+                }
+                for v in violations
+            ]
+            self.telemetry.record_freshness_banner(
+                oldest_data_as_of=(
+                    banner_oldest.isoformat()
+                    if isinstance(banner_oldest, datetime)
+                    else banner_oldest
+                ),
+                violations=banner_violations,
+                override=self.freshness_override,
+            )
+            if hard and not self.freshness_override:
+                raise StaleDataError(hard)
+            if hard:
+                for v in hard:
+                    print(
+                        f"[runner] WARN stale fact {v.fact_name!r} "
+                        f"(as_of={v.data_as_of}, age={v.age_days}d > "
+                        f"budget={v.budget_days}d) — proceeding due to "
+                        f"freshness_override=True",
+                        flush=True,
+                    )
 
             # W4: body sections
             await self._emit(ReportPhase(report_id=rid, phase="section_drafting"))
