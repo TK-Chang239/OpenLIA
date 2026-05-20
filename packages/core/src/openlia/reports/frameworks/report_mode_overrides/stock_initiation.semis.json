@@ -1,0 +1,48 @@
+{
+  "report_mode_label": "Initiation report — semis specialization",
+  "facts": {
+    "cover": [
+      "customer_concentration_top1_pct",
+      "customer_concentration_top5_pct"
+    ],
+    "business_model": [
+      "customer_concentration_top1_pct",
+      "customer_concentration_top5_pct",
+      "geographic_revenue_split",
+      "book_to_bill"
+    ],
+    "industry_overview": [
+      "geographic_revenue_split"
+    ],
+    "competitive_analysis": [
+      "customer_concentration_top1_pct",
+      "customer_concentration_top5_pct"
+    ],
+    "historical_financials": [
+      "inventory_dollars",
+      "purchase_commitments_dollars"
+    ],
+    "financial_analysis": [
+      "inventory_dollars",
+      "purchase_commitments_dollars",
+      "book_to_bill",
+      "gross_margin_guidance_next_q"
+    ],
+    "financial_projections": [
+      "gross_margin_guidance_next_q",
+      "book_to_bill"
+    ],
+    "risk_analysis": [
+      "customer_concentration_top1_pct",
+      "customer_concentration_top5_pct",
+      "geographic_revenue_split",
+      "china_export_control_exposure_dollars",
+      "purchase_commitments_dollars"
+    ]
+  },
+  "section_emphasis": {
+    "risk_analysis": "Semis overlay: Add a dedicated 'China / export-control exposure' sub-section. Cite `china_export_control_exposure_dollars` and `geographic_revenue_split` by name. Quantify the dollar exposure of restricted product lines to China revenue; describe the regulatory regime, the specific product or technology lines subject to export controls, and the dollar revenue at risk from current and contemplated rule extensions.",
+    "business_model": "Semis overlay: Cite `customer_concentration_top1_pct` and `customer_concentration_top5_pct` by name when describing the customer base. Cite `geographic_revenue_split` for the US/China/RoW revenue split. Note `book_to_bill` for current demand momentum.",
+    "industry_overview": "Semis overlay: Include a hyperscaler-capex tracker as a required exhibit — chart hyperscaler aggregate capex over the last 8 quarters with the source cited."
+  }
+}
