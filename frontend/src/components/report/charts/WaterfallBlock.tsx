@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { ChartEmpty } from "./ChartEmpty";
 import { niceTicks, formatTick, yScale, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
 import { useChartTooltip } from './useChartTooltip';
 
@@ -55,7 +56,7 @@ export function WaterfallBlock({ title, items, options }: WaterfallBlockProps) {
     return (
       <figure className="report-chart">
         <figcaption className="report-chart__title">{title}</figcaption>
-        <div className="report-chart__empty">No data</div>
+        <ChartEmpty />
       </figure>
     );
   }
