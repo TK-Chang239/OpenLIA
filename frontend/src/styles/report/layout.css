@@ -74,6 +74,72 @@
   margin-bottom: 6px;
 }
 
+/* WS5 consensus block: rating badge + mean target + upside chip render
+   immediately under the subtitle so the deterministic market verdict
+   appears above the fold on the first page. */
+.report-cover__consensus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-cover__consensus-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--report-radius-sm, 6px);
+  border: 1px solid var(--report-border);
+  background: var(--report-bg-elevated);
+  font-size: 13px;
+}
+
+.report-cover__consensus-badge-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--report-text-tertiary);
+}
+
+.report-cover__consensus-badge-value {
+  font-weight: 600;
+  color: var(--report-text-primary);
+}
+
+.report-cover__consensus-target {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--report-text-secondary);
+}
+
+.report-cover__consensus-target-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--report-text-tertiary);
+}
+
+.report-cover__consensus-target-value {
+  font-weight: 600;
+  color: var(--report-text-primary);
+}
+
+.report-cover__consensus-upside {
+  padding: 1px 6px;
+  border-radius: var(--report-radius-sm, 6px);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.report-cover__consensus-upside[data-tone='positive'] { color: var(--report-positive); }
+.report-cover__consensus-upside[data-tone='negative'] { color: var(--report-negative); }
+.report-cover__consensus-upside[data-tone='neutral']  { color: var(--report-neutral); }
+
 .report-cover__tagline {
   font-size: 14px;
   color: var(--report-text-tertiary);

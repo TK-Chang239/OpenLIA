@@ -26,6 +26,14 @@ export interface ReportCover {
   tldr?: string[];
   tldr_label?: string | null;
   key_metrics?: Metric[];
+  // Deterministic consensus block (WS5). Populated by the server from
+  // the analyst_consensus_rating / analyst_target_mean /
+  // consensus_upside_pct facts. Renders on the cover hero so the market
+  // verdict appears above the fold.
+  consensus_rating?: string | null;
+  consensus_target_mean?: number | null;
+  consensus_upside_pct?: number | null;
+  consensus_source_ids?: string[];
 }
 
 export interface ReportSection {
