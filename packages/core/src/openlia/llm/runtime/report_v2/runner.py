@@ -340,7 +340,9 @@ class WavedReportRunner:
             # runner proceeds and surfaces a STALE DATA cover banner via
             # telemetry.
             now = datetime.now(UTC)
-            violations = check_freshness(pack.facts, as_of=now)
+            violations = check_freshness(
+                pack.facts, as_of=now, budgets=self.template.freshness_budgets or None
+            )
             hard = [v for v in violations if v.severity == "hard_block"]
             banner_oldest = oldest_data_as_of(pack.facts)
             banner_violations: list[dict[str, Any]] = [

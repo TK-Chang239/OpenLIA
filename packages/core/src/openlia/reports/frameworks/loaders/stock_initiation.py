@@ -8,6 +8,7 @@ definitions live here.
 
 from __future__ import annotations
 
+from openlia.llm.runtime.report_v2.freshness import FRESHNESS_BUDGETS
 from openlia.reports.frameworks.registry import default_registry
 from openlia.reports.frameworks.template_spec import SectionSpec, TemplateSpec
 
@@ -215,6 +216,7 @@ def load_stock_initiation_template() -> TemplateSpec:
         system_role=SYSTEM_ROLE,
         default_word_targets=dict(WORD_TARGETS),
         web_search_budget_default=20,
+        freshness_budgets=dict(FRESHNESS_BUDGETS),
     )
 
 
