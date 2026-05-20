@@ -1,23 +1,24 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useBlocker } from 'react-router-dom';
 import { SettingsDirtyProvider, useSettingsDirty } from './dirty-context';
 import { UnsavedChangesModal } from './UnsavedChangesModal';
 
 interface NavItem {
   to: string;
-  label: string;
+  labelKey: string;
   adminOnly?: boolean;
 }
 
 const ITEMS: NavItem[] = [
-  { to: '/settings/general', label: 'General' },
-  { to: '/settings/models', label: 'Models' },
-  { to: '/settings/timezone', label: 'Timezone & Memory' },
-  { to: '/settings/account', label: 'Account' },
-  { to: '/settings/disclaimer', label: 'Compliance disclaimer' },
-  { to: '/settings/guardrails', label: 'Guardrail activity' },
-  { to: '/settings/skills', label: 'Skills' },
-  { to: '/settings/admin', label: 'Admin', adminOnly: true },
+  { to: '/settings/general', labelKey: 'settings.tabs.general' },
+  { to: '/settings/models', labelKey: 'settings.tabs.models' },
+  { to: '/settings/timezone', labelKey: 'settings.tabs.timezone' },
+  { to: '/settings/account', labelKey: 'settings.tabs.account' },
+  { to: '/settings/disclaimer', labelKey: 'settings.tabs.disclaimer' },
+  { to: '/settings/guardrails', labelKey: 'settings.tabs.guardrails' },
+  { to: '/settings/skills', labelKey: 'settings.tabs.skills' },
+  { to: '/settings/admin', labelKey: 'settings.tabs.admin', adminOnly: true },
 ];
 
 interface Props {
@@ -25,6 +26,7 @@ interface Props {
 }
 
 function ShellInner({ userRole }: Props): JSX.Element {
+  const { t } = useTranslation();
   const items = ITEMS.filter((i) => !i.adminOnly || userRole === 'admin');
   const dirtyCtx = useSettingsDirty();
 
@@ -55,7 +57,7 @@ function ShellInner({ userRole }: Props): JSX.Element {
       <aside className="w-56 shrink-0 border-r border-border-subtle bg-bg-base">
         <nav className="sticky top-16 p-4">
           <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-            Settings
+            {t('settings.shell.heading')}
           </h2>
           <ul className="space-y-1">
             {items.map((i) => (
@@ -70,7 +72,7 @@ function ShellInner({ userRole }: Props): JSX.Element {
                     }`
                   }
                 >
-                  {i.label}
+                  {t(i.labelKey)}
                 </NavLink>
               </li>
             ))}

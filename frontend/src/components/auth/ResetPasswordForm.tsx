@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { consumePasswordReset } from "../../api/auth";
 import { ApiError } from "../../api/client";
@@ -22,6 +23,7 @@ export interface ResetPasswordFormProps {
 }
 
 export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
+  const { t } = useTranslation();
   const [newPw, setNewPw] = useState("");
   const [confirm, setConfirm] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -38,10 +40,10 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
     const errs: Record<string, string> = {};
     if (newPw.length < PASSWORD_MIN) {
-      errs.new_password = `Password must be at least ${PASSWORD_MIN} characters.`;
+      errs.new_password = t("auth.errors.password_too_short", { min: PASSWORD_MIN });
     }
     if (newPw !== confirm) {
-      errs.confirm = "Passwords do not match.";
+      errs.confirm = t("auth.errors.passwords_do_not_match");
     }
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
@@ -61,15 +63,14 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           if (body.code === "token_invalid" || body.code === "token_expired") {
             setBanner({
               message:
-                body.message ??
-                "This reset link has expired or has already been used. Contact your administrator for a new one.",
+                body.message ?? t("auth.errors.reset_link_expired"),
               variant: "error",
             });
           } else if (body.field) {
-            setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+            setFieldErrors({ [body.field]: body.message ?? t("auth.errors.invalid_value") });
           } else {
             setBanner({
-              message: body.message ?? "Reset failed. Please try again.",
+              message: body.message ?? t("auth.errors.reset_failed"),
               variant: "error",
             });
           }
@@ -87,14 +88,14 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       <div>
         <Banner
           variant="success"
-          message="Password updated successfully. You can now log in."
+          message={t("auth.reset.success")}
         />
         <p className="mt-6 text-sm text-text-secondary text-center">
           <Link
             to="/login"
             className="text-accent-primary hover:text-accent-hover"
           >
-            Back to Log In
+            {t("auth.reset.back_to_login")}
           </Link>
         </p>
       </div>
@@ -107,7 +108,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
       <FormField
         id="new_password"
-        label="New Password"
+        label={t("auth.reset.new_password_label")}
         error={fieldErrors.new_password}
       >
         <PasswordInput
@@ -126,7 +127,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
       <FormField
         id="confirm"
-        label="Confirm New Password"
+        label={t("auth.reset.confirm_new_password_label")}
         error={fieldErrors.confirm}
       >
         <PasswordInput
@@ -147,15 +148,15 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
         className="w-full h-10 rounded-md bg-accent-primary text-white text-sm font-medium flex items-center justify-center hover:bg-accent-hover transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {submitting ? (
-          <Loader2 size={16} className="animate-spin" aria-label="Loading" />
+          <Loader2 size={16} className="animate-spin" aria-label={t("auth.loading_aria")} />
         ) : (
-          "Reset Password"
+          t("auth.reset.submit")
         )}
       </button>
 
       <p className="mt-6 text-sm text-text-secondary text-center">
         <Link to="/login" className="text-accent-primary hover:text-accent-hover">
-          Back to Log In
+          {t("auth.reset.back_to_login")}
         </Link>
       </p>
     </form>

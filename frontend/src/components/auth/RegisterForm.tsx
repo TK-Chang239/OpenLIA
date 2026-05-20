@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 import { register } from "../../api/auth";
 import { ApiError } from "../../api/client";
@@ -38,6 +39,7 @@ interface ServerError {
 }
 
 export function RegisterForm({ inviteToken }: RegisterFormProps) {
+  const { t } = useTranslation();
   const { refresh, setMustChangePassword } = useAuth();
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -64,13 +66,13 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
 
     const errs: Record<string, string> = {};
     if (!EMAIL_RE.test(form.email)) {
-      errs.email = "Enter a valid email address.";
+      errs.email = t("auth.errors.invalid_email");
     }
     if (form.password.length < PASSWORD_MIN) {
-      errs.password = `Password must be at least ${PASSWORD_MIN} characters.`;
+      errs.password = t("auth.errors.password_too_short", { min: PASSWORD_MIN });
     }
     if (form.password !== form.confirm) {
-      errs.confirm = "Passwords do not match.";
+      errs.confirm = t("auth.errors.passwords_do_not_match");
     }
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
@@ -112,18 +114,17 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
     ) {
       setBanner({
         message:
-          body.message ??
-          "This invite link is no longer valid. Contact your administrator for a new one.",
+          body.message ?? t("auth.errors.invite_no_longer_valid"),
         variant: "error",
       });
       return;
     }
     if (body.field) {
-      setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+      setFieldErrors({ [body.field]: body.message ?? t("auth.errors.invalid_value") });
       return;
     }
     setBanner({
-      message: body.message ?? "Registration failed. Please try again.",
+      message: body.message ?? t("auth.errors.registration_failed"),
       variant: "error",
     });
   }
@@ -132,7 +133,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
     <form onSubmit={onSubmit} noValidate>
       {banner && <Banner variant={banner.variant} message={banner.message} />}
 
-      <FormField id="email" label="Email" error={fieldErrors.email}>
+      <FormField id="email" label={t("auth.register.email_label")} error={fieldErrors.email}>
         <input
           id="email"
           type="email"
@@ -149,7 +150,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
         />
       </FormField>
 
-      <FormField id="password" label="Password" error={fieldErrors.password}>
+      <FormField id="password" label={t("auth.register.password_label")} error={fieldErrors.password}>
         <PasswordInput
           id="password"
           value={form.password}
@@ -164,7 +165,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
 
       <FormField
         id="confirm"
-        label="Confirm Password"
+        label={t("auth.register.confirm_password_label")}
         error={fieldErrors.confirm}
       >
         <PasswordInput
@@ -178,7 +179,7 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
         />
       </FormField>
 
-      <FormField id="display_name" label="Display Name (optional)">
+      <FormField id="display_name" label={t("auth.register.display_name_label")}>
         <input
           id="display_name"
           type="text"
@@ -197,16 +198,16 @@ export function RegisterForm({ inviteToken }: RegisterFormProps) {
         className="w-full h-10 rounded-md bg-accent-primary text-white text-sm font-medium flex items-center justify-center hover:bg-accent-hover transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {submitting ? (
-          <Loader2 size={16} className="animate-spin" aria-label="Loading" />
+          <Loader2 size={16} className="animate-spin" aria-label={t("auth.loading_aria")} />
         ) : (
-          "Create Account"
+          t("auth.register.submit")
         )}
       </button>
 
       <p className="mt-6 text-sm text-text-secondary text-center">
-        Already have an account?{" "}
+        {t("auth.register.login_link")}{" "}
         <Link to="/login" className="text-accent-primary hover:text-accent-hover">
-          Log in
+          {t("auth.register.log_in_link")}
         </Link>
       </p>
     </form>

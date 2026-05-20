@@ -1,12 +1,13 @@
+import { useTranslation } from 'react-i18next';
 import { NavLink, Outlet, useMatch, useResolvedPath } from 'react-router-dom';
 
 const TABS = [
-  { to: 'invites', label: 'Invites' },
-  { to: 'users', label: 'Users' },
-  { to: 'reset-requests', label: 'Reset requests' },
-  { to: 'connectors', label: 'Connectors' },
-  { to: 'runner-specs', label: 'Runner specs' },
-  { to: 'skills', label: 'Skill activity' },
+  { to: 'invites', labelKey: 'settings.admin.tab_invites' },
+  { to: 'users', labelKey: 'settings.admin.tab_users' },
+  { to: 'reset-requests', labelKey: 'settings.admin.tab_reset_requests' },
+  { to: 'connectors', labelKey: 'settings.admin.tab_connectors' },
+  { to: 'runner-specs', labelKey: 'settings.admin.tab_runner_specs' },
+  { to: 'skills', labelKey: 'settings.admin.tab_skills' },
 ];
 
 function AdminTab({ to, label }: { to: string; label: string }): JSX.Element {
@@ -30,17 +31,18 @@ function AdminTab({ to, label }: { to: string; label: string }): JSX.Element {
 }
 
 export function AdminSection(): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-xl font-semibold text-text-primary">Admin</h1>
+        <h1 className="text-xl font-semibold text-text-primary">{t('settings.admin.title')}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Manage users, invites, password resets, server-wide models, and data providers.
+          {t('settings.admin.subtitle')}
         </p>
       </header>
-      <nav role="tablist" aria-label="Admin sections" className="flex gap-1 border-b border-border-subtle">
-        {TABS.map((t) => (
-          <AdminTab key={t.to} to={t.to} label={t.label} />
+      <nav role="tablist" aria-label={t('settings.admin.sections_aria')} className="flex gap-1 border-b border-border-subtle">
+        {TABS.map((tab) => (
+          <AdminTab key={tab.to} to={tab.to} label={t(tab.labelKey)} />
         ))}
       </nav>
       <Outlet />
