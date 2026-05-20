@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { RsQuoteBar, RsSnapshot } from "../../api/retail-sentiment";
 import { RS_METRIC_BY_ID } from "../../lib/retail-sentiment/metric-catalog";
@@ -95,10 +96,12 @@ function HeroSection({
   ticker,
   snap,
   history,
+  t,
 }: {
   ticker: string;
   snap: RsSnapshot;
   history: RsSnapshot[];
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const prior24 = findOffset(history, 1);
   const prior7 = findOffset(history, 7);
@@ -160,7 +163,7 @@ function HeroSection({
             }}
             aria-hidden="true"
           />
-          Retail Sentiment · {ticker} · {capturedLabel}
+          {t("retail_sentiment.overview.hero_eyebrow_prefix")} · {ticker} · {capturedLabel}
         </span>
         <h1
           className="text-[--color-text-primary] m-0"
@@ -173,7 +176,10 @@ function HeroSection({
         >
           {ticker}{" "}
           <span style={{ color: "var(--color-text-secondary)" }}>
-            · {snap.sentiment_score >= 0 ? "Crowd is leaning long" : "Crowd is leaning short"}
+            ·{" "}
+            {snap.sentiment_score >= 0
+              ? t("retail_sentiment.overview.long_segment")
+              : t("retail_sentiment.overview.short_segment")}
           </span>
         </h1>
         <p
@@ -186,20 +192,19 @@ function HeroSection({
         >
           {snap.narrative ?? (
             <span className="text-[--color-text-tertiary]">
-              No narrative synthesized yet — a Quick-tier model is required for
-              automated takes. The metrics below are still live.
+              {t("retail_sentiment.overview.no_narrative")}
             </span>
           )}
         </p>
         <div className="grid grid-cols-4 gap-7 pt-1.5">
-          <HeroStat label="Bull / Bear" value={bullBear} />
+          <HeroStat label={t("retail_sentiment.overview.bull_bear")} value={bullBear} />
           <HeroStat
-            label="Buzz × 30d"
+            label={t("retail_sentiment.overview.buzz_30d")}
             value={formatStat(snap.buzz_volume, 2)}
             tone={snap.buzz_volume > 1.5 ? "warn" : "neutral"}
           />
-          <HeroStat label="Sources" value={`${sourceCount}`} />
-          <HeroStat label="X-source agree" value={xSourcePct} />
+          <HeroStat label={t("retail_sentiment.overview.sources")} value={`${sourceCount}`} />
+          <HeroStat label={t("retail_sentiment.overview.x_source_agree")} value={xSourcePct} />
         </div>
       </div>
 
@@ -208,12 +213,14 @@ function HeroSection({
         style={{ borderRadius: "12px" }}
       >
         <div className="flex items-center justify-between gap-3">
-          <span className="rs-mono-label">Sentiment Index</span>
+          <span className="rs-mono-label">
+            {t("retail_sentiment.overview.sentiment_index")}
+          </span>
           <span
             className="rs-mono-label"
             style={{ color: "var(--color-feedback-success)" }}
           >
-            Live
+            {t("retail_sentiment.overview.live")}
           </span>
         </div>
         <SentimentGauge
@@ -225,15 +232,29 @@ function HeroSection({
           className="rs-mono-label pt-3 border-t flex items-center justify-between"
           style={{ borderColor: "var(--color-border-subtle)" }}
         >
-          <span>Sample · {sampleTotal.toLocaleString()}</span>
-          <span>Captured · {captured.toLocaleTimeString()}</span>
+          <span>
+            {t("retail_sentiment.overview.sample_label", {
+              count: sampleTotal.toLocaleString(),
+            })}
+          </span>
+          <span>
+            {t("retail_sentiment.overview.captured_label", {
+              time: captured.toLocaleTimeString(),
+            })}
+          </span>
         </div>
       </div>
     </section>
   );
 }
 
-function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
+function LiaTakeCard({
+  snap,
+  t,
+}: {
+  snap: RsSnapshot;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
   const sourceCount = Object.keys(snap.source_breakdown ?? {}).length;
   const sample = Object.values(snap.source_breakdown ?? {}).reduce(
     (a, v) => a + (typeof v === "number" ? v : 0),
@@ -267,7 +288,7 @@ function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
       </div>
       <div className="flex flex-col gap-3 min-w-0">
         <div className="rs-mono-label flex items-center gap-2.5 flex-wrap">
-          <span>Retail Sentiment</span>
+          <span>{t("retail_sentiment.overview.retail_sentiment")}</span>
           <span
             aria-hidden="true"
             style={{
@@ -278,7 +299,9 @@ function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
             }}
           />
           <span>
-            Confidence {confidence !== null ? `${confidence} / 100` : "—"}
+            {confidence !== null
+              ? t("retail_sentiment.overview.confidence_value", { value: confidence })
+              : t("retail_sentiment.overview.confidence_empty")}
           </span>
           <span
             aria-hidden="true"
@@ -289,7 +312,9 @@ function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
               borderRadius: "50%",
             }}
           />
-          <span>Sources · {sourceCount}</span>
+          <span>
+            {t("retail_sentiment.overview.sources_count", { count: sourceCount })}
+          </span>
           <span
             aria-hidden="true"
             style={{
@@ -299,7 +324,11 @@ function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
               borderRadius: "50%",
             }}
           />
-          <span>Sample · {sample.toLocaleString()}</span>
+          <span>
+            {t("retail_sentiment.overview.sample_count", {
+              count: sample.toLocaleString(),
+            })}
+          </span>
         </div>
         <p
           className="m-0"
@@ -312,8 +341,7 @@ function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
         >
           {snap.narrative ?? (
             <span className="text-[--color-text-tertiary]">
-              No narrative synthesis yet for this snapshot. Run a fresh snapshot
-              with a Quick-tier model configured to populate the LIA take.
+              {t("retail_sentiment.overview.lia_no_narrative")}
             </span>
           )}
         </p>
@@ -322,7 +350,13 @@ function LiaTakeCard({ snap }: { snap: RsSnapshot }) {
   );
 }
 
-function CompactTier({ snap }: { snap: RsSnapshot }) {
+function CompactTier({
+  snap,
+  t,
+}: {
+  snap: RsSnapshot;
+  t: (key: string, opts?: Record<string, unknown>) => string;
+}) {
   const tile = (key: keyof RsSnapshot, label?: string) => {
     const meta = RS_METRIC_BY_ID[String(key)];
     const raw = snap[key] as number | null;
@@ -337,7 +371,9 @@ function CompactTier({ snap }: { snap: RsSnapshot }) {
         reliability={meta?.reliability}
         disabledNote={
           disabled
-            ? `Awaiting ${meta?.label ?? key} — provider may not be configured.`
+            ? t("retail_sentiment.overview.awaiting_metric", {
+                label: meta?.label ?? key,
+              })
             : undefined
         }
       />
@@ -361,9 +397,11 @@ function CompactTier({ snap }: { snap: RsSnapshot }) {
 function MomentumPanel({
   snap,
   history,
+  t,
 }: {
   snap: RsSnapshot;
   history: RsSnapshot[];
+  t: (key: string) => string;
 }) {
   const series = useMemo(
     () =>
@@ -379,7 +417,9 @@ function MomentumPanel({
     >
       <MomentumGauge momentum={snap.sentiment_momentum} />
       <div className="min-w-0">
-        <div className="rs-mono-label mb-2">5d Momentum trend</div>
+        <div className="rs-mono-label mb-2">
+          {t("retail_sentiment.overview.five_d_momentum")}
+        </div>
         <MomentumArea data={series} />
       </div>
     </div>
@@ -390,10 +430,12 @@ function ChartsGrid({
   snap,
   history,
   quotes,
+  t,
 }: {
   snap: RsSnapshot;
   history: RsSnapshot[];
   quotes: RsQuoteBar[];
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const sortedHistory = useMemo(
     () =>
@@ -436,11 +478,17 @@ function ChartsGrid({
     <div className="grid grid-cols-1 gap-4">
       <div className="rs-col-card p-5">
         <div className="flex items-center justify-between rs-mono-label mb-2">
-          <span>Sentiment vs price · {sortedHistory.length}d window</span>
+          <span>
+            {t("retail_sentiment.overview.sentiment_vs_price", {
+              count: sortedHistory.length,
+            })}
+          </span>
           <span style={{ color: "var(--color-text-tertiary)" }}>
             {priceHasData
-              ? `price ${priceWindowPct >= 0 ? "+" : ""}${priceWindowPct.toFixed(2)}%`
-              : "price overlay awaiting EODHD key"}
+              ? t("retail_sentiment.overview.price_pct", {
+                  value: `${priceWindowPct >= 0 ? "+" : ""}${priceWindowPct.toFixed(2)}`,
+                })
+              : t("retail_sentiment.overview.price_overlay_pending")}
           </span>
         </div>
         <SentimentPriceOverlay
@@ -450,28 +498,32 @@ function ChartsGrid({
         />
         <div className="text-[11px] mt-2 flex flex-wrap gap-3 rs-mono-label">
           <span style={{ color: "var(--color-feedback-success)" }}>
-            ─ sentiment (left axis)
+            {t("retail_sentiment.overview.legend_sentiment")}
           </span>
           <span style={{ color: "var(--color-text-primary)" }}>
-            ┄ price cumulative % (right axis)
+            {t("retail_sentiment.overview.legend_price")}
           </span>
           <span style={{ color: "var(--color-text-tertiary)" }}>
-            ▮ buzz × 30d (background)
+            {t("retail_sentiment.overview.legend_buzz")}
           </span>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rs-col-card p-5">
           <div className="flex items-center justify-between rs-mono-label mb-2">
-            <span>Bull / Bear stack</span>
-            <span>latest · {formatStat(snap.bull_bear_ratio)}</span>
+            <span>{t("retail_sentiment.overview.bull_bear_stack")}</span>
+            <span>
+              {t("retail_sentiment.overview.latest_label", {
+                value: formatStat(snap.bull_bear_ratio),
+              })}
+            </span>
           </div>
           <BullBearStack data={ratioSeries} />
         </div>
         <div className="rs-col-card p-5">
           <div className="flex items-center justify-between rs-mono-label mb-2">
-            <span>Buzz / sentiment divergence</span>
-            <span>thresholds ±1.0</span>
+            <span>{t("retail_sentiment.overview.divergence")}</span>
+            <span>{t("retail_sentiment.overview.thresholds")}</span>
           </div>
           <DivergenceBars data={divergenceSeries} />
         </div>
@@ -486,21 +538,35 @@ export function OverviewTab({
   history,
   quotes = [],
 }: Props) {
+  const { t } = useTranslation();
   return (
     <div className="space-y-7" data-testid="overview-single">
-      <HeroSection ticker={selected} snap={snapshot} history={history} />
+      <HeroSection ticker={selected} snap={snapshot} history={history} t={t} />
 
-      <SectionLabel title="Today's read" meta="LIA narrative" first />
-      <LiaTakeCard snap={snapshot} />
+      <SectionLabel
+        title={t("retail_sentiment.overview.todays_read")}
+        meta={t("retail_sentiment.overview.lia_narrative")}
+        first
+      />
+      <LiaTakeCard snap={snapshot} t={t} />
 
-      <SectionLabel title="Momentum" meta="last 7 snapshots" />
-      <MomentumPanel snap={snapshot} history={history} />
+      <SectionLabel
+        title={t("retail_sentiment.overview.momentum_title")}
+        meta={t("retail_sentiment.overview.momentum_meta")}
+      />
+      <MomentumPanel snap={snapshot} history={history} t={t} />
 
-      <SectionLabel title="Metrics" meta="Compact tier · 8" />
-      <CompactTier snap={snapshot} />
+      <SectionLabel
+        title={t("retail_sentiment.overview.metrics_title")}
+        meta={t("retail_sentiment.overview.metrics_meta")}
+      />
+      <CompactTier snap={snapshot} t={t} />
 
-      <SectionLabel title="Time series" meta="all available history" />
-      <ChartsGrid snap={snapshot} history={history} quotes={quotes} />
+      <SectionLabel
+        title={t("retail_sentiment.overview.time_series")}
+        meta={t("retail_sentiment.overview.time_series_meta")}
+      />
+      <ChartsGrid snap={snapshot} history={history} quotes={quotes} t={t} />
     </div>
   );
 }

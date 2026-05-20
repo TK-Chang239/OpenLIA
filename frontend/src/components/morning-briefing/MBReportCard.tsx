@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { RecentReport } from "../../api/morning-briefing";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
@@ -43,12 +44,17 @@ function formatDate(iso: string): string {
 }
 
 export function MBReportCard({ report, onOpen, now }: MBReportCardProps) {
+  const { t } = useTranslation();
   const [opened, setOpened] = useState(false);
   const reference = now ?? new Date();
   const fresh = isWithinHour(report.created_at, reference);
   const showNew = fresh && !opened;
   const slot = deriveSlot(report);
   const summary = DEMO_BRIEFING_META[report.id]?.summary;
+  const slotLabel =
+    slot.slot === "pre_market"
+      ? t("morning_briefing.hero.pre_market")
+      : t("morning_briefing.hero.post_market");
 
   const handleOpen = () => {
     setOpened(true);
@@ -79,7 +85,9 @@ export function MBReportCard({ report, onOpen, now }: MBReportCardProps) {
       }}
       tabIndex={0}
       role="button"
-      aria-label={`Open ${report.title}`}
+      aria-label={t("morning_briefing.report_card.open_report_aria", {
+        title: report.title,
+      })}
     >
       {showNew ? (
         <span
@@ -90,7 +98,7 @@ export function MBReportCard({ report, onOpen, now }: MBReportCardProps) {
             color: "var(--color-accent-on)",
           }}
         >
-          New
+          {t("morning_briefing.report_card.new")}
         </span>
       ) : null}
       <div className="flex items-center gap-2 text-[13px] font-medium text-[--color-text-secondary]">
@@ -99,7 +107,7 @@ export function MBReportCard({ report, onOpen, now }: MBReportCardProps) {
           className="font-mono text-[9.5px] tracking-[0.1em] uppercase rounded px-2 py-0.5 border"
           style={pillTone}
         >
-          {slot.slotLabel}
+          {slotLabel}
         </span>
       </div>
       <h4 className="text-[16px] font-semibold m-0 mt-0.5 text-[--color-text-primary]">
@@ -126,7 +134,7 @@ export function MBReportCard({ report, onOpen, now }: MBReportCardProps) {
           className="inline-flex items-center gap-1.5 h-7 px-3 rounded-md text-[13px] font-medium border border-[--color-text-primary] bg-[--color-text-primary] text-[--color-bg-base] hover:bg-black"
           data-testid="mb-report-open"
         >
-          Open
+          {t("morning_briefing.report_card.open")}
           <ArrowRight size={13} />
         </button>
         <span data-testid="mb-report-download" onClick={(e) => e.stopPropagation()}>

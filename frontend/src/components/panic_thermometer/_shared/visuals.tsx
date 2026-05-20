@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type {
   HeadlineFragment,
   PanelLine,
@@ -85,13 +87,14 @@ export function RulesBlock({
   rules: RuleRow[];
   onEdit?: () => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="pt-rules" aria-label={title}>
       <div className="pt-rules-head">
         <span>{title}</span>
         {onEdit ? (
           <button type="button" className="pt-edit-link" onClick={onEdit}>
-            + Edit
+            {t("panic_thermometer.rules.edit")}
           </button>
         ) : null}
       </div>

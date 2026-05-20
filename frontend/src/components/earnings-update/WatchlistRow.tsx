@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { WatchlistEntry } from "../../api/earnings-update";
 
 import { AddTickerPopover } from "./AddTickerPopover";
@@ -10,17 +12,18 @@ interface Props {
 }
 
 export function WatchlistRow({ entries, onAdd, onRemove }: Props) {
+  const { t } = useTranslation();
   return (
     <section>
       <header className="flex items-center justify-between px-6 pt-5 pb-3">
         <h3 className="text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em]">
-          Watchlist
+          {t("earnings.watchlist_row.heading")}
         </h3>
         <AddTickerPopover onAdd={onAdd} />
       </header>
       {entries.length === 0 ? (
         <div className="mx-6 mb-4 border border-dashed border-[--color-border-subtle] rounded-[--radius-lg] h-[120px] flex items-center justify-center text-sm text-[--color-text-tertiary]">
-          Add companies to your watchlist to track upcoming earnings
+          {t("earnings.watchlist_row.empty")}
         </div>
       ) : (
         <div

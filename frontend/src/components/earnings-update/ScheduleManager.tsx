@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   AddScheduleModal,
@@ -57,6 +58,7 @@ export function ScheduleManager({
   onUpdate,
   onRemove,
 }: Props) {
+  const { t } = useTranslation();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ScheduleView | null>(null);
 
@@ -64,20 +66,19 @@ export function ScheduleManager({
     <section className="px-6 pt-5 pb-4">
       <header className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em]">
-          Scan Schedules
+          {t("earnings.schedule_manager.heading")}
         </h3>
         <button
           type="button"
           onClick={() => setShowAdd(true)}
           className="border border-[--color-border-secondary] text-sm text-[--color-text-secondary] rounded-[--radius-md] px-3 h-7 hover:border-[--color-border-primary]"
         >
-          + Add Schedule
+          {t("earnings.schedule_manager.add_schedule")}
         </button>
       </header>
       {schedules.length === 0 ? (
         <div className="border border-dashed border-[--color-border-subtle] rounded-[--radius-md] py-6 text-center text-sm text-[--color-text-tertiary]">
-          No scan schedules configured. Earnings reports will not be detected
-          automatically.
+          {t("earnings.schedule_manager.empty")}
         </div>
       ) : (
         <ul className="border border-[--color-border-subtle] rounded-[--radius-md] divide-y divide-[--color-border-subtle]">
@@ -107,14 +108,14 @@ export function ScheduleManager({
                   onClick={() => setEditing(s)}
                   className="text-sm text-[--color-accent-primary]"
                 >
-                  Edit
+                  {t("earnings.schedule_manager.edit")}
                 </button>
                 <button
                   type="button"
                   onClick={() => void onRemove(s.id)}
                   className="text-sm text-[--color-feedback-error]"
                 >
-                  Remove
+                  {t("earnings.schedule_manager.remove")}
                 </button>
               </div>
             </li>

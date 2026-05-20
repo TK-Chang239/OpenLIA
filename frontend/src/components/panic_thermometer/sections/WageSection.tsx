@@ -1,5 +1,7 @@
 import type { JSX } from "react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { WagePanel } from "../../../lib/panic_thermometer/copy/types";
 import { PanelLineText, ParamsBlock, RulesBlock } from "../_shared/visuals";
 import { PanelHead } from "./PanelHead";
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function WageSection({ panel, onEditRules }: Props): JSX.Element {
+  const { t } = useTranslation();
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const xMin = 40;
   const xMax = 690;
@@ -24,12 +27,12 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
   return (
     <>
       <div className="pt-sec-label" id="wage">
-        <span>D4 · Wage growth</span>
+        <span>{t("panic_thermometer.wage_section.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">EODHD · economic_events · AHE MoM</span>
+        <span className="pt-count">{t("panic_thermometer.wage_section.meta")}</span>
       </div>
 
-      <section className="pt-panel" aria-label="Wage growth panel">
+      <section className="pt-panel" aria-label={t("panic_thermometer.wage_section.aria")}>
         <PanelHead panel={panel} />
         <div className="pt-panel-body">
           <div className="pt-panel-chart">
@@ -47,7 +50,7 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
               className="pt-svg-chart pt-wage-svg"
               viewBox="0 0 700 200"
               preserveAspectRatio="none"
-              aria-label="Monthly AHE bars"
+              aria-label={t("panic_thermometer.wage_section.chart_aria")}
               style={{ cursor: "default" }}
             >
               <g className="pt-grid" opacity={0.5}>
@@ -77,7 +80,7 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
                 textAnchor="end"
                 fill="var(--color-feedback-warning)"
               >
-                {panel.thresholds.amber}% — amber
+                {t("panic_thermometer.wage_section.amber_label", { value: panel.thresholds.amber })}
               </text>
               <line
                 className="pt-wage-thresh-red"
@@ -93,7 +96,7 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
                 textAnchor="end"
                 fill="var(--color-feedback-error)"
               >
-                {panel.thresholds.red}% — red
+                {t("panic_thermometer.wage_section.red_label", { value: panel.thresholds.red })}
               </text>
 
               {panel.bars.map((b, i) => {
@@ -112,7 +115,10 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
                     onMouseLeave={() => setHoverIdx(null)}
                   >
                     <title>
-                      {b.month}: {b.value.toFixed(2)}% MoM
+                      {t("panic_thermometer.wage_section.title_mom", {
+                        month: b.month,
+                        value: b.value.toFixed(2),
+                      })}
                     </title>
                   </rect>
                 );
@@ -235,7 +241,10 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
                 >
                   <div className="pt-tooltip-label">{b.month}</div>
                   <div className={`pt-tooltip-value ${toneClass}`}>
-                    {b.value > 0 ? "+" : ""}{b.value.toFixed(2)}% MoM
+                    {b.value > 0 ? "+" : ""}
+                    {t("panic_thermometer.wage_section.tooltip_mom", {
+                      value: b.value.toFixed(2),
+                    })}
                   </div>
                 </div>
               );
@@ -244,9 +253,13 @@ export function WageSection({ panel, onEditRules }: Props): JSX.Element {
           </div>
 
           <div className="pt-panel-side">
-            <RulesBlock title="Rule set" rules={panel.rules} onEdit={onEditRules} />
+            <RulesBlock
+              title={t("panic_thermometer.wage_section.rules_title")}
+              rules={panel.rules}
+              onEdit={onEditRules}
+            />
             <ParamsBlock
-              title="Params"
+              title={t("panic_thermometer.wage_section.params_title")}
               params={panel.params}
               presetLabel={panel.presetLabel}
             />

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Plus, Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { FeedFilter } from "./feedHelpers";
 
@@ -11,12 +12,12 @@ interface Props {
   onAdHoc: () => void;
 }
 
-const FILTERS: { id: FeedFilter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "watchlist", label: "Watchlist" },
-  { id: "portfolio", label: "Portfolio" },
-  { id: "beats", label: "Beats" },
-  { id: "misses", label: "Misses" },
+const FILTER_IDS: readonly FeedFilter[] = [
+  "all",
+  "watchlist",
+  "portfolio",
+  "beats",
+  "misses",
 ];
 
 export function EuFilterStrip({
@@ -26,6 +27,7 @@ export function EuFilterStrip({
   onSearchChange,
   onAdHoc,
 }: Props) {
+  const { t } = useTranslation();
   const segRef = useRef<HTMLDivElement | null>(null);
   const btnRefs = useRef<Map<FeedFilter, HTMLButtonElement>>(new Map());
   const [pillStyle, setPillStyle] = useState<{
@@ -54,7 +56,7 @@ export function EuFilterStrip({
       <div
         ref={segRef}
         role="tablist"
-        aria-label="Earnings filter"
+        aria-label={t("earnings.feed.filter_aria")}
         className="inline-flex p-[3px] border border-[--color-border-subtle] rounded-lg bg-[--color-bg-elevated] relative"
       >
         {pillStyle ? (
@@ -64,26 +66,26 @@ export function EuFilterStrip({
             style={{ left: pillStyle.left, width: pillStyle.width }}
           />
         ) : null}
-        {FILTERS.map((f) => {
-          const isOn = f.id === filter;
+        {FILTER_IDS.map((id) => {
+          const isOn = id === filter;
           return (
             <button
-              key={f.id}
+              key={id}
               ref={(el) => {
-                if (el) btnRefs.current.set(f.id, el);
+                if (el) btnRefs.current.set(id, el);
               }}
               type="button"
               role="tab"
               aria-selected={isOn}
-              data-filter={f.id}
-              onClick={() => onFilterChange(f.id)}
+              data-filter={id}
+              onClick={() => onFilterChange(id)}
               className={`relative z-[2] bg-transparent border-0 px-3 py-1.5 text-[12.5px] cursor-pointer rounded-[5px] transition-colors duration-[220ms] ${
                 isOn
                   ? "text-[--color-bg-base]"
                   : "text-[--color-text-secondary] hover:text-[--color-text-primary]"
               }`}
             >
-              {f.label}
+              {t(`earnings.feed.filter_${id}`)}
             </button>
           );
         })}
@@ -94,8 +96,8 @@ export function EuFilterStrip({
         <input
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Filter by ticker, sector, or quote..."
-          aria-label="Filter reports"
+          placeholder={t("earnings.feed.search_placeholder")}
+          aria-label={t("earnings.feed.search_aria")}
           className="border-0 bg-transparent outline-none text-[13px] text-[--color-text-primary] w-full placeholder:text-[--color-text-tertiary]"
         />
       </div>
@@ -103,9 +105,9 @@ export function EuFilterStrip({
         type="button"
         onClick={onAdHoc}
         className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-[--color-bg-elevated] text-[12.5px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] transition-colors duration-[--duration-normal]"
-        aria-label="Generate ad-hoc report"
+        aria-label={t("earnings.feed.ad_hoc_aria")}
       >
-        <Plus size={13} /> Ad-hoc
+        <Plus size={13} /> {t("earnings.feed.ad_hoc")}
       </button>
     </div>
   );

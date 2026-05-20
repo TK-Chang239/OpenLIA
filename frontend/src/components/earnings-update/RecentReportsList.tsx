@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { RecentReport } from "../../api/earnings-update";
 
@@ -46,6 +47,7 @@ export function RecentReportsList({
   onOpenReport,
   onOpenCabinet,
 }: Props) {
+  const { t } = useTranslation();
   const [openedIds, setOpenedIds] = useState<Set<string>>(() => readOpened());
 
   useEffect(() => {
@@ -69,19 +71,19 @@ export function RecentReportsList({
     <section>
       <header className="flex items-center justify-between px-6 pt-5 pb-3">
         <h3 className="text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em]">
-          Recent Reports
+          {t("earnings.recent_reports.heading")}
         </h3>
         <button
           type="button"
           onClick={onOpenCabinet}
           className="text-sm text-[--color-accent-primary] hover:text-[--color-accent-hover]"
         >
-          Open Cabinet →
+          {t("earnings.recent_reports.open_cabinet")}
         </button>
       </header>
       {reports.length === 0 ? (
         <div className="mx-6 mb-4 text-center py-8 text-sm text-[--color-text-tertiary]">
-          On-Demand reports and automated reports will appear here
+          {t("earnings.recent_reports.empty")}
         </div>
       ) : (
         <div>
