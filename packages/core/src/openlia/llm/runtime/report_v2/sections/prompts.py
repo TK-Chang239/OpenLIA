@@ -483,3 +483,43 @@ def assemble_synthesis_section_prompt(
         ]
     )
     return "\n\n".join(parts)
+
+
+def assemble_meta_section_prompt(
+    *,
+    system_role: str,
+    style_guide: str,
+    framework_brief: str,
+    manifest: Manifest,
+    report_markdown: str,
+    facts_slice: dict[str, Fact],
+    word_target: int,
+    language: str | None = None,
+) -> str:
+    """Assemble the prompt for a PR-12 meta-tier section.
+
+    Meta sections run after every body + synthesis section has completed and
+    receive the *concatenated body + synthesis markdown* (`report_markdown`)
+    as input. Template authors use this for §28-class self-audit / blind-
+    spot review sections that reference the entire prior report by content.
+
+    Persona reset instructions (e.g. "you are now a Goldman analyst") stay
+    in the section's `framework_brief` prose — no per-section system_role
+    override is required for v1.
+    """
+    parts: list[str] = [system_role]
+    lang = _language_directive(language)
+    if lang is not None:
+        parts.append(lang)
+    parts.extend(
+        [
+            f"STYLE GUIDE:\n{style_guide}",
+            f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
+            f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
+            f"FULL REPORT CONTEXT:\n{report_markdown}",
+            f"FACTS FOR THIS SECTION:\n{_format_facts_slice(facts_slice)}",
+            f"Word target: {word_target}",
+            _OUTPUT_FORMAT_REMINDER,
+        ]
+    )
+    return "\n\n".join(parts)
