@@ -1,16 +1,10 @@
+import { useTranslation } from "react-i18next";
+
 import { passwordStrength, type StrengthLevel } from "../../auth/passwordStrength";
 
 export interface PasswordStrengthMeterProps {
   value: string;
 }
-
-const LABELS: Record<StrengthLevel, string> = {
-  0: "",
-  1: "Weak",
-  2: "Fair",
-  3: "Good",
-  4: "Strong",
-};
 
 const BAR_COLOR: Record<StrengthLevel, string> = {
   0: "bg-border-subtle",
@@ -29,8 +23,16 @@ const LABEL_COLOR: Record<StrengthLevel, string> = {
 };
 
 export function PasswordStrengthMeter({ value }: PasswordStrengthMeterProps) {
+  const { t } = useTranslation();
   if (value.length === 0) return null;
   const level = passwordStrength(value);
+  const labels: Record<StrengthLevel, string> = {
+    0: "",
+    1: t("primitives.password_weak"),
+    2: t("primitives.password_fair"),
+    3: t("primitives.password_good"),
+    4: t("primitives.password_strong"),
+  };
   return (
     <div className="flex flex-col gap-1 mt-1.5">
       <div className="flex justify-between items-center">
@@ -45,7 +47,7 @@ export function PasswordStrengthMeter({ value }: PasswordStrengthMeterProps) {
           ))}
         </div>
         <span className={`text-xs ml-2 ${LABEL_COLOR[level]}`}>
-          {LABELS[level]}
+          {labels[level]}
         </span>
       </div>
     </div>

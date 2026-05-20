@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { requestPasswordReset } from "../../api/auth";
 import { ApiError } from "../../api/client";
@@ -8,10 +9,9 @@ import { Banner, type BannerVariant } from "../primitives/Banner";
 import { FormField } from "../primitives/FormField";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const NEUTRAL_MESSAGE =
-  "If the email matches an account, your admin has been notified. They'll send you a reset link.";
 
 export function ForgotPasswordForm() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -25,7 +25,7 @@ export function ForgotPasswordForm() {
     setEmailError(null);
     setBanner(null);
     if (!EMAIL_RE.test(email)) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t("auth.errors.invalid_email"));
       return;
     }
     setSubmitting(true);
@@ -35,7 +35,7 @@ export function ForgotPasswordForm() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         setBanner({
-          message: "Too many requests. Please wait and try again.",
+          message: t("auth.errors.too_many_requests"),
           variant: "warning",
         });
       } else if (
@@ -55,10 +55,10 @@ export function ForgotPasswordForm() {
   if (done) {
     return (
       <div>
-        <Banner variant="success" message={NEUTRAL_MESSAGE} />
+        <Banner variant="success" message={t("auth.forgot.neutral_message")} />
         <p className="mt-6 text-sm text-text-secondary text-center">
           <Link to="/login" className="text-accent-primary hover:text-accent-hover">
-            Back to Log In
+            {t("auth.forgot.back_to_login")}
           </Link>
         </p>
       </div>
@@ -69,11 +69,10 @@ export function ForgotPasswordForm() {
     <form onSubmit={onSubmit} noValidate>
       {banner && <Banner variant={banner.variant} message={banner.message} />}
       <p className="text-sm text-text-secondary mb-5">
-        Enter your email and we&apos;ll notify your admin to approve a password
-        reset.
+        {t("auth.forgot.helper")}
       </p>
 
-      <FormField id="email" label="Email" error={emailError ?? undefined}>
+      <FormField id="email" label={t("auth.login.email_label")} error={emailError ?? undefined}>
         <input
           id="email"
           type="email"
@@ -97,15 +96,15 @@ export function ForgotPasswordForm() {
         className="w-full h-10 rounded-md bg-accent-primary text-white text-sm font-medium flex items-center justify-center hover:bg-accent-hover transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {submitting ? (
-          <Loader2 size={16} className="animate-spin" aria-label="Loading" />
+          <Loader2 size={16} className="animate-spin" aria-label={t("auth.loading_aria")} />
         ) : (
-          "Request Reset"
+          t("auth.forgot.submit")
         )}
       </button>
 
       <p className="mt-6 text-sm text-text-secondary text-center">
         <Link to="/login" className="text-accent-primary hover:text-accent-hover">
-          Back to Log In
+          {t("auth.forgot.back_to_login")}
         </Link>
       </p>
     </form>

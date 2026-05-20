@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { ScorecardEntry } from "../../../lib/panic_thermometer/copy/types";
 import {
   MiniBars,
@@ -29,12 +31,15 @@ const SPARK_COLORS: Record<string, { stroke: string; fill: string }> = {
 };
 
 export function ScorecardGrid({ entries }: Props): JSX.Element {
+  const { t } = useTranslation();
   return (
     <>
       <div className="pt-sec-label is-first">
-        <span>Indicator scorecards</span>
+        <span>{t("panic_thermometer.scorecard.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">{entries.length} panels · click to drill in</span>
+        <span className="pt-count">
+          {t("panic_thermometer.scorecard.meta", { count: entries.length })}
+        </span>
       </div>
 
       <div className="pt-grid5" role="list">

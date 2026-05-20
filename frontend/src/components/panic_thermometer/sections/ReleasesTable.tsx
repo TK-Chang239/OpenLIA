@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { ReleaseRow } from "../../../lib/panic_thermometer/copy/types";
 
 interface Props {
@@ -6,33 +8,34 @@ interface Props {
 }
 
 export function ReleasesTable({ rows }: Props): JSX.Element {
+  const { t } = useTranslation();
   return (
     <>
       <div className="pt-sec-label">
-        <span>Macro releases · last 7 days</span>
+        <span>{t("panic_thermometer.releases.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">economic_events · US</span>
+        <span className="pt-count">{t("panic_thermometer.releases.meta")}</span>
       </div>
 
       <section
         className="pt-mtable"
         role="table"
-        aria-label="Macro releases last 7 days"
+        aria-label={t("panic_thermometer.releases.aria")}
       >
         <div className="pt-mt-row is-head" role="row">
-          <span role="columnheader">When</span>
-          <span role="columnheader">Release</span>
+          <span role="columnheader">{t("panic_thermometer.releases.col_when")}</span>
+          <span role="columnheader">{t("panic_thermometer.releases.col_release")}</span>
           <span style={{ textAlign: "right" }} role="columnheader">
-            Actual
+            {t("panic_thermometer.releases.col_actual")}
           </span>
           <span style={{ textAlign: "right" }} className="pt-col-hide" role="columnheader">
-            Consensus
+            {t("panic_thermometer.releases.col_consensus")}
           </span>
           <span style={{ textAlign: "right" }} className="pt-col-hide" role="columnheader">
-            Prior
+            {t("panic_thermometer.releases.col_prior")}
           </span>
           <span style={{ textAlign: "right" }} role="columnheader">
-            Surprise
+            {t("panic_thermometer.releases.col_surprise")}
           </span>
         </div>
 

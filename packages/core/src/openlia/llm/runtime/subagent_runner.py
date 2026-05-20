@@ -165,6 +165,7 @@ class SubagentReportRunner:
         attachments: Any = None,
         model_id_override: str | None = None,
         disabled_skill_ids: frozenset[str] | tuple[str, ...] = (),
+        language: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         # SubagentReportRunner accepts the same call surface as the classic
         # ReportRunner so the server's RefreshingReportRunner can drop in
@@ -180,6 +181,10 @@ class SubagentReportRunner:
         #   - disabled_skill_ids: subagents have no tools, so skills don't
         #     apply. Ignored.
         del attachments, model_id_override, disabled_skill_ids
+        # ``language`` is accepted for call-shape parity with v2 / ReportRunner
+        # but the SubagentReportRunner doesn't yet rethread it into the planner
+        # or section-writer prompts. Treated as a no-op for now.
+        del language
 
         def _cancelled() -> bool:
             return cancel_token is not None and getattr(cancel_token, "is_cancelled", False)

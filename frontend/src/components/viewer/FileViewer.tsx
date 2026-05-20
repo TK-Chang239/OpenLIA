@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { useFileViewer } from "./FileViewerContext";
 import { ViewerHeader } from "./ViewerHeader";
 import { ResizeHandle } from "./ResizeHandle";
@@ -51,6 +52,7 @@ function isMobile(): boolean {
 }
 
 export function FileViewer(): JSX.Element | null {
+  const { t } = useTranslation();
   const { current, close, scrollMemory, rememberScroll } = useFileViewer();
   const reduce = useReducedMotion();
   const [width, setWidth] = useState<number>(initialWidth);
@@ -133,7 +135,7 @@ export function FileViewer(): JSX.Element | null {
         <motion.aside
           key={current.filename}
           role="complementary"
-          aria-label={`File viewer: ${current.filename}`}
+          aria-label={t("chat.viewer_label_aria", { name: current.filename })}
           tabIndex={-1}
           onKeyDown={(e) => {
             if (e.key === "Escape") close();
@@ -209,14 +211,15 @@ function ViewerTabs({
   tab: ViewerTab;
   onTabChange: (next: ViewerTab) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const tabs: ReadonlyArray<{ id: ViewerTab; label: string }> = [
-    { id: "preview", label: "Preview" },
-    { id: "raw", label: "Raw" },
+    { id: "preview", label: t("chat.viewer_tab_preview") },
+    { id: "raw", label: t("chat.viewer_tab_raw") },
   ];
   return (
     <div
       role="tablist"
-      aria-label="File viewer mode"
+      aria-label={t("chat.viewer_mode_aria")}
       className="flex border-b"
       style={{ borderColor: "var(--color-border-subtle)" }}
     >

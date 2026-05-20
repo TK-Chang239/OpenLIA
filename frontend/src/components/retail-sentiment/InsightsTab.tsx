@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { RsSnapshot, RsSpike } from "../../api/retail-sentiment";
 import {
@@ -49,18 +50,25 @@ function metricValue(
 function MetricSnapshotChip({
   m,
   value,
+  t,
 }: {
   m: MetricDefinition;
   value: number | null;
+  t: (key: string) => string;
 }) {
   let answer = "—";
   let tone = "var(--color-text-secondary)";
 
   if (value === null) {
-    answer = "Awaiting data";
+    answer = t("retail_sentiment.insights.awaiting_data");
     tone = "var(--color-text-tertiary)";
   } else if (m.id === "sentiment_score") {
-    answer = value >= 0.1 ? "Bullish" : value <= -0.1 ? "Bearish" : "Balanced";
+    answer =
+      value >= 0.1
+        ? t("retail_sentiment.insights.bullish")
+        : value <= -0.1
+          ? t("retail_sentiment.insights.bearish")
+          : t("retail_sentiment.insights.balanced");
     tone =
       value >= 0.1
         ? "var(--color-feedback-success)"
@@ -68,7 +76,12 @@ function MetricSnapshotChip({
           ? "var(--color-feedback-error)"
           : "var(--color-text-secondary)";
   } else if (m.id === "buzz_volume") {
-    answer = value > 1.5 ? "Spike" : value > 1.0 ? "Elevated" : "Normal";
+    answer =
+      value > 1.5
+        ? t("retail_sentiment.insights.spike")
+        : value > 1.0
+          ? t("retail_sentiment.insights.elevated")
+          : t("retail_sentiment.insights.normal");
     tone =
       value > 1.5
         ? "var(--color-feedback-error)"
@@ -76,7 +89,12 @@ function MetricSnapshotChip({
           ? "var(--color-feedback-warning)"
           : "var(--color-text-secondary)";
   } else if (m.id === "sentiment_momentum") {
-    answer = value > 0.02 ? "Improving" : value < -0.02 ? "Deteriorating" : "Flat";
+    answer =
+      value > 0.02
+        ? t("retail_sentiment.insights.improving")
+        : value < -0.02
+          ? t("retail_sentiment.insights.deteriorating")
+          : t("retail_sentiment.insights.flat");
     tone =
       value > 0.02
         ? "var(--color-feedback-success)"
@@ -86,16 +104,21 @@ function MetricSnapshotChip({
   } else if (m.id === "bull_bear_ratio") {
     answer =
       value > 0.7
-        ? "Crowded long"
+        ? t("retail_sentiment.insights.crowded_long")
         : value < 0.3
-          ? "Crowded short"
-          : "Mixed";
+          ? t("retail_sentiment.insights.crowded_short")
+          : t("retail_sentiment.insights.mixed");
     tone =
       value > 0.7 || value < 0.3
         ? "var(--color-feedback-warning)"
         : "var(--color-text-secondary)";
   } else if (m.id === "buzz_sentiment_divergence") {
-    answer = value > 1 ? "Panic" : value < -1 ? "Stealth bid" : "No edge";
+    answer =
+      value > 1
+        ? t("retail_sentiment.insights.panic")
+        : value < -1
+          ? t("retail_sentiment.insights.stealth_bid")
+          : t("retail_sentiment.insights.no_edge");
     tone =
       value > 1
         ? "var(--color-feedback-error)"
@@ -103,13 +126,23 @@ function MetricSnapshotChip({
           ? "var(--color-feedback-success)"
           : "var(--color-text-secondary)";
   } else if (m.id === "social_velocity") {
-    answer = value > 1 ? "Accelerating" : value < -0.5 ? "Decelerating" : "Steady";
+    answer =
+      value > 1
+        ? t("retail_sentiment.insights.accelerating")
+        : value < -0.5
+          ? t("retail_sentiment.insights.decelerating")
+          : t("retail_sentiment.insights.steady");
     tone =
       value > 1
         ? "var(--color-feedback-warning)"
         : "var(--color-text-secondary)";
   } else if (m.id === "cross_source_agreement") {
-    answer = value > 0.7 ? "High" : value > 0.4 ? "Mixed" : "Low";
+    answer =
+      value > 0.7
+        ? t("retail_sentiment.insights.high")
+        : value > 0.4
+          ? t("retail_sentiment.insights.mixed")
+          : t("retail_sentiment.insights.low");
     tone =
       value > 0.7
         ? "var(--color-feedback-success)"
@@ -158,10 +191,12 @@ function FrameworkSection({
   question,
   metrics,
   snap,
+  t,
 }: {
   question: FrameworkQuestion;
   metrics: MetricDefinition[];
   snap: RsSnapshot | null;
+  t: (key: string) => string;
 }) {
   if (metrics.length === 0) return null;
   return (
@@ -185,6 +220,7 @@ function FrameworkSection({
             key={m.id}
             m={m}
             value={metricValue(snap, m.field)}
+            t={t}
           />
         ))}
       </div>
@@ -192,7 +228,13 @@ function FrameworkSection({
   );
 }
 
-function NarrativeCard({ snap }: { snap: RsSnapshot }) {
+function NarrativeCard({
+  snap,
+  t,
+}: {
+  snap: RsSnapshot;
+  t: (key: string) => string;
+}) {
   return (
     <article
       className="grid gap-5 rs-col-card p-6"
@@ -216,7 +258,9 @@ function NarrativeCard({ snap }: { snap: RsSnapshot }) {
         LIA
       </div>
       <div className="flex flex-col gap-2 min-w-0">
-        <span className="rs-mono-label">Narrative synthesis</span>
+        <span className="rs-mono-label">
+          {t("retail_sentiment.insights.narrative_synthesis")}
+        </span>
         <p
           className="m-0"
           style={{
@@ -228,8 +272,7 @@ function NarrativeCard({ snap }: { snap: RsSnapshot }) {
         >
           {snap.narrative ?? (
             <span style={{ color: "var(--color-text-tertiary)" }}>
-              No narrative synthesis yet — Quick-tier model not configured for
-              this user.
+              {t("retail_sentiment.insights.no_synthesis")}
             </span>
           )}
         </p>
@@ -244,6 +287,7 @@ export function InsightsTab({
   spikes,
   onPickTicker,
 }: Props) {
+  const { t } = useTranslation();
   const snap = selected
     ? snapshots.find((s) => s.ticker === selected) ?? null
     : null;
@@ -284,8 +328,10 @@ export function InsightsTab({
   return (
     <div className="space-y-7">
       <SectionLabel
-        title="Active signals"
-        meta={`${visibleSpikes.length} alerts`}
+        title={t("retail_sentiment.insights.active_signals")}
+        meta={t("retail_sentiment.insights.alerts_count", {
+          count: visibleSpikes.length,
+        })}
         first
       />
       {visibleSpikes.length === 0 ? (
@@ -294,7 +340,9 @@ export function InsightsTab({
           style={{ borderRadius: "12px" }}
           data-testid="rs-no-signals"
         >
-          <span className="rs-mono-label">No active signals</span>
+          <span className="rs-mono-label">
+            {t("retail_sentiment.insights.no_signals_title")}
+          </span>
           <p
             className="m-0 mt-1.5"
             style={{
@@ -303,9 +351,7 @@ export function InsightsTab({
               lineHeight: 1.55,
             }}
           >
-            Buzz spikes, divergences, and momentum crossovers will surface here
-            when thresholds breach. Velocity surfaces here as a derived trigger
-            (see Metrics Deep Dive for thresholds).
+            {t("retail_sentiment.insights.no_signals_hint")}
           </p>
         </div>
       ) : (
@@ -322,12 +368,18 @@ export function InsightsTab({
 
       {snap ? (
         <>
-          <SectionLabel title="LIA take" meta={selected ?? ""} />
-          <NarrativeCard snap={snap} />
+          <SectionLabel
+            title={t("retail_sentiment.insights.lia_take")}
+            meta={selected ?? ""}
+          />
+          <NarrativeCard snap={snap} t={t} />
         </>
       ) : null}
 
-      <SectionLabel title="Insights framework" meta="six questions" />
+      <SectionLabel
+        title={t("retail_sentiment.insights.framework_title")}
+        meta={t("retail_sentiment.insights.framework_meta")}
+      />
       <div className="grid gap-7">
         {(Object.keys(grouped) as FrameworkQuestion[]).map((q) => (
           <FrameworkSection
@@ -335,13 +387,14 @@ export function InsightsTab({
             question={q}
             metrics={grouped[q]}
             snap={snap}
+            t={t}
           />
         ))}
       </div>
 
       <SectionLabel
-        title="Reliability matrix"
-        meta="predictive strength × timeliness · bubble = data volume"
+        title={t("retail_sentiment.insights.reliability_title")}
+        meta={t("retail_sentiment.insights.reliability_meta")}
       />
       <article
         className="rs-col-card p-5"

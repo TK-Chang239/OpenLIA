@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { RecentReport } from "../../api/morning-briefing";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
@@ -39,8 +40,13 @@ function formatStamp(iso: string): string {
 }
 
 export function MBHeroCard({ report, onOpen }: Props) {
+  const { t } = useTranslation();
   const slot = deriveSlot(report);
   const summary = DEMO_BRIEFING_META[report.id]?.summary;
+  const slotLabel =
+    slot.slot === "pre_market"
+      ? t("morning_briefing.hero.pre_market")
+      : t("morning_briefing.hero.post_market");
 
   const pillTone =
     slot.slot === "pre_market"
@@ -65,7 +71,9 @@ export function MBHeroCard({ report, onOpen }: Props) {
       onKeyDown={(e) => {
         if (e.key === "Enter") onOpen(report);
       }}
-      aria-label={`Open ${report.title}`}
+      aria-label={t("morning_briefing.hero.open_report_aria", {
+        title: report.title,
+      })}
       data-testid="mb-hero-card"
     >
       <div className="flex items-center gap-2.5 flex-wrap">
@@ -80,13 +88,13 @@ export function MBHeroCard({ report, onOpen }: Props) {
               boxShadow: "0 0 0 4px rgba(212,255,0,0.18)",
             }}
           />
-          Latest briefing
+          {t("morning_briefing.hero.latest_briefing")}
         </span>
         <span
           className="font-mono text-[10px] tracking-[0.1em] uppercase rounded px-2 py-0.5 border"
           style={pillTone}
         >
-          {slot.slotLabel}
+          {slotLabel}
         </span>
         <span
           className="font-mono text-[10px] tracking-[0.08em]"
@@ -124,7 +132,7 @@ export function MBHeroCard({ report, onOpen }: Props) {
           className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md text-[13.5px] font-medium border border-[--color-text-primary] bg-[--color-text-primary] text-[--color-bg-base] hover:bg-black"
           data-testid="mb-hero-open"
         >
-          Open briefing
+          {t("morning_briefing.hero.open_briefing")}
           <ArrowRight size={14} />
         </button>
         <span data-testid="mb-hero-download" onClick={(e) => e.stopPropagation()}>

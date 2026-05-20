@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { RsSnapshot } from "../../api/retail-sentiment";
 import {
@@ -20,14 +21,14 @@ interface Props {
   history: RsSnapshot[];
 }
 
-const CHART_LABEL: Record<string, string> = {
-  gauge: "Arc gauge",
-  bar: "Bar chart",
-  line: "Line chart",
-  area: "Dual-fill area",
-  "stacked-bar": "Stacked bar (100%)",
-  scatter: "Bubble scatter",
-  stat: "Stat card",
+const CHART_LABEL_KEY: Record<string, string> = {
+  gauge: "retail_sentiment.deep_dive.chart_gauge",
+  bar: "retail_sentiment.deep_dive.chart_bar",
+  line: "retail_sentiment.deep_dive.chart_line",
+  area: "retail_sentiment.deep_dive.chart_area",
+  "stacked-bar": "retail_sentiment.deep_dive.chart_stacked",
+  scatter: "retail_sentiment.deep_dive.chart_scatter",
+  stat: "retail_sentiment.deep_dive.chart_stat",
 };
 
 function metricSeries(history: RsSnapshot[], field: string): Array<{ x: string; y: number }> {
@@ -43,9 +44,11 @@ function metricSeries(history: RsSnapshot[], field: string): Array<{ x: string; 
 function MetricChart({
   m,
   history,
+  t,
 }: {
   m: MetricDefinition;
   history: RsSnapshot[];
+  t: (key: string) => string;
 }) {
   const series = useMemo(() => metricSeries(history, m.field), [history, m.field]);
 
@@ -61,7 +64,7 @@ function MetricChart({
         }}
         data-testid={`deep-dive-empty-${m.id}`}
       >
-        No history yet
+        {t("retail_sentiment.deep_dive.empty_history")}
       </div>
     );
   }
@@ -136,9 +139,11 @@ function MetricLatest({
 function DeepDiveSection({
   m,
   history,
+  t,
 }: {
   m: MetricDefinition;
   history: RsSnapshot[];
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   return (
     <article
@@ -178,7 +183,10 @@ function DeepDiveSection({
               className="rs-mono-label"
               style={{ color: "var(--color-text-tertiary)" }}
             >
-              pred {m.predictive_strength}/10 · time {m.timeliness}/10
+              {t("retail_sentiment.deep_dive.pred_time", {
+                pred: m.predictive_strength,
+                time: m.timeliness,
+              })}
             </span>
           </h3>
           <p
@@ -193,7 +201,9 @@ function DeepDiveSection({
           </p>
         </div>
         <div className="flex flex-col items-end gap-0.5 shrink-0">
-          <span className="rs-mono-label">Latest</span>
+          <span className="rs-mono-label">
+            {t("retail_sentiment.deep_dive.latest")}
+          </span>
           <MetricLatest m={m} history={history} />
           <span
             className="rs-mono-label"
@@ -215,19 +225,23 @@ function DeepDiveSection({
           className="rs-mono-label mr-2"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          formula
+          {t("retail_sentiment.deep_dive.formula")}
         </span>
         {m.formula}
       </div>
 
       <div className="space-y-2">
         <div className="flex items-center justify-between rs-mono-label">
-          <span>{CHART_LABEL[m.chart] ?? m.chart}</span>
+          <span>
+            {CHART_LABEL_KEY[m.chart] ? t(CHART_LABEL_KEY[m.chart]) : m.chart}
+          </span>
           <span style={{ color: "var(--color-text-tertiary)" }}>
-            {history.length} pts
+            {t("retail_sentiment.deep_dive.pts_suffix", {
+              count: history.length,
+            })}
           </span>
         </div>
-        <MetricChart m={m} history={history} />
+        <MetricChart m={m} history={history} t={t} />
       </div>
 
       <div
@@ -238,7 +252,9 @@ function DeepDiveSection({
         }}
       >
         <div className="space-y-1">
-          <span className="rs-mono-label">What it tells you</span>
+          <span className="rs-mono-label">
+            {t("retail_sentiment.deep_dive.what_it_tells")}
+          </span>
           <p
             className="m-0"
             style={{
@@ -255,7 +271,7 @@ function DeepDiveSection({
             className="rs-mono-label"
             style={{ color: "var(--color-feedback-warning)" }}
           >
-            Caveat
+            {t("retail_sentiment.deep_dive.caveat")}
           </span>
           <p
             className="m-0"
@@ -274,6 +290,7 @@ function DeepDiveSection({
 }
 
 export function MetricsDeepDiveTab({ selected, history }: Props) {
+  const { t } = useTranslation();
   if (!selected) {
     return (
       <div
@@ -281,7 +298,9 @@ export function MetricsDeepDiveTab({ selected, history }: Props) {
         style={{ borderRadius: 12 }}
         data-testid="deep-dive-empty-selection"
       >
-        <p className="rs-mono-label">Pick a ticker</p>
+        <p className="rs-mono-label">
+          {t("retail_sentiment.deep_dive.select_hint_title")}
+        </p>
         <p
           className="m-0 mt-2"
           style={{
@@ -289,10 +308,7 @@ export function MetricsDeepDiveTab({ selected, history }: Props) {
             fontSize: 13.5,
           }}
         >
-          Select a ticker above to see each metric explained against its real
-          history. The deep dive renders the same chart shapes the Overview tab
-          uses, with formula, latest value, interpretation, and caveat side by
-          side.
+          {t("retail_sentiment.deep_dive.select_hint_body")}
         </p>
       </div>
     );
@@ -310,13 +326,16 @@ export function MetricsDeepDiveTab({ selected, history }: Props) {
             letterSpacing: "-0.01em",
           }}
         >
-          Metrics Deep Dive
+          {t("retail_sentiment.deep_dive.title")}
         </h2>
         <span
           className="rs-mono-label"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          {selected} · {RS_METRIC_CATALOG.length} metrics
+          {t("retail_sentiment.deep_dive.ticker_metrics", {
+            ticker: selected,
+            count: RS_METRIC_CATALOG.length,
+          })}
         </span>
       </header>
       <p
@@ -327,13 +346,11 @@ export function MetricsDeepDiveTab({ selected, history }: Props) {
           color: "var(--color-text-secondary)",
         }}
       >
-        Every signal that feeds the dashboard, with the formula, the chart, and
-        the practical interpretation. Use this surface to learn how a metric
-        behaves before relying on it in your Insights workflow.
+        {t("retail_sentiment.deep_dive.intro")}
       </p>
       <div className="space-y-4 pt-2">
         {RS_METRIC_CATALOG.map((m) => (
-          <DeepDiveSection key={m.id} m={m} history={history} />
+          <DeepDiveSection key={m.id} m={m} history={history} t={t} />
         ))}
       </div>
     </div>

@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import type { RsSpike } from "../../api/retail-sentiment";
 
 interface Props {
@@ -6,6 +8,7 @@ interface Props {
 }
 
 export function SignalAlert({ spike, onPick }: Props) {
+  const { t } = useTranslation();
   const tone =
     spike.z_score > 3
       ? "var(--color-feedback-error)"
@@ -28,7 +31,7 @@ export function SignalAlert({ spike, onPick }: Props) {
             className="rs-mono-label"
             style={{ color: tone, letterSpacing: "0.16em" }}
           >
-            BUZZ SPIKE
+            {t("retail_sentiment.signal_alert.buzz_spike")}
           </span>
           <span
             className="font-mono font-semibold tracking-[0.02em] text-[--color-text-primary]"
@@ -38,15 +41,19 @@ export function SignalAlert({ spike, onPick }: Props) {
           </span>
         </span>
         <span className="rs-mono-value text-[12px]" style={{ color: tone }}>
-          z = {spike.z_score.toFixed(2)}
+          {t("retail_sentiment.signal_alert.z_prefix")} {spike.z_score.toFixed(2)}
         </span>
       </div>
       <div className="rs-mono-label mt-2 flex flex-wrap gap-4">
         <span>
-          today {spike.buzz.toFixed(0)}
+          {t("retail_sentiment.signal_alert.today_prefix")} {spike.buzz.toFixed(0)}
         </span>
-        <span>μ {spike.baseline_mean.toFixed(1)}</span>
-        <span>σ {spike.baseline_stddev.toFixed(1)}</span>
+        <span>
+          {t("retail_sentiment.signal_alert.mu_prefix")} {spike.baseline_mean.toFixed(1)}
+        </span>
+        <span>
+          {t("retail_sentiment.signal_alert.sigma_prefix")} {spike.baseline_stddev.toFixed(1)}
+        </span>
         <span>{captured.toLocaleString()}</span>
       </div>
     </button>

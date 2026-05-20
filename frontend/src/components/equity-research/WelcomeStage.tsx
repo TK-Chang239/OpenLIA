@@ -1,25 +1,15 @@
 import { motion, useReducedMotion } from "framer-motion";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 import { TrendingUp } from "lucide-react";
 
 import {
-  ER_GREETING_BANK,
+  getErGreetingBank,
   pickGreeting,
   localDaySeed,
   timeOfDayGreeting,
 } from "../../pages/departments/equity-research/greetings";
 import type { ReportLength, ReportMode } from "../../api/equity-research";
-
-const MODE_PILL_LABEL: Record<ReportMode, string> = {
-  stock_initiation: "Stock Initiation",
-  stock_update: "Stock Update",
-  sector_research: "Sector Research",
-};
-const LENGTH_PILL_LABEL: Record<ReportLength, string> = {
-  concise: "Concise",
-  normal: "Normal",
-  elaborative: "Elaborative",
-};
 
 interface Props {
   firstName: string;
@@ -36,10 +26,21 @@ export function WelcomeStage({
   onModeRowClick,
   now = new Date(),
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const reduce = useReducedMotion();
-  const phrase = pickGreeting(ER_GREETING_BANK, localDaySeed(now));
+  const phrase = pickGreeting(getErGreetingBank(), localDaySeed(now));
   const [pre, post] = phrase.template.split("{accent}");
   const tod = timeOfDayGreeting(now);
+  const modePillLabel: Record<ReportMode, string> = {
+    stock_initiation: t("equity_research.mode_stock_initiation"),
+    stock_update: t("equity_research.mode_stock_update"),
+    sector_research: t("equity_research.mode_sector_research"),
+  };
+  const lengthPillLabel: Record<ReportLength, string> = {
+    concise: t("equity_research.length_concise"),
+    normal: t("equity_research.length_normal"),
+    elaborative: t("equity_research.length_elaborative"),
+  };
 
   const stagger = (delay: number) => ({
     initial: reduce ? { opacity: 0 } : { opacity: 0, y: 12 },
@@ -80,28 +81,27 @@ export function WelcomeStage({
         {...stagger(0.12)}
         className="m-0 max-w-[520px] text-center text-[15px] leading-[1.55] text-[--color-text-secondary]"
       >
-        Initiate coverage on a name, refresh a thesis after an event, or take a
-        sector apart from the top down.
+        {t("welcome.equity_research_subtitle")}
       </motion.p>
 
       <motion.button
         {...stagger(0.18)}
         type="button"
         onClick={onModeRowClick}
-        aria-label="Change report mode and length"
+        aria-label={t("equity_research.change_mode_aria")}
         className="inline-flex items-center gap-2 rounded-full border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-1.5 pl-2 font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-secondary] hover:border-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
       >
         <span
           aria-hidden="true"
           className="h-1.5 w-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_6px_rgba(212,255,0,0.6)]"
         />
-        <span>Mode</span>
+        <span>{t("equity_research.mode")}</span>
         <span aria-hidden="true">·</span>
         <strong className="font-medium text-[--color-text-primary]">
-          {MODE_PILL_LABEL[mode]}
+          {modePillLabel[mode]}
         </strong>
         <span aria-hidden="true">·</span>
-        <span>{LENGTH_PILL_LABEL[length]}</span>
+        <span>{lengthPillLabel[length]}</span>
       </motion.button>
     </div>
   );

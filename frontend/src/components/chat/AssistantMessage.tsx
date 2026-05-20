@@ -2,6 +2,7 @@ import type { JSX } from "react";
 import { motion } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTranslation } from "react-i18next";
 import { LiaBadge } from "./LiaBadge";
 import { MarkdownCodeRenderer } from "./MarkdownCodeRenderer";
 import { ReportThumbnail } from "./ReportThumbnail";
@@ -116,13 +117,14 @@ export function AssistantMessage({
   tokens,
   latencyMs,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const inlineChunks: AssistantChunk[] =
     chunks ?? (content !== undefined ? [{ type: "text", text: content }] : []);
   const reduce = useReducedMotion();
 
   return (
     <motion.article
-      aria-label="Assistant message"
+      aria-label={t("chat.aria_assistant_message")}
       initial={{ opacity: 0, y: reduce ? 0 : 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduce ? 0 : 0.2, ease: [0.16, 1, 0.3, 1] }}
@@ -179,7 +181,7 @@ export function AssistantMessage({
         )}
         {stopped ? (
           <span className="mt-1.5 block font-mono text-[10px] italic text-text-tertiary">
-            Response stopped.
+            {t("chat.response_stopped")}
           </span>
         ) : null}
         {timestamp ? (

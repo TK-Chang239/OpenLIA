@@ -179,6 +179,7 @@ def build_chat_system_prompt(
     memory_block: str | None = None,
     selected_exemplars: list[str] | None = None,
     market_basket: dict[str, list[str]] | None = None,
+    language: str | None = None,
 ) -> str:
     """Render the chat.system slot with the user's visible skills menu.
 
@@ -221,6 +222,7 @@ def build_chat_system_prompt(
         memory_block=memory_block,
         selected_exemplars=list(selected_exemplars) if selected_exemplars else [],
         market_basket=market_basket,
+        language=language,
     )
 
 
@@ -320,6 +322,7 @@ class ChatRunner:
         memory_block: str | None = None,
         selected_exemplars: list[str] | None = None,
         market_basket: dict[str, list[str]] | None = None,
+        language: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         # `session_id` is currently informational — runtime does not branch
         # on it but routes thread it for telemetry / persistence parity.
@@ -379,6 +382,7 @@ class ChatRunner:
             memory_block=memory_block,
             selected_exemplars=selected_exemplars,
             market_basket=market_basket,
+            language=language,
         )
         self._trace(
             "llm.resolved",

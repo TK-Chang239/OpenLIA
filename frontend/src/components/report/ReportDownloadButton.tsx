@@ -1,5 +1,6 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   downloadReportBlob,
   triggerBrowserSave,
@@ -22,6 +23,7 @@ export function ReportDownloadButton({
   variant = "icon",
   className,
 }: ReportDownloadButtonProps): JSX.Element {
+  const { t } = useTranslation();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
 
@@ -54,13 +56,13 @@ export function ReportDownloadButton({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          aria-label="Download report"
+          aria-label={t("report.aria_download_report")}
           disabled={busy}
           data-busy={busy ? "true" : "false"}
           className={className ? `${triggerClass} ${className}` : triggerClass}
         >
           {busy ? <Spinner /> : <DownloadIcon />}
-          {variant === "primary" && <span>Download</span>}
+          {variant === "primary" && <span>{t("report.download")}</span>}
           <Chevron />
         </button>
       </DropdownMenu.Trigger>
@@ -74,14 +76,14 @@ export function ReportDownloadButton({
             onSelect={() => void download("pdf")}
             className="cursor-pointer rounded-sm px-2 py-1.5 outline-none text-[--color-text-primary] data-[highlighted]:bg-[--color-surface-hover]"
           >
-            Download as PDF
+            {t("report.download_as_pdf")}
           </DropdownMenu.Item>
           {showDocx && (
             <DropdownMenu.Item
               onSelect={() => void download("docx")}
               className="cursor-pointer rounded-sm px-2 py-1.5 outline-none text-[--color-text-primary] data-[highlighted]:bg-[--color-surface-hover]"
             >
-              Download as Word
+              {t("report.download_as_word")}
             </DropdownMenu.Item>
           )}
         </DropdownMenu.Content>

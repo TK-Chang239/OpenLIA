@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { RecentReport } from "../../../api/earnings-update";
 import type { DemoReportMeta, Verdict } from "../../../lib/earnings-update/demo-data";
@@ -42,6 +43,7 @@ function verdictClasses(v: Verdict): string {
 }
 
 export function EuReportRow({ report, onOpen, meta }: Props) {
+  const { t } = useTranslation();
   const ticker = tickerOf(report) || "—";
   const sameDay = (() => {
     const d = new Date(report.created_at);
@@ -82,7 +84,7 @@ export function EuReportRow({ report, onOpen, meta }: Props) {
       </div>
       <div className="hidden md:flex flex-col gap-1">
         <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-[--color-text-tertiary]">
-          Verdict
+          {t("earnings.feed.verdict_label")}
         </span>
         {meta ? (
           <span
@@ -98,7 +100,7 @@ export function EuReportRow({ report, onOpen, meta }: Props) {
       </div>
       <div className="hidden md:grid grid-cols-2 gap-x-3 gap-y-1.5 font-mono text-[11px]">
         <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-[--color-text-tertiary]">
-          Rev.
+          {t("earnings.feed.rev_label")}
         </span>
         <span
           className={`font-mono tabular-nums ${
@@ -112,7 +114,7 @@ export function EuReportRow({ report, onOpen, meta }: Props) {
           {meta?.revSurprise ?? "—"}
         </span>
         <span className="font-mono text-[9px] tracking-[0.12em] uppercase text-[--color-text-tertiary]">
-          EPS
+          {t("earnings.feed.eps_label")}
         </span>
         <span
           className={`font-mono tabular-nums ${

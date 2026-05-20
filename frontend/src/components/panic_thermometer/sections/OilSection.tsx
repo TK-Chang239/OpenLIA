@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { OilPanel } from "../../../lib/panic_thermometer/copy/types";
 import { Crosshair, HoverTooltip, useChartHover } from "../_shared/hover";
 import { PanelLineText, ParamsBlock, RulesBlock } from "../_shared/visuals";
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function OilSection({ panel, onEditRules }: Props): JSX.Element {
+  const { t } = useTranslation();
   const { chart } = panel;
   const xMin = 40;
   const xMax = 690;
@@ -51,12 +54,12 @@ export function OilSection({ panel, onEditRules }: Props): JSX.Element {
   return (
     <>
       <div className="pt-sec-label" id="oil">
-        <span>D1 · Oil price duration</span>
+        <span>{t("panic_thermometer.oil_section.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">EODHD · BNO.US · 06:30 ET</span>
+        <span className="pt-count">{t("panic_thermometer.oil_section.meta")}</span>
       </div>
 
-      <section className="pt-panel" aria-label="Oil price duration panel">
+      <section className="pt-panel" aria-label={t("panic_thermometer.oil_section.aria")}>
         <PanelHead panel={panel} />
         <div className="pt-panel-body">
           <div className="pt-panel-chart">
@@ -75,7 +78,7 @@ export function OilSection({ panel, onEditRules }: Props): JSX.Element {
               className="pt-svg-chart"
               viewBox="0 0 700 240"
               preserveAspectRatio="none"
-              aria-label="Oil price chart with threshold"
+              aria-label={t("panic_thermometer.oil_section.chart_aria")}
               onMouseMove={hover.onMouseMove}
               onMouseLeave={hover.onMouseLeave}
             >
@@ -124,7 +127,7 @@ export function OilSection({ panel, onEditRules }: Props): JSX.Element {
                 textAnchor="end"
                 fill="var(--color-feedback-error)"
               >
-                ${chart.thresholdPrice} — user threshold
+                {t("panic_thermometer.oil_section.user_threshold", { price: chart.thresholdPrice })}
               </text>
 
               {chart.streakStartIndex < chart.series.length - 1 ? (
@@ -189,9 +192,14 @@ export function OilSection({ panel, onEditRules }: Props): JSX.Element {
 
             <div className="pt-streak">
               <div className="pt-streak-head">
-                <span className="pt-streak-label">Streak progression</span>
+                <span className="pt-streak-label">
+                  {t("panic_thermometer.oil_section.streak_progression")}
+                </span>
                 <span className="pt-streak-count">
-                  <strong>{panel.streak.days}</strong> / {panel.streak.targetDays} days
+                  {t("panic_thermometer.oil_section.streak_count", {
+                    days: panel.streak.days,
+                    target: panel.streak.targetDays,
+                  })}
                 </span>
               </div>
               <div className="pt-streak-track">
@@ -222,12 +230,12 @@ export function OilSection({ panel, onEditRules }: Props): JSX.Element {
 
           <div className="pt-panel-side">
             <RulesBlock
-              title="Rule set · evaluates top-to-bottom"
+              title={t("panic_thermometer.oil_section.rules_title")}
               rules={panel.rules}
               onEdit={onEditRules}
             />
             <ParamsBlock
-              title="Params"
+              title={t("panic_thermometer.oil_section.params_title")}
               params={panel.params}
               presetLabel={panel.presetLabel}
             />

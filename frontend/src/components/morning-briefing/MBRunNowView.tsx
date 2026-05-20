@@ -8,6 +8,7 @@ import {
   Square,
   Zap,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type {
   CustomSection,
@@ -27,11 +28,7 @@ import { SectionRow } from "./SectionRow";
 import { TopicChip } from "./TopicChip";
 
 const STORAGE_KEY = "mb_run_now_draft_v1";
-const LENGTHS: readonly { id: ReportLength; label: string }[] = [
-  { id: "concise", label: "Concise" },
-  { id: "normal", label: "Normal" },
-  { id: "elaborative", label: "Elaborative" },
-];
+const LENGTH_IDS: readonly ReportLength[] = ["concise", "normal", "elaborative"];
 
 interface Props {
   baseConfig: MbConfig;
@@ -74,6 +71,7 @@ export function MBRunNowView({
   onReportSaved,
   onOpenReport,
 }: Props) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<MbConfig>(() => loadDraft(baseConfig));
   const [editingTopicSection, setEditingTopicSection] = useState<string | null>(
     null,
@@ -201,24 +199,23 @@ export function MBRunNowView({
     >
       <div className="mb-6">
         <p className="text-[13px] text-[--color-text-secondary] m-0 leading-[1.5]">
-          Stage a one-off briefing. Tweaks here apply to this run only — your
-          saved Settings (used by scheduled briefings) stay untouched.
+          {t("morning_briefing.runnow.intro")}
         </p>
       </div>
 
-      <SetSection eyebrow="Report Length">
+      <SetSection eyebrow={t("morning_briefing.runnow.report_length")}>
         <div
           className="inline-flex p-0.5 rounded-md border bg-[--color-bg-elevated]"
           style={{ borderColor: "var(--color-border-subtle)" }}
         >
-          {LENGTHS.map((l) => {
-            const active = draft.report_length === l.id;
+          {LENGTH_IDS.map((id) => {
+            const active = draft.report_length === id;
             return (
               <button
                 type="button"
-                key={l.id}
+                key={id}
                 aria-pressed={active}
-                onClick={() => setDraft({ ...draft, report_length: l.id })}
+                onClick={() => setDraft({ ...draft, report_length: id })}
                 disabled={running}
                 className="h-7 px-3.5 rounded-[5px] text-[13px] font-medium transition-colors duration-[--duration-normal] disabled:opacity-50"
                 style={{
@@ -230,14 +227,14 @@ export function MBRunNowView({
                     : "var(--color-text-secondary)",
                 }}
               >
-                {l.label}
+                {t(`morning_briefing.length.${id}`)}
               </button>
             );
           })}
         </div>
       </SetSection>
 
-      <SetSection number="01" eyebrow="Report Sections">
+      <SetSection number="01" eyebrow={t("morning_briefing.runnow.report_sections")}>
         <div
           className="bg-[--color-bg-elevated] border rounded-[--radius-lg] overflow-hidden"
           style={{ borderColor: "var(--color-border-subtle)" }}
@@ -253,7 +250,9 @@ export function MBRunNowView({
                 title={entry.title}
                 hint={entry.hint}
                 badge={
-                  id === "executive_summary" ? "Always-on summary" : undefined
+                  id === "executive_summary"
+                    ? t("morning_briefing.runnow.always_on_summary")
+                    : undefined
                 }
                 checked={isEnabled}
                 onChange={(c) => toggleSection(id, c)}
@@ -295,7 +294,7 @@ export function MBRunNowView({
                         <input
                           ref={topicInputRef}
                           type="text"
-                          placeholder="Type and press Enter"
+                          placeholder={t("morning_briefing.runnow.topic_input_placeholder")}
                           className="bg-transparent border-0 outline-0 text-[13px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] w-[150px]"
                           onKeyDown={(e) => {
                             if (e.key === "Enter" || e.key === ",") {
@@ -321,7 +320,8 @@ export function MBRunNowView({
                         style={{ borderColor: "var(--color-border-secondary)" }}
                       >
                         <Plus size={11} strokeWidth={2.5} />
-                        {entry.topicPlaceholder || "Add topic"}
+                        {entry.topicPlaceholder ||
+                          t("morning_briefing.runnow.add_topic")}
                       </button>
                     )}
                   </div>
@@ -345,9 +345,9 @@ export function MBRunNowView({
                     />
                     <span>
                       <strong className="text-[--color-text-primary] font-medium">
-                        Reference Portfolio
+                        {t("morning_briefing.runnow.reference_portfolio_strong")}
                       </strong>{" "}
-                      — automatically include tickers from your Portfolio.
+                      {t("morning_briefing.runnow.reference_portfolio_hint")}
                     </span>
                   </label>
                 ) : null}
@@ -359,7 +359,7 @@ export function MBRunNowView({
 
       <SetSection
         number="02"
-        eyebrow="Custom Sections"
+        eyebrow={t("morning_briefing.runnow.custom_sections")}
         action={
           <button
             type="button"
@@ -369,7 +369,7 @@ export function MBRunNowView({
             style={{ borderColor: "var(--color-border-secondary)" }}
           >
             <Plus size={13} strokeWidth={1.8} />
-            Add Section
+            {t("morning_briefing.runnow.add_section")}
           </button>
         }
       >
@@ -381,7 +381,7 @@ export function MBRunNowView({
               color: "var(--color-text-tertiary)",
             }}
           >
-            No custom sections.
+            {t("morning_briefing.runnow.no_custom_sections")}
           </div>
         ) : (
           <div className="space-y-2">
@@ -397,10 +397,9 @@ export function MBRunNowView({
         )}
       </SetSection>
 
-      <SetSection number="03" eyebrow="Model">
+      <SetSection number="03" eyebrow={t("morning_briefing.runnow.model_section")}>
         <p className="text-[13px] text-[--color-text-secondary] mb-3 leading-[1.5] m-0 -mt-1.5">
-          Model used to generate this briefing. Changing it here updates your
-          default for Morning Briefings.
+          {t("morning_briefing.runnow.model_description")}
         </p>
         <ModelPicker
           departmentSlug="morning-briefing"
@@ -413,6 +412,7 @@ export function MBRunNowView({
           phase={state.phase}
           sections={state.sections}
           toolCalls={state.toolCalls}
+          t={t}
         />
       ) : null}
 
@@ -430,7 +430,7 @@ export function MBRunNowView({
             style={{ color: "var(--color-feedback-success)" }}
           />
           <div className="flex-1 text-[13.5px] text-[--color-text-primary]">
-            Briefing complete.
+            {t("morning_briefing.runnow.briefing_complete")}
           </div>
           <button
             type="button"
@@ -438,7 +438,7 @@ export function MBRunNowView({
             data-testid="mb-runnow-view-report"
             className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[13px] font-medium border border-[--color-text-primary] bg-[--color-text-primary] text-[--color-bg-base] hover:bg-black"
           >
-            View report
+            {t("morning_briefing.runnow.view_report")}
             <ArrowRight size={13} />
           </button>
         </div>
@@ -452,7 +452,7 @@ export function MBRunNowView({
           className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] disabled:opacity-50"
         >
           <RotateCcw size={13} />
-          Reset to saved defaults
+          {t("morning_briefing.runnow.reset_defaults")}
         </button>
         {running ? (
           <button
@@ -463,7 +463,7 @@ export function MBRunNowView({
             style={{ borderColor: "var(--color-feedback-error)" }}
           >
             <Square size={13} strokeWidth={2} fill="currentColor" />
-            Cancel
+            {t("morning_briefing.runnow.cancel")}
           </button>
         ) : (
           <button
@@ -473,7 +473,7 @@ export function MBRunNowView({
             className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md text-[13.5px] font-medium bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover]"
           >
             <Zap size={14} strokeWidth={2} />
-            Run
+            {t("morning_briefing.runnow.run")}
           </button>
         )}
       </div>
@@ -485,19 +485,21 @@ function ProgressPanel({
   phase,
   sections,
   toolCalls,
+  t,
 }: {
   phase: string | null;
   sections: { id: string; title: string; status: string }[];
   toolCalls: { toolName: string }[];
+  t: (key: string) => string;
 }) {
   const phaseLabel =
     phase === "fetching_data"
-      ? "Gathering data"
+      ? t("morning_briefing.runnow.phase_gathering_data")
       : phase === "writing"
-        ? "Writing"
+        ? t("morning_briefing.runnow.phase_writing")
         : phase === "finalizing"
-          ? "Finalizing"
-          : "Starting";
+          ? t("morning_briefing.runnow.phase_finalizing")
+          : t("morning_briefing.runnow.phase_starting");
   return (
     <div
       className="mt-7 p-5 rounded-[--radius-lg] border bg-[--color-bg-elevated] flex flex-col gap-3"

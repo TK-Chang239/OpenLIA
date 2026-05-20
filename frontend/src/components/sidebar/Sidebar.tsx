@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { JSX } from "react";
 import { useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { CORE_NAV, DEPARTMENT_NAV } from "./navData";
 import { NavItem } from "./NavItem";
@@ -27,6 +28,7 @@ function deriveDisplayName(name: string | null, email: string | null): string {
 }
 
 export function Sidebar(): JSX.Element {
+  const { t } = useTranslation();
   const [collapsed, setCollapsed] = useCollapsed();
   const { unreadByDepartment, markRead } = useNotificationPoll();
   const healths = useDeptHealth((s) => s.healths);
@@ -42,12 +44,12 @@ export function Sidebar(): JSX.Element {
 
   const initials = deriveInitials(user?.display_name ?? null, user?.email ?? null);
   const displayName = deriveDisplayName(user?.display_name ?? null, user?.email ?? null);
-  const modeLabel = status === "personal" ? "PERSONAL" : "COMPANY";
+  const modeLabel = status === "personal" ? t("common.personal") : t("common.company");
   const roleLine = `${modeLabel} · v${pkg.version}`;
 
   return (
     <nav
-      aria-label="Main navigation"
+      aria-label={t("nav.main_navigation")}
       className={[
         "hidden md:flex flex-col h-screen bg-sidebar-bg",
         "transition-[width] duration-normal ease-in-out",
@@ -88,13 +90,13 @@ export function Sidebar(): JSX.Element {
               fontWeight: 500,
             }}
           >
-            General
+            {t("nav.section_general")}
           </div>
         )}
         {CORE_NAV.map((entry) => (
           <NavItem
             key={entry.id}
-            label={entry.label}
+            label={t(entry.labelKey)}
             icon={entry.icon}
             path={entry.path}
             collapsed={collapsed}
@@ -121,7 +123,7 @@ export function Sidebar(): JSX.Element {
               fontWeight: 500,
             }}
           >
-            Departments
+            {t("nav.section_departments")}
           </div>
         )}
 
@@ -134,7 +136,7 @@ export function Sidebar(): JSX.Element {
           return (
             <NavItem
               key={entry.id}
-              label={entry.label}
+              label={t(entry.labelKey)}
               icon={entry.icon}
               path={entry.path}
               collapsed={collapsed}
@@ -153,7 +155,7 @@ export function Sidebar(): JSX.Element {
         style={{ borderTop: "1px solid var(--color-sidebar-divider)" }}
       >
         <NavItem
-          label="Settings"
+          label={t("nav.settings")}
           icon={Settings}
           path="/settings"
           collapsed={collapsed}
@@ -162,7 +164,7 @@ export function Sidebar(): JSX.Element {
 
         <button
           type="button"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={collapsed ? t("nav.expand_sidebar") : t("nav.collapse_sidebar")}
           aria-expanded={!collapsed}
           onClick={() => setCollapsed(!collapsed)}
           className={[
@@ -177,7 +179,7 @@ export function Sidebar(): JSX.Element {
           ) : (
             <>
               <ChevronLeft size={16} strokeWidth={1.5} />
-              <span className="text-[13px] font-display truncate">Collapse</span>
+              <span className="text-[13px] font-display truncate">{t("nav.collapse")}</span>
             </>
           )}
         </button>

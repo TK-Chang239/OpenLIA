@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 export interface TocSection {
   id: string;
   title: string;
@@ -10,8 +12,9 @@ export interface TableOfContentsProps {
 }
 
 export function TableOfContents({ sections, activeId, onSectionClick }: TableOfContentsProps) {
+  const { t } = useTranslation();
   return (
-    <nav className="report-toc" aria-label="Report sections">
+    <nav className="report-toc" aria-label={t('report.aria_report_sections')}>
       <ul>
         {sections.map((s, i) => {
           const isActive = s.id === activeId;

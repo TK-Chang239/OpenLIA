@@ -1,5 +1,6 @@
 import type { Ref } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { type FileSource } from "./FileViewerContext";
 import { sourceUrl } from "./renderers/sourceUrl";
 import { SaveToRepoButton } from "../chat/SaveToRepoButton";
@@ -27,6 +28,7 @@ export function ViewerHeader({
   onClose,
   closeButtonRef,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-[56px] flex-shrink-0 items-start justify-between gap-3 border-b border-border-subtle bg-bg-elevated px-4 py-3">
       <div className="flex min-w-0 flex-1 flex-col">
@@ -45,7 +47,7 @@ export function ViewerHeader({
         <button
           ref={closeButtonRef}
           type="button"
-          aria-label="Close"
+          aria-label={t("common.close")}
           onClick={onClose}
           className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary transition-colors duration-normal ease-out hover:bg-surface-hover hover:text-text-primary"
         >

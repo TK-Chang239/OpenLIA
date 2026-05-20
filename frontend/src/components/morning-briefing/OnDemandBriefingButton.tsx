@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useReportStream } from "../report/useReportStream";
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function OnDemandBriefingButton({ onSaved, onError }: Props) {
+  const { t } = useTranslation();
   const { state, start, reset } = useReportStream();
   const seenIdRef = useRef<string | null>(null);
   const seenErrorRef = useRef<string | null>(null);
@@ -59,7 +61,9 @@ export function OnDemandBriefingButton({ onSaved, onError }: Props) {
       style={{ borderColor: "var(--color-border-secondary)" }}
     >
       <Plus size={13} strokeWidth={1.8} />
-      {running ? "Generating…" : "Run now"}
+      {running
+        ? t("morning_briefing.on_demand.generating")
+        : t("morning_briefing.on_demand.run_now")}
     </button>
   );
 }

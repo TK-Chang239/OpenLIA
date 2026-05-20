@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { RecentReport } from "../../api/earnings-update";
 import { ConfirmDialog } from "../primitives/ConfirmDialog";
@@ -29,6 +30,7 @@ export function EUCabinetView({
   onRemove,
   onQueryChange,
 }: Props) {
+  const { t } = useTranslation();
   const [q, setQ] = useState("");
   const [ticker, setTicker] = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -82,16 +84,16 @@ export function EUCabinetView({
           onClick={onBack}
           className="text-sm text-[--color-accent-primary]"
         >
-          ← Back to Earnings Updates
+          {t("earnings.cabinet.back")}
         </button>
-        <h2 className="text-xl font-semibold">EU Cabinet</h2>
+        <h2 className="text-xl font-semibold">{t("earnings.cabinet.title")}</h2>
         <span className="w-32" />
       </header>
       <div className="px-4 sm:px-6 py-4 flex items-center gap-2">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search reports..."
+          placeholder={t("earnings.cabinet.search_placeholder")}
           className="flex-1 bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-md] px-3 h-9 text-sm text-[--color-text-primary]"
         />
         <button
@@ -100,16 +102,16 @@ export function EUCabinetView({
           aria-expanded={filterOpen}
           className="text-sm border border-[--color-border-subtle] rounded-[--radius-md] px-3 h-9 hover:bg-[--color-surface-hover]"
         >
-          Filters ▾
+          {t("earnings.cabinet.filters")}
         </button>
       </div>
       {filterOpen ? (
         <div className="px-4 sm:px-6 pb-4 flex flex-wrap items-center gap-2">
-          <label className="text-xs text-[--color-text-secondary]">Ticker</label>
+          <label className="text-xs text-[--color-text-secondary]">{t("earnings.cabinet.ticker_label")}</label>
           <input
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            placeholder="AAPL"
+            placeholder={t("earnings.cabinet.ticker_placeholder")}
             className="bg-[--color-bg-elevated] border border-[--color-border-subtle] rounded-[--radius-sm] px-2 h-8 text-sm text-[--color-text-primary] w-24"
           />
         </div>
@@ -132,9 +134,9 @@ export function EUCabinetView({
       ))}
       <ConfirmDialog
         open={pendingRemoval !== null}
-        title="Remove report?"
-        description="This action cannot be undone."
-        confirmLabel="Remove"
+        title={t("earnings.cabinet.remove_title")}
+        description={t("earnings.cabinet.remove_description")}
+        confirmLabel={t("earnings.cabinet.remove_confirm")}
         destructive
         onCancel={() => setPendingRemoval(null)}
         onConfirm={() => {

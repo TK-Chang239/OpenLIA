@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { MbSchedule } from "../../api/morning-briefing";
 
@@ -8,20 +9,24 @@ interface Props {
   onDelete: () => void;
 }
 
-function formatDays(days: string[]): string {
+function formatDays(
+  days: string[],
+  t: (key: string) => string,
+): string {
   if (days.length === 0) return "—";
   const lower = days.map((d) => d.toLowerCase());
   const mf = ["mon", "tue", "wed", "thu", "fri"];
   if (lower.length === 5 && mf.every((d) => lower.includes(d))) {
-    return "Mon — Fri";
+    return t("morning_briefing.schedule_row.mon_fri");
   }
-  if (lower.length === 7) return "Every day";
+  if (lower.length === 7) return t("morning_briefing.schedule_row.every_day");
   return days
     .map((d) => d.charAt(0).toUpperCase() + d.slice(1, 3).toLowerCase())
     .join(", ");
 }
 
 export function ScheduleRow({ schedule, onEdit, onDelete }: Props) {
+  const { t } = useTranslation();
   const isPost = /post/i.test(schedule.label);
   const labelTone = isPost
     ? {
@@ -42,7 +47,7 @@ export function ScheduleRow({ schedule, onEdit, onDelete }: Props) {
         {schedule.time}
       </div>
       <div className="flex-1 min-w-0 text-[13.5px] text-[--color-text-secondary]">
-        <span>{formatDays(schedule.days_of_week)}</span>
+        <span>{formatDays(schedule.days_of_week, t)}</span>
         <span className="text-[--color-text-tertiary]"> · {schedule.timezone}</span>
         {schedule.label ? (
           <span
@@ -60,12 +65,12 @@ export function ScheduleRow({ schedule, onEdit, onDelete }: Props) {
           className="inline-flex items-center h-7 px-3 rounded-md text-[13px] text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover]"
           data-testid={`schedule-row-edit-${schedule.id}`}
         >
-          Edit
+          {t("morning_briefing.schedule_row.edit")}
         </button>
         <button
           type="button"
           onClick={onDelete}
-          aria-label="Delete schedule"
+          aria-label={t("morning_briefing.schedule_row.delete_aria")}
           className="inline-flex items-center justify-center h-7 w-7 rounded-md text-[--color-feedback-error] hover:bg-[rgba(224,92,48,0.08)]"
           data-testid={`schedule-row-delete-${schedule.id}`}
         >

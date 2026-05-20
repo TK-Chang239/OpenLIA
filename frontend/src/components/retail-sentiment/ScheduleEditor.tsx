@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { RsSchedule, RsScheduleUpsert } from "../../api/retail-sentiment";
 
@@ -23,6 +24,7 @@ const FIELD_INPUT =
   "h-8 px-2.5 rounded-md border bg-[--color-bg-input] text-[12.5px] focus:outline-none focus:border-[--color-accent-primary]";
 
 export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
+  const { t } = useTranslation();
   const [time, setTime] = useState(schedule?.time ?? "08:00");
   const [tz, setTz] = useState(schedule?.timezone ?? "America/New_York");
   const [days, setDays] = useState<string[]>(
@@ -63,7 +65,7 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
   return (
     <div
       role="dialog"
-      aria-label="Schedule editor"
+      aria-label={t("retail_sentiment.schedule_editor.aria")}
       data-testid="schedule-editor"
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/40"
     >
@@ -90,12 +92,14 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
               color: "var(--color-text-tertiary)",
             }}
           >
-            Schedule · Retail Sentiment
+            {t("retail_sentiment.schedule_editor.header")}
           </span>
         </header>
         <div className="p-5 space-y-3 text-[13px]">
           <label className="grid gap-1">
-            <span className="rs-mono-label">Time</span>
+            <span className="rs-mono-label">
+              {t("retail_sentiment.schedule_editor.time")}
+            </span>
             <input
               type="time"
               value={time}
@@ -105,7 +109,9 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
             />
           </label>
           <label className="grid gap-1">
-            <span className="rs-mono-label">Timezone</span>
+            <span className="rs-mono-label">
+              {t("retail_sentiment.schedule_editor.timezone")}
+            </span>
             <input
               value={tz}
               onChange={(e) => setTz(e.target.value)}
@@ -114,7 +120,9 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
             />
           </label>
           <div>
-            <span className="rs-mono-label block mb-1.5">Days</span>
+            <span className="rs-mono-label block mb-1.5">
+              {t("retail_sentiment.schedule_editor.days")}
+            </span>
             <div className="flex flex-wrap gap-1.5">
               {DAYS.map((d) => {
                 const on = days.includes(d);
@@ -137,7 +145,9 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
             </div>
           </div>
           <label className="grid gap-1">
-            <span className="rs-mono-label">Label</span>
+            <span className="rs-mono-label">
+              {t("retail_sentiment.schedule_editor.label")}
+            </span>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
@@ -152,7 +162,7 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
               onChange={(e) => setEnabled(e.target.checked)}
             />
             <span className="rs-mono-label" style={{ color: "var(--color-text-primary)" }}>
-              Enabled
+              {t("retail_sentiment.schedule_editor.enabled")}
             </span>
           </label>
           {error ? (
@@ -178,7 +188,7 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
               color: "var(--color-text-secondary)",
             }}
           >
-            Cancel
+            {t("retail_sentiment.schedule_editor.cancel")}
           </button>
           <button
             type="button"
@@ -190,7 +200,9 @@ export function ScheduleEditor({ open, schedule, onClose, onSave }: Props) {
               color: "var(--color-accent-on)",
             }}
           >
-            {busy ? "Saving…" : "Save"}
+            {busy
+              ? t("retail_sentiment.schedule_editor.saving")
+              : t("retail_sentiment.schedule_editor.save")}
           </button>
         </footer>
       </div>

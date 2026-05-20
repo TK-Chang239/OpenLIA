@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { ArrowDown, ArrowUp, Columns3, Filter } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type {
   AnalyticsResponse,
   PortfolioHolding,
@@ -69,6 +70,7 @@ export function HoldingsTable({
   onRowClick,
   onManageGroups,
 }: HoldingsTableProps): JSX.Element {
+  const { t } = useTranslation();
   const [sort, setSort] = useLocalJsonPref<SortState>("portfolio:sort", DEFAULT_SORT);
   const [storedColumns, setColumns] = useLocalJsonPref<Partial<ColumnVis>>(
     "portfolio:columns",
@@ -126,10 +128,13 @@ export function HoldingsTable({
     >
       <div className="flex items-center justify-between border-b border-[--color-border-subtle] px-[18px] py-[14px]">
         <span className="inline-flex items-center gap-[10px] text-[13px] font-semibold text-[--color-text-primary]">
-          Holdings
+          {t("portfolio_page.holdings")}
           <span className="font-mono text-[10px] font-normal tracking-[0.08em] text-[--color-text-tertiary]">
-            {sorted.length} POSITIONS · SORTED BY {sort.key}{" "}
-            {sort.dir === "asc" ? "↑" : "↓"}
+            {t("portfolio_page.positions_sorted", {
+              count: sorted.length,
+              key: sort.key,
+              arrow: sort.dir === "asc" ? "↑" : "↓",
+            })}
           </span>
         </span>
         <div className="flex gap-[6px]">
@@ -149,38 +154,38 @@ export function HoldingsTable({
       ) : sorted.length === 0 ? (
         <div className="px-[18px] py-10 text-center text-sm text-[--color-text-tertiary]">
           {filter.groups.length > 0
-            ? "No holdings match the current filter."
-            : "No holdings yet. Add a position to get started."}
+            ? t("portfolio_page.no_holdings_match")
+            : t("portfolio_page.no_holdings_yet")}
         </div>
       ) : (
         <table className="w-full table-auto border-collapse font-mono text-[12px] tabular-nums">
           <thead>
             <tr>
               <SortHeader
-                label="TICKER"
+                label={t("portfolio_page.col_ticker")}
                 column="TICKER"
                 sort={sort}
                 onClick={() => onHeaderClick("TICKER")}
               />
               <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-left text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                GROUP
+                {t("portfolio_page.col_group")}
               </th>
               <SortHeader
-                label="SHARES"
+                label={t("portfolio_page.col_shares")}
                 column="SHARES"
                 sort={sort}
                 onClick={() => onHeaderClick("SHARES")}
                 align="right"
               />
               <SortHeader
-                label="AVG COST"
+                label={t("portfolio_page.col_avg_cost")}
                 column="AVG_COST"
                 sort={sort}
                 onClick={() => onHeaderClick("AVG_COST")}
                 align="right"
               />
               <SortHeader
-                label="PRICE"
+                label={t("portfolio_page.col_price")}
                 column="PRICE"
                 sort={sort}
                 onClick={() => onHeaderClick("PRICE")}
@@ -188,7 +193,7 @@ export function HoldingsTable({
               />
               {columns.day_change ? (
                 <SortHeader
-                  label="DAY ±"
+                  label={t("portfolio_page.col_day_change")}
                   column="DAY_CHANGE"
                   sort={sort}
                   onClick={() => onHeaderClick("DAY_CHANGE")}
@@ -196,7 +201,7 @@ export function HoldingsTable({
                 />
               ) : null}
               <SortHeader
-                label="MKT VALUE"
+                label={t("portfolio_page.col_mkt_value")}
                 column="MKT_VALUE"
                 sort={sort}
                 onClick={() => onHeaderClick("MKT_VALUE")}
@@ -204,7 +209,7 @@ export function HoldingsTable({
               />
               {columns.pos_pl ? (
                 <SortHeader
-                  label="POS P/L"
+                  label={t("portfolio_page.col_pos_pl")}
                   column="POS_PL"
                   sort={sort}
                   onClick={() => onHeaderClick("POS_PL")}
@@ -213,7 +218,7 @@ export function HoldingsTable({
               ) : null}
               {columns.weight ? (
                 <SortHeader
-                  label="WEIGHT"
+                  label={t("portfolio_page.col_weight")}
                   column="WEIGHT"
                   sort={sort}
                   onClick={() => onHeaderClick("WEIGHT")}
@@ -222,7 +227,7 @@ export function HoldingsTable({
               ) : null}
               {columns.spark ? (
                 <th className="border-b border-[--color-border-subtle] bg-[--color-bg-base] px-[14px] py-2 text-right text-[9px] font-medium uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-                  7D
+                  {t("portfolio_page.col_spark")}
                 </th>
               ) : null}
             </tr>

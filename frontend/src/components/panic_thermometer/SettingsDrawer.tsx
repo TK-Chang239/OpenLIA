@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   createPreset,
   exportConfig,
@@ -22,27 +23,27 @@ interface Props {
   onRefreshIntervalChange: (s: number | null) => void;
 }
 
-const REFRESH_OPTIONS: Array<{ label: string; value: number | null }> = [
-  { label: "Auto-refresh · Off", value: null },
-  { label: "Auto-refresh · 1 min", value: 60 },
-  { label: "Auto-refresh · 5 min", value: 300 },
-  { label: "Auto-refresh · 15 min", value: 900 },
+const REFRESH_OPTIONS: Array<{ key: string; value: number | null }> = [
+  { key: "panic_thermometer.settings_drawer.refresh_off", value: null },
+  { key: "panic_thermometer.settings_drawer.refresh_1", value: 60 },
+  { key: "panic_thermometer.settings_drawer.refresh_5", value: 300 },
+  { key: "panic_thermometer.settings_drawer.refresh_15", value: 900 },
 ];
 
-const PANEL_TITLES: Record<PtBackendPanelId, string> = {
-  oil: "D1 · Oil price duration",
-  inflation: "D2 · Inflation expectations",
-  fed_language: "D3 · Fed language tracker",
-  wage_growth: "D4 · Wage growth",
-  diplomacy: "D5 · Diplomatic progress",
+const PANEL_TITLE_KEY: Record<PtBackendPanelId, string> = {
+  oil: "panic_thermometer.settings_drawer.panel_oil",
+  inflation: "panic_thermometer.settings_drawer.panel_inflation",
+  fed_language: "panic_thermometer.settings_drawer.panel_fed",
+  wage_growth: "panic_thermometer.settings_drawer.panel_wage",
+  diplomacy: "panic_thermometer.settings_drawer.panel_diplomacy",
 };
 
-const STATUS_LABEL: Record<string, string> = {
-  green: "Green",
-  amber: "Amber",
-  red: "Red",
-  dark_red: "Dark red",
-  disabled: "Off",
+const STATUS_KEY: Record<string, string> = {
+  green: "panic_thermometer.settings_drawer.status_green",
+  amber: "panic_thermometer.settings_drawer.status_amber",
+  red: "panic_thermometer.settings_drawer.status_red",
+  dark_red: "panic_thermometer.settings_drawer.status_dark_red",
+  disabled: "panic_thermometer.settings_drawer.status_disabled",
 };
 
 export function SettingsDrawer({
@@ -51,6 +52,7 @@ export function SettingsDrawer({
   refreshIntervalSeconds,
   onRefreshIntervalChange,
 }: Props): JSX.Element | null {
+  const { t } = useTranslation();
   const cfg = usePtConfig();
   const presets = usePtPresets();
   const [tab, setTab] = useState<Tab>("presets");
@@ -103,7 +105,7 @@ export function SettingsDrawer({
     try {
       parsed = JSON.parse(importText);
     } catch {
-      setImportError("Invalid JSON");
+      setImportError(t("panic_thermometer.settings_drawer.invalid_json"));
       return;
     }
     try {
@@ -121,10 +123,16 @@ export function SettingsDrawer({
       const res = await parseFormula(formulaText, "oil");
       if (!res.ok) {
         setFormulaError(
-          res.errors?.[0]?.message ?? "Formula failed to parse",
+          res.errors?.[0]?.message ??
+            t("panic_thermometer.settings_drawer.formula_failed"),
         );
       } else {
-        setFormulaError(`OK — ${(res.identifiers ?? []).join(", ") || "no identifiers"}`);
+        setFormulaError(
+          `${t("panic_thermometer.settings_drawer.ok_prefix")}${
+            (res.identifiers ?? []).join(", ") ||
+            t("panic_thermometer.settings_drawer.no_identifiers")
+          }`,
+        );
       }
     } catch (err) {
       setFormulaError(err instanceof Error ? err.message : String(err));
@@ -142,15 +150,15 @@ export function SettingsDrawer({
         className="pt-drawer"
         role="dialog"
         aria-modal="true"
-        aria-label="Panic Thermometer settings"
+        aria-label={t("panic_thermometer.settings_drawer.aria")}
       >
         <div className="pt-drawer-head">
-          <h2>Settings</h2>
+          <h2>{t("panic_thermometer.settings_drawer.title")}</h2>
           <button
             type="button"
             className="pt-close"
             onClick={onClose}
-            aria-label="Close settings"
+            aria-label={t("panic_thermometer.settings_drawer.close_aria")}
           >
             ×
           </button>
@@ -158,11 +166,11 @@ export function SettingsDrawer({
 
         <div className="pt-drawer-tabs" role="tablist">
           {([
-            ["presets", "Presets"],
-            ["panels", "Panels"],
-            ["composite", "Composite"],
-            ["data", "Data"],
-          ] as const).map(([id, label]) => (
+            ["presets", "tab_presets"],
+            ["panels", "tab_panels"],
+            ["composite", "tab_composite"],
+            ["data", "tab_data"],
+          ] as const).map(([id, labelKey]) => (
             <button
               key={id}
               type="button"
@@ -171,7 +179,7 @@ export function SettingsDrawer({
               className={`pt-drawer-tab ${tab === id ? "is-active" : ""}`}
               onClick={() => setTab(id)}
             >
-              {label}
+              {t(`panic_thermometer.settings_drawer.${labelKey}`)}
             </button>
           ))}
         </div>
@@ -189,6 +197,7 @@ export function SettingsDrawer({
               newPresetName={newPresetName}
               onNewPresetNameChange={setNewPresetName}
               onSaveAs={onSaveAsPreset}
+              t={t}
             />
           ) : null}
 
@@ -200,6 +209,7 @@ export function SettingsDrawer({
                 setOpenPanelId((prev) => (prev === id ? null : id))
               }
               onSave={cfg.save}
+              t={t}
             />
           ) : null}
 
@@ -211,13 +221,16 @@ export function SettingsDrawer({
               onFormulaTextChange={setFormulaText}
               onTestFormula={onTestFormula}
               formulaError={formulaError}
+              t={t}
             />
           ) : null}
 
           {tab === "data" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div className="pt-drawer-row">
-                <label htmlFor="pt-refresh-select">Auto-refresh interval</label>
+                <label htmlFor="pt-refresh-select">
+                  {t("panic_thermometer.settings_drawer.auto_refresh")}
+                </label>
                 <select
                   id="pt-refresh-select"
                   value={refreshIntervalSeconds ?? ""}
@@ -227,8 +240,8 @@ export function SettingsDrawer({
                   }}
                 >
                   {REFRESH_OPTIONS.map((opt) => (
-                    <option key={opt.label} value={opt.value ?? ""}>
-                      {opt.label}
+                    <option key={opt.key} value={opt.value ?? ""}>
+                      {t(opt.key)}
                     </option>
                   ))}
                 </select>
@@ -236,12 +249,14 @@ export function SettingsDrawer({
 
               <div className="pt-drawer-actions">
                 <button type="button" className="pt-drawer-btn" onClick={onExport}>
-                  Export config
+                  {t("panic_thermometer.settings_drawer.export_config")}
                 </button>
               </div>
 
               <div className="pt-drawer-row">
-                <label htmlFor="pt-import-text">Import config (JSON)</label>
+                <label htmlFor="pt-import-text">
+                  {t("panic_thermometer.settings_drawer.import_config")}
+                </label>
                 <textarea
                   id="pt-import-text"
                   value={importText}
@@ -260,7 +275,7 @@ export function SettingsDrawer({
                     onClick={onImport}
                     disabled={!importText.trim()}
                   >
-                    Import
+                    {t("panic_thermometer.settings_drawer.import")}
                   </button>
                 </div>
               </div>
@@ -281,6 +296,7 @@ function PresetsTab({
   newPresetName,
   onNewPresetNameChange,
   onSaveAs,
+  t,
 }: {
   presets: ReadonlyArray<{
     id: string;
@@ -294,14 +310,15 @@ function PresetsTab({
   newPresetName: string;
   onNewPresetNameChange: (v: string) => void;
   onSaveAs: () => Promise<void>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }): JSX.Element {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="pt-drawer-row">
-        <label>Available presets</label>
+        <label>{t("panic_thermometer.settings_drawer.available_presets")}</label>
         {presets.length === 0 ? (
           <span style={{ color: "var(--color-text-tertiary)", fontSize: 12 }}>
-            No presets yet
+            {t("panic_thermometer.settings_drawer.no_presets")}
           </span>
         ) : (
           presets.map((p) => (
@@ -313,7 +330,9 @@ function PresetsTab({
             >
               <span className="pt-preset-name">{p.name}</span>
               {p.is_shipped ? (
-                <span className="pt-preset-tag">shipped</span>
+                <span className="pt-preset-tag">
+                  {t("panic_thermometer.settings_drawer.shipped")}
+                </span>
               ) : null}
               <button
                 type="button"
@@ -321,14 +340,19 @@ function PresetsTab({
                 onClick={() => void onApply(p.id)}
                 disabled={p.id === activePresetId}
               >
-                {p.id === activePresetId ? "Active" : "Apply"}
+                {p.id === activePresetId
+                  ? t("panic_thermometer.settings_drawer.active")
+                  : t("panic_thermometer.settings_drawer.apply")}
               </button>
               {!p.is_shipped ? (
                 <button
                   type="button"
                   className="pt-drawer-btn is-danger"
                   onClick={() => {
-                    const next = window.prompt("Rename preset", p.name);
+                    const next = window.prompt(
+                      t("panic_thermometer.settings_drawer.rename_prompt"),
+                      p.name,
+                    );
                     if (next && next.trim() && next.trim() !== p.name) {
                       void onRename(p.id, next.trim());
                     } else {
@@ -345,13 +369,15 @@ function PresetsTab({
       </div>
 
       <div className="pt-drawer-row">
-        <label htmlFor="pt-new-preset">Save current config as preset</label>
+        <label htmlFor="pt-new-preset">
+          {t("panic_thermometer.settings_drawer.save_as_preset")}
+        </label>
         <input
           id="pt-new-preset"
           type="text"
           value={newPresetName}
           onChange={(e) => onNewPresetNameChange(e.target.value)}
-          placeholder="e.g. Recession-watch"
+          placeholder={t("panic_thermometer.settings_drawer.preset_name_placeholder")}
         />
         <div className="pt-drawer-actions">
           <button
@@ -360,7 +386,7 @@ function PresetsTab({
             onClick={() => void onSaveAs()}
             disabled={!newPresetName.trim()}
           >
-            Save as preset
+            {t("panic_thermometer.settings_drawer.save_as_button")}
           </button>
         </div>
       </div>
@@ -373,6 +399,7 @@ function PanelsTab({
   openPanelId,
   onTogglePanel,
   onSave,
+  t,
 }: {
   config: UserConfig | null;
   openPanelId: PtBackendPanelId | null;
@@ -380,11 +407,12 @@ function PanelsTab({
   onSave: (
     next: Pick<UserConfig, "panel_config" | "composite_settings">,
   ) => Promise<void>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }): JSX.Element {
   if (!config) {
     return (
       <div style={{ color: "var(--color-text-tertiary)", fontSize: 12 }}>
-        Loading config…
+        {t("panic_thermometer.settings_drawer.loading_config")}
       </div>
     );
   }
@@ -404,15 +432,18 @@ function PanelsTab({
               aria-expanded={isOpen}
             >
               <span className="pt-acc-num">{p.panel_id.toUpperCase()}</span>
-              <span>{PANEL_TITLES[p.panel_id]}</span>
+              <span>{t(PANEL_TITLE_KEY[p.panel_id])}</span>
               <span className="pt-acc-status">
-                {p.enabled === false ? "Off" : "On"}
+                {p.enabled === false
+                  ? t("panic_thermometer.settings_drawer.panel_off")
+                  : t("panic_thermometer.settings_drawer.panel_on")}
               </span>
             </button>
             {isOpen ? (
               <div className="pt-panel-acc-body">
                 <PanelEditor
                   panel={p}
+                  t={t}
                   onChange={async (next) => {
                     const updated = panels.map((q) =>
                       q.panel_id === p.panel_id ? next : q,
@@ -435,9 +466,11 @@ function PanelsTab({
 function PanelEditor({
   panel,
   onChange,
+  t,
 }: {
   panel: PanelConfig;
   onChange: (next: PanelConfig) => Promise<void>;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }): JSX.Element {
   const [draft, setDraft] = useState<PanelConfig>(panel);
 
@@ -450,10 +483,10 @@ function PanelEditor({
   return (
     <>
       <div className="pt-drawer-row">
-        <label>Rules</label>
+        <label>{t("panic_thermometer.settings_drawer.rules")}</label>
         {draft.rules.length === 0 ? (
           <span style={{ color: "var(--color-text-tertiary)", fontSize: 12 }}>
-            No rules
+            {t("panic_thermometer.settings_drawer.no_rules")}
           </span>
         ) : (
           draft.rules.map((r, i) => (
@@ -468,7 +501,7 @@ function PanelEditor({
               }}
             >
               <span style={{ color: "var(--color-text-tertiary)" }}>
-                {STATUS_LABEL[r.status] ?? r.status}
+                {STATUS_KEY[r.status] ? t(STATUS_KEY[r.status]) : r.status}
               </span>
               <input
                 type="text"
@@ -486,7 +519,7 @@ function PanelEditor({
       </div>
 
       <div className="pt-drawer-row">
-        <label>Streak condition</label>
+        <label>{t("panic_thermometer.settings_drawer.streak_condition")}</label>
         <input
           type="text"
           value={draft.streak_condition ?? ""}
@@ -496,7 +529,7 @@ function PanelEditor({
               streak_condition: e.target.value || null,
             })
           }
-          placeholder="(optional)"
+          placeholder={t("panic_thermometer.settings_drawer.streak_optional")}
         />
       </div>
 
@@ -510,7 +543,7 @@ function PanelEditor({
             }
             style={{ marginRight: 8 }}
           />
-          Enabled
+          {t("panic_thermometer.settings_drawer.enabled")}
         </label>
       </div>
 
@@ -521,7 +554,7 @@ function PanelEditor({
           onClick={() => void onChange(draft)}
           disabled={!dirty}
         >
-          Save
+          {t("panic_thermometer.settings_drawer.save")}
         </button>
         <button
           type="button"
@@ -529,7 +562,7 @@ function PanelEditor({
           onClick={() => setDraft(panel)}
           disabled={!dirty}
         >
-          Reset
+          {t("panic_thermometer.settings_drawer.reset")}
         </button>
       </div>
     </>
@@ -543,6 +576,7 @@ function CompositeTab({
   onFormulaTextChange,
   onTestFormula,
   formulaError,
+  t,
 }: {
   config: UserConfig | null;
   onSave: (next: Pick<UserConfig, "panel_config" | "composite_settings">) => Promise<void>;
@@ -550,6 +584,7 @@ function CompositeTab({
   onFormulaTextChange: (v: string) => void;
   onTestFormula: () => Promise<void>;
   formulaError: string | null;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }): JSX.Element {
   const [draft, setDraft] = useState<CompositeSettings | null>(
     config?.composite_settings ?? null,
@@ -562,7 +597,7 @@ function CompositeTab({
   if (!config || !draft) {
     return (
       <div style={{ color: "var(--color-text-tertiary)", fontSize: 12 }}>
-        Loading config…
+        {t("panic_thermometer.settings_drawer.loading_config")}
       </div>
     );
   }
@@ -573,7 +608,9 @@ function CompositeTab({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <div className="pt-drawer-row">
-        <label htmlFor="pt-mode">Composite mode</label>
+        <label htmlFor="pt-mode">
+          {t("panic_thermometer.settings_drawer.composite_mode")}
+        </label>
         <select
           id="pt-mode"
           value={draft.mode}
@@ -587,7 +624,9 @@ function CompositeTab({
       </div>
 
       <div className="pt-drawer-row">
-        <label htmlFor="pt-red-threshold">Red threshold</label>
+        <label htmlFor="pt-red-threshold">
+          {t("panic_thermometer.settings_drawer.red_threshold")}
+        </label>
         <input
           id="pt-red-threshold"
           type="number"
@@ -614,7 +653,7 @@ function CompositeTab({
           }
           disabled={!dirty}
         >
-          Save composite
+          {t("panic_thermometer.settings_drawer.save_composite")}
         </button>
         <button
           type="button"
@@ -622,17 +661,19 @@ function CompositeTab({
           onClick={() => setDraft(config.composite_settings)}
           disabled={!dirty}
         >
-          Reset
+          {t("panic_thermometer.settings_drawer.reset")}
         </button>
       </div>
 
       <div className="pt-drawer-row">
-        <label htmlFor="pt-formula-text">Test panel formula</label>
+        <label htmlFor="pt-formula-text">
+          {t("panic_thermometer.settings_drawer.test_formula")}
+        </label>
         <textarea
           id="pt-formula-text"
           value={formulaText}
           onChange={(e) => onFormulaTextChange(e.target.value)}
-          placeholder="e.g. streak_days >= streak_red"
+          placeholder={t("panic_thermometer.settings_drawer.formula_placeholder")}
         />
         <div className="pt-drawer-actions">
           <button
@@ -641,7 +682,7 @@ function CompositeTab({
             onClick={() => void onTestFormula()}
             disabled={!formulaText.trim()}
           >
-            Parse
+            {t("panic_thermometer.settings_drawer.parse")}
           </button>
         </div>
         {formulaError ? (

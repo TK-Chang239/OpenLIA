@@ -1,10 +1,12 @@
+import { useTranslation } from "react-i18next";
+
 import type { ReliabilityTier } from "../../lib/retail-sentiment/metric-catalog";
 
-const TIER_LABEL: Record<ReliabilityTier, string> = {
-  high: "High",
-  medium: "Med",
-  low: "Low",
-  experimental: "Exp",
+const TIER_KEY: Record<ReliabilityTier, string> = {
+  high: "retail_sentiment.reliability.high",
+  medium: "retail_sentiment.reliability.med",
+  low: "retail_sentiment.reliability.low",
+  experimental: "retail_sentiment.reliability.exp",
 };
 
 const TIER_TONE: Record<ReliabilityTier, string> = {
@@ -15,6 +17,7 @@ const TIER_TONE: Record<ReliabilityTier, string> = {
 };
 
 export function ReliabilityBadge({ tier }: { tier: ReliabilityTier }) {
+  const { t } = useTranslation();
   return (
     <span
       data-testid={`reliability-${tier}`}
@@ -29,7 +32,7 @@ export function ReliabilityBadge({ tier }: { tier: ReliabilityTier }) {
         textTransform: "uppercase",
       }}
     >
-      {TIER_LABEL[tier]}
+      {t(TIER_KEY[tier])}
     </span>
   );
 }

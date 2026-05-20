@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { MbSchedule, RecentReport } from "../../api/morning-briefing";
 import { DEMO_BRIEFING_META } from "../../lib/morning-briefing/demo-data";
@@ -27,7 +28,11 @@ function startOfDay(d: Date): Date {
   return x;
 }
 
-function dayHeading(date: Date, today: Date): string {
+function dayHeading(
+  date: Date,
+  today: Date,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): string {
   const tStart = startOfDay(today);
   const dStart = startOfDay(date);
   const diffDays = Math.round(
@@ -39,15 +44,25 @@ function dayHeading(date: Date, today: Date): string {
     day: "numeric",
     year: "numeric",
   });
-  if (diffDays === 0) return `Today — ${weekday}, ${monthDayYear}`;
-  if (diffDays === 1) return `Yesterday — ${weekday}, ${monthDayYear}`;
+  if (diffDays === 0)
+    return t("morning_briefing.archive.today_prefix", {
+      date: `${weekday}, ${monthDayYear}`,
+    });
+  if (diffDays === 1)
+    return t("morning_briefing.archive.yesterday_prefix", {
+      date: `${weekday}, ${monthDayYear}`,
+    });
   return date.toLocaleDateString(undefined, {
     month: "long",
     day: "numeric",
   });
 }
 
-function groupReports(reports: RecentReport[], today: Date): DayGroup[] {
+function groupReports(
+  reports: RecentReport[],
+  today: Date,
+  t: (key: string, opts?: Record<string, unknown>) => string,
+): DayGroup[] {
   const map = new Map<string, RecentReport[]>();
   for (const r of reports) {
     const date = new Date(r.created_at);
@@ -63,7 +78,7 @@ function groupReports(reports: RecentReport[], today: Date): DayGroup[] {
       (a, b) =>
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     );
-    out.push({ key, heading: dayHeading(date, today), reports: list });
+    out.push({ key, heading: dayHeading(date, today, t), reports: list });
   }
   out.sort((a, b) => (a.key < b.key ? 1 : -1));
   return out;
@@ -106,6 +121,7 @@ export function MBArchiveView({
   onOpen,
   onGoToSettings,
 }: MBArchiveViewProps) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(
@@ -114,7 +130,10 @@ export function MBArchiveView({
   );
 
   const today = useMemo(() => new Date(), []);
-  const groups = useMemo(() => groupReports(filtered, today), [filtered, today]);
+  const groups = useMemo(
+    () => groupReports(filtered, today, t),
+    [filtered, today, t],
+  );
 
   if (loading) {
     return (
@@ -122,7 +141,7 @@ export function MBArchiveView({
         className="text-sm"
         style={{ color: "var(--color-text-tertiary)" }}
       >
-        Loading briefings…
+        {t("morning_briefing.archive.loading")}
       </div>
     );
   }
@@ -139,14 +158,13 @@ export function MBArchiveView({
           <SunIcon size={24} />
         </div>
         <h3 className="text-[17px] font-medium m-0 text-[--color-text-primary]">
-          No reports yet
+          {t("morning_briefing.archive.empty_title")}
         </h3>
         <p
           className="text-[14px] m-0 max-w-[460px] leading-[1.55]"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Configure your sections and schedule, then generate your first
-          briefing.
+          {t("morning_briefing.archive.empty_sub")}
         </p>
         {onGoToSettings && (
           <button
@@ -155,7 +173,7 @@ export function MBArchiveView({
             className="text-sm underline mt-1"
             data-testid="mb-empty-go-to-settings"
           >
-            {"⚙ Go to Settings"}
+            {t("morning_briefing.archive.go_to_settings")}
           </button>
         )}
       </div>
@@ -187,11 +205,19 @@ export function MBArchiveView({
         className="flex items-center gap-[18px] flex-wrap pb-[18px] mb-[22px] border-b animate-feed-fade-up"
         style={{ borderColor: "var(--color-border-subtle)" }}
       >
-        <Stat label="Today" value={todayLabel} />
+        <Stat label={t("morning_briefing.archive.today_label")} value={todayLabel} />
         <Divider />
-        <Stat label="Next briefing" value={nextBriefing} mono />
+        <Stat
+          label={t("morning_briefing.archive.next_briefing_label")}
+          value={nextBriefing}
+          mono
+        />
         <Divider />
-        <Stat label="Active schedules" value={String(activeSchedules)} mono />
+        <Stat
+          label={t("morning_briefing.archive.active_schedules_label")}
+          value={String(activeSchedules)}
+          mono
+        />
         <label
           className="ml-auto inline-flex items-center gap-2 h-8 px-3 rounded-md border bg-[--color-bg-input] text-[13px] min-w-[240px]"
           style={{ borderColor: "var(--color-border-secondary)" }}
@@ -201,7 +227,7 @@ export function MBArchiveView({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search briefings…"
+            placeholder={t("morning_briefing.archive.search_placeholder")}
             className="flex-1 bg-transparent border-0 outline-0 text-[13px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] min-w-0"
             data-testid="mb-archive-search"
           />
@@ -239,7 +265,10 @@ export function MBArchiveView({
                   className="font-mono text-[10px] tracking-[0.08em]"
                   style={{ color: "var(--color-text-tertiary)" }}
                 >
-                  · {g.reports.length} report{g.reports.length === 1 ? "" : "s"}
+                  ·{" "}
+                  {t("morning_briefing.archive.reports_count", {
+                    count: g.reports.length,
+                  })}
                 </span>
               </h3>
               <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
@@ -255,7 +284,7 @@ export function MBArchiveView({
             className="text-sm py-8 text-center"
             style={{ color: "var(--color-text-tertiary)" }}
           >
-            No briefings match your search.
+            {t("morning_briefing.archive.no_match")}
           </p>
         ) : null}
       </div>

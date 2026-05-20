@@ -1,4 +1,5 @@
 import { type FC, useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   listGuardrailEvents,
   wipeGuardrailEvents,
@@ -25,6 +26,7 @@ const CATEGORIES = [
 ];
 
 export const GuardrailActivitySection: FC<Props> = ({ mode }) => {
+  const { t } = useTranslation();
   const [days, setDays] = useState(7);
   const [category, setCategory] = useState("");
   const [rows, setRows] = useState<GuardrailEvent[]>([]);
@@ -43,22 +45,22 @@ export const GuardrailActivitySection: FC<Props> = ({ mode }) => {
 
   return (
     <section>
-      <h2 className="text-base font-semibold">Guardrail activity</h2>
+      <h2 className="text-base font-semibold">{t('settings.guardrails.title')}</h2>
       <div className="mt-2 flex items-center gap-2">
         <label className="text-xs">
-          Last
+          {t('settings.guardrails.filter_last')}
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
             className="ml-1"
           >
-            <option value={1}>1d</option>
-            <option value={7}>7d</option>
-            <option value={30}>30d</option>
+            <option value={1}>{t('settings.guardrails.range_1d')}</option>
+            <option value={7}>{t('settings.guardrails.range_7d')}</option>
+            <option value={30}>{t('settings.guardrails.range_30d')}</option>
           </select>
         </label>
         <label className="text-xs">
-          Category
+          {t('settings.guardrails.filter_category')}
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
@@ -66,7 +68,7 @@ export const GuardrailActivitySection: FC<Props> = ({ mode }) => {
           >
             {CATEGORIES.map((c) => (
               <option key={c} value={c}>
-                {c || "all"}
+                {c || t('settings.guardrails.filter_all')}
               </option>
             ))}
           </select>
@@ -79,19 +81,19 @@ export const GuardrailActivitySection: FC<Props> = ({ mode }) => {
             }}
             className="ml-auto text-xs text-red-600 underline"
           >
-            Wipe all
+            {t('settings.guardrails.wipe_all')}
           </button>
         )}
       </div>
       <table className="mt-3 w-full text-xs">
         <thead className="text-slate-500">
           <tr>
-            <th className="text-left">When</th>
-            <th className="text-left">Desk</th>
-            <th className="text-left">Type</th>
-            <th className="text-left">Category</th>
-            <th className="text-left">Action</th>
-            <th className="text-left">Excerpt</th>
+            <th className="text-left">{t('settings.guardrails.col_when')}</th>
+            <th className="text-left">{t('settings.guardrails.col_desk')}</th>
+            <th className="text-left">{t('settings.guardrails.col_type')}</th>
+            <th className="text-left">{t('settings.guardrails.col_category')}</th>
+            <th className="text-left">{t('settings.guardrails.col_action')}</th>
+            <th className="text-left">{t('settings.guardrails.col_excerpt')}</th>
           </tr>
         </thead>
         <tbody>

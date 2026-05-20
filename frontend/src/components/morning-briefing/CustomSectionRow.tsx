@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { CustomSection } from "../../api/morning-briefing";
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function CustomSectionRow({ section, onChange, onRemove }: Props) {
+  const { t } = useTranslation();
   return (
     <article
       className="bg-[--color-bg-elevated] border rounded-[--radius-lg] p-4 px-5"
@@ -18,7 +20,7 @@ export function CustomSectionRow({ section, onChange, onRemove }: Props) {
       <div className="flex justify-between items-start gap-3">
         <div className="flex-1 min-w-0 flex flex-col gap-2">
           <input
-            placeholder="Section name (e.g., AI Capex Watch)"
+            placeholder={t("morning_briefing.custom_section.title_placeholder")}
             value={section.title}
             onChange={(e) => onChange({ title: e.target.value })}
             data-testid={`custom-section-title-${section.id}`}
@@ -26,7 +28,7 @@ export function CustomSectionRow({ section, onChange, onRemove }: Props) {
             style={{ borderColor: "var(--color-border-subtle)" }}
           />
           <textarea
-            placeholder="Describe what this section should cover…"
+            placeholder={t("morning_briefing.custom_section.description_placeholder")}
             value={section.description}
             onChange={(e) => onChange({ description: e.target.value })}
             data-testid={`custom-section-description-${section.id}`}
@@ -36,7 +38,7 @@ export function CustomSectionRow({ section, onChange, onRemove }: Props) {
         </div>
         <button
           type="button"
-          aria-label="Remove section"
+          aria-label={t("morning_briefing.custom_section.remove_aria")}
           onClick={onRemove}
           data-testid={`custom-section-remove-${section.id}`}
           className="inline-flex items-center justify-center h-7 w-7 rounded-md text-[--color-feedback-error] hover:bg-[rgba(224,92,48,0.08)]"

@@ -634,6 +634,7 @@ def build_report_system_prompt(
     connector_quirks: tuple[str, ...] = ("eodhd",),
     loader: PromptLoader | None = None,
     disabled_skill_ids: frozenset[str] = frozenset(),
+    language: str | None = None,
 ) -> str:
     """Render the report.system slot with the user's visible skills menu.
 
@@ -675,6 +676,7 @@ def build_report_system_prompt(
         current_date_long=current_date_long,
         search_budget=search_budget,
         connector_quirks=list(connector_quirks),
+        language=language,
     )
 
 
@@ -849,6 +851,7 @@ class ReportRunner:
         attachments: list[Attachment] | None = None,
         model_id_override: str | None = None,
         disabled_skill_ids: frozenset[str] = frozenset(),
+        language: str | None = None,
     ) -> AsyncIterator[SseEvent]:
         report_id = self._report_id_factory()
 
@@ -956,6 +959,7 @@ class ReportRunner:
             search_budget=search_budget,
             loader=self._prompts,
             disabled_skill_ids=disabled_skill_ids,
+            language=language,
         )
         tools = await self._tools.build(department_id, has_web_search=True)
         if using_user_template:

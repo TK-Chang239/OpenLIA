@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { fetchRepoFacets, saveToRepo, unsaveFromRepo, type RepoFacets, type RepoRow } from "../api/repo";
 import { deleteReport } from "../api/reports";
 import { DeleteReportDialog } from "../components/report/DeleteReportDialog";
@@ -59,6 +60,7 @@ function formatDate(iso: string): string {
 }
 
 export default function Repository(): JSX.Element {
+  const { t } = useTranslation();
   const list = useRepoList();
   const { open: openViewer } = useFileViewer();
   const savedReports = useSavedReportsOptional();
@@ -124,7 +126,7 @@ export default function Repository(): JSX.Element {
       handleOpen(row);
     } else {
       toast.push({
-        title: "Report not in your repository",
+        title: t("repository.report_not_in_repo"),
         tone: "info",
         durationMs: 4000,
       });
@@ -132,7 +134,7 @@ export default function Repository(): JSX.Element {
     const next = new URLSearchParams(searchParams);
     next.delete("open");
     setSearchParams(next, { replace: true });
-  }, [openParam, list.loading, list.rows, toast, searchParams, setSearchParams]);
+  }, [openParam, list.loading, list.rows, toast, searchParams, setSearchParams, t]);
 
   const confirmDelete = async () => {
     if (!pendingDelete) return;
@@ -144,13 +146,13 @@ export default function Repository(): JSX.Element {
       await deleteReport(row.report_id);
       savedReports?.markUnsaved(row.report_id);
       toast.push({
-        title: "Report deleted permanently.",
+        title: t("repository.report_deleted"),
         durationMs: 3000,
       });
     } catch {
       list.restoreRow(row, removedIndex);
       toast.push({
-        title: "Failed to delete. Try again.",
+        title: t("repository.delete_failed"),
         tone: "error",
         durationMs: 4000,
       });
@@ -167,19 +169,19 @@ export default function Repository(): JSX.Element {
       await unsaveFromRepo(row.report_id);
       savedReports?.markUnsaved(row.report_id);
       toast.push({
-        title: "Removed from Repository",
+        title: t("repository.removed_from_repo"),
         durationMs: 4000,
         undo: {
-          label: "Undo",
+          label: t("repository.undo"),
           onClick: async () => {
             try {
               await saveToRepo(row.report_id);
               savedReports?.markSaved(row.report_id);
               list.restoreRow(row, removedIndex);
-              toast.push({ title: "Report restored.", tone: "success", durationMs: 2000 });
+              toast.push({ title: t("repository.report_restored"), tone: "success", durationMs: 2000 });
             } catch {
               toast.push({
-                title: "Failed to restore. Try again.",
+                title: t("repository.restore_failed"),
                 tone: "error",
                 durationMs: 4000,
               });
@@ -190,7 +192,7 @@ export default function Repository(): JSX.Element {
     } catch {
       list.restoreRow(row, removedIndex);
       toast.push({
-        title: "Failed to remove. Try again.",
+        title: t("repository.remove_failed"),
         tone: "error",
         durationMs: 4000,
       });
@@ -200,14 +202,14 @@ export default function Repository(): JSX.Element {
   const showSkeleton = list.loading && list.rows.length === 0;
   const showEmpty = !list.loading && list.rows.length === 0;
   const emptyMode: "no-saved" | "no-match" = filtersActive ? "no-match" : "no-saved";
-  const totalLabel = facets.total === 1 ? "SAVED REPORT" : "SAVED REPORTS";
+  const totalLabel = facets.total === 1 ? t("repository.saved_report_one") : t("repository.saved_report_other");
 
   return (
     <div className="flex h-full flex-col bg-[--color-bg-base]">
       <Reveal delay={0}>
         <header className="flex h-[56px] flex-shrink-0 items-center border-b border-[--color-border-subtle] bg-[--color-bg-base] px-6">
           <h1 className="whitespace-nowrap text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
-            Repository
+            {t("repository.title")}
             <span className="ml-3 font-mono text-[10px] font-normal tracking-[0.1em] text-[--color-text-tertiary]">
               {facets.total} {totalLabel}
             </span>
@@ -266,9 +268,13 @@ export default function Repository(): JSX.Element {
         <div className="flex items-center gap-3 px-6 pb-[6px] pt-[10px]">
           <SortDropdown value={list.params.sort} onChange={(s) => list.setParams({ sort: s })} />
           <span className="ml-auto whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-            Showing {list.rows.length} of {facets.total}
+            {t("repository.showing", { shown: list.rows.length, total: facets.total })}
             {activeFilterCount > 0
-              ? ` · ${activeFilterCount} ${activeFilterCount === 1 ? "filter" : "filters"} applied`
+              ? ` · ${
+                  activeFilterCount === 1
+                    ? t("repository.filter_applied_one", { count: activeFilterCount })
+                    : t("repository.filter_applied_other", { count: activeFilterCount })
+                }`
               : ""}
           </span>
         </div>
@@ -317,12 +323,12 @@ export default function Repository(): JSX.Element {
             className="py-[18px] pt-[18px] text-center font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]"
             role="status"
           >
-            — Loading more · {list.rows.length} of {facets.total} shown —
+            {t("repository.loading_more", { shown: list.rows.length, total: facets.total })}
           </div>
         ) : null}
         {list.rows.length > 0 && !list.hasMore && !list.loading ? (
           <div className="py-[18px] pt-[18px] text-center font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            — End of results · {list.rows.length} shown —
+            {t("repository.end_of_results", { shown: list.rows.length })}
           </div>
         ) : null}
       </div>

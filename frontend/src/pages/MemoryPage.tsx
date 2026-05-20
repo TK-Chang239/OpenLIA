@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { JSX } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ProposalsList } from '../components/memory/ProposalsList';
 import { ConstructsList } from '../components/memory/ConstructsList';
 
@@ -7,23 +8,25 @@ type Tab = 'pending' | 'confirmed';
 
 interface TabDef {
   id: Tab;
-  label: string;
+  labelKey: string;
 }
 
 const TABS: readonly TabDef[] = [
-  { id: 'pending', label: 'Pending proposals' },
-  { id: 'confirmed', label: 'Confirmed beliefs' },
+  { id: 'pending', labelKey: 'memory_page.pending_proposals' },
+  { id: 'confirmed', labelKey: 'memory_page.confirmed_beliefs' },
 ];
 
 export function MemoryPage(): JSX.Element {
+  const { t } = useTranslation();
   const [active, setActive] = useState<Tab>('pending');
+  const tabs = useMemo(() => TABS.map((tab) => ({ id: tab.id, label: t(tab.labelKey) })), [t]);
 
   return (
     <div className="flex h-full flex-col">
       <header className="flex h-[52px] flex-shrink-0 items-center gap-3 border-b border-border-subtle px-6">
-        <h1 className="text-[20px] font-semibold tracking-tight text-text-primary">Memory</h1>
+        <h1 className="text-[20px] font-semibold tracking-tight text-text-primary">{t('memory_page.title')}</h1>
         <span className="ml-3 border-l border-border-subtle pl-3 font-mono text-[10px] uppercase tracking-wide text-text-tertiary">
-          Cross-session beliefs
+          {t('memory_page.subtitle')}
         </span>
       </header>
 
@@ -31,10 +34,10 @@ export function MemoryPage(): JSX.Element {
         <div className="mx-auto max-w-3xl space-y-6">
           <div
             role="tablist"
-            aria-label="Memory sections"
+            aria-label={t('memory_page.sections_aria')}
             className="flex gap-2 border-b border-border-subtle"
           >
-            {TABS.map((t) => {
+            {tabs.map((t) => {
               const isActive = active === t.id;
               return (
                 <button

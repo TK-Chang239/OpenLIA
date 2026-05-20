@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { mapTransportError } from "../../api/errors";
@@ -37,6 +38,7 @@ interface ServerError {
 }
 
 export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
+  const { t } = useTranslation();
   const { login } = useAuth();
   const [form, setForm] = useState<FormState>(INITIAL_STATE);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -62,7 +64,7 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
     setBanner(null);
 
     if (!EMAIL_RE.test(form.email)) {
-      setFieldErrors({ email: "Enter a valid email address." });
+      setFieldErrors({ email: t("auth.errors.invalid_email") });
       return;
     }
 
@@ -98,24 +100,24 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
       const minutes = Math.max(1, Math.ceil(seconds / 60));
       const banner =
         seconds > 0
-          ? `Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`
-          : (body.message ?? "Account is temporarily locked.");
+          ? t("auth.errors.try_again_in_minutes", { count: minutes })
+          : (body.message ?? t("auth.errors.account_locked_default"));
       setBanner({ message: banner, variant: "warning" });
       return;
     }
     if (body.code === "rate_limited") {
       setBanner({
-        message: body.message ?? "Too many attempts. Please wait.",
+        message: body.message ?? t("auth.errors.rate_limited"),
         variant: "warning",
       });
       return;
     }
     if (body.field) {
-      setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+      setFieldErrors({ [body.field]: body.message ?? t("auth.errors.invalid_value") });
       return;
     }
     setBanner({
-      message: body.message ?? "Email or password is incorrect.",
+      message: body.message ?? t("auth.errors.login_incorrect"),
       variant: "error",
     });
   }
@@ -124,7 +126,7 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
     <form onSubmit={onSubmit} noValidate>
       {banner && <Banner variant={banner.variant} message={banner.message} />}
 
-      <FormField id="email" label="Email" error={fieldErrors.email}>
+      <FormField id="email" label={t("auth.login.email_label")} error={fieldErrors.email}>
         <input
           id="email"
           type="email"
@@ -141,7 +143,7 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
         />
       </FormField>
 
-      <FormField id="password" label="Password" error={fieldErrors.password}>
+      <FormField id="password" label={t("auth.login.password_label")} error={fieldErrors.password}>
         <PasswordInput
           id="password"
           value={form.password}
@@ -166,7 +168,7 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
           htmlFor="persistent"
           className="text-sm text-text-secondary cursor-pointer"
         >
-          Keep me logged in
+          {t("auth.login.keep_me_signed_in")}
         </label>
       </div>
 
@@ -177,9 +179,9 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
         className="w-full h-10 rounded-md bg-accent-primary text-white text-sm font-medium flex items-center justify-center hover:bg-accent-hover transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {submitting ? (
-          <Loader2 size={16} className="animate-spin" aria-label="Loading" />
+          <Loader2 size={16} className="animate-spin" aria-label={t("auth.loading_aria")} />
         ) : (
-          "Log In"
+          t("auth.login.submit")
         )}
       </button>
 
@@ -188,18 +190,18 @@ export function LoginForm({ inviteToken, policyMode }: LoginFormProps) {
           to="/forgot-password"
           className="text-sm text-accent-primary hover:text-accent-hover"
         >
-          Forgot password?
+          {t("auth.login.forgot_password")}
         </Link>
       </div>
 
       {inviteToken && policyMode !== "closed" && (
         <p className="mt-6 text-sm text-text-secondary text-center">
-          Don&apos;t have an account?{" "}
+          {t("auth.login.dont_have_account")}{" "}
           <Link
             to={`/register?invite=${encodeURIComponent(inviteToken)}`}
             className="text-accent-primary hover:text-accent-hover"
           >
-            Sign up
+            {t("auth.login.sign_up_link")}
           </Link>
         </p>
       )}

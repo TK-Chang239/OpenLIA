@@ -2,23 +2,19 @@ import { useEffect, useState } from "react";
 import type { JSX } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { ChevronDown, Ruler } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { patchSession, type ResponseLength } from "../../api/chat";
 
-const OPTIONS: ReadonlyArray<{
-  value: ResponseLength;
-  label: string;
-  hint: string;
-}> = [
-  { value: "concise", label: "Concise", hint: "1–3 sentences" },
-  { value: "normal", label: "Normal", hint: "Default discipline" },
-  { value: "detailed", label: "Detailed", hint: "Headings, full reasoning" },
-];
-
-const LABEL: Record<ResponseLength, string> = {
-  concise: "Concise",
-  normal: "Normal",
-  detailed: "Detailed",
+const LABEL_KEY: Record<ResponseLength, string> = {
+  concise: "chat.response_length_concise",
+  normal: "chat.response_length_normal",
+  detailed: "chat.response_length_detailed",
+};
+const HINT_KEY: Record<ResponseLength, string> = {
+  concise: "chat.response_length_concise_hint",
+  normal: "chat.response_length_normal_hint",
+  detailed: "chat.response_length_detailed_hint",
 };
 
 interface Props {
@@ -34,8 +30,15 @@ export function ResponseLengthPicker({
   sessionId,
   initialValue,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const [value, setValue] = useState<ResponseLength>(initialValue ?? "normal");
   const [busy, setBusy] = useState(false);
+
+  const OPTIONS: ReadonlyArray<{ value: ResponseLength; label: string; hint: string }> = [
+    { value: "concise", label: t(LABEL_KEY.concise), hint: t(HINT_KEY.concise) },
+    { value: "normal", label: t(LABEL_KEY.normal), hint: t(HINT_KEY.normal) },
+    { value: "detailed", label: t(LABEL_KEY.detailed), hint: t(HINT_KEY.detailed) },
+  ];
 
   // Sync from the parent when the session changes (e.g. user switches chats)
   // or when the initial GET resolves after mount with a non-default choice.
@@ -62,7 +65,7 @@ export function ResponseLengthPicker({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          aria-label="Choose response length"
+          aria-label={t("chat.response_length_aria")}
           disabled={busy}
           className="inline-flex items-center gap-[6px] rounded-sm border px-2 py-[4px] font-mono text-[10px] uppercase transition-colors duration-normal ease-out disabled:opacity-60 hover:border-border-strong hover:text-text-primary"
           style={{
@@ -73,7 +76,7 @@ export function ResponseLengthPicker({
           }}
         >
           <Ruler size={10} strokeWidth={1.5} aria-hidden />
-          <span className="truncate max-w-[100px]">{LABEL[value]}</span>
+          <span className="truncate max-w-[100px]">{t(LABEL_KEY[value])}</span>
           <ChevronDown size={10} strokeWidth={1.5} aria-hidden />
         </button>
       </DropdownMenu.Trigger>
@@ -95,7 +98,7 @@ export function ResponseLengthPicker({
               color: "var(--color-text-tertiary)",
             }}
           >
-            Response length
+            {t("chat.response_length_title")}
           </DropdownMenu.Label>
           {OPTIONS.map((opt) => {
             const active = opt.value === value;

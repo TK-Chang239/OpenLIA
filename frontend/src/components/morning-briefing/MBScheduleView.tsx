@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type {
   MbSchedule,
@@ -28,6 +29,7 @@ export function MBScheduleView({
   onUpdateSchedule,
   onRemoveSchedule,
 }: Props) {
+  const { t } = useTranslation();
   const schedules = schedulesProp ?? [];
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -52,9 +54,15 @@ export function MBScheduleView({
       setModalOpen(false);
       setEditingId(null);
       setInitial(undefined);
-      setToast({ kind: "success", text: "Schedule saved." });
+      setToast({
+        kind: "success",
+        text: t("morning_briefing.schedule_view.saved_toast"),
+      });
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Schedule save failed.";
+      const text =
+        err instanceof Error
+          ? err.message
+          : t("morning_briefing.schedule_view.save_failed");
       setToast({ kind: "error", text });
     }
   };
@@ -73,9 +81,15 @@ export function MBScheduleView({
   const deleteSchedule = async (id: string) => {
     try {
       await onRemoveSchedule(id);
-      setToast({ kind: "success", text: "Schedule removed." });
+      setToast({
+        kind: "success",
+        text: t("morning_briefing.schedule_view.removed_toast"),
+      });
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Remove failed.";
+      const text =
+        err instanceof Error
+          ? err.message
+          : t("morning_briefing.schedule_view.remove_failed");
       setToast({ kind: "error", text });
     }
   };
@@ -94,7 +108,7 @@ export function MBScheduleView({
       <section>
         <div className="flex items-center justify-between gap-3 mb-3">
           <span className="font-mono text-[11px] font-medium tracking-[0.14em] uppercase text-[--color-text-secondary]">
-            Active Schedules
+            {t("morning_briefing.schedule_view.active_schedules")}
             {schedules.length > 0 ? (
               <span
                 aria-hidden="true"
@@ -116,13 +130,11 @@ export function MBScheduleView({
             style={{ borderColor: "var(--color-border-secondary)" }}
           >
             <Plus size={13} strokeWidth={1.8} />
-            Add Schedule
+            {t("morning_briefing.schedule_view.add_schedule")}
           </button>
         </div>
         <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
-          Set when scheduled briefings are generated. Each schedule fires
-          independently and uses your saved Settings (length, sections, custom
-          sections, model).
+          {t("morning_briefing.schedule_view.description")}
         </p>
         {loading ? (
           <div
@@ -132,7 +144,7 @@ export function MBScheduleView({
               color: "var(--color-text-tertiary)",
             }}
           >
-            Loading schedules…
+            {t("morning_briefing.schedule_view.loading")}
           </div>
         ) : schedules.length > 0 ? (
           <div
@@ -156,8 +168,7 @@ export function MBScheduleView({
               color: "var(--color-text-tertiary)",
             }}
           >
-            No schedules yet — Morning Briefings only run when triggered from
-            the Run Now tab.
+            {t("morning_briefing.schedule_view.empty")}
           </div>
         )}
       </section>

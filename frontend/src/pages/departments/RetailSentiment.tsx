@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { runSnapshot } from "../../api/retail-sentiment";
 import { EvidenceTab } from "../../components/retail-sentiment/EvidenceTab";
@@ -18,17 +19,17 @@ import { useRsSpikes } from "../../hooks/useRsSpikes";
 
 type TabId = "overview" | "metrics" | "evidence" | "insights";
 
-const TABS: Array<{ id: TabId; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "metrics", label: "Metrics Deep Dive" },
-  { id: "evidence", label: "Evidence" },
-  { id: "insights", label: "Insights" },
+const TAB_I18N: Array<{ id: TabId; key: string }> = [
+  { id: "overview", key: "retail_sentiment.tab_overview" },
+  { id: "metrics", key: "retail_sentiment.tab_metrics" },
+  { id: "evidence", key: "retail_sentiment.tab_evidence" },
+  { id: "insights", key: "retail_sentiment.tab_insights" },
 ];
 
-const REFRESH_OPTIONS: Array<{ value: number; label: string }> = [
-  { value: 0, label: "Off" },
-  { value: 30, label: "30 min" },
-  { value: 60, label: "1 hr" },
+const REFRESH_OPTION_KEYS: Array<{ value: number; key: string }> = [
+  { value: 0, key: "retail_sentiment.off" },
+  { value: 30, key: "retail_sentiment.min_30" },
+  { value: 60, key: "retail_sentiment.hr_1" },
 ];
 
 function tabFromConfig(active: string | undefined): TabId {
@@ -45,6 +46,15 @@ const TOP_BTN =
   "inline-flex items-center gap-1.5 h-8 px-3 rounded-md border bg-transparent text-[12.5px] font-medium transition-colors duration-[--duration-normal] ease-[--ease-out] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] hover:border-[--color-border-strong]";
 
 export default function RetailSentiment(): JSX.Element {
+  const { t } = useTranslation();
+  const TABS = useMemo(
+    () => TAB_I18N.map((tab) => ({ id: tab.id, label: t(tab.key) })),
+    [t],
+  );
+  const REFRESH_OPTIONS = useMemo(
+    () => REFRESH_OPTION_KEYS.map((o) => ({ value: o.value, label: t(o.key) })),
+    [t],
+  );
   const { config, save: saveConfig } = useRsConfig();
   const refreshInterval = config?.refresh_interval_minutes ?? 0;
   const { dashboard, refresh: refreshDashboard } = useRsDashboard(
@@ -98,7 +108,7 @@ export default function RetailSentiment(): JSX.Element {
 
   const onRun = useCallback(async () => {
     if (tickers.length === 0) {
-      setError("Add at least one ticker before running a snapshot.");
+      setError(t("retail_sentiment.add_ticker_first"));
       return;
     }
     setBusy(true);
@@ -112,7 +122,7 @@ export default function RetailSentiment(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [tickers, refreshDashboard, refreshSpikes]);
+  }, [tickers, refreshDashboard, refreshSpikes, t]);
 
   const onChangeRefresh = useCallback(
     (mins: number) => {
@@ -159,7 +169,7 @@ export default function RetailSentiment(): JSX.Element {
             letterSpacing: "-0.01em",
           }}
         >
-          Retail Sentiment
+          {t("retail_sentiment.title")}
         </span>
         <span
           className="font-mono"
@@ -173,14 +183,14 @@ export default function RetailSentiment(): JSX.Element {
             borderLeft: "1px solid var(--color-border-subtle)",
           }}
         >
-          Department ·{" "}
+          {t("retail_sentiment.department_label")} ·{" "}
           <strong
             style={{
               color: "var(--color-feedback-success)",
               fontWeight: 500,
             }}
           >
-            Active
+            {t("retail_sentiment.status_active")}
           </strong>
         </span>
         <div className="flex-1" />
@@ -210,7 +220,7 @@ export default function RetailSentiment(): JSX.Element {
               }}
               aria-hidden="true"
             />
-            Streaming · {sourceCount} sources
+            {t("retail_sentiment.streaming_sources", { count: sourceCount })}
           </span>
         ) : null}
         <label className="inline-flex items-center gap-2">
@@ -218,7 +228,7 @@ export default function RetailSentiment(): JSX.Element {
             className="rs-mono-label"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            Auto-refresh
+            {t("retail_sentiment.auto_refresh")}
           </span>
           <select
             value={refreshInterval}
@@ -245,7 +255,7 @@ export default function RetailSentiment(): JSX.Element {
             color: "var(--color-accent-on)",
           }}
         >
-          {busy ? "Running…" : "Run snapshot"}
+          {busy ? t("retail_sentiment.running") : t("retail_sentiment.run_snapshot")}
         </button>
         <button
           type="button"
@@ -256,7 +266,7 @@ export default function RetailSentiment(): JSX.Element {
             color: "var(--color-text-secondary)",
           }}
         >
-          Schedule
+          {t("retail_sentiment.schedule")}
         </button>
         <button
           type="button"
@@ -267,7 +277,7 @@ export default function RetailSentiment(): JSX.Element {
             color: "var(--color-text-secondary)",
           }}
         >
-          Settings
+          {t("retail_sentiment.settings")}
         </button>
       </header>
 
@@ -325,9 +335,7 @@ export default function RetailSentiment(): JSX.Element {
           onAdd={onAddTicker}
           onRemove={onRemoveTicker}
           onImportFromPortfolio={() => {
-            setError(
-              "Portfolio import is wired but not yet connected to the live portfolio API.",
-            );
+            setError(t("retail_sentiment.portfolio_import_pending"));
           }}
         />
       </div>
@@ -371,7 +379,7 @@ export default function RetailSentiment(): JSX.Element {
                   style={{ borderRadius: 12 }}
                   data-testid="overview-empty"
                 >
-                  <p className="rs-mono-label">No snapshot for {selected}</p>
+                  <p className="rs-mono-label">{t("retail_sentiment.no_snapshot_for", { ticker: selected })}</p>
                   <p
                     className="m-0 mt-2"
                     style={{
@@ -379,7 +387,7 @@ export default function RetailSentiment(): JSX.Element {
                       fontSize: 13.5,
                     }}
                   >
-                    Run a snapshot from the toolbar above to populate this view.
+                    {t("retail_sentiment.run_snapshot_hint")}
                   </p>
                 </div>
               )

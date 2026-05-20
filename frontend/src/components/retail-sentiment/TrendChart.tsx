@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface Point {
   x: number | string;
   y: number;
@@ -18,15 +20,17 @@ export function TrendChart({
   data,
   height = 80,
   baseline,
-  ariaLabel = "trend",
+  ariaLabel,
 }: Props) {
+  const { t } = useTranslation();
+  const label = ariaLabel ?? t("retail_sentiment.trend_chart.aria");
   if (data.length === 0) {
     return (
       <div
         className="text-xs text-[--color-text-secondary]"
         data-testid="trend-empty"
       >
-        No history.
+        {t("retail_sentiment.trend_chart.empty")}
       </div>
     );
   }
@@ -51,7 +55,7 @@ export function TrendChart({
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={ariaLabel}
+      aria-label={label}
       data-testid="trend-chart"
     >
       {baseline !== null && baseline !== undefined ? (

@@ -1,6 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { JSX, ReactNode } from "react";
 import { ArrowUp, Paperclip, Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PendingAttachmentChip } from "./PendingAttachmentChip";
 
 interface Props {
@@ -20,7 +21,6 @@ interface Props {
 }
 
 const MAX_HEIGHT = 120;
-const HELPER_COPY = "Enter to send · Shift+Enter for new line";
 
 // Mirrors the server-side allowlist + caps in
 // ``openlia_server.services.attachments``. Client-side validation here is
@@ -43,16 +43,6 @@ const ALLOWED_MIMES = new Set([
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ]);
 
-function _validateFile(f: File): string | null {
-  if (f.size > PER_FILE_MAX_BYTES) {
-    return `${f.name}: too large (max 25 MB)`;
-  }
-  if (!ALLOWED_MIMES.has(f.type)) {
-    return `${f.name}: file type not supported`;
-  }
-  return null;
-}
-
 export function ChatInput({
   onSend,
   onStop,
@@ -63,6 +53,7 @@ export function ChatInput({
   disabled,
   disabledReason,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   if (disabled) {
     return (
       <div className="flex-shrink-0 px-6 py-4 bg-bg-base">
@@ -72,12 +63,21 @@ export function ChatInput({
             aria-label={disabledReason}
             role="status"
           >
-            {disabledReason ?? "Chat is unavailable."}
+            {disabledReason ?? t("chat.chat_unavailable")}
           </div>
         </div>
       </div>
     );
   }
+  const validateFile = (f: File): string | null => {
+    if (f.size > PER_FILE_MAX_BYTES) {
+      return t("chat.attachment_too_large", { name: f.name });
+    }
+    if (!ALLOWED_MIMES.has(f.type)) {
+      return t("chat.attachment_unsupported", { name: f.name });
+    }
+    return null;
+  };
   const [value, setValue] = useState(initialValue ?? "");
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentErrors, setAttachmentErrors] = useState<string[]>([]);
@@ -130,7 +130,7 @@ export function ChatInput({
     const accepted: File[] = [];
     const errors: string[] = [];
     for (const f of incoming) {
-      const err = _validateFile(f);
+      const err = validateFile(f);
       if (err) {
         errors.push(err);
       } else {
@@ -141,7 +141,7 @@ export function ChatInput({
       const combined = [...prev, ...accepted];
       if (combined.length > PER_MESSAGE_MAX_FILES) {
         errors.push(
-          `only ${PER_MESSAGE_MAX_FILES} files per message — extra files ignored`,
+          t("chat.attachment_limit", { limit: PER_MESSAGE_MAX_FILES }),
         );
         return combined.slice(0, PER_MESSAGE_MAX_FILES);
       }
@@ -163,7 +163,7 @@ export function ChatInput({
           <textarea
             ref={taRef}
             id={`${helperId}-textarea`}
-            aria-label="Chat message"
+            aria-label={t("chat.aria_chat_message")}
             aria-describedby={helperId}
             placeholder={placeholder}
             rows={1}
@@ -199,7 +199,7 @@ export function ChatInput({
           <div className="flex items-center gap-2 px-2 py-[6px] pl-[10px]">
             <button
               type="button"
-              aria-label="Attach files"
+              aria-label={t("chat.aria_attach_files")}
               onClick={() => fileInputRef.current?.click()}
               className="inline-flex items-center justify-center rounded-md p-[6px] text-text-secondary transition-colors duration-normal ease-out hover:bg-surface-hover hover:text-text-primary"
             >
@@ -219,7 +219,7 @@ export function ChatInput({
             {isStreaming ? (
               <button
                 type="button"
-                aria-label="Stop generating"
+                aria-label={t("chat.aria_stop_generating")}
                 onClick={onStop}
                 className="inline-flex items-center justify-center rounded-md p-[9px] text-text-secondary transition-colors duration-normal ease-out hover:bg-surface-hover"
               >
@@ -228,7 +228,7 @@ export function ChatInput({
             ) : (
               <button
                 type="button"
-                aria-label="Send"
+                aria-label={t("chat.aria_send")}
                 onClick={submit}
                 disabled={value.trim().length === 0 && attachments.length === 0}
                 className="inline-flex items-center justify-center rounded-md p-[9px] transition-colors duration-normal ease-out hover:bg-accent-hover active:scale-[0.96] disabled:cursor-not-allowed disabled:opacity-40"
@@ -246,7 +246,7 @@ export function ChatInput({
           id={helperId}
           className="mt-2 text-xs text-[--color-text-tertiary] text-center select-none"
         >
-          {HELPER_COPY}
+          {t("chat.input_helper")}
         </p>
       </div>
     </div>

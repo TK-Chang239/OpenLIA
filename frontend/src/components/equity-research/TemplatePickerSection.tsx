@@ -12,6 +12,8 @@ import {
   X,
 } from "lucide-react";
 import { type JSX, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import {
   type ErTemplate,
@@ -25,16 +27,16 @@ import {
   uploadErTemplate,
 } from "../../api/equity-research";
 
-const MODE_LABELS: Record<ReportMode, string> = {
-  stock_initiation: "Stock Initiation",
-  stock_update: "Stock Update",
-  sector_research: "Sector Research",
+const MODE_KEY: Record<ReportMode, string> = {
+  stock_initiation: "equity_research.mode_stock_initiation",
+  stock_update: "equity_research.mode_stock_update",
+  sector_research: "equity_research.mode_sector_research",
 };
 
-const MODE_SUBLABELS: Record<ReportMode, string> = {
-  stock_initiation: "Full coverage initiation report",
-  stock_update: "Post-event or earnings update",
-  sector_research: "Industry-wide thematic report",
+const MODE_SUBKEY: Record<ReportMode, string> = {
+  stock_initiation: "equity_research.mode_sub_stock_initiation",
+  stock_update: "equity_research.mode_sub_stock_update",
+  sector_research: "equity_research.mode_sub_sector_research",
 };
 
 const ALL_MODES: ReportMode[] = [
@@ -84,6 +86,7 @@ export function TemplatePickerSection({
   isAdmin,
   onActiveTemplateChange,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const [templates, setTemplates] = useState<ErTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -204,11 +207,7 @@ export function TemplatePickerSection({
   };
 
   const handleDelete = async (id: string) => {
-    if (
-      !window.confirm(
-        "Delete this template? Anyone currently using it will revert to Default.",
-      )
-    ) {
+    if (!window.confirm(t("equity_research.template.confirm_delete"))) {
       return;
     }
     setBusy(true);
@@ -251,9 +250,9 @@ export function TemplatePickerSection({
           id="er-template-section"
           className="block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]"
         >
-          Report Template ·{" "}
+          {t("equity_research.template.section_label")} ·{" "}
           <strong className="font-medium normal-case tracking-normal text-[--color-text-primary]">
-            {MODE_LABELS[mode]}
+            {t(MODE_KEY[mode])}
           </strong>
         </span>
       </div>
@@ -270,7 +269,7 @@ export function TemplatePickerSection({
           <button
             type="button"
             onClick={() => setError(null)}
-            aria-label="Dismiss error"
+            aria-label={t("equity_research.template.dismiss_error_aria")}
             className="text-[--color-feedback-danger] opacity-60 hover:opacity-100"
           >
             <X size={11} strokeWidth={2} />
@@ -291,6 +290,7 @@ export function TemplatePickerSection({
           onEdit={startEdit}
           onDelete={handleDelete}
           onUploadClick={() => fileInputRef.current?.click()}
+          t={t}
         />
       ) : null}
 
@@ -304,6 +304,7 @@ export function TemplatePickerSection({
           onSubmit={submitUpload}
           onCancel={cancelConfig}
           busy={busy}
+          t={t}
         />
       ) : null}
 
@@ -317,6 +318,7 @@ export function TemplatePickerSection({
           onSubmit={submitEdit}
           onCancel={cancelConfig}
           busy={busy}
+          t={t}
         />
       ) : null}
 
@@ -337,6 +339,7 @@ export function TemplatePickerSection({
         name={preview?.name ?? ""}
         text={preview?.text ?? ""}
         onClose={() => setPreview(null)}
+        t={t}
       />
     </section>
   );
@@ -356,6 +359,7 @@ function ListView({
   onEdit,
   onDelete,
   onUploadClick,
+  t,
 }: {
   loading: boolean;
   compatible: ErTemplate[];
@@ -368,27 +372,29 @@ function ListView({
   onEdit: (t: ErTemplate) => void;
   onDelete: (id: string) => void;
   onUploadClick: () => void;
+  t: TFunction;
 }): JSX.Element {
   return (
-    <div role="radiogroup" aria-label="Template choice" className="flex flex-col">
+    <div role="radiogroup" aria-label={t("equity_research.template.choice_aria")} className="flex flex-col">
       <div className="flex flex-col gap-[8px]">
-        <DefaultCard checked={defaultSelected} onSelect={() => onSelect("default")} />
+        <DefaultCard checked={defaultSelected} onSelect={() => onSelect("default")} t={t} />
         {loading ? (
           <div className="flex items-center gap-[8px] rounded-[9px] border border-dashed border-[--color-border-subtle] bg-transparent px-[14px] py-[12px] font-mono text-[10.5px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
             <span className="inline-block h-1 w-1 animate-pulse rounded-full bg-[--color-text-tertiary]" />
-            Loading templates
+            {t("equity_research.template.loading")}
           </div>
         ) : (
-          compatible.map((t) => (
+          compatible.map((tpl) => (
             <TemplateCard
-              key={t.id}
-              template={t}
-              checked={selectedId === t.id}
-              canMutate={t.owner_scope === "user" || isAdmin}
-              onSelect={() => onSelect(t.id)}
-              onPreview={() => onPreview(t)}
-              onEdit={() => onEdit(t)}
-              onDelete={() => onDelete(t.id)}
+              key={tpl.id}
+              template={tpl}
+              checked={selectedId === tpl.id}
+              canMutate={tpl.owner_scope === "user" || isAdmin}
+              onSelect={() => onSelect(tpl.id)}
+              onPreview={() => onPreview(tpl)}
+              onEdit={() => onEdit(tpl)}
+              onDelete={() => onDelete(tpl.id)}
+              t={t}
             />
           ))
         )}
@@ -396,16 +402,15 @@ function ListView({
 
       {!loading && compatible.length === 0 ? (
         <p className="px-[4px] pb-[4px] pt-[14px] text-[12.5px] italic leading-[1.5] text-[--color-text-tertiary]">
-          No custom templates yet for this mode. Upload one to apply your firm's
-          house style.
+          {t("equity_research.template.empty_hint")}
         </p>
       ) : null}
 
-      <DropZone onClick={onUploadClick} />
+      <DropZone onClick={onUploadClick} t={t} />
 
       {activeTemplate ? (
         <div className="mt-[14px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-          Active: <span className="text-[--color-text-secondary]">{activeTemplate.name}</span>
+          {t("equity_research.template.active_prefix")} <span className="text-[--color-text-secondary]">{activeTemplate.name}</span>
         </div>
       ) : null}
     </div>
@@ -417,9 +422,11 @@ function ListView({
 function DefaultCard({
   checked,
   onSelect,
+  t,
 }: {
   checked: boolean;
   onSelect: () => void;
+  t: TFunction;
 }): JSX.Element {
   return (
     <button
@@ -440,11 +447,11 @@ function DefaultCard({
       </IconTile>
       <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
         <span className="flex items-center gap-[8px] text-[13.5px] font-medium text-[--color-text-primary]">
-          Default
-          <PillBadge tone="neutral">Built-in</PillBadge>
+          {t("equity_research.template.default_label")}
+          <PillBadge tone="neutral">{t("equity_research.template.default_builtin")}</PillBadge>
         </span>
         <span className="font-mono text-[10.5px] tracking-[0.02em] text-[--color-text-tertiary]">
-          OpenLia framework · section toggles below
+          {t("equity_research.template.default_sub")}
         </span>
       </span>
     </button>
@@ -454,13 +461,14 @@ function DefaultCard({
 /* ──────────────────────────── template card ────────────────────────── */
 
 function TemplateCard({
-  template: t,
+  template: tpl,
   checked,
   canMutate,
   onSelect,
   onPreview,
   onEdit,
   onDelete,
+  t,
 }: {
   template: ErTemplate;
   checked: boolean;
@@ -469,10 +477,11 @@ function TemplateCard({
   onPreview: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  t: TFunction;
 }): JSX.Element {
   const formatLabel =
-    FORMAT_LABEL[t.raw_mime] ?? t.raw_mime.split("/").pop()?.toUpperCase() ?? "FILE";
-  const isGlobal = t.owner_scope === "global";
+    FORMAT_LABEL[tpl.raw_mime] ?? tpl.raw_mime.split("/").pop()?.toUpperCase() ?? "FILE";
+  const isGlobal = tpl.owner_scope === "global";
   return (
     <div
       className={[
@@ -496,10 +505,12 @@ function TemplateCard({
         <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
           <span className="flex min-w-0 items-center gap-[8px]">
             <span className="truncate text-[13.5px] font-medium text-[--color-text-primary]">
-              {t.name}
+              {tpl.name}
             </span>
             <PillBadge tone={isGlobal ? "accent" : "neutral"}>
-              {isGlobal ? "Global" : "Mine"}
+              {isGlobal
+                ? t("equity_research.template.scope_global")
+                : t("equity_research.template.scope_mine")}
             </PillBadge>
           </span>
           <span className="flex min-w-0 items-center gap-[8px] font-mono text-[10.5px] tracking-[0.02em] text-[--color-text-tertiary]">
@@ -507,13 +518,15 @@ function TemplateCard({
               {formatLabel}
             </span>
             <span className="text-[--color-text-secondary]">
-              {`${t.estimated_tokens.toLocaleString()} tokens`}
+              {t("equity_research.template.format_tokens", {
+                count: tpl.estimated_tokens.toLocaleString(),
+              })}
             </span>
             <span aria-hidden="true" className="opacity-40">
               ·
             </span>
             <span className="truncate text-[--color-text-tertiary]">
-              {t.raw_filename}
+              {tpl.raw_filename}
             </span>
           </span>
         </span>
@@ -526,16 +539,16 @@ function TemplateCard({
             : "opacity-0 group-hover/card:opacity-100 focus-within:opacity-100",
         ].join(" ")}
       >
-        <CardIconButton title="Preview extracted text" onClick={onPreview}>
+        <CardIconButton title={t("equity_research.template.preview_title")} onClick={onPreview}>
           <Eye size={13} />
         </CardIconButton>
         {canMutate ? (
           <>
-            <CardIconButton title="Edit metadata" onClick={onEdit}>
+            <CardIconButton title={t("equity_research.template.edit_title")} onClick={onEdit}>
               <Pencil size={13} />
             </CardIconButton>
             <CardIconButton
-              title="Delete"
+              title={t("equity_research.template.delete_title")}
               onClick={onDelete}
               tone="danger"
             >
@@ -550,7 +563,13 @@ function TemplateCard({
 
 /* ──────────────────────────── drop zone ────────────────────────────── */
 
-function DropZone({ onClick }: { onClick: () => void }): JSX.Element {
+function DropZone({
+  onClick,
+  t,
+}: {
+  onClick: () => void;
+  t: TFunction;
+}): JSX.Element {
   return (
     <button
       type="button"
@@ -559,7 +578,7 @@ function DropZone({ onClick }: { onClick: () => void }): JSX.Element {
     >
       <Upload size={14} strokeWidth={1.7} className="shrink-0 opacity-70" />
       <span className="flex-1">
-        Drop a file here or click to upload your own template
+        {t("equity_research.template.dropzone")}
       </span>
       <span className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
         DOCX · PDF · MD
@@ -668,6 +687,7 @@ interface ConfigureProps {
   onSubmit: () => void;
   modesError: boolean;
   busy: boolean;
+  t: TFunction;
 }
 
 interface UploadConfigureProps extends ConfigureProps {
@@ -683,6 +703,7 @@ interface EditConfigureProps extends ConfigureProps {
 }
 
 function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.Element {
+  const { t } = props;
   const isUpload = props.kind === "upload";
   const filename = isUpload ? props.draft.file.name : props.editing.filename;
   const filesize = isUpload ? props.draft.file.size : props.editing.filesize;
@@ -714,7 +735,7 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
         className="mb-[10px] inline-flex h-[24px] w-fit items-center gap-[5px] rounded-[5px] pl-[4px] pr-[8px] font-display text-[12px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
       >
         <ChevronLeft size={13} strokeWidth={2} />
-        Back to templates
+        {t("equity_research.template.configure_back")}
       </button>
 
       <div className="flex flex-col gap-[18px]">
@@ -728,24 +749,28 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
             </div>
             <div className="font-mono text-[10.5px] tracking-[0.02em] text-[--color-text-tertiary]">
               {format} · {formatBytes(filesize)}
-              {isUpload ? " · ready to save" : " · on file"}
+              {isUpload
+                ? ` · ${t("equity_research.template.configure_ready")}`
+                : ` · ${t("equity_research.template.configure_on_file")}`}
             </div>
           </div>
           <span className="inline-flex shrink-0 items-center gap-[5px] rounded-full border border-[rgba(107,130,0,0.30)] bg-[rgba(107,130,0,0.10)] px-[9px] py-[3px] font-mono text-[9px] uppercase tracking-[0.1em] text-[--color-feedback-success]">
             <Check size={9} strokeWidth={2.4} />
-            {isUpload ? "Uploaded" : "Saved"}
+            {isUpload
+              ? t("equity_research.template.configure_uploaded")
+              : t("equity_research.template.configure_saved")}
           </span>
         </div>
 
         <Step
           num={1}
-          title="Name this template"
-          sub="Shown in the template picker. Defaults to the file name — edit if you want something cleaner."
+          title={t("equity_research.template.name_step_title")}
+          sub={t("equity_research.template.name_step_sub")}
         >
           <input
             type="text"
-            aria-label="Template name"
-            placeholder="e.g. House Initiation Template"
+            aria-label={t("equity_research.template.name_aria")}
+            placeholder={t("equity_research.template.name_placeholder")}
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="h-[34px] w-full rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] px-[10px] text-[13px] text-[--color-text-primary] outline-none transition-colors focus:border-[--color-accent-primary] focus:shadow-[0_0_0_3px_rgba(212,255,0,0.18)]"
@@ -754,8 +779,8 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
 
         <Step
           num={2}
-          title="Apply to report modes"
-          sub="Pick the report types where this template should be available. Choose at least one."
+          title={t("equity_research.template.modes_step_title")}
+          sub={t("equity_research.template.modes_step_sub")}
         >
           <div className="flex flex-col gap-[6px]">
             {ALL_MODES.map((m) => {
@@ -792,10 +817,10 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
                   </span>
                   <span className="flex flex-1 flex-col gap-[1px]">
                     <span className="text-[13px] font-medium text-[--color-text-primary]">
-                      {MODE_LABELS[m]}
+                      {t(MODE_KEY[m])}
                     </span>
                     <span className="text-[11.5px] text-[--color-text-secondary]">
-                      {MODE_SUBLABELS[m]}
+                      {t(MODE_SUBKEY[m])}
                     </span>
                   </span>
                 </button>
@@ -804,7 +829,7 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
           </div>
           {props.modesError ? (
             <span className="mt-[2px] block text-[11.5px] text-[--color-feedback-danger]">
-              Select at least one report mode.
+              {t("equity_research.template.modes_error")}
             </span>
           ) : null}
         </Step>
@@ -812,18 +837,26 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
         {isUpload && props.isAdmin && scope ? (
           <Step
             num={3}
-            title="Where should it live?"
-            sub="Mine: only you can pick it. Global: every user in this workspace can pick it."
+            title={t("equity_research.template.scope_step_title")}
+            sub={t("equity_research.template.scope_step_sub")}
           >
             <div
               role="radiogroup"
-              aria-label="Scope"
+              aria-label={t("equity_research.template.scope_aria")}
               className="flex gap-[2px] rounded-lg border border-[--color-border-subtle] bg-[--color-bg-base] p-[3px]"
             >
               {(
                 [
-                  { value: "user", label: "Mine", sub: "Only you" },
-                  { value: "global", label: "Global (admin)", sub: "All users" },
+                  {
+                    value: "user",
+                    label: t("equity_research.template.scope_mine_label"),
+                    sub: t("equity_research.template.scope_mine_sub"),
+                  },
+                  {
+                    value: "global",
+                    label: t("equity_research.template.scope_global_label"),
+                    sub: t("equity_research.template.scope_global_sub"),
+                  },
                 ] as { value: TemplateOwnerScope; label: string; sub: string }[]
               ).map((opt) => {
                 const active = opt.value === scope;
@@ -860,7 +893,7 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
             onClick={props.onCancel}
             className="inline-flex h-9 items-center rounded-md border border-[--color-border-subtle] bg-transparent px-4 font-display text-[13.5px] font-medium text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
           >
-            Cancel
+            {t("equity_research.settings.cancel")}
           </button>
           <button
             type="button"
@@ -870,11 +903,9 @@ function ConfigureView(props: UploadConfigureProps | EditConfigureProps): JSX.El
           >
             {props.busy
               ? isUpload
-                ? "Uploading…"
-                : "Saving…"
-              : isUpload
-                ? "Save Template"
-                : "Save Template"}
+                ? t("equity_research.template.uploading")
+                : t("equity_research.template.saving")
+              : t("equity_research.template.save_template")}
           </button>
         </div>
       </div>
@@ -924,11 +955,13 @@ function PreviewDialog({
   name,
   text,
   onClose,
+  t,
 }: {
   open: boolean;
   name: string;
   text: string;
   onClose: () => void;
+  t: TFunction;
 }): JSX.Element {
   const lineCount = useMemo(
     () => (text ? text.split("\n").length : 0),
@@ -946,17 +979,19 @@ function PreviewDialog({
             </span>
             <div className="flex min-w-0 flex-1 flex-col">
               <Dialog.Title className="m-0 truncate text-[14px] font-semibold tracking-[-0.005em] text-[--color-text-primary]">
-                {name || "Preview"}
+                {name || t("equity_research.template.preview_title")}
               </Dialog.Title>
               <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-                extracted text · {lineCount.toLocaleString()} lines ·{" "}
-                {charCount.toLocaleString()} chars
+                {t("equity_research.template.preview_meta", {
+                  lines: lineCount.toLocaleString(),
+                  chars: charCount.toLocaleString(),
+                })}
               </span>
             </div>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close preview"
+              aria-label={t("equity_research.template.preview_close_aria")}
               className="ml-auto inline-flex h-7 w-7 items-center justify-center rounded-md text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
             >
               <X size={14} strokeWidth={2} />
@@ -969,14 +1004,14 @@ function PreviewDialog({
           </div>
           <div className="flex items-center justify-between gap-[10px] rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[12px]">
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-              read-only · this is what the model sees
+              {t("equity_research.template.preview_footer")}
             </span>
             <button
               type="button"
               onClick={onClose}
               className="inline-flex h-7 items-center rounded-md border border-[--color-border-subtle] bg-transparent px-[12px] font-display text-[12px] text-[--color-text-secondary] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
             >
-              Close
+              {t("equity_research.template.preview_close")}
             </button>
           </div>
         </Dialog.Content>
@@ -994,6 +1029,7 @@ interface TemplateInfoCardProps {
 export function TemplateInfoCard({
   template,
 }: TemplateInfoCardProps): JSX.Element {
+  const { t } = useTranslation();
   const [preview, setPreview] = useState<{ name: string; text: string } | null>(
     null,
   );
@@ -1014,17 +1050,15 @@ export function TemplateInfoCard({
         </span>
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="mb-[3px] text-[13px] font-medium text-[--color-text-primary]">
-            Sections defined by{" "}
+            {t("equity_research.template.info_sections_defined_by")}{" "}
             <span className="text-[--color-feedback-success]">
               {template.name}
             </span>
           </div>
           <p className="m-0 text-[12.5px] leading-[1.5] text-[--color-text-secondary]">
-            Report length and section structure are inherited from the template
-            file. To change the structure, edit the source file and re-upload,
-            or switch back to{" "}
+            {t("equity_research.template.info_help")}{" "}
             <strong className="font-medium text-[--color-text-primary]">
-              Default
+              {t("equity_research.template.info_default_strong")}
             </strong>
             .
           </p>
@@ -1040,7 +1074,7 @@ export function TemplateInfoCard({
               className="inline-flex items-center gap-[5px] rounded-[5px] px-[8px] py-[4px] font-display text-[12px] font-medium text-[--color-feedback-success] transition-colors hover:bg-[rgba(212,255,0,0.08)]"
             >
               <Eye size={12} strokeWidth={2} />
-              Preview template
+              {t("equity_research.template.info_preview")}
             </button>
             <a
               href={erTemplateRawUrl(template.id)}
@@ -1048,7 +1082,7 @@ export function TemplateInfoCard({
               className="inline-flex items-center gap-[5px] rounded-[5px] px-[8px] py-[4px] font-display text-[12px] font-medium text-[--color-feedback-success] transition-colors hover:bg-[rgba(212,255,0,0.08)]"
             >
               <Download size={12} strokeWidth={2} />
-              Download original
+              {t("equity_research.template.info_download")}
             </a>
           </div>
         </div>
@@ -1058,6 +1092,7 @@ export function TemplateInfoCard({
         name={preview?.name ?? ""}
         text={preview?.text ?? ""}
         onClose={() => setPreview(null)}
+        t={t}
       />
     </>
   );

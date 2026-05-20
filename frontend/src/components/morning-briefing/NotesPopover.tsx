@@ -1,5 +1,6 @@
 import * as Popover from "@radix-ui/react-popover";
 import { type ReactNode, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   topic: string;
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function NotesPopover({ topic, notes, onSave, children }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(notes);
 
@@ -38,7 +40,7 @@ export function NotesPopover({ topic, notes, onSave, children }: Props) {
           </span>
           <textarea
             data-testid={`notes-popover-textarea-${topic}`}
-            placeholder="Add sub-topics or focus areas… (e.g., Semiconductors, China–Taiwan tension)"
+            placeholder={t("morning_briefing.notes.placeholder")}
             className="w-full h-20 resize-none rounded-md border bg-[--color-bg-input] px-2.5 py-2 text-[13px] text-[--color-text-primary] outline-none focus:border-[--color-accent-primary] placeholder:text-[--color-text-tertiary]"
             style={{ borderColor: "var(--color-border-subtle)" }}
             value={draft}
@@ -51,7 +53,7 @@ export function NotesPopover({ topic, notes, onSave, children }: Props) {
               className="inline-flex items-center h-7 px-3 rounded-md text-[13px] font-medium bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover]"
               data-testid={`notes-popover-done-${topic}`}
             >
-              Done
+              {t("morning_briefing.notes.done")}
             </button>
           </div>
         </Popover.Content>

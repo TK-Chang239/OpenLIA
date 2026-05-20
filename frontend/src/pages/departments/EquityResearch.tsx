@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import {
   type ChatMessage,
@@ -109,6 +110,7 @@ export default function EquityResearch(): JSX.Element {
   const fileViewer = useFileViewer();
   const toast = useToast();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [searchParams, setSearchParams] = useSearchParams();
   const tickerParam = searchParams.get("ticker");
@@ -368,12 +370,12 @@ export default function EquityResearch(): JSX.Element {
       })
       .catch((err: unknown) => {
         if (!cancelled)
-          setStartError(err instanceof Error ? err.message : "Failed to load report");
+          setStartError(err instanceof Error ? err.message : t("equity_research.report_load_failed"));
       });
     return () => {
       cancelled = true;
     };
-  }, [reportState.status, reportState.reportId, schema]);
+  }, [reportState.status, reportState.reportId, schema, t]);
 
   // Implicit-binding one-time intro toast: fires on the first report.saved
   // the user sees, then never again (localStorage flag).
@@ -382,11 +384,11 @@ export default function EquityResearch(): JSX.Element {
     if (localStorage.getItem(CHAT_FOLLOWUP_INTRO_TOAST_KEY) === "1") return;
     localStorage.setItem(CHAT_FOLLOWUP_INTRO_TOAST_KEY, "1");
     toast.push({
-      title: "Report linked to this chat — ask follow-up questions below.",
+      title: t("equity_research.report_linked_toast"),
       tone: "info",
       durationMs: 6000,
     });
-  }, [reportState.status, reportState.reportId, toast]);
+  }, [reportState.status, reportState.reportId, toast, t]);
 
   // Redirect toast: fired when the backend signals this report was generated
   // in a new session because the current session was already bound.
@@ -398,17 +400,17 @@ export default function EquityResearch(): JSX.Element {
     const targetId = redirectSessionId;
     setRedirectSessionId(null);
     toast.push({
-      title: "Generating new report in a separate thread.",
+      title: t("equity_research.new_thread_toast"),
       tone: "info",
       durationMs: 8000,
       undo: {
-        label: "Open",
+        label: t("equity_research.open_toast"),
         onClick: () => {
           void navigate(`/chat/${targetId}`);
         },
       },
     });
-  }, [redirectSessionId, toast, navigate]);
+  }, [redirectSessionId, toast, navigate, t]);
 
   const dispatchReport = useCallback(
     async (text: string, attachments?: File[]) => {
@@ -452,7 +454,7 @@ export default function EquityResearch(): JSX.Element {
           attachments,
         });
       } catch (err) {
-        setStartError(err instanceof Error ? err.message : "Failed to start research");
+        setStartError(err instanceof Error ? err.message : t("equity_research.research_start_failed"));
       }
     },
     [
@@ -461,6 +463,7 @@ export default function EquityResearch(): JSX.Element {
       startReport,
       disabledConnectorIds,
       disabledSkillIds,
+      t,
     ],
   );
 
@@ -540,7 +543,7 @@ export default function EquityResearch(): JSX.Element {
     register({
       departmentId: "equity_research",
       activeSessionId: sessionId,
-      chatTitle: sessionId ? sessionTitle : "New chat",
+      chatTitle: sessionId ? sessionTitle : t("nav.new_chat"),
       onSelect: handleSelectSession,
       onCreate: handleNewChat,
     });
@@ -552,6 +555,7 @@ export default function EquityResearch(): JSX.Element {
     handleNewChat,
     register,
     clear,
+    t,
   ]);
 
   const handleSave = async (id: string) => {
@@ -605,8 +609,8 @@ export default function EquityResearch(): JSX.Element {
 
   const { ticker, company } = parseTickerCompany(schema?.cover ?? null);
   const placeholder = sessionId
-    ? "Ask a follow-up question about the company, sector, or report…"
-    : "Enter a ticker, company, or sector (e.g., AAPL, Semiconductors)…";
+    ? t("equity_research.followup_placeholder")
+    : t("equity_research.ticker_placeholder");
 
   return (
     <div className="flex h-full flex-col bg-[--color-bg-base]">
@@ -655,7 +659,7 @@ export default function EquityResearch(): JSX.Element {
 
               {reportState.status === "error" ? (
                 <ErrorMessage
-                  message={reportState.errorMessage ?? "Report generation failed."}
+                  message={reportState.errorMessage ?? t("equity_research.report_generation_failed")}
                   onRetry={() => retryReport()}
                 />
               ) : null}
@@ -743,7 +747,7 @@ export default function EquityResearch(): JSX.Element {
 
               {!historyLoaded && history.length === 0 && !isStreaming ? (
                 <div className="py-6 text-center text-[12px] text-[--color-text-tertiary]">
-                  Loading…
+                  {t("common.loading")}
                 </div>
               ) : null}
             </MessageList>

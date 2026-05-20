@@ -41,6 +41,23 @@ def test_word_count_minimum_flags_below_70pct() -> None:
     assert "300" in findings[0].detail
 
 
+def test_word_count_minimum_counts_cjk_chars_individually() -> None:
+    # Traditional Chinese prose with no inter-character whitespace.
+    # ``.split()`` would return 1 "word"; the counter should count each
+    # CJK ideograph as one unit.
+    chinese_prose = "公" * 420
+    parsed = _parsed([_text(chinese_prose)])
+    findings = word_count_minimum(parsed, target=600)
+    assert findings == []
+
+
+def test_word_count_minimum_mixed_cjk_latin() -> None:
+    # ``EBITDA`` plus 419 CJK chars → 420 units total → passes 70% of 600.
+    parsed = _parsed([_text("EBITDA " + "公" * 419)])
+    findings = word_count_minimum(parsed, target=600)
+    assert findings == []
+
+
 def test_tombstone_regex_flags_no_data_available() -> None:
     parsed = _parsed([_text("The data is great but No Data Available for the rest.")])
     findings = tombstone_regex(parsed)
