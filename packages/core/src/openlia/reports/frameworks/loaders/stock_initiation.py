@@ -214,6 +214,9 @@ def _section_brief(section_id: str) -> str:
     )
 
 
+_THIRD_PERSON_ONLY_SECTIONS: frozenset[str] = frozenset({"investment_recommendation"})
+
+
 def _build_sections(section_ids: tuple[str, ...]) -> tuple[SectionSpec, ...]:
     return tuple(
         SectionSpec(
@@ -221,6 +224,7 @@ def _build_sections(section_ids: tuple[str, ...]) -> tuple[SectionSpec, ...]:
             title=sid.replace("_", " ").title(),
             brief=_section_brief(sid),
             word_target=WORD_TARGETS[sid],
+            voice="third_person_only" if sid in _THIRD_PERSON_ONLY_SECTIONS else "any",
         )
         for sid in section_ids
     )
