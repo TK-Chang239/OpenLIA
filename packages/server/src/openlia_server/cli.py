@@ -120,12 +120,25 @@ def _default_port() -> int:
 
 
 def _find_listener_pid(host: str, port: int) -> int | None:
-    """Best-effort lookup of the PID listening on (host, port) via lsof.
-    Returns None when lsof is unavailable or the listener can't be identified.
+    """Best-effort lookup of the PID squatting on `port` via lsof.
+
+    We deliberately do not pass `-sTCP:LISTEN` — on macOS that filter combined
+    with `-iTCP:<port>` returns no hits even when a process IS the listener.
+    A bind can also fail with no live LISTEN socket at all: a dead server's
+    ESTABLISHED socket holds the local 4-tuple until the remote end closes,
+    so the offender is the dead-server PID, not the client still connected to
+    it. We ask lsof for every TCP socket on the port and rank candidates:
+
+      1. LISTEN socket (NAME has no `->`).
+      2. Server side of an ESTABLISHED connection (`:{port}->...`).
+      3. Anything else holding a socket on the port.
+
+    Host is unused; lsof's `-i@host:port` form misbehaves with wildcard binds.
     """
+    del host  # see docstring
     try:
         result = subprocess.run(
-            ["lsof", "-nP", f"-iTCP@{host}:{port}", "-sTCP:LISTEN", "-Fp"],
+            ["lsof", "-nP", f"-iTCP:{port}", "-Fpn"],
             capture_output=True,
             text=True,
             timeout=2,
@@ -133,10 +146,28 @@ def _find_listener_pid(host: str, port: int) -> int | None:
         )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
+    listener_pid: int | None = None
+    server_pid: int | None = None
+    any_pid: int | None = None
+    current_pid: int | None = None
+    port_suffix = f":{port}"
     for line in result.stdout.splitlines():
         if line.startswith("p") and line[1:].isdigit():
-            return int(line[1:])
-    return None
+            current_pid = int(line[1:])
+            if any_pid is None:
+                any_pid = current_pid
+            continue
+        if not line.startswith("n") or current_pid is None:
+            continue
+        name = line[1:]
+        if "->" not in name:
+            listener_pid = current_pid
+            break
+        if server_pid is None:
+            local, _, _remote = name.partition("->")
+            if local.endswith(port_suffix):
+                server_pid = current_pid
+    return listener_pid or server_pid or any_pid
 
 
 def _check_port_available(host: str, port: int) -> int | None:

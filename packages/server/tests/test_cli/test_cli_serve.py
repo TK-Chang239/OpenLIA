@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 
 import pytest
-from openlia_server.cli import app
+from openlia_server.cli import _find_listener_pid, app
 
 
 class TestGlobalFlags:
@@ -214,3 +215,53 @@ class TestServePortInUse:
         result = cli_runner.invoke(app, ["serve", "--reload", "--port", "8080"])
         assert result.exit_code == 0, result.output
         assert called.get("uvicorn") is True
+
+
+class TestFindListenerPid:
+    def _patch_lsof(self, monkeypatch: pytest.MonkeyPatch, stdout: str) -> None:
+        def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess:
+            return subprocess.CompletedProcess(args=args[0], returncode=0, stdout=stdout, stderr="")
+
+        monkeypatch.setattr("openlia_server.cli.subprocess.run", fake_run)
+
+    def test_prefers_listen_socket_over_established(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Server with both a LISTEN socket and an accepted connection — and
+        # a client process also showing up — must resolve to the server PID.
+        self._patch_lsof(
+            monkeypatch,
+            "p63273\nf39\nn127.0.0.1:55211->127.0.0.1:8080\n"
+            "p79418\nf15\nn127.0.0.1:8080->127.0.0.1:55211\n"
+            "p79418\nf9\nn127.0.0.1:8080\n",
+        )
+        assert _find_listener_pid("127.0.0.1", 8080) == 79418
+
+    def test_picks_server_side_when_listen_socket_gone(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Dead-server case: listen socket is gone but an ESTABLISHED connection
+        # lingers and holds the local 4-tuple — the *server* side of that
+        # connection is the squatter, not the client still connected to it.
+        self._patch_lsof(
+            monkeypatch,
+            "p63273\nf39\nn127.0.0.1:55211->127.0.0.1:8080\n"
+            "p79418\nf15\nn127.0.0.1:8080->127.0.0.1:55211\n",
+        )
+        assert _find_listener_pid("127.0.0.1", 8080) == 79418
+
+    def test_returns_none_when_no_sockets(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._patch_lsof(monkeypatch, "")
+        assert _find_listener_pid("127.0.0.1", 8080) is None
+
+    def test_returns_none_when_lsof_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(*args: object, **kwargs: object) -> None:
+            raise FileNotFoundError("lsof")
+
+        monkeypatch.setattr("openlia_server.cli.subprocess.run", fake_run)
+        assert _find_listener_pid("127.0.0.1", 8080) is None
+
+    def test_returns_none_on_lsof_timeout(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def fake_run(*args: object, **kwargs: object) -> None:
+            raise subprocess.TimeoutExpired(cmd="lsof", timeout=2)
+
+        monkeypatch.setattr("openlia_server.cli.subprocess.run", fake_run)
+        assert _find_listener_pid("127.0.0.1", 8080) is None
