@@ -36,6 +36,7 @@ class ReportTelemetry:
     auto_repair_fixes: Counter = field(default_factory=Counter)
     cross_section_findings: list[CrossSectionFinding] = field(default_factory=list)
     omitted_blocks: list[OmittedBlock] = field(default_factory=list)
+    freshness_banner: dict[str, Any] | None = None
 
     def record_section(self, result: SectionResult) -> None:
         self.sections[result.section_id] = {
@@ -68,6 +69,24 @@ class ReportTelemetry:
             OmittedBlock(section_id=section_id, block_type=block_type, reason=reason)
         )
 
+    def record_freshness_banner(
+        self,
+        *,
+        oldest_data_as_of: str | None,
+        violations: list[dict[str, Any]],
+        override: bool,
+    ) -> None:
+        """Record the freshness banner block for the cover/manifest surface.
+
+        Surfaced via the schema's telemetry dict so the renderer can show a
+        "data as of <oldest_date>" badge and an explicit STALE DATA banner
+        when the runner was invoked with `freshness_override=True`."""
+        self.freshness_banner = {
+            "oldest_data_as_of": oldest_data_as_of,
+            "violations": violations,
+            "override": override,
+        }
+
     def snapshot(self) -> dict[str, Any]:
         omitted_counts: Counter = Counter()
         for ob in self.omitted_blocks:
@@ -88,4 +107,5 @@ class ReportTelemetry:
                 for ob in self.omitted_blocks
             ],
             "omitted_block_counts": dict(omitted_counts),
+            "freshness_banner": self.freshness_banner,
         }

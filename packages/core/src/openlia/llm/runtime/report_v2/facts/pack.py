@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from openlia.llm.runtime.report_v2.facts.registry import FactRegistry
 from openlia.llm.runtime.report_v2.types import Fact, ManifestEntry
@@ -18,6 +19,30 @@ class PayloadView:
 
     def manifest_id_for(self, identifier: str) -> int:
         return self._by_identifier[identifier].id
+
+    def retrieved_at_for(self, identifier: str) -> datetime | str | None:
+        """Return the ManifestEntry retrieval timestamp for an identifier."""
+        entry = self._by_identifier.get(identifier)
+        return entry.retrieved_at if entry is not None else None
+
+    def latest_annual_filing_date(self, identifier: str) -> str | None:
+        """Return the most recent yearly Income_Statement key for a fundamentals
+        payload (e.g. "2024-12-31"). Used as `data_as_of` for annual facts.
+        Returns None when the yearly block is missing or empty."""
+        entry = self._by_identifier.get(identifier)
+        if entry is None:
+            return None
+        payload = entry.raw_payload
+        if not isinstance(payload, dict):
+            return None
+        yearly = (
+            payload.get("Financials", {}).get("Income_Statement", {}).get("yearly", {})
+            if isinstance(payload.get("Financials"), dict)
+            else {}
+        )
+        if not isinstance(yearly, dict) or not yearly:
+            return None
+        return max(yearly.keys())
 
     def has(self, identifier: str) -> bool:
         return identifier in self._by_identifier
