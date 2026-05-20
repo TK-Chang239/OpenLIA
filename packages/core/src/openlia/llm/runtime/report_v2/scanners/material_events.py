@@ -54,6 +54,18 @@ EventClass = Literal[
     "restatement",
 ]
 
+ALL_MATERIAL_EVENT_CLASSES: frozenset[str] = frozenset(
+    {
+        "chapter_11",
+        "bankruptcy_emergence",
+        "going_private",
+        "ma_target",
+        "delisting",
+        "stock_split",
+        "restatement",
+    }
+)
+
 Confidence = Literal["high", "medium", "low"]
 
 Severity = Literal["hard_block", "warning_banner", "informational"]
@@ -251,6 +263,7 @@ class MaterialEventScanner:
     subject_ticker: str
     company_names: list[str] = field(default_factory=list)
     as_of_date: date | None = None
+    event_classes: frozenset[str] | None = None
 
     def _name_aliases(self) -> list[str]:
         # Strip exchange suffix (e.g. ".US") and add lowercase variants.
@@ -271,6 +284,8 @@ class MaterialEventScanner:
                 name_match = _name_present(text, names)
                 article_date = _parse_date(article.get("date") or article.get("published_at"))
                 for event_class in _PATTERNS:
+                    if self.event_classes is not None and event_class not in self.event_classes:
+                        continue
                     matched, strength = _classify(text, event_class)
                     if not matched or strength is None:
                         continue
@@ -314,12 +329,17 @@ def scan_manifest(
     subject_ticker: str,
     company_names: list[str] | None = None,
     as_of_date: date | datetime | str | None = None,
+    event_classes: frozenset[str] | None = None,
 ) -> list[MaterialEvent]:
     """One-call entry point used by the runner.
 
     `as_of_date` here is the oldest `data_as_of` of the manifest's facts (from
     the P1 freshness gate). Events after this date carry their natural
-    severity; events on or before it are demoted to informational."""
+    severity; events on or before it are demoted to informational.
+
+    `event_classes` restricts which classes are scanned. When None (default)
+    every class in `ALL_MATERIAL_EVENT_CLASSES` is inspected; pass an empty
+    frozenset to disable the scanner entirely."""
     as_of: date | None
     if isinstance(as_of_date, datetime):
         as_of = as_of_date.date()
@@ -333,6 +353,7 @@ def scan_manifest(
         subject_ticker=subject_ticker,
         company_names=company_names or [],
         as_of_date=as_of,
+        event_classes=event_classes,
     )
     return scanner.scan(manifest)
 

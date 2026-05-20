@@ -10,7 +10,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import resources
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from openlia.reports.frameworks.template_spec import TemplateSpec
 
 from openlia.llm.runtime.events import (
     ReportComplete,
@@ -107,167 +110,31 @@ from openlia.llm.runtime.report_v2.validators import (
     NumericValidationError,
     validate_sections,
 )
+
+# PR 2: section list, briefs, word targets, system role, and style guide moved
+# to `openlia.reports.frameworks.loaders.stock_initiation` (canonical source).
+# These module-level names are kept as re-exports for backward compatibility
+# with internal code paths and external importers; new code should read from
+# the resolved `TemplateSpec` instead.
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    BODY_SECTION_IDS as BODY_SECTIONS_STOCK_INITIATION,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    SECTION_BRIEFS as _SECTION_BRIEFS,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    STYLE_GUIDE as DEFAULT_STYLE_GUIDE,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    SYNTHESIS_SECTION_IDS as SYNTHESIS_SECTIONS_STOCK_INITIATION,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    SYSTEM_ROLE as DEFAULT_SYSTEM_ROLE,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    WORD_TARGETS as DEFAULT_WORD_TARGETS,
+)
 from openlia.reports.schema import ReportSchema
-
-BODY_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
-    "company_overview",
-    "industry_overview",
-    "products_and_services",
-    "business_model",
-    "management_team",
-    "historical_financials",
-    "financial_analysis",
-    "financial_projections",
-    "valuation_analysis",
-    "competitive_analysis",
-    "recent_developments",
-)
-
-SYNTHESIS_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
-    "competitive_advantages_and_weaknesses",
-    "risk_analysis",
-    "investment_recommendation",
-    "cover",
-)
-
-DEFAULT_WORD_TARGETS: dict[str, int] = {sid: 600 for sid in BODY_SECTIONS_STOCK_INITIATION} | {
-    "competitive_advantages_and_weaknesses": 500,
-    "risk_analysis": 500,
-    "investment_recommendation": 400,
-    "cover": 400,
-}
-
-_SECTION_BRIEFS: dict[str, str] = {
-    "company_overview": (
-        "Section: company_overview. Cover ticker, sector, headquarters, "
-        "headcount, founding date, key milestones, and core value "
-        "proposition. Preferred exhibits: ``metric_cards`` for headline "
-        "stats (market cap, P/E, revenue scale, headcount), ``key_finding`` "
-        "for the positioning one-liner, ``pull_quote`` for the mission or "
-        "CEO line."
-    ),
-    "industry_overview": (
-        "Section: industry_overview. Describe market size, growth, "
-        "structure, and where the company sits. Preferred exhibits: "
-        "``chart:pie`` or ``chart:treemap`` for market share or "
-        "segmentation, ``chart:bar`` for player ranking once there are "
-        "three or more competitors, ``callout_grid`` for market segments, "
-        "``table`` for TAM/SAM/SOM."
-    ),
-    "products_and_services": (
-        "Section: products_and_services. Walk through product families, "
-        "pricing, and customer types. Preferred exhibits: ``callout_grid`` "
-        "with eyebrow + description for each product or module family, "
-        "``table`` for a feature matrix, ``bullet_list`` for a tight "
-        "list of capabilities."
-    ),
-    "business_model": (
-        "Section: business_model. Cover revenue model, unit economics, "
-        "moats, and distribution. Preferred exhibits: ``callout_grid`` for "
-        "revenue pillars, ``chart:pie`` for revenue mix when disclosed, "
-        "``comparison_split`` for the model vs. its nearest alternative, "
-        "``key_finding``."
-    ),
-    "management_team": (
-        "Section: management_team. Profile the C-suite and board with "
-        "named individuals. Preferred exhibits: ``table`` for the officer "
-        "and director list with role + background, ``key_finding`` for "
-        "notable hires or departures."
-    ),
-    "historical_financials": (
-        "Section: historical_financials. Show revenue, profitability, "
-        "cash, and balance-sheet trends. Preferred exhibits: ``chart:combo``"
-        " for revenue bars plus a margin line across multiple years, "
-        "``chart:line`` for a single-metric trend, ``table`` for the "
-        "multi-period KPI grid."
-    ),
-    "financial_analysis": (
-        "Section: financial_analysis. Decompose margins, capital "
-        "efficiency, and ratios. Preferred exhibits: ``chart:line`` for "
-        "margin trends, ``table`` for KPIs vs. peers, ``waterfall_chart`` "
-        "for a revenue or EBITDA bridge, ``key_finding``."
-    ),
-    "financial_projections": (
-        "Section: financial_projections. Forward look on revenue, margins, "
-        "FCF. Preferred exhibits: ``chart:line`` for the 3-5 year "
-        "projection curve, ``chart:combo`` for revenue + growth %, "
-        "``table`` for assumptions plus outputs."
-    ),
-    "valuation_analysis": (
-        "Section: valuation_analysis. Multiples, DCF, peer comp — present "
-        "the math, not a recommendation. Preferred exhibits: ``table`` for "
-        "the peer multiples matrix (P/E, P/B, EV/EBITDA, PEG, 3Y growth — "
-        "the server pre-builds the peer matrix from facts; you may augment "
-        "with additional cited rows), ``chart:scatter`` for P/E vs. growth, "
-        "``comparison_split`` for sensitivity scenarios labeled by "
-        "methodology (e.g. 'Conservative · 18x EPS' vs 'Optimistic · "
-        "28x EPS'), ``waterfall_chart`` for a DCF bridge. Do not author a "
-        "single 'price target' — show the methodology's output and let the "
-        "reader compare it to analyst consensus (rendered separately in "
-        "Analyst View)."
-    ),
-    "competitive_analysis": (
-        "Section: competitive_analysis. Name competitors and quantify "
-        "where the company stands. Preferred exhibits: ``comparison_split``"
-        " for subject vs. top rival, ``table`` for a feature or share "
-        "matrix. Peer revenue ranking is owned by ``industry_overview`` — "
-        "reference it in prose here and use a different exhibit family."
-    ),
-    "recent_developments": (
-        "Section: recent_developments. Catalysts and news flow in the "
-        "last twelve months. Preferred exhibits: ``timeline`` with dated "
-        "events and ``impact_tag`` annotations whenever you have at least "
-        "three dated events, ``key_finding`` for the single most important "
-        "development, ``bullet_list`` for a tight catalog when dates are "
-        "not available."
-    ),
-    "competitive_advantages_and_weaknesses": (
-        "Section: competitive_advantages_and_weaknesses. Preferred "
-        "exhibits: ``comparison_split`` for strengths (left tone positive) "
-        "vs. weaknesses (right tone negative), ``callout_grid`` for moats "
-        "by type, ``key_finding`` for the durable advantage."
-    ),
-    "risk_analysis": (
-        "Section: risk_analysis. Preferred exhibits: ``callout_grid`` for "
-        "risk categories (market, regulatory, execution, financial), "
-        "``comparison_split`` for controlled vs. uncontrolled risks, "
-        "``timeline`` for known risk events."
-    ),
-    "investment_recommendation": (
-        "Section: Analyst View (information aggregation; no advocacy). The "
-        "server pre-populates the rating distribution chart, consensus "
-        "price-target metric_cards, and rating-badge from EODHD AnalystRatings "
-        "— do NOT emit those blocks yourself. Your job: (1) a "
-        "``comparison_split`` with 'Bull-case arguments' (left) vs "
-        "'Bear-case arguments' (right), each item an argument observed in "
-        "analyst notes / news / management commentary with a citation; "
-        "(2) when news_search surfaced upgrades/downgrades, a ``table`` of "
-        "recent rating changes (Date, Firm, Action, From -> To, Target "
-        "Price), each row cited; (3) a closing 3-4 sentence prose paragraph "
-        "summarizing what the consensus reflects, citing sources. Use "
-        "third-person sourcing language: 'JPMorgan rates Buy [c12]', "
-        "'consensus reflects a Hold [c1]'. Never write 'we recommend', "
-        "'our rating', 'our target', 'we view this as'."
-    ),
-    "cover": (
-        "Section: cover. Headline summary that drives the report's hero "
-        "panel. Required blocks, in this order: (1) a ``pull_quote`` "
-        "containing a single neutral framing sentence (what this report "
-        "covers and why it matters; one full sentence, <=240 chars, no "
-        "quotes around it, no recommendation language) — this becomes "
-        "the cover tagline; (2) a ``bullet_list`` of 3-5 short, "
-        "declarative ``Key findings`` — neutral, evidence-based, each "
-        "phrased as an observation citable to sources, NOT as a "
-        "recommendation; this is lifted as the Executive Summary; (3) a "
-        "``metric_cards`` block with 4-5 headline metrics — this "
-        "replaces the server-built deterministic metrics if present. "
-        "Wrap one short prose paragraph (3-5 sentences) before and "
-        "after the metric_cards to provide context. Do not emit "
-        "exhibit blocks like charts or tables. Do not use phrases like "
-        "'we recommend', 'our view', 'investment thesis' — frame as "
-        "'what the data shows', not what to do about it."
-    ),
-}
 
 DEFAULT_BRIEFS: dict[str, str] = {
     sid: _SECTION_BRIEFS.get(sid, f"Section: {sid}. Write a substantive analytical section.")
@@ -296,18 +163,8 @@ class WavedReportRunner:
         preflight_provider: Any,
         body_writer: Any,
         synthesis_writer: Any,
-        system_role: str = "You are an equity research section writer.",
-        style_guide: str = (
-            "Institutional tone, precise, cited. INFORMATION-AGGREGATION ONLY: "
-            "this report gathers and synthesizes information for the reader. "
-            "Never recommend an action. Never write 'we recommend', 'we "
-            "initiate at', 'our rating', 'our price target', 'our view is', "
-            "'we view this as', 'investment thesis', or any first-person "
-            "advocacy. Any buy/hold/sell language must be attributed to a "
-            "specific cited source (e.g. 'JPMorgan rates Buy [c12]', "
-            "'consensus reflects a Hold [c1]'). Frame conclusions as 'what "
-            "the data shows', not 'what to do about it'."
-        ),
+        system_role: str = DEFAULT_SYSTEM_ROLE,
+        style_guide: str = DEFAULT_STYLE_GUIDE,
         max_retries: int = 1,
         sse_emitter: Callable[[Any], Awaitable[None]] | None = None,
         report_id: str | None = None,
@@ -322,9 +179,19 @@ class WavedReportRunner:
         report_mode_override: ReportMode | None = None,
         numeric_validation_override: bool = False,
         catalyst_pack_enabled: bool = True,
+        template: TemplateSpec | None = None,
     ) -> None:
-        if report_type != "stock_initiation":
-            raise ValueError("only stock_initiation supported in v1")
+        # Template resolution. When an explicit TemplateSpec is provided, it
+        # takes precedence and the runner no longer requires `report_type` to
+        # be a registered template. When None, look up via the default registry;
+        # unknown report types raise `UnknownTemplateError` from there.
+        if template is None:
+            from openlia.reports.frameworks.registry import (
+                default_registry as _template_registry,
+            )
+
+            template = _template_registry.get(report_type)
+        self.template = template
         self.report_type = report_type
         self.ticker = ticker
         self.dispatcher = dispatcher
@@ -473,7 +340,9 @@ class WavedReportRunner:
             # runner proceeds and surfaces a STALE DATA cover banner via
             # telemetry.
             now = datetime.now(UTC)
-            violations = check_freshness(pack.facts, as_of=now)
+            violations = check_freshness(
+                pack.facts, as_of=now, budgets=self.template.freshness_budgets or None
+            )
             hard = [v for v in violations if v.severity == "hard_block"]
             banner_oldest = oldest_data_as_of(pack.facts)
             banner_violations: list[dict[str, Any]] = [
@@ -516,10 +385,16 @@ class WavedReportRunner:
             # M&A target, delisting, splits, restatements). Events dated
             # after the oldest data_as_of carry hard_block / warning_banner
             # severity; events on or before are demoted to informational.
+            _material_classes = (
+                frozenset(self.template.material_event_classes)
+                if self.template.material_event_classes
+                else None
+            )
             events = scan_manifest(
                 manifest.entries,
                 subject_ticker=self.ticker,
                 as_of_date=banner_oldest,
+                event_classes=_material_classes,
             )
             hard_events = [e for e in events if e.severity == "hard_block"]
             banner_events: list[dict[str, Any]] = [
@@ -564,10 +439,16 @@ class WavedReportRunner:
             # skipped, `catalysts_recent` is injected as an empty list so the
             # framework's section facts slices still resolve.
             if self.catalyst_pack_enabled:
+                _catalyst_classes = (
+                    frozenset(self.template.catalyst_classes)
+                    if self.template.catalyst_classes
+                    else None
+                )
                 catalysts = scan_catalysts(
                     manifest.entries,
                     subject_ticker=self.ticker,
                     as_of_date=banner_oldest,
+                    event_classes=_catalyst_classes,
                 )
             else:
                 catalysts = []
@@ -610,31 +491,52 @@ class WavedReportRunner:
                     mode_as_of = None
             else:
                 mode_as_of = None
-            auto_mode: ReportMode = select_report_mode(pack.facts, events, as_of=mode_as_of)
+            _available_modes = (
+                frozenset(self.template.industry_modes)
+                if self.template.industry_modes
+                else frozenset()
+            )
+            auto_mode: ReportMode | None = (
+                select_report_mode(
+                    pack.facts,
+                    events,
+                    as_of=mode_as_of,
+                    available_modes=_available_modes if _available_modes else None,
+                )
+                if _available_modes
+                else None
+            )
             if self.report_mode_override is not None:
-                chosen_mode: ReportMode = self.report_mode_override
+                chosen_mode: ReportMode | None = self.report_mode_override
                 auto_selected = False
             else:
                 chosen_mode = auto_mode
                 auto_selected = True
-            overlay = load_overlay(chosen_mode)
-            framework = apply_facts_overlay(framework, overlay)
-            section_emphasis = overlay_section_emphasis(overlay)
-            mode_label = report_mode_label(overlay)
+            if chosen_mode is None:
+                # Template declares no industry modes — skip overlay entirely.
+                overlay: dict[str, Any] = {}
+                section_emphasis: dict[str, str] = {}
+                mode_label: str | None = None
+            else:
+                overlay = load_overlay(chosen_mode)
+                framework = apply_facts_overlay(framework, overlay)
+                section_emphasis = overlay_section_emphasis(overlay)
+                mode_label = report_mode_label(overlay)
             section_briefs: dict[str, str] = dict(DEFAULT_BRIEFS)
             for sid, emphasis in section_emphasis.items():
                 base = section_briefs.get(sid, "")
                 section_briefs[sid] = (base + "\n\n" + emphasis).strip() if base else emphasis
-            self.telemetry.record_report_mode_banner(
-                mode=chosen_mode,
-                label=mode_label,
-                auto_selected=auto_selected,
-            )
-            print(
-                f"[runner] industry-mode overlay applied: mode={chosen_mode!r} "
-                f"(auto_selected={auto_selected}, label={mode_label!r})",
-                flush=True,
-            )
+            if chosen_mode is not None:
+                self.telemetry.record_report_mode_banner(
+                    mode=chosen_mode,
+                    label=mode_label,
+                    auto_selected=auto_selected,
+                )
+                print(
+                    f"[runner] industry-mode overlay applied: mode={chosen_mode!r} "
+                    f"(auto_selected={auto_selected}, label={mode_label!r})",
+                    flush=True,
+                )
 
             # WS2: peer-set sufficiency gate. An initiation report must carry
             # at least two peers; shipping a single-row peer table is a P1

@@ -82,13 +82,16 @@ class StaleDataError(Exception):
         return "stale data: " + "; ".join(parts) if parts else "stale data"
 
 
-def _budget_for(name: str) -> int | None:
+def _budget_for(name: str, budgets: dict[str, int] | None = None) -> int | None:
     """Return the freshness budget in days for `name`, or None when unbudgeted.
 
     Uses longest-prefix matching so a specific bucket beats a generic one.
+    `budgets` defaults to the module-level `FRESHNESS_BUDGETS` for backward
+    compatibility; callers should pass the active template's budget map.
     """
+    table = budgets if budgets is not None else FRESHNESS_BUDGETS
     best: tuple[int, int] | None = None  # (prefix_len, budget_days)
-    for prefix, days in FRESHNESS_BUDGETS.items():
+    for prefix, days in table.items():
         if name == prefix or name.startswith(prefix):
             n = len(prefix)
             if best is None or n > best[0]:
@@ -122,9 +125,13 @@ def _to_datetime(value: datetime | str | None) -> datetime | None:
 def check_freshness(
     facts: dict[str, Fact],
     as_of: datetime,
+    budgets: dict[str, int] | None = None,
 ) -> list[FreshnessViolation]:
     """Return the list of freshness violations for `facts` measured against `as_of`.
 
+    `budgets` is the per-template name-prefix → max-age map. When None, falls
+    back to the module-level `FRESHNESS_BUDGETS` for backward compatibility;
+    callers driving uploaded templates should pass `template.freshness_budgets`.
     Facts without a registered budget are skipped silently. Facts whose
     `data_as_of` is None are reported as severity="missing" so the runner
     can warn without blocking.
@@ -132,7 +139,7 @@ def check_freshness(
     as_of_aware = as_of if as_of.tzinfo is not None else as_of.replace(tzinfo=UTC)
     out: list[FreshnessViolation] = []
     for name, fact in facts.items():
-        budget = _budget_for(name)
+        budget = _budget_for(name, budgets)
         if budget is None:
             continue
         dt = _to_datetime(fact.data_as_of)

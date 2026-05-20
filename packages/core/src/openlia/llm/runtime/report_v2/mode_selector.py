@@ -129,11 +129,22 @@ def select_report_mode(
     material_events: list[MaterialEvent],
     *,
     as_of: date | None = None,
-) -> ReportMode:
-    """Pick one of four overlays based on subject industry, sector, and events.
+    available_modes: frozenset[str] | None = None,
+) -> ReportMode | None:
+    """Pick one of the available overlays based on subject industry, sector, and events.
 
     `as_of` defaults to today (UTC) when None — only used for the distress
-    event-recency window. Selection is deterministic given the inputs."""
+    event-recency window. Selection is deterministic given the inputs.
+
+    `available_modes` restricts the set of modes the selector can return. When
+    None (default), all four legacy modes are eligible and the function always
+    returns one — preserving pre-PR-7 behavior for callers that omit the
+    parameter. When provided as an empty frozenset, the selector returns None
+    so no overlay is applied. When provided with a subset, the legacy logic
+    runs but the function returns None if the picked mode isn't in the set.
+    """
+    if available_modes is not None and not available_modes:
+        return None
     as_of_date = as_of if as_of is not None else datetime.now(UTC).date()
 
     # 1) Distressed gate — first because it overrides industry classification.
@@ -142,15 +153,17 @@ def select_report_mode(
         or _is_going_concern_qualified(facts)
         or _is_distressed_financials(facts)
     ):
-        return "distressed"
+        picked: ReportMode = "distressed"
+    else:
+        sector = _as_str(_fact_value(facts, "sector"))
+        industry = _as_str(_fact_value(facts, "industry"))
+        if sector == "Technology" and _SAAS_INDUSTRY_PATTERN.search(industry):
+            picked = "saas"
+        elif sector == "Technology" and _SEMIS_INDUSTRY_PATTERN.search(industry):
+            picked = "semis"
+        else:
+            picked = "generic"
 
-    sector = _as_str(_fact_value(facts, "sector"))
-    industry = _as_str(_fact_value(facts, "industry"))
-
-    if sector == "Technology" and _SAAS_INDUSTRY_PATTERN.search(industry):
-        return "saas"
-
-    if sector == "Technology" and _SEMIS_INDUSTRY_PATTERN.search(industry):
-        return "semis"
-
-    return "generic"
+    if available_modes is not None and picked not in available_modes:
+        return None
+    return picked
