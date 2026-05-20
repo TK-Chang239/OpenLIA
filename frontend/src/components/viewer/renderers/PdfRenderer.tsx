@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { type FileSource } from "../FileViewerContext";
 import { sourceUrl } from "./sourceUrl";
 import { RendererError, RendererLoading } from "./RendererStates";
@@ -20,6 +21,7 @@ async function getPdfJs(): Promise<typeof import("pdfjs-dist")> {
 }
 
 export function PdfRenderer({ source }: { source: FileSource }): JSX.Element {
+  const { t } = useTranslation();
   const [numPages, setNumPages] = useState(0);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<Error | null>(null);
@@ -91,12 +93,12 @@ export function PdfRenderer({ source }: { source: FileSource }): JSX.Element {
       </div>
       <div className="flex flex-shrink-0 items-center justify-between border-t border-[--color-border-subtle] px-4 py-2">
         <span className="text-sm text-[--color-text-secondary]">
-          Page {page} of {numPages}
+          {t("chat.pdf_page_of", { page, total: numPages })}
         </span>
         <div className="flex gap-1">
           <button
             type="button"
-            aria-label="Previous page"
+            aria-label={t("chat.viewer_prev_page")}
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
             className="flex h-7 w-7 items-center justify-center rounded-[--radius-md] hover:bg-[--color-surface-hover] disabled:opacity-40"
@@ -105,7 +107,7 @@ export function PdfRenderer({ source }: { source: FileSource }): JSX.Element {
           </button>
           <button
             type="button"
-            aria-label="Next page"
+            aria-label={t("chat.viewer_next_page")}
             disabled={page >= numPages}
             onClick={() => setPage((p) => Math.min(numPages, p + 1))}
             className="flex h-7 w-7 items-center justify-center rounded-[--radius-md] hover:bg-[--color-surface-hover] disabled:opacity-40"

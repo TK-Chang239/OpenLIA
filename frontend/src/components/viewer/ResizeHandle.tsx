@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   onWidthChange: (next: number) => void;
@@ -6,6 +7,7 @@ interface Props {
 }
 
 export function ResizeHandle({ onWidthChange, viewportWidth }: Props): JSX.Element {
+  const { t } = useTranslation();
   const dragging = useRef(false);
 
   const onDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -33,7 +35,7 @@ export function ResizeHandle({ onWidthChange, viewportWidth }: Props): JSX.Eleme
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize file viewer"
+      aria-label={t("chat.viewer_resize_aria")}
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
