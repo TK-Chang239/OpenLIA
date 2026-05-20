@@ -385,10 +385,16 @@ class WavedReportRunner:
             # M&A target, delisting, splits, restatements). Events dated
             # after the oldest data_as_of carry hard_block / warning_banner
             # severity; events on or before are demoted to informational.
+            _material_classes = (
+                frozenset(self.template.material_event_classes)
+                if self.template.material_event_classes
+                else None
+            )
             events = scan_manifest(
                 manifest.entries,
                 subject_ticker=self.ticker,
                 as_of_date=banner_oldest,
+                event_classes=_material_classes,
             )
             hard_events = [e for e in events if e.severity == "hard_block"]
             banner_events: list[dict[str, Any]] = [
@@ -433,10 +439,16 @@ class WavedReportRunner:
             # skipped, `catalysts_recent` is injected as an empty list so the
             # framework's section facts slices still resolve.
             if self.catalyst_pack_enabled:
+                _catalyst_classes = (
+                    frozenset(self.template.catalyst_classes)
+                    if self.template.catalyst_classes
+                    else None
+                )
                 catalysts = scan_catalysts(
                     manifest.entries,
                     subject_ticker=self.ticker,
                     as_of_date=banner_oldest,
+                    event_classes=_catalyst_classes,
                 )
             else:
                 catalysts = []

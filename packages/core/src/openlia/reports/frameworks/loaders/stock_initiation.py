@@ -9,6 +9,8 @@ definitions live here.
 from __future__ import annotations
 
 from openlia.llm.runtime.report_v2.freshness import FRESHNESS_BUDGETS
+from openlia.llm.runtime.report_v2.scanners.catalyst_pack import ALL_CATALYST_CLASSES
+from openlia.llm.runtime.report_v2.scanners.material_events import ALL_MATERIAL_EVENT_CLASSES
 from openlia.llm.runtime.report_v2.validators.identity_equations import IdentityEquationSpec
 from openlia.reports.frameworks.registry import default_registry
 from openlia.reports.frameworks.template_spec import SectionSpec, TemplateSpec
@@ -242,6 +244,8 @@ def load_stock_initiation_template() -> TemplateSpec:
         web_search_budget_default=20,
         freshness_budgets=dict(FRESHNESS_BUDGETS),
         identity_equations=IDENTITY_EQUATIONS,
+        material_event_classes=tuple(sorted(ALL_MATERIAL_EVENT_CLASSES)),
+        catalyst_classes=tuple(sorted(ALL_CATALYST_CLASSES)),
     )
 
 

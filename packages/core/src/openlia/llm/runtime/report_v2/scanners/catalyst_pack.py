@@ -51,6 +51,18 @@ CatalystClass = Literal[
     "guidance_update",
 ]
 
+ALL_CATALYST_CLASSES: frozenset[str] = frozenset(
+    {
+        "product_announcement",
+        "customer_concentration_disclosure",
+        "hyperscaler_capex_print",
+        "sovereign_ai_deal",
+        "export_control_change",
+        "material_partnership",
+        "guidance_update",
+    }
+)
+
 Confidence = Literal["high", "medium", "low"]
 
 
@@ -314,6 +326,7 @@ class CatalystScanner:
     subject_ticker: str
     company_names: list[str] = field(default_factory=list)
     as_of_date: date | None = None
+    catalyst_classes: frozenset[str] | None = None
 
     def _name_aliases(self) -> list[str]:
         bare = self.subject_ticker.split(".")[0]
@@ -358,6 +371,11 @@ class CatalystScanner:
                 a_date = article_date(article)
                 name_match = name_present(text, aliases)
                 for catalyst_class in _PATTERNS:
+                    if (
+                        self.catalyst_classes is not None
+                        and catalyst_class not in self.catalyst_classes
+                    ):
+                        continue
                     matched, strength = _classify(text, catalyst_class)
                     if not matched or strength is None:
                         continue
@@ -398,11 +416,16 @@ def scan_catalysts(
     subject_ticker: str,
     as_of_date: date | datetime | str | None = None,
     company_names: list[str] | None = None,
+    event_classes: frozenset[str] | None = None,
 ) -> list[CatalystEvent]:
     """One-call entry point used by the runner.
 
     Returns the full list of detected catalysts; order is manifest order
-    (earlier entries first, then per-class match order within an article)."""
+    (earlier entries first, then per-class match order within an article).
+
+    `event_classes` restricts which catalyst classes are scanned. When None
+    every class in `ALL_CATALYST_CLASSES` is inspected; pass an empty
+    frozenset to disable the scanner."""
     as_of: date | None
     if isinstance(as_of_date, datetime):
         as_of = as_of_date.date()
@@ -416,6 +439,7 @@ def scan_catalysts(
         subject_ticker=subject_ticker,
         company_names=company_names or [],
         as_of_date=as_of,
+        catalyst_classes=event_classes,
     )
     return scanner.scan(
         manifest_entries=manifest_entries,
