@@ -5,6 +5,8 @@ Importing this module triggers registration with the default_registry.
 
 from __future__ import annotations
 
+from typing import Any
+
 from openlia.llm.runtime.report_v2.facts.extractors.compute import cagr, union_source_ids
 from openlia.llm.runtime.report_v2.facts.extractors.deterministic import (
     pluck,
@@ -21,11 +23,14 @@ _FUNDAMENTALS = "get_fundamentals_data"
 def market_cap(payloads, facts) -> Fact:
     ident = payloads.subject_fundamentals_identifier()
     payload = payloads.by_identifier(ident)
+    # Highlights/General lack any filing date; use the ManifestEntry retrieval timestamp.
     return Fact(
         name="market_cap",
         value=pluck(payload, "Highlights", "MarketCapitalization"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -38,6 +43,8 @@ def pe_ratio_ttm(payloads, facts) -> Fact:
         value=pluck(payload, "Highlights", "PERatio"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -50,6 +57,8 @@ def sector(payloads, facts) -> Fact:
         value=pluck(payload, "General", "Sector"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -62,6 +71,8 @@ def company_name(payloads, facts) -> Fact:
         value=pluck(payload, "General", "Name"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -69,11 +80,14 @@ def company_name(payloads, facts) -> Fact:
 def revenue_annual(payloads, facts) -> Fact:
     ident = payloads.subject_fundamentals_identifier()
     payload = payloads.by_identifier(ident)
+    # Annual facts: latest yearly Income_Statement key is the canonical filing date.
     return Fact(
         name="revenue_annual",
         value=yearly_series(payload, statement="Income_Statement", field="totalRevenue"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -86,6 +100,8 @@ def gross_profit_annual(payloads, facts) -> Fact:
         value=yearly_series(payload, statement="Income_Statement", field="grossProfit"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -98,6 +114,8 @@ def revenue_cagr_3y(payloads, facts) -> Fact:
         source_ids=union_source_ids(facts["revenue_annual"]),
         extractor="compute",
         depends_on=["revenue_annual"],
+        data_as_of=facts["revenue_annual"].data_as_of,
+        source_tier="derived",
     )
 
 
@@ -113,6 +131,8 @@ def gross_margin_ttm(payloads, facts) -> Fact:
         source_ids=union_source_ids(facts["revenue_annual"], facts["gross_profit_annual"]),
         extractor="compute",
         depends_on=["revenue_annual", "gross_profit_annual"],
+        data_as_of=facts["revenue_annual"].data_as_of,
+        source_tier="derived",
     )
 
 
@@ -154,11 +174,14 @@ def peer_pe_ratio_ttm(payloads, facts) -> Fact:
         except (TypeError, ValueError):
             continue
         used_ids.append(payloads.manifest_id_for(ident))
+    subject_ident = payloads.subject_fundamentals_identifier()
     return Fact(
         name="peer_pe_ratio_ttm",
         value=values,
         source_ids=_peer_source_ids_or_subject_fallback(payloads, used_ids),
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(subject_ident),
+        source_tier="vendor",
     )
 
 
@@ -176,11 +199,14 @@ def peer_revenue_cagr_3y(payloads, facts) -> Fact:
         except (ValueError, ZeroDivisionError):
             continue
         used_ids.append(payloads.manifest_id_for(ident))
+    subject_ident = payloads.subject_fundamentals_identifier()
     return Fact(
         name="peer_revenue_cagr_3y",
         value=values,
         source_ids=_peer_source_ids_or_subject_fallback(payloads, used_ids),
         extractor="compute",
+        data_as_of=payloads.latest_annual_filing_date(subject_ident),
+        source_tier="derived",
     )
 
 
@@ -200,11 +226,14 @@ def peer_gross_margin_ttm(payloads, facts) -> Fact:
         except (TypeError, ZeroDivisionError):
             continue
         used_ids.append(payloads.manifest_id_for(ident))
+    subject_ident = payloads.subject_fundamentals_identifier()
     return Fact(
         name="peer_gross_margin_ttm",
         value=values,
         source_ids=_peer_source_ids_or_subject_fallback(payloads, used_ids),
         extractor="compute",
+        data_as_of=payloads.latest_annual_filing_date(subject_ident),
+        source_tier="derived",
     )
 
 
@@ -227,6 +256,8 @@ def ipo_date(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "General", "IPODate"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -238,6 +269,8 @@ def employees(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "General", "FullTimeEmployees"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -249,6 +282,8 @@ def exchange(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "General", "Exchange"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -264,6 +299,8 @@ def headquarters(payloads, facts) -> Fact:
         value=value if value else None,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -281,6 +318,8 @@ def pe_ratio_forward(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "Highlights", "ForwardPE"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -292,6 +331,8 @@ def net_margin_ttm(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "Highlights", "ProfitMargin"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -303,6 +344,8 @@ def operating_margin_ttm(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "Highlights", "OperatingMarginTTM"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -314,6 +357,8 @@ def ebitda_ttm(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "Highlights", "EBITDA"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -325,6 +370,8 @@ def revenue_ttm(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "Highlights", "RevenueTTM"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -336,6 +383,8 @@ def eps_ttm(payloads, facts) -> Fact:
         value=pluck_or_none(payload, "Highlights", "EarningsShare"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -355,6 +404,8 @@ def current_price(payloads, facts) -> Fact:
             value=None,
             source_ids=[payloads.manifest_id_for(fid)],
             extractor="deterministic",
+            data_as_of=payloads.retrieved_at_for(fid),
+            source_tier="vendor",
         )
     payload = payloads.by_identifier(ident)
     # EODHD live returns a top-level dict with `close` or `last` key.
@@ -367,11 +418,19 @@ def current_price(payloads, facts) -> Fact:
                 break
             except (TypeError, ValueError):
                 continue
+    # Use the live payload's own date when present; otherwise the retrieval
+    # timestamp. EODHD live exposes a top-level `date` (YYYY-MM-DD) and
+    # `timestamp` (epoch seconds); prefer the explicit date string.
+    live_date: Any = None
+    if isinstance(payload, dict):
+        live_date = payload.get("date") or payload.get("timestamp")
     return Fact(
         name="current_price",
         value=value,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=live_date if live_date is not None else payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -400,11 +459,18 @@ def price_range_52w(payloads, facts) -> Fact:
     lows = [float(r["low"]) for r in last_252 if isinstance(r, dict) and r.get("low") is not None]
     value = {"low": min(lows), "high": max(highs)} if highs and lows else None
     fallback = payloads.subject_fundamentals_identifier()
+    chosen = ident or fallback
+    # Use the latest EOD row's date when available; otherwise the retrieval timestamp.
+    last_date: Any = None
+    if last_252 and isinstance(last_252[-1], dict):
+        last_date = last_252[-1].get("date")
     return Fact(
         name="price_range_52w",
         value=value,
-        source_ids=[payloads.manifest_id_for(ident or fallback)],
+        source_ids=[payloads.manifest_id_for(chosen)],
         extractor="deterministic",
+        data_as_of=last_date if last_date is not None else payloads.retrieved_at_for(chosen),
+        source_tier="vendor",
     )
 
 
@@ -417,11 +483,17 @@ def avg_daily_volume_3m(payloads, facts) -> Fact:
     ]
     value = sum(vols) / len(vols) if vols else None
     fallback = payloads.subject_fundamentals_identifier()
+    chosen = ident or fallback
+    last_date: Any = None
+    if last_63 and isinstance(last_63[-1], dict):
+        last_date = last_63[-1].get("date")
     return Fact(
         name="avg_daily_volume_3m",
         value=value,
-        source_ids=[payloads.manifest_id_for(ident or fallback)],
+        source_ids=[payloads.manifest_id_for(chosen)],
         extractor="deterministic",
+        data_as_of=last_date if last_date is not None else payloads.retrieved_at_for(chosen),
+        source_tier="vendor",
     )
 
 
@@ -466,6 +538,8 @@ def analyst_consensus_rating(payloads, facts) -> Fact:
         value=label,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -488,6 +562,8 @@ def analyst_target_mean(payloads, facts) -> Fact:
         value=value,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -508,6 +584,8 @@ def analyst_count(payloads, facts) -> Fact:
         value=total if total > 0 else None,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -530,6 +608,8 @@ def analyst_rating_distribution(payloads, facts) -> Fact:
         value=out if out else None,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(ident),
+        source_tier="vendor",
     )
 
 
@@ -560,6 +640,8 @@ def consensus_upside_pct(payloads, facts) -> Fact:
         source_ids=union_source_ids(facts["analyst_target_mean"], facts["current_price"]),
         extractor="compute",
         depends_on=["analyst_target_mean", "current_price"],
+        data_as_of=facts["current_price"].data_as_of,
+        source_tier="derived",
     )
 
 
@@ -588,6 +670,8 @@ def revenue_years(payloads, facts) -> Fact:
         value=dates if dates else None,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -599,6 +683,8 @@ def cogs_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Income_Statement", field="costOfRevenue"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -610,6 +696,8 @@ def operating_income_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Income_Statement", field="operatingIncome"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -621,6 +709,8 @@ def net_income_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Income_Statement", field="netIncome"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -632,6 +722,8 @@ def eps_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Income_Statement", field="eps"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -643,6 +735,8 @@ def total_assets_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Balance_Sheet", field="totalAssets"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -654,6 +748,8 @@ def total_liabilities_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Balance_Sheet", field="totalLiab"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -665,6 +761,8 @@ def equity_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Balance_Sheet", field="totalStockholderEquity"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -676,6 +774,8 @@ def cash_annual(payloads, facts) -> Fact:
         value=_series_or_none(payload, statement="Balance_Sheet", field="cash"),
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -691,6 +791,8 @@ def total_debt_annual(payloads, facts) -> Fact:
         value=series,
         source_ids=[payloads.manifest_id_for(ident)],
         extractor="deterministic",
+        data_as_of=payloads.latest_annual_filing_date(ident),
+        source_tier="vendor",
     )
 
 
@@ -727,6 +829,8 @@ def gross_margin_annual(payloads, facts) -> Fact:
         source_ids=union_source_ids(facts["revenue_annual"], facts["gross_profit_annual"]),
         extractor="compute",
         depends_on=["revenue_annual", "gross_profit_annual"],
+        data_as_of=facts["revenue_annual"].data_as_of,
+        source_tier="derived",
     )
 
 
@@ -742,6 +846,8 @@ def operating_margin_annual(payloads, facts) -> Fact:
         source_ids=union_source_ids(facts["revenue_annual"], facts["operating_income_annual"]),
         extractor="compute",
         depends_on=["revenue_annual", "operating_income_annual"],
+        data_as_of=facts["revenue_annual"].data_as_of,
+        source_tier="derived",
     )
 
 
@@ -757,6 +863,8 @@ def net_margin_annual(payloads, facts) -> Fact:
         source_ids=union_source_ids(facts["revenue_annual"], facts["net_income_annual"]),
         extractor="compute",
         depends_on=["revenue_annual", "net_income_annual"],
+        data_as_of=facts["revenue_annual"].data_as_of,
+        source_tier="derived",
     )
 
 
@@ -781,11 +889,14 @@ def peer_price_to_book(payloads, facts) -> Fact:
         except (TypeError, ValueError):
             continue
         used_ids.append(payloads.manifest_id_for(ident))
+    subject_ident = payloads.subject_fundamentals_identifier()
     return Fact(
         name="peer_price_to_book",
         value=values,
         source_ids=_peer_source_ids_or_subject_fallback(payloads, used_ids),
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(subject_ident),
+        source_tier="vendor",
     )
 
 
@@ -803,11 +914,14 @@ def peer_ev_to_ebitda(payloads, facts) -> Fact:
         except (TypeError, ValueError):
             continue
         used_ids.append(payloads.manifest_id_for(ident))
+    subject_ident = payloads.subject_fundamentals_identifier()
     return Fact(
         name="peer_ev_to_ebitda",
         value=values,
         source_ids=_peer_source_ids_or_subject_fallback(payloads, used_ids),
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(subject_ident),
+        source_tier="vendor",
     )
 
 
@@ -825,9 +939,12 @@ def peer_peg_ratio(payloads, facts) -> Fact:
         except (TypeError, ValueError):
             continue
         used_ids.append(payloads.manifest_id_for(ident))
+    subject_ident = payloads.subject_fundamentals_identifier()
     return Fact(
         name="peer_peg_ratio",
         value=values,
         source_ids=_peer_source_ids_or_subject_fallback(payloads, used_ids),
         extractor="deterministic",
+        data_as_of=payloads.retrieved_at_for(subject_ident),
+        source_tier="vendor",
     )
