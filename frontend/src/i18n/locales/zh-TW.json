@@ -1,0 +1,242 @@
+{
+  "common": {
+    "save": "儲存",
+    "saving": "儲存中…",
+    "saved": "已儲存",
+    "cancel": "取消",
+    "confirm": "確認",
+    "delete": "刪除",
+    "edit": "編輯",
+    "close": "關閉",
+    "loading": "載入中…",
+    "refresh": "重新整理",
+    "ok": "確定",
+    "back": "返回",
+    "next": "下一步",
+    "search": "搜尋",
+    "error_generic": "發生錯誤。",
+    "try_again": "請再試一次",
+    "yes": "是",
+    "no": "否",
+    "are_you_sure": "確定要繼續嗎？",
+    "this_cannot_be_undone": "此動作無法復原。",
+    "personal": "個人版",
+    "company": "企業版"
+  },
+  "nav": {
+    "section_general": "一般",
+    "section_departments": "部門",
+    "home": "首頁",
+    "secretary": "秘書",
+    "portfolio": "投資組合",
+    "repository": "資料庫",
+    "memory": "記憶",
+    "equity_research": "個股研究",
+    "earnings_update": "財報更新",
+    "morning_briefing": "晨報",
+    "retail_sentiment": "散戶情緒",
+    "macro_research": "總體研究",
+    "panic_thermometer": "恐慌溫度計",
+    "settings": "設定",
+    "main_navigation": "主要導覽",
+    "collapse": "收合",
+    "collapse_sidebar": "收合側邊欄",
+    "expand_sidebar": "展開側邊欄",
+    "open_navigation": "開啟導覽",
+    "new_chat": "新對話"
+  },
+  "welcome": {
+    "greeting_morning": "早安",
+    "greeting_afternoon": "午安",
+    "greeting_evening": "晚安",
+    "greeting_night": "夜深了",
+    "greeting_hello": "您好",
+    "accent_today": "今天",
+    "accent_this_evening": "今晚",
+    "accent_this_morning": "今早",
+    "accent_right_now": "此刻",
+    "accent_at_the_open": "開盤時",
+    "equity_research_subtitle": "建立新標的的覆蓋研究、在事件後更新投資觀點，或自上而下解構一個產業。",
+    "secretary_subtitle": "歡迎詢問任何問題。我可以調閱市場資料、財報、新聞、您的投資組合與資料庫。"
+  },
+  "home": {
+    "morning_briefing_card_title": "晨報",
+    "portfolio_card_title": "投資組合總覽 · 淨值",
+    "suggested_today": "今日建議",
+    "ticker": "代號行情",
+    "recent": "最近項目",
+    "nav": "淨值",
+    "vs_spx": "對標普 500",
+    "drawdown": "回撤",
+    "exposure": "曝險"
+  },
+  "settings": {
+    "title": "設定",
+    "tabs": {
+      "general": "一般",
+      "models": "模型",
+      "timezone": "時區",
+      "account": "帳號",
+      "skills": "技能",
+      "admin": "管理",
+      "disclaimer": "免責聲明",
+      "guardrails": "風控紀錄"
+    },
+    "general": {
+      "title": "一般",
+      "profile_title": "個人資料",
+      "profile_description": "顯示於側邊欄與報告中的名稱。",
+      "display_name": "顯示名稱",
+      "notifications_title": "通知",
+      "notifications_description": "在報告與排程任務完成時提醒您。",
+      "notify_inapp": "應用程式內通知",
+      "notify_email": "電子郵件通知",
+      "notify_email_hint": "需由管理員設定 SMTP。",
+      "appearance_title": "外觀",
+      "theme_system": "跟隨系統",
+      "theme_light": "淺色",
+      "theme_dark": "深色",
+      "language_title": "語言",
+      "language_description": "控制系統介面、對話回覆與生成報告的輸出語言。",
+      "language_system_label": "系統語言",
+      "language_system_hint": "選單、設定與歡迎畫面所使用的語言。",
+      "language_chat_label": "對話回覆語言",
+      "language_chat_hint": "Lia 在對話中回覆您時所使用的語言。",
+      "language_report_label": "報告輸出語言",
+      "language_report_hint": "個股研究、財報更新與晨報所使用的語言。",
+      "language_option_en": "English",
+      "language_option_zh_tw": "繁體中文",
+      "language_option_both": "中英對照 (English + 繁體中文)"
+    },
+    "account": {
+      "title": "帳號",
+      "email_section_title": "變更電子郵件",
+      "new_email": "新電子郵件",
+      "current_password": "目前密碼",
+      "change_email_button": "變更電子郵件",
+      "email_updated": "電子郵件已更新。",
+      "change_password_section_title": "變更密碼",
+      "active_sessions_section_title": "使用中的登入工作階段",
+      "must_change_password_banner": "請先變更密碼，再繼續使用本系統。"
+    },
+    "timezone": {
+      "title": "時區"
+    },
+    "models": {
+      "title": "模型"
+    },
+    "disclaimer": {
+      "title": "免責聲明"
+    },
+    "guardrails": {
+      "title": "風控紀錄"
+    },
+    "skills": {
+      "title": "技能"
+    },
+    "admin": {
+      "title": "管理"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "登入",
+      "email_label": "電子郵件",
+      "password_label": "密碼",
+      "submit": "登入",
+      "forgot_password": "忘記密碼？",
+      "register_link": "尚未註冊？立即註冊",
+      "loading": "登入中…"
+    },
+    "register": {
+      "title": "建立帳號",
+      "email_label": "電子郵件",
+      "password_label": "密碼",
+      "confirm_password_label": "確認密碼",
+      "display_name_label": "顯示名稱（選填）",
+      "submit": "建立帳號",
+      "loading": "建立帳號中…",
+      "login_link": "已有帳號？立即登入",
+      "registration_closed": "目前已暫停註冊。"
+    },
+    "forgot": {
+      "title": "重設密碼",
+      "submit": "寄送重設連結",
+      "back_to_login": "返回登入"
+    },
+    "reset": {
+      "title": "設定新密碼",
+      "new_password_label": "新密碼",
+      "confirm_new_password_label": "確認新密碼",
+      "submit": "重設密碼"
+    },
+    "must_change": {
+      "title": "請先變更您的密碼",
+      "submit": "變更密碼"
+    }
+  },
+  "chat": {
+    "input_helper": "Enter 送出 · Shift+Enter 換行",
+    "thinking": "思考中…",
+    "load_failed": "無法載入對話訊息",
+    "report_unavailable": "本對話原所對應的報告已無法擷取，因此無法繼續回答相關問題。",
+    "ask_followup_placeholder": "針對該公司、產業或報告，提出後續問題…"
+  },
+  "equity_research": {
+    "ticker_placeholder": "輸入代號、公司名稱或產業（例如：AAPL、半導體）…",
+    "mode": "模式",
+    "mode_stock_initiation": "首次覆蓋報告",
+    "mode_stock_update": "個股更新報告",
+    "mode_sector_research": "產業研究報告",
+    "length_concise": "精簡",
+    "length_normal": "標準",
+    "length_elaborative": "深度",
+    "change_mode_aria": "切換報告模式與篇幅"
+  },
+  "earnings": {
+    "no_prints_today": "今日尚無財報發布",
+    "no_prints_this_week": "本週稍早無財報發布",
+    "up_next_24h": "即將發布 · 24 小時內",
+    "earlier_this_week": "本週稍早",
+    "calendar_wiring_pending": "財報行事曆連線設定中"
+  },
+  "macro": {
+    "frameworks_aria": "總體研究框架",
+    "framework_debt_cycle": "債務循環",
+    "framework_four_seasons": "四季模型",
+    "framework_all_weather": "全天候組合",
+    "framework_world_order": "世界秩序",
+    "framework_five_forces": "五力分析",
+    "auto_refresh_aria": "自動更新頻率",
+    "auto_refresh_5min": "自動更新 · 每 5 分鐘",
+    "auto_refresh_15min": "自動更新 · 每 15 分鐘",
+    "auto_refresh_off": "自動更新 · 關閉"
+  },
+  "morning_briefing": {
+    "tab_overview": "總覽",
+    "tab_metrics": "指標細項",
+    "tab_evidence": "佐證資料",
+    "tab_insights": "洞察",
+    "run_now": "立即執行",
+    "running": "執行中…"
+  },
+  "panic_thermometer": {
+    "title": "恐慌溫度計"
+  },
+  "memory_page": {
+    "title": "記憶",
+    "subtitle": "跨對話記憶",
+    "pending_proposals": "待確認的記憶",
+    "confirmed_beliefs": "已確認的記憶"
+  },
+  "report": {
+    "executive_summary": "重點摘要",
+    "lias_call": "Lia 的判讀",
+    "related_links": "相關連結",
+    "delete_report": "刪除報告",
+    "download": "下載",
+    "download_pdf": "PDF",
+    "download_json": "JSON",
+    "download_markdown": "Markdown"
+  }
+}
