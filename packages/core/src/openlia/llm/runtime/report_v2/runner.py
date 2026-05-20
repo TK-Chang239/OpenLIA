@@ -71,6 +71,10 @@ from openlia.llm.runtime.report_v2.packer.validator import (
     cross_section_numeric_consistency,
     validate_section,
 )
+from openlia.llm.runtime.report_v2.peers import (
+    InsufficientPeerSetError,
+    count_peer_fundamentals,
+)
 from openlia.llm.runtime.report_v2.scanners import (
     MaterialEventError,
     scan_manifest,
@@ -295,6 +299,7 @@ class WavedReportRunner:
         language: str | None = None,
         freshness_override: bool = False,
         material_events_override: bool = False,
+        peer_set_override: bool = False,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -328,6 +333,10 @@ class WavedReportRunner:
         # When True, hard-block material events (Chapter 11, restatement, etc.)
         # detected after `data_as_of` are logged but the runner proceeds.
         self.material_events_override = material_events_override
+        # When True, an insufficient peer set (<2 peers) is logged but the
+        # runner proceeds. Default False: shipping a single-row peer table is
+        # a P1 quality defect for an initiation report.
+        self.peer_set_override = peer_set_override
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -498,6 +507,21 @@ class WavedReportRunner:
                         f"material_events_override=True",
                         flush=True,
                     )
+
+            # WS2: peer-set sufficiency gate. An initiation report must carry
+            # at least two peers; shipping a single-row peer table is a P1
+            # quality defect. The override flag downgrades the failure to a
+            # logged warning.
+            peer_count = count_peer_fundamentals(manifest.entries, subject_ticker=self.ticker)
+            if peer_count < 2 and not self.peer_set_override:
+                raise InsufficientPeerSetError(peer_count)
+            if peer_count < 2:
+                print(
+                    f"[runner] WARN insufficient peer set "
+                    f"(peers={peer_count}, need>=2) — proceeding due to "
+                    f"peer_set_override=True",
+                    flush=True,
+                )
 
             # W4: body sections
             await self._emit(ReportPhase(report_id=rid, phase="section_drafting"))
