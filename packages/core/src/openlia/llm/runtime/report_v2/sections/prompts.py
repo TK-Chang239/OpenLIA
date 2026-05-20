@@ -335,9 +335,13 @@ and waste your retry budget:
   - "no data available"
   - "data not provided"
   - "data unavailable"
+  - "data not available"
   - "N/A" or "n/a" (as standalone prose)
   - "TBD"
   - "unable to determine"
+  - "we cannot determine"
+  - "more assumption-heavy than the current fact set supports"
+  - "this is not a single target-setting exercise"
 
 If a specific fact you would like to cite is not in the manifest or facts slice, REWRITE the \
 sentence so it does not need that fact. Use what IS available, frame qualitatively, or omit the \

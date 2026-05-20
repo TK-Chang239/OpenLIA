@@ -38,6 +38,7 @@ class ReportTelemetry:
     omitted_blocks: list[OmittedBlock] = field(default_factory=list)
     freshness_banner: dict[str, Any] | None = None
     material_events_banner: dict[str, Any] | None = None
+    report_mode_banner: dict[str, Any] | None = None
 
     def record_section(self, result: SectionResult) -> None:
         self.sections[result.section_id] = {
@@ -105,6 +106,25 @@ class ReportTelemetry:
             "override": override,
         }
 
+    def record_report_mode_banner(
+        self,
+        *,
+        mode: str,
+        label: str | None,
+        auto_selected: bool,
+    ) -> None:
+        """Record the chosen industry overlay (WS9).
+
+        Surfaced on the cover so readers see which specialization rendered the
+        report (e.g. 'Initiation report — SaaS specialization'). `auto_selected`
+        is False when the runner was invoked with an explicit
+        `report_mode_override`."""
+        self.report_mode_banner = {
+            "mode": mode,
+            "label": label,
+            "auto_selected": auto_selected,
+        }
+
     def snapshot(self) -> dict[str, Any]:
         omitted_counts: Counter = Counter()
         for ob in self.omitted_blocks:
@@ -127,4 +147,5 @@ class ReportTelemetry:
             "omitted_block_counts": dict(omitted_counts),
             "freshness_banner": self.freshness_banner,
             "material_events_banner": self.material_events_banner,
+            "report_mode_banner": self.report_mode_banner,
         }
