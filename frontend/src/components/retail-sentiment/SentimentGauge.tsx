@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface Props {
   /** Sentiment score. Auto-detects scale: |x|<=1 → [-1,+1]; else clamped 0..100. */
   score: number | null | undefined;
@@ -23,11 +25,11 @@ interface Zone {
  * intermediate bands not represented by semantic tokens.
  */
 const ZONES: Zone[] = [
-  { start: 0, end: 20, color: "var(--color-feedback-error)", label: "Capitulation" },
-  { start: 20, end: 40, color: "var(--color-feedback-error)", label: "Fearful" },
-  { start: 40, end: 60, color: "var(--color-text-tertiary)", label: "Calm" },
-  { start: 60, end: 80, color: "var(--color-feedback-success)", label: "Greedy" },
-  { start: 80, end: 100, color: "var(--color-accent-primary)", label: "Frothy" },
+  { start: 0, end: 20, color: "var(--color-feedback-error)", label: "capitulation" },
+  { start: 20, end: 40, color: "var(--color-feedback-error)", label: "fearful" },
+  { start: 40, end: 60, color: "var(--color-text-tertiary)", label: "calm" },
+  { start: 60, end: 80, color: "var(--color-feedback-success)", label: "greedy" },
+  { start: 80, end: 100, color: "var(--color-accent-primary)", label: "frothy" },
 ];
 
 function detectScale(value: number, override?: "signed" | "percent"): "signed" | "percent" {
@@ -51,6 +53,7 @@ export function SentimentGauge({
   scale,
   size = 320,
 }: Props) {
+  const { t } = useTranslation();
   const hasScore = score !== null && score !== undefined && Number.isFinite(score);
   const rawIn = hasScore ? Number(score) : 0;
   const detected = detectScale(rawIn, scale);
@@ -103,7 +106,10 @@ export function SentimentGauge({
       className="relative w-full"
       style={{ maxWidth: size }}
       role="img"
-      aria-label={`Sentiment gauge ${displayValue} (${zone.label})`}
+      aria-label={t("retail_sentiment.sentiment_gauge.aria", {
+        value: displayValue,
+        label: t(`retail_sentiment.sentiment_gauge.${zone.label}`),
+      })}
       data-testid="sentiment-gauge"
     >
       <svg
@@ -173,17 +179,17 @@ export function SentimentGauge({
           textAnchor="middle"
         >
           <text x="58" y="120" transform="rotate(-72 58 120)">
-            FEAR
+            {t("retail_sentiment.sentiment_gauge.fear")}
           </text>
           <text x="105" y="55" transform="rotate(-36 105 55)">
-            CAUTIOUS
+            {t("retail_sentiment.sentiment_gauge.cautious")}
           </text>
-          <text x="160" y="58">CALM</text>
+          <text x="160" y="58">{t("retail_sentiment.sentiment_gauge.calm_caps")}</text>
           <text x="215" y="55" transform="rotate(36 215 55)">
-            GREEDY
+            {t("retail_sentiment.sentiment_gauge.greedy_caps")}
           </text>
           <text x="262" y="120" transform="rotate(72 262 120)">
-            FROTHY
+            {t("retail_sentiment.sentiment_gauge.frothy_caps")}
           </text>
         </g>
       </svg>
@@ -207,7 +213,9 @@ export function SentimentGauge({
             color: zone.color,
           }}
         >
-          {hasScore ? zone.label : "Awaiting snapshot"}
+          {hasScore
+            ? t(`retail_sentiment.sentiment_gauge.${zone.label}`)
+            : t("retail_sentiment.sentiment_gauge.awaiting")}
         </div>
       </div>
 
@@ -216,13 +224,17 @@ export function SentimentGauge({
         style={{ borderColor: "var(--color-border-subtle)" }}
       >
         <div className="flex flex-col gap-0.5">
-          <span className="rs-mono-label">Δ 24H</span>
+          <span className="rs-mono-label">
+            {t("retail_sentiment.sentiment_gauge.delta_24h")}
+          </span>
           <span className={`rs-mono-value ${sentimentClass(delta24h)}`}>
             {fmtDelta(delta24h)}
           </span>
         </div>
         <div className="flex flex-col gap-0.5">
-          <span className="rs-mono-label">Δ 7D</span>
+          <span className="rs-mono-label">
+            {t("retail_sentiment.sentiment_gauge.delta_7d")}
+          </span>
           <span className={`rs-mono-value ${sentimentClass(delta7d)}`}>
             {fmtDelta(delta7d)}
           </span>

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   CustomSection,
@@ -21,17 +22,14 @@ interface Props {
   onSave: (next: EuConfig) => Promise<void>;
 }
 
-const LENGTHS: { id: ReportLength; label: string; hint: string }[] = [
-  { id: "concise", label: "Concise", hint: "Shorter" },
-  { id: "normal", label: "Normal", hint: "Balanced" },
-  { id: "elaborative", label: "Elaborative", hint: "Deeper" },
-];
+const LENGTH_IDS: readonly ReportLength[] = ["concise", "normal", "elaborative"];
 
 function randomId(): string {
   return `custom_${Math.random().toString(36).slice(2, 8)}_${Date.now().toString(36)}`;
 }
 
 export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
+  const { t } = useTranslation();
   const [length, setLength] = useState<ReportLength>(config.report_length);
   const [enabled, setEnabled] = useState<Set<string>>(
     new Set(config.enabled_section_ids),
@@ -94,19 +92,19 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
             <div>
               <Dialog.Title asChild>
                 <h2 className="text-[15px] font-semibold text-[--color-text-primary] m-0">
-                  Report Settings
+                  {t("earnings.settings_modal.title")}
                 </h2>
               </Dialog.Title>
               <Dialog.Description asChild>
                 <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[--color-text-tertiary] m-0">
-                  Customize earnings update reports
+                  {t("earnings.settings_modal.subtitle")}
                 </p>
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
               <button
                 type="button"
-                aria-label="Close report settings"
+                aria-label={t("earnings.settings_modal.close_aria")}
                 className="text-[--color-text-secondary] hover:text-[--color-text-primary] transition-colors"
               >
                 <X size={16} />
@@ -117,26 +115,26 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
           <div className="flex-1 overflow-y-auto px-6 py-5">
             <section className="mb-7">
               <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
-                Report length
+                {t("earnings.settings_modal.length_title")}
               </h3>
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
-                How thoroughly the report walks through each section.
+                {t("earnings.settings_modal.length_hint")}
               </p>
               <div
                 role="radiogroup"
-                aria-label="Report length"
+                aria-label={t("earnings.settings_modal.length_aria")}
                 className="inline-flex gap-1 p-1 bg-[--color-surface-hover] rounded-lg"
               >
-                {LENGTHS.map((l) => {
-                  const active = length === l.id;
+                {LENGTH_IDS.map((id) => {
+                  const active = length === id;
                   return (
                     <button
-                      key={l.id}
+                      key={id}
                       type="button"
                       role="radio"
                       aria-checked={active}
-                      aria-label={l.id}
-                      onClick={() => setLength(l.id)}
+                      aria-label={id}
+                      onClick={() => setLength(id)}
                       className={[
                         "px-3.5 py-1.5 rounded-md text-[13px] transition-all duration-[--duration-fast]",
                         active
@@ -144,7 +142,7 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
                           : "text-[--color-text-secondary] hover:text-[--color-text-primary]",
                       ].join(" ")}
                     >
-                      {l.label}
+                      {t(`earnings.settings_modal.length_${id}`)}
                     </button>
                   );
                 })}
@@ -155,10 +153,10 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
 
             <section className="mb-7">
               <h3 className="text-[15px] font-semibold text-[--color-text-primary] mb-1">
-                Sections
+                {t("earnings.settings_modal.sections_title")}
               </h3>
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
-                Toggle which default sections each report includes.
+                {t("earnings.settings_modal.sections_hint")}
               </p>
               <div className="border border-[--color-border-subtle] rounded-lg overflow-hidden">
                 {defaultRows.map((row, idx) => {
@@ -216,23 +214,22 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
             <section className="mb-2">
               <div className="flex items-center justify-between mb-1">
                 <h3 className="text-[15px] font-semibold text-[--color-text-primary]">
-                  Custom sections
+                  {t("earnings.settings_modal.custom_title")}
                 </h3>
                 <button
                   type="button"
                   onClick={addCustom}
                   className="inline-flex items-center h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors text-[12.5px]"
                 >
-                  + Custom section
+                  {t("earnings.settings_modal.custom_button")}
                 </button>
               </div>
               <p className="text-[13px] text-[--color-text-secondary] leading-[1.5] mb-3">
-                Add your own sections — the description guides the LLM on what
-                to write.
+                {t("earnings.settings_modal.custom_hint")}
               </p>
               {customs.length === 0 ? (
                 <div className="border border-dashed border-[--color-border-subtle] rounded-md px-4 py-6 text-center text-[12.5px] text-[--color-text-tertiary]">
-                  No custom sections yet.
+                  {t("earnings.settings_modal.custom_empty")}
                 </div>
               ) : (
                 customs.map((c, idx) => (
@@ -259,7 +256,7 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
               onClick={onClose}
               className="inline-flex items-center h-9 px-4 rounded-md border border-[--color-border-subtle] bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:border-[--color-border-strong] transition-colors text-[13px] font-medium"
             >
-              Cancel
+              {t("earnings.settings_modal.cancel")}
             </button>
             <button
               type="button"
@@ -267,7 +264,9 @@ export function ReportSettingsModal({ open, config, onClose, onSave }: Props) {
               disabled={saving}
               className="inline-flex items-center h-9 px-5 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] disabled:opacity-50 transition-colors"
             >
-              {saving ? "Saving..." : "Save changes"}
+              {saving
+                ? t("earnings.settings_modal.saving")
+                : t("earnings.settings_modal.save")}
             </button>
           </footer>
         </Dialog.Content>

@@ -1,14 +1,16 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   newReportId: string;
 }
 
 export function RevisionInProgressChip({ newReportId }: Props) {
+  const { t } = useTranslation();
   const [cancelled, setCancelled] = useState(false);
 
   async function handleCancel() {
-    if (!confirm("Cancel this revision? Partial progress will be discarded.")) return;
+    if (!confirm(t("chat.cancel_revision_confirm"))) return;
     await fetch(`/reports/${newReportId}`, { method: "DELETE" });
     setCancelled(true);
   }
@@ -16,9 +18,9 @@ export function RevisionInProgressChip({ newReportId }: Props) {
   return (
     <div className={`chip chip--revision ${cancelled ? "chip--cancelled" : ""}`}>
       <span className="spinner" aria-hidden="true" />
-      <span>{cancelled ? "Revision cancelled" : "Revising the report based on our discussion..."}</span>
+      <span>{cancelled ? t("chat.revision_cancelled") : t("chat.revision_in_progress")}</span>
       {!cancelled && (
-        <button onClick={handleCancel}>Cancel revision</button>
+        <button onClick={handleCancel}>{t("chat.cancel_revision")}</button>
       )}
     </div>
   );

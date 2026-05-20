@@ -1,5 +1,6 @@
 import { useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { useTranslation } from "react-i18next";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 export type Day = (typeof DAYS)[number];
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function AddScheduleModal({ open, onClose, onSave, initial }: Props) {
+  const { t } = useTranslation();
   const [time, setTime] = useState(initial?.time ?? "06:00");
   const [timezone, setTimezone] = useState(
     initial?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -35,7 +37,7 @@ export function AddScheduleModal({ open, onClose, onSave, initial }: Props) {
 
   async function handleSave() {
     if (days.length === 0) {
-      setErr("Select at least one day");
+      setErr(t("earnings.schedule_modal.select_at_least_one"));
       return;
     }
     setErr(null);
@@ -49,12 +51,14 @@ export function AddScheduleModal({ open, onClose, onSave, initial }: Props) {
         <Dialog.Overlay className="fixed inset-0 bg-black/40" />
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[420px] bg-[--color-bg-elevated] rounded-[--radius-lg] p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold mb-4">
-            {initial ? "Edit Schedule" : "Add Schedule"}
+            {initial
+              ? t("earnings.schedule_modal.edit_title")
+              : t("earnings.schedule_modal.add_title")}
           </Dialog.Title>
           <label className="block text-sm mb-2">
-            Time
+            {t("earnings.schedule_modal.time")}
             <input
-              aria-label="time"
+              aria-label={t("earnings.schedule_modal.time_aria")}
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
@@ -62,16 +66,16 @@ export function AddScheduleModal({ open, onClose, onSave, initial }: Props) {
             />
           </label>
           <label className="block text-sm mb-2">
-            Timezone
+            {t("earnings.schedule_modal.timezone")}
             <input
-              aria-label="timezone"
+              aria-label={t("earnings.schedule_modal.timezone_aria")}
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
               className="ml-2 bg-[--color-bg-base] border border-[--color-border-subtle] rounded-[--radius-sm] px-2 h-8 text-sm w-[200px]"
             />
           </label>
           <fieldset className="my-2">
-            <legend className="text-sm">Days</legend>
+            <legend className="text-sm">{t("earnings.schedule_modal.days")}</legend>
             <div className="flex gap-2 flex-wrap">
               {DAYS.map((d) => (
                 <label key={d} className="text-xs flex items-center gap-1">
@@ -87,9 +91,9 @@ export function AddScheduleModal({ open, onClose, onSave, initial }: Props) {
             </div>
           </fieldset>
           <label className="block text-sm mb-2">
-            Label
+            {t("earnings.schedule_modal.label")}
             <input
-              aria-label="label"
+              aria-label={t("earnings.schedule_modal.label_aria")}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className="ml-2 bg-[--color-bg-base] border border-[--color-border-subtle] rounded-[--radius-sm] px-2 h-8 text-sm w-[240px]"
@@ -104,14 +108,14 @@ export function AddScheduleModal({ open, onClose, onSave, initial }: Props) {
               onClick={onClose}
               className="text-sm text-[--color-text-secondary] px-3 h-8 rounded-[--radius-md]"
             >
-              Cancel
+              {t("earnings.schedule_modal.cancel")}
             </button>
             <button
               type="button"
               onClick={() => void handleSave()}
               className="text-sm bg-[--color-accent-primary] text-white px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover]"
             >
-              Save
+              {t("earnings.schedule_modal.save")}
             </button>
           </div>
         </Dialog.Content>

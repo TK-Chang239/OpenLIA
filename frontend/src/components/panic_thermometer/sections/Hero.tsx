@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { HeroCopy, SummaryStats } from "../../../lib/panic_thermometer/copy/types";
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
 }
 
 export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
+  const { t } = useTranslation();
   const tubeY1 = 10;
   const tubeY2 = 190;
   const tubeHeight = tubeY2 - tubeY1;
@@ -31,24 +34,26 @@ export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
         </p>
         <div className="pt-stats">
           <div className="pt-stat">
-            <span className="pt-k">Composite</span>
+            <span className="pt-k">{t("panic_thermometer.hero.composite")}</span>
             <span className="pt-v is-bad">{stats.composite.toUpperCase()}</span>
           </div>
           <div className="pt-stat">
-            <span className="pt-k">Score</span>
+            <span className="pt-k">{t("panic_thermometer.hero.score")}</span>
             <span className="pt-v is-bad">
               {stats.scoreOutOf5.toFixed(1)} / 5.0
             </span>
           </div>
           <div className="pt-stat">
-            <span className="pt-k">Δ 7-day</span>
+            <span className="pt-k">{t("panic_thermometer.hero.delta_7day")}</span>
             <span className="pt-v is-warn">
-              {stats.delta7day > 0 ? `+${stats.delta7day}` : stats.delta7day} panel
-              {Math.abs(stats.delta7day) === 1 ? "" : "s"}
+              {stats.delta7day > 0 ? `+${stats.delta7day}` : stats.delta7day}{" "}
+              {t("panic_thermometer.hero.panels", {
+                count: Math.abs(stats.delta7day),
+              })}
             </span>
           </div>
           <div className="pt-stat">
-            <span className="pt-k">Last refresh</span>
+            <span className="pt-k">{t("panic_thermometer.hero.last_refresh")}</span>
             <span className="pt-v">{stats.lastRefreshLabel}</span>
           </div>
         </div>
@@ -58,7 +63,7 @@ export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
         <div className="pt-therm-col">
           <div
             className="pt-therm-bulb"
-            aria-label={`Composite panic thermometer at ${stats.composite}`}
+            aria-label={t("panic_thermometer.hero.composite_aria", { level: stats.composite })}
           >
             <svg viewBox="0 0 56 240" preserveAspectRatio="xMidYMid meet">
               <rect
@@ -128,21 +133,23 @@ export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
 
         <div className="pt-therm-side">
           <div className="pt-therm-row1">
-            <span className="pt-therm-label">● Composite reading</span>
-            <div className="pt-mode" role="group" aria-label="Composite mode">
+            <span className="pt-therm-label">
+              {t("panic_thermometer.hero.composite_reading")}
+            </span>
+            <div className="pt-mode" role="group" aria-label={t("panic_thermometer.hero.composite_mode_aria")}>
               <button
                 type="button"
                 className={mode === "count" ? "is-on" : ""}
                 onClick={() => onModeChange("count")}
               >
-                Count
+                {t("panic_thermometer.hero.mode_count")}
               </button>
               <button
                 type="button"
                 className={mode === "weighted" ? "is-on" : ""}
                 onClick={() => onModeChange("weighted")}
               >
-                Weighted
+                {t("panic_thermometer.hero.mode_weighted")}
               </button>
             </div>
           </div>
@@ -153,10 +160,15 @@ export function Hero({ hero, stats, mode, onModeChange }: Props): JSX.Element {
             </span>
             <span className="pt-sub">
               <strong>
-                {stats.redCount} of {stats.totalPanels}
+                {t("panic_thermometer.hero.red_of_total_strong", {
+                  red: stats.redCount,
+                  total: stats.totalPanels,
+                })}
               </strong>{" "}
-              red · score <strong>{stats.scoreOutOf5.toFixed(1)}</strong> / 5.0 ·{" "}
-              {stats.trend}
+              {t("panic_thermometer.hero.red_score", {
+                score: stats.scoreOutOf5.toFixed(1),
+                trend: stats.trend,
+              })}
             </span>
           </div>
 

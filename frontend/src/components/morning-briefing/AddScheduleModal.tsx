@@ -1,5 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { MbScheduleUpsert } from "../../api/morning-briefing";
 
@@ -31,6 +32,7 @@ export function AddScheduleModal({
   onSubmit,
   initial,
 }: Props) {
+  const { t } = useTranslation();
   const [time, setTime] = useState(initial?.time ?? "07:00");
   const [timezone, setTimezone] = useState(
     initial?.timezone ?? "America/New_York",
@@ -75,15 +77,16 @@ export function AddScheduleModal({
           data-testid="add-schedule-modal"
         >
           <Dialog.Title className="text-base font-semibold">
-            {initial ? "Edit schedule" : "Add schedule"}
+            {initial
+              ? t("morning_briefing.schedule_modal.edit_title")
+              : t("morning_briefing.schedule_modal.add_title")}
           </Dialog.Title>
           <Dialog.Description className="sr-only">
-            Configure time, timezone, days, and label for this Morning Briefing
-            schedule.
+            {t("morning_briefing.schedule_modal.description")}
           </Dialog.Description>
           <div className="space-y-2 text-sm">
             <label className="block">
-              <span className="text-xs">Time</span>
+              <span className="text-xs">{t("morning_briefing.schedule_modal.time")}</span>
               <input
                 type="time"
                 className="block w-full rounded border px-2 py-1"
@@ -94,7 +97,7 @@ export function AddScheduleModal({
               />
             </label>
             <label className="block">
-              <span className="text-xs">Timezone</span>
+              <span className="text-xs">{t("morning_briefing.schedule_modal.timezone")}</span>
               <select
                 className="block w-full rounded border px-2 py-1"
                 style={{ borderColor: "var(--color-border-subtle)" }}
@@ -110,7 +113,7 @@ export function AddScheduleModal({
               </select>
             </label>
             <div>
-              <span className="text-xs">Days</span>
+              <span className="text-xs">{t("morning_briefing.schedule_modal.days")}</span>
               <div className="flex gap-1 flex-wrap mt-1">
                 {DAY_NAMES.map((d) => {
                   const pressed = days.includes(d);
@@ -139,13 +142,13 @@ export function AddScheduleModal({
               </div>
             </div>
             <label className="block">
-              <span className="text-xs">Label</span>
+              <span className="text-xs">{t("morning_briefing.schedule_modal.label")}</span>
               <input
                 className="block w-full rounded border px-2 py-1"
                 style={{ borderColor: "var(--color-border-subtle)" }}
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                placeholder="Pre-Market"
+                placeholder={t("morning_briefing.schedule_modal.label_placeholder")}
                 data-testid="add-schedule-label"
               />
             </label>
@@ -158,7 +161,7 @@ export function AddScheduleModal({
               style={{ borderColor: "var(--color-border-subtle)" }}
               data-testid="add-schedule-cancel"
             >
-              Cancel
+              {t("morning_briefing.schedule_modal.cancel")}
             </button>
             <button
               type="button"
@@ -170,7 +173,9 @@ export function AddScheduleModal({
               }}
               data-testid="add-schedule-submit"
             >
-              {initial ? "Update Schedule" : "Add Schedule"}
+              {initial
+                ? t("morning_briefing.schedule_modal.update")
+                : t("morning_briefing.schedule_modal.add")}
             </button>
           </div>
         </Dialog.Content>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type {
   CustomSection,
@@ -17,11 +18,7 @@ import { NotesPopover } from "./NotesPopover";
 import { SectionRow } from "./SectionRow";
 import { TopicChip } from "./TopicChip";
 
-const LENGTHS: readonly { id: ReportLength; label: string }[] = [
-  { id: "concise", label: "Concise" },
-  { id: "normal", label: "Normal" },
-  { id: "elaborative", label: "Elaborative" },
-];
+const LENGTH_IDS: readonly ReportLength[] = ["concise", "normal", "elaborative"];
 
 interface Props {
   config: MbConfig;
@@ -32,6 +29,7 @@ interface Props {
 type Toast = { kind: "success" | "error"; text: string };
 
 export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState<MbConfig>(config);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -102,9 +100,15 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
     setSaving(true);
     try {
       await onSaveConfig(draft);
-      setToast({ kind: "success", text: "Settings saved." });
+      setToast({
+        kind: "success",
+        text: t("morning_briefing.settings_view.saved_toast"),
+      });
     } catch (err) {
-      const text = err instanceof Error ? err.message : "Save failed.";
+      const text =
+        err instanceof Error
+          ? err.message
+          : t("morning_briefing.settings_view.save_failed");
       setToast({ kind: "error", text });
     } finally {
       setSaving(false);
@@ -116,22 +120,22 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
       className="max-w-[880px] mx-auto px-8 pt-7 pb-16 relative"
       data-testid="mb-settings-view"
     >
-      <SetSection eyebrow="Report Length">
+      <SetSection eyebrow={t("morning_briefing.runnow.report_length")}>
         <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
-          Controls how detailed each briefing is.
+          {t("morning_briefing.settings_view.report_length_hint")}
         </p>
         <div
           className="inline-flex p-0.5 rounded-md border bg-[--color-bg-elevated]"
           style={{ borderColor: "var(--color-border-subtle)" }}
         >
-          {LENGTHS.map((l) => {
-            const active = draft.report_length === l.id;
+          {LENGTH_IDS.map((id) => {
+            const active = draft.report_length === id;
             return (
               <button
                 type="button"
-                key={l.id}
+                key={id}
                 aria-pressed={active}
-                onClick={() => setDraft({ ...draft, report_length: l.id })}
+                onClick={() => setDraft({ ...draft, report_length: id })}
                 className="h-7 px-3.5 rounded-[5px] text-[13px] font-medium transition-colors duration-[--duration-normal]"
                 style={{
                   background: active
@@ -142,18 +146,16 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
                     : "var(--color-text-secondary)",
                 }}
               >
-                {l.label}
+                {t(`morning_briefing.length.${id}`)}
               </button>
             );
           })}
         </div>
       </SetSection>
 
-      <SetSection number="01" eyebrow="Report Sections">
+      <SetSection number="01" eyebrow={t("morning_briefing.settings_view.report_sections")}>
         <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
-          Standard sections are fixed. Toggle each on or off, and add the
-          topics you want covered. Click any topic chip to add notes for the
-          LLM.
+          {t("morning_briefing.settings_view.report_sections_hint")}
         </p>
         <div
           className="bg-[--color-bg-elevated] border rounded-[--radius-lg] overflow-hidden"
@@ -170,7 +172,9 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
                 title={entry.title}
                 hint={entry.hint}
                 badge={
-                  id === "executive_summary" ? "Always-on summary" : undefined
+                  id === "executive_summary"
+                    ? t("morning_briefing.runnow.always_on_summary")
+                    : undefined
                 }
                 checked={isEnabled}
                 onChange={(c) => toggleSection(id, c)}
@@ -212,7 +216,7 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
                         <input
                           ref={topicInputRef}
                           type="text"
-                          placeholder="Type and press Enter"
+                          placeholder={t("morning_briefing.settings_view.topic_input_placeholder")}
                           data-testid={`topic-input-${id}`}
                           className="bg-transparent border-0 outline-0 text-[13px] text-[--color-text-primary] placeholder:text-[--color-text-tertiary] w-[150px]"
                           onKeyDown={(e) => {
@@ -238,7 +242,8 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
                         style={{ borderColor: "var(--color-border-secondary)" }}
                       >
                         <Plus size={11} strokeWidth={2.5} />
-                        {entry.topicPlaceholder || "Add topic"}
+                        {entry.topicPlaceholder ||
+                          t("morning_briefing.settings_view.add_topic")}
                       </button>
                     )}
                   </div>
@@ -261,10 +266,9 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
                     />
                     <span>
                       <strong className="text-[--color-text-primary] font-medium">
-                        Reference Portfolio
+                        {t("morning_briefing.settings_view.reference_portfolio_strong")}
                       </strong>{" "}
-                      — automatically include tickers from your Portfolio in
-                      this section.
+                      {t("morning_briefing.settings_view.reference_portfolio_hint")}
                     </span>
                   </label>
                 )}
@@ -276,7 +280,7 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
 
       <SetSection
         number="02"
-        eyebrow="Custom Sections"
+        eyebrow={t("morning_briefing.settings_view.custom_sections")}
         action={
           <button
             type="button"
@@ -286,13 +290,12 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
             style={{ borderColor: "var(--color-border-secondary)" }}
           >
             <Plus size={13} strokeWidth={1.8} />
-            Add Section
+            {t("morning_briefing.settings_view.add_section")}
           </button>
         }
       >
         <p className="text-[13px] text-[--color-text-secondary] mb-3.5 leading-[1.5] m-0 -mt-1.5">
-          Add custom sections with a description that tells the LLM what to
-          cover.
+          {t("morning_briefing.settings_view.custom_sections_hint")}
         </p>
         {draft.custom_sections.length === 0 ? (
           <div
@@ -302,7 +305,7 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
               color: "var(--color-text-tertiary)",
             }}
           >
-            No custom sections yet.
+            {t("morning_briefing.settings_view.no_custom_yet")}
           </div>
         ) : (
           <div className="space-y-2">
@@ -318,10 +321,9 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
         )}
       </SetSection>
 
-      <SetSection number="03" eyebrow="Default Model">
+      <SetSection number="03" eyebrow={t("morning_briefing.settings_view.default_model")}>
         <p className="text-[13px] text-[--color-text-secondary] mb-3 leading-[1.5] m-0 -mt-1.5">
-          Default model used for scheduled briefings and as the starting point
-          on the Run Now tab.
+          {t("morning_briefing.settings_view.default_model_hint")}
         </p>
         <ModelPicker
           departmentSlug="morning-briefing"
@@ -337,7 +339,9 @@ export function MBSettingsView({ config, onSaveConfig, onError }: Props) {
           onClick={save}
           data-testid="mb-save-settings"
         >
-          {saving ? "Saving…" : "Save settings"}
+          {saving
+            ? t("morning_briefing.settings_view.saving")
+            : t("morning_briefing.settings_view.save_settings")}
         </button>
       </div>
 

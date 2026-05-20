@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { InflationPanel } from "../../../lib/panic_thermometer/copy/types";
 import { Crosshair, HoverTooltip, useChartHover } from "../_shared/hover";
 import { PanelLineText, ParamsBlock, RulesBlock } from "../_shared/visuals";
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export function InflationSection({ panel, onEditRules }: Props): JSX.Element {
+  const { t } = useTranslation();
   const { chart } = panel;
   const xMin = 40;
   const xMax = 690;
@@ -53,12 +56,12 @@ export function InflationSection({ panel, onEditRules }: Props): JSX.Element {
   return (
     <>
       <div className="pt-sec-label" id="inflation">
-        <span>D2 · Inflation expectations</span>
+        <span>{t("panic_thermometer.inflation_section.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">EODHD · TIP.US + Michigan 5Y</span>
+        <span className="pt-count">{t("panic_thermometer.inflation_section.meta")}</span>
       </div>
 
-      <section className="pt-panel" aria-label="Inflation expectations panel">
+      <section className="pt-panel" aria-label={t("panic_thermometer.inflation_section.aria")}>
         <PanelHead panel={panel} />
         <div className="pt-panel-body">
           <div className="pt-panel-chart">
@@ -77,7 +80,7 @@ export function InflationSection({ panel, onEditRules }: Props): JSX.Element {
               className="pt-svg-chart"
               viewBox="0 0 700 240"
               preserveAspectRatio="none"
-              aria-label="Inflation expectations dual-axis chart"
+              aria-label={t("panic_thermometer.inflation_section.chart_aria")}
               onMouseMove={hover.onMouseMove}
               onMouseLeave={hover.onMouseLeave}
             >
@@ -207,19 +210,23 @@ export function InflationSection({ panel, onEditRules }: Props): JSX.Element {
             <div className="pt-infl-legend">
               <span>
                 <span className="pt-legend-line" />
-                TIP price · left
+                {t("panic_thermometer.inflation_section.tip_left")}
               </span>
               <span>
                 <span className="pt-legend-dot" />
-                Michigan 5Y · monthly
+                {t("panic_thermometer.inflation_section.michigan_monthly")}
               </span>
             </div>
           </div>
 
           <div className="pt-panel-side">
-            <RulesBlock title="Rule set" rules={panel.rules} onEdit={onEditRules} />
+            <RulesBlock
+              title={t("panic_thermometer.inflation_section.rules_title")}
+              rules={panel.rules}
+              onEdit={onEditRules}
+            />
             <ParamsBlock
-              title="Params"
+              title={t("panic_thermometer.inflation_section.params_title")}
               params={panel.params}
               presetLabel={panel.presetLabel}
             />

@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { FedPanel, Tone } from "../../../lib/panic_thermometer/copy/types";
 import {
   HeadlineText,
@@ -20,14 +22,15 @@ const TONE_FILL: Record<Tone, string> = {
   hawkish: "var(--color-feedback-error)",
   crisis: "var(--pt-darkred)",
 };
-const TONE_LABEL: Record<Tone, string> = {
-  dovish: "DOVISH",
-  neutral: "NEUTRAL",
-  hawkish: "HAWKISH",
-  crisis: "CRISIS",
+const TONE_KEY: Record<Tone, string> = {
+  dovish: "panic_thermometer.fed_section.tone_dovish",
+  neutral: "panic_thermometer.fed_section.tone_neutral",
+  hawkish: "panic_thermometer.fed_section.tone_hawkish",
+  crisis: "panic_thermometer.fed_section.tone_crisis",
 };
 
 export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.Element {
+  const { t } = useTranslation();
   const xMin = 30;
   const xMax = 690;
   const xStep = (xMax - xMin) / Math.max(1, panel.postureTimeline.length - 1);
@@ -35,12 +38,12 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
   return (
     <>
       <div className="pt-sec-label" id="fed">
-        <span>D3 · Fed language tracker</span>
+        <span>{t("panic_thermometer.fed_section.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">EODHD · company_news · Fed/FOMC/Powell</span>
+        <span className="pt-count">{t("panic_thermometer.fed_section.meta")}</span>
       </div>
 
-      <section className="pt-panel" aria-label="Fed language tracker panel">
+      <section className="pt-panel" aria-label={t("panic_thermometer.fed_section.aria")}>
         <PanelHead panel={panel} />
         <div className="pt-panel-body">
           <div className="pt-panel-chart">
@@ -51,9 +54,13 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
 
             <div className="pt-fed-timeline">
               <div className="pt-fed-tl-head">
-                <span className="pt-fed-tl-title">FOMC posture timeline</span>
+                <span className="pt-fed-tl-title">
+                  {t("panic_thermometer.fed_section.posture_title")}
+                </span>
                 <span className="pt-fed-tl-meta">
-                  last {panel.postureTimeline.length} meetings
+                  {t("panic_thermometer.fed_section.posture_meta", {
+                    count: panel.postureTimeline.length,
+                  })}
                 </span>
               </div>
               <svg
@@ -86,8 +93,8 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
                         style={{ animationDelay: `${300 + i * 60}ms` }}
                       >
                         <title>
-                          {m.label}: {TONE_LABEL[m.tone]}
-                          {m.isCurrent ? " (current)" : ""}
+                          {m.label}: {t(TONE_KEY[m.tone])}
+                          {m.isCurrent ? t("panic_thermometer.fed_section.current_suffix") : ""}
                         </title>
                       </circle>
                       <text
@@ -113,7 +120,7 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
                         fontWeight={m.isCurrent ? 600 : 400}
                         fontSize={8}
                       >
-                        {TONE_LABEL[m.tone]}
+                        {t(TONE_KEY[m.tone])}
                         {m.isCurrent ? " ●" : ""}
                       </text>
                     </g>
@@ -125,9 +132,13 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
             <div className="pt-fed-news">
               <div className="pt-fed-news-head">
                 <span className="pt-fed-news-title">
-                  Last {panel.headlines.length} Fed-related headlines
+                  {t("panic_thermometer.fed_section.news_title", {
+                    count: panel.headlines.length,
+                  })}
                 </span>
-                <span className="pt-fed-news-meta">trigger matches highlighted</span>
+                <span className="pt-fed-news-meta">
+                  {t("panic_thermometer.fed_section.news_meta")}
+                </span>
               </div>
               {panel.headlines.map((h, i) => (
                 <div key={i} className="pt-fed-item">
@@ -149,12 +160,14 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
 
           <div className="pt-panel-side">
             <div className="pt-kw">
-              <div className="pt-kw-head">Keyword lists · click to edit</div>
+              <div className="pt-kw-head">
+                {t("panic_thermometer.fed_section.keywords_head")}
+              </div>
               {(["dovish", "neutral", "hawkish", "crisis"] as Tone[]).map((tone) => {
                 const kw = panel.keywords[tone];
                 return (
                   <div key={tone} className="pt-kw-row">
-                    <span className={`pt-lbl is-${tone}`}>{TONE_LABEL[tone]}</span>
+                    <span className={`pt-lbl is-${tone}`}>{t(TONE_KEY[tone])}</span>
                     <div className="pt-kw-chips">
                       {kw.matches.map((m) => (
                         <span key={`m-${m}`} className="pt-kw-chip is-match">
@@ -184,9 +197,13 @@ export function FedSection({ panel, onEditRules, onEditKeywords }: Props): JSX.E
               })}
             </div>
 
-            <RulesBlock title="Rule set" rules={panel.rules} onEdit={onEditRules} />
+            <RulesBlock
+              title={t("panic_thermometer.fed_section.rules_title")}
+              rules={panel.rules}
+              onEdit={onEditRules}
+            />
             <ParamsBlock
-              title="Manual override"
+              title={t("panic_thermometer.fed_section.params_title")}
               params={panel.params}
             />
           </div>

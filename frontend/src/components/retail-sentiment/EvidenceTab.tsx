@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { RsSnapshot } from "../../api/retail-sentiment";
 import { RS_METRIC_CATALOG } from "../../lib/retail-sentiment/metric-catalog";
@@ -54,15 +55,17 @@ function SectionLabel({
   );
 }
 
-function classify(snap: RsSnapshot): "Bullish" | "Bearish" | "Mixed" {
-  if (snap.sentiment_score > 0.15) return "Bullish";
-  if (snap.sentiment_score < -0.15) return "Bearish";
-  return "Mixed";
+type StanceId = "bullish" | "bearish" | "mixed";
+
+function classify(snap: RsSnapshot): StanceId {
+  if (snap.sentiment_score > 0.15) return "bullish";
+  if (snap.sentiment_score < -0.15) return "bearish";
+  return "mixed";
 }
 
-function classificationColor(label: "Bullish" | "Bearish" | "Mixed"): string {
-  if (label === "Bullish") return "var(--color-feedback-success)";
-  if (label === "Bearish") return "var(--color-feedback-error)";
+function classificationColor(label: StanceId): string {
+  if (label === "bullish") return "var(--color-feedback-success)";
+  if (label === "bearish") return "var(--color-feedback-error)";
   return "var(--color-text-secondary)";
 }
 
@@ -70,15 +73,17 @@ function SourceFilterPills({
   active,
   onChange,
   counts,
+  t,
 }: {
   active: SourceFilter;
   onChange: (next: SourceFilter) => void;
   counts: Record<SourceFilter, number>;
+  t: (key: string) => string;
 }) {
   const items: Array<{ id: SourceFilter; label: string }> = [
-    { id: "all", label: "All sources" },
-    { id: "news", label: "News" },
-    { id: "social", label: "Social" },
+    { id: "all", label: t("retail_sentiment.evidence.filter_all") },
+    { id: "news", label: t("retail_sentiment.evidence.filter_news") },
+    { id: "social", label: t("retail_sentiment.evidence.filter_social") },
   ];
   return (
     <div
@@ -125,15 +130,29 @@ function ScoreImpactWalkthrough({
   rows,
   baseline,
   final,
+  t,
 }: {
   rows: ImpactRow[];
   baseline: number;
   final: number;
+  t: (key: string) => string;
 }) {
   const all = [
-    { id: "__baseline", label: "Baseline", value: baseline, display: baseline.toFixed(2), kind: "baseline" as const },
+    {
+      id: "__baseline",
+      label: t("retail_sentiment.evidence.baseline_label"),
+      value: baseline,
+      display: baseline.toFixed(2),
+      kind: "baseline" as const,
+    },
     ...rows.map((r) => ({ ...r, kind: "delta" as const })),
-    { id: "__final", label: "= Final composite", value: final, display: final.toFixed(2), kind: "final" as const },
+    {
+      id: "__final",
+      label: t("retail_sentiment.evidence.final_label"),
+      value: final,
+      display: final.toFixed(2),
+      kind: "final" as const,
+    },
   ];
   const max = Math.max(
     ...all.map((r) => Math.abs(r.value)),
@@ -222,16 +241,19 @@ function SourceCard({
   count,
   snap,
   ticker,
+  t,
 }: {
   source: string;
   count: number;
   snap: RsSnapshot;
   ticker: string;
+  t: (key: string, opts?: Record<string, unknown>) => string;
 }) {
   const label = SOURCE_LABEL[source] ?? source;
   const kind = SOURCE_KIND[source] ?? "news";
   const stance = classify(snap);
   const color = classificationColor(stance);
+  const stanceLabel = t(`retail_sentiment.evidence.stance_${stance}`);
   return (
     <article
       className="rs-col-card p-5 space-y-3"
@@ -241,7 +263,9 @@ function SourceCard({
       <header className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-0.5">
           <span className="rs-mono-label">
-            {kind === "news" ? "News provider" : "Social provider"}
+            {kind === "news"
+              ? t("retail_sentiment.evidence.news_provider")
+              : t("retail_sentiment.evidence.social_provider")}
           </span>
           <h4
             className="m-0"
@@ -263,7 +287,7 @@ function SourceCard({
             letterSpacing: "0.14em",
           }}
         >
-          {stance}
+          {stanceLabel}
         </span>
       </header>
       <p
@@ -274,10 +298,11 @@ function SourceCard({
           color: "var(--color-text-secondary)",
         }}
       >
-        Captured {count.toLocaleString()} mentions of{" "}
+        {t("retail_sentiment.evidence.source_blurb_prefix", {
+          count: count.toLocaleString(),
+        })}{" "}
         <strong style={{ color: "var(--color-text-primary)" }}>{ticker}</strong>{" "}
-        on this source. Per-source polarity is not yet broken out — the stance
-        badge above reflects the snapshot-wide composite.
+        {t("retail_sentiment.evidence.source_blurb_suffix")}
       </p>
       <dl
         className="font-mono"
@@ -291,7 +316,7 @@ function SourceCard({
             className="rs-mono-label"
             style={{ minWidth: 96 }}
           >
-            count
+            {t("retail_sentiment.evidence.count_key")}
           </dt>
           <dd className="m-0" style={{ color: "var(--color-text-primary)" }}>
             {count}
@@ -302,10 +327,13 @@ function SourceCard({
             className="rs-mono-label"
             style={{ minWidth: 96 }}
           >
-            normalized
+            {t("retail_sentiment.evidence.normalized_key")}
           </dt>
           <dd className="m-0" style={{ color: "var(--color-text-primary)" }}>
-            {snap.sentiment_score.toFixed(2)} <span style={{ color: "var(--color-text-tertiary)" }}>(snapshot-wide)</span>
+            {snap.sentiment_score.toFixed(2)}{" "}
+            <span style={{ color: "var(--color-text-tertiary)" }}>
+              {t("retail_sentiment.evidence.normalized_note")}
+            </span>
           </dd>
         </div>
       </dl>
@@ -316,9 +344,11 @@ function SourceCard({
 function ChatStyleSnapshotRow({
   snap,
   prior,
+  t,
 }: {
   snap: RsSnapshot;
   prior: RsSnapshot | null;
+  t: (key: string) => string;
 }) {
   const delta =
     prior && Number.isFinite(snap.sentiment_score) && Number.isFinite(prior.sentiment_score)
@@ -326,6 +356,7 @@ function ChatStyleSnapshotRow({
       : null;
   const stance = classify(snap);
   const stanceColor = classificationColor(stance);
+  const stanceLabel = t(`retail_sentiment.evidence.stance_${stance}`);
   const captured = new Date(snap.captured_at);
   const sources = Object.keys(snap.source_breakdown ?? {});
 
@@ -362,8 +393,7 @@ function ChatStyleSnapshotRow({
         >
           {snap.narrative ?? (
             <span className="text-[--color-text-tertiary]">
-              No narrative for this snapshot. Score reflects aggregated
-              classifier output.
+              {t("retail_sentiment.evidence.no_narrative")}
             </span>
           )}
         </p>
@@ -384,7 +414,7 @@ function ChatStyleSnapshotRow({
               color: stanceColor,
             }}
           >
-            {stance.toUpperCase()}
+            {stanceLabel.toUpperCase()}
           </span>
           <span style={{ color: "var(--color-text-tertiary)" }}>
             score {snap.sentiment_score.toFixed(2)}
@@ -458,6 +488,7 @@ function impactRowsFor(snap: RsSnapshot): ImpactRow[] {
 }
 
 export function EvidenceTab({ selected, history }: Props) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<SourceFilter>("all");
 
   if (!selected) {
@@ -474,7 +505,7 @@ export function EvidenceTab({ selected, history }: Props) {
             color: "var(--color-text-secondary)",
           }}
         >
-          Select a single ticker to inspect the evidence behind its score.
+          {t("retail_sentiment.evidence.select_ticker")}
         </p>
       </div>
     );
@@ -494,13 +525,14 @@ export function EvidenceTab({ selected, history }: Props) {
         className="rs-col-card p-8 text-center"
         style={{ borderRadius: 12 }}
       >
-        <p className="rs-mono-label">No history</p>
+        <p className="rs-mono-label">
+          {t("retail_sentiment.evidence.no_history")}
+        </p>
         <p
           className="m-0 mt-2"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          No snapshot history for {selected} yet — run a snapshot to populate
-          this view.
+          {t("retail_sentiment.evidence.no_history_hint", { ticker: selected })}
         </p>
       </div>
     );
@@ -535,7 +567,7 @@ export function EvidenceTab({ selected, history }: Props) {
             letterSpacing: "-0.01em",
           }}
         >
-          Evidence snapshots
+          {t("retail_sentiment.evidence.header_title")}
         </h2>
         <p
           className="m-0 max-w-[760px]"
@@ -545,21 +577,23 @@ export function EvidenceTab({ selected, history }: Props) {
             color: "var(--color-text-secondary)",
           }}
         >
-          Every score on the dashboard is built from concrete sources. Here is
-          how today's mentions are distributed and how the composite read is
-          assembled metric by metric.
+          {t("retail_sentiment.evidence.header_lede")}
         </p>
       </header>
 
       <SectionLabel
-        title="Sources"
-        meta={`${sourceEntries.length} active · filter ${filter}`}
+        title={t("retail_sentiment.evidence.sources_label")}
+        meta={t("retail_sentiment.evidence.sources_meta", {
+          count: sourceEntries.length,
+          filter,
+        })}
         first
       />
       <SourceFilterPills
         active={filter}
         onChange={setFilter}
         counts={counts}
+        t={t}
       />
 
       {filtered.length === 0 ? (
@@ -568,14 +602,16 @@ export function EvidenceTab({ selected, history }: Props) {
           style={{ borderRadius: 12 }}
           data-testid="evidence-no-sources"
         >
-          <p className="rs-mono-label">No matching sources</p>
+          <p className="rs-mono-label">
+            {t("retail_sentiment.evidence.no_matching_sources")}
+          </p>
           <p
             className="m-0 mt-2"
             style={{ color: "var(--color-text-secondary)", fontSize: 13 }}
           >
             {sourceEntries.length === 0
-              ? "Snapshot did not record any source breakdown — provider may be misconfigured."
-              : "No sources of this kind in the latest snapshot. Try the All filter."}
+              ? t("retail_sentiment.evidence.no_source_breakdown")
+              : t("retail_sentiment.evidence.no_kind_in_snapshot")}
           </p>
         </div>
       ) : (
@@ -587,6 +623,7 @@ export function EvidenceTab({ selected, history }: Props) {
               count={count}
               snap={latest}
               ticker={selected}
+              t={t}
             />
           ))}
         </div>
@@ -595,13 +632,14 @@ export function EvidenceTab({ selected, history }: Props) {
         className="rs-mono-label"
         style={{ color: "var(--color-text-tertiary)" }}
       >
-        Backend gap: per-source polarity / engagement / per-evidence-item rows
-        require an /evidence_items endpoint (Gap 2 + Gap 3).
+        {t("retail_sentiment.evidence.gap_evidence")}
       </p>
 
       <SectionLabel
-        title="Score impact walkthrough"
-        meta={`Snapshot · ${new Date(latest.captured_at).toLocaleString()}`}
+        title={t("retail_sentiment.evidence.walkthrough_title")}
+        meta={t("retail_sentiment.evidence.walkthrough_snapshot_meta", {
+          when: new Date(latest.captured_at).toLocaleString(),
+        })}
       />
       <article
         className="rs-col-card p-5"
@@ -612,21 +650,19 @@ export function EvidenceTab({ selected, history }: Props) {
           rows={impactRows}
           baseline={0}
           final={finalScore}
+          t={t}
         />
         <p
           className="rs-mono-label mt-4"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          Backend gap: real per-evidence walkthrough (+ Reuters article, − NHTSA
-          probe, etc.) requires per-item additive impact (Gap 4). Today's bars
-          are signed contributions of each composite metric, centered against
-          its neutral value.
+          {t("retail_sentiment.evidence.gap_walkthrough")}
         </p>
       </article>
 
       <SectionLabel
-        title="Recent snapshots"
-        meta={`${sorted.length} captures · reverse chronological`}
+        title={t("retail_sentiment.evidence.recent_snapshots")}
+        meta={t("retail_sentiment.evidence.recent_meta", { count: sorted.length })}
       />
       <article
         className="rs-col-card overflow-hidden"
@@ -640,6 +676,7 @@ export function EvidenceTab({ selected, history }: Props) {
               key={snap.captured_at}
               snap={snap}
               prior={isLast ? null : arr[i + 1]}
+              t={t}
             />
           );
         })}
@@ -647,9 +684,7 @@ export function EvidenceTab({ selected, history }: Props) {
           className="rs-mono-label px-5 py-3"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          Backend gap: per-source rows (article / tweet / post with
-          classification badge + impact value) require an /evidence_items
-          endpoint. Snapshot history shown here is the closest substitute today.
+          {t("retail_sentiment.evidence.gap_recent")}
         </div>
       </article>
     </div>

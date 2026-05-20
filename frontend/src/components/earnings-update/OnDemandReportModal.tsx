@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { CheckCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { WatchlistEntry } from "../../api/earnings-update";
 
@@ -31,6 +32,7 @@ export function OnDemandReportModal({
   startReport,
   entries,
 }: Props) {
+  const { t } = useTranslation();
   const [ticker, setTicker] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -51,7 +53,7 @@ export function OnDemandReportModal({
       onReportReady(result);
       onClose();
     } catch (e) {
-      setErr((e as Error).message ?? "Failed to generate report");
+      setErr((e as Error).message ?? t("earnings.on_demand_modal.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -63,16 +65,15 @@ export function OnDemandReportModal({
         <Dialog.Overlay className="fixed inset-0 bg-black/40" />
         <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[480px] max-w-[480px] bg-[--color-bg-elevated] rounded-[--radius-lg] p-6 shadow-lg">
           <Dialog.Title className="text-lg font-semibold mb-1">
-            On-Demand Earnings Update
+            {t("earnings.on_demand_modal.title")}
           </Dialog.Title>
           <Dialog.Description className="text-sm text-[--color-text-secondary] mb-4">
-            Generate an earnings analysis for a company's most recently released
-            earnings report.
+            {t("earnings.on_demand_modal.description")}
           </Dialog.Description>
           <input
             value={ticker}
             onChange={(e) => setTicker(e.target.value)}
-            placeholder="Ticker symbol (e.g. AAPL)"
+            placeholder={t("earnings.on_demand_modal.ticker_placeholder")}
             className="w-full bg-[--color-bg-base] border border-[--color-border-subtle] rounded-[--radius-sm] px-3 h-9 text-sm text-[--color-text-primary]"
           />
           {matchedEntry ? (
@@ -90,7 +91,9 @@ export function OnDemandReportModal({
                 — {matchedEntry.company_name}
               </span>
               <span className="text-[--color-text-tertiary] ml-auto">
-                Last earnings: {formatDate(matchedEntry.next_earnings_date)}
+                {t("earnings.on_demand_modal.last_earnings", {
+                  date: formatDate(matchedEntry.next_earnings_date),
+                })}
               </span>
             </div>
           ) : null}
@@ -103,7 +106,7 @@ export function OnDemandReportModal({
               onClick={onClose}
               className="text-sm text-[--color-text-secondary] px-3 h-8 rounded-[--radius-md]"
             >
-              Cancel
+              {t("earnings.on_demand_modal.cancel")}
             </button>
             <button
               type="button"
@@ -111,7 +114,9 @@ export function OnDemandReportModal({
               onClick={() => void handleGenerate()}
               className="text-sm bg-[--color-accent-primary] text-white px-3 h-8 rounded-[--radius-md] hover:bg-[--color-accent-hover] disabled:opacity-50"
             >
-              {submitting ? "Generating..." : "Generate Report"}
+              {submitting
+                ? t("earnings.on_demand_modal.generating")
+                : t("earnings.on_demand_modal.generate")}
             </button>
           </div>
         </Dialog.Content>

@@ -1,4 +1,5 @@
 import { FileText } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { DemoReportMeta } from "../../../lib/earnings-update/demo-data";
 
@@ -23,6 +24,7 @@ export function EuBigCard({
   onOpen,
   meta,
 }: Props) {
+  const { t } = useTranslation();
   const live = status === "streaming";
   return (
     <article
@@ -35,11 +37,11 @@ export function EuBigCard({
           {live ? (
             <span className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded bg-[--color-accent-subtle] font-mono text-[10px] tracking-[0.1em] uppercase text-[--color-feedback-success]">
               <span className="w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] animate-live-pulse" />
-              Call Live
+              {t("earnings.feed.call_live")}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 h-[22px] px-2.5 rounded bg-[--color-accent-subtle] font-mono text-[10px] tracking-[0.1em] uppercase text-[--color-feedback-success]">
-              Today
+              {t("earnings.feed.today")}
             </span>
           )}
           <span className="font-mono text-[10.5px] tracking-[0.06em] text-[--color-text-tertiary] uppercase">
@@ -67,12 +69,12 @@ export function EuBigCard({
               onClick={() => onOpen(reportId)}
               className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md bg-[--color-accent-primary] text-[--color-accent-on] text-[13px] font-medium hover:bg-[--color-accent-hover] transition-colors duration-[--duration-normal]"
             >
-              <FileText size={13} /> Open update
+              <FileText size={13} /> {t("earnings.feed.open_update")}
             </button>
           ) : (
             <span className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-md border border-[--color-border-subtle] text-[--color-text-secondary] text-[13px]">
               <span className="w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] animate-live-pulse" />
-              Generating...
+              {t("earnings.feed.generating")}
             </span>
           )}
         </div>
@@ -80,17 +82,17 @@ export function EuBigCard({
       <aside className="bg-[--color-accent-subtle] border-t md:border-t-0 md:border-l border-[--color-border-subtle] px-4 py-4 flex flex-col gap-2.5">
         <div className="grid grid-cols-2 gap-x-3.5 gap-y-2.5">
           <SideStat
-            label="Rev. surprise"
+            label={t("earnings.feed.rev_surprise")}
             value={meta?.revSurprise ?? "—"}
             tone={meta ? (meta.revPositive ? "pos" : "neg") : undefined}
           />
           <SideStat
-            label="EPS surprise"
+            label={t("earnings.feed.eps_surprise")}
             value={meta?.epsSurprise ?? "—"}
             tone={meta ? (meta.epsPositive ? "pos" : "neg") : undefined}
           />
           <SideStat
-            label="After-hours"
+            label={t("earnings.feed.after_hours")}
             value={meta?.afterHours ?? "—"}
             tone={
               meta?.afterHours !== undefined
@@ -100,7 +102,7 @@ export function EuBigCard({
                 : undefined
             }
           />
-          <SideStat label="Lia signal" value={meta?.liaSignal ?? "—"} />
+          <SideStat label={t("earnings.feed.lia_signal")} value={meta?.liaSignal ?? "—"} />
         </div>
       </aside>
     </article>
