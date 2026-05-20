@@ -110,186 +110,36 @@ from openlia.llm.runtime.report_v2.validators import (
     NumericValidationError,
     validate_sections,
 )
+
+# PR 2: section list, briefs, word targets, system role, and style guide moved
+# to `openlia.reports.frameworks.loaders.stock_initiation` (canonical source).
+# These module-level names are kept as re-exports for backward compatibility
+# with internal code paths and external importers; new code should read from
+# the resolved `TemplateSpec` instead.
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    BODY_SECTION_IDS as BODY_SECTIONS_STOCK_INITIATION,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    SECTION_BRIEFS as _SECTION_BRIEFS,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    STYLE_GUIDE as DEFAULT_STYLE_GUIDE,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    SYNTHESIS_SECTION_IDS as SYNTHESIS_SECTIONS_STOCK_INITIATION,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    SYSTEM_ROLE as DEFAULT_SYSTEM_ROLE,
+)
+from openlia.reports.frameworks.loaders.stock_initiation import (
+    WORD_TARGETS as DEFAULT_WORD_TARGETS,
+)
 from openlia.reports.schema import ReportSchema
-
-BODY_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
-    "company_overview",
-    "industry_overview",
-    "products_and_services",
-    "business_model",
-    "management_team",
-    "historical_financials",
-    "financial_analysis",
-    "financial_projections",
-    "valuation_analysis",
-    "competitive_analysis",
-    "recent_developments",
-)
-
-SYNTHESIS_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
-    "competitive_advantages_and_weaknesses",
-    "risk_analysis",
-    "investment_recommendation",
-    "cover",
-)
-
-DEFAULT_WORD_TARGETS: dict[str, int] = {sid: 600 for sid in BODY_SECTIONS_STOCK_INITIATION} | {
-    "competitive_advantages_and_weaknesses": 500,
-    "risk_analysis": 500,
-    "investment_recommendation": 400,
-    "cover": 400,
-}
-
-_SECTION_BRIEFS: dict[str, str] = {
-    "company_overview": (
-        "Section: company_overview. Cover ticker, sector, headquarters, "
-        "headcount, founding date, key milestones, and core value "
-        "proposition. Preferred exhibits: ``metric_cards`` for headline "
-        "stats (market cap, P/E, revenue scale, headcount), ``key_finding`` "
-        "for the positioning one-liner, ``pull_quote`` for the mission or "
-        "CEO line."
-    ),
-    "industry_overview": (
-        "Section: industry_overview. Describe market size, growth, "
-        "structure, and where the company sits. Preferred exhibits: "
-        "``chart:pie`` or ``chart:treemap`` for market share or "
-        "segmentation, ``chart:bar`` for player ranking once there are "
-        "three or more competitors, ``callout_grid`` for market segments, "
-        "``table`` for TAM/SAM/SOM."
-    ),
-    "products_and_services": (
-        "Section: products_and_services. Walk through product families, "
-        "pricing, and customer types. Preferred exhibits: ``callout_grid`` "
-        "with eyebrow + description for each product or module family, "
-        "``table`` for a feature matrix, ``bullet_list`` for a tight "
-        "list of capabilities."
-    ),
-    "business_model": (
-        "Section: business_model. Cover revenue model, unit economics, "
-        "moats, and distribution. Preferred exhibits: ``callout_grid`` for "
-        "revenue pillars, ``chart:pie`` for revenue mix when disclosed, "
-        "``comparison_split`` for the model vs. its nearest alternative, "
-        "``key_finding``."
-    ),
-    "management_team": (
-        "Section: management_team. Profile the C-suite and board with "
-        "named individuals. Preferred exhibits: ``table`` for the officer "
-        "and director list with role + background, ``key_finding`` for "
-        "notable hires or departures."
-    ),
-    "historical_financials": (
-        "Section: historical_financials. Show revenue, profitability, "
-        "cash, and balance-sheet trends. Preferred exhibits: ``chart:combo``"
-        " for revenue bars plus a margin line across multiple years, "
-        "``chart:line`` for a single-metric trend, ``table`` for the "
-        "multi-period KPI grid."
-    ),
-    "financial_analysis": (
-        "Section: financial_analysis. Decompose margins, capital "
-        "efficiency, and ratios. Preferred exhibits: ``chart:line`` for "
-        "margin trends, ``table`` for KPIs vs. peers, ``waterfall_chart`` "
-        "for a revenue or EBITDA bridge, ``key_finding``."
-    ),
-    "financial_projections": (
-        "Section: financial_projections. Forward look on revenue, margins, "
-        "FCF. Preferred exhibits: ``chart:line`` for the 3-5 year "
-        "projection curve, ``chart:combo`` for revenue + growth %, "
-        "``table`` for assumptions plus outputs."
-    ),
-    "valuation_analysis": (
-        "Section: valuation_analysis. Multiples, DCF, peer comp — present "
-        "the math, not a recommendation. Preferred exhibits: ``table`` for "
-        "the peer multiples matrix (P/E, P/B, EV/EBITDA, PEG, 3Y growth — "
-        "the server pre-builds the peer matrix from facts; you may augment "
-        "with additional cited rows), ``chart:scatter`` for P/E vs. growth, "
-        "``comparison_split`` for sensitivity scenarios labeled by "
-        "methodology (e.g. 'Conservative · 18x EPS' vs 'Optimistic · "
-        "28x EPS'), ``waterfall_chart`` for a DCF bridge. Do not author a "
-        "single 'price target' — show the methodology's output and let the "
-        "reader compare it to analyst consensus (rendered separately in "
-        "Analyst View)."
-    ),
-    "competitive_analysis": (
-        "Section: competitive_analysis. Name competitors and quantify "
-        "where the company stands. Preferred exhibits: ``comparison_split``"
-        " for subject vs. top rival, ``table`` for a feature or share "
-        "matrix. Peer revenue ranking is owned by ``industry_overview`` — "
-        "reference it in prose here and use a different exhibit family."
-    ),
-    "recent_developments": (
-        "Section: recent_developments. Catalysts and news flow in the "
-        "last twelve months. Preferred exhibits: ``timeline`` with dated "
-        "events and ``impact_tag`` annotations whenever you have at least "
-        "three dated events, ``key_finding`` for the single most important "
-        "development, ``bullet_list`` for a tight catalog when dates are "
-        "not available."
-    ),
-    "competitive_advantages_and_weaknesses": (
-        "Section: competitive_advantages_and_weaknesses. Preferred "
-        "exhibits: ``comparison_split`` for strengths (left tone positive) "
-        "vs. weaknesses (right tone negative), ``callout_grid`` for moats "
-        "by type, ``key_finding`` for the durable advantage."
-    ),
-    "risk_analysis": (
-        "Section: risk_analysis. Preferred exhibits: ``callout_grid`` for "
-        "risk categories (market, regulatory, execution, financial), "
-        "``comparison_split`` for controlled vs. uncontrolled risks, "
-        "``timeline`` for known risk events."
-    ),
-    "investment_recommendation": (
-        "Section: Analyst View (information aggregation; no advocacy). The "
-        "server pre-populates the rating distribution chart, consensus "
-        "price-target metric_cards, and rating-badge from EODHD AnalystRatings "
-        "— do NOT emit those blocks yourself. Your job: (1) a "
-        "``comparison_split`` with 'Bull-case arguments' (left) vs "
-        "'Bear-case arguments' (right), each item an argument observed in "
-        "analyst notes / news / management commentary with a citation; "
-        "(2) when news_search surfaced upgrades/downgrades, a ``table`` of "
-        "recent rating changes (Date, Firm, Action, From -> To, Target "
-        "Price), each row cited; (3) a closing 3-4 sentence prose paragraph "
-        "summarizing what the consensus reflects, citing sources. Use "
-        "third-person sourcing language: 'JPMorgan rates Buy [c12]', "
-        "'consensus reflects a Hold [c1]'. Never write 'we recommend', "
-        "'our rating', 'our target', 'we view this as'."
-    ),
-    "cover": (
-        "Section: cover. Headline summary that drives the report's hero "
-        "panel. Required blocks, in this order: (1) a ``pull_quote`` "
-        "containing a single neutral framing sentence (what this report "
-        "covers and why it matters; one full sentence, <=240 chars, no "
-        "quotes around it, no recommendation language) — this becomes "
-        "the cover tagline; (2) a ``bullet_list`` of 3-5 short, "
-        "declarative ``Key findings`` — neutral, evidence-based, each "
-        "phrased as an observation citable to sources, NOT as a "
-        "recommendation; this is lifted as the Executive Summary; (3) a "
-        "``metric_cards`` block with 4-5 headline metrics — this "
-        "replaces the server-built deterministic metrics if present. "
-        "Wrap one short prose paragraph (3-5 sentences) before and "
-        "after the metric_cards to provide context. Do not emit "
-        "exhibit blocks like charts or tables. Do not use phrases like "
-        "'we recommend', 'our view', 'investment thesis' — frame as "
-        "'what the data shows', not what to do about it."
-    ),
-}
 
 DEFAULT_BRIEFS: dict[str, str] = {
     sid: _SECTION_BRIEFS.get(sid, f"Section: {sid}. Write a substantive analytical section.")
     for sid in (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
 }
-
-DEFAULT_SYSTEM_ROLE: str = "You are an equity research section writer."
-
-DEFAULT_STYLE_GUIDE: str = (
-    "Institutional tone, precise, cited. INFORMATION-AGGREGATION ONLY: "
-    "this report gathers and synthesizes information for the reader. "
-    "Never recommend an action. Never write 'we recommend', 'we "
-    "initiate at', 'our rating', 'our price target', 'our view is', "
-    "'we view this as', 'investment thesis', or any first-person "
-    "advocacy. Any buy/hold/sell language must be attributed to a "
-    "specific cited source (e.g. 'JPMorgan rates Buy [c12]', "
-    "'consensus reflects a Hold [c1]'). Frame conclusions as 'what "
-    "the data shows', not 'what to do about it'."
-)
 
 
 @dataclass
@@ -331,15 +181,11 @@ class WavedReportRunner:
         catalyst_pack_enabled: bool = True,
         template: TemplateSpec | None = None,
     ) -> None:
-        # PR 1 — template resolution. When an explicit TemplateSpec is provided,
-        # it takes precedence and the runner no longer requires `report_type` to
+        # Template resolution. When an explicit TemplateSpec is provided, it
+        # takes precedence and the runner no longer requires `report_type` to
         # be a registered template. When None, look up via the default registry;
-        # unknown report types now raise `UnknownTemplateError` from there.
+        # unknown report types raise `UnknownTemplateError` from there.
         if template is None:
-            # Importing the loaders package ensures default templates are registered
-            # before the registry is consulted. Done lazily here to avoid an import
-            # cycle (loaders depend on this module's constants).
-            import openlia.reports.frameworks.loaders  # noqa: F401
             from openlia.reports.frameworks.registry import (
                 default_registry as _template_registry,
             )
