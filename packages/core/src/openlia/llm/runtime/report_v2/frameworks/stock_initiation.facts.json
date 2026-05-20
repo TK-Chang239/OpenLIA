@@ -65,6 +65,7 @@
       "total_debt_annual",
       "cash_and_short_term_investments_annual",
       "net_cash_annual",
+      "net_cash",
       "operating_cash_flow_annual",
       "free_cash_flow_annual",
       "capex_annual",
@@ -92,8 +93,15 @@
       "roe_ttm",
       "roa_ttm",
       "roic_ttm",
+      "roe_ttm_computed",
+      "roic_ttm_computed",
+      "fcf_yield_computed",
+      "fcf_margin",
+      "margin_bridge",
       "sbc_annual",
-      "net_cash_annual"
+      "net_cash_annual",
+      "net_cash",
+      "cash_runway_quarters"
     ],
     "financial_projections": [
       "revenue_annual",
@@ -111,7 +119,9 @@
       "consensus_eps_growth_fy_next",
       "next_quarter_revenue_guide_midpoint",
       "next_quarter_revenue_guide_low",
-      "next_quarter_revenue_guide_high"
+      "next_quarter_revenue_guide_high",
+      "forecast_table",
+      "actual_vs_consensus"
     ],
     "valuation_analysis": [
       "market_cap",
@@ -131,11 +141,16 @@
       "ev_to_ebitda_forward",
       "ev_to_sales_forward",
       "fcf_yield",
+      "fcf_yield_computed",
       "dividend_yield",
       "beta",
       "shares_outstanding",
       "float_shares",
-      "short_interest_pct"
+      "short_interest_pct",
+      "peer_multiple_implied_range",
+      "peg_ratio_correct",
+      "sum_of_parts",
+      "football_field"
     ],
     "competitive_analysis": [
       "sector",
@@ -146,7 +161,14 @@
     ],
     "recent_developments": ["company_name"],
     "competitive_advantages_and_weaknesses": ["sector", "gross_margin_ttm"],
-    "risk_analysis": ["sector", "revenue_cagr_3y", "net_cash_annual", "short_interest_pct"],
+    "risk_analysis": [
+      "sector",
+      "revenue_cagr_3y",
+      "net_cash_annual",
+      "net_cash",
+      "short_interest_pct",
+      "cash_runway_quarters"
+    ],
     "investment_recommendation": [
       "company_name",
       "current_price",
@@ -154,7 +176,8 @@
       "analyst_target_mean",
       "analyst_count",
       "analyst_rating_distribution",
-      "consensus_upside_pct"
+      "consensus_upside_pct",
+      "football_field"
     ]
   }
 }

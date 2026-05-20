@@ -20,6 +20,7 @@ from openlia.llm.runtime.events import (
 )
 
 # Force registration of all deterministic + compute facts
+from openlia.llm.runtime.report_v2.facts import helpers as _helpers  # noqa: F401
 from openlia.llm.runtime.report_v2.facts.extractors import stock_initiation  # noqa: F401
 from openlia.llm.runtime.report_v2.facts.pack import compile_pack
 from openlia.llm.runtime.report_v2.facts.registry import default_registry
