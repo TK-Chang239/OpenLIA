@@ -57,4 +57,43 @@ describe('GeneralSection', () => {
     fireEvent.click(screen.getByRole('button', { name: /save/i }));
     await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' })));
   });
+
+  it('renders language selectors and PATCHes report_language=zh-TW on save', async () => {
+    vi.spyOn(settingsApi, 'getPrefs').mockResolvedValue({
+      display_name: 'Alice',
+      theme: 'system',
+      notify_inapp: true,
+      notify_email: false,
+      display_language: 'en',
+      response_language: 'en',
+      report_language: 'en',
+      timezone: 'UTC',
+      timezone_source: 'auto',
+      graph_extraction_time: '03:00',
+    });
+    const update = vi.spyOn(settingsApi, 'updatePrefs').mockResolvedValue({
+      display_name: 'Alice',
+      theme: 'system',
+      notify_inapp: true,
+      notify_email: false,
+      display_language: 'en',
+      response_language: 'en',
+      report_language: 'zh-TW',
+      timezone: 'UTC',
+      timezone_source: 'auto',
+      graph_extraction_time: '03:00',
+    });
+    render(<GeneralSection />);
+    await waitFor(() => screen.getByDisplayValue('Alice'));
+    const selects = screen.getAllByRole('combobox');
+    // 3 selectors rendered: system / response / report language.
+    expect(selects).toHaveLength(3);
+    fireEvent.change(selects[2], { target: { value: 'zh-TW' } });
+    fireEvent.click(screen.getByRole('button', { name: /save/i }));
+    await waitFor(() =>
+      expect(update).toHaveBeenCalledWith(
+        expect.objectContaining({ report_language: 'zh-TW' }),
+      ),
+    );
+  });
 });

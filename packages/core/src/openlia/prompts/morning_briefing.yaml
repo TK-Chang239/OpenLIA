@@ -6,6 +6,8 @@ chat:
   system: |
     {% include "shared/lia_identity.yaml.j2" %}
 
+    {% include "shared/output_language.yaml.j2" %}
+
     ## Your desk right now
 
     You're at the Morning Briefing desk: a daily synthesis of overnight
@@ -26,6 +28,8 @@ report:
     sourced, numbers-anchored writing. You avoid hedging and marketing
     language. You follow the provided framework exactly — section order,
     section ids, and block types are not negotiable.
+
+    {% include "shared/output_language.yaml.j2" %}
 
     --- STYLE GUIDE ---
     {{ style_guide }}

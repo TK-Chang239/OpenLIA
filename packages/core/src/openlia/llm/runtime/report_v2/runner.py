@@ -283,6 +283,7 @@ class WavedReportRunner:
         preflight_concurrency: int = 4,
         body_concurrency: int = 1,
         synthesis_concurrency: int = 1,
+        language: str | None = None,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -295,6 +296,9 @@ class WavedReportRunner:
         self.synthesis_writer = synthesis_writer
         self.system_role = system_role
         self.style_guide = style_guide
+        # Per-user output language directive (`"zh-TW"`, `"both"`, or `None`/`"en"`).
+        # Injected into every body/synthesis section prompt by the assemble helpers.
+        self.language = language
         self.max_retries = max_retries
         self.sse_emitter = sse_emitter
         self.report_id = report_id or uuid.uuid4().hex
@@ -409,6 +413,7 @@ class WavedReportRunner:
                         manifest=manifest,
                         facts_slice=pack.slice_for(framework[sid]),
                         word_target=DEFAULT_WORD_TARGETS[sid],
+                        language=self.language,
                     ),
                     target_word_count=DEFAULT_WORD_TARGETS[sid],
                     facts_slice=pack.slice_for(framework[sid]),
@@ -447,6 +452,7 @@ class WavedReportRunner:
                         synthesis_hooks_bundle=bundle,
                         facts_slice=pack.slice_for(framework[sid]),
                         word_target=DEFAULT_WORD_TARGETS[sid],
+                        language=self.language,
                     ),
                     target_word_count=DEFAULT_WORD_TARGETS[sid],
                     facts_slice=pack.slice_for(framework[sid]),

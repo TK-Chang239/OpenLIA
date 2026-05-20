@@ -132,3 +132,62 @@ def test_prompt_restricts_line_charts_to_ordered_series_of_4plus_points() -> Non
     assert "four or more time periods" in parts
     # metric_cards is the correct alternative for 1-3 independent scalars.
     assert "metric_cards" in parts
+
+
+def test_body_prompt_omits_language_directive_for_english_default() -> None:
+    parts = assemble_body_section_prompt(
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        facts_slice=_facts_slice(),
+        word_target=500,
+    )
+    assert "OUTPUT LANGUAGE" not in parts
+
+
+def test_body_prompt_injects_traditional_chinese_directive() -> None:
+    parts = assemble_body_section_prompt(
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        facts_slice=_facts_slice(),
+        word_target=500,
+        language="zh-TW",
+    )
+    assert "OUTPUT LANGUAGE" in parts
+    assert "Traditional Chinese" in parts
+    assert "繁體中文" in parts
+    # Directive appears between system role and style guide.
+    assert parts.find("OUTPUT LANGUAGE") < parts.find("STYLE GUIDE")
+
+
+def test_body_prompt_injects_dual_language_directive() -> None:
+    parts = assemble_body_section_prompt(
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        facts_slice=_facts_slice(),
+        word_target=500,
+        language="both",
+    )
+    assert "OUTPUT LANGUAGE" in parts
+    assert "first in" in parts and "English" in parts
+    assert "繁體中文" in parts
+
+
+def test_synthesis_prompt_injects_language_directive() -> None:
+    parts = assemble_synthesis_section_prompt(
+        system_role="x",
+        style_guide="y",
+        framework_brief="z",
+        manifest=_manifest(),
+        synthesis_hooks_bundle="hooks",
+        facts_slice=_facts_slice(),
+        word_target=500,
+        language="zh-TW",
+    )
+    assert "OUTPUT LANGUAGE" in parts
+    assert "繁體中文" in parts

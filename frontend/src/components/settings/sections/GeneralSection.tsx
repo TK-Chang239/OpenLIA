@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
-import { getPrefs, updatePrefs, Prefs, Theme, ApiError } from '../../../api/settings';
+import {
+  getPrefs,
+  updatePrefs,
+  Prefs,
+  Theme,
+  ApiError,
+  type LangCode,
+} from '../../../api/settings';
 import { useDirtyForm } from '../useDirtyForm';
 import { SaveButton, SaveState } from '../SaveButton';
 import { SettingGroup } from '../SettingGroup';
@@ -7,6 +14,17 @@ import { ToggleSwitch } from '../ToggleSwitch';
 import { InlineFeedback } from '../InlineFeedback';
 
 const THEMES: Theme[] = ['system', 'light', 'dark'];
+
+const UI_LANGUAGES: { code: LangCode; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'zh-TW', label: '繁體中文 (Traditional Chinese)' },
+];
+
+const REPORT_LANGUAGES: { code: LangCode; label: string }[] = [
+  { code: 'en', label: 'English' },
+  { code: 'zh-TW', label: '繁體中文 (Traditional Chinese)' },
+  { code: 'both', label: 'Both (English + 繁體中文)' },
+];
 
 const EMPTY: Prefs = {
   display_name: '',
@@ -62,6 +80,9 @@ export function GeneralSection(): JSX.Element {
         theme: form.values.theme,
         notify_inapp: form.values.notify_inapp,
         notify_email: form.values.notify_email,
+        display_language: form.values.display_language,
+        response_language: form.values.response_language,
+        report_language: form.values.report_language,
       };
       const next = await updatePrefs(patch);
       form.setValues(next);
@@ -136,6 +157,65 @@ export function GeneralSection(): JSX.Element {
             </label>
           ))}
         </div>
+      </SettingGroup>
+
+      <SettingGroup
+        title="Language"
+        description="Controls the system interface, chat responses, and generated report output."
+      >
+        <label className="block">
+          <span className="block text-sm font-medium text-text-primary">System language</span>
+          <span className="block text-xs text-text-secondary">
+            Language used across menus, settings, and welcome screens.
+          </span>
+          <select
+            value={form.values.display_language}
+            onChange={(e) => form.setField('display_language', e.target.value as LangCode)}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
+          >
+            {UI_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-sm font-medium text-text-primary">Chat response language</span>
+          <span className="block text-xs text-text-secondary">
+            Language Lia uses when replying to your chat messages.
+          </span>
+          <select
+            value={form.values.response_language}
+            onChange={(e) => form.setField('response_language', e.target.value as LangCode)}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
+          >
+            {UI_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="block text-sm font-medium text-text-primary">Report output language</span>
+          <span className="block text-xs text-text-secondary">
+            Language used in equity research, earnings, and morning briefing reports.
+          </span>
+          <select
+            value={form.values.report_language}
+            onChange={(e) => form.setField('report_language', e.target.value as LangCode)}
+            className="mt-1 w-full rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
+          >
+            {REPORT_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </SettingGroup>
     </div>
   );

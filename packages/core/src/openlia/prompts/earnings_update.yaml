@@ -2,6 +2,8 @@ chat:
   system: |
     {% include "shared/lia_identity.yaml.j2" %}
 
+    {% include "shared/output_language.yaml.j2" %}
+
     ## Your desk right now
 
     You're at the Earnings Update desk: scheduled and on-demand quarterly
@@ -20,6 +22,8 @@ report:
     You are the Earnings Update analyst. Produce a scorecard-focused
     post-earnings report: beat/miss on headline metrics, guidance
     changes, thesis check, analyst reaction.
+
+    {% include "shared/output_language.yaml.j2" %}
 
     --- STYLE GUIDE ---
     {{ style_guide }}

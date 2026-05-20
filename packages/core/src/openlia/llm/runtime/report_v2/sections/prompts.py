@@ -362,6 +362,34 @@ def _format_facts_slice(facts_slice: dict[str, Fact]) -> str:
     return "\n".join(lines) if lines else "  (none)"
 
 
+_LANGUAGE_DIRECTIVE_ZH_TW = (
+    "OUTPUT LANGUAGE: Write every paragraph, heading, bullet, key finding, "
+    "and prose field in Traditional Chinese (繁體中文 / 台灣用語). Keep "
+    "ticker symbols, financial metric codes (EPS, EBITDA, P/E, etc.), "
+    "citation markers ([c1], [s2]), block ids, and code identifiers in "
+    "their original Latin form — translate the prose around them. Numeric "
+    "values and units stay as written (e.g. $197.56, 38.2x, 16.5%)."
+)
+
+_LANGUAGE_DIRECTIVE_BOTH = (
+    "OUTPUT LANGUAGE: For every paragraph, render it twice: first in "
+    "English, then immediately followed by the Traditional Chinese "
+    "(繁體中文 / 台灣用語) translation of that paragraph in the same "
+    "block. Keep ticker symbols, financial metric codes (EPS, EBITDA, "
+    "P/E, etc.), citation markers ([c1], [s2]), block ids, and code "
+    "identifiers in their original Latin form. Numeric values and units "
+    "stay as written (e.g. $197.56, 38.2x, 16.5%)."
+)
+
+
+def _language_directive(language: str | None) -> str | None:
+    if language == "zh-TW":
+        return _LANGUAGE_DIRECTIVE_ZH_TW
+    if language == "both":
+        return _LANGUAGE_DIRECTIVE_BOTH
+    return None
+
+
 def assemble_body_section_prompt(
     *,
     system_role: str,
@@ -370,10 +398,14 @@ def assemble_body_section_prompt(
     manifest: Manifest,
     facts_slice: dict[str, Fact],
     word_target: int,
+    language: str | None = None,
 ) -> str:
-    return "\n\n".join(
+    parts: list[str] = [system_role]
+    lang = _language_directive(language)
+    if lang is not None:
+        parts.append(lang)
+    parts.extend(
         [
-            system_role,
             f"STYLE GUIDE:\n{style_guide}",
             f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
             f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
@@ -382,6 +414,7 @@ def assemble_body_section_prompt(
             _OUTPUT_FORMAT_REMINDER,
         ]
     )
+    return "\n\n".join(parts)
 
 
 def assemble_synthesis_section_prompt(
@@ -393,10 +426,14 @@ def assemble_synthesis_section_prompt(
     synthesis_hooks_bundle: str,
     facts_slice: dict[str, Fact],
     word_target: int,
+    language: str | None = None,
 ) -> str:
-    return "\n\n".join(
+    parts: list[str] = [system_role]
+    lang = _language_directive(language)
+    if lang is not None:
+        parts.append(lang)
+    parts.extend(
         [
-            system_role,
             f"STYLE GUIDE:\n{style_guide}",
             f"FRAMEWORK SECTION BRIEF:\n{framework_brief}",
             f"MANIFEST (citable as [N]):\n{manifest.as_prompt_list()}",
@@ -406,3 +443,4 @@ def assemble_synthesis_section_prompt(
             _OUTPUT_FORMAT_REMINDER,
         ]
     )
+    return "\n\n".join(parts)

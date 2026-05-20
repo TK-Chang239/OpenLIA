@@ -112,6 +112,11 @@ class PromptLoader:
             ),
             "search_budget": 0,
             "connector_quirks": (),
+            # User-pref language directive. ``None``/``"en"`` makes the
+            # shared/output_language partial emit nothing — default English
+            # behavior is unchanged. ``"zh-TW"`` / ``"both"`` triggers an
+            # explicit directive injected into chat.system and report.system.
+            "language": None,
             **context,
         }
         template = self._env.from_string(template_src)
