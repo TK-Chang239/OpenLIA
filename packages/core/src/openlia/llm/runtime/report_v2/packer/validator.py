@@ -26,6 +26,22 @@ _TOMBSTONE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# CJK ideographs (CJK Unified, CJK Ext-A, CJK Compatibility) — counted as
+# one "word" each since Chinese prose has no inter-character whitespace.
+_CJK_RE = re.compile(r"[一-鿿㐀-䶿豈-﫿]")
+
+
+def _count_prose_words(text: str) -> int:
+    """Count semantic units in mixed Latin/CJK prose.
+
+    Each CJK ideograph counts as one unit; remaining (non-CJK) text is
+    split on whitespace. ``"600 字" → 2`` words, ``"hello 你好" → 3``.
+    """
+    cjk = len(_CJK_RE.findall(text))
+    latin = len(_CJK_RE.sub(" ", text).split())
+    return cjk + latin
+
+
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|bn|b|m|k|x|usd|\$)", re.IGNORECASE)
 # Accept single ([1]) and multi-id ([1, 2, 3]) citation markers.
 _CITATION_RE = re.compile(r"\[\d+(?:\s*,\s*\d+)*\]")
@@ -62,7 +78,7 @@ def _prose_text(parsed: ParsedSection) -> str:
 
 def word_count_minimum(parsed: ParsedSection, *, target: int) -> list[ValidationFinding]:
     prose = _prose_text(parsed)
-    n = len(prose.split())
+    n = _count_prose_words(prose)
     if n < int(target * 0.7):
         return [
             ValidationFinding(

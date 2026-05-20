@@ -368,7 +368,11 @@ _LANGUAGE_DIRECTIVE_ZH_TW = (
     "ticker symbols, financial metric codes (EPS, EBITDA, P/E, etc.), "
     "citation markers ([c1], [s2]), block ids, and code identifiers in "
     "their original Latin form — translate the prose around them. Numeric "
-    "values and units stay as written (e.g. $197.56, 38.2x, 16.5%)."
+    "values and units stay as written (e.g. $197.56, 38.2x, 16.5%). "
+    "WORD TARGET MAPPING: When the section specifies an English word "
+    "target N, treat it as a target of N Chinese characters of prose "
+    "(每個漢字算一個字). Aim to meet or exceed the target so the section "
+    "is fully developed."
 )
 
 _LANGUAGE_DIRECTIVE_BOTH = (
