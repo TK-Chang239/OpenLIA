@@ -94,6 +94,18 @@ def assemble_report(
     for sr in sections:
         if sr.state == SectionTerminalState.EXHAUSTED:
             continue
+        if sr.state in (
+            SectionTerminalState.SKIPPED_REQUIRED_FACTS,
+            SectionTerminalState.DEGRADED_CAP_HIT,
+        ):
+            assembled_sections.append(
+                Section(
+                    id=sr.section_id,
+                    title=sr.section_id.replace("_", " ").title(),
+                    blocks=[_build_skip_banner_block(sr)],
+                )
+            )
+            continue
         assert sr.markdown is not None
         parsed = parse_section_file(sr.markdown)
         fm = parsed.frontmatter
@@ -139,6 +151,34 @@ def assemble_report(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _build_skip_banner_block(sr: Any) -> Block:
+    """Render an admonition-style TextBlock for skipped/degraded sections.
+
+    PR 15: makes custom-template failure modes surface in the rendered output
+    instead of silently dropping the section. The banner names the section
+    and (for SKIPPED_REQUIRED_FACTS) the missing facts so the template author
+    can react. We piggy-back on TextBlock to avoid a schema change; the
+    leading `> **Section omitted:**` prefix renders as a blockquote callout in
+    the existing markdown viewer.
+    """
+    from openlia.reports.schema import TextBlock as _TextBlock
+
+    if sr.state == SectionTerminalState.SKIPPED_REQUIRED_FACTS:
+        missing = sr.validation_errors or []
+        detail = ", ".join(f"`{name}`" for name in missing) if missing else "(unspecified)"
+        content = (
+            f"> **Section omitted.** Required fact(s) unavailable for this subject: "
+            f"{detail}. Other sections continue to render."
+        )
+    else:  # DEGRADED_CAP_HIT
+        content = (
+            "> **Section degraded.** Tool-call round budget exhausted before all "
+            "requested helpers were invoked; the prose below reflects only the "
+            "partial data the writer was able to gather."
+        )
+    return _TextBlock(type="text", content=content)
 
 
 def _strip_leading_title_heading(blocks: list[Block], section_title: str) -> None:

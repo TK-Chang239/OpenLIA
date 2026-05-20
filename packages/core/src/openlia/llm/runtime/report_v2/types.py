@@ -62,6 +62,11 @@ class SectionTerminalState(StrEnum):
     DEGRADED = "degraded"
     DEGRADED_CAP_HIT = "degraded_cap_hit"
     EXHAUSTED = "exhausted"
+    # Section was not dispatched because one or more required_facts declared
+    # in its TemplateSpec entry were not available in the facts pack for the
+    # subject. The renderer surfaces an admonition banner naming the
+    # specific missing facts so the template author can react.
+    SKIPPED_REQUIRED_FACTS = "skipped_required_facts"
 
 
 class SectionResult(_Strict):
@@ -77,7 +82,11 @@ class SectionResult(_Strict):
     @classmethod
     def _markdown_required_unless_exhausted(cls, v: str | None, info: Any) -> str | None:
         state = info.data.get("state")
-        if state in (SectionTerminalState.EXHAUSTED, SectionTerminalState.DEGRADED_CAP_HIT):
+        if state in (
+            SectionTerminalState.EXHAUSTED,
+            SectionTerminalState.DEGRADED_CAP_HIT,
+            SectionTerminalState.SKIPPED_REQUIRED_FACTS,
+        ):
             return v
         if v is None or not v.strip():
             raise ValueError("markdown required for success/degraded states")
