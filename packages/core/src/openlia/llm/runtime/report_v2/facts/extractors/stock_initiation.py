@@ -998,6 +998,45 @@ def _oldest_dep_as_of(*facts: Fact) -> datetime | str | None:
     return oldest[1] if oldest is not None else None
 
 
+def _newest_dep_as_of(*facts: Fact) -> datetime | str | None:
+    """Return the newest `data_as_of` across a set of dependency facts.
+
+    Use this for derived facts whose freshness is gated by the most recently
+    updated input — typically forward-looking estimates anchored on stable
+    historical data (e.g. `consensus_eps_growth_fy_next` = consensus / prior
+    annual EPS). The historical anchor is by definition non-recent; the
+    growth value is "as fresh as the consensus that produced it."
+    """
+    newest: tuple[datetime, datetime | str] | None = None
+    for f in facts:
+        v = f.data_as_of
+        if v is None:
+            continue
+        parsed: datetime | None
+        if isinstance(v, datetime):
+            parsed = v if v.tzinfo is not None else v.replace(tzinfo=UTC)
+        elif isinstance(v, str):
+            s = v.strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            try:
+                parsed = datetime.fromisoformat(s)
+            except ValueError:
+                try:
+                    parsed = datetime.strptime(s, "%Y-%m-%d")
+                except ValueError:
+                    parsed = None
+            if parsed is not None and parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+        else:
+            parsed = None
+        if parsed is None:
+            continue
+        if newest is None or parsed > newest[0]:
+            newest = (parsed, v)
+    return newest[1] if newest is not None else None
+
+
 # --- Group 1: Segment / business-model facts -------------------------------
 
 
@@ -1618,7 +1657,12 @@ def consensus_revenue_growth_fy_next(payloads, facts) -> Fact:
         source_ids=union_source_ids(nxt, hist),
         extractor="compute",
         depends_on=["consensus_revenue_fy_next", "revenue_annual"],
-        data_as_of=_oldest_dep_as_of(nxt, hist),
+        # Freshness is gated by the consensus side: the prior-year actual is
+        # by definition non-recent (annual filing), but the growth rate is
+        # "as fresh as the consensus that produced it." Using the older of
+        # the two pinned this fact to the annual filing date and tripped
+        # the consensus_ 14-day budget month after month.
+        data_as_of=_newest_dep_as_of(nxt, hist),
         source_tier="derived",
     )
 
@@ -1649,7 +1693,9 @@ def consensus_eps_growth_fy_next(payloads, facts) -> Fact:
         source_ids=union_source_ids(nxt, hist),
         extractor="compute",
         depends_on=["consensus_eps_fy_next", "eps_annual"],
-        data_as_of=_oldest_dep_as_of(nxt, hist),
+        # See consensus_revenue_growth_fy_next: forward-looking growth tracks
+        # consensus freshness, not the stable historical anchor.
+        data_as_of=_newest_dep_as_of(nxt, hist),
         source_tier="derived",
     )
 
