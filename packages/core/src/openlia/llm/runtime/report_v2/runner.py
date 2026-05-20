@@ -24,6 +24,12 @@ from openlia.llm.runtime.report_v2.facts import helpers as _helpers  # noqa: F40
 from openlia.llm.runtime.report_v2.facts.extractors import stock_initiation  # noqa: F401
 from openlia.llm.runtime.report_v2.facts.pack import compile_pack
 from openlia.llm.runtime.report_v2.facts.registry import default_registry
+from openlia.llm.runtime.report_v2.framework_overlay import (
+    apply_facts_overlay,
+    load_overlay,
+    overlay_section_emphasis,
+    report_mode_label,
+)
 from openlia.llm.runtime.report_v2.freshness import (
     StaleDataError,
     check_freshness,
@@ -39,6 +45,7 @@ from openlia.llm.runtime.report_v2.manifest.baseline import (
     run_baseline,
 )
 from openlia.llm.runtime.report_v2.manifest.preflight import run_section_preflight
+from openlia.llm.runtime.report_v2.mode_selector import ReportMode, select_report_mode
 from openlia.llm.runtime.report_v2.packer.assembler import assemble_report
 
 # Force registration of all block types
@@ -301,6 +308,7 @@ class WavedReportRunner:
         freshness_override: bool = False,
         material_events_override: bool = False,
         peer_set_override: bool = False,
+        report_mode_override: ReportMode | None = None,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -338,6 +346,10 @@ class WavedReportRunner:
         # runner proceeds. Default False: shipping a single-row peer table is
         # a P1 quality defect for an initiation report.
         self.peer_set_override = peer_set_override
+        # When set, forces a specific industry overlay regardless of the
+        # auto-selector output. Useful for misclassified or freshly-relisted
+        # names. Defaults to None -> auto-selection runs.
+        self.report_mode_override: ReportMode | None = report_mode_override
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -509,6 +521,47 @@ class WavedReportRunner:
                         flush=True,
                     )
 
+            # WS9: industry-mode selection. Pick one of four overlays
+            # (generic / saas / semis / distressed) from facts + material
+            # events; apply the matching JSON to both the facts framework
+            # (per-section fact lists) and the section briefs (emphasis text
+            # appended to base brief). Manual override takes precedence.
+            mode_as_of: Any
+            if isinstance(banner_oldest, datetime):
+                mode_as_of = banner_oldest.date()
+            elif isinstance(banner_oldest, str):
+                try:
+                    mode_as_of = datetime.fromisoformat(banner_oldest.rstrip("Z")).date()
+                except ValueError:
+                    mode_as_of = None
+            else:
+                mode_as_of = None
+            auto_mode: ReportMode = select_report_mode(pack.facts, events, as_of=mode_as_of)
+            if self.report_mode_override is not None:
+                chosen_mode: ReportMode = self.report_mode_override
+                auto_selected = False
+            else:
+                chosen_mode = auto_mode
+                auto_selected = True
+            overlay = load_overlay(chosen_mode)
+            framework = apply_facts_overlay(framework, overlay)
+            section_emphasis = overlay_section_emphasis(overlay)
+            mode_label = report_mode_label(overlay)
+            section_briefs: dict[str, str] = dict(DEFAULT_BRIEFS)
+            for sid, emphasis in section_emphasis.items():
+                base = section_briefs.get(sid, "")
+                section_briefs[sid] = (base + "\n\n" + emphasis).strip() if base else emphasis
+            self.telemetry.record_report_mode_banner(
+                mode=chosen_mode,
+                label=mode_label,
+                auto_selected=auto_selected,
+            )
+            print(
+                f"[runner] industry-mode overlay applied: mode={chosen_mode!r} "
+                f"(auto_selected={auto_selected}, label={mode_label!r})",
+                flush=True,
+            )
+
             # WS2: peer-set sufficiency gate. An initiation report must carry
             # at least two peers; shipping a single-row peer table is a P1
             # quality defect. The override flag downgrades the failure to a
@@ -533,7 +586,7 @@ class WavedReportRunner:
                     prompt=assemble_body_section_prompt(
                         system_role=self.system_role,
                         style_guide=self.style_guide,
-                        framework_brief=DEFAULT_BRIEFS[sid],
+                        framework_brief=section_briefs[sid],
                         manifest=manifest,
                         facts_slice=pack.slice_for(framework[sid]),
                         word_target=DEFAULT_WORD_TARGETS[sid],
@@ -571,7 +624,7 @@ class WavedReportRunner:
                     prompt=assemble_synthesis_section_prompt(
                         system_role=self.system_role,
                         style_guide=self.style_guide,
-                        framework_brief=DEFAULT_BRIEFS[sid],
+                        framework_brief=section_briefs[sid],
                         manifest=manifest,
                         synthesis_hooks_bundle=bundle,
                         facts_slice=pack.slice_for(framework[sid]),
