@@ -8,6 +8,23 @@ from __future__ import annotations
 from openlia.llm.runtime.report_v2.manifest.manifest import Manifest
 from openlia.llm.runtime.report_v2.types import Fact
 
+# Tombstone phrases the LLM must never emit in prose. The numeric-consistency
+# validator (P7) imports this list and rejects sections that contain any of
+# these phrases (case-insensitive substring match). When adding to this list,
+# keep entries short and exact so the prompt rendering and the validator
+# regex pipeline stay in sync.
+TOMBSTONE_PHRASES: tuple[str, ...] = (
+    "no data available",
+    "data not provided",
+    "data unavailable",
+    "data not available",
+    "TBD",
+    "unable to determine",
+    "we cannot determine",
+    "more assumption-heavy than the current fact set supports",
+    "this is not a single target-setting exercise",
+)
+
 # All 22 supported fenced block tags.
 _OUTPUT_FORMAT_REMINDER = """\
 CRITICAL OUTPUT FORMAT — your response must be the section file content EXACTLY in this shape, \
@@ -335,9 +352,13 @@ and waste your retry budget:
   - "no data available"
   - "data not provided"
   - "data unavailable"
+  - "data not available"
   - "N/A" or "n/a" (as standalone prose)
   - "TBD"
   - "unable to determine"
+  - "we cannot determine"
+  - "more assumption-heavy than the current fact set supports"
+  - "this is not a single target-setting exercise"
 
 If a specific fact you would like to cite is not in the manifest or facts slice, REWRITE the \
 sentence so it does not need that fact. Use what IS available, frame qualitatively, or omit the \
@@ -350,7 +371,21 @@ TABLE CELL DISCIPLINE — when the facts slice contains a `peer_*` mapping keyed
 metrics MUST contain the formatted numeric value from the mapping (with one decimal and the \
 correct unit: `38.2x`, `16.5%`, `69.4%`). Do not emit cell placeholders like `See fundamentals`, \
 `NM from cited set`, `See source`, or any other deflection. If a peer is absent from the \
-mapping for a given metric, drop that row entirely — never substitute a placeholder string.\
+mapping for a given metric, drop that row entirely — never substitute a placeholder string.
+
+EXHIBIT SHAPE RULES — your blocks will be REJECTED if they violate any of these:
+- Peer-comparison/comp-set tables: at least 3 data rows. If you cannot gather >=3 peers, \
+drop the table — do not emit a one-row table.
+- Scatter charts: at least 3 points per series. Single-dot scatters are rejected.
+- Chart axes: use REAL fiscal-year labels or dates. Placeholder labels like "Year 1", \
+"Year 2", "TTM/Late" are rejected.
+- Waterfall: increase/decrease components must sum to the stated total within 0.5%. \
+Cost-of-Revenue bars cannot push the running balance above the starting total or below zero.
+- Pie/treemap: segments must sum to 100% (within 1%) or to a declared absolute total.
+- Each block in a section must have a unique purpose. Don't emit two segment-mix pies for the \
+same year.
+- metric_cards: delta_direction MUST agree with the sign of delta. A negative delta cannot \
+have delta_direction: "up".\
 """
 
 

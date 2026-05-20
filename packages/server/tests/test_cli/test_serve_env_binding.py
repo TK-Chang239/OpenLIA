@@ -6,7 +6,7 @@ Contract:
 - If the flag is absent, the corresponding env var (`OPENLIA_HOST`,
   `OPENLIA_PORT`) is honoured.
 - Otherwise fall back to the mode-aware default
-  (``127.0.0.1`` personal / ``0.0.0.0`` company; port 8000).
+  (``127.0.0.1`` personal / ``0.0.0.0`` company; port 8080).
 """
 
 from __future__ import annotations
@@ -74,4 +74,4 @@ class TestServeEnvBinding:
         result = cli_runner.invoke(app, ["serve"])
         assert result.exit_code == 0, result.output
         assert captured["kwargs"]["host"] == "127.0.0.1"
-        assert captured["kwargs"]["port"] == 8000
+        assert captured["kwargs"]["port"] == 8080

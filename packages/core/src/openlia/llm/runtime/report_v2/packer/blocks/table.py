@@ -87,6 +87,43 @@ def _assemble(*, data: dict[str, Any], citation_ids: list[int], manifest_resolve
     )
 
 
+_PEER_PURPOSE_TAGS = {"peer_comparison", "comp_set", "peer_multiples", "peers"}
+_HISTORICAL_PURPOSE_TAGS = {
+    "historical_financials",
+    "income_statement_history",
+    "balance_sheet_history",
+}
+
+
+def _validate_shape(block: dict[str, Any]) -> list[str]:
+    """Enforce minimum row counts for purpose-tagged tables.
+
+    Peer-comparison and comp-set tables require >=3 data rows; historical
+    financial tables require >=3 year columns.
+    """
+    errors: list[str] = []
+    purpose = block.get("purpose_tag")
+    rows = block.get("rows") or []
+    if purpose in _PEER_PURPOSE_TAGS:
+        # Count dict-shape rows only — positional list rows are also valid data.
+        data_rows = [r for r in rows if isinstance(r, (dict, list))]
+        if len(data_rows) < 3:
+            errors.append(
+                f"table[purpose_tag={purpose!r}]: peer/comp tables require "
+                f">=3 data rows, got {len(data_rows)}"
+            )
+    if purpose in _HISTORICAL_PURPOSE_TAGS:
+        headers = block.get("headers") or []
+        # Year columns = headers minus the leading label column.
+        year_columns = max(0, len(headers) - 1)
+        if year_columns < 3:
+            errors.append(
+                f"table[purpose_tag={purpose!r}]: historical tables require "
+                f">=3 year columns, got {year_columns}"
+            )
+    return errors
+
+
 register_block(
     "table",
     assembler=_assemble,
@@ -94,4 +131,5 @@ register_block(
         "type": "object",
         "required": ["title", "headers", "rows"],
     },
+    validate_shape=_validate_shape,
 )

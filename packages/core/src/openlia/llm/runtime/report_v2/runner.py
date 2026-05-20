@@ -20,9 +20,21 @@ from openlia.llm.runtime.events import (
 )
 
 # Force registration of all deterministic + compute facts
+from openlia.llm.runtime.report_v2.facts import helpers as _helpers  # noqa: F401
 from openlia.llm.runtime.report_v2.facts.extractors import stock_initiation  # noqa: F401
 from openlia.llm.runtime.report_v2.facts.pack import compile_pack
 from openlia.llm.runtime.report_v2.facts.registry import default_registry
+from openlia.llm.runtime.report_v2.framework_overlay import (
+    apply_facts_overlay,
+    load_overlay,
+    overlay_section_emphasis,
+    report_mode_label,
+)
+from openlia.llm.runtime.report_v2.freshness import (
+    StaleDataError,
+    check_freshness,
+    oldest_data_as_of,
+)
 from openlia.llm.runtime.report_v2.manifest.aggregator import (
     aggregate_declarations,
     execute_aggregated,
@@ -33,6 +45,7 @@ from openlia.llm.runtime.report_v2.manifest.baseline import (
     run_baseline,
 )
 from openlia.llm.runtime.report_v2.manifest.preflight import run_section_preflight
+from openlia.llm.runtime.report_v2.mode_selector import ReportMode, select_report_mode
 from openlia.llm.runtime.report_v2.packer.assembler import assemble_report
 
 # Force registration of all block types
@@ -66,6 +79,16 @@ from openlia.llm.runtime.report_v2.packer.validator import (
     cross_section_numeric_consistency,
     validate_section,
 )
+from openlia.llm.runtime.report_v2.peers import (
+    InsufficientPeerSetError,
+    count_peer_fundamentals,
+)
+from openlia.llm.runtime.report_v2.scanners import (
+    MaterialEventError,
+    catalyst_event_to_dict,
+    scan_catalysts,
+    scan_manifest,
+)
 from openlia.llm.runtime.report_v2.sections.dispatcher import (
     SectionDispatch,
     dispatch_sections,
@@ -79,6 +102,11 @@ from openlia.llm.runtime.report_v2.sections.synthesis_hooks import (
     extract_hooks_from_section_result,
 )
 from openlia.llm.runtime.report_v2.telemetry import ReportTelemetry
+from openlia.llm.runtime.report_v2.types import Fact
+from openlia.llm.runtime.report_v2.validators import (
+    NumericValidationError,
+    validate_sections,
+)
 from openlia.reports.schema import ReportSchema
 
 BODY_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
@@ -251,6 +279,10 @@ DEFAULT_BRIEFS: dict[str, str] = {
 class ReportRunOutput:
     schema: ReportSchema
     telemetry: ReportTelemetry
+    # Compiled facts pack from W3 + post-W3 injectables (e.g. WS3-A
+    # `catalysts_recent`). Exposed for diagnostics / tests; not part of the
+    # serialised report.
+    facts: dict[str, Any] | None = None
 
 
 class WavedReportRunner:
@@ -284,6 +316,12 @@ class WavedReportRunner:
         body_concurrency: int = 1,
         synthesis_concurrency: int = 1,
         language: str | None = None,
+        freshness_override: bool = False,
+        material_events_override: bool = False,
+        peer_set_override: bool = False,
+        report_mode_override: ReportMode | None = None,
+        numeric_validation_override: bool = False,
+        catalyst_pack_enabled: bool = True,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -311,6 +349,29 @@ class WavedReportRunner:
             self.preflight_concurrency = preflight_concurrency
             self.body_concurrency = body_concurrency
             self.synthesis_concurrency = synthesis_concurrency
+        # When True, hard-block freshness violations are logged but the runner
+        # proceeds. Default False: stale data refuses to render.
+        self.freshness_override = freshness_override
+        # When True, hard-block material events (Chapter 11, restatement, etc.)
+        # detected after `data_as_of` are logged but the runner proceeds.
+        self.material_events_override = material_events_override
+        # When True, an insufficient peer set (<2 peers) is logged but the
+        # runner proceeds. Default False: shipping a single-row peer table is
+        # a P1 quality defect for an initiation report.
+        self.peer_set_override = peer_set_override
+        # When set, forces a specific industry overlay regardless of the
+        # auto-selector output. Useful for misclassified or freshly-relisted
+        # names. Defaults to None -> auto-selection runs.
+        self.report_mode_override: ReportMode | None = report_mode_override
+        # When True, hard numeric-validation failures are logged but the
+        # runner proceeds. Default False: any hard failure raises
+        # NumericValidationError.
+        self.numeric_validation_override = numeric_validation_override
+        # When True (default), the WS3-A catalyst-pack scanner runs after the
+        # material-events scanner and before section dispatch, packing a
+        # `catalysts_recent` Fact (list of catalyst dicts) into the facts
+        # pack. Disable in tests where news scanning is undesirable.
+        self.catalyst_pack_enabled = catalyst_pack_enabled
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -391,7 +452,13 @@ class WavedReportRunner:
             # W3: compile facts pack
             await self._emit(ReportPhase(report_id=rid, phase="loading_context"))
             t0 = time.monotonic()
-            requested = sorted({n for names in framework.values() for n in names})
+            # `catalysts_recent` is not registered in the FactRegistry — it is
+            # injected directly after the WS3-A catalyst scanner runs (below).
+            # Filter it out of the requested-facts set so compile_pack does
+            # not raise on the unknown name.
+            requested = sorted(
+                {n for names in framework.values() for n in names if n != "catalysts_recent"}
+            )
             pack = compile_pack(
                 registry=default_registry,
                 manifest=manifest.entries,
@@ -399,6 +466,190 @@ class WavedReportRunner:
                 subject_ticker=self.ticker,
             )
             self.telemetry.record_wave("W3_facts", duration_ms=int((time.monotonic() - t0) * 1000))
+
+            # WS10-B: per-fact freshness gate. Runs after facts are compiled
+            # and before any section generation. Hard-block violations refuse
+            # to render unless `freshness_override=True`, in which case the
+            # runner proceeds and surfaces a STALE DATA cover banner via
+            # telemetry.
+            now = datetime.now(UTC)
+            violations = check_freshness(pack.facts, as_of=now)
+            hard = [v for v in violations if v.severity == "hard_block"]
+            banner_oldest = oldest_data_as_of(pack.facts)
+            banner_violations: list[dict[str, Any]] = [
+                {
+                    "fact_name": v.fact_name,
+                    "data_as_of": (
+                        v.data_as_of.isoformat()
+                        if isinstance(v.data_as_of, datetime)
+                        else v.data_as_of
+                    ),
+                    "age_days": v.age_days,
+                    "budget_days": v.budget_days,
+                    "severity": v.severity,
+                }
+                for v in violations
+            ]
+            self.telemetry.record_freshness_banner(
+                oldest_data_as_of=(
+                    banner_oldest.isoformat()
+                    if isinstance(banner_oldest, datetime)
+                    else banner_oldest
+                ),
+                violations=banner_violations,
+                override=self.freshness_override,
+            )
+            if hard and not self.freshness_override:
+                raise StaleDataError(hard)
+            if hard:
+                for v in hard:
+                    print(
+                        f"[runner] WARN stale fact {v.fact_name!r} "
+                        f"(as_of={v.data_as_of}, age={v.age_days}d > "
+                        f"budget={v.budget_days}d) — proceeding due to "
+                        f"freshness_override=True",
+                        flush=True,
+                    )
+
+            # WS3-B: material-events gate. Scans manifest news entries for
+            # the seven event classes (Chapter 11, emergence, going-private,
+            # M&A target, delisting, splits, restatements). Events dated
+            # after the oldest data_as_of carry hard_block / warning_banner
+            # severity; events on or before are demoted to informational.
+            events = scan_manifest(
+                manifest.entries,
+                subject_ticker=self.ticker,
+                as_of_date=banner_oldest,
+            )
+            hard_events = [e for e in events if e.severity == "hard_block"]
+            banner_events: list[dict[str, Any]] = [
+                {
+                    "event_class": e.event_class,
+                    "event_date": (e.event_date.isoformat() if e.event_date is not None else None),
+                    "confidence": e.confidence,
+                    "severity": e.severity,
+                    "evidence": list(e.evidence),
+                    "description": e.description,
+                }
+                for e in events
+            ]
+            self.telemetry.record_material_events_banner(
+                events=banner_events,
+                override=self.material_events_override,
+            )
+            if hard_events and not self.material_events_override:
+                raise MaterialEventError(hard_events)
+            if hard_events:
+                for e in hard_events:
+                    print(
+                        f"[runner] WARN material event {e.event_class!r} "
+                        f"detected (date={e.event_date}, "
+                        f"confidence={e.confidence}) — proceeding due to "
+                        f"material_events_override=True",
+                        flush=True,
+                    )
+
+            # WS3-A: fresh-catalyst pack. Runs after material-events (so the
+            # runner has already blocked on Chapter 11 / restatements before
+            # we spend cycles on catalyst classification). Scans manifest
+            # news entries for product announcements, customer-concentration
+            # disclosures, hyperscaler capex prints, sovereign-AI deals,
+            # export-control changes, material partnerships, and guidance
+            # updates. Results are packed into the facts dict as
+            # `catalysts_recent` (list of catalyst dicts with manifest-id
+            # evidence) so body sections can cite them like any other source.
+            #
+            # The `catalyst_pack_enabled=False` runner kwarg skips the scan
+            # cleanly (used by tests that don't want news scanning). When
+            # skipped, `catalysts_recent` is injected as an empty list so the
+            # framework's section facts slices still resolve.
+            if self.catalyst_pack_enabled:
+                catalysts = scan_catalysts(
+                    manifest.entries,
+                    subject_ticker=self.ticker,
+                    as_of_date=banner_oldest,
+                )
+            else:
+                catalysts = []
+            catalyst_values: list[dict[str, Any]] = [catalyst_event_to_dict(c) for c in catalysts]
+            # Evidence IDs across all catalysts form the source_ids list. When
+            # no catalysts were found, fall back to manifest entry id=1 to
+            # satisfy the Fact's `min_length=1` source_ids constraint — the
+            # value list is empty in that case so prose treats it as "none".
+            evidence_ids = sorted({eid for c in catalysts for eid in c.evidence})
+            if not evidence_ids and manifest.entries:
+                evidence_ids = [manifest.entries[0].id]
+            elif not evidence_ids:
+                evidence_ids = [1]
+            pack.facts["catalysts_recent"] = Fact(
+                name="catalysts_recent",
+                value=catalyst_values,
+                source_ids=evidence_ids,
+                extractor="compute",
+                depends_on=[],
+                source_tier="derived",
+            )
+            print(
+                f"[runner] catalyst-pack scan: enabled={self.catalyst_pack_enabled}, "
+                f"hits={len(catalyst_values)}",
+                flush=True,
+            )
+
+            # WS9: industry-mode selection. Pick one of four overlays
+            # (generic / saas / semis / distressed) from facts + material
+            # events; apply the matching JSON to both the facts framework
+            # (per-section fact lists) and the section briefs (emphasis text
+            # appended to base brief). Manual override takes precedence.
+            mode_as_of: Any
+            if isinstance(banner_oldest, datetime):
+                mode_as_of = banner_oldest.date()
+            elif isinstance(banner_oldest, str):
+                try:
+                    mode_as_of = datetime.fromisoformat(banner_oldest.rstrip("Z")).date()
+                except ValueError:
+                    mode_as_of = None
+            else:
+                mode_as_of = None
+            auto_mode: ReportMode = select_report_mode(pack.facts, events, as_of=mode_as_of)
+            if self.report_mode_override is not None:
+                chosen_mode: ReportMode = self.report_mode_override
+                auto_selected = False
+            else:
+                chosen_mode = auto_mode
+                auto_selected = True
+            overlay = load_overlay(chosen_mode)
+            framework = apply_facts_overlay(framework, overlay)
+            section_emphasis = overlay_section_emphasis(overlay)
+            mode_label = report_mode_label(overlay)
+            section_briefs: dict[str, str] = dict(DEFAULT_BRIEFS)
+            for sid, emphasis in section_emphasis.items():
+                base = section_briefs.get(sid, "")
+                section_briefs[sid] = (base + "\n\n" + emphasis).strip() if base else emphasis
+            self.telemetry.record_report_mode_banner(
+                mode=chosen_mode,
+                label=mode_label,
+                auto_selected=auto_selected,
+            )
+            print(
+                f"[runner] industry-mode overlay applied: mode={chosen_mode!r} "
+                f"(auto_selected={auto_selected}, label={mode_label!r})",
+                flush=True,
+            )
+
+            # WS2: peer-set sufficiency gate. An initiation report must carry
+            # at least two peers; shipping a single-row peer table is a P1
+            # quality defect. The override flag downgrades the failure to a
+            # logged warning.
+            peer_count = count_peer_fundamentals(manifest.entries, subject_ticker=self.ticker)
+            if peer_count < 2 and not self.peer_set_override:
+                raise InsufficientPeerSetError(peer_count)
+            if peer_count < 2:
+                print(
+                    f"[runner] WARN insufficient peer set "
+                    f"(peers={peer_count}, need>=2) — proceeding due to "
+                    f"peer_set_override=True",
+                    flush=True,
+                )
 
             # W4: body sections
             await self._emit(ReportPhase(report_id=rid, phase="section_drafting"))
@@ -409,7 +660,7 @@ class WavedReportRunner:
                     prompt=assemble_body_section_prompt(
                         system_role=self.system_role,
                         style_guide=self.style_guide,
-                        framework_brief=DEFAULT_BRIEFS[sid],
+                        framework_brief=section_briefs[sid],
                         manifest=manifest,
                         facts_slice=pack.slice_for(framework[sid]),
                         word_target=DEFAULT_WORD_TARGETS[sid],
@@ -447,7 +698,7 @@ class WavedReportRunner:
                     prompt=assemble_synthesis_section_prompt(
                         system_role=self.system_role,
                         style_guide=self.style_guide,
-                        framework_brief=DEFAULT_BRIEFS[sid],
+                        framework_brief=section_briefs[sid],
                         manifest=manifest,
                         synthesis_hooks_bundle=bundle,
                         facts_slice=pack.slice_for(framework[sid]),
@@ -493,6 +744,39 @@ class WavedReportRunner:
                         detail=finding.detail,
                     )
 
+            # WS4 / P7: numeric reconciliation validator. Runs after all
+            # sections are written and parsed. Hard failures (identity
+            # equations, arithmetic disagreements, first-person voice,
+            # tombstone phrases, year-label mismatches) raise
+            # NumericValidationError unless `numeric_validation_override` is
+            # set. Soft failures (numeric_not_in_facts,
+            # missing_data_as_of) are surfaced via telemetry only.
+            section_files: dict[str, str] = {
+                r.section_id: r.markdown
+                for r in (*body_results, *synth_results)
+                if r.markdown is not None
+            }
+            numeric_report = validate_sections(
+                section_files=section_files,
+                facts=pack.facts,
+            )
+            for f in numeric_report.failures:
+                self.telemetry.record_cross_section_finding(
+                    check=f"numeric_consistency.{f.failure_type}",
+                    sections=f.section_id,
+                    detail=f.detail,
+                )
+            if numeric_report.hard_failures and not self.numeric_validation_override:
+                raise NumericValidationError(numeric_report.hard_failures)
+            if numeric_report.hard_failures:
+                for f in numeric_report.hard_failures:
+                    print(
+                        f"[runner] WARN numeric validation {f.failure_type!r} "
+                        f"in section {f.section_id!r}: {f.detail} — proceeding "
+                        f"due to numeric_validation_override=True",
+                        flush=True,
+                    )
+
             # W6: assemble final report
             await self._emit(ReportPhase(report_id=rid, phase="finalizing"))
             t0 = time.monotonic()
@@ -520,4 +804,4 @@ class WavedReportRunner:
 
         schema.telemetry = self.telemetry.snapshot()
         await self._emit(ReportComplete(report_id=rid, schema=schema.model_dump(mode="json")))
-        return ReportRunOutput(schema=schema, telemetry=self.telemetry)
+        return ReportRunOutput(schema=schema, telemetry=self.telemetry, facts=pack.facts)
