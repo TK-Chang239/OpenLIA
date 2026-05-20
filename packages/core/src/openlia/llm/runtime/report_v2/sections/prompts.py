@@ -8,6 +8,23 @@ from __future__ import annotations
 from openlia.llm.runtime.report_v2.manifest.manifest import Manifest
 from openlia.llm.runtime.report_v2.types import Fact
 
+# Tombstone phrases the LLM must never emit in prose. The numeric-consistency
+# validator (P7) imports this list and rejects sections that contain any of
+# these phrases (case-insensitive substring match). When adding to this list,
+# keep entries short and exact so the prompt rendering and the validator
+# regex pipeline stay in sync.
+TOMBSTONE_PHRASES: tuple[str, ...] = (
+    "no data available",
+    "data not provided",
+    "data unavailable",
+    "data not available",
+    "TBD",
+    "unable to determine",
+    "we cannot determine",
+    "more assumption-heavy than the current fact set supports",
+    "this is not a single target-setting exercise",
+)
+
 # All 22 supported fenced block tags.
 _OUTPUT_FORMAT_REMINDER = """\
 CRITICAL OUTPUT FORMAT — your response must be the section file content EXACTLY in this shape, \
