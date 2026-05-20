@@ -716,3 +716,98 @@ def test_cover_falls_back_when_synthesis_blocks_missing() -> None:
     assert report.cover.tldr == []
     assert report.cover.tldr_label is None
     assert report.rail.verdict is None
+
+
+def test_assemble_renders_banner_for_skipped_required_facts_section() -> None:
+    sections = [
+        SectionResult(
+            section_id="thesis",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_SECTION_MARKDOWN,
+        ),
+        SectionResult(
+            section_id="segment_revenue_table",
+            state=SectionTerminalState.SKIPPED_REQUIRED_FACTS,
+            attempts=1,
+            markdown=None,
+            validation_errors=["segment_revenue_latest", "segment_growth_yoy"],
+        ),
+    ]
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=sections,
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+
+    banner_section = next(s for s in report.sections if s.id == "segment_revenue_table")
+    assert len(banner_section.blocks) == 1
+    block = banner_section.blocks[0]
+    assert block.type == "text"
+    assert "Section omitted" in block.content
+    assert "segment_revenue_latest" in block.content
+    assert "segment_growth_yoy" in block.content
+
+
+def test_assemble_renders_banner_for_degraded_cap_hit_section() -> None:
+    sections = [
+        SectionResult(
+            section_id="thesis",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_SECTION_MARKDOWN,
+        ),
+        SectionResult(
+            section_id="scorecard",
+            state=SectionTerminalState.DEGRADED_CAP_HIT,
+            attempts=1,
+            markdown=None,
+        ),
+    ]
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=sections,
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+
+    banner_section = next(s for s in report.sections if s.id == "scorecard")
+    assert len(banner_section.blocks) == 1
+    assert banner_section.blocks[0].type == "text"
+    assert "Section degraded" in banner_section.blocks[0].content
+
+
+def test_assemble_still_skips_exhausted_sections_silently() -> None:
+    """EXHAUSTED predates the banner work and continues to drop the section.
+
+    Validates the assembler did not over-extend banner rendering to the
+    exhausted state, where the section never produced usable output."""
+    sections = [
+        SectionResult(
+            section_id="thesis",
+            state=SectionTerminalState.SUCCESS,
+            attempts=1,
+            markdown=_SECTION_MARKDOWN,
+        ),
+        SectionResult(
+            section_id="dead_section",
+            state=SectionTerminalState.EXHAUSTED,
+            attempts=3,
+            markdown=None,
+        ),
+    ]
+    report = assemble_report(
+        manifest=_make_manifest(),
+        facts_pack=_make_facts_pack(),
+        sections=sections,
+        department="equity_research",
+        ticker="AAPL",
+        generated_at=_NOW,
+    )
+
+    assert all(s.id != "dead_section" for s in report.sections)
