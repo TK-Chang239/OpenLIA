@@ -85,6 +85,8 @@ from openlia.llm.runtime.report_v2.peers import (
 )
 from openlia.llm.runtime.report_v2.scanners import (
     MaterialEventError,
+    catalyst_event_to_dict,
+    scan_catalysts,
     scan_manifest,
 )
 from openlia.llm.runtime.report_v2.sections.dispatcher import (
@@ -100,6 +102,7 @@ from openlia.llm.runtime.report_v2.sections.synthesis_hooks import (
     extract_hooks_from_section_result,
 )
 from openlia.llm.runtime.report_v2.telemetry import ReportTelemetry
+from openlia.llm.runtime.report_v2.types import Fact
 from openlia.llm.runtime.report_v2.validators import (
     NumericValidationError,
     validate_sections,
@@ -276,6 +279,10 @@ DEFAULT_BRIEFS: dict[str, str] = {
 class ReportRunOutput:
     schema: ReportSchema
     telemetry: ReportTelemetry
+    # Compiled facts pack from W3 + post-W3 injectables (e.g. WS3-A
+    # `catalysts_recent`). Exposed for diagnostics / tests; not part of the
+    # serialised report.
+    facts: dict[str, Any] | None = None
 
 
 class WavedReportRunner:
@@ -314,6 +321,7 @@ class WavedReportRunner:
         peer_set_override: bool = False,
         report_mode_override: ReportMode | None = None,
         numeric_validation_override: bool = False,
+        catalyst_pack_enabled: bool = True,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -359,6 +367,11 @@ class WavedReportRunner:
         # runner proceeds. Default False: any hard failure raises
         # NumericValidationError.
         self.numeric_validation_override = numeric_validation_override
+        # When True (default), the WS3-A catalyst-pack scanner runs after the
+        # material-events scanner and before section dispatch, packing a
+        # `catalysts_recent` Fact (list of catalyst dicts) into the facts
+        # pack. Disable in tests where news scanning is undesirable.
+        self.catalyst_pack_enabled = catalyst_pack_enabled
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -439,7 +452,13 @@ class WavedReportRunner:
             # W3: compile facts pack
             await self._emit(ReportPhase(report_id=rid, phase="loading_context"))
             t0 = time.monotonic()
-            requested = sorted({n for names in framework.values() for n in names})
+            # `catalysts_recent` is not registered in the FactRegistry — it is
+            # injected directly after the WS3-A catalyst scanner runs (below).
+            # Filter it out of the requested-facts set so compile_pack does
+            # not raise on the unknown name.
+            requested = sorted(
+                {n for names in framework.values() for n in names if n != "catalysts_recent"}
+            )
             pack = compile_pack(
                 registry=default_registry,
                 manifest=manifest.entries,
@@ -529,6 +548,52 @@ class WavedReportRunner:
                         f"material_events_override=True",
                         flush=True,
                     )
+
+            # WS3-A: fresh-catalyst pack. Runs after material-events (so the
+            # runner has already blocked on Chapter 11 / restatements before
+            # we spend cycles on catalyst classification). Scans manifest
+            # news entries for product announcements, customer-concentration
+            # disclosures, hyperscaler capex prints, sovereign-AI deals,
+            # export-control changes, material partnerships, and guidance
+            # updates. Results are packed into the facts dict as
+            # `catalysts_recent` (list of catalyst dicts with manifest-id
+            # evidence) so body sections can cite them like any other source.
+            #
+            # The `catalyst_pack_enabled=False` runner kwarg skips the scan
+            # cleanly (used by tests that don't want news scanning). When
+            # skipped, `catalysts_recent` is injected as an empty list so the
+            # framework's section facts slices still resolve.
+            if self.catalyst_pack_enabled:
+                catalysts = scan_catalysts(
+                    manifest.entries,
+                    subject_ticker=self.ticker,
+                    as_of_date=banner_oldest,
+                )
+            else:
+                catalysts = []
+            catalyst_values: list[dict[str, Any]] = [catalyst_event_to_dict(c) for c in catalysts]
+            # Evidence IDs across all catalysts form the source_ids list. When
+            # no catalysts were found, fall back to manifest entry id=1 to
+            # satisfy the Fact's `min_length=1` source_ids constraint — the
+            # value list is empty in that case so prose treats it as "none".
+            evidence_ids = sorted({eid for c in catalysts for eid in c.evidence})
+            if not evidence_ids and manifest.entries:
+                evidence_ids = [manifest.entries[0].id]
+            elif not evidence_ids:
+                evidence_ids = [1]
+            pack.facts["catalysts_recent"] = Fact(
+                name="catalysts_recent",
+                value=catalyst_values,
+                source_ids=evidence_ids,
+                extractor="compute",
+                depends_on=[],
+                source_tier="derived",
+            )
+            print(
+                f"[runner] catalyst-pack scan: enabled={self.catalyst_pack_enabled}, "
+                f"hits={len(catalyst_values)}",
+                flush=True,
+            )
 
             # WS9: industry-mode selection. Pick one of four overlays
             # (generic / saas / semis / distressed) from facts + material
@@ -739,4 +804,4 @@ class WavedReportRunner:
 
         schema.telemetry = self.telemetry.snapshot()
         await self._emit(ReportComplete(report_id=rid, schema=schema.model_dump(mode="json")))
-        return ReportRunOutput(schema=schema, telemetry=self.telemetry)
+        return ReportRunOutput(schema=schema, telemetry=self.telemetry, facts=pack.facts)
