@@ -34,6 +34,13 @@ class ManifestEntry(_Strict):
     retrieved_at: datetime | str
 
 
+# Source-tier provenance class.
+#   vendor: pulled from a data vendor (e.g. EODHD fundamentals/live)
+#   primary_filing: extracted from a primary filing (10-K, 10-Q, 8-K, press release)
+#   derived: computed from other facts (compute tier)
+SourceTier = Literal["vendor", "primary_filing", "derived"]
+
+
 class Fact(_Strict):
     """A named, citation-tagged value produced by the registry."""
 
@@ -42,6 +49,12 @@ class Fact(_Strict):
     source_ids: list[int] = Field(min_length=1)
     extractor: ExtractorTier
     depends_on: list[str] = Field(default_factory=list)
+    # Date the underlying data was captured/filed. For vendor fundamentals,
+    # this is the most recent filing date present in the payload; for live
+    # price snapshots, the snapshot date; for analyst data, the ManifestEntry
+    # retrieval timestamp. None when the upstream payload lacks any date.
+    data_as_of: datetime | str | None = None
+    source_tier: SourceTier = "vendor"
 
 
 class SectionTerminalState(StrEnum):

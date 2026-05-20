@@ -120,6 +120,10 @@ async def test_runner_end_to_end_minimal() -> None:
         preflight_provider=preflight_provider,
         body_writer=writer,
         synthesis_writer=writer,
+        # Fixture's latest fiscal year (2024-12-31) is older than the 380d annual
+        # budget against any real-time clock past 2026-01-15; bypass the gate
+        # since this test exercises end-to-end flow, not freshness.
+        freshness_override=True,
     )
     report = await runner.run()
 
@@ -172,6 +176,8 @@ async def test_runner_records_cross_section_inconsistencies_in_telemetry() -> No
         preflight_provider=preflight_provider,
         body_writer=writer,
         synthesis_writer=writer,
+        # Static fixture; bypass freshness gate (see test_runner_end_to_end_minimal).
+        freshness_override=True,
     )
     report = await runner.run()
 
