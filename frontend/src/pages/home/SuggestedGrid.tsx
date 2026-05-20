@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { useNavigate } from "react-router-dom";
 import { RefreshCw, FileText, Globe, Briefcase, BarChart3 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   SUGGESTION_BANK,
   pickSuggestions,
@@ -18,6 +19,7 @@ const DEPT_ICON: Record<SuggestionDept, JSX.Element> = {
 };
 
 export function SuggestedGrid(): JSX.Element {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [seedSalt, setSeedSalt] = useState(0);
   const seed = `${localDaySeed()}#${seedSalt}`;
@@ -31,14 +33,14 @@ export function SuggestedGrid(): JSX.Element {
     <section>
       <div className="flex items-center justify-between">
         <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-text-tertiary">
-          Suggested · today
+          {t("home.suggested_today")}
         </span>
         <button
           type="button"
           onClick={() => setSeedSalt((s) => s + 1)}
           className="inline-flex items-center gap-[6px] font-mono text-[10px] tracking-[0.06em] text-text-secondary cursor-pointer hover:text-text-primary transition-colors duration-normal ease-out"
         >
-          Refresh <RefreshCw size={10} strokeWidth={1.5} />
+          {t("home_cards.refresh")} <RefreshCw size={10} strokeWidth={1.5} />
         </button>
       </div>
 

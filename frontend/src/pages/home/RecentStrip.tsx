@@ -1,4 +1,5 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Pill {
   title: string;
@@ -16,10 +17,11 @@ const PILLS: Pill[] = [
 ];
 
 export function RecentStrip(): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex items-center pt-[14px] border-t border-border-subtle">
       <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-text-tertiary mr-[14px]">
-        Recent
+        {t("home.recent")}
       </span>
       <div className="flex gap-[6px] flex-wrap flex-1">
         {PILLS.map((p) => (

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 import { ChevronDown, Download, Plus, RotateCw, Settings } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type { RefreshCadence } from "../api/portfolio";
 import type { Market } from "./marketTypes";
@@ -61,18 +62,19 @@ export function PortfolioPageHeader({
   marketLabel,
   onMarketChange,
 }: PortfolioPageHeaderProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex flex-col gap-[6px]">
         <span className="inline-flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-[--color-text-tertiary]">
           <span aria-hidden="true" className="h-px w-[18px] bg-[--color-border-strong]" />
-          PERSONAL · {marketLabel} · {MARKET_CURRENCIES[market]} · LAST SYNCED {formatSync(lastSyncedAt)}
+          {t("portfolio_page.personal")} · {marketLabel} · {MARKET_CURRENCIES[market]} · {t("portfolio_page.last_synced")} {formatSync(lastSyncedAt)}
           <button
             type="button"
             onClick={onRefresh}
             disabled={refreshing}
-            aria-label="Refresh prices"
-            title="Refresh prices"
+            aria-label={t("portfolio_page.refresh_prices")}
+            title={t("portfolio_page.refresh_prices")}
             className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded text-[--color-text-tertiary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:opacity-60"
             data-testid="refresh-prices"
           >
@@ -80,9 +82,9 @@ export function PortfolioPageHeader({
           </button>
         </span>
         <h1 className="font-display m-0 text-[30px] font-medium leading-[1.1] tracking-[-0.02em] text-[--color-text-primary]">
-          My Portfolio
+          {t("portfolio_page.title")}
           <small className="ml-[10px] font-mono text-[11px] font-normal uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            {holdingCount} HOLDINGS
+            {t("portfolio_page.holdings_count", { count: holdingCount })}
           </small>
         </h1>
       </div>
@@ -100,7 +102,7 @@ export function PortfolioPageHeader({
           data-testid="export-csv"
         >
           <Download size={11} aria-hidden="true" />
-          EXPORT
+          {t("portfolio_page.export")}
         </a>
         <AddSplitButton onAddManually={onAddManually} onImportCsv={onImportCsv} />
       </div>
@@ -117,10 +119,11 @@ function MarketToggle({
   value: Market;
   onChange: (next: Market) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <span
       role="tablist"
-      aria-label="Portfolio market"
+      aria-label={t("portfolio_page.market_aria")}
       className="inline-flex overflow-hidden rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated]"
       data-testid="market-toggle"
     >
@@ -152,10 +155,11 @@ function RangePicker({
   value: PerfRange;
   onChange: (next: PerfRange) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <span
       role="tablist"
-      aria-label="Perf chart range"
+      aria-label={t("portfolio_page.range_aria")}
       className="inline-flex overflow-hidden rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated]"
     >
       {PERF_RANGES.map((r) => (
@@ -186,6 +190,7 @@ function AddSplitButton({
   onAddManually: () => void;
   onImportCsv: () => void;
 }): JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement | null>(null);
 
@@ -207,12 +212,12 @@ function AddSplitButton({
         data-testid="add-position-primary"
       >
         <Plus size={11} aria-hidden="true" />
-        ADD POSITION
+        {t("portfolio_page.add_position")}
       </button>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Add position options"
+        aria-label={t("portfolio_page.add_position_options")}
         aria-expanded={open}
         className="inline-flex items-center justify-center rounded-r-md border border-l-0 border-[--color-accent-primary] bg-[--color-accent-primary] px-2 text-[--color-accent-on] transition-colors hover:bg-[--color-accent-hover]"
         data-testid="add-position-toggle"
@@ -240,7 +245,7 @@ function AddSplitButton({
             className="cursor-pointer px-3 py-2 text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
             data-testid="menu-add-manually"
           >
-            Add Position manually
+            {t("portfolio_page.add_manually")}
           </li>
           <li
             role="menuitem"
@@ -258,7 +263,7 @@ function AddSplitButton({
             className="cursor-pointer px-3 py-2 text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
             data-testid="menu-import-csv"
           >
-            Import Positions CSV…
+            {t("portfolio_page.import_csv")}
           </li>
         </ul>
       ) : null}
@@ -266,12 +271,12 @@ function AddSplitButton({
   );
 }
 
-const CADENCE_OPTIONS: { value: RefreshCadence; label: string; hint: string }[] = [
-  { value: "15min", label: "Every 15 min", hint: "Refresh every 15 minutes during market hours" },
-  { value: "hourly", label: "Hourly", hint: "Refresh every hour during market hours" },
-  { value: "daily", label: "Daily", hint: "Refresh once a day after market close" },
-  { value: "weekly", label: "Weekly", hint: "Refresh once a week" },
-  { value: "manual", label: "No Auto-refresh", hint: "Only refresh when you click Refresh" },
+const CADENCE_KEYS: { value: RefreshCadence; labelKey: string; hintKey: string }[] = [
+  { value: "15min", labelKey: "portfolio_page.cadence_15min", hintKey: "portfolio_page.cadence_15min_hint" },
+  { value: "hourly", labelKey: "portfolio_page.cadence_hourly", hintKey: "portfolio_page.cadence_hourly_hint" },
+  { value: "daily", labelKey: "portfolio_page.cadence_daily", hintKey: "portfolio_page.cadence_daily_hint" },
+  { value: "weekly", labelKey: "portfolio_page.cadence_weekly", hintKey: "portfolio_page.cadence_weekly_hint" },
+  { value: "manual", labelKey: "portfolio_page.cadence_manual", hintKey: "portfolio_page.cadence_manual_hint" },
 ];
 
 function CadenceGearPopover({
@@ -281,6 +286,16 @@ function CadenceGearPopover({
   value: RefreshCadence;
   onChange: (next: RefreshCadence) => void;
 }): JSX.Element {
+  const { t } = useTranslation();
+  const cadenceOptions = useMemo(
+    () =>
+      CADENCE_KEYS.map((o) => ({
+        value: o.value,
+        label: t(o.labelKey),
+        hint: t(o.hintKey),
+      })),
+    [t],
+  );
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLSpanElement | null>(null);
 
@@ -298,7 +313,7 @@ function CadenceGearPopover({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Portfolio settings"
+        aria-label={t("portfolio_page.portfolio_settings")}
         aria-expanded={open}
         className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] text-[--color-text-secondary] transition-colors hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
         data-testid="portfolio-settings-gear"
@@ -308,14 +323,14 @@ function CadenceGearPopover({
       {open ? (
         <div
           role="dialog"
-          aria-label="Portfolio settings"
+          aria-label={t("portfolio_page.portfolio_settings")}
           className="absolute right-0 top-full z-20 mt-1 w-[260px] overflow-hidden rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-3 shadow-lg"
         >
           <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-            Refresh cadence
+            {t("portfolio_page.refresh_cadence")}
           </div>
           <fieldset className="flex flex-col gap-1">
-            {CADENCE_OPTIONS.map((opt) => (
+            {cadenceOptions.map((opt) => (
               <label
                 key={opt.value}
                 className="flex cursor-pointer items-start gap-2 rounded px-2 py-[6px] text-sm text-[--color-text-primary] hover:bg-[--color-surface-hover]"
@@ -337,8 +352,7 @@ function CadenceGearPopover({
             ))}
           </fieldset>
           <p className="mt-2 text-[11px] text-[--color-text-tertiary]">
-            Cadence sets your freshness floor. Prices may update sooner if another
-            user holding the same ticker requests it.
+            {t("portfolio_page.cadence_floor_hint")}
           </p>
         </div>
       ) : null}
