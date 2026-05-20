@@ -1,8 +1,15 @@
 """Pre-section scanners (WS3).
 
-Part B (material-events gate) lives here. Part A (fresh-catalyst pack) will
-join in a later PR sharing the same news/EDGAR/web fetch surface."""
+Part A (fresh-catalyst pack) and Part B (material-events gate) live here. Both
+share `_news_utils.py` for news-entry detection, article parsing, and date
+helpers."""
 
+from openlia.llm.runtime.report_v2.scanners.catalyst_pack import (
+    CatalystEvent,
+    CatalystScanner,
+    catalyst_event_to_dict,
+    scan_catalysts,
+)
 from openlia.llm.runtime.report_v2.scanners.material_events import (
     MaterialEvent,
     MaterialEventError,
@@ -11,8 +18,12 @@ from openlia.llm.runtime.report_v2.scanners.material_events import (
 )
 
 __all__ = [
+    "CatalystEvent",
+    "CatalystScanner",
     "MaterialEvent",
     "MaterialEventError",
     "MaterialEventScanner",
+    "catalyst_event_to_dict",
+    "scan_catalysts",
     "scan_manifest",
 ]

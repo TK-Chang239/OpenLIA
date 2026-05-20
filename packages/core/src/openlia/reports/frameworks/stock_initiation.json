@@ -103,5 +103,6 @@
     "sparkline": null
   },
   "citations": [],
-  "web_search_budget_default": 10
+  "_web_search_budget_default_doc": "Bumped from 10 -> 20 to accommodate per-section deep dives that go beyond the WS3-A fresh-catalyst pack. The catalyst pack handles the broad scan (product announcements, customer concentration, hyperscaler capex, sovereign AI, export controls) up-front; the remaining budget covers section-specific research (e.g. competitive_analysis peer-product feature checks, valuation_analysis sell-side note pulls).",
+  "web_search_budget_default": 20
 }

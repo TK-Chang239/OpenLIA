@@ -27,6 +27,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any, Literal
 
+from openlia.llm.runtime.report_v2.scanners._news_utils import (
+    article_text as _article_text,
+)
+from openlia.llm.runtime.report_v2.scanners._news_utils import (
+    is_news_entry as _is_news_entry,
+)
+from openlia.llm.runtime.report_v2.scanners._news_utils import (
+    iter_news_articles as _iter_news_articles,
+)
+from openlia.llm.runtime.report_v2.scanners._news_utils import (
+    name_present as _name_present,
+)
+from openlia.llm.runtime.report_v2.scanners._news_utils import (
+    parse_date as _parse_date,
+)
 from openlia.llm.runtime.report_v2.types import ManifestEntry
 
 EventClass = Literal[
@@ -185,82 +200,6 @@ _NEGATIONS: dict[EventClass, list[re.Pattern[str]]] = {
         re.compile(r"\bcalled\s+off\b", re.IGNORECASE),
     ],
 }
-
-
-def _parse_date(value: Any) -> date | None:
-    """Parse a date-like value from a news payload field to a `date`.
-
-    Accepts date, datetime, ISO 8601 strings, and 'YYYY-MM-DD'. Returns
-    None for unparseable inputs."""
-    if value is None:
-        return None
-    if isinstance(value, date) and not isinstance(value, datetime):
-        return value
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, str):
-        s = value.strip()
-        if not s:
-            return None
-        if s.endswith("Z"):
-            s = s[:-1] + "+00:00"
-        try:
-            return datetime.fromisoformat(s).date()
-        except ValueError:
-            try:
-                return datetime.strptime(s, "%Y-%m-%d").date()
-            except ValueError:
-                return None
-    return None
-
-
-def _iter_news_articles(entry: ManifestEntry) -> list[dict[str, Any]]:
-    """Extract news article dicts from a manifest entry.
-
-    Recognised shapes:
-      - EODHD `financial_news` / `get_company_news`: list[dict] with `date`,
-        `title`, `content` (or `body`), `link`, `symbols`.
-      - Wrapped {"items": [...]} or {"data": [...]} envelopes.
-    """
-    payload = entry.raw_payload
-    if isinstance(payload, list):
-        return [a for a in payload if isinstance(a, dict)]
-    if isinstance(payload, dict):
-        for key in ("items", "data", "articles", "news"):
-            inner = payload.get(key)
-            if isinstance(inner, list):
-                return [a for a in inner if isinstance(a, dict)]
-    return []
-
-
-def _is_news_entry(entry: ManifestEntry) -> bool:
-    """Heuristic — entry identifier or provider implies news content."""
-    ident = (entry.identifier or "").lower()
-    return (
-        "news" in ident or "financial_news" in ident or entry.provider.lower() in {"news", "edgar"}
-    )
-
-
-def _article_text(article: dict[str, Any]) -> str:
-    """Concatenate the text fields the regexes scan over (title + body)."""
-    parts: list[str] = []
-    for key in ("title", "headline"):
-        v = article.get(key)
-        if isinstance(v, str):
-            parts.append(v)
-    for key in ("content", "body", "summary", "description"):
-        v = article.get(key)
-        if isinstance(v, str):
-            parts.append(v)
-    return "\n".join(parts)
-
-
-def _name_present(text: str, names: list[str]) -> bool:
-    """Case-insensitive substring match on any of the supplied identifiers."""
-    if not names:
-        return False
-    low = text.lower()
-    return any(name.lower() in low for name in names if name)
 
 
 def _classify(text: str, event_class: EventClass) -> tuple[bool, Literal["strong", "weak"] | None]:
