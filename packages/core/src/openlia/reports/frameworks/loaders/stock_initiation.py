@@ -9,8 +9,28 @@ definitions live here.
 from __future__ import annotations
 
 from openlia.llm.runtime.report_v2.freshness import FRESHNESS_BUDGETS
+from openlia.llm.runtime.report_v2.validators.identity_equations import IdentityEquationSpec
 from openlia.reports.frameworks.registry import default_registry
 from openlia.reports.frameworks.template_spec import SectionSpec, TemplateSpec
+
+IDENTITY_EQUATIONS: tuple[IdentityEquationSpec, ...] = (
+    IdentityEquationSpec(
+        name="market_cap_check",
+        lhs_a="current_price",
+        op="mul",
+        lhs_b="shares_outstanding",
+        rhs="market_cap",
+        tolerance_pct=2.0,
+    ),
+    IdentityEquationSpec(
+        name="operating_income_check",
+        lhs_a="revenue_ttm",
+        op="mul",
+        lhs_b="operating_margin_ttm",
+        rhs="operating_income_ttm",
+        tolerance_pct=0.5,
+    ),
+)
 
 BODY_SECTION_IDS: tuple[str, ...] = (
     "company_overview",
@@ -217,6 +237,7 @@ def load_stock_initiation_template() -> TemplateSpec:
         default_word_targets=dict(WORD_TARGETS),
         web_search_budget_default=20,
         freshness_budgets=dict(FRESHNESS_BUDGETS),
+        identity_equations=IDENTITY_EQUATIONS,
     )
 
 

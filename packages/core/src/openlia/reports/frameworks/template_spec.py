@@ -70,7 +70,7 @@ class TemplateSpec(BaseModel):
     default_word_targets: dict[str, int] = {}
     web_search_budget_default: int = 10
     freshness_budgets: dict[str, int] = {}
-    identity_equations: tuple[object, ...] = ()
+    identity_equations: tuple = ()
     material_event_classes: tuple[object, ...] = ()
     catalyst_classes: tuple[object, ...] = ()
     industry_modes: tuple[object, ...] = ()
