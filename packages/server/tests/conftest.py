@@ -103,6 +103,8 @@ class _CapturedReportRequest:
     length: str
     section_topics: dict | None = None
     reference_portfolio: list | None = None
+    framework_template_spec: dict | None = None
+    framework_template_id: str | None = None
 
 
 class FakeReportRunner:
@@ -127,6 +129,12 @@ class FakeReportRunner:
             reference_portfolio=(
                 list(req.reference_portfolio) if req.reference_portfolio else None
             ),
+            framework_template_spec=(
+                dict(req.framework_template_spec)
+                if getattr(req, "framework_template_spec", None)
+                else None
+            ),
+            framework_template_id=getattr(req, "framework_template_id", None),
         )
         self.last_attachments = kwargs.get("attachments")
         self.last_model_id_override = kwargs.get("model_id_override")

@@ -311,6 +311,18 @@ class WavedReportRunnerHost:
         async def _emit(event: SseEvent) -> None:
             await event_queue.put(event)
 
+        # 6.5. Resolve framework template override (custom report templates).
+        #      When the caller attaches a `framework_template_spec` dict to the
+        #      ReportRequest, materialize it into a TemplateSpec and forward to
+        #      WavedReportRunner. The runner accepts an explicit `template`
+        #      kwarg that bypasses the report_type → registry lookup.
+        template_override = None
+        spec_dict = getattr(request, "framework_template_spec", None)
+        if spec_dict is not None:
+            from openlia.reports.frameworks.template_spec import TemplateSpec
+
+            template_override = TemplateSpec.model_validate(spec_dict)
+
         runner = WavedReportRunner(
             report_type="stock_initiation",
             ticker=ticker,
@@ -322,6 +334,7 @@ class WavedReportRunnerHost:
             sse_emitter=_emit,
             report_id=run_id,
             language=language,
+            template=template_override,
         )
 
         # Run the WavedReportRunner concurrently and drain the event queue.
