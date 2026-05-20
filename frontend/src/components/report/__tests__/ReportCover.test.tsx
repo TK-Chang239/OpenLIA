@@ -22,7 +22,7 @@ describe('ReportCover', () => {
     expect(screen.getByText('Strong quarter.')).toBeInTheDocument();
     expect(screen.getByText('Price')).toBeInTheDocument();
     expect(screen.getByText('We initiate at Buy, $245 PT.')).toBeInTheDocument();
-    expect(screen.getByText('TL;DR')).toBeInTheDocument();
+    expect(screen.getByText('Executive Summary')).toBeInTheDocument();
   });
 
   it('uses custom tldr_label when provided', () => {
