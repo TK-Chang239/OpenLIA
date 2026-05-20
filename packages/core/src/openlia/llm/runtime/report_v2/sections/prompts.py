@@ -350,7 +350,21 @@ TABLE CELL DISCIPLINE — when the facts slice contains a `peer_*` mapping keyed
 metrics MUST contain the formatted numeric value from the mapping (with one decimal and the \
 correct unit: `38.2x`, `16.5%`, `69.4%`). Do not emit cell placeholders like `See fundamentals`, \
 `NM from cited set`, `See source`, or any other deflection. If a peer is absent from the \
-mapping for a given metric, drop that row entirely — never substitute a placeholder string.\
+mapping for a given metric, drop that row entirely — never substitute a placeholder string.
+
+EXHIBIT SHAPE RULES — your blocks will be REJECTED if they violate any of these:
+- Peer-comparison/comp-set tables: at least 3 data rows. If you cannot gather >=3 peers, \
+drop the table — do not emit a one-row table.
+- Scatter charts: at least 3 points per series. Single-dot scatters are rejected.
+- Chart axes: use REAL fiscal-year labels or dates. Placeholder labels like "Year 1", \
+"Year 2", "TTM/Late" are rejected.
+- Waterfall: increase/decrease components must sum to the stated total within 0.5%. \
+Cost-of-Revenue bars cannot push the running balance above the starting total or below zero.
+- Pie/treemap: segments must sum to 100% (within 1%) or to a declared absolute total.
+- Each block in a section must have a unique purpose. Don't emit two segment-mix pies for the \
+same year.
+- metric_cards: delta_direction MUST agree with the sign of delta. A negative delta cannot \
+have delta_direction: "up".\
 """
 
 
