@@ -25,9 +25,16 @@ def test_facts_file_exists_and_is_valid_json() -> None:
     assert isinstance(data["sections"], dict)
 
 
+# Facts injected by the runner post-W3 rather than registered in the
+# FactRegistry. `catalysts_recent` is packed by the WS3-A catalyst scanner
+# (runner step) after `compile_pack` runs — it is intentionally absent from
+# the registry.
+RUNNER_INJECTED_FACTS: set[str] = {"catalysts_recent"}
+
+
 def test_every_referenced_fact_is_registered() -> None:
     data = json.loads(FACTS_PATH.read_text())
-    registered = set(default_registry.names())
+    registered = set(default_registry.names()) | RUNNER_INJECTED_FACTS
     referenced: set[str] = set()
     for _section_id, fact_names in data["sections"].items():
         referenced.update(fact_names)
