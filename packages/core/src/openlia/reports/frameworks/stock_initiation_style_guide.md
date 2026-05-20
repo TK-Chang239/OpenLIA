@@ -12,10 +12,10 @@ Number formatting, currency/unit conventions, table formatting, and chart conven
 ### Tone and Voice
 
 - Authoritative but measured. Initiation reports are more deliberate than event-driven notes. The analyst is building a case from the ground up, not reacting to a catalyst.
-- Use hedging language judiciously: "we believe", "in our view", "we estimate" for forward projections. Use direct language for factual descriptions: "The company operates in three segments" (not "we believe the company operates in...").
+- Information-aggregation only. OpenLIA reports surface what the market is saying with citations. Never speak in the first person about whether to buy a stock. First-person voice — "we believe", "we view", "in our view", "we recommend", "our base case", "our rating", "our target" — is FORBIDDEN throughout the report; the validator rejects it. Attribute every directional claim to a cited source using sourced-voice verbs ("JPMorgan rates", "consensus reflects", "management guided", "Bernstein argued", "Goldman flagged").
 - Adopt a teaching posture in early sections (Company Overview through Business Model). The reader may be encountering this company for the first time. Explain the business clearly before analyzing it.
-- Shift to analytical and opinionated in later sections (Competitive Analysis through Investment Recommendation). By the time the reader reaches valuation, the tone should carry conviction.
-- Maintain objectivity in descriptive sections. Competitive Analysis and Risk Analysis should present both sides. Reserve advocacy for the Investment Recommendation.
+- Shift to analytical sourcing in later sections (Competitive Analysis through Analyst View). Analytical density rises; the voice remains third-person and cited.
+- Maintain objectivity in descriptive sections. Competitive Analysis and Risk Analysis should present both sides. The Analyst View section reports the analyst consensus and bull/bear arguments observed in cited sources — it never authors an OpenLIA rating or price target.
 
 ### Sentence Structure
 
@@ -30,20 +30,22 @@ All transitions from the Stock Update Style Guide apply (Section 1: Transitions 
 
 - "Putting this in context," to transition from description to analysis
 - "The key question for investors is..." to frame the central debate
-- "We see [X] as the primary differentiator because..." to transition from competitive description to moat assessment
+- "Sources cite [X] as the primary differentiator because..." to transition from competitive description to moat assessment
 - "On balance," to summarize after a strengths-vs-weaknesses discussion
-- "We derive our [price target/valuation] from..." to introduce the valuation methodology
-- "The investment case rests on..." to frame the final recommendation
+- "Consensus derives the target from..." to introduce the valuation methodology cited
+- "Sources frame the investment case around..." to frame the analyst consensus narrative
 
 ### What to Avoid
 
 All items from the Stock Update Style Guide (Section 1: What to Avoid) apply. Additional items specific to initiation reports:
 
-- Company press release language. Do not parrot the company's own marketing or mission statements. Restate facts in analytical terms.
+- First-person voice anywhere in the report. "We believe", "we view", "we recommend", "in our view", "our base case", "our rating", "our target", "our DCF" all fail validation. Use sourced verbs ("consensus reflects", "JPMorgan rates", "management guided") instead.
+- Company press release language. Restate facts in analytical terms — do not lift the company's own marketing copy, taglines, or mission statements (e.g., do not repeat a company slogan as if it were analytical content).
+- Tombstone phrases. The following hedges (and any close variant) FAIL validation: "more assumption-heavy than the current fact set supports", "this is not a single target-setting exercise", "we cannot determine", "data not available", "data not provided", "unable to determine". If a specific fact you would cite is not in the manifest or facts slice, rewrite the sentence so it does not need that fact; do not announce the gap.
 - Lazy qualitative claims: "strong management team", "best-in-class technology", "industry-leading margins" — unless immediately substantiated with data: "industry-leading gross margins of 74.5%, 15ppts above the peer median of 59.2%."
 - Symmetry for its own sake. If the company has 5 clear strengths and 2 weaknesses, do not pad the weaknesses list to match. Present what is real.
 - Excessive history. Company Overview should cover founding and milestones in 2-3 sentences, not a multi-paragraph corporate history. The reader is here for the investment case.
-- DCF worship. Do not present a DCF model as precise truth. Always state key assumptions and sensitivity: "Our DCF implies $142 per share, but the result is sensitive to the terminal growth rate assumption (a 50bps change in terminal growth shifts the value by ~$12)."
+- DCF worship. Cite the deterministic DCF helper output; do not present a DCF as precise truth, and never re-derive it in prose. State the inputs and the sensitivity, then move on.
 
 
 ## 2. Per-Section Guidelines
@@ -284,10 +286,10 @@ All items from the Stock Update Style Guide (Section 1: What to Avoid) apply. Ad
 **Data integration:** All projections should flow logically from the analysis in prior sections. Revenue growth should be consistent with industry growth + market share assumptions. Margin assumptions should be consistent with mix shift and operating leverage dynamics discussed earlier.
 
 **Do:**
-- State assumptions explicitly: "We assume Data Center revenue grows at 35% YoY in FY2027E, driven by Blackwell ramp and enterprise AI adoption"
-- Compare to consensus where available: "Our FY2027E EPS of $5.42 is 8% above Bloomberg consensus of $5.02"
-- Show the bridge from current to projected: what drives revenue growth, what drives margin change
-- Include sensitivity: "Each 5ppt change in Data Center growth moves FY2027E EPS by approximately $0.40"
+- Cite consensus directly using deterministic facts: "Consensus reflects FY+1 revenue of $X (N analysts, mean of `consensus_revenue_fy_next`) and FY+1 EPS of $Y [c1]."
+- State each named growth driver with a sourced anchor: "Bernstein attributes the Data Center growth to Blackwell ramp [c3]"; "management guided gross margin to 73–74% on the Q1 call [c5]."
+- Show the bridge from current to projected by citing the `forecast_table` helper fact, not by re-deriving the math in prose
+- Compare consensus paths to disclosed company guidance ranges where available
 
 **Don't:**
 - Present projections without stating assumptions — black-box forecasts have no credibility
@@ -298,49 +300,55 @@ All items from the Stock Update Style Guide (Section 1: What to Avoid) apply. Ad
 
 ### 2.12 Valuation Analysis
 
-**Purpose:** Derive a target price using appropriate methodologies and contextualize it against history and peers.
+**Purpose:** Present three deterministic-helper-derived valuation ranges side-by-side. OpenLIA does NOT synthesize them into a single price target.
 
-**Structure:** Three parts. (1) Valuation models: apply 2-3 appropriate methods (P/E, P/B, DCF, EV/EBITDA, PEG, sum-of-parts) depending on the company type. For each, show the inputs and the resulting target price in a table. Derive conservative, base, and optimistic targets. (2) Historical P/E trend: a line chart showing the stock's trailing or forward P/E over 5+ years with the current level marked, plus the mean and +/- 1 standard deviation bands. (3) Peer valuation comparison: a table showing P/E, P/B, EV/EBITDA, and other relevant multiples for the target company vs. 3-5 peers.
+**Structure:** Three required blocks plus a football_field exhibit. (1) Peer-multiple implied range: a `metric_cards` or `table` rendering the helper fact `peer_multiple_implied_range` (low / median / high implied prices from peer P/E and EV/EBITDA percentiles). (2) Historical P/E band: a `chart:line` rendering the helper fact `historical_pe_band` (mean, +/- 1 sigma, current percentile). (3) Sourced sell-side range: a `metric_cards` rendering `analyst_target_high`, `analyst_target_mean`, `analyst_target_low`, and `analyst_count`. In addition, a `football_field` exhibit overlaying the three ranges on a single horizontal-bar chart with the current price as a vertical reference line.
 
-**Tone:** Precise and transparent. Show the math. Valuation is the section readers scrutinize most — every number must be traceable.
+**Tone:** Precise, transparent, and third-person. Every number traces to a helper-emitted Fact. Do not perform multiplication, division, or growth calculations in prose — cite the helper output.
 
-**Data integration:** Valuation conventions follow the same rules defined in the Stock Update Style Guide (Section 2.5: Valuation and Price Target) and the Sector Research Style Guide (Section 2.7: Valuation). The core principle is the same across all three modes: state the methodology, show the multiple, identify the metric it applies to, reference the historical range, and state the implied upside/downside.
-
-**Do:**
-- Show the math explicitly: "Base case TP of $185 = 32x FY2027E EPS of $5.78"
-- Justify the multiple: "32x is in line with the 5-year average forward P/E of 31x and reflects the company's above-average earnings growth profile (3-year EPS CAGR of 28%)"
-- Present a valuation range, not a single point: conservative / base / optimistic with different multiple or growth assumptions
-- Cross-check with PEG: "At our base case TP, the stock trades at a PEG of 1.1x, which we view as reasonable for this growth profile"
-- Include a sensitivity table showing how the TP changes with different multiple and earnings assumptions
-
-**Don't:**
-- Present a DCF as the sole methodology — it is too sensitive to terminal assumptions to stand alone
-- Use a methodology that doesn't fit the company: P/B for an asset-light SaaS company, P/E for a pre-profit company
-- Ignore what the market is currently pricing: if the stock trades at 45x and your target assumes 32x, explain why de-rating should occur
-- Present a target without upside/downside from the current price
-
-
-### 2.13 Investment Recommendation
-
-**Purpose:** Deliver the final verdict — does the analysis support buying, holding, or selling?
-
-**Structure:** Four components. (1) Rating and target price headline: stated prominently using a rating badge. (2) Bull case summary: 2-3 sentences stating the key upside scenarios and the implied bull-case target price. (3) Bear case summary: 2-3 sentences stating the key downside scenarios and the implied bear-case target price. (4) Key finding: a single sentence distilling the most important reason for the recommendation.
-
-**Tone:** Most opinionated section in the report. This is where the analyst stakes a position. Be confident, but acknowledge the range of outcomes.
-
-**Data integration:** The recommendation should synthesize the entire report: reference the thesis, the competitive position, the financial projections, and the valuation. The target price should match the valuation section. The bull/bear cases should reference specific risks and catalysts from earlier sections.
+**Data integration:** All numeric claims cite a Fact by name. The prose presents the three ranges side-by-side, then stops; it does NOT pick a target multiple, derive an OpenLIA target, or rank one methodology over another.
 
 **Do:**
-- Lead with the rating and target price: "We initiate coverage of NVDA with an Overweight rating and a 12-month price target of $185, implying 22% upside from the current price of $152"
-- State the bull and bear cases with specific target prices: "Bull case ($230): AI capex accelerates beyond our base case; Bear case ($120): cyclical slowdown in data center spending"
-- Reference the key drivers from earlier in the report — this section should feel like a conclusion, not a new argument
-- End with a single-sentence key finding that a reader can take away without reading anything else
+- Cite helper facts by name: "The peer-multiple implied range is $X–$Y (low–high quartile P/E applied to consensus FY+1 EPS) [c1]. The historical P/E band suggests fair value of $Z at the 5-year mean and $W at +1 sigma [c2]. The sell-side range from N analysts is $A–$B with mean $C [c3]."
+- Present the football_field exhibit so the reader can visually compare ranges
+- Note where the three ranges agree or diverge: "All three ranges overlap in the $X–$Y region; the sell-side mean sits at the high end of the peer-multiple range."
+- Cross-check sell-side dispersion: "The spread between high and low analyst targets is $X, indicating wide disagreement on the FY+1 earnings path."
 
 **Don't:**
-- Introduce new information in the recommendation section — everything here should have been established earlier
-- Hedge the recommendation to the point of meaninglessness: "We rate the stock Buy but note significant risks" without ranking them
-- Omit the target price, upside/downside, or key valuation metric
-- Provide a recommendation that contradicts the analysis (e.g., a Buy rating when the valuation section shows the stock is overvalued)
+- Synthesize the three ranges into a single OpenLIA target or recommendation — present them side-by-side and stop
+- Author a "base case TP" or "12-month price target" in OpenLIA voice — this is not a target-setting exercise; consensus owns the target
+- Use first-person voice anywhere in this section ("we", "our", "in our view") — the validator rejects it
+- Perform arithmetic in prose — every multiple/price product must come from a helper fact
+- Use P/E for a distressed name — distressed mode (industry overlay) substitutes EV/Sales and EV/EBITDA bands
+
+**Exemplar (sourced voice, no first person, no OpenLIA target):**
+> "Consensus reflects a Buy rating with a mean 12-month target of $185, implying 22% upside [c1]. The peer-multiple implied range, applying peer median forward P/E (32x) and EV/EBITDA (22x) to consensus FY+1 EPS and EBITDA, yields a range of $164–$203 [c2]. The historical P/E band sits at $158 mean / $192 at +1 sigma based on the last five years of trailing P/E [c3]. Goldman's May 12 note centres the bull case on data-center mix continuing to outpace gaming through FY+2 [c4]."
+
+
+### 2.13 Analyst View
+
+**Purpose:** Aggregate what the analyst community is currently saying about the stock, with citations. OpenLIA never authors its own rating or price target — this section reflects the sell-side and management commentary the runner gathered.
+
+**Structure:** The section leads with four deterministic, server-built blocks in this order: (1) `rating_badge` populated from `analyst_consensus_rating`; (2) `metric_cards` populated from `analyst_target_mean`, `analyst_target_high`, `analyst_target_low`, `analyst_count`, and `consensus_upside_pct`; (3) `chart:bar` populated from `analyst_rating_distribution` (Strong Buy → Strong Sell counts). (4) A `table` of recent rating changes in the last 90 days (Date, Firm, Action, From → To, Target Price) built from cited news, each row carrying an inline `[N]` citation. If no rating-change events surfaced in the last 90 days, OMIT this table — never fabricate rows. Then a `comparison_split` of Bull-case vs Bear-case arguments, every item carrying an `[N]` citation and a sourced verb. Close with a 3-4 sentence prose paragraph summarizing the consensus, with citations.
+
+**Tone:** Third-person, cited, neutral. The analyst's job in this section is curation, not advocacy.
+
+**Data integration:** Every quantitative claim is a Fact pre-built by the server. The recent-rating-changes table is sourced from `web_search`/`get_company_news`. The bull/bear items are sourced from analyst notes, earnings call commentary, regulatory filings, and news entries packed in the manifest.
+
+**Do:**
+- Use sourced-voice verbs: "JPMorgan rates Buy [c12]", "consensus reflects a Hold rating with mean target $X [c1]", "Bernstein argued the China export-control headwind has been over-discounted [c8]", "management guided FY+1 revenue to $X at the midpoint on the Q1 call [c5]", "Goldman flagged a Blackwell supply constraint [c9]", "Barclays raised its FY+1 EPS to $Y [c11]".
+- Cite every bull/bear item and every recent-rating-changes row
+- Quote the consensus tally explicitly: "N analysts cover the stock; X Buy, Y Hold, Z Sell."
+- Drop the recent-rating-changes table entirely if no events surfaced in the last 90 days — never fabricate a row
+
+**Don't:**
+- Author a rating or price target in OpenLIA voice anywhere in this section
+- Use first-person voice ("we", "our", "in our view", "we recommend", "our rating", "our target") — the validator rejects it
+- Hedge the consensus with OpenLIA opinion ("consensus is Buy but we think this is too aggressive") — report what the consensus says and stop
+- Pad bull/bear items beyond what cited sources actually support
+
+**Exemplar (sourced voice, no advocacy):**
+> "Consensus reflects a Buy rating with a mean 12-month target of $185 across 42 analysts (33 Buy, 7 Hold, 2 Sell), implying 22% upside from the current $152 [c1]. In the last 30 days, Goldman raised its target to $215 from $200 citing accelerated Blackwell adoption [c4]; Bernstein reiterated Buy with a $195 target after Q1 [c8]. Bulls cite management's guidance for FY+1 revenue at the high end of consensus [c5]; bears flag a potential China export-control extension that JPMorgan estimates would reduce data-center revenue by ~$8bn [c12]."
 
 
 ## 3. Data Presentation Rules
@@ -372,17 +380,17 @@ In addition to the chart types shared across modes:
 ## 4. Cover Page Conventions
 
 ### Key Information Displayed
-- Rating badge (Buy/Hold/Sell or Overweight/Equal-weight/Underweight) displayed prominently
-- 12-month price target with upside/downside % from current price
+- Consensus rating badge populated from `analyst_consensus_rating` (deterministic, server-built — never authored by OpenLIA)
+- Mean analyst 12-month target price from `analyst_target_mean` with implied upside/downside from `consensus_upside_pct`
 - Current share price with date
 - Ticker and exchange
 - Market cap (dual currency where applicable)
-- One-sentence investment thesis tagline
+- One-sentence neutral framing tagline — describes what the report covers, NOT what to do about the stock. No "Buy", "Sell", "Overweight", "Initiate at" language.
 - Key forecast table: Revenue, EPS, P/E for current year + 2-3 forward years (estimates marked with "E")
 - Sector, sub-industry classification
 - Report date
 
-### Initiation vs. Update Covers
-- Initiation covers are more comprehensive than update covers. They include the full forecast table and sector classification because the reader has no prior context.
-- Initiation covers do not show "from/to" changes on ratings or targets (there is no prior to compare to). State the rating and target as new: "Initiate at Overweight, TP $185."
+### Initiation Cover Conventions
+- The cover surfaces the deterministic consensus rating, mean PT, and implied upside as the headline — the first thing a reader sees is what the market is saying, with citations resolving to the AnalystRatings manifest entry.
+- OpenLIA does NOT author its own rating or target on the cover. There is no "Initiate at Overweight" or "We rate Buy" language anywhere on the cover. Exemplar tagline: "Stock initiation note covering business model, financials, and the sell-side consensus on $TICKER."
 - Include free float % and 3-month ADTV for institutional readers evaluating liquidity.

@@ -110,6 +110,10 @@ async def test_runner_emits_lifecycle_events_in_order() -> None:
         body_writer=writer,
         synthesis_writer=writer,
         sse_emitter=capture,
+        # Static fixture; bypass freshness gate.
+        freshness_override=True,
+        # Single-ticker fixture has no peers; bypass the peer-set gate.
+        peer_set_override=True,
     )
     await runner.run()
 

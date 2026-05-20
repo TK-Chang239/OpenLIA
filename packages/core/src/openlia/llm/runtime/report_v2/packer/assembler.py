@@ -307,6 +307,24 @@ def _build_cover(facts_pack: FactsPack, *, ticker: str, generated_at: datetime) 
         if gm is not None:
             _add("Gross Margin", _format_pct(gm), "gross_margin_ttm")
 
+    # Deterministic consensus block (WS5). Pulls rating / target / upside
+    # straight from the analyst facts so the cover hero can render the
+    # market verdict above the fold rather than burying it in the body.
+    consensus_rating: str | None = None
+    consensus_target_mean: float | None = None
+    consensus_upside_pct_val: float | None = None
+    consensus_source_ids: list[str] = []
+    rating_fact = facts.get("analyst_consensus_rating")
+    if rating_fact is not None and rating_fact.value:
+        consensus_rating = str(rating_fact.value)
+        consensus_source_ids = [f"c{sid}" for sid in rating_fact.source_ids]
+    target_fact = facts.get("analyst_target_mean")
+    if target_fact is not None and target_fact.value is not None:
+        consensus_target_mean = float(target_fact.value)
+    upside_fact = facts.get("consensus_upside_pct")
+    if upside_fact is not None and upside_fact.value is not None:
+        consensus_upside_pct_val = float(upside_fact.value)
+
     return Cover(
         title=company_name,
         subtitle=subtitle,
@@ -314,6 +332,10 @@ def _build_cover(facts_pack: FactsPack, *, ticker: str, generated_at: datetime) 
         ticker=ticker,
         tagline="Company Research Briefing",
         key_metrics=key_metrics,
+        consensus_rating=consensus_rating,
+        consensus_target_mean=consensus_target_mean,
+        consensus_upside_pct=consensus_upside_pct_val,
+        consensus_source_ids=consensus_source_ids,
     )
 
 

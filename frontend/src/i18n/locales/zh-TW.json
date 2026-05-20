@@ -1504,6 +1504,8 @@
     "sources_and_disclosures": "資料來源與聲明",
     "sources": "資料來源",
     "quick_stats": "重點指標",
+    "consensus_rating_label": "市場共識",
+    "consensus_mean_target_label": "平均目標價",
     "related": "相關項目",
     "previous_rating_prefix": "原評",
     "lo": "低",

@@ -36,6 +36,9 @@ class ReportTelemetry:
     auto_repair_fixes: Counter = field(default_factory=Counter)
     cross_section_findings: list[CrossSectionFinding] = field(default_factory=list)
     omitted_blocks: list[OmittedBlock] = field(default_factory=list)
+    freshness_banner: dict[str, Any] | None = None
+    material_events_banner: dict[str, Any] | None = None
+    report_mode_banner: dict[str, Any] | None = None
 
     def record_section(self, result: SectionResult) -> None:
         self.sections[result.section_id] = {
@@ -68,6 +71,60 @@ class ReportTelemetry:
             OmittedBlock(section_id=section_id, block_type=block_type, reason=reason)
         )
 
+    def record_freshness_banner(
+        self,
+        *,
+        oldest_data_as_of: str | None,
+        violations: list[dict[str, Any]],
+        override: bool,
+    ) -> None:
+        """Record the freshness banner block for the cover/manifest surface.
+
+        Surfaced via the schema's telemetry dict so the renderer can show a
+        "data as of <oldest_date>" badge and an explicit STALE DATA banner
+        when the runner was invoked with `freshness_override=True`."""
+        self.freshness_banner = {
+            "oldest_data_as_of": oldest_data_as_of,
+            "violations": violations,
+            "override": override,
+        }
+
+    def record_material_events_banner(
+        self,
+        *,
+        events: list[dict[str, Any]],
+        override: bool,
+    ) -> None:
+        """Record the material-events banner block for the cover/manifest surface.
+
+        Surfaced via the schema's telemetry dict so the renderer can show a
+        warning banner per event (e.g. Chapter 11 detected on YYYY-MM-DD).
+        `override` is True when the runner was invoked with
+        `material_events_override=True` and proceeded despite a hard_block."""
+        self.material_events_banner = {
+            "events": events,
+            "override": override,
+        }
+
+    def record_report_mode_banner(
+        self,
+        *,
+        mode: str,
+        label: str | None,
+        auto_selected: bool,
+    ) -> None:
+        """Record the chosen industry overlay (WS9).
+
+        Surfaced on the cover so readers see which specialization rendered the
+        report (e.g. 'Initiation report — SaaS specialization'). `auto_selected`
+        is False when the runner was invoked with an explicit
+        `report_mode_override`."""
+        self.report_mode_banner = {
+            "mode": mode,
+            "label": label,
+            "auto_selected": auto_selected,
+        }
+
     def snapshot(self) -> dict[str, Any]:
         omitted_counts: Counter = Counter()
         for ob in self.omitted_blocks:
@@ -88,4 +145,7 @@ class ReportTelemetry:
                 for ob in self.omitted_blocks
             ],
             "omitted_block_counts": dict(omitted_counts),
+            "freshness_banner": self.freshness_banner,
+            "material_events_banner": self.material_events_banner,
+            "report_mode_banner": self.report_mode_banner,
         }
