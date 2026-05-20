@@ -578,6 +578,46 @@ def test_consensus_eps_growth_fy_next_derived() -> None:
     assert fact.source_tier == "derived"
 
 
+def test_consensus_growth_data_as_of_tracks_consensus_side_not_annual_anchor() -> None:
+    """Regression: derived growth facts inherited the older (annual) date from
+    their historical anchor and tripped the consensus_ 14-day freshness budget
+    even when the consensus estimate itself was fresh. The fix points the
+    derived `data_as_of` at the consensus side (the newer of the two)."""
+    from datetime import UTC, datetime
+
+    from openlia.llm.runtime.report_v2.facts.extractors.stock_initiation import (
+        _newest_dep_as_of,
+    )
+    from openlia.llm.runtime.report_v2.types import Fact
+
+    consensus = Fact(
+        name="consensus_revenue_fy_next",
+        value=100.0,
+        source_ids=[1],
+        extractor="deterministic",
+        data_as_of=datetime(2026, 5, 15, tzinfo=UTC),
+    )
+    annual = Fact(
+        name="revenue_annual",
+        value=[80.0, 90.0, 95.0],
+        source_ids=[1],
+        extractor="deterministic",
+        data_as_of=datetime(2026, 1, 31, tzinfo=UTC),
+    )
+    assert _newest_dep_as_of(consensus, annual) == datetime(2026, 5, 15, tzinfo=UTC)
+    # Order independence.
+    assert _newest_dep_as_of(annual, consensus) == datetime(2026, 5, 15, tzinfo=UTC)
+    # Missing data_as_of is ignored, not treated as max.
+    no_date = Fact(
+        name="consensus_revenue_fy_next",
+        value=100.0,
+        source_ids=[1],
+        extractor="deterministic",
+        data_as_of=None,
+    )
+    assert _newest_dep_as_of(no_date, annual) == datetime(2026, 1, 31, tzinfo=UTC)
+
+
 def test_next_quarter_revenue_guide_midpoint_populates() -> None:
     pack = _compile(["next_quarter_revenue_guide_midpoint"])
     assert pack.get("next_quarter_revenue_guide_midpoint").value == 55.0
