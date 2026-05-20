@@ -10,7 +10,10 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib import resources
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from openlia.reports.frameworks.template_spec import TemplateSpec
 
 from openlia.llm.runtime.events import (
     ReportComplete,
@@ -274,6 +277,20 @@ DEFAULT_BRIEFS: dict[str, str] = {
     for sid in (*BODY_SECTIONS_STOCK_INITIATION, *SYNTHESIS_SECTIONS_STOCK_INITIATION)
 }
 
+DEFAULT_SYSTEM_ROLE: str = "You are an equity research section writer."
+
+DEFAULT_STYLE_GUIDE: str = (
+    "Institutional tone, precise, cited. INFORMATION-AGGREGATION ONLY: "
+    "this report gathers and synthesizes information for the reader. "
+    "Never recommend an action. Never write 'we recommend', 'we "
+    "initiate at', 'our rating', 'our price target', 'our view is', "
+    "'we view this as', 'investment thesis', or any first-person "
+    "advocacy. Any buy/hold/sell language must be attributed to a "
+    "specific cited source (e.g. 'JPMorgan rates Buy [c12]', "
+    "'consensus reflects a Hold [c1]'). Frame conclusions as 'what "
+    "the data shows', not 'what to do about it'."
+)
+
 
 @dataclass
 class ReportRunOutput:
@@ -296,18 +313,8 @@ class WavedReportRunner:
         preflight_provider: Any,
         body_writer: Any,
         synthesis_writer: Any,
-        system_role: str = "You are an equity research section writer.",
-        style_guide: str = (
-            "Institutional tone, precise, cited. INFORMATION-AGGREGATION ONLY: "
-            "this report gathers and synthesizes information for the reader. "
-            "Never recommend an action. Never write 'we recommend', 'we "
-            "initiate at', 'our rating', 'our price target', 'our view is', "
-            "'we view this as', 'investment thesis', or any first-person "
-            "advocacy. Any buy/hold/sell language must be attributed to a "
-            "specific cited source (e.g. 'JPMorgan rates Buy [c12]', "
-            "'consensus reflects a Hold [c1]'). Frame conclusions as 'what "
-            "the data shows', not 'what to do about it'."
-        ),
+        system_role: str = DEFAULT_SYSTEM_ROLE,
+        style_guide: str = DEFAULT_STYLE_GUIDE,
         max_retries: int = 1,
         sse_emitter: Callable[[Any], Awaitable[None]] | None = None,
         report_id: str | None = None,
@@ -322,9 +329,23 @@ class WavedReportRunner:
         report_mode_override: ReportMode | None = None,
         numeric_validation_override: bool = False,
         catalyst_pack_enabled: bool = True,
+        template: TemplateSpec | None = None,
     ) -> None:
-        if report_type != "stock_initiation":
-            raise ValueError("only stock_initiation supported in v1")
+        # PR 1 — template resolution. When an explicit TemplateSpec is provided,
+        # it takes precedence and the runner no longer requires `report_type` to
+        # be a registered template. When None, look up via the default registry;
+        # unknown report types now raise `UnknownTemplateError` from there.
+        if template is None:
+            # Importing the loaders package ensures default templates are registered
+            # before the registry is consulted. Done lazily here to avoid an import
+            # cycle (loaders depend on this module's constants).
+            import openlia.reports.frameworks.loaders  # noqa: F401
+            from openlia.reports.frameworks.registry import (
+                default_registry as _template_registry,
+            )
+
+            template = _template_registry.get(report_type)
+        self.template = template
         self.report_type = report_type
         self.ticker = ticker
         self.dispatcher = dispatcher
