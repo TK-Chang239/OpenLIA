@@ -69,6 +69,7 @@ class ReportPayload(BaseModel):
     mode: str
     user_input: str
     session_id: str | None = None
+    report_template_id: str | None = None
 
 
 class ChatPayload(BaseModel):
@@ -173,6 +174,7 @@ def build_equity_research_router(
         user_input: str,
         session_id: str | None,
         uploads: list[FileUpload] | None,
+        report_template_id: str | None = None,
     ) -> StreamingResponse:
         if mode not in _VALID_MODES:
             raise HTTPException(status_code=400, detail=f"unknown mode: {mode!r}")
@@ -234,6 +236,7 @@ def build_equity_research_router(
                     attachments=runtime_attachments or None,
                     disabled_connector_ids=disabled_connector_ids,
                     disabled_skill_ids=disabled_skill_ids,
+                    report_template_id=report_template_id,
                 ):
                     wire = _serialize_event(ev)
                     yield f"event: {wire['type']}\ndata: {json.dumps(wire)}\n\n".encode()
@@ -265,6 +268,7 @@ def build_equity_research_router(
             mode = (form.get("mode") or "").strip()
             user_input = (form.get("user_input") or "").strip()
             session_id = form.get("session_id") or None
+            report_template_id = form.get("report_template_id") or None
             uploads: list[FileUpload] = []
             for upload in form.getlist("files"):
                 if not hasattr(upload, "read"):
@@ -291,6 +295,7 @@ def build_equity_research_router(
                 user_input=user_input,
                 session_id=session_id,
                 uploads=uploads,
+                report_template_id=report_template_id,
             )
         body = await request.json()
         try:
@@ -305,6 +310,7 @@ def build_equity_research_router(
             user_input=payload.user_input,
             session_id=payload.session_id,
             uploads=None,
+            report_template_id=payload.report_template_id,
         )
 
     async def _stream_chat(
