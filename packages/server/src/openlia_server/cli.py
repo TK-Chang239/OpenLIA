@@ -114,7 +114,7 @@ def _default_port() -> int:
     env = os.environ.get("OPENLIA_PORT")
     if env:
         return int(env)
-    return 8000
+    return 8080
 
 
 @app.command()
@@ -435,7 +435,7 @@ def admin_create_invite(
             metadata={"invite_id": invite.id, "max_uses": max_uses, "label": label},
         )
         db.commit()
-        base_url = os.environ.get("OPENLIA_PUBLIC_URL", "http://localhost:8000")
+        base_url = os.environ.get("OPENLIA_PUBLIC_URL", "http://localhost:8080")
         url = f"{base_url}/register?invite={raw_token}"
         if json_output:
             import json as _json
