@@ -207,6 +207,7 @@ class WavedReportRunnerHost:
         disabled_skill_ids: tuple[str, ...] | frozenset[str] = (),
         sse_emitter: Any = None,
         run_id: str | None = None,
+        language: str | None = None,
     ):
         """Async generator that mirrors the ReportRunner.run() contract.
 
@@ -320,6 +321,7 @@ class WavedReportRunnerHost:
             synthesis_writer=synthesis_writer,
             sse_emitter=_emit,
             report_id=run_id,
+            language=language,
         )
 
         # Run the WavedReportRunner concurrently and drain the event queue.

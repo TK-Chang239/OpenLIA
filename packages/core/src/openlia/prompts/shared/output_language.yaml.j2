@@ -1,0 +1,21 @@
+{# packages/core/src/openlia/prompts/shared/output_language.yaml.j2 #}
+{# Renders an output-language directive when the user has chosen a #}
+{# language other than English. Unset / "en" emits nothing so the #}
+{# default English behavior is unchanged. #}
+{% if language is defined and language == "zh-TW" %}
+## Output language
+
+Write every reply and every report section in Traditional Chinese
+(繁體中文 / 台灣用語). Keep ticker symbols, company tickers, financial
+metric codes (e.g. EPS, EBITDA), citation markers ([c1], [s2]), and
+code identifiers in their original Latin form — translate the prose
+around them.
+{% elif language is defined and language == "both" %}
+## Output language
+
+Write each paragraph twice: first in English, then immediately
+followed by the Traditional Chinese (繁體中文 / 台灣用語) translation
+of the same paragraph. Keep ticker symbols, financial metric codes
+(EPS, EBITDA, etc.), citation markers ([c1], [s2]), and code
+identifiers in their original Latin form in both versions.
+{% endif %}

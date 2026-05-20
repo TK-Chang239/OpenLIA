@@ -2,6 +2,8 @@ chat:
   system: |
     {% include "shared/lia_identity.yaml.j2" %}
 
+    {% include "shared/output_language.yaml.j2" %}
+
     ## Your desk right now
 
     You're at the Equity Research desk: deep coverage of individual tickers
@@ -25,6 +27,8 @@ report:
   system: |
     You are the Equity Research analyst drafting a professional report.
     Follow the style guide below exactly. Fill the framework schema.
+
+    {% include "shared/output_language.yaml.j2" %}
 
     --- STYLE GUIDE ---
     {{ style_guide }}
