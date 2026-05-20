@@ -17,7 +17,9 @@
       "avg_daily_volume_3m",
       "analyst_consensus_rating",
       "analyst_target_mean",
-      "consensus_upside_pct"
+      "consensus_upside_pct",
+      "fiscal_year_end_latest",
+      "shares_outstanding"
     ],
     "company_overview": [
       "company_name",
@@ -28,11 +30,25 @@
       "employees",
       "exchange",
       "revenue_ttm",
-      "ebitda_ttm"
+      "ebitda_ttm",
+      "fiscal_year_end_latest"
     ],
     "industry_overview": ["sector"],
-    "products_and_services": ["company_name"],
-    "business_model": ["company_name", "revenue_cagr_3y", "gross_margin_ttm"],
+    "products_and_services": [
+      "company_name",
+      "segment_revenue_latest",
+      "segment_share_latest",
+      "segment_revenue_yoy"
+    ],
+    "business_model": [
+      "company_name",
+      "revenue_cagr_3y",
+      "gross_margin_ttm",
+      "segment_revenue_latest",
+      "segment_revenue_yoy",
+      "segment_share_latest",
+      "fiscal_year_end_latest"
+    ],
     "management_team": ["company_name"],
     "historical_financials": [
       "revenue_years",
@@ -47,8 +63,18 @@
       "equity_annual",
       "cash_annual",
       "total_debt_annual",
+      "cash_and_short_term_investments_annual",
+      "net_cash_annual",
+      "operating_cash_flow_annual",
+      "free_cash_flow_annual",
+      "capex_annual",
+      "sbc_annual",
+      "dividend_per_share_annual",
+      "shares_outstanding",
+      "float_shares",
       "revenue_cagr_3y",
-      "gross_margin_ttm"
+      "gross_margin_ttm",
+      "fiscal_year_end_latest"
     ],
     "financial_analysis": [
       "revenue_cagr_3y",
@@ -59,14 +85,33 @@
       "operating_margin_annual",
       "net_margin_annual",
       "peer_revenue_cagr_3y",
-      "peer_gross_margin_ttm"
+      "peer_gross_margin_ttm",
+      "free_cash_flow_annual",
+      "operating_cash_flow_annual",
+      "capex_annual",
+      "roe_ttm",
+      "roa_ttm",
+      "roic_ttm",
+      "sbc_annual",
+      "net_cash_annual"
     ],
     "financial_projections": [
       "revenue_annual",
       "revenue_cagr_3y",
       "operating_income_annual",
       "net_income_annual",
-      "eps_annual"
+      "eps_annual",
+      "consensus_revenue_fy_next",
+      "consensus_revenue_fy_next_plus_one",
+      "consensus_revenue_fy_next_plus_two",
+      "consensus_eps_fy_next",
+      "consensus_eps_fy_next_plus_one",
+      "consensus_eps_fy_next_plus_two",
+      "consensus_revenue_growth_fy_next",
+      "consensus_eps_growth_fy_next",
+      "next_quarter_revenue_guide_midpoint",
+      "next_quarter_revenue_guide_low",
+      "next_quarter_revenue_guide_high"
     ],
     "valuation_analysis": [
       "market_cap",
@@ -77,12 +122,31 @@
       "peer_price_to_book",
       "peer_ev_to_ebitda",
       "peer_peg_ratio",
-      "peer_revenue_cagr_3y"
+      "peer_revenue_cagr_3y",
+      "peer_market_cap",
+      "peer_revenue_ttm",
+      "peer_net_margin_ttm",
+      "peer_operating_margin_ttm",
+      "peer_fcf_yield",
+      "ev_to_ebitda_forward",
+      "ev_to_sales_forward",
+      "fcf_yield",
+      "dividend_yield",
+      "beta",
+      "shares_outstanding",
+      "float_shares",
+      "short_interest_pct"
     ],
-    "competitive_analysis": ["sector"],
+    "competitive_analysis": [
+      "sector",
+      "peer_market_cap",
+      "peer_revenue_ttm",
+      "peer_net_margin_ttm",
+      "peer_operating_margin_ttm"
+    ],
     "recent_developments": ["company_name"],
     "competitive_advantages_and_weaknesses": ["sector", "gross_margin_ttm"],
-    "risk_analysis": ["sector", "revenue_cagr_3y"],
+    "risk_analysis": ["sector", "revenue_cagr_3y", "net_cash_annual", "short_interest_pct"],
     "investment_recommendation": [
       "company_name",
       "current_price",

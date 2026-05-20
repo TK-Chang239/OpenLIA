@@ -124,6 +124,9 @@ async def test_runner_end_to_end_minimal() -> None:
         # budget against any real-time clock past 2026-01-15; bypass the gate
         # since this test exercises end-to-end flow, not freshness.
         freshness_override=True,
+        # Single-ticker fixture has no peers; bypass the peer-set gate so the
+        # end-to-end smoke can run.
+        peer_set_override=True,
     )
     report = await runner.run()
 
@@ -178,6 +181,8 @@ async def test_runner_records_cross_section_inconsistencies_in_telemetry() -> No
         synthesis_writer=writer,
         # Static fixture; bypass freshness gate (see test_runner_end_to_end_minimal).
         freshness_override=True,
+        # Single-ticker fixture has no peers; bypass the peer-set gate.
+        peer_set_override=True,
     )
     report = await runner.run()
 
