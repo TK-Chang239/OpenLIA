@@ -16,6 +16,9 @@ from openlia_server.services import reports as reports_svc
 from openlia_server.services.equity_research_config import (
     EquityResearchConfigService,
 )
+from openlia_server.services.report_template_resolver import (
+    resolve_user_template_spec,
+)
 
 _LENGTH_MAP = {"concise": "brief", "normal": "standard", "elaborative": "long"}
 
@@ -63,12 +66,21 @@ class EquityResearchRunner:
         model_id_override: str | None = None,
         disabled_connector_ids: tuple[str, ...] = (),
         disabled_skill_ids: tuple[str, ...] = (),
+        report_template_id: str | None = None,
     ) -> AsyncIterator[SseEvent | ReportSavedEvent]:
         if mode not in self._dept.valid_modes:
             raise ValueError(f"unknown equity_research mode: {mode!r}")
 
         cfg = self._config.get_config(user_id)
         active = self._config.resolve_active(cfg, mode=mode, user_id=user_id)
+
+        framework_template_spec: dict | None = None
+        if report_template_id:
+            framework_template_spec = resolve_user_template_spec(
+                self._db,
+                user_id=user_id,
+                template_id=report_template_id,
+            )
 
         custom_section_dicts = [
             {
@@ -89,6 +101,8 @@ class EquityResearchRunner:
             user_template_text=active.template_text,
             user_template_name=active.template_name,
             web_search_budget_override=active.web_search_budget,
+            framework_template_spec=framework_template_spec,
+            framework_template_id=report_template_id,
         )
 
         last_complete: ReportComplete | None = None

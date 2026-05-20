@@ -76,6 +76,14 @@ class ReportRequest:
     reference_portfolio: list[dict[str, Any]] | None = None
     user_template_text: str | None = None
     user_template_name: str | None = None
+    # Framework template override (custom report templates, PR 13+). When
+    # set, the runner replaces the default per-report-type framework with
+    # this fully-specified TemplateSpec dict — sections, briefs, voice
+    # rules, identity equations, etc. This is the new "user uploads their
+    # own framework" path; `user_template_text`/`_name` above remain the
+    # legacy style-reference upload path used by er_templates.
+    framework_template_spec: dict[str, Any] | None = None
+    framework_template_id: str | None = None
     # Per-report override for the web-search budget. ``None`` means the
     # runner resolves from the framework default (and falls back to the
     # global 8 if the framework didn't declare one). See

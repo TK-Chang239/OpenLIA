@@ -33,6 +33,7 @@ import { ToolPicker } from "../../components/chat/ToolPicker";
 import { UserBubble } from "../../components/chat/UserBubble";
 import { useChatStream } from "../../components/chat/useChatStream";
 import { ErComposer } from "../../components/equity-research/ErComposer";
+import { FrameworkTemplatePicker } from "../../components/equity-research/FrameworkTemplatePicker";
 import { ReportCard } from "../../components/equity-research/ReportCard";
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
@@ -122,6 +123,28 @@ export default function EquityResearch(): JSX.Element {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [input, setInput] = useState(tickerParam ?? "");
+  const [frameworkTemplateId, setFrameworkTemplateId] = useState<string | null>(
+    () => {
+      try {
+        return (
+          window.localStorage.getItem("er.frameworkTemplateId") || null
+        );
+      } catch {
+        return null;
+      }
+    },
+  );
+  useEffect(() => {
+    try {
+      if (frameworkTemplateId) {
+        window.localStorage.setItem("er.frameworkTemplateId", frameworkTemplateId);
+      } else {
+        window.localStorage.removeItem("er.frameworkTemplateId");
+      }
+    } catch {
+      /* localStorage disabled */
+    }
+  }, [frameworkTemplateId]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
@@ -450,6 +473,9 @@ export default function EquityResearch(): JSX.Element {
             mode: config.report_mode,
             user_input: trimmed,
             session_id: row.id,
+            ...(frameworkTemplateId
+              ? { report_template_id: frameworkTemplateId }
+              : {}),
           },
           attachments,
         });
@@ -463,6 +489,7 @@ export default function EquityResearch(): JSX.Element {
       startReport,
       disabledConnectorIds,
       disabledSkillIds,
+      frameworkTemplateId,
       t,
     ],
   );
@@ -760,6 +787,15 @@ export default function EquityResearch(): JSX.Element {
           </p>
         ) : null}
       </div>
+
+      {!sessionId ? (
+        <div className="mx-auto w-full max-w-3xl px-4 pb-2">
+          <FrameworkTemplatePicker
+            selectedId={frameworkTemplateId}
+            onChange={setFrameworkTemplateId}
+          />
+        </div>
+      ) : null}
 
       <ErComposer
         value={input}
