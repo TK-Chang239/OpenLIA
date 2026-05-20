@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface Props {
   reportsThisWeek: number | null;
   beats: number | null;
@@ -17,9 +19,10 @@ export function EuHero({
   avgLatency,
   watchlistEmpty,
 }: Props) {
+  const { t } = useTranslation();
   const lede = watchlistEmpty
-    ? "Add tickers to your watchlist and LIA will auto-generate reports as they release."
-    : "Live coverage of every print across your watchlist. LIA reads the release, listens to the call, and revises the model.";
+    ? t("earnings.feed.hero_lede_empty")
+    : t("earnings.feed.hero_lede");
 
   return (
     <section className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-6 items-end pb-[22px] border-b border-[--color-border-subtle] mb-6">
@@ -29,19 +32,20 @@ export function EuHero({
           data-testid="eu-hero-eyebrow"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_0_4px_rgba(var(--color-accent-primary-rgb),0.18)]" />
-          Earnings Update {String.fromCharCode(0xb7)} Department
+          {t("earnings.feed.hero_eyebrow")} {String.fromCharCode(0xb7)}{" "}
+          {t("earnings.feed.hero_dept")}
         </span>
         <h1 className="text-[38px] font-semibold leading-[1.05] tracking-[-0.02em] m-0 mb-2 text-[--color-text-primary]">
-          This week in earnings
+          {t("earnings.feed.hero_headline")}
         </h1>
         <p className="text-base text-[--color-text-secondary] m-0 max-w-[620px] leading-[1.55]">
           {lede}
         </p>
       </div>
       <div className="flex gap-7">
-        <Stat label="Reports this wk" value={reportsThisWeek ?? DASH} />
+        <Stat label={t("earnings.feed.stat_reports_wk")} value={reportsThisWeek ?? DASH} />
         <Stat
-          label="Beats / Misses"
+          label={t("earnings.feed.stat_beats_misses")}
           value={
             beats === null || misses === null ? (
               DASH
@@ -55,11 +59,11 @@ export function EuHero({
           }
         />
         <Stat
-          label="Avg. surprise"
+          label={t("earnings.feed.stat_avg_surprise")}
           value={avgSurprise ?? DASH}
           tone={avgSurprise && avgSurprise.startsWith("-") ? "neg" : "pos"}
         />
-        <Stat label="Avg. latency" value={avgLatency ?? DASH} />
+        <Stat label={t("earnings.feed.stat_avg_latency")} value={avgLatency ?? DASH} />
       </div>
     </section>
   );

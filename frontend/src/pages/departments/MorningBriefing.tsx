@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import {
   Archive,
   CalendarClock,
@@ -24,6 +25,7 @@ import { useMbSchedules } from "../../hooks/useMbSchedules";
 type Tab = "archive" | "run" | "schedule" | "settings";
 
 export default function MorningBriefing() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { config, save: saveConfig, loading: configLoading } = useMbConfig();
   const {
@@ -62,13 +64,13 @@ export default function MorningBriefing() {
       .catch((err: unknown) => {
         if (!cancelled)
           setViewingError(
-            err instanceof Error ? err.message : "Failed to load briefing",
+            err instanceof Error ? err.message : t("morning_briefing.viewer_failed"),
           );
       });
     return () => {
       cancelled = true;
     };
-  }, [viewing]);
+  }, [viewing, t]);
 
   const onReportSaved = useCallback(
     (_reportId: string) => {
@@ -89,12 +91,12 @@ export default function MorningBriefing() {
       await refresh();
       onOpen({
         id: reportId,
-        title: "Morning Briefing",
+        title: t("nav.morning_briefing"),
         report_type: "morning_briefing",
         created_at: new Date().toISOString(),
       });
     },
-    [reports, refresh, onOpen],
+    [reports, refresh, onOpen, t],
   );
 
   const askInSecretary = useCallback(() => {
@@ -121,13 +123,13 @@ export default function MorningBriefing() {
             style={{ borderColor: "var(--color-border-secondary)" }}
           >
             <ChevronLeft size={14} />
-            Close
+            {t("morning_briefing.close")}
           </button>
           <span
             className="ml-3 font-mono text-[10px] tracking-[0.1em] uppercase truncate"
             style={{ color: "var(--color-text-tertiary)" }}
           >
-            Report ·{" "}
+            {t("morning_briefing.report_label")} ·{" "}
             <strong className="text-[--color-text-primary] font-medium">
               {viewing.title}
             </strong>{" "}
@@ -144,7 +146,7 @@ export default function MorningBriefing() {
             style={{ borderColor: "var(--color-border-secondary)" }}
           >
             <Printer size={13} />
-            Print
+            {t("morning_briefing.print")}
           </button>
           <button
             type="button"
@@ -153,7 +155,7 @@ export default function MorningBriefing() {
             style={{ borderColor: "var(--color-border-secondary)" }}
             data-testid="mb-ask-in-secretary"
           >
-            Ask in Secretary →
+            {t("morning_briefing.ask_in_secretary")}
           </button>
         </header>
         <div className="flex-1 overflow-y-auto animate-mb-report-body-enter">
@@ -173,7 +175,7 @@ export default function MorningBriefing() {
               key="load"
               className="p-6 text-sm text-[--color-text-tertiary] animate-mb-report-content-enter"
             >
-              Loading briefing…
+              {t("morning_briefing.loading_briefing")}
             </div>
           )}
         </div>
@@ -188,7 +190,7 @@ export default function MorningBriefing() {
         style={{ borderColor: "var(--color-border-subtle)" }}
       >
         <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
-          Morning Briefings
+          {t("morning_briefing.title")}
         </h1>
         <span
           className="ml-3.5 pl-3.5 font-mono text-[10px] tracking-[0.1em] uppercase border-l"
@@ -197,12 +199,12 @@ export default function MorningBriefing() {
             color: "var(--color-text-tertiary)",
           }}
         >
-          Department ·{" "}
+          {t("morning_briefing.department_label")} ·{" "}
           <strong
             className="font-medium"
             style={{ color: "var(--color-feedback-success)" }}
           >
-            Active
+            {t("morning_briefing.status_active")}
           </strong>
         </span>
         <div className="flex-1" />
@@ -216,27 +218,27 @@ export default function MorningBriefing() {
           active={tab === "archive"}
           onClick={() => setTab("archive")}
           icon={<Archive size={14} />}
-          label="Archive"
+          label={t("morning_briefing.tab_archive")}
           badge={archiveCount}
         />
         <TabButton
           active={tab === "schedule"}
           onClick={() => setTab("schedule")}
           icon={<CalendarClock size={14} />}
-          label="Schedule"
+          label={t("morning_briefing.tab_schedule")}
         />
         <TabButton
           active={tab === "settings"}
           onClick={() => setTab("settings")}
           icon={<SettingsIcon size={14} />}
-          label="Settings"
+          label={t("morning_briefing.tab_settings")}
         />
         <div className="flex-1" aria-hidden="true" />
         <TabButton
           active={tab === "run"}
           onClick={() => setTab("run")}
           icon={<Zap size={14} />}
-          label="Run Now"
+          label={t("morning_briefing.run_now")}
         />
       </nav>
 
@@ -266,7 +268,7 @@ export default function MorningBriefing() {
           ) : tab === "run" ? (
             configLoading || !config ? (
               <div className="text-sm text-[--color-text-tertiary] p-8">
-                Loading…
+                {t("morning_briefing.loading")}
               </div>
             ) : (
               <MBRunNowView
@@ -286,7 +288,7 @@ export default function MorningBriefing() {
             />
           ) : configLoading || !config ? (
             <div className="text-sm text-[--color-text-tertiary] p-8">
-              Loading settings…
+              {t("morning_briefing.loading_settings")}
             </div>
           ) : (
             <MBSettingsView

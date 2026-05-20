@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { RsSnapshot, RsSpike } from "../../api/retail-sentiment";
 import { RS_METRIC_CATALOG } from "../../lib/retail-sentiment/metric-catalog";
@@ -85,9 +86,11 @@ function HeatCell({
 function TrendingRail({
   snapshots,
   onPick,
+  t,
 }: {
   snapshots: RsSnapshot[];
   onPick: (t: string) => void;
+  t: (key: string) => string;
 }) {
   const top = useMemo(
     () =>
@@ -132,7 +135,7 @@ function TrendingRail({
                 {(s.buzz_count ?? 0).toLocaleString()}
               </strong>{" "}
               <span style={{ color: "var(--color-text-tertiary)" }}>
-                mentions
+                {t("retail_sentiment.overview_all.mentions")}
               </span>
             </div>
             <div
@@ -180,6 +183,7 @@ function TrendingRail({
 }
 
 export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
+  const { t } = useTranslation();
   const valid = snapshots.filter((s) => Number.isFinite(s.sentiment_score));
   const meanSentiment =
     valid.length > 0
@@ -206,13 +210,14 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
         className="rs-col-card p-10 flex flex-col items-center gap-3 text-center"
         style={{ borderRadius: "12px" }}
       >
-        <div className="rs-mono-label">Nothing to monitor yet</div>
+        <div className="rs-mono-label">
+          {t("retail_sentiment.overview_all.empty_title")}
+        </div>
         <p
           className="m-0 text-[--color-text-secondary] max-w-[420px]"
           style={{ fontSize: "14px", lineHeight: 1.55 }}
         >
-          Add a ticker above or import your portfolio to start tracking retail
-          sentiment.
+          {t("retail_sentiment.overview_all.empty_sub")}
         </p>
       </div>
     );
@@ -248,7 +253,9 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
               }}
               aria-hidden="true"
             />
-            Watchlist · {snapshots.length} tickers
+            {t("retail_sentiment.overview_all.watchlist_count", {
+              count: snapshots.length,
+            })}
           </span>
           <h1
             className="m-0 text-[--color-text-primary]"
@@ -260,19 +267,23 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
             }}
           >
             {meanSentiment > 0.1
-              ? "Crowd is leaning long."
+              ? t("retail_sentiment.overview_all.long")
               : meanSentiment < -0.1
-                ? "Crowd is leaning short."
-                : "Crowd is balanced."}{" "}
+                ? t("retail_sentiment.overview_all.short")
+                : t("retail_sentiment.overview_all.balanced")}{" "}
             <span style={{ color: "var(--color-text-secondary)" }}>
               {spikes.length > 0
-                ? `${spikes.length} active buzz spike${spikes.length > 1 ? "s" : ""}.`
-                : "No active alerts."}
+                ? t("retail_sentiment.overview_all.spikes", {
+                    count: spikes.length,
+                  })
+                : t("retail_sentiment.overview_all.no_alerts")}
             </span>
           </h1>
           <div className="grid grid-cols-4 gap-7 pt-1.5">
             <div className="flex flex-col gap-0.5">
-              <span className="rs-mono-label">Mean sentiment</span>
+              <span className="rs-mono-label">
+                {t("retail_sentiment.overview_all.mean_sentiment")}
+              </span>
               <span
                 className="rs-mono-value text-[18px]"
                 style={{
@@ -289,19 +300,25 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
               </span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="rs-mono-label">Mean buzz</span>
+              <span className="rs-mono-label">
+                {t("retail_sentiment.overview_all.mean_buzz")}
+              </span>
               <span className="rs-mono-value text-[18px]">
                 {meanBuzz.toFixed(2)}×
               </span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="rs-mono-label">Sample · 24h</span>
+              <span className="rs-mono-label">
+                {t("retail_sentiment.overview_all.sample_24h")}
+              </span>
               <span className="rs-mono-value text-[18px]">
                 {totalSample.toLocaleString()}
               </span>
             </div>
             <div className="flex flex-col gap-0.5">
-              <span className="rs-mono-label">Active alerts</span>
+              <span className="rs-mono-label">
+                {t("retail_sentiment.overview_all.active_alerts")}
+              </span>
               <span
                 className="rs-mono-value text-[18px]"
                 style={{
@@ -321,24 +338,30 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
           style={{ borderRadius: "12px" }}
         >
           <div className="flex items-center justify-between gap-3">
-            <span className="rs-mono-label">Aggregate sentiment</span>
+            <span className="rs-mono-label">
+              {t("retail_sentiment.overview_all.aggregate_sentiment")}
+            </span>
             <span
               className="rs-mono-label"
               style={{ color: "var(--color-feedback-success)" }}
             >
-              Live
+              {t("retail_sentiment.overview_all.live")}
             </span>
           </div>
           <SentimentGauge score={meanSentiment} />
         </div>
       </section>
 
-      <SectionLabel title="Trending tickers" meta="By buzz × 30d" first />
-      <TrendingRail snapshots={snapshots} onPick={onPickTicker} />
+      <SectionLabel
+        title={t("retail_sentiment.overview_all.trending_tickers")}
+        meta={t("retail_sentiment.overview_all.trending_meta")}
+        first
+      />
+      <TrendingRail snapshots={snapshots} onPick={onPickTicker} t={t} />
 
       <SectionLabel
-        title="Sentiment surface"
-        meta="Watchlist × metrics"
+        title={t("retail_sentiment.overview_all.sentiment_surface")}
+        meta={t("retail_sentiment.overview_all.sentiment_surface_meta")}
       />
       <div
         className="rs-col-card overflow-x-auto"
@@ -355,7 +378,7 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
                     "1px solid var(--color-border-subtle)",
                 }}
               >
-                Ticker
+                {t("retail_sentiment.overview_all.ticker_header")}
               </th>
               {RS_METRIC_CATALOG.map((m) => (
                 <th
@@ -374,7 +397,7 @@ export function OverviewAllView({ snapshots, spikes, onPickTicker }: Props) {
                   borderBottom: "1px solid var(--color-border-subtle)",
                 }}
               >
-                Trend
+                {t("retail_sentiment.overview_all.trend_header")}
               </th>
             </tr>
           </thead>

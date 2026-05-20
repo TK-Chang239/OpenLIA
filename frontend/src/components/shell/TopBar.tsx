@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { useState } from "react";
 import { ChevronDown, Menu, Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useMobileNav } from "../../layouts/MobileNavContext";
 import { useChatHeader } from "../../layouts/ChatHeaderContext";
@@ -19,6 +20,8 @@ export function TopBar({
   stamps = [],
   live = false,
 }: TopBarProps): JSX.Element {
+  const { t } = useTranslation();
+  const tr = (c: string) => t(c, { defaultValue: c });
   const last = crumbs[crumbs.length - 1];
   const head = crumbs.slice(0, -1);
   const { setOpen } = useMobileNav();
@@ -30,7 +33,7 @@ export function TopBar({
     <div className="flex items-center gap-[14px] border-b border-border-subtle bg-bg-base px-7 py-[14px]">
       <button
         type="button"
-        aria-label="Open navigation"
+        aria-label={t("nav.open_navigation")}
         onClick={() => setOpen(true)}
         className="md:hidden inline-flex items-center justify-center rounded-md p-1.5 text-text-secondary hover:text-text-primary"
       >
@@ -43,11 +46,11 @@ export function TopBar({
       >
         {head.map((c) => (
           <span key={c} className="flex items-center gap-2">
-            {c}
+            {tr(c)}
             <span className="text-text-tertiary">/</span>
           </span>
         ))}
-        <strong className="font-semibold text-text-primary">{last}</strong>
+        <strong className="font-semibold text-text-primary">{tr(last)}</strong>
         {showChatCrumb && chatHeader ? (
           <span className="relative flex items-center gap-2">
             <span className="text-text-tertiary">/</span>
@@ -90,7 +93,7 @@ export function TopBar({
             className="inline-flex items-center gap-1 rounded-md border border-border-subtle px-2 py-1 text-xs font-medium text-text-secondary hover:bg-surface-hover hover:text-text-primary"
           >
             <Plus size={12} strokeWidth={2} aria-hidden />
-            New Chat
+            {t("nav.new_chat")}
           </button>
         ) : null}
         {stamps.map((s) => (

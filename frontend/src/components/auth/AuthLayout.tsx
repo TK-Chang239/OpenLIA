@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export function AuthLayout({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   return (
     <main
-      aria-label="Authentication"
+      aria-label={t("auth.layout_aria")}
       className="min-h-screen bg-bg-base flex flex-col items-center justify-center p-4"
     >
       <div className="mb-6 flex items-center gap-[10px]">

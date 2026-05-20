@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight, MessageSquare } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 /** Compact snapshot of today's Morning Briefing rendered on the Home page.
  *  All numbers are placeholder per Q1=A; replace with the snapshot API once
@@ -132,9 +133,10 @@ const IMPORTANCE_CLASS: Record<WatchEntry["importance"], string> = {
 };
 
 export function MorningBriefingSnapshotCard(): JSX.Element {
+  const { t } = useTranslation();
   return (
     <article
-      aria-label="Morning briefing snapshot"
+      aria-label={t("home_cards.morning_briefing_aria")}
       className="rounded-xl border border-border-subtle bg-bg-elevated overflow-hidden"
     >
       <header className="flex items-center gap-[10px] px-[18px] py-[14px] border-b border-border-subtle">
@@ -145,20 +147,20 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
           LIA
         </span>
         <span className="text-[13.5px] font-semibold text-text-primary tracking-[-0.005em]">
-          Morning Briefing · Edition No. 218
+          {t("home_cards.edition_no", { n: 218 })}
         </span>
         <span className="ml-auto flex items-center gap-2 font-mono text-[9.5px] tracking-[0.1em] uppercase text-text-tertiary">
           <span>TUE 02 MAY</span>
           <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
           <span className="text-feedback-success">
-            Pre-open · 2h 14m to bell
+            {t("home_cards.pre_open")}
           </span>
         </span>
         <Link
           to="/morning-briefing"
           className="ml-3 inline-flex items-center gap-[6px] px-[10px] py-1 rounded-md border border-border-subtle bg-bg-base font-mono text-[10px] tracking-[0.06em] text-text-primary no-underline transition-colors duration-normal ease-out hover:border-border-strong hover:bg-surface-hover"
         >
-          Open briefing
+          {t("home_cards.open_briefing")}
           <ArrowRight size={11} strokeWidth={2} />
         </Link>
       </header>
@@ -172,11 +174,11 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
         </span>
         <div className="flex flex-col gap-[6px] min-w-0">
           <div className="flex items-center gap-2 font-mono text-[9.5px] tracking-[0.12em] uppercase text-text-tertiary">
-            <span>Today's read</span>
+            <span>{t("home_cards.todays_read")}</span>
             <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
-            <span>Confidence 78 / 100</span>
+            <span>{t("home_cards.confidence", { n: 78 })}</span>
             <span className="w-[3px] h-[3px] rounded-full bg-text-tertiary" />
-            <span>12 sources</span>
+            <span>{t("home_cards.sources_count", { n: 12 })}</span>
           </div>
           <p className="m-0 text-[16px] leading-[1.4] font-medium text-text-primary tracking-[-0.005em]">
             Payrolls Friday is the only chart that matters this week — and the
@@ -190,7 +192,7 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3">
-        <Column heading="Overnight macro" count="3 of 12">
+        <Column heading={t("home_cards.col_overnight_macro")} count={t("home_cards.col_overnight_count")}>
           <div className="flex flex-col gap-2">
             {MACRO.map((m) => (
               <div
@@ -216,7 +218,7 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
           </div>
         </Column>
 
-        <Column heading="Your watchlist" count="3 matter" border>
+        <Column heading={t("home_cards.col_watchlist")} count={t("home_cards.col_watchlist_count")} border>
           <div className="flex flex-col gap-2">
             {WATCH.map((w, i) => (
               <div
@@ -231,10 +233,10 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
                     className={`font-mono text-[8.5px] tracking-[0.1em] uppercase px-[5px] py-[1px] rounded-[3px] ${IMPORTANCE_CLASS[w.importance]}`}
                   >
                     {w.importance === "high"
-                      ? "High"
+                      ? t("home_cards.importance_high")
                       : w.importance === "med"
-                        ? "Med"
-                        : "Low"}
+                        ? t("home_cards.importance_med")
+                        : t("home_cards.importance_low")}
                   </span>
                   <span
                     className={`ml-auto font-mono text-[10px] tabular-nums ${w.preMarketPos ? "text-feedback-success" : "text-feedback-error"}`}
@@ -250,7 +252,7 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
           </div>
         </Column>
 
-        <Column heading="Today & ahead" count="Next 72h">
+        <Column heading={t("home_cards.col_today_ahead")} count={t("home_cards.col_today_ahead_count")}>
           <div className="flex flex-col gap-2">
             {CAL.map((c, i) => (
               <div
@@ -282,17 +284,17 @@ export function MorningBriefingSnapshotCard(): JSX.Element {
 
       <div className="flex items-center gap-[14px] px-[18px] py-[10px] border-t border-border-subtle bg-bg-base font-mono text-[10px] tracking-[0.06em] text-text-tertiary uppercase">
         <span className="inline-flex items-center gap-[6px] before:content-[''] before:w-[4px] before:h-[4px] before:bg-accent-primary before:rounded-full">
-          5 watchlist names {">"}2% PM
+          {t("home_cards.footer_watchlist")}
         </span>
         <span>·</span>
-        <span>3 earnings on book</span>
+        <span>{t("home_cards.footer_earnings")}</span>
         <span>·</span>
-        <span>Updated 07:16 ET</span>
+        <span>{t("home_cards.footer_updated")}</span>
         <Link
           to={`/secretary?prompt=${encodeURIComponent("Brief me on today.")}`}
           className="ml-auto inline-flex items-center gap-[6px] px-[10px] py-[3px] rounded-md border border-border-subtle text-text-primary no-underline transition-colors duration-normal ease-out hover:bg-surface-hover hover:border-border-strong"
         >
-          Ask LIA to brief me
+          {t("home_cards.ask_lia_brief")}
           <MessageSquare size={11} strokeWidth={2} />
         </Link>
       </div>

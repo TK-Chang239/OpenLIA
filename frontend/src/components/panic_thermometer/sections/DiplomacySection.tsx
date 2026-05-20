@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { DiplomacyPanel } from "../../../lib/panic_thermometer/copy/types";
 import {
   HeadlineText,
@@ -20,17 +22,18 @@ export function DiplomacySection({
   onMarkMilestone,
   onOverrideStatus,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const { countdown, signals } = panel;
 
   return (
     <>
       <div className="pt-sec-label" id="diplomacy">
-        <span>D5 · Diplomatic progress</span>
+        <span>{t("panic_thermometer.diplomacy_section.title")}</span>
         <span className="pt-ln" />
-        <span className="pt-count">EODHD · company_news · ceasefire / Hormuz / Iran</span>
+        <span className="pt-count">{t("panic_thermometer.diplomacy_section.meta")}</span>
       </div>
 
-      <section className="pt-panel" aria-label="Diplomatic progress panel">
+      <section className="pt-panel" aria-label={t("panic_thermometer.diplomacy_section.aria")}>
         <PanelHead panel={panel} />
         <div className="pt-panel-body is-full">
           <div
@@ -42,8 +45,16 @@ export function DiplomacySection({
                 <div className="pt-countdown">
                   <div className="pt-countdown-num">
                     <span className="pt-v">{countdown.elapsed}</span>
-                    <span className="pt-of">/ {countdown.total} days elapsed</span>
-                    <span className="pt-lbl">{countdown.remaining} days remaining</span>
+                    <span className="pt-of">
+                      {t("panic_thermometer.diplomacy_section.days_elapsed", {
+                        total: countdown.total,
+                      })}
+                    </span>
+                    <span className="pt-lbl">
+                      {t("panic_thermometer.diplomacy_section.days_remaining", {
+                        days: countdown.remaining,
+                      })}
+                    </span>
                   </div>
                   <div className="pt-countdown-bar">
                     <div
@@ -57,10 +68,16 @@ export function DiplomacySection({
                   </div>
                   <div className="pt-countdown-foot">
                     <span>
-                      <strong>Day 0</strong> · {countdown.startLabel.replace(/^Day 0 · /, "")}
+                      <strong>{t("panic_thermometer.diplomacy_section.day0_strong")}</strong>{" "}
+                      · {countdown.startLabel.replace(/^Day 0 · /, "")}
                     </span>
                     <span>
-                      <strong>Day {countdown.total}</strong> ·{" "}
+                      <strong>
+                        {t("panic_thermometer.diplomacy_section.day_total_strong", {
+                          total: countdown.total,
+                        })}
+                      </strong>{" "}
+                      ·{" "}
                       {countdown.endLabel.replace(new RegExp(`^Day ${countdown.total} · `), "")}
                     </span>
                   </div>
@@ -72,28 +89,34 @@ export function DiplomacySection({
                     className="pt-reset-btn"
                     onClick={onMarkMilestone}
                   >
-                    + Mark new milestone
+                    {t("panic_thermometer.diplomacy_section.mark_milestone")}
                   </button>
                   <button
                     type="button"
                     className="pt-reset-btn is-warn"
                     onClick={onOverrideStatus}
                   >
-                    ⚑ Override status
+                    {t("panic_thermometer.diplomacy_section.override_status")}
                   </button>
                 </div>
 
                 <div className="pt-dipl-signals">
                   <div className="pt-dipl-signal">
-                    <div className="pt-dipl-signal-k">Progress signals</div>
+                    <div className="pt-dipl-signal-k">
+                      {t("panic_thermometer.diplomacy_section.progress_signals")}
+                    </div>
                     <div className="pt-dipl-signal-v">
-                      {signals.progress} <small>in news (30d)</small>
+                      {signals.progress}{" "}
+                      <small>{t("panic_thermometer.diplomacy_section.in_news_30d")}</small>
                     </div>
                   </div>
                   <div className="pt-dipl-signal">
-                    <div className="pt-dipl-signal-k">Escalation signals</div>
+                    <div className="pt-dipl-signal-k">
+                      {t("panic_thermometer.diplomacy_section.escalation_signals")}
+                    </div>
                     <div className="pt-dipl-signal-v">
-                      {signals.escalation} <small>in news (30d)</small>
+                      {signals.escalation}{" "}
+                      <small>{t("panic_thermometer.diplomacy_section.in_news_30d")}</small>
                     </div>
                   </div>
                 </div>
@@ -102,9 +125,13 @@ export function DiplomacySection({
               <div>
                 <div className="pt-fed-news-head">
                   <span className="pt-fed-news-title">
-                    News feed · last {panel.headlines.length}
+                    {t("panic_thermometer.diplomacy_section.news_feed", {
+                      count: panel.headlines.length,
+                    })}
                   </span>
-                  <span className="pt-fed-news-meta">progress / escalation tags</span>
+                  <span className="pt-fed-news-meta">
+                    {t("panic_thermometer.diplomacy_section.news_meta")}
+                  </span>
                 </div>
                 <div className="pt-fed-news">
                   {panel.headlines.map((h, i) => (
@@ -135,9 +162,13 @@ export function DiplomacySection({
               padding: "16px 20px",
             }}
           >
-            <RulesBlock title="Rule set" rules={panel.rules} onEdit={onEditRules} />
+            <RulesBlock
+              title={t("panic_thermometer.diplomacy_section.rules_title")}
+              rules={panel.rules}
+              onEdit={onEditRules}
+            />
             <ParamsBlock
-              title="Params"
+              title={t("panic_thermometer.diplomacy_section.params_title")}
               params={panel.params}
               presetLabel={panel.presetLabel}
             />

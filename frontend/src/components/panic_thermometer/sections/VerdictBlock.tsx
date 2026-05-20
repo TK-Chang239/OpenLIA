@@ -1,4 +1,6 @@
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
+
 import type { VerdictCopy } from "../../../lib/panic_thermometer/copy/types";
 
 interface Props {
@@ -7,19 +9,23 @@ interface Props {
 }
 
 export function VerdictBlock({ verdict, variant = "severe" }: Props): JSX.Element {
+  const { t } = useTranslation();
   return (
     <>
       <div className="pt-sec-label">
-        <span>LIA · verdict</span>
+        <span>{t("panic_thermometer.verdict.label")}</span>
         <span className="pt-ln" />
         <span className="pt-count">
-          {verdict.generatedAt} · confidence {verdict.confidence}
+          {t("panic_thermometer.verdict.confidence", {
+            when: verdict.generatedAt,
+            confidence: verdict.confidence,
+          })}
         </span>
       </div>
 
       <article
         className={`pt-verdict ${variant === "severe" ? "is-severe" : ""}`}
-        aria-label="LIA verdict"
+        aria-label={t("panic_thermometer.verdict.aria")}
       >
         <div className="pt-badge">LIA</div>
         <div className="pt-body">

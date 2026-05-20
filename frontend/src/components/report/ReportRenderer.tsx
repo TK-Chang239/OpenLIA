@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import type { ReportSchema } from '../../api/reports';
 import { ReportCover } from './ReportCover';
@@ -57,6 +58,7 @@ export function ReportRenderer({
   related,
   reportId,
 }: ReportRendererProps) {
+  const { t } = useTranslation();
   const appTheme = useAppTheme();
   const resolvedTheme: ReportTheme = theme ?? appTheme;
   const [activeId, setActiveId] = useState<string | undefined>();
@@ -74,7 +76,7 @@ export function ReportRenderer({
   const citations = schema.citations ?? [];
   const tocSections = schema.sections.map((s) => ({ id: s.id, title: s.title }));
   if (citations.length) {
-    tocSections.push({ id: SOURCES_SECTION_ID, title: 'Sources & Disclosures' });
+    tocSections.push({ id: SOURCES_SECTION_ID, title: t('report.sources_and_disclosures') });
   }
   const hasRailPanel =
     !!schema.rail &&

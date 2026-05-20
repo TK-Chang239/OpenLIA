@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 import {
   getDashboard,
@@ -28,6 +29,14 @@ const FALLBACK_TABS: DashboardTab[] = [
   { slug: "five_forces", display_name: "Five Forces", tcode: "T5" },
 ];
 
+const FRAMEWORK_I18N_KEY: Record<string, string> = {
+  debt_cycle: "macro.framework_debt_cycle",
+  four_seasons: "macro.framework_four_seasons",
+  all_weather: "macro.framework_all_weather",
+  world_order: "macro.framework_world_order",
+  five_forces: "macro.framework_five_forces",
+};
+
 const TCODE_BY_SLUG: Record<string, string> = {
   debt_cycle: "T1",
   four_seasons: "T2",
@@ -36,20 +45,26 @@ const TCODE_BY_SLUG: Record<string, string> = {
   five_forces: "T5",
 };
 
-const REFRESH_OPTIONS: { label: string; ms: number | null }[] = [
-  { label: "Auto-refresh · 5 min", ms: 300_000 },
-  { label: "Auto-refresh · 15 min", ms: 900_000 },
-  { label: "Auto-refresh · Off", ms: null },
+const REFRESH_OPTION_KEYS: { key: string; ms: number | null }[] = [
+  { key: "macro.auto_refresh_5min", ms: 300_000 },
+  { key: "macro.auto_refresh_15min", ms: 900_000 },
+  { key: "macro.auto_refresh_off", ms: null },
 ];
 
 const PAGE_EASE = [0.16, 1, 0.3, 1] as const;
 
 export default function MacroResearch(): JSX.Element {
+  const { t } = useTranslation();
   const [dashboards, setDashboards] = useState<DashboardTab[]>(FALLBACK_TABS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [refreshMs, setRefreshMs] = useState<number | null>(300_000);
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
+
+  const refreshOptions = useMemo(
+    () => REFRESH_OPTION_KEYS.map((o) => ({ label: t(o.key), ms: o.ms })),
+    [t],
+  );
 
   useEffect(() => {
     listDashboards()
@@ -110,20 +125,20 @@ export default function MacroResearch(): JSX.Element {
     >
       <header className="flex h-[52px] flex-shrink-0 items-center gap-3 border-b border-[--color-border-subtle] bg-[--color-bg-base] px-6">
         <span className="text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
-          Macro Research
+          {t("macro.title")}
         </span>
         <span className="ml-3 border-l border-[--color-border-subtle] pl-3 font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-          Dalio Frameworks ·{" "}
+          {t("macro.dalio_frameworks")} ·{" "}
           <strong className="font-medium text-[--color-feedback-success]">
-            Live · TUE 02 MAY 2026
+            {t("macro.live_label")} · TUE 02 MAY 2026
           </strong>
         </span>
         <div className="flex-1" />
         <span className="mr-live-pill" data-testid="mr-live-pill">
-          Streaming · 42 series
+          {t("macro.streaming_series", { count: 42 })}
         </span>
         <select
-          aria-label="Auto-refresh interval"
+          aria-label={t("macro.auto_refresh_aria")}
           data-testid="mr-refresh-select"
           value={refreshMs ?? ""}
           onChange={(e) => {
@@ -132,7 +147,7 @@ export default function MacroResearch(): JSX.Element {
           }}
           className="h-[30px] rounded-md border border-[--color-border-subtle] bg-transparent pl-2.5 pr-7 font-mono text-[12px] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
         >
-          {REFRESH_OPTIONS.map((o) => (
+          {refreshOptions.map((o) => (
             <option key={o.label} value={o.ms ?? ""}>
               {o.label}
             </option>
@@ -145,24 +160,27 @@ export default function MacroResearch(): JSX.Element {
           className="inline-flex h-[30px] items-center gap-1.5 rounded-md border border-[--color-border-subtle] bg-transparent px-3 font-mono text-[12px] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
         >
           <SettingsIcon />
-          Settings
+          {t("macro.settings")}
         </button>
       </header>
 
       <nav
         className="flex flex-shrink-0 items-center gap-px overflow-x-auto border-b border-[--color-border-subtle] bg-[--color-bg-base] px-6"
-        aria-label="Macro frameworks"
+        aria-label={t("macro.frameworks_aria")}
       >
         <SummaryTab path="." prefersReducedMotion={prefersReducedMotion ?? false} />
-        {dashboards.map((d) => (
-          <TabLink
-            key={d.slug}
-            to={d.slug}
-            tcode={d.tcode}
-            label={d.display_name}
-            prefersReducedMotion={prefersReducedMotion ?? false}
-          />
-        ))}
+        {dashboards.map((d) => {
+          const i18nKey = FRAMEWORK_I18N_KEY[d.slug];
+          return (
+            <TabLink
+              key={d.slug}
+              to={d.slug}
+              tcode={d.tcode}
+              label={i18nKey ? t(i18nKey) : d.display_name}
+              prefersReducedMotion={prefersReducedMotion ?? false}
+            />
+          );
+        })}
       </nav>
 
       <div
@@ -240,6 +258,7 @@ function TabLink({
 }
 
 function SummaryTab({ path, prefersReducedMotion }: { path: string; prefersReducedMotion: boolean }): JSX.Element {
+  const { t } = useTranslation();
   return (
     <NavLink
       to={path}
@@ -254,7 +273,7 @@ function SummaryTab({ path, prefersReducedMotion }: { path: string; prefersReduc
       {({ isActive }) => (
         <>
           <span className={`mr-tab-tcode is-summary${isActive ? " is-active" : ""}`}>★</span>
-          Summary
+          {t("macro.summary")}
           {isActive ? (
             <motion.span
               layoutId="mr-tab-underline"

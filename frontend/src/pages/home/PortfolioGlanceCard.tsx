@@ -2,9 +2,17 @@ import { useState } from "react";
 import type { JSX } from "react";
 import { Link } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 const TABS = ["NAV", "vs SPX", "Drawdown", "Exposure"] as const;
 type Tab = (typeof TABS)[number];
+
+const TAB_I18N: Record<Tab, string> = {
+  NAV: "home.nav",
+  "vs SPX": "home.vs_spx",
+  Drawdown: "home.drawdown",
+  Exposure: "home.exposure",
+};
 
 /** Synthetic chart paths — visual stub until backend exposes a portfolio
  *  timeseries endpoint. The "selected tab" only swaps the area path so the
@@ -45,6 +53,7 @@ const PATHS: Record<Tab, { area: string; line: string; bench: string }> = {
 };
 
 export function PortfolioGlanceCard(): JSX.Element {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>("NAV");
   const p = PATHS[tab];
   return (
@@ -52,7 +61,7 @@ export function PortfolioGlanceCard(): JSX.Element {
       <div className="flex items-baseline gap-[14px] mb-[14px]">
         <div className="flex flex-col gap-1">
           <span className="font-mono text-[10px] tracking-[0.12em] uppercase text-text-tertiary">
-            Total Portfolio · NAV
+            {t("home.portfolio_card_title")}
           </span>
           <span className="font-display text-[28px] font-semibold tracking-[-0.015em] text-text-primary leading-none">
             $2,184,920
@@ -62,19 +71,19 @@ export function PortfolioGlanceCard(): JSX.Element {
           </span>
         </div>
         <span className="ml-auto font-mono text-[11px] tracking-[0.04em] text-feedback-success">
-          +0.85% TODAY · +$18,402
+          {t("home_cards.today_change")}
         </span>
       </div>
 
       <div className="flex gap-[14px] mb-2 items-center">
-        {TABS.map((t) => (
+        {TABS.map((tabItem) => (
           <button
-            key={t}
+            key={tabItem}
             type="button"
-            onClick={() => setTab(t)}
-            className={`font-mono text-[10px] tracking-[0.08em] cursor-pointer pb-1 border-b transition-colors duration-normal ease-out ${tab === t ? "text-text-primary border-accent-primary" : "text-text-tertiary border-transparent hover:text-text-secondary"}`}
+            onClick={() => setTab(tabItem)}
+            className={`font-mono text-[10px] tracking-[0.08em] cursor-pointer pb-1 border-b transition-colors duration-normal ease-out ${tab === tabItem ? "text-text-primary border-accent-primary" : "text-text-tertiary border-transparent hover:text-text-secondary"}`}
           >
-            {t}
+            {t(TAB_I18N[tabItem])}
           </button>
         ))}
         <span className="ml-auto font-mono text-[10px] tracking-[0.08em] text-text-tertiary cursor-default">
@@ -113,16 +122,16 @@ export function PortfolioGlanceCard(): JSX.Element {
       </div>
 
       <div className="flex items-center gap-[14px] mt-3 pt-3 border-t border-border-subtle font-mono text-[10px] tracking-[0.06em] text-text-tertiary uppercase">
-        <span>14 Positions</span>
+        <span>{t("home_cards.positions_count", { n: 14 })}</span>
         <span>·</span>
-        <span>YTD +22.8%</span>
+        <span>{t("home_cards.ytd")}</span>
         <span>·</span>
-        <span>Sharpe 1.42</span>
+        <span>{t("home_cards.sharpe")}</span>
         <Link
           to="/portfolio"
           className="ml-auto inline-flex items-center gap-[6px] px-[10px] py-1 rounded-md border border-border-subtle text-text-primary no-underline transition-colors duration-normal ease-out hover:bg-bg-base hover:border-border-strong"
         >
-          Open portfolio
+          {t("home_cards.open_portfolio")}
           <ArrowRight size={11} strokeWidth={2} />
         </Link>
       </div>

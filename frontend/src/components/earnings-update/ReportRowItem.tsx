@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import { RecentReport } from "../../api/earnings-update";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
 
@@ -24,6 +26,7 @@ export function ReportRowItem({
   onRemove,
   isNew = false,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <div
       role="row"
@@ -31,7 +34,7 @@ export function ReportRowItem({
     >
       {isNew ? (
         <span
-          aria-label="New"
+          aria-label={t("earnings.report_row.new_aria")}
           className="inline-block w-1.5 h-1.5 rounded-full bg-[--color-accent-primary] flex-shrink-0"
         />
       ) : null}
@@ -49,7 +52,7 @@ export function ReportRowItem({
         onClick={() => onOpen(report.id)}
         className="text-sm text-[--color-accent-primary] hover:text-[--color-accent-hover] ml-2"
       >
-        Open
+        {t("earnings.report_row.open")}
       </button>
       {showExtras ? (
         <>
@@ -57,7 +60,7 @@ export function ReportRowItem({
           <button
             type="button"
             onClick={() => onRemove?.(report.id)}
-            aria-label="Remove"
+            aria-label={t("earnings.report_row.remove_aria")}
             className="text-sm text-[--color-text-secondary] hover:text-[--color-feedback-error] ml-2"
           >
             ×

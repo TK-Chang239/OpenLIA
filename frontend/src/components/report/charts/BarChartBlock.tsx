@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { ChartEmpty } from "./ChartEmpty";
 import { paletteColor, niceTicks, formatTick, yScale, visibleXLabels, CHART_VIEWBOX, CHART_PADDING } from './svgUtils';
 import { useChartTooltip } from './useChartTooltip';
 
@@ -74,7 +75,7 @@ export function BarChartBlock({
     return (
       <figure className="report-chart">
         <figcaption className="report-chart__title">{title}</figcaption>
-        <div className="report-chart__empty">No data</div>
+        <ChartEmpty />
       </figure>
     );
   }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Pin, Archive, ArchiveRestore, Trash, Pencil, Search, Paperclip } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   type ChatSession,
@@ -26,9 +27,13 @@ interface Props {
   reportsById?: Record<string, ReportListItem>;
 }
 
-function displayTitle(session: ChatSession, reportsById: Record<string, ReportListItem>): string {
+function displayTitle(
+  session: ChatSession,
+  reportsById: Record<string, ReportListItem>,
+  discussionPrefix: string,
+): string {
   if (session.attached_report_id && reportsById[session.attached_report_id]) {
-    return `Discussion: ${reportsById[session.attached_report_id].title}`;
+    return `${discussionPrefix}: ${reportsById[session.attached_report_id].title}`;
   }
   return session.title || departmentLabel(session.department);
 }
@@ -43,6 +48,7 @@ export function ChatHistoryList({
   refreshKey = 0,
   reportsById = {},
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const [items, setItems] = useState<ChatSession[] | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -105,7 +111,7 @@ export function ChatHistoryList({
       );
       setRenameError({
         id: s.id,
-        message: err instanceof Error ? err.message : "Rename failed",
+        message: err instanceof Error ? err.message : t("chat.rename_aria"),
       });
     }
   };
@@ -132,7 +138,7 @@ export function ChatHistoryList({
               if (e.key === "Enter") (e.target as HTMLInputElement).blur();
               if (e.key === "Escape") setEditingId(null);
             }}
-            aria-label="Rename session"
+            aria-label={t("chat.rename_session_aria")}
             aria-invalid={showError ? true : undefined}
             className={`flex-1 rounded bg-[--color-bg-input] px-1 py-0.5 text-[--color-text-primary] outline-none ${showError ? "underline decoration-[--color-feedback-error] decoration-wavy" : ""}`}
           />
@@ -146,13 +152,13 @@ export function ChatHistoryList({
             {s.attached_report_id && (
               <span
                 data-testid="attached-report-icon"
-                title="Discussing a report"
+                title={t("chat.discussing_report")}
                 className="shrink-0 text-[--color-text-tertiary]"
               >
                 <Paperclip size={11} aria-hidden />
               </span>
             )}
-            <span className="truncate">{displayTitle(s, reportsById)}</span>
+            <span className="truncate">{displayTitle(s, reportsById, t("chat.discussion_prefix"))}</span>
             {showError ? (
               <span className="ml-2 text-[10px] text-[--color-feedback-error]" role="status">
                 {renameError?.message}
@@ -163,7 +169,7 @@ export function ChatHistoryList({
         <div className="hidden gap-1 group-hover:flex">
           <button
             type="button"
-            aria-label="Rename"
+            aria-label={t("chat.rename_aria")}
             onClick={() => {
               setEditingId(s.id);
               setEditTitle(s.title);
@@ -175,7 +181,7 @@ export function ChatHistoryList({
           </button>
           <button
             type="button"
-            aria-label={s.is_pinned ? "Unpin" : "Pin"}
+            aria-label={s.is_pinned ? t("chat.unpin_aria") : t("chat.pin_aria")}
             onClick={async () => {
               await patchSession(s.id, { pinned: !s.is_pinned });
               refresh();
@@ -186,7 +192,7 @@ export function ChatHistoryList({
           </button>
           <button
             type="button"
-            aria-label={s.is_archived ? "Unarchive" : "Archive"}
+            aria-label={s.is_archived ? t("chat.unarchive_aria") : t("chat.archive_aria")}
             onClick={async () => {
               await patchSession(s.id, { archived: !s.is_archived });
               refresh();
@@ -197,7 +203,7 @@ export function ChatHistoryList({
           </button>
           <button
             type="button"
-            aria-label="Delete"
+            aria-label={t("chat.delete_aria")}
             onClick={() => setPendingDelete(s)}
             className="rounded p-1 text-[--color-feedback-error] hover:bg-[--color-surface-hover]"
           >
@@ -223,8 +229,8 @@ export function ChatHistoryList({
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search sessions"
-            aria-label="Search chat sessions"
+            placeholder={t("chat.search_sessions_placeholder")}
+            aria-label={t("chat.search_sessions_aria")}
             className="w-full rounded-md border border-[--color-border-subtle] bg-[--color-bg-input] py-1 pl-7 pr-2 text-xs text-[--color-text-primary] outline-none focus:border-[--color-accent-primary]"
           />
         </label>
@@ -233,7 +239,7 @@ export function ChatHistoryList({
         {pinned.length > 0 ? (
           <>
             <h3 className="mt-2 px-2 text-[11px] font-semibold uppercase text-[--color-text-tertiary]">
-              Pinned
+              {t("chat.section_pinned")}
             </h3>
             <ul className="mt-1 space-y-0.5">
               {pinned.map((s) => (
@@ -245,7 +251,7 @@ export function ChatHistoryList({
         {recent.length > 0 ? (
           <>
             <h3 className="mt-4 px-2 text-[11px] font-semibold uppercase text-[--color-text-tertiary]">
-              Recent
+              {t("chat.section_recent")}
             </h3>
             <ul className="mt-1 space-y-0.5">
               {recent.map((s) => (
@@ -263,7 +269,7 @@ export function ChatHistoryList({
               aria-controls={archivedHeadingId}
               className="mt-4 flex w-full items-center justify-between px-2 text-[11px] font-semibold uppercase text-[--color-text-tertiary] hover:text-[--color-text-secondary]"
             >
-              <span>Archived ({archived.length})</span>
+              <span>{t("chat.section_archived", { count: archived.length })}</span>
               <span aria-hidden>{showArchived ? "−" : "+"}</span>
             </button>
             {showArchived ? (
@@ -277,19 +283,19 @@ export function ChatHistoryList({
         ) : null}
         {items !== null && items.length === 0 ? (
           <p className="mt-6 px-2 text-xs text-[--color-text-tertiary]">
-            {debouncedQuery ? "No matching sessions." : "No conversations yet."}
+            {debouncedQuery ? t("chat.no_matching_sessions") : t("chat.no_conversations_yet")}
           </p>
         ) : null}
       </div>
       <ConfirmDialog
         open={pendingDelete !== null}
-        title="Delete conversation"
+        title={t("chat.delete_conversation_title")}
         description={
           pendingDelete
-            ? `Delete "${pendingDelete.title}"? This cannot be undone.`
+            ? t("chat.delete_conversation_description", { title: pendingDelete.title })
             : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t("chat.delete_aria")}
         destructive
         onCancel={() => setPendingDelete(null)}
         onConfirm={async () => {

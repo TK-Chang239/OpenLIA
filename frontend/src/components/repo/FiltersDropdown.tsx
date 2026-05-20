@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { SlidersHorizontal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import type { RepoFacets } from "../../api/repo";
 import { departmentLabel } from "../../lib/department-colors";
 
@@ -34,6 +35,7 @@ export function FiltersDropdown({
   active,
   activeCount,
 }: FiltersDropdownProps): JSX.Element {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [draftDepartments, setDraftDepartments] = useState<string[]>(selectedDepartments);
   const [draftGenFrom, setDraftGenFrom] = useState(generatedFrom);
@@ -78,12 +80,12 @@ export function FiltersDropdown({
       <Popover.Trigger asChild>
         <button
           type="button"
-          aria-label="Filters"
+          aria-label={t("repository.filters_aria")}
           aria-pressed={active}
           className={`inline-flex h-9 items-center gap-[6px] rounded-[--radius-md] border px-3 text-[12.5px] font-medium transition-colors ${triggerActive}`}
         >
           <SlidersHorizontal size={14} strokeWidth={1.6} />
-          Filters
+          {t("repository.filters_trigger")}
           {activeCount > 0 ? (
             <span
               className="ml-[2px] inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[--color-accent-primary] px-[5px] font-mono text-[10px] font-semibold text-[--color-accent-on]"
@@ -102,11 +104,11 @@ export function FiltersDropdown({
           data-testid="filters-dropdown"
         >
           <div className="text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em] mb-2">
-            Department
+            {t("repository.filter_department")}
           </div>
           <ul className="mb-4">
             {facets.departments.length === 0 ? (
-              <li className="text-sm text-[--color-text-tertiary]">No departments</li>
+              <li className="text-sm text-[--color-text-tertiary]">{t("repository.filter_no_departments")}</li>
             ) : (
               facets.departments.map((d) => (
                 <li
@@ -129,19 +131,19 @@ export function FiltersDropdown({
           </ul>
 
           <div className="text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em] mb-2">
-            Date Generated
+            {t("repository.filter_date_generated")}
           </div>
           <div className="flex gap-2 mb-4">
             <input
               type="date"
-              aria-label="Generated from"
+              aria-label={t("repository.filter_generated_from_aria")}
               value={draftGenFrom}
               onChange={(e) => setDraftGenFrom(e.target.value)}
               className="flex-1 h-8 rounded-[--radius-sm] border border-[--color-border-subtle] bg-[--color-bg-input] px-2 text-sm"
             />
             <input
               type="date"
-              aria-label="Generated to"
+              aria-label={t("repository.filter_generated_to_aria")}
               value={draftGenTo}
               onChange={(e) => setDraftGenTo(e.target.value)}
               className="flex-1 h-8 rounded-[--radius-sm] border border-[--color-border-subtle] bg-[--color-bg-input] px-2 text-sm"
@@ -149,19 +151,19 @@ export function FiltersDropdown({
           </div>
 
           <div className="text-xs font-medium text-[--color-text-tertiary] uppercase tracking-[0.04em] mb-2">
-            Date Saved
+            {t("repository.filter_date_saved")}
           </div>
           <div className="flex gap-2">
             <input
               type="date"
-              aria-label="Saved from"
+              aria-label={t("repository.filter_saved_from_aria")}
               value={draftSavedFrom}
               onChange={(e) => setDraftSavedFrom(e.target.value)}
               className="flex-1 h-8 rounded-[--radius-sm] border border-[--color-border-subtle] bg-[--color-bg-input] px-2 text-sm"
             />
             <input
               type="date"
-              aria-label="Saved to"
+              aria-label={t("repository.filter_saved_to_aria")}
               value={draftSavedTo}
               onChange={(e) => setDraftSavedTo(e.target.value)}
               className="flex-1 h-8 rounded-[--radius-sm] border border-[--color-border-subtle] bg-[--color-bg-input] px-2 text-sm"
@@ -173,7 +175,7 @@ export function FiltersDropdown({
             onClick={apply}
             className="h-8 px-3 rounded-[--radius-md] text-sm w-full mt-3 bg-[--color-accent-primary] text-[--color-accent-on]"
           >
-            Apply
+            {t("repository.filter_apply")}
           </button>
         </Popover.Content>
       </Popover.Portal>

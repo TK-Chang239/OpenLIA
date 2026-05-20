@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 interface SettingsState {
   thresholds: {
@@ -28,6 +29,7 @@ const FIELD_INPUT =
   "h-8 px-2.5 rounded-md border bg-[--color-bg-input] text-[12.5px] font-mono tabular-nums focus:outline-none focus:border-[--color-accent-primary]";
 
 export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
+  const { t } = useTranslation();
   const [state, setState] = useState<SettingsState>(initial ?? DEFAULTS);
   const [busy, setBusy] = useState(false);
 
@@ -64,12 +66,12 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
       <button
         type="button"
         onClick={onClose}
-        aria-label="Close settings"
+        aria-label={t("retail_sentiment.settings_drawer.close_aria")}
         className="fixed inset-0 z-30 bg-black/40"
       />
       <aside
         role="dialog"
-        aria-label="Retail Sentiment settings"
+        aria-label={t("retail_sentiment.settings_drawer.aria")}
         data-testid="settings-drawer"
         className="fixed inset-y-0 right-0 z-40 flex w-[420px] max-w-full flex-col border-l shadow-2xl"
         style={{
@@ -93,19 +95,19 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
               color: "var(--color-text-tertiary)",
             }}
           >
-            Settings · Retail Sentiment
+            {t("retail_sentiment.settings_drawer.header")}
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("retail_sentiment.settings_drawer.close")}
             className="inline-flex items-center h-8 px-3 rounded-md border text-[12px] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
             style={{
               borderColor: "var(--color-border-secondary)",
               color: "var(--color-text-secondary)",
             }}
           >
-            Close
+            {t("retail_sentiment.settings_drawer.close")}
           </button>
         </header>
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
@@ -114,10 +116,12 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
               className="m-0 rs-mono-label"
               style={{ color: "var(--color-text-primary)" }}
             >
-              Thresholds
+              {t("retail_sentiment.settings_drawer.thresholds")}
             </h3>
             <label className="grid gap-1">
-              <span className="rs-mono-label">Spike z-score</span>
+              <span className="rs-mono-label">
+                {t("retail_sentiment.settings_drawer.spike_z")}
+              </span>
               <input
                 type="number"
                 step="0.1"
@@ -128,7 +132,9 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
               />
             </label>
             <label className="grid gap-1">
-              <span className="rs-mono-label">Divergence threshold</span>
+              <span className="rs-mono-label">
+                {t("retail_sentiment.settings_drawer.divergence")}
+              </span>
               <input
                 type="number"
                 step="0.1"
@@ -144,7 +150,7 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
               className="m-0 rs-mono-label"
               style={{ color: "var(--color-text-primary)" }}
             >
-              Cross-source weights
+              {t("retail_sentiment.settings_drawer.weights")}
             </h3>
             {Object.entries(state.cross_source_weights).map(([key, val]) => (
               <label key={key} className="grid gap-1">
@@ -176,7 +182,7 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
               color: "var(--color-text-secondary)",
             }}
           >
-            Cancel
+            {t("retail_sentiment.settings_drawer.cancel")}
           </button>
           <button
             type="button"
@@ -188,7 +194,9 @@ export function SettingsDrawer({ open, initial, onClose, onSave }: Props) {
               color: "var(--color-accent-on)",
             }}
           >
-            {busy ? "Saving…" : "Save"}
+            {busy
+              ? t("retail_sentiment.settings_drawer.saving")
+              : t("retail_sentiment.settings_drawer.save")}
           </button>
         </footer>
       </aside>

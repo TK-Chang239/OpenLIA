@@ -1,5 +1,6 @@
 import { useEffect, type JSX, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { Sidebar } from "../components/sidebar/Sidebar";
 import { TopBar } from "../components/shell/TopBar";
 import { MobileTabBar } from "../components/sidebar/MobileTabBar";
@@ -40,6 +41,7 @@ function NotificationsWatcher(): null {
 
 function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
   const { pathname } = useLocation();
+  const { t } = useTranslation();
   const crumbs = crumbsForPath(pathname);
   const { open, setOpen } = useMobileNav();
   const refreshHealth = useDeptHealth((s) => s.refresh);
@@ -59,7 +61,7 @@ function AppLayoutInner({ children }: AppLayoutProps): JSX.Element {
         href="#main"
         className="sr-only focus:not-sr-only fixed top-2 left-2 bg-white text-black px-3 py-2 rounded shadow z-50"
       >
-        Skip to content
+        {t("shell.skip_to_content")}
       </a>
       <NotificationsWatcher />
       <Sidebar />

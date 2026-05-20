@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   getDepartmentModelPref,
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function ModelPicker({ departmentSlug, onError }: Props) {
+  const { t } = useTranslation();
   const [models, setModels] = useState<RosterEntry[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [hasOverride, setHasOverride] = useState(false);
@@ -71,14 +73,14 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
 
   const usingFallback = !loading && !hasOverride && selected !== "";
   const title = usingFallback
-    ? "Using your default model. Pick one to override for this department."
-    : "Pick the model used for this department's reports.";
+    ? t("morning_briefing.model_picker.fallback_title")
+    : t("morning_briefing.model_picker.default_title");
   const current = models.find((m) => m.id === selected);
   const triggerLabel = loading
-    ? "Loading…"
+    ? t("morning_briefing.model_picker.loading")
     : current
       ? current.display_name
-      : "Select model…";
+      : t("morning_briefing.model_picker.select_model");
 
   return (
     <div className="relative inline-flex">
@@ -87,19 +89,23 @@ export function ModelPicker({ departmentSlug, onError }: Props) {
         onChange={onChange}
         disabled={loading || saving}
         data-testid="mb-model-picker"
-        aria-label="Model for Morning Briefing reports"
+        aria-label={t("morning_briefing.model_picker.aria_label")}
         title={title}
         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
       >
         <option value="" disabled>
-          {loading ? "Loading models…" : "Select a model…"}
+          {loading
+            ? t("morning_briefing.model_picker.loading_models")
+            : t("morning_briefing.model_picker.select_a_model")}
         </option>
         {grouped.map((g) => (
           <optgroup key={g.kind} label={g.kind}>
             {g.items.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.display_name}
-                {usingFallback && m.id === selected ? " — default" : ""}
+                {usingFallback && m.id === selected
+                  ? t("morning_briefing.model_picker.default_suffix")
+                  : ""}
               </option>
             ))}
           </optgroup>

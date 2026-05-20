@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { Briefcase, Settings as SettingsIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   deleteReport,
@@ -60,6 +61,7 @@ function Skeleton({ className = "" }: { className?: string }) {
 }
 
 export default function EarningsUpdate() {
+  const { t } = useTranslation();
   const {
     entries,
     add,
@@ -163,7 +165,7 @@ export default function EarningsUpdate() {
     <div className="flex flex-col h-full">
       <header className="h-[52px] flex items-center gap-3.5 px-6 flex-shrink-0 border-b border-[--color-border-subtle]">
         <h1 className="text-[20px] font-semibold tracking-[-0.01em] text-[--color-text-primary]">
-          Earnings Update
+          {t("earnings.title")}
         </h1>
         <div className="flex-1" />
         <button
@@ -171,15 +173,15 @@ export default function EarningsUpdate() {
           onClick={() => setCoverageOpen(true)}
           className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
         >
-          <Briefcase size={13} /> Coverage
+          <Briefcase size={13} /> {t("earnings.coverage")}
         </button>
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          aria-label="Report settings"
+          aria-label={t("earnings.report_settings_aria")}
           className="inline-flex items-center gap-1.5 h-8 px-3 border border-[--color-border-subtle] rounded-md bg-transparent text-[--color-text-secondary] hover:text-[--color-text-primary] hover:bg-[--color-surface-hover] hover:border-[--color-border-strong] transition-colors duration-[--duration-normal] text-[12.5px]"
         >
-          <SettingsIcon size={13} /> Settings
+          <SettingsIcon size={13} /> {t("earnings.settings")}
         </button>
       </header>
 
@@ -190,13 +192,13 @@ export default function EarningsUpdate() {
               role="alert"
               className="mb-4 flex items-center justify-between gap-4 border border-[--color-feedback-error] rounded-[--radius-md] px-4 py-2 text-sm text-[--color-feedback-error]"
             >
-              <span>Failed to load earnings data. Try again.</span>
+              <span>{t("earnings.load_failed")}</span>
               <button
                 type="button"
                 onClick={retryFetch}
                 className="text-sm font-medium underline"
               >
-                Retry
+                {t("earnings.retry")}
               </button>
             </div>
           ) : null}
@@ -257,7 +259,7 @@ export default function EarningsUpdate() {
                 style={{ animationDelay: "160ms" }}
               >
               <EuFeedSection
-                label="Today's"
+                label={t("earnings.today")}
                 count={todayReports.length + (liveCard ? 1 : 0)}
               >
                 {liveCard ? (
@@ -289,8 +291,8 @@ export default function EarningsUpdate() {
                   <EuSectionEmpty
                     message={
                       filter === "all"
-                        ? "No prints today yet"
-                        : "No matching prints today"
+                        ? t("earnings.no_prints_today")
+                        : t("earnings.no_matching_prints_today")
                     }
                   />
                 ) : null}
@@ -314,11 +316,11 @@ export default function EarningsUpdate() {
                 style={{ animationDelay: "240ms" }}
               >
                 <EuFeedSection
-                  label="Up next · within 24 hours"
+                  label={t("earnings.up_next_24h")}
                   count={upNext.length}
                 >
                   {upNext.length === 0 ? (
-                    <EuSectionEmpty message="Earnings calendar wiring pending" />
+                    <EuSectionEmpty message={t("earnings.calendar_wiring_pending")} />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                       {upNext.map((u) => (
@@ -334,15 +336,15 @@ export default function EarningsUpdate() {
                 style={{ animationDelay: "320ms" }}
               >
                 <EuFeedSection
-                  label="Earlier this week"
+                  label={t("earnings.earlier_this_week")}
                   count={groups.earlierThisWeek.length}
                 >
                   {groups.earlierThisWeek.length === 0 ? (
                     <EuSectionEmpty
                       message={
                         filter === "all"
-                          ? "No prints earlier this week"
-                          : "No matching prints"
+                          ? t("earnings.no_prints_this_week")
+                          : t("earnings.no_matching_prints")
                       }
                     />
                   ) : (
@@ -367,7 +369,7 @@ export default function EarningsUpdate() {
                     onClick={() => setCabinetOpen(true)}
                     className="font-mono text-[11px] tracking-[0.12em] uppercase text-[--color-text-secondary] hover:text-[--color-text-primary]"
                   >
-                    View all reports →
+                    {t("earnings.view_all_reports")}
                   </button>
                 </div>
               ) : null}
@@ -397,7 +399,7 @@ export default function EarningsUpdate() {
             ticker: payload.ticker,
             status: "streaming",
             reportId: null,
-            title: `Generating ${payload.ticker} earnings update...`,
+            title: t("earnings.generating_report", { ticker: payload.ticker }),
           });
           try {
             return await startOnDemandReport(payload);

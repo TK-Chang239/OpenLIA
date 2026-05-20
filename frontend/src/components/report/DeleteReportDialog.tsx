@@ -1,4 +1,5 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import { useTranslation } from "react-i18next";
 
 export interface DeleteReportDialogProps {
   open: boolean;
@@ -21,6 +22,7 @@ export function DeleteReportDialog({
   onCancel,
   onConfirm,
 }: DeleteReportDialogProps): JSX.Element {
+  const { t } = useTranslation();
   return (
     <Dialog.Root
       open={open}
@@ -35,12 +37,11 @@ export function DeleteReportDialog({
           data-testid="delete-report-dialog"
         >
           <Dialog.Title className="text-base font-semibold text-[--color-text-primary]">
-            Delete this report?
+            {t("report.delete_this_report_title")}
           </Dialog.Title>
           <Dialog.Description className="mt-3 text-sm text-[--color-text-secondary]">
-            <span className="font-medium text-[--color-text-primary]">"{reportTitle}"</span> and
-            its version history will be permanently removed. The card will remain in your chat
-            history showing "no longer available." This cannot be undone.
+            <span className="font-medium text-[--color-text-primary]">"{reportTitle}"</span>{" "}
+            {t("report.delete_description_prefix")}
           </Dialog.Description>
           <div className="mt-6 flex justify-end gap-2">
             <button
@@ -48,7 +49,7 @@ export function DeleteReportDialog({
               onClick={onCancel}
               className="h-9 px-4 rounded-[--radius-md] border border-[--color-border-secondary] text-sm text-[--color-text-secondary]"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -57,7 +58,7 @@ export function DeleteReportDialog({
               }}
               className="h-9 px-4 rounded-[--radius-md] bg-[--color-feedback-error] text-white text-sm font-medium hover:opacity-90"
             >
-              Delete
+              {t("common.delete")}
             </button>
           </div>
         </Dialog.Content>

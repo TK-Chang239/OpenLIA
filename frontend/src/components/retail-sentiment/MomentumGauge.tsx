@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 interface Props {
   /** Sentiment momentum (Δ score). Expected range -0.3..+0.3 but auto-clamped. */
   momentum: number | null | undefined;
@@ -15,6 +17,7 @@ export function MomentumGauge({
   range = 0.3,
   size = 240,
 }: Props) {
+  const { t } = useTranslation();
   const has = momentum !== null && momentum !== undefined && Number.isFinite(momentum);
   const raw = has ? Math.max(-range, Math.min(range, Number(momentum))) : 0;
   const percent = ((raw + range) / (2 * range)) * 100;
@@ -37,14 +40,20 @@ export function MomentumGauge({
   const display = has
     ? `${raw > 0 ? "+" : ""}${raw.toFixed(3)}`
     : "—";
-  const dir = !has ? "—" : raw > 0 ? "Improving" : raw < 0 ? "Deteriorating" : "Flat";
+  const dir = !has
+    ? "—"
+    : raw > 0
+      ? t("retail_sentiment.momentum_gauge.improving")
+      : raw < 0
+        ? t("retail_sentiment.momentum_gauge.deteriorating")
+        : t("retail_sentiment.momentum_gauge.flat");
 
   return (
     <div
       className="relative w-full"
       style={{ maxWidth: size }}
       role="img"
-      aria-label={`Momentum gauge ${display} (${dir})`}
+      aria-label={t("retail_sentiment.momentum_gauge.aria", { value: display, dir })}
       data-testid="momentum-gauge"
     >
       <svg

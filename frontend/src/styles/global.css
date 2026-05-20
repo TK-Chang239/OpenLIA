@@ -2,6 +2,9 @@
 @import "./report/theme-light.css";
 @import "./report/theme-dark.css";
 @import "./report/layout.css";
+/* Noto Sans TC — Traditional Chinese web font. Loaded from Google Fonts
+   so the binaries are CDN-cached and tree-shakable per weight. */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap");
 
 @font-face {
   font-family: "Geist";
@@ -16,6 +19,27 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* When the document root is in Traditional Chinese, layer Noto Sans TC
+   behind the Latin Geist font so CJK glyphs render natively while
+   tickers, numbers, and citation markers keep their original look. */
+html[data-lang="zh-TW"] body {
+  font-family:
+    "Geist", "Noto Sans TC", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+}
+
+/* CJK fonts have no true italic forms — browsers fake a slant that
+   reads as broken text. Replace italic with a heavier weight + subtle
+   forward skew when the document is in Traditional Chinese so the
+   brand's green accent words still feel emphasised. */
+html[data-lang="zh-TW"] em,
+html[data-lang="zh-TW"] i,
+html[data-lang="zh-TW"] .italic {
+  font-style: normal;
+  font-weight: 600;
+  display: inline-block;
+  transform: skewX(-6deg);
+}
 
 @keyframes eu-feed-fade-up {
   from {

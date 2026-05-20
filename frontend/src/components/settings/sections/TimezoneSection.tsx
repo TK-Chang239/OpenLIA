@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getPrefs,
   updateGraphExtractionTime,
@@ -54,6 +55,7 @@ function supportedZones(): readonly string[] {
 }
 
 export function TimezoneSection(): JSX.Element {
+  const { t } = useTranslation();
   const [prefs, setPrefs] = useState<Prefs | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +105,7 @@ export function TimezoneSection(): JSX.Element {
       setTimeout(() => setTzSaveState('idle'), 1500);
     } catch (e) {
       const err = e as ApiError;
-      setError(err.message ?? 'Failed to update timezone.');
+      setError(err.message ?? t('settings.timezone.update_failed'));
       setTzSaveState('idle');
     }
   };
@@ -118,17 +120,17 @@ export function TimezoneSection(): JSX.Element {
       setTimeout(() => setExtractionSaveState('idle'), 1500);
     } catch (e) {
       const err = e as ApiError;
-      setExtractionError(err.message ?? 'Failed to update extraction time.');
+      setExtractionError(err.message ?? t('settings.timezone.update_extraction_failed'));
       setExtractionSaveState('idle');
     }
   };
 
-  if (loading) return <p className="text-sm text-text-secondary">Loading...</p>;
+  if (loading) return <p className="text-sm text-text-secondary">{t('common.loading')}</p>;
   if (!prefs) {
     return (
       <InlineFeedback
         kind="error"
-        message={error ?? 'Failed to load preferences.'}
+        message={error ?? t('settings.timezone.load_failed')}
       />
     );
   }
@@ -136,25 +138,25 @@ export function TimezoneSection(): JSX.Element {
   const sourceBadge =
     prefs.timezone_source === 'manual' ? (
       <span className="ml-2 rounded-md border border-accent-primary/40 bg-accent-primary/10 px-2 py-0.5 text-xs text-accent-primary">
-        Manual
+        {t('settings.timezone.source_manual')}
       </span>
     ) : (
       <span className="ml-2 rounded-md border border-border-subtle bg-bg-elevated px-2 py-0.5 text-xs text-text-secondary">
-        Detected
+        {t('settings.timezone.source_detected')}
       </span>
     );
 
   return (
     <div className="max-w-2xl space-y-6">
       <header>
-        <h1 className="text-xl font-semibold text-text-primary">Timezone & Memory</h1>
+        <h1 className="text-xl font-semibold text-text-primary">{t('settings.timezone.title')}</h1>
       </header>
 
       <InlineFeedback kind={error ? 'error' : null} message={error ?? ''} />
 
       <SettingGroup
-        title="Timezone"
-        description="Used to schedule per-user jobs (briefings, memory extraction) at the right wall-clock time."
+        title={t('settings.timezone.tz_group_title')}
+        description={t('settings.timezone.tz_group_description')}
       >
         <div className="flex items-center">
           <span className="text-sm font-medium text-text-primary">{prefs.timezone}</span>
@@ -165,7 +167,7 @@ export function TimezoneSection(): JSX.Element {
               onClick={() => setOverrideOpen(true)}
               className="ml-auto rounded-md border border-border-subtle bg-bg-elevated px-3 py-1 text-sm text-text-primary hover:bg-surface-hover"
             >
-              Override
+              {t('settings.timezone.override_button')}
             </button>
           ) : null}
         </div>
@@ -174,10 +176,10 @@ export function TimezoneSection(): JSX.Element {
           <div className="space-y-2 rounded-md border border-border-subtle bg-bg-elevated p-3">
             <label className="block">
               <span className="block text-sm font-medium text-text-primary">
-                IANA timezone
+                {t('settings.timezone.iana_label')}
               </span>
               <select
-                aria-label="IANA timezone"
+                aria-label={t('settings.timezone.iana_label')}
                 value={overrideZone}
                 onChange={(e) => setOverrideZone(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border-subtle bg-bg-base px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
@@ -196,7 +198,7 @@ export function TimezoneSection(): JSX.Element {
                 disabled={tzSaveState === 'saving'}
                 className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
-                {tzSaveState === 'saving' ? 'Saving...' : 'Save timezone'}
+                {tzSaveState === 'saving' ? t('settings.timezone.saving') : t('settings.timezone.save_timezone')}
               </button>
               <button
                 type="button"
@@ -206,27 +208,27 @@ export function TimezoneSection(): JSX.Element {
                 }}
                 className="rounded-md border border-border-subtle bg-bg-base px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
             </div>
             {tzSaveState === 'saved' ? (
-              <p className="text-xs text-text-secondary">Saved.</p>
+              <p className="text-xs text-text-secondary">{t('settings.timezone.saved')}</p>
             ) : null}
           </div>
         ) : null}
       </SettingGroup>
 
       <SettingGroup
-        title="Memory extraction time"
-        description="Wall-clock time (in your timezone) when the nightly memory-extraction job runs."
+        title={t('settings.timezone.memory_group_title')}
+        description={t('settings.timezone.memory_group_description')}
       >
         <label className="block">
           <span className="block text-sm font-medium text-text-primary">
-            Memory extraction time
+            {t('settings.timezone.memory_label')}
           </span>
           <input
             type="time"
-            aria-label="Memory extraction time"
+            aria-label={t('settings.timezone.memory_label')}
             value={extractionTime}
             onChange={(e) => setExtractionTime(e.target.value)}
             className="mt-1 w-32 rounded-md border border-border-subtle bg-bg-elevated px-3 py-1.5 text-sm text-text-primary focus:border-border-secondary focus:outline-none"
@@ -240,11 +242,11 @@ export function TimezoneSection(): JSX.Element {
             className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {extractionSaveState === 'saving'
-              ? 'Saving...'
-              : 'Save extraction time'}
+              ? t('settings.timezone.saving')
+              : t('settings.timezone.save_extraction')}
           </button>
           {extractionSaveState === 'saved' ? (
-            <span className="text-xs text-text-secondary">Saved.</span>
+            <span className="text-xs text-text-secondary">{t('settings.timezone.saved')}</span>
           ) : null}
         </div>
         <InlineFeedback

@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { PendingAttachmentChip } from "./PendingAttachmentChip";
 import { useReducedMotion } from "../../hooks/useReducedMotion";
 
@@ -15,12 +16,13 @@ interface Props {
 }
 
 export function UserBubble({ content, timestamp, attachments }: Props): JSX.Element {
+  const { t } = useTranslation();
   const hasAttachments = (attachments?.length ?? 0) > 0;
   const reduce = useReducedMotion();
   return (
     <motion.article
       role="article"
-      aria-label="User message"
+      aria-label={t("chat.aria_user_message")}
       initial={{ opacity: 0, y: reduce ? 0 : 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: reduce ? 0 : 0.2, ease: [0.16, 1, 0.3, 1] }}

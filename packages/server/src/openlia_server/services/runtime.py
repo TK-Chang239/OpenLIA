@@ -65,6 +65,24 @@ def _default_embedding_factory() -> tuple[EmbeddingProvider, str]:
     return FakeEmbeddingProvider(), "fake-embedding"
 
 
+def _resolve_user_language(db, *, user_id: str | None, field: str) -> str | None:
+    """Look up a language pref column on the user's UserPrefs row.
+
+    Returns ``None`` (English-default) when ``user_id`` is unset, the
+    user has no prefs row, the stored value is empty, or the DB session
+    can't service the query (e.g. spy sessions in unit tests). Treats
+    every failure mode the same: no directive injected into the prompt.
+    """
+    if user_id is None:
+        return None
+    try:
+        from openlia_server.services import user_prefs as _user_prefs_svc
+
+        return getattr(_user_prefs_svc.get_or_create(db, user_id=user_id), field) or None
+    except Exception:
+        return None
+
+
 class _EmptyDataDispatcher:
     """No data-provider tools wired in this blocker. Plan 13 replaces this."""
 
@@ -298,6 +316,13 @@ class RefreshingChatRunner:
                 disabled_connector_ids=disabled_connector_ids,
                 recall_artifacts=recall_handler,
             )
+            # Per-user response language. Anonymous (``user_id is None``)
+            # callers and any prefs lookup failure (e.g. mock sessions in
+            # tests) fall back to None — the prompt partial then emits
+            # nothing, preserving English-default behavior.
+            response_language = _resolve_user_language(
+                db, user_id=user_id, field="response_language"
+            )
             async for event in runner.run(
                 department_id=department_id,
                 user_id=user_id,
@@ -311,6 +336,7 @@ class RefreshingChatRunner:
                 memory_block=memory_block,
                 selected_exemplars=selected_exemplars,
                 market_basket=market_basket,
+                language=response_language,
             ):
                 yield event
         finally:
@@ -504,6 +530,10 @@ class RefreshingReportRunner:
                 web_search = WebSearchResolution(False, None, None)
             run_id = f"r_{_uuid.uuid4().hex[:12]}"
             run_date = _dt.now(_UTC).date()
+            # Per-user output language for the LLM prompts. Falls back to
+            # ``None`` (English) if the user has no prefs row yet or the
+            # session can't run a query (mock sessions in tests).
+            report_language = _resolve_user_language(db, user_id=user_id, field="report_language")
             runner = _build_report_runner_with_registry(
                 registry,
                 web_search=web_search,
@@ -517,7 +547,7 @@ class RefreshingReportRunner:
                 disabled_skill_ids=disabled_skill_ids,
             )
             db.commit()
-            async for event in runner.run(
+            run_kwargs: dict[str, Any] = dict(
                 department_id=department_id,
                 user_id=user_id,
                 request=request,
@@ -525,7 +555,9 @@ class RefreshingReportRunner:
                 attachments=attachments,
                 model_id_override=model_id_override,
                 disabled_skill_ids=frozenset(disabled_skill_ids),
-            ):
+                language=report_language,
+            )
+            async for event in runner.run(**run_kwargs):
                 yield event
             db.commit()
         finally:

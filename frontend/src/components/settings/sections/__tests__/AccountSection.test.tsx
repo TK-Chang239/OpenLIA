@@ -52,16 +52,10 @@ describe('AccountSection', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/must change your password/i);
   });
 
-  it('saves language preferences independently', async () => {
-    const update = vi.spyOn(settingsApi, 'updatePrefs').mockResolvedValue({} as any);
+  it('does not render language preference controls (moved to General settings)', async () => {
     render(<AccountSection currentEmail="a@b.c" mustChangePassword={false} />);
-    await waitFor(() => screen.getAllByRole('combobox')[0]);
-    const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[0], { target: { value: 'zh-TW' } });
-    fireEvent.click(screen.getByRole('button', { name: /save languages/i }));
-    await waitFor(() =>
-      expect(update).toHaveBeenCalledWith(expect.objectContaining({ display_language: 'zh-TW' })),
-    );
+    await waitFor(() => screen.getByDisplayValue('a@b.c'));
+    expect(screen.queryByRole('button', { name: /save languages/i })).toBeNull();
   });
 
   it('does not render a Sign out button (login pages disabled)', () => {

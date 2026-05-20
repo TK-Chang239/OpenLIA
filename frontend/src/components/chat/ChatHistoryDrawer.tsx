@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { type Department, createSession } from "../../api/chat";
 import { ChatHistoryList } from "./ChatHistoryList";
@@ -17,6 +18,7 @@ export function ChatHistoryDrawer({
   onSelect,
   onCreate,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const [refreshKey, setRefreshKey] = useState(0);
 
   const newChat = async () => {
@@ -29,12 +31,12 @@ export function ChatHistoryDrawer({
     <aside className="flex h-full w-60 flex-col border-r border-[--color-border-subtle] bg-[--color-bg-base]">
       <div className="flex items-center justify-between p-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-[--color-text-tertiary]">
-          Chat history
+          {t("chat.history_title")}
         </h2>
         <button
           type="button"
           onClick={newChat}
-          aria-label="New chat"
+          aria-label={t("chat.aria_new_chat")}
           className="flex h-6 w-6 items-center justify-center rounded-md bg-[--color-accent-primary] text-white hover:bg-[--color-accent-hover]"
         >
           <Plus size={14} />

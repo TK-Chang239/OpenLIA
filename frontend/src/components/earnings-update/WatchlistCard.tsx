@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { WatchlistEntry } from "../../api/earnings-update";
 
@@ -25,11 +26,12 @@ function isPast(iso: string | null): boolean {
 }
 
 export function WatchlistCard({ entry, onRemove }: Props) {
+  const { t } = useTranslation();
   const overdue = isPast(entry.next_earnings_date);
   return (
     <div
       role="group"
-      aria-label={`Watchlist entry ${entry.ticker}`}
+      aria-label={t("earnings.watchlist_card.group_aria", { ticker: entry.ticker })}
       className={[
         "group flex-shrink-0 w-[148px] bg-[--color-bg-elevated]",
         "border rounded-[--radius-lg] p-3 flex flex-col gap-1 relative",
@@ -42,7 +44,7 @@ export function WatchlistCard({ entry, onRemove }: Props) {
       <button
         type="button"
         onClick={() => onRemove(entry.id)}
-        aria-label={`Remove ${entry.ticker}`}
+        aria-label={t("earnings.watchlist_card.remove_aria", { ticker: entry.ticker })}
         className={[
           "absolute right-1 top-1 p-1 rounded opacity-0 group-hover:opacity-100",
           "text-[--color-text-tertiary] hover:text-[--color-text-primary]",
@@ -62,7 +64,7 @@ export function WatchlistCard({ entry, onRemove }: Props) {
       </div>
       {overdue ? (
         <span className="text-xs rounded-full px-2 py-0.5 bg-[--color-surface-hover] text-[--color-text-tertiary]">
-          Date passed
+          {t("earnings.watchlist_card.date_passed")}
         </span>
       ) : entry.release_timing ? (
         <span
@@ -73,7 +75,9 @@ export function WatchlistCard({ entry, onRemove }: Props) {
               : "bg-[--color-warning]/10 text-[--color-warning]",
           ].join(" ")}
         >
-          {entry.release_timing === "pre_market" ? "Pre-Market" : "Post-Market"}
+          {entry.release_timing === "pre_market"
+            ? t("earnings.watchlist_card.pre_market")
+            : t("earnings.watchlist_card.post_market")}
         </span>
       ) : null}
     </div>

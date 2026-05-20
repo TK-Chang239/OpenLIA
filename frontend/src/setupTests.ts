@@ -1,5 +1,11 @@
 import "@testing-library/jest-dom";
 import { afterEach } from "vitest";
+// Initialize i18next so components that call useTranslation() resolve
+// against the real English bundle. Without this, every t() call returns
+// the raw key (e.g. "nav.home"), which makes selectors that match the
+// displayed label fail. The initial language defaults to "en" because
+// localStorage is empty and jsdom's navigator.language is "en-US".
+import "./i18n";
 
 // jsdom does not implement EventSource. Several components (notifications
 // stream, report stream) construct one on mount, which crashes any test that

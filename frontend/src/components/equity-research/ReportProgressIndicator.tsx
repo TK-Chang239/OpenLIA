@@ -1,5 +1,6 @@
 import { type JSX, useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   /** Wall-clock ms timestamp when generation began. */
@@ -8,42 +9,6 @@ interface Props {
   mode: string;
   /** Ticker / company / sector typed by the user. */
   subject: string;
-}
-
-const STOCK_VERBS = [
-  "Reconciling filings",
-  "Crunching financials",
-  "Cross-referencing peers",
-  "Triangulating estimates",
-  "Stress-testing assumptions",
-  "Benchmarking comps",
-  "Auditing the print",
-  "Scrutinizing footnotes",
-  "Modeling cash flows",
-  "Parsing the 10-K",
-  "Tabulating segments",
-  "Profiling the operator",
-  "Synthesizing the thesis",
-  "Diligencing the print",
-  "Underwriting the setup",
-];
-
-const SECTOR_VERBS = [
-  "Mapping the cohort",
-  "Sizing the TAM",
-  "Stack-ranking peers",
-  "Reading the tape",
-  "Cross-referencing peers",
-  "Triangulating estimates",
-  "Benchmarking comps",
-  "Synthesizing the thesis",
-];
-
-function reportTypeLabel(mode: string): string {
-  if (mode === "stock_initiation") return "stock initiation report";
-  if (mode === "stock_update") return "stock update";
-  if (mode === "sector_research") return "sector research report";
-  return "report";
 }
 
 function formatElapsed(ms: number): string {
@@ -60,6 +25,7 @@ export function ReportProgressIndicator({
   mode,
   subject,
 }: Props): JSX.Element {
+  const { t } = useTranslation();
   const reduce = useReducedMotion();
   const [now, setNow] = useState<number>(() => Date.now());
   const [verbIdx, setVerbIdx] = useState(0);
@@ -70,13 +36,18 @@ export function ReportProgressIndicator({
     return () => window.clearInterval(id);
   }, [startedAt]);
 
-  const verbs = useMemo(
-    () => (mode === "sector_research" ? SECTOR_VERBS : STOCK_VERBS),
-    [mode],
-  );
+  const verbs = useMemo<string[]>(() => {
+    const key =
+      mode === "sector_research"
+        ? "equity_research.verbs_sector"
+        : "equity_research.verbs_stock";
+    const value = t(key, { returnObjects: true });
+    return Array.isArray(value) ? (value as string[]) : [];
+  }, [mode, t]);
 
   useEffect(() => {
     if (reduce) return;
+    if (verbs.length === 0) return;
     const id = window.setInterval(
       () => setVerbIdx((i) => (i + 1) % verbs.length),
       VERB_INTERVAL_MS,
@@ -84,13 +55,23 @@ export function ReportProgressIndicator({
     return () => window.clearInterval(id);
   }, [reduce, verbs.length]);
 
+  const reportType = useMemo(() => {
+    if (mode === "stock_initiation")
+      return t("equity_research.report_type_stock_initiation");
+    if (mode === "stock_update")
+      return t("equity_research.report_type_stock_update");
+    if (mode === "sector_research")
+      return t("equity_research.report_type_sector_research");
+    return t("equity_research.report_type_default");
+  }, [mode, t]);
+
   const trimmedSubject = subject.trim();
   const headline = trimmedSubject
-    ? `Drafting the ${reportTypeLabel(mode)} on ${trimmedSubject}`
-    : `Drafting your ${reportTypeLabel(mode)}`;
+    ? t("equity_research.drafting_on", { type: reportType, subject: trimmedSubject })
+    : t("equity_research.drafting_your", { type: reportType });
 
   const elapsedMs = startedAt === null ? 0 : now - startedAt;
-  const verb = verbs[verbIdx % verbs.length];
+  const verb = verbs.length > 0 ? verbs[verbIdx % verbs.length] : "";
 
   return (
     <motion.div

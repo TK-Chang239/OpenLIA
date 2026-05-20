@@ -133,3 +133,40 @@ def test_rendered_string_is_jinja2_safe_for_json_values(prompts_dir: Path) -> No
     loader = PromptLoader(root=prompts_dir)
     out = loader.render("equity_research", "report.data.user", blob={"k": "v"})
     assert '{"k": "v"}' in out
+
+
+def test_real_prompts_render_traditional_chinese_language_directive() -> None:
+    """Renders equity_research.report.system with language='zh-TW' using
+    the real shipped prompt root + shared/output_language.yaml.j2 partial.
+    Confirms the directive lands in the assembled system prompt."""
+    loader = PromptLoader()
+    out = loader.render(
+        "equity_research",
+        "report.system",
+        style_guide="neutral institutional tone",
+        skills_menu=[],
+        available_category_hints=[],
+        current_date="2026-05-19",
+        current_date_long="Tuesday, May 19, 2026",
+        search_budget=4,
+        connector_quirks=[],
+        language="zh-TW",
+    )
+    assert "OUTPUT LANGUAGE" in out or "Output language" in out
+    assert "繁體中文" in out
+
+
+def test_real_prompts_omit_language_directive_when_english_default() -> None:
+    loader = PromptLoader()
+    out = loader.render(
+        "equity_research",
+        "report.system",
+        style_guide="neutral institutional tone",
+        skills_menu=[],
+        available_category_hints=[],
+        current_date="2026-05-19",
+        current_date_long="Tuesday, May 19, 2026",
+        search_budget=4,
+        connector_quirks=[],
+    )
+    assert "繁體中文" not in out

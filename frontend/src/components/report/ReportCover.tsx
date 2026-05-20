@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { ReportCover as ReportCoverData } from '../../api/reports';
 
 export interface ReportCoverProps {
@@ -34,7 +36,8 @@ function MetricCell({ metric }: { metric: NonNullable<ReportCoverData['key_metri
 }
 
 export function ReportCover({ cover }: ReportCoverProps) {
-  const tldrLabel = cover.tldr_label ?? 'Executive Summary';
+  const { t } = useTranslation();
+  const tldrLabel = cover.tldr_label ?? t('report.executive_summary');
   return (
     <header className="report-cover">
       {cover.eyebrow ? <div className="report-cover__eyebrow">{cover.eyebrow}</div> : null}

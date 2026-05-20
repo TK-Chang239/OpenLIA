@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   topic: string;
@@ -8,6 +9,7 @@ interface Props {
 }
 
 export function TopicChip({ topic, hasNotes, onClick, onRemove }: Props) {
+  const { t } = useTranslation();
   return (
     <span
       className="relative inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[--color-surface-active] text-[13px] text-[--color-text-primary] cursor-pointer transition-colors duration-[--duration-normal] hover:bg-[--color-bg-code]"
@@ -23,7 +25,7 @@ export function TopicChip({ topic, hasNotes, onClick, onRemove }: Props) {
       </button>
       <button
         type="button"
-        aria-label={`Remove ${topic}`}
+        aria-label={t("morning_briefing.topic_chip.remove_aria", { topic })}
         onClick={(e) => {
           e.stopPropagation();
           onRemove();
