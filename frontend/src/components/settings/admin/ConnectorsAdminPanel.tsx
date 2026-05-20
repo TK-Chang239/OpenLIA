@@ -6,6 +6,7 @@
  * source/category cannot change post-creation per spec §3.
  */
 import { useEffect, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import {
   deleteConnector,
   listConnectors,
@@ -35,6 +36,7 @@ function kvToRecord(rows: KV[]): Record<string, string> {
 }
 
 export function ConnectorsAdminPanel(): JSX.Element {
+  const { t } = useTranslation();
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function ConnectorsAdminPanel(): JSX.Element {
       await refreshDeptHealth();
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load connectors.");
+      setError(err instanceof Error ? err.message : t('settings.connectors.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -61,6 +63,7 @@ export function ConnectorsAdminPanel(): JSX.Element {
 
   useEffect(() => {
     void refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const onValidate = async (id: string) => {
@@ -69,18 +72,18 @@ export function ConnectorsAdminPanel(): JSX.Element {
       await refresh();
       await refreshDeptHealth();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Validation failed.");
+      setError(err instanceof Error ? err.message : t('settings.connectors.validate_failed'));
     }
   };
 
   const onDelete = async (row: ConnectorRow) => {
-    if (!confirm(`Delete connector ${row.display_name || row.provider_id}?`)) return;
+    if (!confirm(t('settings.connectors.confirm_delete', { name: row.display_name || row.provider_id }))) return;
     try {
       await deleteConnector(row.id);
       await refresh();
       await refreshDeptHealth();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Delete failed.");
+      setError(err instanceof Error ? err.message : t('settings.connectors.delete_failed'));
     }
   };
 
@@ -90,22 +93,21 @@ export function ConnectorsAdminPanel(): JSX.Element {
       await refresh();
       await refreshDeptHealth();
       setError(null);
-      alert(`Re-synced ${inserted} runner spec${inserted === 1 ? "" : "s"}.`);
+      alert(t('settings.connectors.sync_done', { count: inserted }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sync failed.");
+      setError(err instanceof Error ? err.message : t('settings.connectors.sync_failed'));
     }
   };
 
-  if (loading) return <p className="text-sm text-text-secondary">Loading...</p>;
+  if (loading) return <p className="text-sm text-text-secondary">{t('settings.connectors.loading')}</p>;
 
   return (
     <div className="space-y-4">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-text-primary">Connectors</h2>
+          <h2 className="text-base font-semibold text-text-primary">{t('settings.connectors.title')}</h2>
           <p className="mt-1 text-sm text-text-secondary">
-            Manage data-source connectors (MCP servers, Python libraries) used
-            by departments.
+            {t('settings.connectors.subtitle')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -117,14 +119,14 @@ export function ConnectorsAdminPanel(): JSX.Element {
             }}
             className="rounded bg-accent-primary px-4 py-2 text-sm text-text-on-accent"
           >
-            Add from catalog
+            {t('settings.connectors.add_from_catalog')}
           </button>
           <button
             type="button"
             onClick={() => setAdding(true)}
             className="rounded border border-border-subtle px-4 py-2 text-sm text-text-primary hover:bg-surface-hover"
           >
-            Add custom
+            {t('settings.connectors.add_custom')}
           </button>
         </div>
       </header>
@@ -139,19 +141,18 @@ export function ConnectorsAdminPanel(): JSX.Element {
 
       {rows.length === 0 ? (
         <p className="text-sm text-text-secondary">
-          No connectors configured. Add one from the setup wizard or via the
-          API.
+          {t('settings.connectors.none_configured')}
         </p>
       ) : (
-        <table className="w-full text-sm" aria-label="Connectors">
+        <table className="w-full text-sm" aria-label={t('settings.connectors.table_aria')}>
           <thead className="text-text-secondary text-xs uppercase">
             <tr>
-              <th className="text-left">Provider</th>
-              <th className="text-left">Display</th>
-              <th className="text-left">Source</th>
-              <th className="text-left">Category</th>
-              <th className="text-left">Status</th>
-              <th className="text-right">Actions</th>
+              <th className="text-left">{t('settings.connectors.col_provider')}</th>
+              <th className="text-left">{t('settings.connectors.col_display')}</th>
+              <th className="text-left">{t('settings.connectors.col_source')}</th>
+              <th className="text-left">{t('settings.connectors.col_category')}</th>
+              <th className="text-left">{t('settings.connectors.col_status')}</th>
+              <th className="text-right">{t('settings.connectors.col_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -185,23 +186,23 @@ export function ConnectorsAdminPanel(): JSX.Element {
                     onClick={() => setEditing(r)}
                     className="text-accent-primary hover:underline"
                   >
-                    Edit
+                    {t('settings.connectors.edit')}
                   </button>
                   <button
                     type="button"
                     onClick={() => onValidate(r.id)}
                     className="text-text-primary hover:underline"
                   >
-                    Validate now
+                    {t('settings.connectors.validate_now')}
                   </button>
                   {r.source === "built_in" ? (
                     <button
                       type="button"
                       onClick={() => onSyncSpecs(r)}
-                      title="Re-sync runner specs from the built-in template (use after upgrading OpenLIA)."
+                      title={t('settings.connectors.sync_specs_title')}
                       className="text-text-primary hover:underline"
                     >
-                      Sync specs
+                      {t('settings.connectors.sync_specs')}
                     </button>
                   ) : null}
                   <button
@@ -209,7 +210,7 @@ export function ConnectorsAdminPanel(): JSX.Element {
                     onClick={() => onDelete(r)}
                     className="text-feedback-error hover:underline"
                   >
-                    Delete
+                    {t('settings.connectors.delete')}
                   </button>
                 </td>
               </tr>
@@ -241,7 +242,7 @@ export function ConnectorsAdminPanel(): JSX.Element {
 
       {adding && (
         <p className="text-sm text-text-secondary">
-          To add a custom connector, use the setup wizard or the API.
+          {t('settings.connectors.custom_hint')}
         </p>
       )}
 
@@ -272,6 +273,7 @@ interface EditModalProps {
  * requires server-side support not yet wired.
  */
 function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
+  const { t } = useTranslation();
   const [displayName, setDisplayName] = useState(row.display_name);
   const [secrets, setSecrets] = useState<KV[]>([{ key: "", value: "" }]);
   const [submitting, setSubmitting] = useState(false);
@@ -293,7 +295,7 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
       console.warn("Connector edit not yet wired on the server:", payload);
       await onSaved();
     } catch (e2) {
-      setErr(e2 instanceof Error ? e2.message : "Save failed.");
+      setErr(e2 instanceof Error ? e2.message : t('settings.connectors.save_failed'));
     } finally {
       setSubmitting(false);
     }
@@ -303,7 +305,7 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Edit connector"
+      aria-label={t('settings.connectors.edit_modal_aria')}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
     >
       <form
@@ -311,13 +313,13 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
         className="w-full max-w-md space-y-3 rounded-md bg-bg-elevated p-4 shadow-md"
       >
         <h3 className="text-base font-semibold text-text-primary">
-          Edit connector — {row.provider_id}
+          {t('settings.connectors.edit_modal_title')} — {row.provider_id}
         </h3>
         <p className="text-xs text-text-secondary">
-          Source ({row.source}) and category ({row.category}) are read-only.
+          {t('settings.connectors.readonly_hint', { source: row.source, category: row.category })}
         </p>
         <label className="block text-xs text-text-secondary">
-          Display name
+          {t('settings.connectors.display_name')}
           <input
             type="text"
             value={displayName}
@@ -327,7 +329,7 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
         </label>
         <fieldset className="space-y-1">
           <legend className="text-xs text-text-secondary">
-            Update secrets (leave blank to keep)
+            {t('settings.connectors.secrets_legend')}
           </legend>
           {secrets.map((s, i) => (
             <div key={i} className="flex gap-2">
@@ -367,7 +369,7 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
             }
             className="text-xs text-accent-primary hover:underline"
           >
-            + Add secret
+            {t('settings.connectors.add_secret')}
           </button>
         </fieldset>
         {err ? (
@@ -381,14 +383,14 @@ function EditConnectorModal({ row, onClose, onSaved }: EditModalProps) {
             onClick={onClose}
             className="rounded-md border border-border-subtle px-3 py-1.5 text-sm text-text-primary hover:bg-surface-hover"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
             disabled={submitting}
             className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
-            {submitting ? "Saving..." : "Save"}
+            {submitting ? t('common.saving') : t('common.save')}
           </button>
         </div>
       </form>

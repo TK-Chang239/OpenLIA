@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiError, approveResetRequest, listResetRequests, rejectResetRequest, ResetRequestRow } from '../../../api/admin';
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
 export function ResetRequestsPanel(): JSX.Element {
+  const { t } = useTranslation();
   const [items, setItems] = useState<ResetRequestRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export function ResetRequestsPanel(): JSX.Element {
   useEffect(() => { refresh(); }, []);
 
   const approve = async (id: string, userId: string) => {
-    if (!window.confirm(`Approve password reset for ${userId}? A single-use 24h token will be generated.`)) return;
+    if (!window.confirm(t('settings.reset_requests.confirm_approve', { user: userId }))) return;
     try {
       const r = await approveResetRequest(id);
       setResetLink(r.reset_token);
@@ -31,7 +33,7 @@ export function ResetRequestsPanel(): JSX.Element {
   };
 
   const reject = async (id: string, userId: string) => {
-    if (!window.confirm(`Reject password reset for ${userId}?`)) return;
+    if (!window.confirm(t('settings.reset_requests.confirm_reject', { user: userId }))) return;
     try {
       await rejectResetRequest(id);
       await refresh();
@@ -42,7 +44,7 @@ export function ResetRequestsPanel(): JSX.Element {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-base font-semibold text-text-primary">Pending password reset requests</h2>
+      <h2 className="text-base font-semibold text-text-primary">{t('settings.reset_requests.title')}</h2>
 
       <InlineFeedback kind={error ? 'error' : null} message={error ?? ''} />
 
@@ -50,18 +52,18 @@ export function ResetRequestsPanel(): JSX.Element {
         <table className="w-full text-sm">
           <thead className="bg-bg-base text-left text-xs uppercase text-text-secondary">
             <tr>
-              <th className="px-3 py-2">User</th>
-              <th className="px-3 py-2">Requested</th>
-              <th className="px-3 py-2">IP</th>
-              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">{t('settings.reset_requests.col_user')}</th>
+              <th className="px-3 py-2">{t('settings.reset_requests.col_requested')}</th>
+              <th className="px-3 py-2">{t('settings.reset_requests.col_ip')}</th>
+              <th className="px-3 py-2">{t('settings.reset_requests.col_status')}</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {items === null ? (
-              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">Loading...</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">{t('settings.reset_requests.loading')}</td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">No pending requests.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">{t('settings.reset_requests.none_pending')}</td></tr>
             ) : items.map((r) => (
               <tr key={r.id} className="border-t border-border-subtle">
                 <td className="px-3 py-2 text-text-primary">{r.user_id}</td>
@@ -76,14 +78,14 @@ export function ResetRequestsPanel(): JSX.Element {
                         onClick={() => approve(r.id, r.user_id)}
                         className="text-sm text-accent-primary hover:underline"
                       >
-                        Approve
+                        {t('settings.reset_requests.approve')}
                       </button>
                       <button
                         type="button"
                         onClick={() => reject(r.id, r.user_id)}
                         className="text-sm text-feedback-error hover:underline"
                       >
-                        Reject
+                        {t('settings.reset_requests.reject')}
                       </button>
                     </>
                   ) : null}
@@ -96,9 +98,9 @@ export function ResetRequestsPanel(): JSX.Element {
 
       <OneTimeSecretModal
         open={resetLink !== null}
-        title="Password reset token"
+        title={t('settings.reset_requests.token_modal_title')}
         secret={resetLink ?? ''}
-        description="Share with the user through a secure channel. Valid for 24 hours, single-use."
+        description={t('settings.reset_requests.token_modal_description')}
         onClose={() => setResetLink(null)}
       />
     </div>

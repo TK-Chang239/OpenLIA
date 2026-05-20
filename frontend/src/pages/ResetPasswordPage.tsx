@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { AuthCard } from "../components/auth/AuthCard";
 import { AuthLayout } from "../components/auth/AuthLayout";
@@ -5,6 +6,7 @@ import { ResetPasswordForm } from "../components/auth/ResetPasswordForm";
 import { Banner } from "../components/primitives/Banner";
 
 export function ResetPasswordPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
 
@@ -16,7 +18,7 @@ export function ResetPasswordPage() {
         ) : (
           <Banner
             variant="error"
-            message="This reset link is invalid. Contact your administrator for a new one."
+            message={t("auth.reset.link_invalid")}
           />
         )}
       </AuthCard>

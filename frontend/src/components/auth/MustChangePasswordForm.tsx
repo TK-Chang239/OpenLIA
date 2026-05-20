@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { changePassword } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { mapTransportError } from "../../api/errors";
@@ -18,6 +19,7 @@ interface ServerError {
 }
 
 export function MustChangePasswordForm() {
+  const { t } = useTranslation();
   const { clearMustChangePassword, refresh } = useAuth();
   const [current, setCurrent] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -35,16 +37,16 @@ export function MustChangePasswordForm() {
 
     const errs: Record<string, string> = {};
     if (current.length === 0) {
-      errs.current_password = "Enter your current (temporary) password.";
+      errs.current_password = t("auth.errors.enter_current_temp_password");
     }
     if (newPw.length < PASSWORD_MIN) {
-      errs.new_password = `Password must be at least ${PASSWORD_MIN} characters.`;
+      errs.new_password = t("auth.errors.password_too_short", { min: PASSWORD_MIN });
     }
     if (newPw !== confirm) {
-      errs.confirm = "Passwords do not match.";
+      errs.confirm = t("auth.errors.passwords_do_not_match");
     }
     if (newPw === current && newPw.length > 0) {
-      errs.new_password = "New password must differ from the temporary one.";
+      errs.new_password = t("auth.errors.new_password_must_differ");
     }
     if (Object.keys(errs).length > 0) {
       setFieldErrors(errs);
@@ -63,10 +65,10 @@ export function MustChangePasswordForm() {
         } else {
           const body = (err.body as ServerError | null) ?? {};
           if (body.field) {
-            setFieldErrors({ [body.field]: body.message ?? "Invalid value." });
+            setFieldErrors({ [body.field]: body.message ?? t("auth.errors.invalid_value") });
           } else {
             setBanner({
-              message: body.message ?? "Password change failed.",
+              message: body.message ?? t("auth.errors.password_change_failed"),
               variant: "error",
             });
           }
@@ -82,14 +84,13 @@ export function MustChangePasswordForm() {
   return (
     <form onSubmit={onSubmit} noValidate>
       <p className="text-sm text-text-secondary mb-5">
-        Your administrator has reset your password. Please set a new one to
-        continue.
+        {t("auth.must_change.intro")}
       </p>
       {banner && <Banner variant={banner.variant} message={banner.message} />}
 
       <FormField
         id="current_password"
-        label="Temporary Password"
+        label={t("auth.must_change.temp_password_label")}
         error={fieldErrors.current_password}
       >
         <PasswordInput
@@ -109,7 +110,7 @@ export function MustChangePasswordForm() {
 
       <FormField
         id="new_password"
-        label="New Password"
+        label={t("auth.must_change.new_password_label")}
         error={fieldErrors.new_password}
       >
         <PasswordInput
@@ -128,7 +129,7 @@ export function MustChangePasswordForm() {
 
       <FormField
         id="confirm"
-        label="Confirm New Password"
+        label={t("auth.must_change.confirm_new_password_label")}
         error={fieldErrors.confirm}
       >
         <PasswordInput
@@ -149,9 +150,9 @@ export function MustChangePasswordForm() {
         className="w-full h-10 rounded-md bg-accent-primary text-white text-sm font-medium flex items-center justify-center hover:bg-accent-hover transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {submitting ? (
-          <Loader2 size={16} className="animate-spin" aria-label="Loading" />
+          <Loader2 size={16} className="animate-spin" aria-label={t("auth.loading_aria")} />
         ) : (
-          "Set Password"
+          t("auth.must_change.submit")
         )}
       </button>
     </form>

@@ -75,12 +75,15 @@
     "tabs": {
       "general": "一般",
       "models": "模型",
-      "timezone": "時區",
+      "timezone": "時區與記憶",
       "account": "帳號",
       "skills": "技能",
       "admin": "管理",
-      "disclaimer": "免責聲明",
+      "disclaimer": "合規免責聲明",
       "guardrails": "風控紀錄"
+    },
+    "shell": {
+      "heading": "設定"
     },
     "general": {
       "title": "一般",
@@ -108,37 +111,183 @@
       "language_option_zh_tw": "繁體中文",
       "language_option_both": "中英對照 (English + 繁體中文)"
     },
+    "timezone": {
+      "title": "時區與記憶",
+      "tz_group_title": "時區",
+      "tz_group_description": "用於依照您所在時區排程使用者任務（晨報、記憶擷取等）。",
+      "source_manual": "手動",
+      "source_detected": "自動偵測",
+      "override_button": "手動覆寫",
+      "iana_label": "IANA 時區",
+      "save_timezone": "儲存時區",
+      "saving": "儲存中...",
+      "saved": "已儲存。",
+      "load_failed": "無法載入偏好設定。",
+      "update_failed": "更新時區失敗。",
+      "memory_group_title": "記憶擷取時間",
+      "memory_group_description": "夜間記憶擷取任務以您所在時區執行的時間。",
+      "memory_label": "記憶擷取時間",
+      "save_extraction": "儲存擷取時間",
+      "update_extraction_failed": "更新擷取時間失敗。"
+    },
+    "models": {
+      "title": "模型",
+      "subtitle": "管理各部門與內部任務如何選擇 LLM。",
+      "catalog_title": "供應商與模型",
+      "catalog_description_admin": "註冊供應商、新增模型，並指定各部門的預設模型。",
+      "catalog_description_user": "瀏覽可用模型清單。"
+    },
+    "disclaimer": {
+      "title": "合規免責聲明",
+      "version_label": "版本",
+      "accepted_yes": "是",
+      "accepted_no": "否",
+      "reaccept_hint": "（您已接受 {{version}}，請重新確認）",
+      "accepted_prefix": "已接受："
+    },
+    "guardrails": {
+      "title": "風控紀錄",
+      "filter_last": "最近",
+      "filter_category": "類別",
+      "filter_all": "全部",
+      "range_1d": "1 天",
+      "range_7d": "7 天",
+      "range_30d": "30 天",
+      "wipe_all": "全部清除",
+      "col_when": "時間",
+      "col_desk": "部門",
+      "col_type": "事件類型",
+      "col_category": "類別",
+      "col_action": "處置",
+      "col_excerpt": "摘錄"
+    },
+    "skills": {
+      "title": "技能",
+      "install_button": "安裝技能",
+      "none_installed": "目前尚未安裝任何技能。"
+    },
+    "admin": {
+      "title": "管理",
+      "subtitle": "管理使用者、邀請碼、密碼重設、伺服器層級模型與資料來源。",
+      "sections_aria": "管理分頁",
+      "tab_invites": "邀請碼",
+      "tab_users": "使用者",
+      "tab_reset_requests": "密碼重設申請",
+      "tab_connectors": "資料連接器",
+      "tab_runner_specs": "Runner 規格",
+      "tab_skills": "技能活動"
+    },
+    "invites": {
+      "title": "邀請碼",
+      "new_invite": "新增邀請",
+      "label_optional": "標籤（選填）",
+      "max_uses": "最高使用次數",
+      "expires_optional": "到期時間（選填）",
+      "create": "建立邀請",
+      "creating": "建立中...",
+      "confirm_revoke": "確定撤銷此邀請？撤銷後將無法再使用。",
+      "col_label": "標籤",
+      "col_uses": "使用次數",
+      "col_expires": "到期時間",
+      "col_status": "狀態",
+      "loading": "載入中...",
+      "none_yet": "尚未建立邀請。",
+      "unlimited": "無上限",
+      "never": "永不到期",
+      "status_revoked": "已撤銷",
+      "status_active": "有效",
+      "revoke": "撤銷",
+      "token_modal_title": "邀請碼權杖",
+      "token_modal_description": "請以安全管道分享此權杖，將無法再次查看。"
+    },
+    "users": {
+      "title": "使用者",
+      "loading": "載入中...",
+      "col_email": "電子郵件",
+      "col_name": "名稱",
+      "col_role": "角色",
+      "col_status": "狀態",
+      "col_last_login": "最近登入",
+      "role_admin": "管理員",
+      "role_user": "使用者",
+      "status_disabled": "已停用",
+      "status_enabled": "啟用中",
+      "must_change_pw": "需變更密碼",
+      "reset_password": "重設密碼",
+      "enable": "啟用",
+      "disable": "停用",
+      "you": "您",
+      "confirm_toggle_disable": "確定停用 {{email}}？",
+      "confirm_toggle_enable": "確定啟用 {{email}}？",
+      "confirm_reset": "確定為 {{email}} 重設密碼？系統將產生一組臨時密碼並僅顯示一次。",
+      "temp_password_title": "{{email}} 的臨時密碼",
+      "temp_password_description": "請將此密碼交付給使用者。使用者下次登入時必須變更密碼。此值僅顯示一次。"
+    },
+    "reset_requests": {
+      "title": "待處理的密碼重設申請",
+      "loading": "載入中...",
+      "none_pending": "目前無待處理申請。",
+      "col_user": "使用者",
+      "col_requested": "申請時間",
+      "col_ip": "IP",
+      "col_status": "狀態",
+      "approve": "核准",
+      "reject": "拒絕",
+      "confirm_approve": "確定核准 {{user}} 的密碼重設申請？將產生 24 小時內單次有效權杖。",
+      "confirm_reject": "確定拒絕 {{user}} 的密碼重設申請？",
+      "token_modal_title": "密碼重設權杖",
+      "token_modal_description": "請以安全管道交付給使用者，24 小時內有效，單次可用。"
+    },
+    "connectors": {
+      "title": "資料連接器",
+      "subtitle": "管理各部門使用的資料來源連接器（MCP 伺服器、Python 函式庫）。",
+      "loading": "載入中...",
+      "add_from_catalog": "從目錄新增",
+      "add_custom": "新增自訂",
+      "none_configured": "尚未設定任何連接器，請透過設定精靈或 API 新增。",
+      "table_aria": "資料連接器",
+      "col_provider": "供應商",
+      "col_display": "顯示名稱",
+      "col_source": "來源",
+      "col_category": "類別",
+      "col_status": "狀態",
+      "col_actions": "操作",
+      "edit": "編輯",
+      "validate_now": "立即驗證",
+      "sync_specs": "同步規格",
+      "sync_specs_title": "從內建範本重新同步 Runner 規格（升級 OpenLIA 後使用）。",
+      "delete": "刪除",
+      "confirm_delete": "確定刪除連接器 {{name}}？",
+      "sync_done": "已重新同步 {{count}} 筆 Runner 規格。",
+      "load_failed": "載入連接器失敗。",
+      "validate_failed": "驗證失敗。",
+      "delete_failed": "刪除失敗。",
+      "sync_failed": "同步失敗。",
+      "custom_hint": "若要新增自訂連接器，請使用設定精靈或 API。",
+      "edit_modal_aria": "編輯連接器",
+      "edit_modal_title": "編輯連接器",
+      "readonly_hint": "來源（{{source}}）與類別（{{category}}）建立後無法修改。",
+      "display_name": "顯示名稱",
+      "secrets_legend": "更新密鑰（留空表示保留原值）",
+      "add_secret": "+ 新增密鑰",
+      "save_failed": "儲存失敗。"
+    },
     "account": {
       "title": "帳號",
       "email_section_title": "變更電子郵件",
       "new_email": "新電子郵件",
       "current_password": "目前密碼",
       "change_email_button": "變更電子郵件",
+      "change_email_failed": "更新電子郵件失敗。",
       "email_updated": "電子郵件已更新。",
       "change_password_section_title": "變更密碼",
       "active_sessions_section_title": "使用中的登入工作階段",
       "must_change_password_banner": "請先變更密碼，再繼續使用本系統。"
-    },
-    "timezone": {
-      "title": "時區"
-    },
-    "models": {
-      "title": "模型"
-    },
-    "disclaimer": {
-      "title": "免責聲明"
-    },
-    "guardrails": {
-      "title": "風控紀錄"
-    },
-    "skills": {
-      "title": "技能"
-    },
-    "admin": {
-      "title": "管理"
     }
   },
   "auth": {
+    "loading_aria": "載入中",
+    "layout_aria": "身分驗證",
     "login": {
       "title": "登入",
       "email_label": "電子郵件",
@@ -146,7 +295,10 @@
       "submit": "登入",
       "forgot_password": "忘記密碼？",
       "register_link": "尚未註冊？立即註冊",
-      "loading": "登入中…"
+      "loading": "登入中…",
+      "keep_me_signed_in": "保持登入狀態",
+      "dont_have_account": "尚未擁有帳號？",
+      "sign_up_link": "立即註冊"
     },
     "register": {
       "title": "建立帳號",
@@ -156,23 +308,58 @@
       "display_name_label": "顯示名稱（選填）",
       "submit": "建立帳號",
       "loading": "建立帳號中…",
-      "login_link": "已有帳號？立即登入",
-      "registration_closed": "目前已暫停註冊。"
+      "login_link": "已擁有帳號？",
+      "log_in_link": "立即登入",
+      "registration_closed": "目前已暫停註冊。",
+      "back_to_login": "返回登入"
     },
     "forgot": {
       "title": "重設密碼",
-      "submit": "寄送重設連結",
-      "back_to_login": "返回登入"
+      "helper": "請輸入您的電子郵件，我們將通知管理員核准您的密碼重設申請。",
+      "submit": "申請重設",
+      "back_to_login": "返回登入",
+      "neutral_message": "若該電子郵件對應有效帳號，系統已通知管理員，管理員將寄送重設連結給您。"
     },
     "reset": {
       "title": "設定新密碼",
       "new_password_label": "新密碼",
       "confirm_new_password_label": "確認新密碼",
-      "submit": "重設密碼"
+      "submit": "重設密碼",
+      "success": "密碼已成功更新，您現在可以登入。",
+      "link_invalid": "此重設連結無效，請聯絡管理員取得新連結。",
+      "back_to_login": "返回登入"
     },
     "must_change": {
       "title": "請先變更您的密碼",
-      "submit": "變更密碼"
+      "submit": "設定密碼",
+      "intro": "管理員已重設您的密碼，請設定新密碼以繼續使用。",
+      "temp_password_label": "臨時密碼",
+      "new_password_label": "新密碼",
+      "confirm_new_password_label": "確認新密碼"
+    },
+    "errors": {
+      "invalid_email": "請輸入有效的電子郵件地址。",
+      "passwords_do_not_match": "兩次輸入的密碼不一致。",
+      "password_too_short": "密碼長度至少需 {{min}} 個字元。",
+      "invalid_value": "輸入內容無效。",
+      "login_incorrect": "電子郵件或密碼錯誤。",
+      "account_locked_default": "帳號已暫時鎖定。",
+      "try_again_in_minutes_one": "請於 {{count}} 分鐘後再試。",
+      "try_again_in_minutes_other": "請於 {{count}} 分鐘後再試。",
+      "rate_limited": "嘗試次數過多，請稍候再試。",
+      "too_many_requests": "請求次數過多，請稍候再試。",
+      "invite_no_longer_valid": "此邀請連結已失效，請聯絡管理員取得新連結。",
+      "registration_failed": "註冊失敗，請再試一次。",
+      "reset_link_expired": "此重設連結已過期或已使用，請聯絡管理員取得新連結。",
+      "reset_failed": "重設失敗，請再試一次。",
+      "password_change_failed": "變更密碼失敗。",
+      "enter_current_temp_password": "請輸入您目前的（臨時）密碼。",
+      "new_password_must_differ": "新密碼必須與臨時密碼不同。"
+    },
+    "setup": {
+      "loading": "載入中…",
+      "retry": "重試",
+      "unknown_step": "未知步驟：{{step}}"
     }
   },
   "chat": {

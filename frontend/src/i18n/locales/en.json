@@ -75,12 +75,15 @@
     "tabs": {
       "general": "General",
       "models": "Models",
-      "timezone": "Timezone",
+      "timezone": "Timezone & Memory",
       "account": "Account",
       "skills": "Skills",
       "admin": "Admin",
-      "disclaimer": "Disclaimer",
-      "guardrails": "Guardrails"
+      "disclaimer": "Compliance disclaimer",
+      "guardrails": "Guardrail activity"
+    },
+    "shell": {
+      "heading": "Settings"
     },
     "general": {
       "title": "General",
@@ -108,71 +111,255 @@
       "language_option_zh_tw": "繁體中文 (Traditional Chinese)",
       "language_option_both": "Both (English + 繁體中文)"
     },
+    "timezone": {
+      "title": "Timezone & Memory",
+      "tz_group_title": "Timezone",
+      "tz_group_description": "Used to schedule per-user jobs (briefings, memory extraction) at the right wall-clock time.",
+      "source_manual": "Manual",
+      "source_detected": "Detected",
+      "override_button": "Override",
+      "iana_label": "IANA timezone",
+      "save_timezone": "Save timezone",
+      "saving": "Saving...",
+      "saved": "Saved.",
+      "load_failed": "Failed to load preferences.",
+      "update_failed": "Failed to update timezone.",
+      "memory_group_title": "Memory extraction time",
+      "memory_group_description": "Wall-clock time (in your timezone) when the nightly memory-extraction job runs.",
+      "memory_label": "Memory extraction time",
+      "save_extraction": "Save extraction time",
+      "update_extraction_failed": "Failed to update extraction time."
+    },
+    "models": {
+      "title": "Models",
+      "subtitle": "Manage how each department and internal job picks an LLM.",
+      "catalog_title": "Providers and models",
+      "catalog_description_admin": "Register providers, add models, and mark which department each model is default for.",
+      "catalog_description_user": "View the catalog of available models."
+    },
+    "disclaimer": {
+      "title": "Compliance disclaimer",
+      "version_label": "Version",
+      "accepted_yes": "yes",
+      "accepted_no": "no",
+      "reaccept_hint": "(you accepted {{version}}; please re-accept)",
+      "accepted_prefix": "Accepted:"
+    },
+    "guardrails": {
+      "title": "Guardrail activity",
+      "filter_last": "Last",
+      "filter_category": "Category",
+      "filter_all": "all",
+      "range_1d": "1d",
+      "range_7d": "7d",
+      "range_30d": "30d",
+      "wipe_all": "Wipe all",
+      "col_when": "When",
+      "col_desk": "Desk",
+      "col_type": "Type",
+      "col_category": "Category",
+      "col_action": "Action",
+      "col_excerpt": "Excerpt"
+    },
+    "skills": {
+      "title": "Skills",
+      "install_button": "Install skill",
+      "none_installed": "No skills installed."
+    },
+    "admin": {
+      "title": "Admin",
+      "subtitle": "Manage users, invites, password resets, server-wide models, and data providers.",
+      "sections_aria": "Admin sections",
+      "tab_invites": "Invites",
+      "tab_users": "Users",
+      "tab_reset_requests": "Reset requests",
+      "tab_connectors": "Connectors",
+      "tab_runner_specs": "Runner specs",
+      "tab_skills": "Skill activity"
+    },
+    "invites": {
+      "title": "Invites",
+      "new_invite": "New invite",
+      "label_optional": "Label (optional)",
+      "max_uses": "Max uses",
+      "expires_optional": "Expires at (optional)",
+      "create": "Create invite",
+      "creating": "Creating...",
+      "confirm_revoke": "Revoke this invite? It will no longer work.",
+      "col_label": "Label",
+      "col_uses": "Uses",
+      "col_expires": "Expires",
+      "col_status": "Status",
+      "loading": "Loading...",
+      "none_yet": "No invites yet.",
+      "unlimited": "unlimited",
+      "never": "Never",
+      "status_revoked": "Revoked",
+      "status_active": "Active",
+      "revoke": "Revoke",
+      "token_modal_title": "Invite token",
+      "token_modal_description": "Share this token through a secure channel. You will not be able to see it again."
+    },
+    "users": {
+      "title": "Users",
+      "loading": "Loading...",
+      "col_email": "Email",
+      "col_name": "Name",
+      "col_role": "Role",
+      "col_status": "Status",
+      "col_last_login": "Last login",
+      "role_admin": "admin",
+      "role_user": "user",
+      "status_disabled": "Disabled",
+      "status_enabled": "Enabled",
+      "must_change_pw": "Must change pw",
+      "reset_password": "Reset password",
+      "enable": "Enable",
+      "disable": "Disable",
+      "you": "You",
+      "confirm_toggle_disable": "Disable {{email}}?",
+      "confirm_toggle_enable": "Enable {{email}}?",
+      "confirm_reset": "Reset password for {{email}}? A new temporary password will be generated and shown once.",
+      "temp_password_title": "Temporary password for {{email}}",
+      "temp_password_description": "Hand this password to the user. They will be required to set a new one on next login. This value will not be shown again."
+    },
+    "reset_requests": {
+      "title": "Pending password reset requests",
+      "loading": "Loading...",
+      "none_pending": "No pending requests.",
+      "col_user": "User",
+      "col_requested": "Requested",
+      "col_ip": "IP",
+      "col_status": "Status",
+      "approve": "Approve",
+      "reject": "Reject",
+      "confirm_approve": "Approve password reset for {{user}}? A single-use 24h token will be generated.",
+      "confirm_reject": "Reject password reset for {{user}}?",
+      "token_modal_title": "Password reset token",
+      "token_modal_description": "Share with the user through a secure channel. Valid for 24 hours, single-use."
+    },
+    "connectors": {
+      "title": "Connectors",
+      "subtitle": "Manage data-source connectors (MCP servers, Python libraries) used by departments.",
+      "loading": "Loading...",
+      "add_from_catalog": "Add from catalog",
+      "add_custom": "Add custom",
+      "none_configured": "No connectors configured. Add one from the setup wizard or via the API.",
+      "table_aria": "Connectors",
+      "col_provider": "Provider",
+      "col_display": "Display",
+      "col_source": "Source",
+      "col_category": "Category",
+      "col_status": "Status",
+      "col_actions": "Actions",
+      "edit": "Edit",
+      "validate_now": "Validate now",
+      "sync_specs": "Sync specs",
+      "sync_specs_title": "Re-sync runner specs from the built-in template (use after upgrading OpenLIA).",
+      "delete": "Delete",
+      "confirm_delete": "Delete connector {{name}}?",
+      "sync_done": "Re-synced {{count}} runner spec(s).",
+      "load_failed": "Failed to load connectors.",
+      "validate_failed": "Validation failed.",
+      "delete_failed": "Delete failed.",
+      "sync_failed": "Sync failed.",
+      "custom_hint": "To add a custom connector, use the setup wizard or the API.",
+      "edit_modal_aria": "Edit connector",
+      "edit_modal_title": "Edit connector",
+      "readonly_hint": "Source ({{source}}) and category ({{category}}) are read-only.",
+      "display_name": "Display name",
+      "secrets_legend": "Update secrets (leave blank to keep)",
+      "add_secret": "+ Add secret",
+      "save_failed": "Save failed."
+    },
     "account": {
       "title": "Account",
       "email_section_title": "Change Email",
       "new_email": "New email",
       "current_password": "Current password",
       "change_email_button": "Change email",
+      "change_email_failed": "Failed to update email.",
       "email_updated": "Email updated.",
       "change_password_section_title": "Change Password",
       "active_sessions_section_title": "Active Sessions",
       "must_change_password_banner": "You must change your password before continuing."
-    },
-    "timezone": {
-      "title": "Timezone"
-    },
-    "models": {
-      "title": "Models"
-    },
-    "disclaimer": {
-      "title": "Disclaimer"
-    },
-    "guardrails": {
-      "title": "Guardrails"
-    },
-    "skills": {
-      "title": "Skills"
-    },
-    "admin": {
-      "title": "Admin"
     }
   },
   "auth": {
+    "loading_aria": "Loading",
+    "layout_aria": "Authentication",
     "login": {
       "title": "Sign in",
       "email_label": "Email",
       "password_label": "Password",
-      "submit": "Log in",
+      "submit": "Log In",
       "forgot_password": "Forgot password?",
       "register_link": "Need an account? Sign up",
-      "loading": "Signing in…"
+      "loading": "Signing in…",
+      "keep_me_signed_in": "Keep me logged in",
+      "dont_have_account": "Don't have an account?",
+      "sign_up_link": "Sign up"
     },
     "register": {
       "title": "Create an account",
       "email_label": "Email",
       "password_label": "Password",
-      "confirm_password_label": "Confirm password",
-      "display_name_label": "Display name (optional)",
-      "submit": "Create account",
+      "confirm_password_label": "Confirm Password",
+      "display_name_label": "Display Name (optional)",
+      "submit": "Create Account",
       "loading": "Creating account…",
-      "login_link": "Already have an account? Log in",
-      "registration_closed": "Registration is closed."
+      "login_link": "Already have an account?",
+      "log_in_link": "Log in",
+      "registration_closed": "Registration is closed.",
+      "back_to_login": "Back to Log In"
     },
     "forgot": {
       "title": "Reset your password",
-      "submit": "Send reset link",
-      "back_to_login": "Back to log in"
+      "helper": "Enter your email and we'll notify your admin to approve a password reset.",
+      "submit": "Request Reset",
+      "back_to_login": "Back to Log In",
+      "neutral_message": "If the email matches an account, your admin has been notified. They'll send you a reset link."
     },
     "reset": {
       "title": "Set a new password",
-      "new_password_label": "New password",
-      "confirm_new_password_label": "Confirm new password",
-      "submit": "Reset password"
+      "new_password_label": "New Password",
+      "confirm_new_password_label": "Confirm New Password",
+      "submit": "Reset Password",
+      "success": "Password updated successfully. You can now log in.",
+      "link_invalid": "This reset link is invalid. Contact your administrator for a new one.",
+      "back_to_login": "Back to Log In"
     },
     "must_change": {
       "title": "You must change your password",
-      "submit": "Change password"
+      "submit": "Set Password",
+      "intro": "Your administrator has reset your password. Please set a new one to continue.",
+      "temp_password_label": "Temporary Password",
+      "new_password_label": "New Password",
+      "confirm_new_password_label": "Confirm New Password"
+    },
+    "errors": {
+      "invalid_email": "Enter a valid email address.",
+      "passwords_do_not_match": "Passwords do not match.",
+      "password_too_short": "Password must be at least {{min}} characters.",
+      "invalid_value": "Invalid value.",
+      "login_incorrect": "Email or password is incorrect.",
+      "account_locked_default": "Account is temporarily locked.",
+      "try_again_in_minutes_one": "Try again in {{count}} minute.",
+      "try_again_in_minutes_other": "Try again in {{count}} minutes.",
+      "rate_limited": "Too many attempts. Please wait.",
+      "too_many_requests": "Too many requests. Please wait and try again.",
+      "invite_no_longer_valid": "This invite link is no longer valid. Contact your administrator for a new one.",
+      "registration_failed": "Registration failed. Please try again.",
+      "reset_link_expired": "This reset link has expired or has already been used. Contact your administrator for a new one.",
+      "reset_failed": "Reset failed. Please try again.",
+      "password_change_failed": "Password change failed.",
+      "enter_current_temp_password": "Enter your current (temporary) password.",
+      "new_password_must_differ": "New password must differ from the temporary one."
+    },
+    "setup": {
+      "loading": "Loading…",
+      "retry": "Retry",
+      "unknown_step": "Unknown step: {{step}}"
     }
   },
   "chat": {

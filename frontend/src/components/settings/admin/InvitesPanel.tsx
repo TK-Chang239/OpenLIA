@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApiError, createInvite, InviteSummary, listInvites, revokeInvite } from '../../../api/admin';
 import { OneTimeSecretModal } from '../OneTimeSecretModal';
 import { InlineFeedback } from '../InlineFeedback';
 
 export function InvitesPanel(): JSX.Element {
+  const { t } = useTranslation();
   const [items, setItems] = useState<InviteSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -50,7 +52,7 @@ export function InvitesPanel(): JSX.Element {
   };
 
   const revoke = async (id: string) => {
-    if (!window.confirm('Revoke this invite? It will no longer work.')) return;
+    if (!window.confirm(t('settings.invites.confirm_revoke'))) return;
     try {
       await revokeInvite(id);
       await refresh();
@@ -62,13 +64,13 @@ export function InvitesPanel(): JSX.Element {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-text-primary">Invites</h2>
+        <h2 className="text-base font-semibold text-text-primary">{t('settings.invites.title')}</h2>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
           className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
         >
-          {showForm ? 'Cancel' : 'New invite'}
+          {showForm ? t('common.cancel') : t('settings.invites.new_invite')}
         </button>
       </div>
 
@@ -77,7 +79,7 @@ export function InvitesPanel(): JSX.Element {
       {showForm ? (
         <div className="rounded-md border border-border-subtle bg-bg-base p-4 space-y-3">
           <label className="block text-sm">
-            <span className="block font-medium text-text-primary">Label (optional)</span>
+            <span className="block font-medium text-text-primary">{t('settings.invites.label_optional')}</span>
             <input
               type="text"
               value={label}
@@ -87,7 +89,7 @@ export function InvitesPanel(): JSX.Element {
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-sm">
-              <span className="block font-medium text-text-primary">Max uses</span>
+              <span className="block font-medium text-text-primary">{t('settings.invites.max_uses')}</span>
               <input
                 type="number"
                 min={1}
@@ -98,7 +100,7 @@ export function InvitesPanel(): JSX.Element {
               />
             </label>
             <label className="block text-sm">
-              <span className="block font-medium text-text-primary">Expires at (optional)</span>
+              <span className="block font-medium text-text-primary">{t('settings.invites.expires_optional')}</span>
               <input
                 type="datetime-local"
                 value={expiresAt}
@@ -113,7 +115,7 @@ export function InvitesPanel(): JSX.Element {
             disabled={creating}
             className="rounded-md bg-accent-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50 hover:bg-accent-hover"
           >
-            {creating ? 'Creating...' : 'Create invite'}
+            {creating ? t('settings.invites.creating') : t('settings.invites.create')}
           </button>
         </div>
       ) : null}
@@ -122,25 +124,25 @@ export function InvitesPanel(): JSX.Element {
         <table className="w-full text-sm">
           <thead className="bg-bg-base text-left text-xs uppercase text-text-secondary">
             <tr>
-              <th className="px-3 py-2">Label</th>
-              <th className="px-3 py-2">Uses</th>
-              <th className="px-3 py-2">Expires</th>
-              <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">{t('settings.invites.col_label')}</th>
+              <th className="px-3 py-2">{t('settings.invites.col_uses')}</th>
+              <th className="px-3 py-2">{t('settings.invites.col_expires')}</th>
+              <th className="px-3 py-2">{t('settings.invites.col_status')}</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {items === null ? (
-              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">Loading...</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">{t('settings.invites.loading')}</td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">No invites yet.</td></tr>
+              <tr><td colSpan={5} className="px-3 py-4 text-text-secondary">{t('settings.invites.none_yet')}</td></tr>
             ) : (
               items.map((inv) => (
                 <tr key={inv.id} className="border-t border-border-subtle">
                   <td className="px-3 py-2 text-text-primary">{inv.label ?? '—'}</td>
-                  <td className="px-3 py-2 text-text-primary">{inv.use_count} / {inv.max_uses ?? 'unlimited'}</td>
+                  <td className="px-3 py-2 text-text-primary">{inv.use_count} / {inv.max_uses ?? t('settings.invites.unlimited')}</td>
                   <td className="px-3 py-2 text-text-secondary">
-                    {inv.expires_at ? new Date(inv.expires_at).toLocaleString() : 'Never'}
+                    {inv.expires_at ? new Date(inv.expires_at).toLocaleString() : t('settings.invites.never')}
                   </td>
                   <td className="px-3 py-2">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -148,7 +150,7 @@ export function InvitesPanel(): JSX.Element {
                         ? 'bg-feedback-error/10 text-feedback-error'
                         : 'bg-feedback-success/10 text-feedback-success'
                     }`}>
-                      {inv.revoked_at ? 'Revoked' : 'Active'}
+                      {inv.revoked_at ? t('settings.invites.status_revoked') : t('settings.invites.status_active')}
                     </span>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -158,7 +160,7 @@ export function InvitesPanel(): JSX.Element {
                         onClick={() => revoke(inv.id)}
                         className="text-sm text-feedback-error hover:underline"
                       >
-                        Revoke
+                        {t('settings.invites.revoke')}
                       </button>
                     ) : null}
                   </td>
@@ -171,9 +173,9 @@ export function InvitesPanel(): JSX.Element {
 
       <OneTimeSecretModal
         open={tokenModal !== null}
-        title="Invite token"
+        title={t('settings.invites.token_modal_title')}
         secret={tokenModal ?? ''}
-        description="Share this token through a secure channel. You will not be able to see it again."
+        description={t('settings.invites.token_modal_description')}
         onClose={() => setTokenModal(null)}
       />
     </div>
