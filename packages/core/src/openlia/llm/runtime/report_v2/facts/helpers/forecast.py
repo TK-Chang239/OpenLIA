@@ -97,6 +97,86 @@ def actual_vs_consensus(
     }
 
 
+def three_scenario_forecast(
+    base_revenue: float,
+    base_op_margin: float,
+    *,
+    conservative_revenue_growth: float,
+    neutral_revenue_growth: float,
+    optimistic_revenue_growth: float,
+    conservative_margin_delta: float = -0.02,
+    optimistic_margin_delta: float = 0.02,
+    horizon_years: int = 3,
+) -> dict:
+    """Produce three forward paths: conservative / neutral / optimistic.
+
+    Inputs:
+      base_revenue: TTM revenue baseline (USD or any consistent unit).
+      base_op_margin: TTM operating margin as a decimal (0.20 = 20%).
+      *_revenue_growth: per-year growth rate, decimal (0.10 = 10%).
+      *_margin_delta: absolute additive shift to base_op_margin per year,
+        decimal pp (default -0.02 / +0.02).
+      horizon_years: number of forward years (default 3).
+
+    Returns dict keyed by scenario; each value is a list of dicts
+    {year_index, revenue, op_margin, op_income}.
+    """
+    if horizon_years <= 0:
+        raise ValueError("horizon_years must be positive")
+
+    def _path(growth: float, margin_delta_per_year: float) -> list[dict]:
+        path = []
+        rev = base_revenue
+        margin = base_op_margin
+        for i in range(1, horizon_years + 1):
+            rev = rev * (1 + growth)
+            margin = margin + margin_delta_per_year
+            path.append(
+                {
+                    "year_index": i,
+                    "revenue": rev,
+                    "op_margin": margin,
+                    "op_income": rev * margin,
+                }
+            )
+        return path
+
+    return {
+        "conservative": _path(conservative_revenue_growth, conservative_margin_delta),
+        "neutral": _path(neutral_revenue_growth, 0.0),
+        "optimistic": _path(optimistic_revenue_growth, optimistic_margin_delta),
+    }
+
+
+def consensus_vs_three_scenarios_table(
+    scenarios: dict,
+    consensus_revenue_path: list[float],
+) -> dict:
+    """Compare a three-scenario forecast against a consensus revenue path.
+
+    `scenarios` is the output of `three_scenario_forecast`.
+    `consensus_revenue_path` is the consensus revenue projection per year
+    (same length as the scenario horizon).
+    Returns rows for each scenario with delta vs consensus mean per year.
+    """
+    rows: list[dict] = []
+    for label in ("conservative", "neutral", "optimistic"):
+        path = scenarios.get(label, [])
+        deltas = []
+        for entry, cons in zip(path, consensus_revenue_path, strict=False):
+            if cons == 0:
+                deltas.append(None)
+            else:
+                deltas.append((entry["revenue"] - cons) / cons)
+        rows.append(
+            {
+                "scenario": label,
+                "deltas_vs_consensus": deltas,
+            }
+        )
+    return {"rows": rows}
+
+
 def consensus_vs_assumptions_table(consensus_facts: dict, named_assumptions: list[dict]) -> dict:
     """`named_assumptions`: each {name, our_value, divergence_threshold_pct?}."""
     rows: list[dict] = []

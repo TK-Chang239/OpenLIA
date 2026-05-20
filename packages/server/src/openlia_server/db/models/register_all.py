@@ -28,6 +28,7 @@ from openlia_server.db.models import (  # noqa: F401
     content,
     dashboard,
     departments,
+    report_templates,
     scheduler,
     connectors,
     safety,

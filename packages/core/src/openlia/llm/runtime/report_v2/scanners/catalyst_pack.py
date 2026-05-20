@@ -51,6 +51,18 @@ CatalystClass = Literal[
     "guidance_update",
 ]
 
+ALL_CATALYST_CLASSES: frozenset[str] = frozenset(
+    {
+        "product_announcement",
+        "customer_concentration_disclosure",
+        "hyperscaler_capex_print",
+        "sovereign_ai_deal",
+        "export_control_change",
+        "material_partnership",
+        "guidance_update",
+    }
+)
+
 Confidence = Literal["high", "medium", "low"]
 
 
@@ -314,6 +326,7 @@ class CatalystScanner:
     subject_ticker: str
     company_names: list[str] = field(default_factory=list)
     as_of_date: date | None = None
+    catalyst_classes: frozenset[str] | None = None
 
     def _name_aliases(self) -> list[str]:
         bare = self.subject_ticker.split(".")[0]
@@ -358,6 +371,11 @@ class CatalystScanner:
                 a_date = article_date(article)
                 name_match = name_present(text, aliases)
                 for catalyst_class in _PATTERNS:
+                    if (
+                        self.catalyst_classes is not None
+                        and catalyst_class not in self.catalyst_classes
+                    ):
+                        continue
                     matched, strength = _classify(text, catalyst_class)
                     if not matched or strength is None:
                         continue
@@ -398,11 +416,16 @@ def scan_catalysts(
     subject_ticker: str,
     as_of_date: date | datetime | str | None = None,
     company_names: list[str] | None = None,
+    event_classes: frozenset[str] | None = None,
 ) -> list[CatalystEvent]:
     """One-call entry point used by the runner.
 
     Returns the full list of detected catalysts; order is manifest order
-    (earlier entries first, then per-class match order within an article)."""
+    (earlier entries first, then per-class match order within an article).
+
+    `event_classes` restricts which catalyst classes are scanned. When None
+    every class in `ALL_CATALYST_CLASSES` is inspected; pass an empty
+    frozenset to disable the scanner."""
     as_of: date | None
     if isinstance(as_of_date, datetime):
         as_of = as_of_date.date()
@@ -416,6 +439,7 @@ def scan_catalysts(
         subject_ticker=subject_ticker,
         company_names=company_names or [],
         as_of_date=as_of,
+        catalyst_classes=event_classes,
     )
     return scanner.scan(
         manifest_entries=manifest_entries,
@@ -437,3 +461,57 @@ def catalyst_event_to_dict(event: CatalystEvent) -> dict[str, Any]:
         "source_url": event.source_url,
         "relevance_score": event.relevance_score,
     }
+
+
+def catalysts_by_horizon(
+    catalysts: list[CatalystEvent] | list[dict],
+    *,
+    as_of: date | None = None,
+) -> dict[str, list]:
+    """Bucket catalyst events by their time horizon relative to `as_of`.
+
+    Buckets:
+      - `3m`     — events in the next 0-90 days (or undated)
+      - `3-12m`  — events 90-365 days out
+      - `1-3y`   — events 1-3 years out
+      - `past`   — events with a date in the past
+
+    Accepts either `CatalystEvent` dataclasses or already-serialised dicts.
+    Events without a date land in `3m` (the default short-horizon bucket) so
+    template prose can still pick them up.
+    """
+    today = as_of or date.today()
+    buckets: dict[str, list] = {"3m": [], "3-12m": [], "1-3y": [], "past": []}
+    for event in catalysts:
+        event_date = (
+            event.event_date if isinstance(event, CatalystEvent) else _date_from_dict(event)
+        )
+        if event_date is None:
+            buckets["3m"].append(event)
+            continue
+        delta_days = (event_date - today).days
+        if delta_days < 0:
+            buckets["past"].append(event)
+        elif delta_days <= 90:
+            buckets["3m"].append(event)
+        elif delta_days <= 365:
+            buckets["3-12m"].append(event)
+        elif delta_days <= 3 * 365:
+            buckets["1-3y"].append(event)
+        else:
+            buckets["past"].append(event)  # >3 years out: not actionable
+    return buckets
+
+
+def _date_from_dict(event: dict) -> date | None:
+    raw = event.get("event_date")
+    if raw is None:
+        return None
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return None
+    return None

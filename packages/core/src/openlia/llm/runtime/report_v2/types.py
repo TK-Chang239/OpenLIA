@@ -60,6 +60,7 @@ class Fact(_Strict):
 class SectionTerminalState(StrEnum):
     SUCCESS = "success"
     DEGRADED = "degraded"
+    DEGRADED_CAP_HIT = "degraded_cap_hit"
     EXHAUSTED = "exhausted"
 
 
@@ -76,7 +77,7 @@ class SectionResult(_Strict):
     @classmethod
     def _markdown_required_unless_exhausted(cls, v: str | None, info: Any) -> str | None:
         state = info.data.get("state")
-        if state == SectionTerminalState.EXHAUSTED:
+        if state in (SectionTerminalState.EXHAUSTED, SectionTerminalState.DEGRADED_CAP_HIT):
             return v
         if v is None or not v.strip():
             raise ValueError("markdown required for success/degraded states")
