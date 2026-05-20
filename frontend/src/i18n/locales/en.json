@@ -78,6 +78,7 @@
       "timezone": "Timezone & Memory",
       "account": "Account",
       "skills": "Skills",
+      "report_templates": "Report templates",
       "admin": "Admin",
       "disclaimer": "Compliance disclaimer",
       "guardrails": "Guardrail activity"
@@ -165,6 +166,33 @@
       "title": "Skills",
       "install_button": "Install skill",
       "none_installed": "No skills installed."
+    },
+    "custom_templates": {
+      "title": "Report templates",
+      "subtitle": "Upload your own Word, Markdown, or text framework. The runtime parses it on save and uses your prose as each section's brief.",
+      "upload": {
+        "title": "Upload a new template",
+        "name_label": "Template name",
+        "name_placeholder": "e.g. Stock Initiation v3",
+        "file_label": "Source document (.md / .docx / .txt)"
+      },
+      "review": {
+        "heading": "Review parsed template",
+        "preview_heading": "Document",
+        "preface_label": "Preface",
+        "doc_frontmatter_label": "Document frontmatter",
+        "sections_heading": "Sections ({{count}})",
+        "no_sections": "No headings found. Add at least one H1 or H2.",
+        "empty_brief": "(empty section body)",
+        "edit_markdown": "Edit source markdown",
+        "save": "Save template",
+        "discard": "Discard"
+      },
+      "list": {
+        "title": "Your templates",
+        "empty": "No custom templates yet.",
+        "section_count": "{{count}} sections"
+      }
     },
     "admin": {
       "title": "Admin",
