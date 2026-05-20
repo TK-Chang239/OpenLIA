@@ -78,6 +78,7 @@
       "timezone": "時區與記憶",
       "account": "帳號",
       "skills": "技能",
+      "report_templates": "報告模板",
       "admin": "管理",
       "disclaimer": "合規免責聲明",
       "guardrails": "風控紀錄"
@@ -165,6 +166,33 @@
       "title": "技能",
       "install_button": "安裝技能",
       "none_installed": "目前尚未安裝任何技能。"
+    },
+    "custom_templates": {
+      "title": "報告模板",
+      "subtitle": "上傳您自有的 Word、Markdown 或純文字框架。儲存時系統會解析章節邊界，並將原文作為各章節的撰寫指令。",
+      "upload": {
+        "title": "上傳新模板",
+        "name_label": "模板名稱",
+        "name_placeholder": "例：股票首次覆蓋 v3",
+        "file_label": "來源文件（.md / .docx / .txt）"
+      },
+      "review": {
+        "heading": "檢閱解析結果",
+        "preview_heading": "文件",
+        "preface_label": "前言",
+        "doc_frontmatter_label": "文件級設定",
+        "sections_heading": "章節（{{count}}）",
+        "no_sections": "未偵測到任何標題。請至少加入一個 H1 或 H2。",
+        "empty_brief": "（章節內容為空）",
+        "edit_markdown": "編輯原始 Markdown",
+        "save": "儲存模板",
+        "discard": "捨棄"
+      },
+      "list": {
+        "title": "您的模板",
+        "empty": "尚無自訂模板。",
+        "section_count": "共 {{count}} 章節"
+      }
     },
     "admin": {
       "title": "管理",
