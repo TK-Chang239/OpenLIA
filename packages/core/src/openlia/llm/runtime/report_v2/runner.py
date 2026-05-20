@@ -100,6 +100,10 @@ from openlia.llm.runtime.report_v2.sections.synthesis_hooks import (
     extract_hooks_from_section_result,
 )
 from openlia.llm.runtime.report_v2.telemetry import ReportTelemetry
+from openlia.llm.runtime.report_v2.validators import (
+    NumericValidationError,
+    validate_sections,
+)
 from openlia.reports.schema import ReportSchema
 
 BODY_SECTIONS_STOCK_INITIATION: tuple[str, ...] = (
@@ -309,6 +313,7 @@ class WavedReportRunner:
         material_events_override: bool = False,
         peer_set_override: bool = False,
         report_mode_override: ReportMode | None = None,
+        numeric_validation_override: bool = False,
     ) -> None:
         if report_type != "stock_initiation":
             raise ValueError("only stock_initiation supported in v1")
@@ -350,6 +355,10 @@ class WavedReportRunner:
         # auto-selector output. Useful for misclassified or freshly-relisted
         # names. Defaults to None -> auto-selection runs.
         self.report_mode_override: ReportMode | None = report_mode_override
+        # When True, hard numeric-validation failures are logged but the
+        # runner proceeds. Default False: any hard failure raises
+        # NumericValidationError.
+        self.numeric_validation_override = numeric_validation_override
         self.telemetry = ReportTelemetry()
 
     async def _emit(self, event: Any) -> None:
@@ -668,6 +677,39 @@ class WavedReportRunner:
                         check=finding.check,
                         sections=finding.section_id,
                         detail=finding.detail,
+                    )
+
+            # WS4 / P7: numeric reconciliation validator. Runs after all
+            # sections are written and parsed. Hard failures (identity
+            # equations, arithmetic disagreements, first-person voice,
+            # tombstone phrases, year-label mismatches) raise
+            # NumericValidationError unless `numeric_validation_override` is
+            # set. Soft failures (numeric_not_in_facts,
+            # missing_data_as_of) are surfaced via telemetry only.
+            section_files: dict[str, str] = {
+                r.section_id: r.markdown
+                for r in (*body_results, *synth_results)
+                if r.markdown is not None
+            }
+            numeric_report = validate_sections(
+                section_files=section_files,
+                facts=pack.facts,
+            )
+            for f in numeric_report.failures:
+                self.telemetry.record_cross_section_finding(
+                    check=f"numeric_consistency.{f.failure_type}",
+                    sections=f.section_id,
+                    detail=f.detail,
+                )
+            if numeric_report.hard_failures and not self.numeric_validation_override:
+                raise NumericValidationError(numeric_report.hard_failures)
+            if numeric_report.hard_failures:
+                for f in numeric_report.hard_failures:
+                    print(
+                        f"[runner] WARN numeric validation {f.failure_type!r} "
+                        f"in section {f.section_id!r}: {f.detail} — proceeding "
+                        f"due to numeric_validation_override=True",
+                        flush=True,
                     )
 
             # W6: assemble final report
