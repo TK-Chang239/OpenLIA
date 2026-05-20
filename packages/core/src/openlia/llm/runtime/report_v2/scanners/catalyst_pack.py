@@ -461,3 +461,57 @@ def catalyst_event_to_dict(event: CatalystEvent) -> dict[str, Any]:
         "source_url": event.source_url,
         "relevance_score": event.relevance_score,
     }
+
+
+def catalysts_by_horizon(
+    catalysts: list[CatalystEvent] | list[dict],
+    *,
+    as_of: date | None = None,
+) -> dict[str, list]:
+    """Bucket catalyst events by their time horizon relative to `as_of`.
+
+    Buckets:
+      - `3m`     — events in the next 0-90 days (or undated)
+      - `3-12m`  — events 90-365 days out
+      - `1-3y`   — events 1-3 years out
+      - `past`   — events with a date in the past
+
+    Accepts either `CatalystEvent` dataclasses or already-serialised dicts.
+    Events without a date land in `3m` (the default short-horizon bucket) so
+    template prose can still pick them up.
+    """
+    today = as_of or date.today()
+    buckets: dict[str, list] = {"3m": [], "3-12m": [], "1-3y": [], "past": []}
+    for event in catalysts:
+        event_date = (
+            event.event_date if isinstance(event, CatalystEvent) else _date_from_dict(event)
+        )
+        if event_date is None:
+            buckets["3m"].append(event)
+            continue
+        delta_days = (event_date - today).days
+        if delta_days < 0:
+            buckets["past"].append(event)
+        elif delta_days <= 90:
+            buckets["3m"].append(event)
+        elif delta_days <= 365:
+            buckets["3-12m"].append(event)
+        elif delta_days <= 3 * 365:
+            buckets["1-3y"].append(event)
+        else:
+            buckets["past"].append(event)  # >3 years out: not actionable
+    return buckets
+
+
+def _date_from_dict(event: dict) -> date | None:
+    raw = event.get("event_date")
+    if raw is None:
+        return None
+    if isinstance(raw, date):
+        return raw
+    if isinstance(raw, str):
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return None
+    return None

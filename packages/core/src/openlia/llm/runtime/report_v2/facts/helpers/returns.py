@@ -43,6 +43,36 @@ def fcf_margin(fcf_ttm: float, revenue_ttm: float) -> float:
     return fcf_ttm / revenue_ttm
 
 
+def dupont_decomposition(
+    net_income: float,
+    revenue: float,
+    total_assets: float,
+    equity: float,
+    tolerance_pct: float = 1.0,
+) -> dict:
+    """DuPont decomposition: ROE = net_margin * asset_turnover * equity_multiplier.
+
+    Returns the three components plus a reconciliation check that their
+    product equals direct ROE (net_income / equity) within `tolerance_pct`.
+    """
+    if revenue == 0 or total_assets == 0 or equity == 0:
+        raise ValueError("revenue, total_assets, and equity must be non-zero")
+    net_margin = net_income / revenue
+    asset_turnover = revenue / total_assets
+    equity_multiplier = total_assets / equity
+    computed_roe = net_margin * asset_turnover * equity_multiplier
+    direct_roe = net_income / equity
+    reconciles = abs(computed_roe - direct_roe) <= abs(direct_roe) * (tolerance_pct / 100.0)
+    return {
+        "net_margin": net_margin,
+        "asset_turnover": asset_turnover,
+        "equity_multiplier": equity_multiplier,
+        "computed_roe": computed_roe,
+        "direct_roe": direct_roe,
+        "reconciles": reconciles,
+    }
+
+
 def margin_bridge(
     prior_margins: dict[str, float], current_margins: dict[str, float]
 ) -> dict[str, dict[str, float]]:
