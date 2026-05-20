@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 export interface ToastEntry {
   readonly id: string;
@@ -91,12 +92,13 @@ export function useToast(): ToastContextValue {
 }
 
 function ToastContainer(): JSX.Element {
+  const { t } = useTranslation();
   const ctx = useContext(ToastContext);
   if (!ctx) return <></>;
   return (
     <div
       role="region"
-      aria-label="Notifications"
+      aria-label={t("primitives.aria_notifications")}
       className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
       data-testid="toast-region"
     >

@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next';
+
 import type { Rail, Sparkline as SparklineData } from '../../api/reports';
 
 const W = 280;
@@ -10,6 +12,7 @@ function formatY(v: number): string {
 }
 
 function Sparkline({ data, gradientId }: { data: SparklineData; gradientId: string }) {
+  const { t } = useTranslation();
   const { points, label } = data;
   if (points.length < 2) return null;
   const xs = points.map((p) => p.x);
@@ -63,8 +66,8 @@ function Sparkline({ data, gradientId }: { data: SparklineData; gradientId: stri
         />
       </svg>
       <div className="report-rail__sparkline-foot">
-        <span>LO {formatY(yMin)}</span>
-        <span>HI {formatY(yMax)}</span>
+        <span>{t('report.lo')} {formatY(yMin)}</span>
+        <span>{t('report.hi')} {formatY(yMax)}</span>
       </div>
     </div>
   );
@@ -76,16 +79,17 @@ export interface RailPanelProps {
 }
 
 export function RailPanel({ rail, related }: RailPanelProps) {
+  const { t } = useTranslation();
   const verdict = rail.verdict;
   return (
     <div className="report-rail">
       {verdict ? (
         <section className="report-rail__card report-rail__verdict">
-          <div className="report-rail__card-label">Lia's Call</div>
+          <div className="report-rail__card-label">{t('report.lias_call')}</div>
           <div className="report-rail__verdict-row">
             <span className="report-rail__rating">{verdict.rating}</span>
             {verdict.previous_rating ? (
-              <span className="report-rail__previous">prev. {verdict.previous_rating}</span>
+              <span className="report-rail__previous">{t('report.previous_rating_prefix')} {verdict.previous_rating}</span>
             ) : null}
           </div>
           {verdict.target ? (
@@ -101,7 +105,7 @@ export function RailPanel({ rail, related }: RailPanelProps) {
 
       {rail.quick_stats && rail.quick_stats.length > 0 ? (
         <section className="report-rail__card report-rail__stats">
-          <div className="report-rail__card-label">Quick Stats</div>
+          <div className="report-rail__card-label">{t('report.quick_stats')}</div>
           <dl>
             {rail.quick_stats.map((m) => (
               <div key={m.label} className="report-rail__stat-row">
@@ -122,7 +126,7 @@ export function RailPanel({ rail, related }: RailPanelProps) {
 
       {related && related.length > 0 ? (
         <section className="report-rail__card report-rail__related">
-          <div className="report-rail__card-label">Related</div>
+          <div className="report-rail__card-label">{t('report.related')}</div>
           <ul>
             {related.map((r) => (
               <li key={r.href}>

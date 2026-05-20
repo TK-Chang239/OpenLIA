@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { LiaBadge } from "./LiaBadge";
 
 interface Props {
@@ -6,6 +7,7 @@ interface Props {
 }
 
 export function ErrorMessage({ message, onRetry }: Props): JSX.Element {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-3">
       <LiaBadge />
@@ -17,7 +19,7 @@ export function ErrorMessage({ message, onRetry }: Props): JSX.Element {
             onClick={onRetry}
             className="ml-1 text-[--color-accent-primary] hover:underline"
           >
-            Try again
+            {t("chat.try_again")}
           </button>
         ) : null}
       </div>

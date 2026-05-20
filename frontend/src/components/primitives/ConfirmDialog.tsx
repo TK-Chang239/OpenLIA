@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 
 interface Props {
   open: boolean;
@@ -21,12 +22,15 @@ export function ConfirmDialog({
   open,
   title,
   description,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   onConfirm,
   onCancel,
 }: Props): JSX.Element | null {
+  const { t } = useTranslation();
+  const resolvedConfirm = confirmLabel ?? t("common.confirm");
+  const resolvedCancel = cancelLabel ?? t("common.cancel");
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -110,7 +114,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             className="rounded-md border border-[--color-border-subtle] px-3 py-1.5 text-sm text-[--color-text-secondary] hover:bg-[--color-surface-hover]"
           >
-            {cancelLabel}
+            {resolvedCancel}
           </button>
           <button
             ref={confirmRef}
@@ -118,7 +122,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             className={`rounded-md px-3 py-1.5 text-sm text-white ${destructive ? "bg-[--color-feedback-error] hover:opacity-90" : "bg-[--color-accent-primary] hover:opacity-90"}`}
           >
-            {confirmLabel}
+            {resolvedConfirm}
           </button>
         </div>
       </div>

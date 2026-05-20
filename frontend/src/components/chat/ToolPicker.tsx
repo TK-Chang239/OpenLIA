@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
+import { useTranslation } from "react-i18next";
 
 import { listConnectors, type ConnectorRow } from "../../api/connectors";
 import { listSkills, type SkillSummary } from "../../api/skills";
@@ -34,6 +35,7 @@ export function ToolPicker({
   initialDisabledSkillIds,
   onChange,
 }: Props): JSX.Element | null {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [connectors, setConnectors] = useState<ConnectorRow[] | null>(null);
   const [skills, setSkills] = useState<SkillSummary[] | null>(null);
@@ -144,15 +146,15 @@ export function ToolPicker({
         onClick={() => setOpen((v) => !v)}
         className="text-xs px-2 py-1 rounded border border-zinc-300 hover:bg-zinc-50"
         aria-expanded={open}
-        aria-label="Tool toggles"
+        aria-label={t("chat.aria_tool_toggles")}
       >
-        Tools ({totalEnabled}/{totalUnits})
+        {t("chat.tools_count", { enabled: totalEnabled, total: totalUnits })}
       </button>
       {open ? (
         <div className="absolute bottom-full mb-1 left-0 z-20 w-72 max-h-96 overflow-y-auto rounded border border-zinc-300 bg-white shadow-lg">
           <ToolSection
-            label="Connectors"
-            empty="No connectors installed."
+            label={t("chat.section_connectors")}
+            empty={t("chat.no_connectors_installed")}
             rows={connectors.map((c) => ({
               id: c.id,
               label: c.display_name || c.provider_id,
@@ -161,8 +163,8 @@ export function ToolPicker({
             onToggle={toggleConnector}
           />
           <ToolSection
-            label="Skills"
-            empty="No skills installed."
+            label={t("chat.section_skills")}
+            empty={t("chat.no_skills_installed")}
             rows={skills.map((s) => ({
               id: s.skill_id,
               label: s.display_name || s.skill_id,
@@ -172,7 +174,7 @@ export function ToolPicker({
           />
           {allConnectorsOff ? (
             <div className="px-3 py-2 text-xs text-amber-700 bg-amber-50 border-t border-amber-200">
-              No connectors enabled — Lia will answer without live data.
+              {t("chat.no_connectors_enabled_hint")}
             </div>
           ) : null}
         </div>
