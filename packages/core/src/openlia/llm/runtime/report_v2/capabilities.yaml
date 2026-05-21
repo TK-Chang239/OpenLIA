@@ -1,0 +1,103 @@
+engine_version: "2.2"
+dev_mode: true
+
+supported:
+  - id: conditional_sections
+    summary: "Sections with trigger_when skip based on LLM evaluation"
+  - id: composer_inputs
+    summary: "Templates declare typed input fields"
+  - id: research_strands
+    summary: "Planner declares N research strands gathered via connected tools"
+  - id: model_components
+    summary: "Planner declares model components built post-gather"
+  - id: section_drafters
+    summary: "Per-section drafter subagents produce typed blocks"
+  - id: verifier_retry
+    summary: "Up to 3 targeted retries per section with verifier feedback"
+  - id: vendored_library_helpers
+    summary: "DCF, ratios, forecasts, budget variance, business investment, SaaS metrics"
+  - id: html_output
+    summary: "Reports render to HTML; download button converts to PDF/DOCX"
+  - id: persistent_cache
+    summary: "Transcripts and investor-day data cached across runs"
+
+unsupported:
+  - id: extra_passes
+    summary: "Additional LLM review/check passes beyond the standard pipeline"
+    detect_in_prompt:
+      - "extra LLM check"
+      - "review pass"
+      - "second opinion"
+      - "devil's advocate"
+      - "have another LLM verify"
+    detect_in_template_keys:
+      - extra_passes
+      - extra_calls
+      - reviewer_passes
+      - check_passes
+    planned_in: "2.3"
+    user_message: |
+      Extra LLM review/check passes are not supported in this version.
+      Proceeding with the standard pipeline. Planned for v2.3.
+
+  - id: review_loops
+    summary: "Reviewer-reviser loops with iterative refinement"
+    detect_in_prompt:
+      - "iterate until"
+      - "loop until"
+      - "round of revisions"
+      - "refine N times"
+    detect_in_template_keys:
+      - loops
+      - review_loops
+    planned_in: "2.3"
+    user_message: |
+      Iterative review loops are not supported in this version.
+      Proceeding with single-pass verification.
+
+  - id: custom_subagents
+    summary: "User-defined subagents beyond the standard research strands"
+    detect_in_prompt:
+      - "my own subagent"
+      - "custom agent for"
+    detect_in_template_keys:
+      - custom_subagents
+    planned_in: "2.3"
+    user_message: |
+      Custom subagents are not supported in this version.
+
+  - id: advanced_quant_categories
+    summary: "VaR, Sharpe, portfolio optimization, Monte Carlo, PDF sentiment"
+    detect_in_prompt:
+      - "VaR"
+      - "Sharpe"
+      - "Monte Carlo"
+      - "portfolio optimization"
+      - "factor exposure"
+      - "sentiment from PDFs"
+    detect_in_template_keys: []
+    planned_in: null
+    user_message: |
+      Advanced quant calculations are not yet available.
+      Available now: DCF, ratio analysis, forecasting, budget variance,
+      business investment, SaaS metrics.
+
+known_template_keys:
+  - template_id
+  - template_name
+  - department
+  - report_type
+  - engine_version_compat
+  - composer_inputs
+  - required_artifacts
+  - output_artifacts
+  - sections
+  - verifier_severity_overrides
+
+cache:
+  enabled: true
+  transcripts:
+    enabled: true
+  investor_day:
+    enabled: true
+  default_force_refresh: false
