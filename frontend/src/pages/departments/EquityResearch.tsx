@@ -16,6 +16,10 @@ import {
   listMessages,
   patchSession,
 } from "../../api/chat";
+import {
+  type CapabilityManifest,
+  fetchCapabilities,
+} from "../../api/capabilities";
 import { saveReportToRepo, unsaveFromRepo } from "../../api/repo";
 import {
   deleteReport,
@@ -32,6 +36,8 @@ import { ToolCallChip } from "../../components/chat/ToolCallChip";
 import { ToolPicker } from "../../components/chat/ToolPicker";
 import { UserBubble } from "../../components/chat/UserBubble";
 import { useChatStream } from "../../components/chat/useChatStream";
+import { CapabilitySidebar } from "../../components/equity-research/CapabilitySidebar/CapabilitySidebar";
+import { ClarifierModal } from "../../components/equity-research/ClarifierModal/ClarifierModal";
 import { ErComposer } from "../../components/equity-research/ErComposer";
 import { FrameworkTemplatePicker } from "../../components/equity-research/FrameworkTemplatePicker";
 import { ReportCard } from "../../components/equity-research/ReportCard";
@@ -42,6 +48,7 @@ import {
   useReportStream,
   useReportStreamAttach,
 } from "../../components/report/useReportStream";
+import { useV2ReportStream } from "../../components/report/useV2ReportStream";
 import { useFileViewer } from "../../components/viewer/FileViewerContext";
 import { useToast } from "../../components/primitives/Toast";
 import { useAuth } from "../../auth/AuthContext";
@@ -61,6 +68,7 @@ interface PersistedToolCall {
 
 const DISABLED_CONNECTORS_LS_KEY = "equity-research:disabled-connector-ids";
 const DISABLED_SKILLS_LS_KEY = "equity-research:disabled-skill-ids";
+const ENGINE_V2_LS_KEY = "equity-research:engine-v2-enabled";
 
 function readLocalStorageIds(key: string): string[] {
   if (typeof window === "undefined") return [];
@@ -167,6 +175,48 @@ export default function EquityResearch(): JSX.Element {
   const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>(
     () => readLocalStorageIds(DISABLED_SKILLS_LS_KEY),
   );
+  // Force cache refresh: when true, the next report dispatch bypasses
+  // the cached document store. Ephemeral (one-shot per run); the
+  // ReportSettingsModal surfaces the toggle.
+  const [forceCacheRefresh, setForceCacheRefresh] = useState(false);
+  const [capabilityManifest, setCapabilityManifest] =
+    useState<CapabilityManifest | null>(null);
+  const [engineV2Enabled, setEngineV2EnabledState] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(ENGINE_V2_LS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setEngineV2Enabled = useCallback((next: boolean) => {
+    setEngineV2EnabledState(next);
+    try {
+      if (next) window.localStorage.setItem(ENGINE_V2_LS_KEY, "1");
+      else window.localStorage.removeItem(ENGINE_V2_LS_KEY);
+    } catch {
+      // localStorage may be disabled; no-op.
+    }
+  }, []);
+
+  const v2Stream = useV2ReportStream();
+
+  // Lazy-load the v2.2 capability manifest the first time the welcome
+  // view shows. Network failures degrade silently — the sidebar simply
+  // stays hidden.
+  useEffect(() => {
+    if (sessionId || capabilityManifest) return;
+    let cancelled = false;
+    void fetchCapabilities()
+      .then((m) => {
+        if (!cancelled) setCapabilityManifest(m);
+      })
+      .catch(() => {
+        // Endpoint may not exist on older deployments; stay quiet.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, capabilityManifest]);
 
   // Mirror toggle state to localStorage so it survives a page refresh.
   // The server-side session row remains the source of truth once a
@@ -467,18 +517,37 @@ export default function EquityResearch(): JSX.Element {
             // Patch failure falls back to "all on" for this run.
           }
         }
-        startReport({
-          url: "/api/departments/equity-research/report",
-          body: {
-            mode: config.report_mode,
-            user_input: trimmed,
-            session_id: row.id,
-            ...(frameworkTemplateId
-              ? { report_template_id: frameworkTemplateId }
-              : {}),
-          },
-          attachments,
-        });
+        if (engineV2Enabled && frameworkTemplateId) {
+          // v2.2 engine path: POST to the v2 SSE endpoint. ClarifierModal
+          // renders when the run pauses on blocking warnings.
+          v2Stream.start({
+            url: "/api/departments/equity-research/v2/report",
+            body: {
+              user_input: trimmed,
+              session_id: row.id,
+              report_template_id: frameworkTemplateId,
+              composer_inputs: {
+                ...(forceCacheRefresh ? { force_cache_refresh: true } : {}),
+              },
+            },
+          });
+        } else {
+          startReport({
+            url: "/api/departments/equity-research/report",
+            body: {
+              mode: config.report_mode,
+              user_input: trimmed,
+              session_id: row.id,
+              ...(frameworkTemplateId
+                ? { report_template_id: frameworkTemplateId }
+                : {}),
+              ...(forceCacheRefresh ? { force_cache_refresh: true } : {}),
+            },
+            attachments,
+          });
+        }
+        // One-shot flag: re-arm on each dispatch.
+        if (forceCacheRefresh) setForceCacheRefresh(false);
       } catch (err) {
         setStartError(err instanceof Error ? err.message : t("equity_research.research_start_failed"));
       }
@@ -490,6 +559,9 @@ export default function EquityResearch(): JSX.Element {
       disabledConnectorIds,
       disabledSkillIds,
       frameworkTemplateId,
+      forceCacheRefresh,
+      engineV2Enabled,
+      v2Stream,
       t,
     ],
   );
@@ -794,6 +866,19 @@ export default function EquityResearch(): JSX.Element {
             selectedId={frameworkTemplateId}
             onChange={setFrameworkTemplateId}
           />
+          {capabilityManifest ? (
+            <details
+              data-testid="er-capability-manifest"
+              className="mt-3 rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-4 py-2 text-xs"
+            >
+              <summary className="cursor-pointer select-none text-[--color-text-tertiary] hover:text-[--color-text-primary]">
+                Engine v{capabilityManifest.engine_version} — show capabilities
+              </summary>
+              <div className="mt-3">
+                <CapabilitySidebar manifest={capabilityManifest} />
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : null}
 
@@ -825,11 +910,37 @@ export default function EquityResearch(): JSX.Element {
       <ReportSettingsModal
         open={settingsOpen}
         config={config}
+        forceCacheRefresh={forceCacheRefresh}
+        onForceCacheRefreshChange={setForceCacheRefresh}
+        engineV2Enabled={engineV2Enabled}
+        onEngineV2EnabledChange={setEngineV2Enabled}
         onClose={() => setSettingsOpen(false)}
         onSave={async (p) => {
           await patch(p);
         }}
       />
+
+      {v2Stream.state.status === "paused" && v2Stream.state.pausedOutput &&
+       v2Stream.state.runId ? (
+        <ClarifierModal
+          output={v2Stream.state.pausedOutput}
+          round={v2Stream.state.pausedRound ?? 1}
+          onSubmit={(answers) => {
+            v2Stream.resume({
+              runId: v2Stream.state.runId!,
+              answers: {
+                warning_actions: answers.warningActions,
+                clarifications: answers.clarifications,
+                question_answers: answers.questionAnswers,
+              },
+            });
+          }}
+          onCancel={() => {
+            v2Stream.stop();
+            v2Stream.reset();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

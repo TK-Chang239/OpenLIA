@@ -38,6 +38,16 @@ interface Props {
   config: ErConfig;
   onClose: () => void;
   onSave: (patch: ErConfigPatch) => Promise<void>;
+  // Optional ephemeral toggle (v2.2 engine): bypass cached documents
+  // on the next report dispatch. Caller owns the state; absent props
+  // hide the section entirely so older callers stay unaffected.
+  forceCacheRefresh?: boolean;
+  onForceCacheRefreshChange?: (next: boolean) => void;
+  // Feature-flag: routes the next report through the v2.2 pipeline
+  // (Clarifier → ResearchPlan → … → assemble). Absent props hide the
+  // section so older callers stay unaffected.
+  engineV2Enabled?: boolean;
+  onEngineV2EnabledChange?: (next: boolean) => void;
 }
 
 interface SegmentedProps<T extends string> {
@@ -88,6 +98,10 @@ export function ReportSettingsModal({
   config,
   onClose,
   onSave,
+  forceCacheRefresh,
+  onForceCacheRefreshChange,
+  engineV2Enabled,
+  onEngineV2EnabledChange,
 }: Props): JSX.Element {
   const { t } = useTranslation();
   const [mode, setMode] = useState<ReportMode>(config.report_mode);
@@ -418,6 +432,55 @@ export function ReportSettingsModal({
               </ul>
             </section>
           </div>
+
+          {onForceCacheRefreshChange ? (
+            <section className="border-t border-[--color-border-subtle] px-[22px] py-[16px]">
+              <label
+                className="flex cursor-pointer items-start gap-3"
+                data-testid="er-force-cache-refresh"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!forceCacheRefresh}
+                  onChange={(e) =>
+                    onForceCacheRefreshChange(e.target.checked)
+                  }
+                  className="mt-[3px] h-4 w-4 cursor-pointer accent-[--color-accent-primary]"
+                />
+                <span className="flex flex-col gap-1 text-[13.5px] text-[--color-text-primary]">
+                  Force cache refresh
+                  <span className="text-[12px] text-[--color-text-secondary]">
+                    Bypass cached transcripts and investor-day documents on
+                    the next report. One-shot — re-arms after each run.
+                  </span>
+                </span>
+              </label>
+            </section>
+          ) : null}
+
+          {onEngineV2EnabledChange ? (
+            <section className="border-t border-[--color-border-subtle] px-[22px] py-[16px]">
+              <label
+                className="flex cursor-pointer items-start gap-3"
+                data-testid="er-engine-v2"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!engineV2Enabled}
+                  onChange={(e) => onEngineV2EnabledChange(e.target.checked)}
+                  className="mt-[3px] h-4 w-4 cursor-pointer accent-[--color-accent-primary]"
+                />
+                <span className="flex flex-col gap-1 text-[13.5px] text-[--color-text-primary]">
+                  v2.2 engine (preview)
+                  <span className="text-[12px] text-[--color-text-secondary]">
+                    Route the next report through the new pipeline with
+                    capability-checked Clarifier, per-section verifier, and
+                    run summary. Requires a v2.2 template selected above.
+                  </span>
+                </span>
+              </label>
+            </section>
+          ) : null}
 
           <div className="flex justify-end gap-2 rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[14px]">
             <button

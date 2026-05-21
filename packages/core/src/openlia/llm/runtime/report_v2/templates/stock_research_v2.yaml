@@ -1,0 +1,52 @@
+template_id: stock_research_v2
+template_name: "Stock Research (v2)"
+department: equity_research
+report_type: equity_research
+engine_version_compat: "2.2"
+
+composer_inputs:
+  - name: ticker
+    type: ticker
+    label: Ticker
+    required: true
+
+required_artifacts: []
+
+sections:
+  - id: thesis
+    name: "Investment Thesis"
+    directive: >
+      Summarize the investment thesis: bull case, bear case, and key
+      catalysts. Attribute all buy/hold/sell language to cited sources.
+      Never use first-person advocacy.
+
+  - id: recent_developments
+    name: "Recent Developments"
+    directive: >
+      Cover the most material news, earnings results, management commentary,
+      and analyst actions from the last twelve months. Use a timeline when
+      three or more dated events are available.
+    depends_on: [thesis]
+
+  - id: financials
+    name: "Financial Snapshot"
+    directive: >
+      Cover revenue trajectory, margin trends, and balance-sheet health.
+      Show key KPIs (revenue, gross margin, operating margin, FCF) with
+      year-over-year comparisons.
+    depends_on: [thesis]
+
+  - id: valuation
+    name: "Valuation"
+    directive: >
+      Provide a valuation perspective using multiples and peer comparables.
+      Show the methodology's output and let the reader compare it to
+      analyst consensus. Do not author a single price target.
+    depends_on: [financials]
+
+  - id: risks
+    name: "Key Risks"
+    directive: >
+      Identify the primary risks (market, regulatory, execution, financial).
+      Distinguish between controlled and uncontrolled risks where possible.
+    depends_on: [thesis]
