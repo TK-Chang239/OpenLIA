@@ -21,7 +21,8 @@ class HelperSchema(BaseModel):
 
 
 class HelperRegistration(BaseModel):
-    schema: HelperSchema
+    # Renamed from `schema` to avoid shadowing pydantic.BaseModel.schema().
+    helper_schema: HelperSchema
     execute: Callable[..., Any] = Field(exclude=True)
     available: bool = True
     deferred_category: str | None = None
@@ -33,7 +34,7 @@ _helpers: dict[str, HelperRegistration] = {}
 
 
 def register_helper(reg: HelperRegistration) -> None:
-    name = reg.schema.name
+    name = reg.helper_schema.name
     if name in _helpers:
         raise ValueError(f"helper {name!r} already registered")
     _helpers[name] = reg
@@ -47,7 +48,7 @@ def register_library_helper(
 ) -> None:
     register_helper(
         HelperRegistration(
-            schema=schema,
+            helper_schema=schema,
             execute=fn,
             available=(deferred_category is None),
             deferred_category=deferred_category,

@@ -36,7 +36,7 @@ def _make_dcf_helper() -> None:
     )
     register_helper(
         HelperRegistration(
-            schema=schema,
+            helper_schema=schema,
             execute=lambda **kw: {"npv": 100},
             available=True,
         )
