@@ -79,6 +79,7 @@
       "account": "Account",
       "skills": "Skills",
       "report_templates": "Report templates",
+      "cache": "Cache",
       "admin": "Admin",
       "disclaimer": "Compliance disclaimer",
       "guardrails": "Guardrail activity"

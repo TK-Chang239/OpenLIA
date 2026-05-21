@@ -9,6 +9,7 @@ import { DisclaimerSection } from '../components/settings/sections/DisclaimerSec
 import { GuardrailActivitySection } from '../components/settings/sections/GuardrailActivitySection';
 import { SkillsSection } from '../components/settings/sections/SkillsSection';
 import { CustomTemplatesSection } from '../components/settings/sections/CustomTemplatesSection';
+import { CacheAdmin } from '../components/equity-research/CacheAdmin/CacheAdmin';
 import { AdminSkillsSection } from '../components/settings/sections/AdminSkillsSection';
 import { InvitesPanel } from '../components/settings/admin/InvitesPanel';
 import { UsersPanel } from '../components/settings/admin/UsersPanel';
@@ -44,6 +45,7 @@ export function SettingsPage(): JSX.Element {
         <Route path="guardrails" element={<GuardrailActivitySection mode={mode} />} />
         <Route path="skills" element={<SkillsSection />} />
         <Route path="report-templates" element={<CustomTemplatesSection />} />
+        <Route path="cache" element={<CacheAdmin />} />
         {isAdmin ? (
           <Route path="admin" element={<AdminSection />}>
             <Route index element={<Navigate to="invites" replace />} />

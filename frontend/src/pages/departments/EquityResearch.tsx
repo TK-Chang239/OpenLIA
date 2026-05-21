@@ -16,6 +16,10 @@ import {
   listMessages,
   patchSession,
 } from "../../api/chat";
+import {
+  type CapabilityManifest,
+  fetchCapabilities,
+} from "../../api/capabilities";
 import { saveReportToRepo, unsaveFromRepo } from "../../api/repo";
 import {
   deleteReport,
@@ -32,6 +36,7 @@ import { ToolCallChip } from "../../components/chat/ToolCallChip";
 import { ToolPicker } from "../../components/chat/ToolPicker";
 import { UserBubble } from "../../components/chat/UserBubble";
 import { useChatStream } from "../../components/chat/useChatStream";
+import { CapabilitySidebar } from "../../components/equity-research/CapabilitySidebar/CapabilitySidebar";
 import { ErComposer } from "../../components/equity-research/ErComposer";
 import { FrameworkTemplatePicker } from "../../components/equity-research/FrameworkTemplatePicker";
 import { ReportCard } from "../../components/equity-research/ReportCard";
@@ -167,6 +172,30 @@ export default function EquityResearch(): JSX.Element {
   const [disabledSkillIds, setDisabledSkillIds] = useState<string[]>(
     () => readLocalStorageIds(DISABLED_SKILLS_LS_KEY),
   );
+  // Force cache refresh: when true, the next report dispatch bypasses
+  // the cached document store. Ephemeral (one-shot per run); the
+  // ReportSettingsModal surfaces the toggle.
+  const [forceCacheRefresh, setForceCacheRefresh] = useState(false);
+  const [capabilityManifest, setCapabilityManifest] =
+    useState<CapabilityManifest | null>(null);
+
+  // Lazy-load the v2.2 capability manifest the first time the welcome
+  // view shows. Network failures degrade silently — the sidebar simply
+  // stays hidden.
+  useEffect(() => {
+    if (sessionId || capabilityManifest) return;
+    let cancelled = false;
+    void fetchCapabilities()
+      .then((m) => {
+        if (!cancelled) setCapabilityManifest(m);
+      })
+      .catch(() => {
+        // Endpoint may not exist on older deployments; stay quiet.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, capabilityManifest]);
 
   // Mirror toggle state to localStorage so it survives a page refresh.
   // The server-side session row remains the source of truth once a
@@ -476,9 +505,12 @@ export default function EquityResearch(): JSX.Element {
             ...(frameworkTemplateId
               ? { report_template_id: frameworkTemplateId }
               : {}),
+            ...(forceCacheRefresh ? { force_cache_refresh: true } : {}),
           },
           attachments,
         });
+        // One-shot flag: re-arm on each dispatch.
+        if (forceCacheRefresh) setForceCacheRefresh(false);
       } catch (err) {
         setStartError(err instanceof Error ? err.message : t("equity_research.research_start_failed"));
       }
@@ -490,6 +522,7 @@ export default function EquityResearch(): JSX.Element {
       disabledConnectorIds,
       disabledSkillIds,
       frameworkTemplateId,
+      forceCacheRefresh,
       t,
     ],
   );
@@ -794,6 +827,19 @@ export default function EquityResearch(): JSX.Element {
             selectedId={frameworkTemplateId}
             onChange={setFrameworkTemplateId}
           />
+          {capabilityManifest ? (
+            <details
+              data-testid="er-capability-manifest"
+              className="mt-3 rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-4 py-2 text-xs"
+            >
+              <summary className="cursor-pointer select-none text-[--color-text-tertiary] hover:text-[--color-text-primary]">
+                Engine v{capabilityManifest.engine_version} — show capabilities
+              </summary>
+              <div className="mt-3">
+                <CapabilitySidebar manifest={capabilityManifest} />
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : null}
 
@@ -825,6 +871,8 @@ export default function EquityResearch(): JSX.Element {
       <ReportSettingsModal
         open={settingsOpen}
         config={config}
+        forceCacheRefresh={forceCacheRefresh}
+        onForceCacheRefreshChange={setForceCacheRefresh}
         onClose={() => setSettingsOpen(false)}
         onSave={async (p) => {
           await patch(p);

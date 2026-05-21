@@ -38,6 +38,11 @@ interface Props {
   config: ErConfig;
   onClose: () => void;
   onSave: (patch: ErConfigPatch) => Promise<void>;
+  // Optional ephemeral toggle (v2.2 engine): bypass cached documents
+  // on the next report dispatch. Caller owns the state; absent props
+  // hide the section entirely so older callers stay unaffected.
+  forceCacheRefresh?: boolean;
+  onForceCacheRefreshChange?: (next: boolean) => void;
 }
 
 interface SegmentedProps<T extends string> {
@@ -88,6 +93,8 @@ export function ReportSettingsModal({
   config,
   onClose,
   onSave,
+  forceCacheRefresh,
+  onForceCacheRefreshChange,
 }: Props): JSX.Element {
   const { t } = useTranslation();
   const [mode, setMode] = useState<ReportMode>(config.report_mode);
@@ -418,6 +425,31 @@ export function ReportSettingsModal({
               </ul>
             </section>
           </div>
+
+          {onForceCacheRefreshChange ? (
+            <section className="border-t border-[--color-border-subtle] px-[22px] py-[16px]">
+              <label
+                className="flex cursor-pointer items-start gap-3"
+                data-testid="er-force-cache-refresh"
+              >
+                <input
+                  type="checkbox"
+                  checked={!!forceCacheRefresh}
+                  onChange={(e) =>
+                    onForceCacheRefreshChange(e.target.checked)
+                  }
+                  className="mt-[3px] h-4 w-4 cursor-pointer accent-[--color-accent-primary]"
+                />
+                <span className="flex flex-col gap-1 text-[13.5px] text-[--color-text-primary]">
+                  Force cache refresh
+                  <span className="text-[12px] text-[--color-text-secondary]">
+                    Bypass cached transcripts and investor-day documents on
+                    the next report. One-shot — re-arms after each run.
+                  </span>
+                </span>
+              </label>
+            </section>
+          ) : null}
 
           <div className="flex justify-end gap-2 rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[14px]">
             <button
