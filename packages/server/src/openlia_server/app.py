@@ -57,6 +57,9 @@ from openlia_server.routes.departments.earnings_update import (
 from openlia_server.routes.departments.equity_research import (
     build_equity_research_router,
 )
+from openlia_server.routes.departments.equity_research_v2 import (
+    build_equity_research_v2_router,
+)
 from openlia_server.routes.departments.macro_research import (
     build_macro_research_router,
 )
@@ -683,6 +686,9 @@ def create_app(
 
     app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
+    app.include_router(
+        build_equity_research_v2_router(db_session_factory=factory, mode=mode)
+    )
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
