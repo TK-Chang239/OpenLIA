@@ -19,6 +19,7 @@ const ITEMS: NavItem[] = [
   { to: '/settings/guardrails', labelKey: 'settings.tabs.guardrails' },
   { to: '/settings/skills', labelKey: 'settings.tabs.skills' },
   { to: '/settings/report-templates', labelKey: 'settings.tabs.report_templates' },
+  { to: '/settings/cache', labelKey: 'settings.tabs.cache' },
   { to: '/settings/admin', labelKey: 'settings.tabs.admin', adminOnly: true },
 ];
 
