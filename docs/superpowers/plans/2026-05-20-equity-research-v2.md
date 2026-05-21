@@ -1,5 +1,7 @@
 # Equity Research v2 Implementation Plan
 
+> **SUPERSEDED.** This plan has been superseded by [Equity Research v2.2 Implementation Plan](2026-05-21-equity-research-v2.2.md), dated 2026-05-21. PR boundaries, ordering, and several entire PRs have changed in v2.2 (capability manifest, blocking clarifier, run summary, verification history, persistent cache added; native docx removed; pipeline split via two-stage planning). Retained here for historical reference. **Do not implement from this version.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Reshape the equity research department around (a) an eight-stage LLM-orchestrated pipeline (clarify → read template → plan → gather → model → draft → verify → assemble), (b) a composer that accepts a template-declared input schema plus a free-form prompt, and (c) the collapse of `stock_research` / `stock_initiation` / `sector_research` modes into ordinary `TemplateSpec` entries.
