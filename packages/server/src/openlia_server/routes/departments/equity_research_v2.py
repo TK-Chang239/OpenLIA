@@ -8,11 +8,12 @@ Two endpoints:
   user clarifier answers and re-stream the continued run.
 
 Stage factory is injected via ``app.state.v2_runner_stage_factory``.
-The factory accepts the request context (db session, user, template,
-composer inputs) and returns a fully constructed ``RunnerV2``. Until
-production LLM wiring lands the factory will be absent and the routes
-respond with 503 — the route shapes and SSE event format are still
-exercisable from tests by setting the factory on a TestClient app.
+The factory accepts the request context (department, composer inputs,
+raw template, etc.) and returns a fully constructed ``RunnerV2``. The
+default factory lives in ``services.v2_stage_factory`` and builds
+LLM-backed stages from env-resolved credentials; if the factory raises
+during construction the routes respond with 503 carrying
+``code=v2_engine_unavailable``.
 """
 
 from __future__ import annotations

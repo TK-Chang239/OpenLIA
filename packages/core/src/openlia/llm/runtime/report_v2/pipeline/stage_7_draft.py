@@ -87,12 +87,21 @@ class SectionDrafter:
             for strand, findings in research_pool.findings_by_strand.items()
         }
 
-        # Build model_artifacts_index: artifact_id → description
+        # Build model_artifacts_index: artifact_id → description.
+        # ModelBuilder yields ``ModelArtifact`` dataclasses whose identity
+        # lives on ``.spec`` (ArtifactSpec); upstream callers may also
+        # pass raw ArtifactSpec instances or plain dicts.
         model_artifacts_index: dict[str, str] = {}
         for art in model_artifacts:
-            art_id = getattr(art, "id", None) or art.get("id", "")
-            description = getattr(art, "description", None) or art.get("description", "")
-            model_artifacts_index[art_id] = description
+            spec = getattr(art, "spec", None) or art
+            if isinstance(spec, dict):
+                art_id = spec.get("id", "")
+                description = spec.get("description", "")
+            else:
+                art_id = getattr(spec, "id", "")
+                description = getattr(spec, "description", "")
+            if art_id:
+                model_artifacts_index[art_id] = description
 
         completed: dict[str, SectionOutput] = {}
 
@@ -152,11 +161,34 @@ class SectionDrafter:
         model_artifacts: list[Any],
         deps_md: dict[str, str],
     ) -> SectionOutput:
-        system = f"Draft section '{section.name}'. Directive: {section.directive}"
+        system = (
+            f"Draft section '{section.name}'.\n"
+            f"Directive: {section.directive}\n\n"
+            "Return a JSON object {\"blocks\": [...]} where each block is one"
+            " of these renderable shapes:\n"
+            '  - {"type": "prose", "text": "markdown body"}\n'
+            '  - {"type": "table", "headers": [..], "rows": [[..], ..],'
+            ' "caption": "optional"}\n'
+            '  - {"type": "kpi_strip", "cells":'
+            ' [{"label": "..", "value": "..", "delta": "optional"}]}\n'
+            '  - {"type": "quote_block", "quote": "..", "source": "..",'
+            ' "citation_id": "optional"}\n\n'
+            "Produce AT LEAST one prose block summarising the section. Use"
+            " other block types only when the data clearly warrants them."
+            " Do NOT invent citations or numeric facts you cannot ground in"
+            " the research_pool_findings input."
+        )
         user: dict[str, Any] = {
             "composer_inputs": composer_inputs,
             "research_pool_findings": research_pool.findings_by_strand,
-            "model_artifacts": model_artifacts,
+            "model_artifacts": [
+                {
+                    "id": getattr(getattr(a, "spec", a), "id", ""),
+                    "description": getattr(getattr(a, "spec", a), "description", ""),
+                    "status": getattr(a, "status", "OK"),
+                }
+                for a in model_artifacts
+            ],
             "depends_on_outputs": deps_md,
         }
         try:
