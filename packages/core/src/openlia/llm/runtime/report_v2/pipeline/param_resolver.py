@@ -28,7 +28,7 @@ def resolve_params(
 ) -> ResolverResult:
     """Resolve parameters for a helper using explicit → derived → default → unresolved."""
     helper = get_helper(helper_name)
-    params = helper.schema.params
+    params = helper.helper_schema.params
 
     resolved: dict[str, Any] = {}
     provenance: dict[str, str] = {}

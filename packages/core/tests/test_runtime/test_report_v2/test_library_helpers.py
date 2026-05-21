@@ -46,7 +46,7 @@ def _reload_helpers():
 
 
 def test_vendored_helpers_registered():
-    names = {h.schema.name for h in list_helpers()}
+    names = {h.helper_schema.name for h in list_helpers()}
     for required in (
         "dcf_valuation",
         "ratio_calculator",
@@ -75,6 +75,6 @@ def test_deferred_helper_raises_when_executed():
 
 def test_dcf_helper_schema_has_required_params():
     h = get_helper("dcf_valuation")
-    p = h.schema.params
+    p = h.helper_schema.params
     assert "base_revenue" in p
     assert p["base_revenue"].required
