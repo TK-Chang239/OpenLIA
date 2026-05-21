@@ -878,6 +878,10 @@ def create_app(
 
     app.include_router(build_settings_email_router(db_session_factory=factory, mode=mode))
 
+    from openlia_server.routes.cache import build_cache_router
+
+    app.include_router(build_cache_router(db_session_factory=factory))
+
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok", "mode": mode}
