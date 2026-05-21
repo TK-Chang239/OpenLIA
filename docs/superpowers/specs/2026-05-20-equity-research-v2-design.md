@@ -1,5 +1,7 @@
 # Equity Research v2 — Design Spec
 
+> **SUPERSEDED.** This design has been superseded by [Equity Research v2.2](2026-05-21-equity-research-v2.2-design.md), dated 2026-05-21. v2.2 changes the pipeline shape (two-stage planning), adds the capability manifest, interactive clarifier with blocking warnings, mandatory Run Summary, Verification History (dev mode), persistent cache, expanded verifier taxonomy, HTML output (drops native docx), and more. Retained here for historical reference. **Do not implement from this version.**
+
 **Date:** 2026-05-20
 **Branch:** `feat/custom-templates-v2` (off `main@400b6346`)
 **Driver:** v1 of custom report templates (PRs 1–16, merged) made the runner template-agnostic and let users upload their own report templates. v2 reshapes the equity research department around two product moves: (i) collapse the three hardcoded modes into ordinary templates, and (ii) redesign the composer to accept a ticker plus a free-form prompt, fed into a planner-driven LLM pipeline that replaces deterministic facts extraction with parallel research subagents over the user's connected MCP tools.
