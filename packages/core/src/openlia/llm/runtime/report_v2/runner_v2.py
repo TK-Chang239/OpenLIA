@@ -29,7 +29,14 @@ from openlia.llm.runtime.report_v2.pipeline.stage_3_research_plan import (
 from openlia.llm.runtime.report_v2.pipeline.stage_4_gather import StrandDispatcher
 from openlia.llm.runtime.report_v2.pipeline.stage_5_model_plan import ModelPlanner
 from openlia.llm.runtime.report_v2.pipeline.stage_6_model_build import ModelBuilder
-from openlia.llm.runtime.report_v2.pipeline.stage_7_draft import SectionDrafter
+from openlia.llm.runtime.report_v2.pipeline.stage_7_draft import (
+    SectionDrafter,
+    SectionOutput,
+)
+from openlia.llm.runtime.report_v2.pipeline.stage_8_verify import (
+    SectionVerificationResult,
+    Verifier,
+)
 from openlia.llm.runtime.report_v2.pipeline.stage_9_assemble import (
     assemble_report,
 )
@@ -40,6 +47,7 @@ from openlia.llm.runtime.report_v2.schemas.run_summary import (
 )
 from openlia.llm.runtime.report_v2.schemas.verification_history import (
     VerificationHistory,
+    VerificationHistoryEntry,
 )
 
 
@@ -133,10 +141,6 @@ class RunnerV2:
     All stage fields default to None so the existing skeleton tests
     (RunnerV2() with no args) keep working; execute() raises a clear error
     if any required stage is missing when invoked.
-
-    Verifier (Stage 8) is intentionally omitted from the first orchestrator
-    cut. Section-level verifier integration belongs in a follow-up — the
-    sections currently flow Draft → Assemble directly.
     """
 
     clarifier: Clarifier | None = None
@@ -145,6 +149,7 @@ class RunnerV2:
     model_planner: ModelPlanner | None = None
     model_builder: ModelBuilder | None = None
     section_drafter: SectionDrafter | None = None
+    verifier: Verifier | None = None
 
     state: RunState = RunState.STARTED
     current_stage: PipelineStage | None = None
@@ -160,6 +165,7 @@ class RunnerV2:
                 "model_planner",
                 "model_builder",
                 "section_drafter",
+                "verifier",
             )
             if getattr(self, name) is None
         ]
@@ -224,8 +230,17 @@ class RunnerV2:
                 template_spec, plan, composer_inputs, research_pool, model_artifacts
             )
 
-            html, run_summary, verification_history = yield from self._stage_assemble(
-                template_spec, section_outputs, research_pool
+            section_outputs, verification_history = yield from self._stage_verify(
+                template_spec=template_spec,
+                plan=plan,
+                section_outputs=section_outputs,
+                research_pool=research_pool,
+                model_artifacts=model_artifacts,
+                composer_inputs=composer_inputs,
+            )
+
+            html, run_summary = yield from self._stage_assemble(
+                template_spec, section_outputs, research_pool, verification_history
             )
 
             # Preserve DEGRADED if any section failed; otherwise mark COMPLETED.
@@ -334,11 +349,99 @@ class RunnerV2:
         yield StageCompleted(PipelineStage.DRAFT)
         return outputs
 
+    def _stage_verify(
+        self,
+        *,
+        template_spec: Any,
+        plan: Any,
+        section_outputs: list[SectionOutput],
+        research_pool: Any,
+        model_artifacts: list,
+        composer_inputs: dict[str, Any],
+    ) -> Iterator[RunEvent]:
+        """Run the per-section verifier with retry, returning updated sections + history.
+
+        Sections with status="SKIPPED" or already-DEGRADED (drafter exception)
+        bypass verification. OK sections go through ``verify_with_retry``; if
+        the result is DEGRADED, the section status is downgraded and the run
+        is marked DEGRADED. Redrafted blocks from successful retries replace
+        the original drafter output before assembly.
+        """
+        self.current_stage = PipelineStage.VERIFY
+        yield StageStarted(PipelineStage.VERIFY)
+
+        directives = {s.id: s.directive for s in template_spec.sections}
+        # The verifier's directive lookup is constructor-bound; refresh per-run
+        # so the same factory-built Verifier serves any template.
+        self.verifier._directives = directives
+
+        required_artifact_ids = {a.id for a in plan.required_artifacts}
+        pool_citation_ids = {c.id for c in research_pool.citations}
+        citations_by_id = {c.id: c for c in research_pool.citations}
+
+        per_section_results: list[SectionVerificationResult] = []
+        updated: list[SectionOutput] = []
+        for s in section_outputs:
+            if s.status != "OK":
+                updated.append(s)
+                continue
+
+            result = self.verifier.verify_with_retry(
+                section_id=s.section_id,
+                blocks=s.blocks,
+                research_pool=research_pool,
+                model_artifacts=model_artifacts,
+                citations=citations_by_id,
+                pool_citation_ids=pool_citation_ids,
+                required_artifact_ids=required_artifact_ids,
+                embedded_artifact_ids=set(),
+                retry_context={"composer_inputs": composer_inputs},
+            )
+            per_section_results.append(result)
+
+            new_blocks = result.final_blocks or s.blocks
+            if result.final_status == "DEGRADED":
+                blocker_types = sorted({
+                    i.issue_type
+                    for r in result.rounds
+                    for i in r.issues
+                    if i.severity == "blocker"
+                })
+                reason = (
+                    "verifier persisted blockers: " + ", ".join(blocker_types)
+                    if blocker_types
+                    else "verifier marked section degraded"
+                )
+                updated.append(
+                    SectionOutput(
+                        section_id=s.section_id,
+                        section_name=s.section_name,
+                        status="DEGRADED",
+                        blocks=new_blocks,
+                        degraded_reason=reason,
+                    )
+                )
+            else:
+                updated.append(
+                    SectionOutput(
+                        section_id=s.section_id,
+                        section_name=s.section_name,
+                        status="OK",
+                        blocks=new_blocks,
+                    )
+                )
+
+        verification_history = _build_verification_history(per_section_results)
+
+        yield StageCompleted(PipelineStage.VERIFY)
+        return (updated, verification_history)
+
     def _stage_assemble(
         self,
         template_spec: Any,
         section_outputs: list,
         research_pool: Any,
+        verification_history: VerificationHistory,
     ) -> Iterator[RunEvent]:
         self.current_stage = PipelineStage.ASSEMBLE
         yield StageStarted(PipelineStage.ASSEMBLE)
@@ -385,7 +488,6 @@ class RunnerV2:
             composer_inputs={},
             outcomes=list(self.outcomes),
         )
-        verification_history = VerificationHistory()
         pool_citations = {c.id: c for c in research_pool.citations}
 
         html = assemble_report(
@@ -397,7 +499,7 @@ class RunnerV2:
         )
 
         yield StageCompleted(PipelineStage.ASSEMBLE)
-        return (html, run_summary, verification_history)
+        return (html, run_summary)
 
     # ------------------------------------------------------------------ legacy
 
@@ -408,3 +510,81 @@ class RunnerV2:
     def enter_stage(self, stage: PipelineStage) -> None:
         """Legacy stage-entry helper kept for tests of the original skeleton."""
         self.current_stage = stage
+
+
+def _build_verification_history(
+    section_results: list[SectionVerificationResult],
+) -> VerificationHistory:
+    """Aggregate per-section verifier results into a renderable history.
+
+    Each unique (issue_type, evidence) signature within a section becomes one
+    entry. ``raised_at_round`` is the first round it appeared; if the
+    signature is absent from the final round we treat it as resolved in
+    ``last_seen + 1``. Surviving signatures are tagged ``persisted_degraded``
+    (blockers in a degraded result) or ``still_open`` (warnings, or blockers
+    in an OK result — the latter shouldn't happen but we don't drop them).
+    """
+    entries: list[VerificationHistoryEntry] = []
+    resolved_first = 0
+    resolved_later = 0
+    persisted = 0
+    warnings_open = 0
+
+    for sr in section_results:
+        if not sr.rounds:
+            continue
+
+        first_seen: dict[tuple[str, str], int] = {}
+        last_seen: dict[tuple[str, str], int] = {}
+        sig_to_issue: dict[tuple[str, str], Any] = {}
+        for r_idx, round_obj in enumerate(sr.rounds):
+            for issue in round_obj.issues:
+                sig = (issue.issue_type, issue.evidence)
+                if sig not in first_seen:
+                    first_seen[sig] = r_idx
+                last_seen[sig] = r_idx
+                sig_to_issue[sig] = issue
+
+        last_round_sigs = {
+            (i.issue_type, i.evidence) for i in sr.rounds[-1].issues
+        }
+
+        for sig, issue in sig_to_issue.items():
+            if sig in last_round_sigs:
+                if (
+                    issue.severity == "blocker"
+                    and sr.final_status == "DEGRADED"
+                ):
+                    resolution = "persisted_degraded"
+                    persisted += 1
+                    resolved_in = None
+                else:
+                    resolution = "still_open"
+                    warnings_open += 1
+                    resolved_in = None
+            else:
+                resolution = "resolved"
+                resolved_in = last_seen[sig] + 1
+                if resolved_in == 1:
+                    resolved_first += 1
+                else:
+                    resolved_later += 1
+            entries.append(
+                VerificationHistoryEntry(
+                    issue=issue,
+                    raised_at_round=first_seen[sig],
+                    final_resolution=resolution,
+                    resolved_in_round=resolved_in,
+                )
+            )
+
+    return VerificationHistory(
+        entries=entries,
+        total_issues_raised=len(entries),
+        resolved_on_first_retry=resolved_first,
+        resolved_on_subsequent_retry=resolved_later,
+        persisted_to_degraded=persisted,
+        warnings_open=warnings_open,
+    )
+
+
