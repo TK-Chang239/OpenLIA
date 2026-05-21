@@ -28,8 +28,12 @@ The Plan must include:
   "eodhd.get_fundamentals_data").
 - required_artifacts: parse the composer prompt for artifact requests
   (charts, tables, sensitivity grids, etc.) and emit one ArtifactSpec per.
-  Template-declared required_artifacts will be merged by the caller; do
-  NOT duplicate them here.
+  Each ArtifactSpec is {id, type, source, description}. The "type" field
+  MUST be one of these exact strings: "chart", "table", "kpi_strip",
+  "excel", "quote_block". Map any other request to the nearest of these
+  (e.g. timeline -> table, sensitivity grid -> table, dashboard -> chart).
+  Set "source" to "composer" for composer-derived artifacts. Template-declared
+  required_artifacts will be merged by the caller; do NOT duplicate them here.
 - section_dag: {section_id: [predecessor_section_ids]} reflecting the
   template's section ordering and any dependencies.
 - slipped_requests: list of composer intents you cannot map to any supported
@@ -42,6 +46,43 @@ def build_research_planner_prompt() -> str:
     return _SYSTEM_PROMPT
 
 
+_VALID_ARTIFACT_TYPES = {"chart", "table", "kpi_strip", "excel", "quote_block"}
+_ARTIFACT_TYPE_ALIASES = {
+    "timeline": "table",
+    "sensitivity_grid": "table",
+    "sensitivity": "table",
+    "grid": "table",
+    "list": "table",
+    "dashboard": "chart",
+    "graph": "chart",
+    "plot": "chart",
+    "kpi": "kpi_strip",
+    "kpis": "kpi_strip",
+    "quote": "quote_block",
+    "spreadsheet": "excel",
+    "model": "excel",
+}
+
+
+def _coerce_artifact_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Coerce an LLM-emitted artifact payload into ArtifactSpec-valid shape.
+
+    LLMs frequently emit synonyms like ``timeline`` or ``sensitivity_grid``
+    that are not in the strict ``ArtifactType`` enum. Map them to the
+    nearest supported renderable type rather than failing the whole plan.
+    """
+    raw_type = payload.get("type")
+    if isinstance(raw_type, str):
+        normalised = raw_type.strip().lower().replace("-", "_").replace(" ", "_")
+        if normalised in _VALID_ARTIFACT_TYPES:
+            payload["type"] = normalised
+        elif normalised in _ARTIFACT_TYPE_ALIASES:
+            payload["type"] = _ARTIFACT_TYPE_ALIASES[normalised]
+        else:
+            payload["type"] = "table"
+    return payload
+
+
 def _to_artifact_spec(value: Any, default_source: str) -> ArtifactSpec:
     """Convert dict or template-side ArtifactSpec into plan-side ArtifactSpec."""
     if isinstance(value, ArtifactSpec):
@@ -49,11 +90,13 @@ def _to_artifact_spec(value: Any, default_source: str) -> ArtifactSpec:
     if isinstance(value, dict):
         payload = dict(value)
         payload.setdefault("source", default_source)
+        payload = _coerce_artifact_payload(payload)
         return ArtifactSpec.model_validate(payload)
     # Duck-type pydantic model from template_v2.spec — same field layout.
     if hasattr(value, "model_dump"):
         payload = value.model_dump()
         payload.setdefault("source", default_source)
+        payload = _coerce_artifact_payload(payload)
         return ArtifactSpec.model_validate(payload)
     raise TypeError(f"cannot coerce {type(value).__name__} to ArtifactSpec")
 
