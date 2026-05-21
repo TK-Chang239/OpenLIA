@@ -24,6 +24,7 @@ class SectionVerificationResult:
     final_status: str  # "OK" | "DEGRADED"
     rounds: list[VerificationRound] = field(default_factory=list)
     all_issues_ever: list[VerifierIssue] = field(default_factory=list)
+    final_blocks: list = field(default_factory=list)
 
 
 class Verifier:
@@ -83,6 +84,7 @@ class Verifier:
             blockers = [i for i in issues if i.severity == "blocker"]
             if not blockers:
                 result.final_status = "OK"
+                result.final_blocks = current_blocks
                 return result
 
             # convergence check: identical blocker signature two rounds in a row
@@ -90,10 +92,12 @@ class Verifier:
             signatures.append(sig)
             if len(signatures) >= 2 and signatures[-1] == signatures[-2]:
                 result.final_status = "DEGRADED"
+                result.final_blocks = current_blocks
                 return result
 
             if round_num >= self.MAX_RETRIES:
                 result.final_status = "DEGRADED"
+                result.final_blocks = current_blocks
                 return result
 
             # call drafter for next round
@@ -104,4 +108,5 @@ class Verifier:
             )
 
         result.final_status = "DEGRADED"
+        result.final_blocks = current_blocks
         return result

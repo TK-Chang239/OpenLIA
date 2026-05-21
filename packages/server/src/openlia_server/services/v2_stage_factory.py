@@ -37,7 +37,9 @@ from openlia.llm.runtime.report_v2.pipeline.stage_4_gather import StrandDispatch
 from openlia.llm.runtime.report_v2.pipeline.stage_5_model_plan import ModelPlanner
 from openlia.llm.runtime.report_v2.pipeline.stage_6_model_build import ModelBuilder
 from openlia.llm.runtime.report_v2.pipeline.stage_7_draft import SectionDrafter
+from openlia.llm.runtime.report_v2.pipeline.stage_8_verify import Verifier
 from openlia.llm.runtime.report_v2.pipeline.trigger_evaluator import TriggerEvaluator
+from openlia.llm.runtime.report_v2.pipeline.verifier_llm import LLMVerifier
 from openlia.llm.runtime.report_v2.runner_v2 import RunnerV2
 from openlia.llm.types import (
     Capabilities,
@@ -345,6 +347,14 @@ def make_v2_runner_stage_factory(
     def _factory(_ctx: Any) -> RunnerV2:
         provider = resolver()
         llm = SyncJsonLlmClient(provider)
+        section_drafter = SectionDrafter(llm, TriggerEvaluator(llm))
+        # Per-run Verifier; directives are refreshed by the runner against the
+        # active template_spec before stage 8 executes.
+        verifier = Verifier(
+            llm_verifier=LLMVerifier(llm),
+            drafter=section_drafter,
+            section_directives={},
+        )
         return RunnerV2(
             clarifier=Clarifier(llm),
             research_planner=ResearchPlanner(llm),
@@ -353,9 +363,8 @@ def make_v2_runner_stage_factory(
             ),
             model_planner=ModelPlanner(llm),
             model_builder=ModelBuilder(llm, max_workers=2),
-            section_drafter=SectionDrafter(
-                llm, TriggerEvaluator(llm)
-            ),
+            section_drafter=section_drafter,
+            verifier=verifier,
         )
 
     return _factory
