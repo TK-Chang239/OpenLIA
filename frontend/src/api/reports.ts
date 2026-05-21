@@ -227,6 +227,12 @@ export interface MetaStats {
   est_read_minutes: number;
 }
 
+// v2.2 engine payloads. Present only on reports produced by the v2.2
+// pipeline (or carrying forward through revisions). The v1 path omits
+// both fields, in which case the renderer simply does not display them.
+import type { RunSummaryData } from '../components/equity-research/RunSummary/RunSummary';
+import type { VerificationHistoryData } from '../components/equity-research/VerificationHistory/VerificationHistory';
+
 export interface ReportSchema {
   schema_version: '2.0';
   department: string;
@@ -237,6 +243,8 @@ export interface ReportSchema {
   rail?: Rail | null;
   citations?: Citation[];
   meta_stats?: MetaStats | null;
+  run_summary?: RunSummaryData | null;
+  verification_history?: VerificationHistoryData | null;
 }
 
 export interface ReportDetail {
