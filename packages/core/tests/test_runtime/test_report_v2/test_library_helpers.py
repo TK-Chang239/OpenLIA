@@ -1,20 +1,48 @@
 from __future__ import annotations
 
-# Import all helper modules so registration side-effects fire.
-import openlia.llm.runtime.report_v2.tools.library_helpers.budget_variance
-import openlia.llm.runtime.report_v2.tools.library_helpers.business_investment
-import openlia.llm.runtime.report_v2.tools.library_helpers.chart_builder
-import openlia.llm.runtime.report_v2.tools.library_helpers.dcf_valuation
-import openlia.llm.runtime.report_v2.tools.library_helpers.excel_builder
-import openlia.llm.runtime.report_v2.tools.library_helpers.forecast_builder
-import openlia.llm.runtime.report_v2.tools.library_helpers.ratio_calculator
-import openlia.llm.runtime.report_v2.tools.library_helpers.saas_metrics  # noqa: F401
+import importlib
+import sys
+
 import pytest
 from openlia.llm.runtime.report_v2.tools.library_helpers import (
     get_helper,
     list_helpers,
     register_deferred_categories,
 )
+
+_HELPER_MODULES = (
+    "openlia.llm.runtime.report_v2.tools.library_helpers.budget_variance",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.business_investment",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.chart_builder",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.dcf_valuation",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.excel_builder",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.forecast_builder",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.ratio_calculator",
+    "openlia.llm.runtime.report_v2.tools.library_helpers.saas_metrics",
+)
+
+
+@pytest.fixture(autouse=True)
+def _reload_helpers():
+    """Re-register vendored helpers before each test.
+
+    Other test modules (e.g. test_stage_6_model_build) call
+    reset_helpers_for_tests() which wipes module-level state. After reset,
+    re-run each helper module body (via reload when already cached, or
+    fresh import otherwise) so each module's register_library_helper(...)
+    side effect fires exactly once.
+    """
+    from openlia.llm.runtime.report_v2.tools.library_helpers import (
+        reset_helpers_for_tests,
+    )
+
+    reset_helpers_for_tests()
+    for mod_name in _HELPER_MODULES:
+        if mod_name in sys.modules:
+            importlib.reload(sys.modules[mod_name])
+        else:
+            importlib.import_module(mod_name)
+    yield
 
 
 def test_vendored_helpers_registered():

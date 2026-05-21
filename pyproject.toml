@@ -38,4 +38,6 @@ addopts = [
 ]
 markers = [
     "live_api: hits a real third-party API. Requires the relevant *_API_KEY env var. Skipped by default; opt in with `-m live_api`.",
+    "slow: marks tests as slow (deselect with -m 'not slow').",
+    "requires_llm: marks tests that require real LLM API access. Opt in with -m requires_llm.",
 ]
