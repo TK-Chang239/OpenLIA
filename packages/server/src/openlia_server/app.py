@@ -834,6 +834,10 @@ def create_app(
     app.state.earnings_adapter = getattr(
         app.state, "earnings_adapter", _NoopEarningsRecentAdapter()
     )
+    from openlia_server.routes.capabilities import router as capabilities_router
+
+    app.include_router(capabilities_router)
+
     app.include_router(build_disclaimer_router(db_session_factory=factory, mode=mode))
     app.include_router(build_guardrail_events_router(db_session_factory=factory, mode=mode))
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
