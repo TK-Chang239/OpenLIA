@@ -689,6 +689,20 @@ def create_app(
     app.include_router(
         build_equity_research_v2_router(db_session_factory=factory, mode=mode)
     )
+
+    # Wire the v2.2 stage factory so the SSE endpoints have a real pipeline.
+    # Errors during provider resolution are deferred to request time — the
+    # routes already return 503 with code=v2_engine_unavailable when the
+    # attribute is missing, and this matches that shape if the env is
+    # incomplete on this deployment.
+    try:
+        from openlia_server.services.v2_stage_factory import (
+            make_v2_runner_stage_factory,
+        )
+
+        app.state.v2_runner_stage_factory = make_v2_runner_stage_factory()
+    except Exception:
+        log.exception("v2 stage factory unavailable — /v2/report will 503")
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))

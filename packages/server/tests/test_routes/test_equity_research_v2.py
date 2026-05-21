@@ -59,7 +59,6 @@ class _FakeRunner:
 def v2_client(tmp_path, monkeypatch):
     """Spin up a TestClient with a temp SQLite + an authenticated local user."""
     import openlia_server.db.models.register_all  # noqa: F401 — register all ORM models
-
     from openlia_server.app import create_app
 
     monkeypatch.setenv("OPENLIA_MODE", "personal")
@@ -258,7 +257,11 @@ def test_start_marks_failed_when_runner_yields_failed(v2_client):
 
 def test_start_returns_503_when_factory_unset(v2_client):
     app, client = v2_client
-    # Do not set app.state.v2_runner_stage_factory.
+    # app.create_app() best-effort installs a real env-driven factory when
+    # LLM keys are present; for this test we explicitly clear it to simulate
+    # the "deployment without v2 wiring" path the route is meant to handle.
+    if hasattr(app.state, "v2_runner_stage_factory"):
+        delattr(app.state, "v2_runner_stage_factory")
     resp = client.post(
         "/api/departments/equity-research/v2/report", json=_ok_payload()
     )
