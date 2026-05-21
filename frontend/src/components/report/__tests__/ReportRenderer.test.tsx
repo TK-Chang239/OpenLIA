@@ -81,4 +81,75 @@ describe('ReportRenderer', () => {
     expect(container.querySelector('.report-rail__citations')).toBeTruthy();
     expect(container.querySelector('.report--3col')).toBeTruthy();
   });
+
+  it('renders the v2.2 run summary section when present', () => {
+    const withRunSummary: ReportSchema = {
+      ...schema,
+      run_summary: {
+        engine_version: '0.2.0',
+        template_id: 'stock_research_v2',
+        template_name: 'Stock Research',
+        composer_inputs: {},
+        outcomes: [
+          {
+            task_type: 'section',
+            task_name: 'Financial Overview',
+            status: 'OK',
+            duration_ms: 1200,
+          },
+        ],
+        unsupported_requests_dismissed: [],
+        unsupported_requests_slipped: [],
+        total_duration_ms: 1200,
+        cache_stats: {},
+      },
+    };
+    const { container } = render(<ReportRenderer schema={withRunSummary} />);
+    expect(container.querySelector('#run_summary')).toBeTruthy();
+    expect(screen.getByText(/Engine v0\.2\.0/)).toBeInTheDocument();
+  });
+
+  it('hides verification history outside dev mode even when payload present', () => {
+    const withHistory: ReportSchema = {
+      ...schema,
+      verification_history: {
+        entries: [
+          {
+            issue: {
+              issue_type: 'unsupported_claim',
+              severity: 'warning',
+              evidence: 'no source for claim',
+              detector: 'llm',
+            },
+            raised_at_round: 1,
+            final_resolution: 'resolved',
+          },
+        ],
+      },
+    };
+    const { container } = render(<ReportRenderer schema={withHistory} />);
+    expect(container.querySelector('#verification_history')).toBeFalsy();
+  });
+
+  it('renders verification history when dev mode is on', () => {
+    const withHistory: ReportSchema = {
+      ...schema,
+      verification_history: {
+        entries: [
+          {
+            issue: {
+              issue_type: 'unsupported_claim',
+              severity: 'warning',
+              evidence: 'no source for claim',
+              detector: 'llm',
+            },
+            raised_at_round: 1,
+            final_resolution: 'resolved',
+          },
+        ],
+      },
+    };
+    const { container } = render(<ReportRenderer schema={withHistory} devMode />);
+    expect(container.querySelector('#verification_history')).toBeTruthy();
+  });
 });

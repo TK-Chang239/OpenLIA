@@ -5,6 +5,9 @@ description = "OpenLIA monorepo workspace root (not an installable package)."
 requires-python = ">=3.12"
 dependencies = [
     "eodhd>=1.0.32",
+    "markdown-it-py>=4.0.0",
+    "matplotlib>=3.10.9",
+    "openpyxl>=3.1.5",
 ]
 
 [tool.uv]
@@ -35,4 +38,6 @@ addopts = [
 ]
 markers = [
     "live_api: hits a real third-party API. Requires the relevant *_API_KEY env var. Skipped by default; opt in with `-m live_api`.",
+    "slow: marks tests as slow (deselect with -m 'not slow').",
+    "requires_llm: marks tests that require real LLM API access. Opt in with -m requires_llm.",
 ]

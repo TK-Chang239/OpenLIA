@@ -1,0 +1,114 @@
+template_id: stock_initiation_v2
+template_name: "Stock Initiation (v2)"
+department: equity_research
+report_type: equity_research
+engine_version_compat: "2.2"
+
+composer_inputs:
+  - name: ticker
+    type: ticker
+    label: Ticker
+    required: true
+
+required_artifacts: []
+
+sections:
+  - id: company_overview
+    name: "Company Overview"
+    directive: >
+      Cover ticker, sector, headquarters, headcount, founding date, key
+      milestones, and core value proposition. Include headline stats
+      (market cap, revenue scale, headcount) and the positioning one-liner.
+
+  - id: industry_overview
+    name: "Industry Overview"
+    directive: >
+      Describe market size, growth rate, structure, and where the company
+      sits within it. Cover TAM/SAM/SOM, major segments, and competitive
+      landscape at a high level.
+    depends_on: [company_overview]
+
+  - id: products_and_services
+    name: "Products and Services"
+    directive: >
+      Walk through product families, pricing tiers, and customer types.
+      Cover what the company sells, who buys it, and why they choose it
+      over alternatives.
+    depends_on: [company_overview]
+
+  - id: business_model
+    name: "Business Model"
+    directive: >
+      Cover revenue model, unit economics, distribution channels, and moats.
+      Explain how the company makes money and what sustains its competitive
+      position.
+    depends_on: [products_and_services]
+
+  - id: management_team
+    name: "Management Team"
+    directive: >
+      Profile the C-suite and board with named individuals. Highlight
+      tenure, relevant experience, and notable hires or departures.
+    depends_on: [company_overview]
+
+  - id: historical_financials
+    name: "Historical Financials"
+    directive: >
+      Show revenue, profitability, cash generation, and balance-sheet
+      trends across multiple years. Use a combo chart for revenue bars
+      plus a margin line, and a KPI table for the full multi-period grid.
+    depends_on: [business_model]
+
+  - id: financial_analysis
+    name: "Financial Analysis"
+    directive: >
+      Decompose margins, capital efficiency, and key financial ratios.
+      Compare against peers where data is available. Identify inflection
+      points and explain what drives them.
+    depends_on: [historical_financials]
+
+  - id: financial_projections
+    name: "Financial Projections"
+    directive: >
+      Provide a forward look on revenue, margins, and free cash flow
+      for the next three to five years. State assumptions explicitly
+      and show how sensitivities affect the output.
+    depends_on: [financial_analysis]
+
+  - id: competitive_analysis
+    name: "Competitive Analysis"
+    directive: >
+      Name primary competitors and quantify where the company stands on
+      key dimensions (share, growth, margins, pricing). Use a comparison
+      split for the subject vs. its top rival and a feature or share matrix.
+    depends_on: [industry_overview]
+
+  - id: valuation_analysis
+    name: "Valuation Analysis"
+    directive: >
+      Present multiples, a DCF, and peer comparables. Show the methodology's
+      output range and compare it to analyst consensus. Do not author a
+      single price target — show scenarios labeled by methodology (e.g.
+      Conservative vs. Optimistic).
+    depends_on: [financial_projections, competitive_analysis]
+
+  - id: risk_analysis
+    name: "Risk Analysis"
+    directive: >
+      Identify risks across market, regulatory, execution, and financial
+      categories. Distinguish controlled from uncontrolled risks. Include
+      a timeline for known risk events where applicable.
+    depends_on: [business_model]
+
+  - id: investment_recommendation
+    name: "Analyst View"
+    directive: >
+      Aggregate analyst perspectives (do NOT emit rating distribution or
+      consensus price-target blocks — those are server-rendered). Provide
+      a comparison split with bull-case arguments (left) vs. bear-case
+      arguments (right), each attributed to a cited source. Include a
+      table of recent rating changes when available. Close with a 3-4
+      sentence prose paragraph summarizing what the consensus reflects.
+      Use third-person sourcing language throughout. Never write
+      "we recommend", "our rating", or "our price target".
+    depends_on: [valuation_analysis, risk_analysis]

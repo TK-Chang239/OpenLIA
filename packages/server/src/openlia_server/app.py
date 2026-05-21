@@ -57,6 +57,9 @@ from openlia_server.routes.departments.earnings_update import (
 from openlia_server.routes.departments.equity_research import (
     build_equity_research_router,
 )
+from openlia_server.routes.departments.equity_research_v2 import (
+    build_equity_research_v2_router,
+)
 from openlia_server.routes.departments.macro_research import (
     build_macro_research_router,
 )
@@ -683,6 +686,23 @@ def create_app(
 
     app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
+    app.include_router(
+        build_equity_research_v2_router(db_session_factory=factory, mode=mode)
+    )
+
+    # Wire the v2.2 stage factory so the SSE endpoints have a real pipeline.
+    # Errors during provider resolution are deferred to request time — the
+    # routes already return 503 with code=v2_engine_unavailable when the
+    # attribute is missing, and this matches that shape if the env is
+    # incomplete on this deployment.
+    try:
+        from openlia_server.services.v2_stage_factory import (
+            make_v2_runner_stage_factory,
+        )
+
+        app.state.v2_runner_stage_factory = make_v2_runner_stage_factory()
+    except Exception:
+        log.exception("v2 stage factory unavailable — /v2/report will 503")
     app.include_router(build_earnings_update_router(db_session_factory=factory, mode=mode))
     app.include_router(build_morning_briefing_router(db_session_factory=factory, mode=mode))
     app.include_router(build_panic_thermometer_router(db_session_factory=factory, mode=mode))
@@ -834,6 +854,10 @@ def create_app(
     app.state.earnings_adapter = getattr(
         app.state, "earnings_adapter", _NoopEarningsRecentAdapter()
     )
+    from openlia_server.routes.capabilities import router as capabilities_router
+
+    app.include_router(capabilities_router)
+
     app.include_router(build_disclaimer_router(db_session_factory=factory, mode=mode))
     app.include_router(build_guardrail_events_router(db_session_factory=factory, mode=mode))
     app.include_router(build_chat_stream_router(db_session_factory=factory, mode=mode))
@@ -873,6 +897,10 @@ def create_app(
     from openlia_server.routes.settings_email import build_settings_email_router
 
     app.include_router(build_settings_email_router(db_session_factory=factory, mode=mode))
+
+    from openlia_server.routes.cache import build_cache_router
+
+    app.include_router(build_cache_router(db_session_factory=factory))
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:

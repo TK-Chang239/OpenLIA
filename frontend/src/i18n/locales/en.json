@@ -79,6 +79,7 @@
       "account": "Account",
       "skills": "Skills",
       "report_templates": "Report templates",
+      "cache": "Cache",
       "admin": "Admin",
       "disclaimer": "Compliance disclaimer",
       "guardrails": "Guardrail activity"
@@ -1534,6 +1535,8 @@
     "aria_open_print_view": "Open print view",
     "title_open_print_view": "Open print view",
     "sources_and_disclosures": "Sources & Disclosures",
+    "run_summary": "Run Summary",
+    "verification_history": "Verification History",
     "sources": "Sources",
     "quick_stats": "Quick Stats",
     "consensus_rating_label": "Consensus",
