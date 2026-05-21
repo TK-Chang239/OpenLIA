@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { fetchReport, type ReportSchema } from "../../../api/reports";
+import { fetchCapabilities } from "../../../api/capabilities";
 import { ReportRenderer } from "../../report/ReportRenderer";
 import { RendererError, RendererLoading } from "./RendererStates";
 import { type FileSource } from "../FileViewerContext";
@@ -10,6 +11,7 @@ export function StructuredReportRenderer({ source }: { source: FileSource }): JS
   const [status, setStatus] = useState<Status>("loading");
   const [schema, setSchema] = useState<ReportSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [devMode, setDevMode] = useState(false);
 
   const reportId = source.kind === "report" ? source.reportId : null;
 
@@ -31,6 +33,24 @@ export function StructuredReportRenderer({ source }: { source: FileSource }): JS
     void load();
   }, [load]);
 
+  // Look up the deployment's dev_mode flag once. Failure to fetch the
+  // manifest (older deployments, network errors) just leaves dev_mode
+  // off — the v2.2 backend would not be emitting verification history
+  // payloads in that case anyway.
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCapabilities()
+      .then((m) => {
+        if (!cancelled) setDevMode(m.dev_mode);
+      })
+      .catch(() => {
+        // Endpoint may be absent on pre-v2.2 deployments; stay quiet.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (!reportId) {
     return <RendererError message="Report viewer requires a report source." onRetry={load} />;
   }
@@ -38,5 +58,5 @@ export function StructuredReportRenderer({ source }: { source: FileSource }): JS
   if (status === "error" || !schema)
     return <RendererError message={error ?? "Failed to load report."} onRetry={load} />;
 
-  return <ReportRenderer schema={schema} reportId={reportId} />;
+  return <ReportRenderer schema={schema} reportId={reportId} devMode={devMode} />;
 }
