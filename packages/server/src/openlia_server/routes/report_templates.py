@@ -7,6 +7,9 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from openlia.llm.runtime.report_v2.template_v2.conversion_prompt import (
+    build_conversion_prompt,
+)
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -64,6 +67,10 @@ class ParseOut(BaseModel):
     template_spec: dict[str, Any]
 
 
+class ConversionPromptOut(BaseModel):
+    prompt: str
+
+
 def build_report_templates_router(
     *,
     db_session_factory: Any,
@@ -73,6 +80,10 @@ def build_report_templates_router(
     router = APIRouter(prefix="/report-templates", tags=["report-templates"])
     require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
+
+    @router.get("/conversion_prompt", response_model=ConversionPromptOut)
+    def get_conversion_prompt() -> ConversionPromptOut:
+        return ConversionPromptOut(prompt=build_conversion_prompt())
 
     def _to_out(row: ReportTemplate) -> ReportTemplateOut:
         return ReportTemplateOut(
