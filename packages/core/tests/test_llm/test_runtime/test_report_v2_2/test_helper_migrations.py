@@ -191,8 +191,9 @@ def test_artifact_type_registry_count() -> None:
     # + 1 sector banks (PR 3.1): banks_sector_panel_output
     # + 1 sector REITs (PR 3.2): reit_valuation_panel_output
     # + 1 sector pharma (PR 3.3): rnpv_pipeline_output
-    # = 100
-    assert len(all_types) == 100, f"Expected 100 artifact types, got {len(all_types)}: {names}"
+    # + 1 sector E&P (PR 3.4): ep_sector_panel_output
+    # = 101
+    assert len(all_types) == 101, f"Expected 101 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -318,6 +319,8 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "reit_valuation_panel_output",
         # Sector modules Wave 1 (PR 3.3)
         "rnpv_pipeline_output",
+        # Sector modules Wave 1 (PR 3.4)
+        "ep_sector_panel_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
