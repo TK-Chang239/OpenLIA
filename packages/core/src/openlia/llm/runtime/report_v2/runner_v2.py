@@ -13,19 +13,25 @@ stream.
 
 See docs/superpowers/specs/2026-05-21-equity-research-v2.2-design.md §2.
 
-v2.2 extension: if ``planner_v2_2`` is injected at construction, two
+v2.2 extension: if ``planner_v2_2_llm`` is injected at construction, two
 extra stages are activated:
 
-  Stage 5b — PLANNER_V2_2: calls ``planner_v2_2.aplan()`` (async, no
-      deadlock risk) and stores the resulting ``PlannerOutput``.
+  Stage 5b — PLANNER_V2_2: constructs a fresh ``Planner`` using the
+      per-run ticker (from ``composer_inputs``) and template sections
+      (from ``template_spec``), calls ``planner.aplan()`` (async, no
+      deadlock risk), and stores the resulting ``PlannerOutput``.
 
   Stage 7a — MATERIALIZE: resolves each ``HelperInvocation`` in the
       PlannerOutput to a registered helper, invokes it, collects artifacts
       into a dict, runs ``resolve_section_plan`` + ``materialize()``, and
       stores the resulting ``MaterializedReport`` for Stage 7b.
 
-When ``planner_v2_2 is None`` both extra stages are silently skipped so
-existing v2 pipelines continue to work without change.
+When ``planner_v2_2_llm is None`` both extra stages are silently skipped
+so existing v2 pipelines continue to work without change.
+
+The Planner is constructed fresh per-run (not stored on the RunnerV2
+instance) so no per-run state (ticker, template sections) leaks between
+concurrent reports.
 """
 
 from __future__ import annotations
@@ -159,10 +165,13 @@ class RunnerV2:
     if any required stage is missing when invoked.
 
     Optional v2.2 extension:
-        planner_v2_2: Any v2.2 ``Planner`` instance. When set, Stage 5b
-            (helper selection) and Stage 7a (materialization) are activated.
-            When None (default), both stages are silently skipped for full
-            backwards compatibility with existing v2 tests and routes.
+        planner_v2_2_llm: An ``LLMProvider`` used to construct a fresh
+            ``Planner`` per-run. When set, Stage 5b (helper selection) and
+            Stage 7a (materialization) are activated. When None (default),
+            both stages are silently skipped for full backwards compatibility
+            with existing v2 tests and routes. The Planner is constructed
+            inside ``_stage_planner_v2_2()`` using the per-run ticker and
+            template sections — no shared mutable state across requests.
     """
 
     clarifier: Clarifier | None = None
@@ -172,9 +181,10 @@ class RunnerV2:
     model_builder: ModelBuilder | None = None
     section_drafter: SectionDrafter | None = None
     verifier: Verifier | None = None
-    # v2.2 extension: report_v2_2.Planner; typed Any to avoid a hard import of
-    # report_v2_2 in this module (keeps the v2 package self-contained).
-    planner_v2_2: Any | None = None
+    # v2.2 extension: an LLMProvider used to construct a fresh Planner per-run.
+    # Typed Any to avoid a hard import of report_v2_2 in this module (keeps the
+    # v2 package self-contained). When None, Stage 5b + 7a are silently skipped.
+    planner_v2_2_llm: Any | None = None
 
     state: RunState = RunState.STARTED
     current_stage: PipelineStage | None = None
@@ -244,9 +254,9 @@ class RunnerV2:
             plan = yield from self._stage_model_plan(plan, research_pool)
 
             # Stage 5b: v2.2 Planner (helper selection). Skipped when
-            # planner_v2_2 is None (backwards-compatible v2 path).
+            # planner_v2_2_llm is None (backwards-compatible v2 path).
             planner_output: Any | None = None
-            if self.planner_v2_2 is not None:
+            if self.planner_v2_2_llm is not None:
                 planner_output = yield from self._stage_planner_v2_2(composer_inputs, template_spec)
 
             model_artifacts = yield from self._stage_model_build(plan, research_pool)
@@ -358,12 +368,44 @@ class RunnerV2:
     ) -> Iterator[RunEvent]:
         """Stage 5b: v2.2 Planner — helper selection and planner overrides.
 
-        Calls ``planner_v2_2.aplan()`` via the ThreadPoolExecutor guard so it
-        is safe to call from both sync and async contexts (no bare asyncio.run).
+        Constructs a fresh ``Planner`` per-run using:
+          - ``planner_v2_2_llm`` injected at RunnerV2 construction
+          - ``ticker`` from ``composer_inputs``
+          - ``template_sections`` derived from ``template_spec.sections``
+          - ``available_helpers`` from ``list_helpers()``
+
+        This avoids storing a stateful Planner instance on RunnerV2 (no shared
+        mutable state across concurrent requests).
+
+        Calls ``planner.aplan()`` via the ThreadPoolExecutor guard so it is
+        safe to call from both sync and async contexts (no bare asyncio.run).
         Returns the ``PlannerOutput`` for Stage 7a.
         """
+        from openlia.llm.runtime.report_v2_2.planner import Planner, sections_from_spec
+        from openlia.llm.runtime.report_v2_2.tools.library_helpers import list_helpers
+
         self.current_stage = PipelineStage.PLANNER_V2_2
         yield StageStarted(PipelineStage.PLANNER_V2_2)
+
+        ticker: str = composer_inputs.get("ticker", "")
+        template_id: str = getattr(template_spec, "template_id", "stock_initiation_v2")
+        template_sections = sections_from_spec(template_spec)
+        available_helpers = [
+            {
+                "name": h.schema.directory.name,
+                "category": h.schema.directory.category.value,
+                "one_liner": h.schema.directory.one_liner,
+            }
+            for h in list_helpers()
+        ]
+
+        planner = Planner(
+            llm=self.planner_v2_2_llm,
+            ticker=ticker,
+            template_sections=template_sections,
+            available_helpers=available_helpers,
+            template_id=template_id,
+        )
 
         # Use the same ThreadPoolExecutor guard as v2_stage_factory._run_sync:
         # this avoids the asyncio.run-inside-running-loop deadlock (A-2).
@@ -371,10 +413,10 @@ class RunnerV2:
             asyncio.get_running_loop()
             # Running inside an event loop — dispatch to a worker thread.
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                planner_output = ex.submit(asyncio.run, self.planner_v2_2.aplan()).result()
+                planner_output = ex.submit(asyncio.run, planner.aplan()).result()
         except RuntimeError:
             # No running loop — safe to call asyncio.run directly.
-            planner_output = asyncio.run(self.planner_v2_2.aplan())
+            planner_output = asyncio.run(planner.aplan())
 
         yield StageCompleted(PipelineStage.PLANNER_V2_2)
         return planner_output
