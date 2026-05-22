@@ -152,26 +152,36 @@ _STRUCTURAL_SENTINEL = "14"  # the specific numeral banned from hardcoding
 
 
 def test_no_hardcoded_14_in_structural_parts() -> None:
-    """Prompt structure must not contain hardcoded '14' from template logic."""
+    """Structural template text must not contain the numeral '14'.
+
+    Allowed in data sections (artifact content, thesis text, theme text).
+    Tested by using no user data that contains '14' — any '14' in the
+    rendered prompt must therefore come from the template scaffold itself.
+    """
     section = _make_section()
     prompt = build_drafter_prompt(
         section=section,
         template_section_meta={"title": "DCF"},
+        # Deliberately no '14' in user-supplied data.
         thesis="Strong buy.",
         themes=["Scale"],
     )
-    # Split on newlines and check structural lines (not data lines) don't contain '14'.
-    structural_lines = [
-        line
-        for line in prompt.split("\n")
-        if not any(c.isdigit() and c not in "0" for c in line[:3])  # skip data lines
-        if "14" in line
-    ]
-    # Filter: '14' only allowed if it's part of user-supplied data (thesis/themes/artifacts).
-    non_data_14 = [
-        line for line in structural_lines if "14" not in "Strong buy." and "14" not in "Scale"
-    ]
-    assert len(non_data_14) == 0, f"Hardcoded '14' found in structural lines: {non_data_14}"
+    # Identify the structural sections of the prompt: everything except artifact content.
+    # Strategy: collect lines that are NOT inside an "### Artifact:" block.
+    structural_lines: list[str] = []
+    in_artifact_block = False
+    for line in prompt.split("\n"):
+        if line.startswith("### Artifact:"):
+            in_artifact_block = True
+        elif line.startswith("## ") and in_artifact_block:
+            in_artifact_block = False
+        if not in_artifact_block:
+            structural_lines.append(line)
+
+    lines_with_14 = [ln for ln in structural_lines if "14" in ln]
+    assert len(lines_with_14) == 0, (
+        f"Hardcoded '14' found in structural (non-artifact) lines: {lines_with_14}"
+    )
 
 
 # ---- Prompt is non-empty and well-formed ----
@@ -230,6 +240,74 @@ def test_prompt_no_min_words_when_absent() -> None:
         themes=[],
     )
     assert "Minimum words" not in prompt
+
+
+# ---- template_id / ticker context ----
+
+
+def test_prompt_includes_template_id_and_ticker_in_system_frame() -> None:
+    """When template_id and ticker are provided, the system frame identifies them."""
+    section = _make_section()
+    prompt = build_drafter_prompt(
+        section=section,
+        template_section_meta={"title": "DCF"},
+        thesis="T.",
+        themes=[],
+        template_id="stock_initiation_v2",
+        ticker="MSFT",
+    )
+    assert "stock_initiation_v2" in prompt
+    assert "MSFT" in prompt
+
+
+def test_prompt_system_frame_format_matches_spec() -> None:
+    """System frame must match 'You are drafting <template_id> for <ticker>.' per §6."""
+    section = _make_section()
+    prompt = build_drafter_prompt(
+        section=section,
+        template_section_meta={"title": "DCF"},
+        thesis="T.",
+        themes=[],
+        template_id="banks_v2_2",
+        ticker="JPM",
+    )
+    assert "You are drafting banks_v2_2 for JPM." in prompt
+
+
+def test_prompt_no_template_ticker_frame_when_omitted() -> None:
+    """When template_id and ticker are not provided, no 'You are drafting' line."""
+    section = _make_section()
+    prompt = build_drafter_prompt(
+        section=section,
+        template_section_meta={"title": "DCF"},
+        thesis="T.",
+        themes=[],
+    )
+    assert "You are drafting" not in prompt
+
+
+def test_prompt_no_frame_when_only_one_of_template_ticker_provided() -> None:
+    """Both must be present for the frame to appear."""
+    section = _make_section()
+    # Only template_id, no ticker
+    prompt_no_ticker = build_drafter_prompt(
+        section=section,
+        template_section_meta={"title": "DCF"},
+        thesis="T.",
+        themes=[],
+        template_id="stock_initiation_v2",
+    )
+    assert "You are drafting" not in prompt_no_ticker
+
+    # Only ticker, no template_id
+    prompt_no_template = build_drafter_prompt(
+        section=section,
+        template_section_meta={"title": "DCF"},
+        thesis="T.",
+        themes=[],
+        ticker="MSFT",
+    )
+    assert "You are drafting" not in prompt_no_template
 
 
 def test_multiple_artifacts_all_present() -> None:

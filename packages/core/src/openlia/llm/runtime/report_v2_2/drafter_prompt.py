@@ -15,11 +15,13 @@ def build_drafter_prompt(
     thesis: str,  # cross-section thesis from earlier stage
     themes: list[str],  # cross-section themes
     threading_summaries: list[str] | None = None,  # prior section summaries
+    template_id: str | None = None,  # e.g. "stock_initiation_v2"
+    ticker: str | None = None,  # e.g. "MSFT"
 ) -> str:
     """Build the LLM-facing prompt for Stage 7b drafting one section.
 
     Structure per artifact-injection §6:
-    1. System role: section subagent
+    1. System role: section subagent (with template_id/ticker context when provided)
     2. Thesis + themes
     3. Section metadata (title, word_budget, style)
     4. Materialized artifacts (each with provenance header)
@@ -29,7 +31,9 @@ def build_drafter_prompt(
     """
     parts: list[str] = []
 
-    # 1. System role
+    # 1. System role (per artifact-injection §6 — include template_id and ticker if provided)
+    if template_id and ticker:
+        parts.append(f"You are drafting {template_id} for {ticker}.")
     parts.append("You are a section subagent drafting one section of an equity research report.")
     parts.append(
         "Ground every claim in the artifacts provided. "
