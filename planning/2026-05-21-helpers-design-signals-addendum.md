@@ -10,11 +10,11 @@ These three helpers extend the existing stack:
 - **`moving_average_panel`** — historical moving-average trend, crossovers, and mean-reversion stretch
 - **`historical_multiple_trends`** — historical P/E and P/S trends vs the company's own history and sector
 
-Suggested placement: `insider_signal_panel` in **§4 (Business quality / capital allocation)**; `moving_average_panel` in **§5 (Risk + macro)** alongside `drawdown_panel`; `historical_multiple_trends` in **§3 (Valuation)**. All follow the §1.1 registration pattern, §1.3 provenance fields, and §1.4 fail-soft policy.
+Suggested placement: `insider_signal_panel` in **§4 (Business quality / capital allocation)**; `moving_average_panel` in **§5 (Risk + macro)** alongside `drawdown_panel`; `historical_multiple_trends` in **§3 (Valuation)** of the parent helpers-design doc. All follow the §1.1 registration pattern, §1.3 provenance fields, and §1.4 fail-soft policy.
 
 ---
 
-## A. `insider_signal_panel`
+## 1. `insider_signal_panel`
 
 **Purpose:** Convert disclosed SEC Form 4 insider transactions into a structured buying/selling signal, properly filtered by transaction type and weighted by insider role.
 
@@ -124,7 +124,7 @@ bearish:        cluster of standalone officer sales with no offsetting buys
 
 ---
 
-## B. `moving_average_panel`
+## 2. `moving_average_panel`
 
 **Purpose:** Derive the moving-average trend state, crossover signals, and mean-reversion stretch that analysts cite for timing and context — built on top of the raw indicator series from `eodhd_technicals`.
 
@@ -237,13 +237,13 @@ The z-score is the meaningful one: "+14% above the 200-day" means little without
 - `block_shape`: each requested `ma_window` present (or explicitly `null`) and each `crossover_pair` reported.
 - `numeric_ungrounded` (future): "trading above its 200-day" must trace to the computed `price_above_ma`, not asserted.
 
-**Note for the narrative generator (important):** A moving-average crossover is **context, not a verdict.** The golden/death cross is widely cited but its standalone predictive value is weak and regime-dependent — it works in trending markets and whipsaws in ranges. The narrative must (a) never present a cross as a buy/sell signal on its own, (b) prefer volume-confirmed crosses, and (c) frame stretch and trend as conditional on the fundamental thesis from the rest of the report. This is the same conditional-language discipline enforced on insider selling (§A) and multiple z-scores (§C).
+**Note for the narrative generator (important):** A moving-average crossover is **context, not a verdict.** The golden/death cross is widely cited but its standalone predictive value is weak and regime-dependent — it works in trending markets and whipsaws in ranges. The narrative must (a) never present a cross as a buy/sell signal on its own, (b) prefer volume-confirmed crosses, and (c) frame stretch and trend as conditional on the fundamental thesis from the rest of the report. This is the same conditional-language discipline enforced on insider selling (§1) and multiple z-scores (§3).
 
-**Tie-in — smoothing the valuation multiple:** With `series_kind: "multiple"`, apply this same MA logic to the multiple series from `historical_multiple_trends` (§C) rather than to price. A 1-year moving average of trailing P/E damps quarter-to-quarter EPS noise and makes the re-rating/de-rating trend (§C, Step 4) cleaner than a raw point-in-time series. Keep the two distinct in output: price MAs are timing/technical context; smoothed-multiple MAs are a valuation-trend refinement.
+**Tie-in — smoothing the valuation multiple:** With `series_kind: "multiple"`, apply this same MA logic to the multiple series from `historical_multiple_trends` (§3) rather than to price. A 1-year moving average of trailing P/E damps quarter-to-quarter EPS noise and makes the re-rating/de-rating trend (§3, Step 4) cleaner than a raw point-in-time series. Keep the two distinct in output: price MAs are timing/technical context; smoothed-multiple MAs are a valuation-trend refinement.
 
 ---
 
-## C. `historical_multiple_trends`
+## 3. `historical_multiple_trends`
 
 **Purpose:** Place the current valuation multiple in the context of the company's own history (and its sector), to distinguish genuine cheapness from a deserved de-rating.
 
@@ -314,7 +314,7 @@ percentile_rank_w = fraction of historical observations below current
 vs_median_pct_w  = (current - median_w) / median_w
 ```
 
-**Step 4 — Re-rating vs de-rating trend:** OLS slope of the multiple over the window. A persistent downward slope = structural de-rating (often justified by decelerating fundamentals); a flat series with current below median = mean-reversion candidate. (Optionally smooth the series first via `moving_average_panel` with `series_kind: "multiple"` — see §B tie-in.)
+**Step 4 — Re-rating vs de-rating trend:** OLS slope of the multiple over the window. A persistent downward slope = structural de-rating (often justified by decelerating fundamentals); a flat series with current below median = mean-reversion candidate. (Optionally smooth the series first via `moving_average_panel` with `series_kind: "multiple"` — see §2 tie-in.)
 
 **Step 5 — Relative-to-sector overlay** (if `sector_median_series` provided): track the stock's premium/discount to its sector over time. The institutional "relative multiple" view — a stock can look cheap on absolute history while still expensive vs a sector that has de-rated further.
 

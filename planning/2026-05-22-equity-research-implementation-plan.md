@@ -29,7 +29,7 @@ Six phases. Phase 0 is hard prerequisite for everything else; Phases 1-2 unblock
 |---|---|---|---|---|
 | 0 | Foundation — schema, registry, materialization | (no backlog task — new) | 4 PRs | everything |
 | 1 | Data spine | #2, #3 | 2 PRs | Phases 2-5 |
-| 2 | Core analytics — Wave 0 helpers | #1, #6, #11, #12, #13, #14, #7, #21, #15, #23, #8 | 9-11 PRs | sector work |
+| 2 | Core analytics — Wave 0 helpers | #1, #6, #11, #12, #13, #14, #7, #21, #15, #23, #8 + risk/macro split | 11 PRs (PR 2.1-2.11) | sector work |
 | 3 | Sector modules — Wave 1 | #16, #17, #18, #19, #20 | 5 PRs | none |
 | 4 | Supporting libraries | #4, #5 | 2 PRs | none |
 | 5 | Future / parked | #9, #10, #22 | deferred | n/a |
@@ -53,7 +53,7 @@ Six phases. Phase 0 is hard prerequisite for everything else; Phases 1-2 unblock
 - `packages/core/src/openlia/llm/runtime/report_v2/capabilities.yaml` (new) — L1 capability index: 14 category names + one-line summaries; source-of-truth file the dispatcher's `project_l1` reads
 - Tests: registration validation (boot-time DAG), Category enum closure, capabilities.yaml shape
 
-**Acceptance:** registering a helper with `produces_artifacts=["nonexistent"]` fails at registration; cycle in producer/consumer graph fails registry boot; `capabilities.yaml` schema validates at boot; existing 7 helpers still register (via back-compat wrapper — see PR 0.2 for the full migration).
+**Acceptance:** registering a helper with `produces_artifacts=["nonexistent"]` fails at registration; cycle in producer/consumer graph fails registry boot; `capabilities.yaml` schema validates at boot; existing 7 helpers still register (via back-compat wrapper — see PR 0.2 for the full migration); `Category` enum exposes all 19 entries (schema-and-skills §3.1) including `risk_macro`, `saas_kpis`, `llm_nlp`, `output`, `adapter` — registering a helper with a category string outside the enum raises `ValueError` at import time.
 
 **Risk:** none meaningful; pure additive.
 
@@ -82,7 +82,7 @@ Note: `budget_variance`, `business_investment`, and `ratio_calculator` are slate
 
 **Decision needed during this PR:** whether to expand the closed 14-type verifier enum to 18 or introduce a materialization sub-enum (open question §12.2). Pick one and commit it inside this PR.
 
-**Acceptance:** end-to-end test runs a synthetic helper pipeline → produces typed artifacts → applies overrides → materializes deterministic markdown → drafter sees sectioned prompt. All seven targeted unit tests pass.
+**Acceptance:** end-to-end test runs a synthetic helper pipeline → produces typed artifacts → applies overrides → materializes deterministic markdown → drafter sees sectioned prompt. All seven targeted unit tests pass. **Stage 6 contract update:** runner_v2 Stage 6 emits `dict[ArtifactId, RenderableArtifact]` (typed Pydantic instances keyed by artifact_id) rather than free-form dicts; Stage 7a consumes that map directly. Verifier reads `helper.return_type` (introspected at registration) per schema-and-skills §5 — no second `shape_hint` lookup.
 
 **Risk:** medium. The materialization algorithm has real complexity (dedup + canonical-site ordering). Mitigate with the unit-test matrix.
 
@@ -141,7 +141,7 @@ Note: `budget_variance`, `business_investment`, and `ratio_calculator` are slate
 
 ---
 
-## 4. Phase 2 — Wave 0 core analytics (9-11 PRs)
+## 4. Phase 2 — Wave 0 core analytics (11 PRs)
 
 **Goal:** the analytic backbone of an institutional initiation report. Tackle in dependency order. Each PR introduces helpers + their `section_plan_defaults.yaml` entries + their skills.md (where listed).
 
@@ -198,21 +198,53 @@ The dependency anchor for everything valuation-related.
 
 ### PR 2.5 — Business quality + statement integrity (backlog task #7)
 
-**Implements:** helpers-design doc §4 (business quality + statement integrity), §4.2 (Sloan accruals — level form), §4.17 (Piotroski with ΔROA), §6.2 (ROIIC), §6.3 (economic profit), §6.4 (operating leverage), §6.5 (capitalized R&D), §6.7 (guidance_tracker), §6.8 (accruals_pct_of_ni)
+**Implements:** helpers-design doc §4 (business quality / capital allocation) — all of §4.1 through §4.20 **except** §4.18 (beneish_m_score, shipped in PR 2.6). Audit fixes from §9 apply.
 
-**Helpers:** Piotroski F-score, Dechow-Dichev accrual quality, Sloan accruals, earnings persistence, ROIIC, economic profit, operating leverage, capitalized R&D, guidance_tracker, accruals_pct_of_ni
-**Artifacts:** `business_quality_panel`, `statement_integrity_panel`
-**skills.md:** `statement_integrity_bundle.md`
+Scope is large enough that PR 2.5 may execute as 2-3 internal commits sequenced by panel grouping, but the §11 PR count treats it as one logical PR.
 
-**Audit fixes to apply (from helpers-design §9):**
-- Sloan accruals: use the **level** measure `Accruals_t / avg_TA_t` (not first-difference `(Accruals_t − Accruals_{t-1}) / avg_TA`).
-- Piotroski F-score: include canonical `Δ ROA > 0` signal (ROA improved YoY); drop the redundant `NI > 0` (already covered by `ROA > 0`).
-- Economic profit base: use **avg IC** (matches ROIC denominator) — not period-end IC.
-- ROIIC timing: **contemporaneous** (`ΔNOPAT_t / ΔIC_t`), not lagged.
-- Operating leverage: make parens explicit in the formula to avoid ambiguity.
-- Capitalized R&D denominator: clarify to `(Capitalized + Expensed)`.
-- Accruals % of NI: renamed to `accruals_pct_of_ni`; drop `+Capex` term (capex is investing, not accruals).
-- `guidance_tracker` label rename: `beat_within_range` → `beat_modest`. Credibility scoring documented as a heuristic, not a hard metric.
+**Helpers (19 total — one per helpers-design §4.x except §4.18):**
+
+Group A — return / value-creation panels (§4.1-§4.2):
+- `roic_panel` (§4.1) — ROIC, ROIIC, economic profit, ROIC-WACC spread
+- `quality_of_earnings_panel` (§4.2) — Sloan accruals, accruals_pct_of_ni, capitalized R&D %, composite quality score
+
+Group B — capital allocation + shareholder return panels (§4.3, §4.7, §4.8, §4.15, §4.16):
+- `capital_allocation_history` (§4.3)
+- `fcf_conversion_track_record` (§4.7)
+- `total_shareholder_yield` (§4.8)
+- `sbc_intensity` (§4.15)
+- `cap_table_dilution` (§4.16)
+
+Group C — earnings / estimates panels (§4.4, §4.5, §4.10, §4.11, §4.12, §4.13, §4.14):
+- `earnings_surprise_tracker` (§4.4)
+- `analyst_revision_momentum` (§4.5)
+- `one_time_item_identification` (§4.10)
+- `organic_vs_inorganic_growth` (§4.11)
+- `currency_neutral_growth` (§4.12)
+- `margin_trajectory_regression` (§4.13)
+- `operating_leverage_analysis` (§4.14)
+
+Group D — statement integrity / fundamental quality panels (§4.6, §4.9, §4.17, §4.19, §4.20):
+- `common_size_statements` (§4.6)
+- `cross_statement_validation` (§4.9)
+- `piotroski_f_score` (§4.17)
+- `cash_conversion_cycle` (§4.19)
+- `sustainable_growth_rate` (§4.20)
+
+**Artifacts:** `roic_panel`, `quality_of_earnings_panel`, `business_quality_panel` (aggregator), `statement_integrity_panel` (aggregator), plus one artifact per individual helper above.
+**skills.md:** `statement_integrity_bundle.md` (covers Piotroski + Dechow-Dichev + accrual quality interpretation)
+
+**Audit fixes to apply (from helpers-design §9; covers items 3, 5, 6, 7, plus "Additional corrections"):**
+- Sloan accruals (§4.2): use the **level** measure `Accruals_t / avg_TA_t` (not first-difference).
+- Piotroski F-score (§4.17): include canonical `Δ ROA > 0` signal; drop redundant `NI > 0`.
+- Economic profit base (§4.1): use **avg IC** (matches ROIC denominator) — not period-end IC.
+- ROIIC timing (§4.1): **contemporaneous** (`ΔNOPAT_t / ΔIC_t`), not lagged. Near-zero ΔIC → null with reason; negative ΔIC → sign-flip warning.
+- Operating leverage (§4.14): parenthesization explicit; sign-divergence cases flagged not dropped.
+- Capitalized R&D % (§4.2): denominator = `(Capitalized + Expensed)`.
+- accruals_pct_of_ni (§4.2): formula `(NI − CFO) / NI` (no `+Capex` term).
+- NOPAT calculation (§4.1): explicit `use_adjusted_ebit` flag; default GAAP EBIT × (1 − tax_rate); records which path used.
+- Invested capital (§4.1): `Total_Equity + Total_Debt − Cash` (operating leases included post-ASC 842 / IFRS 16); all cash netted; applied identically across ROIC / ROIIC / EP.
+- Currency-neutral growth (§4.12): explicit output recording disclosed-vs-derived path.
 
 **Cleanup:** deprecate and remove `budget_variance.py`, `business_investment.py`, `ratio_calculator.py`. Their schemas were migrated in PR 0.2; this PR deletes the files and any test fixtures that referenced them.
 
@@ -262,12 +294,23 @@ The dependency anchor for everything valuation-related.
 
 ### PR 2.10 — Workbook builder + remaining outputs (backlog task #8)
 
-**Implements:** helpers-design doc §8 (workbook builder + remaining outputs)
+**Implements:** helpers-design §2.5 `WorkbookTemplate` class (infrastructure); helper-level design for `workbook_builder` lives in the new supplement doc `2026-05-22-helpers-design-supplement.md` (forthcoming Commit 2). Also picks up helpers-design §3.6 `football_field_chart` and §3.7 `waterfall_chart` outputs that didn't ship with PR 2.2.
 
-**Helpers:** `workbook_builder`, remaining chart / table helpers
-**Artifacts:** `workbook_render`
+**Helpers:** `workbook_builder`, `football_field_chart`, `waterfall_chart`, plus any remaining chart / table helpers
+**Artifacts:** `workbook_render`, `football_field_render`, `waterfall_render`
 **skills.md:** `workbook_builder.md`
-**Acceptance:** produces a multi-sheet xlsx with cross-sheet formulas, formatted to a published convention per design §8.2.
+**Acceptance:** produces a multi-sheet xlsx with cross-sheet formulas, formatted to a published convention per the supplement doc.
+
+### PR 2.11 — Risk / macro helpers (backlog tasks #8 spillover, #4 prep)
+
+**Implements:** helpers-design §5.1 `drawdown_panel`, §5.2 `yield_curve_shape`. (§5.3 `commodity_exposure_tracker` already exists; it migrates to the new schema in PR 0.2.)
+
+**Helpers:** `drawdown_panel`, `yield_curve_shape`
+**Artifacts:** `drawdown_panel`, `yield_curve_shape`
+**Category:** `risk_macro`
+**Acceptance:** `drawdown_panel` returns max-drawdown, time-to-recovery, calmar ratio per design §5.1; `yield_curve_shape` returns 2s/10s, 3m/10y, NY-Fed recession-prob per design §5.2. Both unit-tested with synthetic series.
+
+**Risk:** low; both are mechanical computations against existing EODHD endpoints.
 
 **Phase 2 exit gate:** `stock_initiation_v2` template can run end-to-end against a tech ticker (MSFT, NVDA) and a value/cyclical ticker (CAT, X) and produce a complete report through Stage 7b. All 14 Stage 8 verifier issue types testable.
 
@@ -301,9 +344,26 @@ Each sector PR adds a sector-specific template (`stock_initiation_banks_v2`, etc
 
 OLS, multi-factor regression, VIF, correlation, t/F tests. Each registers as a separate library helper with `data_dependencies` declaring its inputs.
 
-### PR 4.2 — claude-cookbooks pattern adoption (backlog task #5)
+### PR 4.2 — claude-cookbooks pattern adoption + LLM-orchestrated helpers (backlog task #5)
 
-PDF table extraction fallback (pdfplumber), structured classification helpers, RAG patterns for filing search. License: MIT.
+**Implements:** helpers-design §2.4 `pdf_ingest`, §7 all LLM-orchestrated helpers.
+
+**Helpers (8 total):**
+- `pdf_ingest` (§2.4) — pdfplumber + camelot fallback table extraction
+- `transcript_tone_analysis` (§7.1) — earnings-call transcript polarity / hedging metrics
+- `tone_shift_qoq` (§7.2) — QoQ delta in tone vs prior calls
+- `mda_extraction` (§7.3) — structured extraction of MD&A drivers, headwinds, tailwinds
+- `risk_factors_extraction` (§7.4) — structured extraction of 10-K risk factor items with novelty flags
+- `forward_looking_statements` (§7.5) — extracts forward statements with confidence flags
+- `guidance_tracker` (§7.6) — beat/miss tracking with corrected `beat_modest` label (audit fix #8 below)
+- `customer_concentration_extraction` (§7.7) — top-N customer disclosures from 10-K item 1
+
+**Category:** `llm_nlp` for §7 helpers; `adapter` for `pdf_ingest`.
+
+**Audit fix from helpers-design §9:**
+- `guidance_tracker` (§7.6): `beat_within_range` → `beat_modest`; credibility scoring relabeled as "guidance accuracy heuristic" and marked opinionated, not neutral track-record.
+
+**Acceptance:** each LLM-orchestrated helper has at least one happy-path test with a recorded transcript / filing fixture and one extraction-failure test (low-confidence return). `pdf_ingest` extracts a known table from a fixture PDF. License check: MIT.
 
 **Phase 4 exit gate:** statistical inference and PDF fallback are available to helpers in Phases 2 and 3 that need them (some Phase 3 helpers may need backports if scheduled out of order).
 
@@ -342,6 +402,8 @@ Every PR in Phases 1-4 must include:
 | PR 2.2 before PR 2.3, 2.4 | DCF artifacts feed DDM / Justified Multiples comparison + Decision layer |
 | PR 2.1 before PR 2.4 | Comparables artifacts feed the Decision layer's blender weights |
 | PR 2.1 before PR 2.8 | Historical multiple trends pairs with comparables |
+| PR 2.6 before PR 2.7 | Altman variants share infrastructure (§14 row); building 2.7 first would force a refactor when 2.6 lands |
+| PR 2.2 before PR 2.10 | football_field_chart consumes DCF + comps valuation artifacts shipped in 2.2 |
 | Phase 2 before Phase 3 | Sector modules build on the analytic primitives (DCF, comps, statement integrity) |
 
 Phases 3 and 4 are parallelizable internally; PRs within those phases have no inter-dependencies.
@@ -365,10 +427,10 @@ Phases 3 and 4 are parallelizable internally; PRs within those phases have no in
 
 - Phase 0: 4 PRs
 - Phase 1: 2 PRs
-- Phase 2: 10 PRs (9-11 range)
+- Phase 2: 11 PRs (2.1 through 2.11, including the new 2.11 risk/macro split)
 - Phase 3: 5 PRs
 - Phase 4: 2 PRs
-- **Total: ~23 PRs** to complete Waves 0 + 1
+- **Total: ~24 PRs** to complete Waves 0 + 1
 
 Sector module PRs (Phase 3) and supporting library PRs (Phase 4) are parallelizable, so wall-clock time is shorter than sequential PR count suggests.
 
@@ -383,6 +445,13 @@ These don't block Phase 0 but each has a designated resolution PR:
 3. **Multimodal chart rendering:** decide during PR 2.2 (first chart-heavy helper).
 4. **Skill doc CI lint strictness:** lint is implemented in PR 0.4; strictness level (warn vs fail) gets finalized once a real skill doc exists, deferred to PR 2.1 (first skills.md authored).
 5. **Citeline 2024 PoS table license:** if redistribution restricted, the rNPV helper falls back to user-supplied PoS values. Decide during PR 3.3.
+6. **Helper versioning** (schema-and-skills §9): `HelperSchema.version` is bumped on contract changes but no migration story is defined. Defer until first real version bump.
+7. **L1.5 cache key strategy** (schema-and-skills §9): sessionId-scoped vs. global cache depends on multi-user company-mode behavior. Defer to deployment task.
+8. **Artifact-type live-reload** (schema-and-skills §9): adding a new ArtifactType currently requires registry rebuild. Acceptable for v2.2; revisit if dynamic helper loading becomes a need.
+9. **Streaming materialization** (artifact-injection §11): can Stage 7a stream markdown to the drafter chunk-by-chunk, or must it batch the full section_plan? Defer until token-cost data from Phase 2 informs the call.
+10. **Cross-report dedup** (artifact-injection §11): can artifacts computed for ticker A be cached and reused for ticker B in a sector batch? Defer to Phase 3 sector-batch design.
+11. **Drafter feedback loop** (artifact-injection §11): does the drafter ever request a higher fidelity than the planner allocated? If yes, how is that wired? Defer to first observed need.
+12. **Football-field methodology weighting** (helpers-design §9 item 9, marked OPEN): currently unweighted (min/median/max of per-multiple medians). Confidence weighting is a defensible future addition. Decide during PR 2.10 (which ships the football_field_chart helper).
 
 ---
 
@@ -400,59 +469,102 @@ The branch shipped to main at end of Phase 3 is the v2.2 GA cut. Wave 2 work hap
 
 ## 14. Design-doc cross-reference
 
-Every PR cites the specific design-doc sections it implements. This table makes the binding machine-checkable in code review — if a PR description doesn't reference at least one section in the table below, the PR is incomplete.
+Every PR cites the specific design-doc sections it implements. This table makes the binding machine-checkable — `test_planning_consistency.py` verifies that each cited `§N` resolves to a real section heading in the cited doc.
+
+**Two new design docs are scheduled for Commits 2-3 of this branch** to fill gaps that an earlier audit surfaced:
+
+- `2026-05-22-helpers-design-supplement.md` (forthcoming) — DCF engine, cost-of-capital, DDM family, justified multiples, SOTP, decision layer, Altman variants, dividend safety, credit/solvency, 5-step DuPont, debt-maturity ladder, workbook_builder helper
+- `2026-05-22-helpers-design-sector-modules.md` (forthcoming) — Banks, REITs, Pharma, Energy, Insurance panels
+
+Rows marked **(pending)** below cite sections in those forthcoming docs. The doctest skips pending-doc rows until the files land; Commit 4 of this branch re-runs the audit to ensure every pending row resolves.
 
 | Design doc | Sections | Implementing PR(s) |
 |---|---|---|
-| **helper-stack** | §1.1 four-tier exposure | PR 0.1, PR 0.4 |
-| helper-stack | §1.2 Option B drafter (prebuilt-only) | PR 0.3 (implicit — no ad-hoc tool calls wired) |
-| helper-stack | §1.3 data-source tagging stub | PR 0.1 (`data_dependencies` field), PR 1.1 (`Connector` adapter) |
-| helper-stack | §2 external libraries | PR 1.1 (EODHD), PR 1.2 (FinanceToolkit), PR 4.1 (statsmodels), PR 4.2 (pdfplumber) |
-| helper-stack | §4.1 ratio_calculator deprecation | PR 0.2 (schema migration holding step), PR 2.5 (delete file) |
-| helper-stack | §4.1 budget_variance / business_investment deprecation | PR 0.2 then PR 2.5 |
-| helper-stack | §4.1 saas_metrics repurpose | PR 0.2 then PR 2.9 |
-| helper-stack | §6 task table (24 tasks) | Phases 1-5 collectively |
+| **helper-stack** | §1 architecture decisions | PR 0.1, PR 0.3, PR 0.4 |
+| helper-stack | §2 external libraries | PR 1.1 (EODHD), PR 1.2 (FinanceToolkit), PR 4.1 (statsmodels), PR 4.2 (pdfplumber + cookbooks) |
 | **schema-and-skills** | §1 four-tier exposure | PR 0.1, PR 0.4 |
 | schema-and-skills | §2 ArtifactType registry + DAG validation | PR 0.1 |
-| schema-and-skills | §3.1 closed enums | PR 0.1 |
-| schema-and-skills | §3.2 sub-model split | PR 0.1 |
-| schema-and-skills | §3.3 registration with return type | PR 0.1 |
-| schema-and-skills | §3.4 projection rules | PR 0.4 |
+| schema-and-skills | §3 schema (closed enums, sub-models, registration, projection) | PR 0.1 (§3.1-§3.3), PR 0.4 (§3.4) |
 | schema-and-skills | §4 boot-time validation | PR 0.1 |
-| schema-and-skills | §5 output validation flow | PR 0.1 (verifier reads runtime Pydantic) |
+| schema-and-skills | §5 output validation flow (verifier coherence) | PR 0.1 (verifier reads runtime Pydantic) |
 | schema-and-skills | §6 18-helper skills.md list | PR 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.8, 2.10, 3.1-3.5 (per-PR) |
 | schema-and-skills | §7 skills.md template | PR 2.1 (first skills.md authored) |
 | **artifact-injection** | §1 pipeline placement (Stage 7a/7b) | PR 0.3 |
-| artifact-injection | §2 RenderableArtifact + Fidelity | PR 0.1 |
+| artifact-injection | §2 fidelity contract on ArtifactType | PR 0.1 |
 | artifact-injection | §3 SectionPlan schema | PR 0.3 |
 | artifact-injection | §4 template defaults + planner overrides | PR 0.3 (resolver), PR 0.4 (Stage 5 emit + template defaults yaml) |
 | artifact-injection | §5 materialization algorithm | PR 0.3 |
-| artifact-injection | §6 drafter prompt structure | PR 0.3 |
+| artifact-injection | §6 drafter prompt structure (Stage 7b) | PR 0.3 |
 | artifact-injection | §8 verifier integration | PR 0.3 |
 | artifact-injection | §9 testing strategy | PR 0.3 |
-| **helpers-design** | §3 comparables (incl. §3.1 combined range, §3.2 peer-set, §3.3 NM handling) | PR 2.1 |
-| helpers-design | §4 business quality + statement integrity | PR 2.5 |
-| helpers-design | §4.4 Beneish M-score | PR 2.6 |
-| helpers-design | §4.5 Altman Z variants | PR 2.6, PR 2.7 (shared infra) |
-| helpers-design | §4.6 dividend safety | PR 2.6 |
-| helpers-design | §4.7 credit + solvency | PR 2.7 |
-| helpers-design | §4.8 5-step DuPont | PR 2.7 |
-| helpers-design | §4.9 debt-maturity ladder | PR 2.7 |
-| helpers-design | §5 DCF engine + cost of capital | PR 2.2 |
-| helpers-design | §5.6 DDM family | PR 2.3 |
-| helpers-design | §5.7 justified multiples | PR 2.3 |
-| helpers-design | §5.8 SOTP | PR 2.3 |
-| helpers-design | §6.1 SaaS KPI panel | PR 2.9 |
-| helpers-design | §6.2-6.8 business-quality formulas | PR 2.5 |
-| helpers-design | §7 decision layer | PR 2.4 |
-| helpers-design | §8 workbook builder + remaining outputs | PR 2.10 |
-| helpers-design | §9 audit fix resolutions (11 fixes) | PR 2.1 (EV bridge, combined range), PR 2.5 (Sloan, Piotroski, ROIIC, economic profit, op leverage, capitalized R&D, accruals_pct_of_ni, guidance_tracker), PR 2.9 (Magic Number) |
-| helpers-design | §10 sector modules | PR 3.1-3.5 |
-| **signals-addendum** | §1 insider_signal_panel (incl. Form 4 codes, role weighting, clustering, 10b5-1, asymmetric weights) | PR 2.8 |
+| **helpers-design** | §1 common conventions (registration, exposure, freshness, missing-data, verifier hooks) | PR 0.1, PR 0.4 |
+| helpers-design | §2.1 EODHD adapter | PR 1.1 |
+| helpers-design | §2.2 FinanceToolkit adapter | PR 1.2 |
+| helpers-design | §2.3 statsmodels adapter | PR 4.1 |
+| helpers-design | §2.4 pdf_ingest | PR 4.2 |
+| helpers-design | §2.5 WorkbookTemplate class (infrastructure) | PR 2.10 |
+| helpers-design | §3.1 comparables | PR 2.1 |
+| helpers-design | §3.2 sensitivity_table | PR 2.2 |
+| helpers-design | §3.3 tornado_diagram | PR 2.2 |
+| helpers-design | §3.4 scenario_weighting | PR 2.2 |
+| helpers-design | §3.5 reverse_dcf | PR 2.2 |
+| helpers-design | §3.6 football_field_chart | PR 2.10 |
+| helpers-design | §3.7 waterfall_chart | PR 2.10 |
+| helpers-design | §4.1 roic_panel | PR 2.5 |
+| helpers-design | §4.2 quality_of_earnings_panel | PR 2.5 |
+| helpers-design | §4.3 capital_allocation_history | PR 2.5 |
+| helpers-design | §4.4 earnings_surprise_tracker | PR 2.5 |
+| helpers-design | §4.5 analyst_revision_momentum | PR 2.5 |
+| helpers-design | §4.6 common_size_statements | PR 2.5 |
+| helpers-design | §4.7 fcf_conversion_track_record | PR 2.5 |
+| helpers-design | §4.8 total_shareholder_yield | PR 2.5 |
+| helpers-design | §4.9 cross_statement_validation | PR 2.5 |
+| helpers-design | §4.10 one_time_item_identification | PR 2.5 |
+| helpers-design | §4.11 organic_vs_inorganic_growth | PR 2.5 |
+| helpers-design | §4.12 currency_neutral_growth | PR 2.5 |
+| helpers-design | §4.13 margin_trajectory_regression | PR 2.5 |
+| helpers-design | §4.14 operating_leverage_analysis | PR 2.5 |
+| helpers-design | §4.15 sbc_intensity | PR 2.5 |
+| helpers-design | §4.16 cap_table_dilution | PR 2.5 |
+| helpers-design | §4.17 piotroski_f_score | PR 2.5 |
+| helpers-design | §4.18 beneish_m_score | PR 2.6 |
+| helpers-design | §4.19 cash_conversion_cycle | PR 2.5 |
+| helpers-design | §4.20 sustainable_growth_rate | PR 2.5 |
+| helpers-design | §5.1 drawdown_panel | PR 2.11 |
+| helpers-design | §5.2 yield_curve_shape | PR 2.11 |
+| helpers-design | §5.3 commodity_exposure_tracker (existing helper, schema migration only) | PR 0.2 |
+| helpers-design | §6.1 saas_kpi_panel | PR 2.9 |
+| helpers-design | §7.1 transcript_tone_analysis | PR 4.2 |
+| helpers-design | §7.2 tone_shift_qoq | PR 4.2 |
+| helpers-design | §7.3 mda_extraction | PR 4.2 |
+| helpers-design | §7.4 risk_factors_extraction | PR 4.2 |
+| helpers-design | §7.5 forward_looking_statements | PR 4.2 |
+| helpers-design | §7.6 guidance_tracker | PR 4.2 |
+| helpers-design | §7.7 customer_concentration_extraction | PR 4.2 |
+| helpers-design | §8 verifier hooks summary | PR 0.3 |
+| helpers-design | §9 audit resolutions (11 fixes) | PR 2.1 (EV bridge, combined range), PR 2.5 (Sloan, Piotroski ΔROA, ROIIC, economic profit, op leverage, capitalized R&D, accruals_pct_of_ni), PR 2.9 (Magic Number), PR 4.2 (guidance_tracker label) |
+| **supplement** | §2 cost_of_capital_builder | PR 2.2 |
+| supplement | §3 dcf_engine | PR 2.2 |
+| supplement | §4 ddm_family | PR 2.3 |
+| supplement | §5 justified_multiples | PR 2.3 |
+| supplement | §6 sotp_builder | PR 2.3 |
+| supplement | §7 decision layer (blender, ETR, risk/reward, rating bands) | PR 2.4 |
+| supplement | §8 altman_z_variants | PR 2.6 |
+| supplement | §9 dividend_safety_panel | PR 2.6 |
+| supplement | §10 credit_solvency_panel | PR 2.7 |
+| supplement | §11 five_step_dupont | PR 2.7 |
+| supplement | §12 debt_maturity_ladder | PR 2.7 |
+| supplement | §13 workbook_builder helper | PR 2.10 |
+| **sector-modules** | §2 Banks panel | PR 3.1 |
+| sector-modules | §3 REITs panel | PR 3.2 |
+| sector-modules | §4 Pharma rNPV pipeline | PR 3.3 |
+| sector-modules | §5 Energy / E&P panel | PR 3.4 |
+| sector-modules | §6 Insurance panel | PR 3.5 |
+| **signals-addendum** | §1 insider_signal_panel | PR 2.8 |
 | signals-addendum | §2 moving_average_panel | PR 2.8 |
 | signals-addendum | §3 historical_multiple_trends | PR 2.8 |
 
-If a row above has no PR assignment, that's a design-doc requirement we haven't scheduled. As of this revision, every row resolves.
+If a row above has no PR assignment, that's a design-doc requirement we haven't scheduled. As of this revision, every row resolves once Commits 2 and 3 land the two pending docs.
 
 ---
 

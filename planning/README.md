@@ -9,11 +9,13 @@ This folder contains the design and implementation contracts for OpenLIA. Many d
 **Read in this exact order:**
 
 1. **`2026-05-22-equity-research-implementation-plan.md` — first, every time.** Find your PR row. Read the design-doc sections it cites in §14. Apply the audit fixes listed in your PR row. Satisfy the cross-cutting requirements in §8.
-2. **`2026-05-21-equity-research-helpers-design.md`** — pull the formula and logic for your helper from the cited sections. This is the source of truth for what each helper computes. 11 external-audit fixes already applied here.
-3. **`2026-05-21-helpers-design-signals-addendum.md`** — only if your PR builds insider / moving-average / historical-multiple-trends helpers.
-4. **`2026-05-21-helper-schema-and-skills.md`** — the universal schema contract. Every helper conforms. Sub-models (DirectoryEntry / SelectionGuidance / MechanicalContract / SkillDocRef), ArtifactType registry, DAG validation, 18-helper skills.md list.
-5. **`2026-05-22-artifact-injection-redesign.md`** — the Stage 7a materialization contract. Every artifact you produce must implement `RenderableArtifact.to_markdown(level)` at three fidelities.
-6. **`2026-05-21-equity-research-engine-helper-stack.md`** — high-level plan: which libraries we use, which we rejected (AGPL/GPL), helper rationalization decisions.
+2. **`2026-05-21-equity-research-helpers-design.md`** — pull the formula and logic for your helper from the cited sections. Source of truth for §3 valuation analytic helpers, §4.1-§4.20 business-quality helpers, §5.1-§5.3 risk/macro helpers, §6.1 SaaS KPI, and §7.1-§7.7 LLM-orchestrated helpers. 11 external-audit fixes already applied.
+3. **`2026-05-22-helpers-design-supplement.md`** — companion to helpers-design. Source of truth for DCF engine, cost-of-capital builder, DDM family, justified multiples, SOTP, decision layer (blender / ETR / risk-reward / rating bands), Altman variants, dividend safety, credit/solvency, 5-step DuPont, debt-maturity ladder, and the workbook_builder helper. **Required for PRs 2.2, 2.3, 2.4, 2.6, 2.7, 2.10.**
+4. **`2026-05-22-helpers-design-sector-modules.md`** — source of truth for Banks, REITs, Pharma rNPV, Energy / E&P, and Insurance sector panels. **Required for PRs 3.1-3.5.**
+5. **`2026-05-21-helpers-design-signals-addendum.md`** — only if your PR builds insider / moving-average / historical-multiple-trends helpers (PR 2.8).
+6. **`2026-05-21-helper-schema-and-skills.md`** — the universal schema contract. Every helper conforms. Sub-models (DirectoryEntry / SelectionGuidance / MechanicalContract / SkillDocRef), ArtifactType registry, DAG validation, 19-entry `Category` enum, 18-helper skills.md list.
+7. **`2026-05-22-artifact-injection-redesign.md`** — the Stage 7a materialization contract. Every artifact you produce must implement `RenderableArtifact.to_markdown(level)` at three fidelities.
+8. **`2026-05-21-equity-research-engine-helper-stack.md`** — high-level plan: which libraries we use, which we rejected (AGPL/GPL), helper rationalization decisions.
 
 ---
 

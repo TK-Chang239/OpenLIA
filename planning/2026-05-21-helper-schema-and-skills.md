@@ -20,7 +20,7 @@ The previously documented "three-layer" model was undercounted. With `skill_doc`
 
 | Tier | What | Always loaded? | Tokens (typical) |
 |---|---|---|---|
-| **L1** | Category index — 14 categories + one-liners | yes, cached across sessions | ~1k |
+| **L1** | Category index — 19 categories + one-liners | yes, cached across sessions | ~1k |
 | **L1.5** | Helper directory — ~178 helper one-liners + category tag | yes, cached across sessions | ~12-18k (cached → ~1-2k effective) |
 | **L2** | Selection guidance + mechanical contract for planner-picked helpers | per run, cached across stages | ~5-8k for ~12 picked helpers |
 | **L3** | Skill docs — full `skills.md` for complex helpers, opt-in per helper | on demand, only when planner requests | ~1.5-3k per loaded skill |
@@ -83,21 +83,34 @@ from typing import Literal
 
 
 class Category(str, Enum):
+    # Valuation
     COMPARABLES = "comparables"
     DCF = "dcf"
     ALTERNATIVE_VALUATION = "alternative_valuation"
     DECISION = "decision"
+    # Business / fundamentals
     BUSINESS_QUALITY = "business_quality"
     STATEMENT_INTEGRITY = "statement_integrity"
     CREDIT_SOLVENCY = "credit_solvency"
     FORENSIC = "forensic"
+    # Risk / macro / non-fundamental
+    RISK_MACRO = "risk_macro"
+    SAAS_KPIS = "saas_kpis"
     SIGNALS = "signals"
+    # Qualitative / NLP / unstructured-source helpers (Task #5 LLM-orchestrated)
+    LLM_NLP = "llm_nlp"
+    # Outputs and infrastructure
+    OUTPUT = "output"            # workbook builder, chart helpers, structured exports
+    ADAPTER = "adapter"          # EODHD / FinanceToolkit / statsmodels / pdf_ingest wrappers
+    # Sector modules (Wave 1)
     SECTOR_BANKS = "sector_banks"
     SECTOR_REITS = "sector_reits"
     SECTOR_PHARMA = "sector_pharma"
     SECTOR_ENERGY = "sector_energy"
     SECTOR_INSURANCE = "sector_insurance"
-    # 14 closed entries; verifier rejects helpers with categories outside this set
+    # 19 closed entries. Verifier rejects helpers with categories outside this set.
+    # If a new helper does not fit any of these, add a new enum value via a new PR
+    # — do not bypass the closed-set invariant.
 
 
 OutputType = Literal[
@@ -105,7 +118,7 @@ OutputType = Literal[
 ]
 ```
 
-Final 14-entry `Category` enum will mirror the audit taxonomy exactly. New helpers cannot drift into ad-hoc category strings.
+19 closed entries. Wave 2 sector modules (Mining, Retail, Telecom, Semis, Airlines) will add their own enum values when scheduled. New helpers cannot drift into ad-hoc category strings.
 
 ### 3.2 Sub-models — one per tier
 

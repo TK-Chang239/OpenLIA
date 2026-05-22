@@ -31,6 +31,10 @@ DESIGN_DOCS = {
     "signals-addendum": PLANNING_DIR / "2026-05-21-helpers-design-signals-addendum.md",
     "schema-and-skills": PLANNING_DIR / "2026-05-21-helper-schema-and-skills.md",
     "artifact-injection": PLANNING_DIR / "2026-05-22-artifact-injection-redesign.md",
+    # Forthcoming docs (Commits 2-3 of this branch). The file-existence checks
+    # in the test bodies skip rows that cite these until they land.
+    "supplement": PLANNING_DIR / "2026-05-22-helpers-design-supplement.md",
+    "sector-modules": PLANNING_DIR / "2026-05-22-helpers-design-sector-modules.md",
 }
 
 
@@ -120,10 +124,8 @@ INTENTIONALLY_UNMAPPED_SECTIONS: dict[str, dict[str, str]] = {
         "§12": "References / bibliography",
     },
     "helpers-design": {
-        # §0 = purpose, §1 = conventions, §2 = adapters — meta sections
         "§0": "Purpose meta-section",
-        "§1": "Conventions meta-section",
-        "§2": "Adapters / data layer — referenced via PR 1.1 by phase, not section",
+        "§10": "References / bibliography",
     },
     "signals-addendum": {
         # All sections are implementation; nothing intentionally unmapped
@@ -139,6 +141,13 @@ INTENTIONALLY_UNMAPPED_SECTIONS: dict[str, dict[str, str]] = {
         "§10": "Implementation order meta-section",
         "§11": "Open questions parked for later",
     },
+    "supplement": {
+        # Pending doc; no top-level sections exist yet. The test_every_design_doc_section
+        # check uses pytest.skip when the file is missing.
+    },
+    "sector-modules": {
+        # Pending doc; same skip behavior as above.
+    },
 }
 
 
@@ -153,7 +162,9 @@ def test_every_design_doc_section_has_a_pr_assignment_or_explicit_exemption(
     """
     for doc_label, path in DESIGN_DOCS.items():
         if not path.exists():
-            pytest.skip(f"Design doc {path} missing")
+            # Pending doc (will be added in later commits on this branch);
+            # the other docs in DESIGN_DOCS must still be validated.
+            continue
         text = path.read_text()
         sections = re.findall(r"^## (\d+)\.\s", text, re.MULTILINE)
         unmapped = INTENTIONALLY_UNMAPPED_SECTIONS.get(doc_label, {})
@@ -174,6 +185,44 @@ def test_every_design_doc_section_has_a_pr_assignment_or_explicit_exemption(
                 f"  (b) add {section_marker} to "
                 f"INTENTIONALLY_UNMAPPED_SECTIONS[{doc_label!r}] with a "
                 f"stated reason."
+            )
+
+
+def test_cross_reference_sections_resolve_in_cited_docs(cross_reference_table):
+    """Every §N citation in §14 must resolve to a real heading in the cited doc.
+
+    Catches the class of drift where §14 says "helpers-design §5.6 DDM family"
+    but §5.6 doesn't exist in helpers-design. The original substring-only check
+    let fabricated citations slip through; this enforces that each cited section
+    marker has a matching `## N.` or `### N.M` heading in the actual doc.
+
+    Skips citations to pending docs that haven't landed yet (supplement,
+    sector-modules) — those resolve once the docs are authored in subsequent
+    commits on this branch.
+    """
+    section_re = re.compile(r"§(\d+(?:\.\d+)?)")
+    for doc_label, section_text, _ in cross_reference_table:
+        if doc_label not in DESIGN_DOCS:
+            continue  # caught separately by test_cross_reference_doc_labels_are_known
+        doc_path = DESIGN_DOCS[doc_label]
+        if not doc_path.exists():
+            continue  # pending doc; resolved when the file lands
+        doc_text = doc_path.read_text()
+        section_refs = section_re.findall(section_text)
+        for section_ref in section_refs:
+            patterns = [
+                rf"^## {re.escape(section_ref)}\.\s",
+                rf"^### {re.escape(section_ref)}\s",
+                rf"^### {re.escape(section_ref)}`",
+            ]
+            found = any(
+                re.search(p, doc_text, re.MULTILINE) for p in patterns
+            )
+            assert found, (
+                f"§{section_ref} cited in §14 for {doc_label!r} "
+                f"(row text: {section_text!r}) does not resolve to any "
+                f"heading in {doc_path.name}. "
+                f"Either correct the §14 row or add the section to the doc."
             )
 
 
