@@ -1310,3 +1310,101 @@ artifact_types:
       summary: "Lag order, variable names, Granger causality matrix (significant pairs), AIC/BIC"
       full: "Full coefficient matrices per lag, complete Granger causality matrix with p-values and verdicts, impulse response functions, AIC, BIC, log-likelihood"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # NLP / unstructured-source helpers (8 helpers, PR 4.2)
+  # -----------------------------------------------------------------------
+
+  - name: pdf_ingest_output
+    description: >
+      Structured extraction from a PDF document (SEC filing, earnings deck, research report).
+      Produced by pdf_ingest using pdfplumber. Contains per-page text, tables as
+      list-of-rows, and document metadata (page count, file size, extraction quality).
+    fidelity:
+      headline: "PDF ingest: N pages, M tables, extraction quality: X"
+      summary: "Metadata (page count, file size), section list with page ranges, table count"
+      full: "Full per-page text, all tables as list-of-rows, metadata, extraction notes"
+    depends_on: []
+
+  - name: transcript_tone_output
+    description: >
+      LLM-analyzed earnings call transcript tone. Per-speaker tone classification
+      (confident/cautious/hedging/defensive for management; constructive/challenging/neutral
+      for analysts), prepared-remarks vs Q&A tone differential, hedging language themes,
+      forward-looking statement count, and extraction quality self-assessment.
+    fidelity:
+      headline: "Transcript tone: prepared_remarks=X, QA=Y, differential=Z"
+      summary: "Per-speaker tone summary, prepared vs QA differential, hedging themes"
+      full: "All speaker entries with tone, evidence quotes, hedging counts, forward-looking counts, themes, quality flag"
+    depends_on: []
+
+  - name: tone_shift_qoq_output
+    description: >
+      QoQ tone shift analysis comparing current and prior quarter transcripts.
+      Returns overall shift direction (more cautious / unchanged / more confident),
+      per-speaker/topic key shifts with current and prior evidence quotes,
+      hedging language change percent, and narrative summary.
+    fidelity:
+      headline: "QoQ tone shift: overall=X, hedging change=Y%"
+      summary: "Overall shift direction, key shifts count, hedging language change pct, narrative"
+      full: "Full key_shifts list with speaker role, topic, direction, current and prior evidence; narrative"
+    depends_on: []
+
+  - name: mda_extraction_output
+    description: >
+      Structured extraction of MD&A section from a 10-K or 10-Q filing.
+      Identifies key business drivers, headwinds, management outlook statements,
+      non-GAAP reconciliation mentions, and per-segment commentary with
+      disclosed growth rates.
+    fidelity:
+      headline: "MD&A: N drivers, M headwinds, segment commentary for K segments"
+      summary: "Top drivers, top headwinds, outlook statements, segment list"
+      full: "Full drivers list with direction and evidence quotes, headwinds with magnitude, outlook statements, non-GAAP mentions, segment commentary"
+    depends_on: []
+
+  - name: risk_factors_extraction_output
+    description: >
+      Structured extraction and categorization of Item 1A Risk Factors from a 10-K.
+      Categorizes risks into operational, financial, governance, macro, regulatory,
+      competitive. Flags new risks and removed risks vs prior year, and severity rankings.
+    fidelity:
+      headline: "Risk factors: N total, categories breakdown, M new this year"
+      summary: "Total risk count, categories breakdown, new risks count, removed risks count"
+      full: "Full risk list with title, category, text excerpt, first-appeared year, YoY language change flags; category breakdown; new/removed lists"
+    depends_on: []
+
+  - name: forward_looking_statements_output
+    description: >
+      Extracted forward-looking statements from a filing or transcript with hedging
+      language analysis. Each statement classified by category (guidance/outlook/
+      risk_factor_qualifier/strategic_statement), confidence indicator, qualifiers list,
+      time horizon, metric, and value range where disclosed.
+    fidelity:
+      headline: "Forward-looking: N statements, source=X, confidence distribution"
+      summary: "Statement count, source type, category breakdown, confidence distribution"
+      full: "Full statement list with text, category, confidence indicator, qualifiers, time horizon, metric, value range"
+    depends_on: []
+
+  - name: guidance_tracker_output
+    description: >
+      Management guidance vs actuals track record over up to 8 quarters.
+      Per-quarter verdict (beat_modest/beat_large/within_range/miss) with guidance
+      range and actual results. Summary with beat rate, miss rate, average revenue
+      surprise percent, guidance accuracy heuristic, and narrative.
+    fidelity:
+      headline: "Guidance track record: beat_rate=X%, miss_rate=Y%, accuracy_heuristic=Z"
+      summary: "Quarters analyzed, beat/within/miss rates, avg revenue surprise pct, accuracy heuristic"
+      full: "Full per-quarter guidance_track_record with guidance ranges, actuals, verdicts; summary with narrative"
+    depends_on: []
+
+  - name: customer_concentration_output
+    description: >
+      Customer concentration disclosures extracted from 10-K Item 1 and Item 14.
+      Top customer percent of revenue, top-3 and top-10 customer percentages,
+      named customers where disclosed, geographic and industry concentration,
+      source quote, and risk framing (low/moderate/high).
+    fidelity:
+      headline: "Customer concentration: top_customer=X%, risk_framing=Y"
+      summary: "Top customer %, top-3 %, named customers, geographic concentration, risk framing"
+      full: "Full disclosure: top customer, top-3, top-10, named customers, geographic breakdown, industry breakdown, source quote, risk framing"
+    depends_on: []

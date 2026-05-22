@@ -196,8 +196,12 @@ def test_artifact_type_registry_count() -> None:
     # + 6 statsmodels helpers (PR 4.1): ols_regression_output, stationarity_test_output,
     #   autocorrelation_output, heteroskedasticity_test_output, garch_volatility_output,
     #   var_model_output
-    # = 108
-    assert len(all_types) == 108, f"Expected 108 artifact types, got {len(all_types)}: {names}"
+    # + 8 NLP helpers (PR 4.2): pdf_ingest_output, transcript_tone_output,
+    #   tone_shift_qoq_output, mda_extraction_output, risk_factors_extraction_output,
+    #   forward_looking_statements_output, guidance_tracker_output,
+    #   customer_concentration_output
+    # = 116
+    assert len(all_types) == 116, f"Expected 116 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -333,6 +337,15 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "heteroskedasticity_test_output",
         "garch_volatility_output",
         "var_model_output",
+        # NLP helpers (PR 4.2)
+        "pdf_ingest_output",
+        "transcript_tone_output",
+        "tone_shift_qoq_output",
+        "mda_extraction_output",
+        "risk_factors_extraction_output",
+        "forward_looking_statements_output",
+        "guidance_tracker_output",
+        "customer_concentration_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (

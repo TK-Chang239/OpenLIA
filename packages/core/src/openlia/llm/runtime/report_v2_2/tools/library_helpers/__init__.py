@@ -81,6 +81,7 @@ from . import (  # noqa: E402, F401
     fred,
     implied_upside_downside,
     justified_multiples,
+    nlp,
     price_target_blender,
     rating_band_assigner,
     ratio_calculator,
