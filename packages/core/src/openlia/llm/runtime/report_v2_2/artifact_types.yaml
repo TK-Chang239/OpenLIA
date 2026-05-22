@@ -517,3 +517,74 @@ artifact_types:
       summary: "Peer set, EV bridge, key multiples table (P/E, EV/EBITDA, EV/Sales), blended range"
       full: "Full peer panel, EV bridge with warning, all multiples stats, all implied values, blended range"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # DCF engine + cost of capital + sensitivity bundle (PR 2.2)
+  # -----------------------------------------------------------------------
+
+  - name: cost_of_capital_output
+    description: >
+      Cost of capital decomposition: risk-free rate, equity risk premium, beta,
+      cost of equity (CAPM / build-up / Hamada), after-tax cost of debt, capital
+      structure weights, and WACC. Consumed by every absolute valuation helper.
+    fidelity:
+      headline: "WACC X%, cost of equity Y%, after-tax cost of debt Z%"
+      summary: "WACC, cost of equity, cost of debt, D/E, method used"
+      full: "Full decomposition: rf, ERP, CRP, beta (source, window, R2), size/specific premiums, capital structure, narrative"
+    depends_on: []
+
+  - name: dcf_output
+    description: >
+      Full DCF engine result: FCFF schedule, discount factors, PV per period,
+      terminal value (perpetuity / exit multiple / key value driver), enterprise
+      value, equity value, implied per-share value, and TV/EV concentration warning.
+    fidelity:
+      headline: "DCF implied value $X/share (TV = Y% of EV)"
+      summary: "EV, equity value, per-share value, TV method and %, WACC, terminal growth"
+      full: "Full FCFF schedule, all three TV methods, EV bridge, sensitivity, warnings"
+    depends_on:
+      - cost_of_capital_output
+
+  - name: sensitivity_matrix
+    description: >
+      Generic 2-variable sensitivity matrix over any two continuous inputs.
+      Contains the base value, axis definitions, and the NxM result grid.
+      Used to show how an output changes across a grid of assumption pairs.
+    fidelity:
+      headline: "Sensitivity matrix: X axis [N values] x Y axis [M values]"
+      summary: "Base value, axis ranges, corner and center cell values"
+      full: "Full NxM grid as markdown table + Plotly HTML heatmap"
+    depends_on: []
+
+  - name: tornado_diagram_output
+    description: >
+      Single-variable tornado sensitivity: each input is varied from low to high
+      while others are held constant; results sorted by impact magnitude descending.
+    fidelity:
+      headline: "Tornado: top driver X swings $Y low/high (N variables)"
+      summary: "Top 5 drivers by impact magnitude with low/high values"
+      full: "Full ranked tornado table + Plotly HTML bar chart"
+    depends_on: []
+
+  - name: scenario_panel
+    description: >
+      Probability-weighted scenario analysis: list of named scenarios, each with
+      a value and probability. Output is the probability-weighted central value
+      plus the full scenario breakdown.
+    fidelity:
+      headline: "Scenario-weighted value $X (N scenarios, base/bull/bear)"
+      summary: "Weighted value, scenario breakdown table"
+      full: "Full scenario table: name, value, probability, weight, contribution"
+    depends_on: []
+
+  - name: reverse_dcf_output
+    description: >
+      Reverse DCF: given the current market price, solves for the implied long-term
+      growth rate (fixed WACC) or implied WACC (fixed growth). Shows what the market
+      is pricing in to justify the current valuation.
+    fidelity:
+      headline: "Market-implied growth rate X% (or implied WACC Y%) at price $Z"
+      summary: "Implied growth/WACC, current price, base WACC/growth, convergence diagnostics"
+      full: "Full Newton iteration log, sensitivity around implied value, interpretation"
+    depends_on:
+      - cost_of_capital_output

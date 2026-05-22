@@ -143,8 +143,7 @@ _SCHEMA = HelperSchema(
                 required=False,
                 default=0.0,
                 description=(
-                    "Market cap. Used for equity weight in WACC. "
-                    "Falls back to book equity if 0."
+                    "Market cap. Used for equity weight in WACC. Falls back to book equity if 0."
                 ),
             ),
             "risk_free_rate": HelperParam(

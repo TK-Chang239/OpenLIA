@@ -65,6 +65,8 @@ from . import (  # noqa: E402, F401
     business_investment,
     chart_builder,
     comparables_run,
+    cost_of_capital_builder,
+    dcf_engine,
     dcf_valuation,
     eodhd,
     excel_builder,
@@ -72,5 +74,9 @@ from . import (  # noqa: E402, F401
     forecast_builder,
     fred,
     ratio_calculator,
+    reverse_dcf,
     saas_metrics,
+    scenario_weighting,
+    sensitivity_table,
+    tornado_diagram,
 )
