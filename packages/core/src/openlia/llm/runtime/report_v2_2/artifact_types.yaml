@@ -630,3 +630,72 @@ artifact_types:
       summary: "Segment EVs table, overhead deduction, discount, equity bridge, per-share value"
       full: "Full segment detail, concentration warnings, equity bridge, sensitivity to discount assumption"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # Decision layer helpers (PR 2.4)
+  # -----------------------------------------------------------------------
+
+  - name: price_target_blended
+    description: >
+      Weighted blend of per-methodology price targets (DCF, DDM, comparables, SOTP).
+      Includes blended target, method breakdown with weights, dispersion statistics
+      (min/max/stdev/spread%), confidence score, and an explanatory narrative.
+    fidelity:
+      headline: "Blended PT $X (range $Y–$Z, confidence N)"
+      summary: "Blended target, method weights table, dispersion stdev and spread %"
+      full: "Full method breakdown, weight audit, dispersion, confidence score, warnings, narrative"
+    depends_on: []
+
+  - name: expected_total_return_output
+    description: >
+      Expected total return (ETR) over a stated horizon: capital return from price
+      target, income return from forward dividend yield, combined ETR, annualized ETR.
+    fidelity:
+      headline: "ETR +X% over N months (cap return +Y%, income +Z%)"
+      summary: "Capital return, income return, ETR, annualized ETR, horizon"
+      full: "Full decomposition: current price, target, cap return, dividend yield, horizon, annualized"
+    depends_on: []
+
+  - name: risk_reward_output
+    description: >
+      Asymmetric risk/reward profile: upside % to bull case, downside % to bear case,
+      R/R ratio, optional probability-weighted expected value, max drawdown,
+      asymmetry score, and a verdict band.
+    fidelity:
+      headline: "R/R X.Xx (upside +Y%, downside Z%)"
+      summary: "Upside %, downside %, R/R ratio, expected value, verdict"
+      full: "Full profile: current price, bull/bear, upside %, downside %, R/R, EV, asymmetry, verdict, narrative"
+    depends_on: []
+
+  - name: implied_upside_downside_output
+    description: >
+      Implied upside % to a price target, implied downside % to a bear scenario,
+      derived R/R ratio, and breakeven probability (probability of reaching PT for
+      zero expected return).
+    fidelity:
+      headline: "Implied upside +X%, downside Y%, R/R Z.Zx"
+      summary: "Implied upside, implied downside, R/R ratio, breakeven probability"
+      full: "Full output: PT, bear value, current price, implied %, R/R, breakeven, narrative"
+    depends_on: []
+
+  - name: rating_assignment
+    description: >
+      Formal rating recommendation (BUY/OUTPERFORM/HOLD/UNDERPERFORM/SELL) derived
+      from ETR and risk/reward ratio, with conviction level (high/medium/low),
+      explanatory prose, and verifier consistency flags.
+    fidelity:
+      headline: "Rating: BUY (high conviction) — ETR +X%, R/R Y.Yx"
+      summary: "Rating, conviction, ETR, R/R, why_this_rating summary"
+      full: "Full assignment: rating, conviction, ETR, R/R, why_this_rating, narrative, warnings"
+    depends_on: []
+
+  - name: football_field_chart_output
+    description: >
+      Football-field valuation synthesis chart: Plotly JSON for a horizontal bar chart
+      showing [low, high] range per methodology with median tick and current-price
+      vertical line. Also includes a markdown table of the same data.
+    fidelity:
+      headline: "Football field: N methodologies, current price at X position (median of medians $Y)"
+      summary: "Methodologies summary table with ranges; current price position; median of medians"
+      full: "Plotly JSON chart, full markdown table, per-methodology detail, verdict"
+    depends_on: []

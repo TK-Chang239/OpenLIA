@@ -174,8 +174,11 @@ def test_artifact_type_registry_count() -> None:
     # + 1 comparables_output (PR 2.1)
     # + 6 DCF/COC/sensitivity bundle (PR 2.2)
     # + 3 alternative valuation (PR 2.3): ddm_output, justified_multiples_output, sotp_output
-    # = 56
-    assert len(all_types) == 56, f"Expected 56 artifact types, got {len(all_types)}: {names}"
+    # + 6 decision layer (PR 2.4): price_target_blended, expected_total_return_output,
+    #   risk_reward_output, implied_upside_downside_output, rating_assignment,
+    #   football_field_chart_output
+    # = 62
+    assert len(all_types) == 62, f"Expected 62 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -246,6 +249,13 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "ddm_output",
         "justified_multiples_output",
         "sotp_output",
+        # Decision layer helpers (PR 2.4)
+        "price_target_blended",
+        "expected_total_return_output",
+        "risk_reward_output",
+        "implied_upside_downside_output",
+        "rating_assignment",
+        "football_field_chart_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
