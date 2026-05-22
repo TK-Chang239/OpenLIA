@@ -164,7 +164,7 @@ Comparables is the entry point because (a) it's a documented gap and (b) many do
 
 ### PR 2.2 — DCF engine + cost of capital (backlog tasks #12, #6)
 
-**Implements:** helpers-design doc §5 (DCF engine + cost of capital), §5.2 (mid-year convention), §5.3 (terminal value methods), §5.4 (sensitivity grid), §5.5 (tornado/scenario)
+**Implements:** supplement §2 (`cost_of_capital_builder`), supplement §3 (`dcf_engine` including mid-year convention, three TV methods, EV→equity bridge); helpers-design §3.2 (`sensitivity_table`), §3.3 (`tornado_diagram`), §3.4 (`scenario_weighting`), §3.5 (`reverse_dcf`).
 
 The dependency anchor for everything valuation-related.
 
@@ -180,21 +180,21 @@ The dependency anchor for everything valuation-related.
 
 ### PR 2.3 — Alternative valuation methodologies (backlog task #13)
 
-**Implements:** helpers-design doc §5.6 (DDM family), §5.7 (justified multiples), §5.8 (SOTP)
+**Implements:** supplement §4 (`ddm_family` — Gordon / two-stage / three-stage / H-model with sustainable-growth check), §5 (`justified_multiples` — forward P/E from payout/(Re-g), P/B from (ROE-g)/(Re-g), EV/EBITDA approximation), §6 (`sotp_builder` — per-segment method, corporate-overhead capitalization, conglomerate discount, tax-on-segment-sale option).
 
-**Helpers:** `ddm_family` (Gordon / multi-stage / H-model), `justified_multiples`, `sotp_builder`
+**Helpers:** `ddm_family`, `justified_multiples`, `sotp_builder`
 **Artifacts:** `ddm_valuation`, `justified_multiple_panel`, `sotp_segment_valuation`
 **skills.md:** `ddm_family.md`, `justified_multiples.md`, `sotp_builder.md`
-**Acceptance:** each DDM variant validates against published textbook examples (1-2 per variant); justified-multiple formulas derived from g/ROE/payout per design §5.7; SOTP supports per-segment valuation method choice (DCF or comps) per design §5.8.
+**Acceptance:** each DDM variant validates against published textbook examples (1-2 per variant); justified-multiple formulas derived from g/ROE/payout per supplement §5; SOTP supports per-segment valuation method choice (EBITDA multiple, DCF, P/S, book value, user-supplied) per supplement §6.
 
 ### PR 2.4 — Decision layer (backlog task #14)
 
-**Implements:** helpers-design doc §7 (decision layer) — blender, ETR, risk/reward, rating bands
+**Implements:** supplement §7 (decision layer, five helpers jointly): §7.1 `price_target_blender`, §7.2 `expected_total_return`, §7.3 `risk_reward_calculator`, §7.4 `implied_upside_downside`, §7.5 `rating_band_assigner`. Also picks up helpers-design §3.6 `football_field_chart` outputs (decision-layer's blended PT feeds into the football field).
 
-**Helpers:** `price_target_blender`, `expected_total_return`, `risk_reward_calculator`, `implied_upside_downside`, `rating_band_assigner`
-**Artifacts:** `price_target_consensus`, `etr_panel`, `risk_reward_panel`, `rating_recommendation`
+**Helpers:** `price_target_blender`, `expected_total_return`, `risk_reward_calculator`, `implied_upside_downside`, `rating_band_assigner`, `football_field_chart`
+**Artifacts:** `price_target_consensus`, `etr_panel`, `risk_reward_panel`, `rating_recommendation`, `football_field_render`
 **skills.md:** `price_target_blender.md`, `rating_band_assigner.md`
-**Acceptance:** blender weights surfaced as configurable per design §7.1; ratings explainable (why-this-rating string included in artifact) per design §7.4; ETR formula matches design §7.2 (capital return + dividend yield, with horizon).
+**Acceptance:** blender weights surfaced as configurable per supplement §7.1; ratings explainable (why-this-rating string in artifact) per supplement §7.5; ETR formula matches supplement §7.2 (capital return + dividend yield × horizon factor); rating bands default to {BUY +15% ETR, ADD +7%, HOLD ±5%, REDUCE -5%, SELL -15%} with risk/reward filter; football_field consumes outputs from PR 2.2 + PR 2.3 + comparables (PR 2.1).
 
 ### PR 2.5 — Business quality + statement integrity (backlog task #7)
 
@@ -250,20 +250,20 @@ Group D — statement integrity / fundamental quality panels (§4.6, §4.9, §4.
 
 ### PR 2.6 — Forensic + dividend safety (backlog task #21)
 
-**Implements:** helpers-design doc §4.4 (Beneish M-score), §4.5 (Altman Z variants), §4.6 (dividend coverage + sustainability)
+**Implements:** helpers-design §4.18 (`beneish_m_score`); supplement §8 (`altman_z_variants` — Z, Z', Z", EM Z" with variant-misapplication guard); supplement §9 (`dividend_safety_panel` — payout ratios, coverage, streak history, stress test, classification bands).
 
-**Helpers:** Beneish M-score, Altman Z variants (Z, Z', Z", EM Z"), dividend coverage, dividend payout sustainability
+**Helpers:** `beneish_m_score`, `altman_z_variants`, `dividend_safety_panel`, plus a `forensic_panel` aggregator that composes Beneish + Altman + Sloan accruals (from PR 2.5 `quality_of_earnings_panel`)
 **Artifacts:** `forensic_panel`, `dividend_safety_panel`
 **skills.md:** `forensic_panel.md`
-**Acceptance:** Beneish 8-variable formula matches design §4.4; each Altman variant validates against published threshold tables.
+**Acceptance:** Beneish 8-variable formula matches helpers-design §4.18; each Altman variant validates against published threshold tables per supplement §8; `dividend_safety_panel` stress test exposes shock-pct as configurable input per supplement §9.
 
 ### PR 2.7 — Credit + solvency + 5-step DuPont (backlog task #15)
 
-**Implements:** helpers-design doc §4.7 (credit + solvency expansion), §4.8 (5-step DuPont), §4.9 (debt-maturity ladder)
+**Implements:** supplement §10 (`credit_solvency_panel` — interest-coverage variants, fixed-charge coverage, leverage ratios, Damodaran rating proxy with disclaimer hook), §11 (`five_step_dupont` — tax burden × interest burden × operating margin × asset turnover × equity multiplier; high-vs-low-quality ROE change attribution), §12 (`debt_maturity_ladder` — year-by-year principal + WAC + WAM, refi-wall detection, refi stress test).
 
-**Helpers:** Altman variants (shared infra with PR 2.6), 5-step DuPont, interest coverage variants, debt-maturity ladder
+**Helpers:** `credit_solvency_panel`, `five_step_dupont`, `debt_maturity_ladder`. `altman_z_variants` consumed from PR 2.6 (shared infrastructure).
 **Artifacts:** `credit_solvency_panel`, `dupont_decomposition`, `debt_maturity_ladder`
-**Acceptance:** 5-step DuPont decomposes ROE into operating margin × asset turnover × interest burden × tax burden × financial leverage per design §4.8; debt-maturity ladder bins by year out 10y + lump-sum tail.
+**Acceptance:** 5-step DuPont decomposes ROE per supplement §11 with the ΔROE additive decomposition; refi wall triggers at ≥25% of total debt or ≥50% of TTM EBIT in a single year per supplement §12; Damodaran rating-proxy mapping pinned to a versioned snapshot.
 
 ### PR 2.8 — Signal & context helpers (backlog task #23)
 
@@ -294,12 +294,12 @@ Group D — statement integrity / fundamental quality panels (§4.6, §4.9, §4.
 
 ### PR 2.10 — Workbook builder + remaining outputs (backlog task #8)
 
-**Implements:** helpers-design §2.5 `WorkbookTemplate` class (infrastructure); helper-level design for `workbook_builder` lives in the new supplement doc `2026-05-22-helpers-design-supplement.md` (forthcoming Commit 2). Also picks up helpers-design §3.6 `football_field_chart` and §3.7 `waterfall_chart` outputs that didn't ship with PR 2.2.
+**Implements:** helpers-design §2.5 `WorkbookTemplate` class (infrastructure); supplement §13 `workbook_builder` (helper wrapper around the class — sheet inventory, embed_charts, save flow). Also picks up helpers-design §3.7 `waterfall_chart`. Note that `football_field_chart` (§3.6) ships with PR 2.4 (decision layer) rather than here, because it consumes blended-PT output.
 
-**Helpers:** `workbook_builder`, `football_field_chart`, `waterfall_chart`, plus any remaining chart / table helpers
-**Artifacts:** `workbook_render`, `football_field_render`, `waterfall_render`
+**Helpers:** `workbook_builder`, `waterfall_chart`, plus any remaining chart / table helpers
+**Artifacts:** `workbook_render`, `waterfall_render`
 **skills.md:** `workbook_builder.md`
-**Acceptance:** produces a multi-sheet xlsx with cross-sheet formulas, formatted to a published convention per the supplement doc.
+**Acceptance:** produces a multi-sheet xlsx (Cover / Assumptions / DCF / Sensitivity / Scenarios / Comparables / SOTP / Cost of Capital / Decision / Forensic / Credit at minimum) with cross-sheet named ranges per supplement §13; file size ≤ 10MB; verifier `block_artifact_too_large` does not fire on the bundled output.
 
 ### PR 2.11 — Risk / macro helpers (backlog tasks #8 spillover, #4 prep)
 
@@ -322,11 +322,11 @@ Each sector PR is independent of the others. Can be tackled in any order or in p
 
 | PR | Task | Helpers / artifacts | Design-doc reference |
 |---|---|---|---|
-| 3.1 | #16 Banks | `banks_sector_panel` (NIM / CET1 / ROTCE / efficiency / NCO), `loan_loss_provision_analysis` | helpers-design §10.1 |
-| 3.2 | #17 REITs | `reit_valuation_panel` (FFO / AFFO / NAV / same-store NOI), `cap_rate_analysis` | helpers-design §10.2 |
-| 3.3 | #18 Pharma | `rnpv_pipeline`, `royalty_stack_analyzer` | helpers-design §10.3 |
-| 3.4 | #19 Energy / E&P | `ep_sector_panel` (EBITDAX, DACF, netback, reserves replacement, AISC variant) | helpers-design §10.4 |
-| 3.5 | #20 Insurance | `insurance_valuation_panel` (combined ratio, embedded value, P&C vs Life) | helpers-design §10.5 |
+| 3.1 | #16 Banks | `banks_sector_panel` (NIM / CET1 / RoTCE / efficiency / NCO / deposit beta / credit-cycle phasing), `loan_loss_provision_analysis` (sub-helper) | sector-modules §2 |
+| 3.2 | #17 REITs | `reit_valuation_panel` (FFO / AFFO / NAV / same-store NOI / property-type cap rate), `cap_rate_analysis` (sub-helper) | sector-modules §3 |
+| 3.3 | #18 Pharma | `rnpv_pipeline`, `royalty_stack_analyzer` | sector-modules §4 |
+| 3.4 | #19 Energy / E&P | `ep_sector_panel` (EBITDAX / DACF / netback per BOE / RRR / reserve-life index / commodity-price scenarios; AISC for metals variant) | sector-modules §5 |
+| 3.5 | #20 Insurance | `insurance_valuation_panel` (P&C combined ratio + ex-cat split + PY-development; Life embedded value + VNB; capital-adequacy regime selection) | sector-modules §6 |
 
 **PR 3.3 (Pharma) — reference data sourcing:** Citeline 2024 stage-PoS table (P1→P2=47%, P2→P3=28%, P3→NDA=55%, NDA→Approval=92%) lives at `packages/core/src/openlia/data/reference/citeline/stage_pos_2024.yaml`. Refresh cadence: annual at Citeline release. Source attribution: Citeline 2024 industry data. Verify license terms before commit; if license-restricted, store hash + external link only and require user-supplied PoS values at runtime.
 
@@ -471,12 +471,12 @@ The branch shipped to main at end of Phase 3 is the v2.2 GA cut. Wave 2 work hap
 
 Every PR cites the specific design-doc sections it implements. This table makes the binding machine-checkable — `test_planning_consistency.py` verifies that each cited `§N` resolves to a real section heading in the cited doc.
 
-**Two new design docs are scheduled for Commits 2-3 of this branch** to fill gaps that an earlier audit surfaced:
+**Two companion design docs supplement helpers-design.md** for content that was missing in the initial design:
 
-- `2026-05-22-helpers-design-supplement.md` (forthcoming) — DCF engine, cost-of-capital, DDM family, justified multiples, SOTP, decision layer, Altman variants, dividend safety, credit/solvency, 5-step DuPont, debt-maturity ladder, workbook_builder helper
-- `2026-05-22-helpers-design-sector-modules.md` (forthcoming) — Banks, REITs, Pharma, Energy, Insurance panels
+- `2026-05-22-helpers-design-supplement.md` — DCF engine, cost-of-capital, DDM family, justified multiples, SOTP, decision layer, Altman variants, dividend safety, credit/solvency, 5-step DuPont, debt-maturity ladder, workbook_builder helper
+- `2026-05-22-helpers-design-sector-modules.md` — Banks, REITs, Pharma, Energy/E&P, Insurance panels
 
-Rows marked **(pending)** below cite sections in those forthcoming docs. The doctest skips pending-doc rows until the files land; Commit 4 of this branch re-runs the audit to ensure every pending row resolves.
+Both docs are now landed (Commits 2 and 3 of this branch). Every `§N` citation in the table below resolves to a real section heading; the doctest `test_cross_reference_sections_resolve_in_cited_docs` enforces this.
 
 | Design doc | Sections | Implementing PR(s) |
 |---|---|---|
@@ -508,7 +508,7 @@ Rows marked **(pending)** below cite sections in those forthcoming docs. The doc
 | helpers-design | §3.3 tornado_diagram | PR 2.2 |
 | helpers-design | §3.4 scenario_weighting | PR 2.2 |
 | helpers-design | §3.5 reverse_dcf | PR 2.2 |
-| helpers-design | §3.6 football_field_chart | PR 2.10 |
+| helpers-design | §3.6 football_field_chart | PR 2.4 |
 | helpers-design | §3.7 waterfall_chart | PR 2.10 |
 | helpers-design | §4.1 roic_panel | PR 2.5 |
 | helpers-design | §4.2 quality_of_earnings_panel | PR 2.5 |
