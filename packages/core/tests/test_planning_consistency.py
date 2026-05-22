@@ -147,7 +147,11 @@ INTENTIONALLY_UNMAPPED_SECTIONS: dict[str, dict[str, str]] = {
         "§15": "References / bibliography",
     },
     "sector-modules": {
-        # Pending doc; same skip behavior as above.
+        "§1": "Document purpose meta-section",
+        "§7": "Sector planner integration — wired by PR 0.4 (Stage 5 planner) and the per-sector PR's routing entry; not a standalone PR",
+        "§8": "Cross-sector contract requirements — applies to PRs 3.1-3.5 collectively",
+        "§9": "Verifier-hook compatibility map — review summary",
+        "§10": "References / bibliography",
     },
 }
 
