@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openlia_server.db.base import Base, UTCDateTime
@@ -38,7 +38,9 @@ class PipelineRun(Base):
     department: Mapped[str] = mapped_column(String(64), nullable=False)
     template_id: Mapped[str] = mapped_column(String(128), nullable=False)
     template_raw: Mapped[str] = mapped_column(Text, nullable=False)
-    template_format: Mapped[str] = mapped_column(String(8), nullable=False, default="yaml")
+    template_format: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="yaml", server_default=text("'yaml'")
+    )
     composer_inputs: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     state: Mapped[str] = mapped_column(String(32), nullable=False)
     paused_at_stage: Mapped[str | None] = mapped_column(String(64), nullable=True)

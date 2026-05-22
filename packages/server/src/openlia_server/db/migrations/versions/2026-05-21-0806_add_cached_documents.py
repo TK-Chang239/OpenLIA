@@ -40,8 +40,17 @@ def upgrade() -> None:
             "ix_cached_documents_ticker_fiscal", ["ticker", "fiscal_period"], unique=False
         )
 
+    # The autogen run that produced this migration captured a stray
+    # `idx_chat_sessions_attached_report_id` index from one dev DB; the
+    # ORM model never defined that index, so it's absent on fresh installs
+    # and the unconditional drop_index here crashes the migration. Make
+    # the drop idempotent by inspecting the live DB first.
+    existing_chat_sessions_indexes = {
+        ix["name"] for ix in sa.inspect(op.get_bind()).get_indexes("chat_sessions")
+    }
     with op.batch_alter_table("chat_sessions", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("idx_chat_sessions_attached_report_id"))
+        if "idx_chat_sessions_attached_report_id" in existing_chat_sessions_indexes:
+            batch_op.drop_index(batch_op.f("idx_chat_sessions_attached_report_id"))
         batch_op.create_foreign_key(
             batch_op.f("fk_chat_sessions_attached_report_id_reports"),
             "reports",
@@ -51,11 +60,15 @@ def upgrade() -> None:
             use_alter=True,
         )
 
+    existing_reports_indexes = {
+        ix["name"] for ix in sa.inspect(op.get_bind()).get_indexes("reports")
+    }
     with op.batch_alter_table("reports", schema=None) as batch_op:
         batch_op.alter_column(
             "status", existing_type=sa.VARCHAR(), server_default=None, nullable=True
         )
-        batch_op.drop_index(batch_op.f("idx_reports_status"))
+        if "idx_reports_status" in existing_reports_indexes:
+            batch_op.drop_index(batch_op.f("idx_reports_status"))
 
     with op.batch_alter_table("rs_snapshots", schema=None) as batch_op:
         batch_op.drop_index(batch_op.f("ix_rs_snapshots_ticker_captured"))
@@ -76,8 +89,10 @@ def downgrade() -> None:
             batch_op.f("ix_rs_snapshots_ticker_captured"), ["ticker", "captured_at"], unique=False
         )
 
+    # idx_reports_status and idx_chat_sessions_attached_report_id were
+    # never created by any prior migration — the upgrade()'s drops were
+    # autogen artefacts from a stray dev DB. Don't fabricate them here.
     with op.batch_alter_table("reports", schema=None) as batch_op:
-        batch_op.create_index(batch_op.f("idx_reports_status"), ["status"], unique=False)
         batch_op.alter_column(
             "status",
             existing_type=sa.VARCHAR(),
@@ -88,9 +103,6 @@ def downgrade() -> None:
     with op.batch_alter_table("chat_sessions", schema=None) as batch_op:
         batch_op.drop_constraint(
             batch_op.f("fk_chat_sessions_attached_report_id_reports"), type_="foreignkey"
-        )
-        batch_op.create_index(
-            batch_op.f("idx_chat_sessions_attached_report_id"), ["attached_report_id"], unique=False
         )
 
     with op.batch_alter_table("cached_documents", schema=None) as batch_op:
