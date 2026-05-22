@@ -64,7 +64,7 @@ class VerifierIssueType(StrEnum):
     REQUIRED_PARAM_UNRESOLVABLE = "required_param_unresolvable"
     HELPER_UNAVAILABLE = "helper_unavailable"
 
-    # --- 4 new from PR 0.3 materialization (artifact-injection §8) ---
+    # --- 4 new values used by PR 0.3 materialization but declared here in PR 0.1 ---
     BLOCK_ARTIFACT_TOO_LARGE = "block_artifact_too_large"
     BLOCK_PLAN_ARTIFACT_MISSING = "block_plan_artifact_missing"
     BLOCK_SECTION_PLAN_INVALID = "block_section_plan_invalid"

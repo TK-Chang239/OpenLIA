@@ -1,10 +1,12 @@
 # Artifact type registry — seed for v2.2 report engine.
 # Each entry declares fidelity descriptions and DAG dependencies.
-# Entries for the 7 existing helpers (migrating in PR 0.2) plus the 4 Stage-7a
-# core types (landing in PR 0.3).
+# 4 Stage-7a core types (landing in PR 0.3) + 8 helper-produced types (migrated in PR 0.2).
 #
 # IMPORTANT: depends_on lists ArtifactType names that MUST be produced before
 # this type can be consumed. Boot-time DAG validation enforces no cycles.
+#
+# deprecated_at_pr: set on types scheduled for removal in a future PR.
+# This key is for tracking only — the L2 projection does NOT surface it to the LLM.
 
 artifact_types:
 
@@ -55,14 +57,14 @@ artifact_types:
     depends_on: []
 
   # -----------------------------------------------------------------------
-  # Existing helper artifacts (7 helpers migrating in PR 0.2)
+  # Helper-produced artifact types (8 helpers migrated in PR 0.2)
   # -----------------------------------------------------------------------
 
   - name: dcf_valuation_output
     description: >
       Full DCF valuation result: WACC, projected FCF schedule, terminal value
       (perpetuity and exit-multiple methods), enterprise and equity value, per-share
-      value, and 2-D sensitivity table over WACC × terminal growth.
+      value, and 2-D sensitivity table over WACC x terminal growth.
     fidelity:
       headline: "DCF fair value = $X (perpetuity) / $Y (exit multiple)"
       summary: "WACC, terminal growth, EV and equity value per method, implied price range"
@@ -74,7 +76,7 @@ artifact_types:
       Inline SVG chart (line, bar, scatter, or heatmap) rendered by matplotlib.
       General-purpose visual; consumed by any section that needs a chart embed.
     fidelity:
-      headline: "Chart title and type (e.g. 'Revenue trend — line chart')"
+      headline: "Chart title and type (e.g. 'Revenue trend -- line chart')"
       summary: "Chart title, axes labels, and data range summary"
       full: "Inline SVG content (base64 or raw SVG string)"
     depends_on: []
@@ -83,45 +85,45 @@ artifact_types:
     description: >
       Financial ratios across profitability, liquidity, leverage, efficiency, and
       valuation categories with benchmark interpretation.
-      NOTE: slated for deprecation in PR 2.5; replaced by per-category panels.
     fidelity:
       headline: "Key ratios summary: ROE X%, gross margin Y%, D/E Z"
       summary: "Profitability + liquidity + valuation ratios table with benchmark flags"
       full: "All five ratio categories with values, formulas, and interpretations"
     depends_on: []
+    deprecated_at_pr: "2.5"
 
   - name: saas_metrics_output
     description: >
       SaaS unit economics: MRR/ARR, ARPA, churn, CAC, LTV, LTV:CAC, payback,
       NRR, Rule of 40. Supports metrics, quick-ratio, and simulation modes.
-      NOTE: will be repurposed as saas_kpi_panel in PR 2.9.
     fidelity:
-      headline: "ARR $X, NRR Y%, LTV:CAC Z — Rule of 40: W"
+      headline: "ARR $X, NRR Y%, LTV:CAC Z -- Rule of 40: W"
       summary: "Core SaaS KPIs table: ARR, churn, CAC, LTV, NRR, Rule of 40"
       full: "Full SaaS metrics with quick ratio breakdown and unit economics simulation"
     depends_on: []
+    deprecated_at_pr: "2.9"
 
   - name: budget_variance_output
     description: >
       Budget variance analysis with materiality filtering and department/category
       breakdown. Favorable/unfavorable classification per line item.
-      NOTE: slated for deprecation in PR 2.5 alongside budget_variance helper.
     fidelity:
       headline: "Revenue variance $X (Y% fav/unfav), N material variances"
       summary: "Revenue and expense variance summary, material variance count by dept"
       full: "All line-item variances, department summary, category summary, exec summary"
     depends_on: []
+    deprecated_at_pr: "2.5"
 
   - name: business_investment_output
     description: >
       Business investment analysis: ROI, payback, NPV, IRR, scoring rubric, and
       base/upside/downside scenario comparison.
-      NOTE: slated for deprecation in PR 2.5 alongside business_investment helper.
     fidelity:
-      headline: "ROI X%, NPV $Y, IRR Z% — verdict: <scoring verdict>"
+      headline: "ROI X%, NPV $Y, IRR Z% -- verdict: <scoring verdict>"
       summary: "Summary metrics: ROI, payback, NPV, IRR, scoring total, verdict"
       full: "Full scoring rubric, all three scenarios, flags list"
     depends_on: []
+    deprecated_at_pr: "2.5"
 
   - name: forecast_output
     description: >
@@ -131,4 +133,14 @@ artifact_types:
       headline: "Base case revenue $X over N periods (Y% growth)"
       summary: "Trend direction, scenario comparison table, cash runway"
       full: "Full period-by-period forecast for all scenarios plus rolling cash flow"
+    depends_on: []
+
+  - name: workbook_artifact
+    description: >
+      Raw xlsx workbook bytes built from one or more named sheets.
+      Produced by excel_builder; intended for download attachment alongside prose reports.
+    fidelity:
+      headline: "Excel workbook: N sheets"
+      summary: "Sheet list with row counts and column headers"
+      full: "Full workbook (raw xlsx bytes, base64-encoded for transport)"
     depends_on: []
