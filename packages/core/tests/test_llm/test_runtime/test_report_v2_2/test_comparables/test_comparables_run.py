@@ -132,8 +132,8 @@ def _run(**kwargs):  # type: ignore[return]
     """Convenience wrapper around the registered helper impl."""
     from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
-    h = get_helper("comparables.run")
-    assert h is not None, "comparables.run not registered"
+    h = get_helper("comparables_run")
+    assert h is not None, "comparables_run not registered"
     return h.impl(**kwargs)
 
 
@@ -464,21 +464,21 @@ def test_ticker_echoed_in_output() -> None:
 
 
 def test_helper_is_registered() -> None:
-    """comparables.run must appear in the helper registry."""
+    """comparables_run must appear in the helper registry."""
     from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
-    h = get_helper("comparables.run")
+    h = get_helper("comparables_run")
     assert h is not None
-    assert h.schema.directory.name == "comparables.run"
+    assert h.schema.directory.name == "comparables_run"
 
 
 def test_helper_has_skill_doc_reference() -> None:
     """HelperSchema must declare a SkillDocRef (non-None skill_doc)."""
     from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
-    h = get_helper("comparables.run")
+    h = get_helper("comparables_run")
     assert h is not None
-    assert h.schema.skill_doc is not None, "comparables.run must have a skill_doc"
+    assert h.schema.skill_doc is not None, "comparables_run must have a skill_doc"
     assert h.schema.skill_doc.path == "skills/comparables_run.md"
 
 
@@ -498,7 +498,7 @@ def test_helper_category_is_comparables() -> None:
     from openlia.llm.runtime.report_v2_2.enums import Category
     from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
-    h = get_helper("comparables.run")
+    h = get_helper("comparables_run")
     assert h is not None
     assert h.schema.directory.category == Category.COMPARABLES
 
@@ -507,7 +507,7 @@ def test_helper_produces_comparables_output_artifact() -> None:
     from openlia.llm.runtime.report_v2_2.artifact_types import _registry as art_reg
     from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
-    h = get_helper("comparables.run")
+    h = get_helper("comparables_run")
     assert h is not None
     assert "comparables_output" in h.schema.contract.produces_artifacts
     assert art_reg.get("comparables_output") is not None

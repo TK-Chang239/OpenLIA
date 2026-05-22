@@ -70,7 +70,7 @@ _CATEGORY_TOLERANCE = 2
 COMPLEX_HELPERS_REQUIRING_SKILL_DOCS: list[str] = [
     "dcf_engine",
     "cost_of_capital_builder",
-    "comparables.run",
+    "comparables_run",
     "ddm_family",
     "justified_multiples",
     "sotp_builder",
@@ -221,7 +221,7 @@ def test_complex_helper_skill_doc_file_exists(helper_name: str) -> None:
         pytest.skip(f"{helper_name}: no skill_doc set; covered by other tests")
 
     # Skill doc paths are relative to the library_helpers directory.
-    # Filenames use underscores; the registered name may have dots (e.g. comparables.run).
+    # Skill doc paths are relative to the library_helpers directory.
     skill_path = _SKILLS_DIR / pathlib.Path(registered.schema.skill_doc.path).name
     assert skill_path.exists(), (
         f"Skill doc for {helper_name!r} declared at "

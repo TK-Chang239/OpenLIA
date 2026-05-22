@@ -229,7 +229,25 @@ class Planner:
         return _parse_planner_response(response.text)
 
     def plan(self) -> PlannerOutput:
-        """Synchronous plan: runs aplan() in a new event loop."""
+        """Synchronous plan: runs aplan() in a new event loop.
+
+        Must not be called from within a running event loop (e.g. inside a
+        FastAPI route handler) — doing so raises RuntimeError because
+        asyncio.run() cannot be called when a loop is already running.
+        Production callers in async contexts must use ``await planner.aplan()``
+        directly. The RunnerV2 pipeline calls ``aplan()`` via the
+        ThreadPoolExecutor guard in ``_stage_planner_v2_2()`` to avoid this.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+        if loop is not None:
+            raise RuntimeError(
+                "Planner.plan() was called from within a running event loop. "
+                "Use 'await planner.aplan()' instead, or drive the runner via "
+                "RunnerV2 which uses the ThreadPoolExecutor guard."
+            )
         return asyncio.run(self.aplan())
 
 

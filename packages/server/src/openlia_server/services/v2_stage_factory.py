@@ -41,6 +41,8 @@ from openlia.llm.runtime.report_v2.pipeline.stage_8_verify import Verifier
 from openlia.llm.runtime.report_v2.pipeline.trigger_evaluator import TriggerEvaluator
 from openlia.llm.runtime.report_v2.pipeline.verifier_llm import LLMVerifier
 from openlia.llm.runtime.report_v2.runner_v2 import RunnerV2
+from openlia.llm.runtime.report_v2_2 import Planner as PlannerV22
+from openlia.llm.runtime.report_v2_2.tools.library_helpers import list_helpers
 from openlia.llm.types import (
     Capabilities,
     LLMRequest,
@@ -353,6 +355,28 @@ def make_v2_runner_stage_factory(
             drafter=section_drafter,
             section_directives={},
         )
+
+        # Build available_helpers list for the v2.2 Planner (L1.5 exposure only).
+        # This is the minimal shape Planner uses to populate its system prompt.
+        available_helpers = [
+            {
+                "name": h.schema.directory.name,
+                "category": h.schema.directory.category.value,
+                "one_liner": h.schema.directory.one_liner,
+            }
+            for h in list_helpers()
+        ]
+
+        # The Planner uses an LLMProvider directly (not SyncJsonLlmClient) because
+        # it calls provider.generate() via its own async aplan() method.
+        planner_v2_2 = PlannerV22(
+            llm=provider,
+            ticker="",  # overridden per-run via composer_inputs inside aplan()
+            template_sections=[],  # overridden per-run via template_spec
+            available_helpers=available_helpers,
+            template_id="stock_initiation_v2",
+        )
+
         return RunnerV2(
             clarifier=Clarifier(llm),
             research_planner=ResearchPlanner(llm),
@@ -361,6 +385,7 @@ def make_v2_runner_stage_factory(
             model_builder=ModelBuilder(llm, max_workers=2),
             section_drafter=section_drafter,
             verifier=verifier,
+            planner_v2_2=planner_v2_2,
         )
 
     return _factory

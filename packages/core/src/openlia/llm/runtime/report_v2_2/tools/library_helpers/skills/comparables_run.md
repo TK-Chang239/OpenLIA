@@ -1,5 +1,5 @@
 ---
-name: comparables.run
+name: comparables_run
 category: comparables
 version: 0.1.0
 produces_artifacts:
@@ -7,7 +7,7 @@ produces_artifacts:
 consumes_artifacts: []
 ---
 
-# comparables.run — Comparable Companies Multiples Valuation
+# comparables_run — Comparable Companies Multiples Valuation
 
 ## Purpose
 
@@ -199,7 +199,7 @@ football-field-style synthesis convention.
 ```python
 from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
-h = get_helper("comparables.run")
+h = get_helper("comparables_run")
 result = h.impl(
     ticker="MSFT",
     peer_overrides=["GOOGL", "AAPL", "META", "AMZN", "ORCL"],
