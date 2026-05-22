@@ -142,8 +142,9 @@ INTENTIONALLY_UNMAPPED_SECTIONS: dict[str, dict[str, str]] = {
         "§11": "Open questions parked for later",
     },
     "supplement": {
-        # Pending doc; no top-level sections exist yet. The test_every_design_doc_section
-        # check uses pytest.skip when the file is missing.
+        "§1": "Document purpose meta-section",
+        "§14": "Verifier-hook coverage map — review summary, not a PR-buildable item",
+        "§15": "References / bibliography",
     },
     "sector-modules": {
         # Pending doc; same skip behavior as above.
