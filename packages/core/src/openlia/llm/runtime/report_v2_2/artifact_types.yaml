@@ -198,6 +198,23 @@ artifact_types:
       full: "All four metric blocks (income, valuation, operating, balance sheet), sustainability score, health score, warnings, narrative"
     depends_on: []
 
+  - name: rnpv_pipeline_output
+    description: >
+      Pharma/biotech pipeline rNPV engine output covering per-asset risk-adjusted NPV
+      components: unrisked NPV, risked NPV (x PoS), royalty burden owed to licensors,
+      net NPV, peak sales year, and patent cliff impact.
+      Aggregates to total pipeline value, top-3 value concentration metrics,
+      optional platform value, warnings (binary event risk, negative rNPV assets),
+      and narrative.
+      Probability-of-success (PoS) values are user-supplied per execution-strategy
+      decision #5 — no built-in Citeline lookup table ships in-repo.
+      Mandatory for any pharma/biotech where pipeline assets represent >25% of value.
+    fidelity:
+      headline: "Pipeline rNPV: $X total; top asset Y% concentration; N assets"
+      summary: "Per-asset risked NPV, total pipeline value, top-1/top-3 concentration, binary risk warnings"
+      full: "All per-asset components (unrisked/risked NPV, royalty burden, cliff impact), concentration table, platform value, warnings, narrative"
+    depends_on: []
+
   # -----------------------------------------------------------------------
   # EODHD adapter outputs (18 helpers, PR 1.1)
   # -----------------------------------------------------------------------

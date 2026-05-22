@@ -2,3 +2,4 @@
 
 from . import banks_sector_panel  # noqa: F401
 from . import reit_valuation_panel  # noqa: F401
+from . import rnpv_pipeline  # noqa: F401
