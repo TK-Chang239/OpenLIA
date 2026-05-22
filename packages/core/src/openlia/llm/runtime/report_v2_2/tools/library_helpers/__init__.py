@@ -24,6 +24,10 @@ def register_helper(schema: HelperSchema, impl: Callable) -> None:  # type: igno
     """Register a helper. Helpers call this at module import.
 
     Raises ValueError on duplicate name or unknown artifact_type.
+
+    # Signature diverges from report_v2's HelperRegistration-wrapping pattern: v2.2 takes
+    # schema + impl unpacked, dropping the now-unused `available`/`deferred_category`
+    # workaround fields.
     """
     if schema.directory.name in _REGISTRY:
         raise ValueError(f"Helper {schema.directory.name!r} already registered")
@@ -52,3 +56,17 @@ def get_helper(name: str) -> RegisteredHelper | None:
 def reset_helpers_for_tests() -> None:
     """Clear registry. Use only in test fixtures."""
     _REGISTRY.clear()
+
+
+# Eagerly import all helper modules so they register themselves at boot.
+
+from . import (  # noqa: E402, F401
+    budget_variance,
+    business_investment,
+    chart_builder,
+    dcf_valuation,
+    excel_builder,
+    forecast_builder,
+    ratio_calculator,
+    saas_metrics,
+)

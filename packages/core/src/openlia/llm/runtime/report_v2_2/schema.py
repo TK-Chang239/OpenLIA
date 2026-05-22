@@ -84,7 +84,7 @@ class HelperSchema(BaseModel):
     """
 
     version: str = "1.0"
-    deprecated_at_version: str | None = None  # per impl-plan open decision #6
+    deprecated_at_version: str | None = None  # per execution-strategy locked decision #6
     directory: DirectoryEntry  # L1.5
     selection: SelectionGuidance  # L2 selection guidance
     contract: MechanicalContract  # L2 mechanical contract
