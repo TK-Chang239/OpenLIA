@@ -93,4 +93,6 @@ from . import (  # noqa: E402, F401
     signals,
     sotp_builder,
     tornado_diagram,
+    waterfall_chart,
+    workbook_builder,
 )

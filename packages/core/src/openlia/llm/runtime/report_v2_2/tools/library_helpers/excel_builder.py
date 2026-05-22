@@ -6,6 +6,10 @@ HelperSchema per the v2.2 four-tier contract.
 Note: the report_v2 helper registers under the name "make_excel"; the v2.2 wrapper
 registers under the canonical file name "excel_builder" to align with the file-based
 naming convention used across the 8 migrated helpers.
+
+DEPRECATED: excel_builder is deprecated at v0.2.0. Use workbook_builder (PR 2.10)
+for new workbook construction. excel_builder remains registered for backward
+compatibility but will be removed in a future PR.
 """
 
 from __future__ import annotations
@@ -26,6 +30,7 @@ from openlia.llm.runtime.report_v2_2.tools.library_helpers import register_helpe
 
 _SCHEMA = HelperSchema(
     version="0.1.0",
+    deprecated_at_version="0.2.0",
     directory=DirectoryEntry(
         name="excel_builder",
         category=Category.OUTPUT,
