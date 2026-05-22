@@ -67,7 +67,9 @@ from . import (  # noqa: E402, F401
     dcf_valuation,
     eodhd,
     excel_builder,
+    financetoolkit,
     forecast_builder,
+    fred,
     ratio_calculator,
     saas_metrics,
 )

@@ -328,3 +328,175 @@ artifact_types:
       summary: "Last 5 data points: date, value"
       full: "Full macro indicator time series for the country and indicator"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # FinanceToolkit ratio helpers (15 helpers, PR 1.2)
+  # -----------------------------------------------------------------------
+
+  - name: ft_liquidity_ratios_output
+    description: >
+      Liquidity ratios computed by FinanceToolkit: current ratio, quick ratio, cash ratio,
+      working capital, operating cash flow ratio, and short-term coverage ratio.
+    fidelity:
+      headline: "Liquidity: current ratio X, quick ratio Y, cash ratio Z"
+      summary: "Current, quick, cash ratios plus working capital"
+      full: "All six liquidity ratios with working capital dollar value"
+    depends_on: []
+
+  - name: ft_solvency_ratios_output
+    description: >
+      Solvency and leverage ratios computed by FinanceToolkit: debt-to-equity,
+      debt-to-assets, interest coverage, equity multiplier, net debt/EBITDA,
+      capex coverage, and FCF yield.
+    fidelity:
+      headline: "Solvency: D/E X, interest coverage Y, net debt/EBITDA Z"
+      summary: "D/E, D/A, interest coverage, equity multiplier, net debt/EBITDA"
+      full: "All seven solvency ratios including capex coverage and FCF yield"
+    depends_on: []
+
+  - name: ft_profitability_ratios_output
+    description: >
+      Profitability ratios computed by FinanceToolkit: gross/operating/net margins,
+      ROA, ROE, ROIC, EBIT/revenue, effective tax rate, income quality, and FCF/OCF ratio.
+    fidelity:
+      headline: "Profitability: gross margin X%, operating margin Y%, ROE Z%"
+      summary: "Gross margin, operating margin, net margin, ROA, ROE"
+      full: "All ten profitability ratios including ROIC, tax rate, income quality"
+    depends_on: []
+
+  - name: ft_efficiency_ratios_output
+    description: >
+      Operational efficiency ratios computed by FinanceToolkit: asset turnover,
+      inventory turnover, receivables turnover, days outstanding metrics,
+      cash conversion cycle, and SG&A/revenue.
+    fidelity:
+      headline: "Efficiency: asset turnover X, CCC Y days, DSO Z days"
+      summary: "Asset turnover, inventory turnover, DSO, DIO, DPO, CCC"
+      full: "All twelve efficiency ratios including operating cycle and SG&A/revenue"
+    depends_on: []
+
+  - name: ft_valuation_ratios_output
+    description: >
+      Market valuation multiples computed by FinanceToolkit: market cap, EV, EPS, BVPS,
+      P/E, P/B, P/S, EV/EBITDA, EV/EBIT, EV/Sales, P/CF, P/FCF, dividend yield, PEG.
+    fidelity:
+      headline: "Valuation: P/E X, EV/EBITDA Y, P/B Z"
+      summary: "Market cap, EV, P/E, P/B, EV/EBITDA, EV/Sales"
+      full: "All fifteen valuation multiples including P/FCF, dividend yield, PEG"
+    depends_on: []
+
+  - name: ft_dupont_output
+    description: >
+      3-step DuPont decomposition computed by FinanceToolkit: net profit margin,
+      asset turnover, equity multiplier, and implied ROE.
+    fidelity:
+      headline: "DuPont ROE: NI margin X% × asset turn Y × equity mult Z = ROE W%"
+      summary: "Three DuPont components and resulting ROE"
+      full: "Full DuPont table with net profit margin, asset turnover, equity multiplier, ROE"
+    depends_on: []
+
+  - name: ft_altman_z_score_output
+    description: >
+      Altman Z-Score (original 1968 5-factor model) computed by FinanceToolkit.
+      Indicates financial distress risk: safe (>2.99), grey zone (1.81-2.99),
+      or distress (<1.81).
+    fidelity:
+      headline: "Altman Z-Score: X (zone: safe/grey/distress)"
+      summary: "Z-Score value, zone classification, and five factor ratios"
+      full: "Z-Score, zone, all five X1-X5 component ratios, and threshold reference"
+    depends_on: []
+
+  - name: ft_piotroski_f_score_output
+    description: >
+      Piotroski F-Score (0-9 point fundamental quality scale) computed by FinanceToolkit.
+      Scores nine binary criteria across profitability, leverage/liquidity, and efficiency.
+    fidelity:
+      headline: "Piotroski F-Score: X/9 (strength: strong/neutral/weak)"
+      summary: "F-Score total and three category sub-scores"
+      full: "Full 9-criterion breakdown: profitability (4), leverage/liquidity (3), efficiency (2)"
+    depends_on: []
+
+  - name: ft_growth_metrics_output
+    description: >
+      YoY growth rates for revenue, gross profit, operating income, net income, EPS,
+      free cash flow, operating cash flow, and total assets.
+    fidelity:
+      headline: "Growth: revenue +X% YoY, net income +Y% YoY, FCF +Z% YoY"
+      summary: "Revenue, net income, EPS, and FCF YoY growth rates"
+      full: "All eight YoY growth rates including gross profit, operating income, total assets"
+    depends_on: []
+
+  - name: ft_per_share_metrics_output
+    description: >
+      Per-share metrics computed by FinanceToolkit: EPS, BVPS, FCF per share,
+      dividends per share, OCF per share, revenue per share, capex per share.
+    fidelity:
+      headline: "Per share: EPS $X, BVPS $Y, FCFPS $Z"
+      summary: "EPS, BVPS, FCF per share, dividends per share"
+      full: "All eight per-share metrics including OCF/share, revenue/share, capex/share"
+    depends_on: []
+
+  - name: ft_cash_flow_metrics_output
+    description: >
+      Cash flow quality metrics: OCF margin, FCF margin, FCF/OCF ratio, income quality,
+      FCF yield, FCFE, capex coverage, and OCF/assets.
+    fidelity:
+      headline: "Cash flow: OCF margin X%, FCF margin Y%, income quality Z"
+      summary: "OCF margin, FCF margin, FCF/OCF ratio, income quality ratio"
+      full: "All ten cash flow metrics including FCFE, capex coverage, FCF yield"
+    depends_on: []
+
+  - name: ft_dividend_metrics_output
+    description: >
+      Dividend sustainability metrics: payout ratio, dividend yield, dividend growth,
+      FCF payout ratio, OCF payout ratio, and retention ratio.
+    fidelity:
+      headline: "Dividend: yield X%, payout ratio Y%, FCF coverage Z"
+      summary: "Dividend yield, payout ratio, FCF payout ratio, growth"
+      full: "All eight dividend metrics including OCF payout and retention ratio"
+    depends_on: []
+
+  - name: ft_working_capital_metrics_output
+    description: >
+      Working capital metrics: NWC, NWC/revenue, non-cash NWC, current ratio,
+      days outstanding (DIO, DSO, DPO), operating cycle, CCC, and OCF/NWC.
+    fidelity:
+      headline: "Working capital: NWC $X, CCC Y days, current ratio Z"
+      summary: "NWC, NWC/revenue, DIO, DSO, DPO, CCC"
+      full: "All ten working capital metrics including operating cycle and OCF/NWC"
+    depends_on: []
+
+  - name: ft_capital_structure_output
+    description: >
+      Capital structure metrics: D/E, D/A, equity multiplier, WACC, cost of equity
+      (CAPM), cost of debt (pre- and after-tax), equity/debt weights, and debt mix.
+    fidelity:
+      headline: "Capital structure: WACC X%, D/E Y, cost of equity Z%"
+      summary: "WACC, cost of equity, cost of debt, D/E, D/A, equity weight"
+      full: "Full WACC decomposition with all inputs, debt mix, and interest coverage"
+    depends_on: []
+
+  - name: ft_quality_metrics_output
+    description: >
+      Earnings quality indicators: Sloan accrual ratio, income quality ratio,
+      FCF/net income sustainability, OCF margin, ROA trend, capex intensity,
+      reinvestment rate, and dilution signal.
+    fidelity:
+      headline: "Quality: accrual ratio X, income quality Y, FCF/NI Z"
+      summary: "Accrual ratio, income quality, FCF/NI, ROA trend direction"
+      full: "All ten quality indicators including capex intensity and dilution signal"
+    depends_on: []
+
+  # -----------------------------------------------------------------------
+  # FRED credit spread helper (PR 1.2)
+  # -----------------------------------------------------------------------
+
+  - name: fred_credit_spreads_output
+    description: >
+      Latest ICE BofA US High Yield OAS, Investment Grade OAS, and 10Y Treasury rate
+      fetched from FRED public CSV endpoints. No API key required.
+    fidelity:
+      headline: "Credit spreads: HY OAS X%, IG OAS Y%, 10Y Tsy Z% as of DATE"
+      summary: "HY OAS, IG OAS, 10Y Treasury, HY-IG spread differential"
+      full: "All spread values, as-of date, FRED series IDs, and source"
+    depends_on: []

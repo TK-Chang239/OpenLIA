@@ -169,9 +169,10 @@ def test_artifact_type_registry_count() -> None:
 
     all_types = _registry.list_all()
     names = [t.name for t in all_types]
-    # 4 Stage-7a + 8 original helpers (PR 0.2) + 18 EODHD adapters (PR 1.1) = 30
-    assert len(all_types) == 30, (
-        f"Expected 30 artifact types, got {len(all_types)}: {names}"
+    # 4 Stage-7a + 8 original helpers (PR 0.2) + 18 EODHD adapters (PR 1.1)
+    # + 15 FinanceToolkit helpers + 1 FRED helper (PR 1.2) = 46
+    assert len(all_types) == 46, (
+        f"Expected 46 artifact types, got {len(all_types)}: {names}"
     )
 
 
@@ -212,6 +213,24 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "eodhd_upcoming_earnings_output",
         "eodhd_technical_indicators_output",
         "eodhd_macro_indicator_output",
+        # FinanceToolkit ratio helpers (PR 1.2)
+        "ft_liquidity_ratios_output",
+        "ft_solvency_ratios_output",
+        "ft_profitability_ratios_output",
+        "ft_efficiency_ratios_output",
+        "ft_valuation_ratios_output",
+        "ft_dupont_output",
+        "ft_altman_z_score_output",
+        "ft_piotroski_f_score_output",
+        "ft_growth_metrics_output",
+        "ft_per_share_metrics_output",
+        "ft_cash_flow_metrics_output",
+        "ft_dividend_metrics_output",
+        "ft_working_capital_metrics_output",
+        "ft_capital_structure_output",
+        "ft_quality_metrics_output",
+        # FRED credit spreads (PR 1.2)
+        "fred_credit_spreads_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
