@@ -76,6 +76,7 @@ from . import (  # noqa: E402, F401
     financetoolkit,
     football_field_chart,
     forecast_builder,
+    forensic,
     fred,
     implied_upside_downside,
     justified_multiples,
