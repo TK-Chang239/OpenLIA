@@ -681,9 +681,7 @@ def test_statement_integrity_skill_doc_file_exists() -> None:
     """Verify the skill doc file is present on disk."""
     from openlia.llm.runtime.report_v2_2.tools import library_helpers
 
-    skill_path = (
-        Path(library_helpers.__file__).parent / "skills" / "statement_integrity_bundle.md"
-    )
+    skill_path = Path(library_helpers.__file__).parent / "skills" / "statement_integrity_bundle.md"
     assert skill_path.exists(), f"Skill doc not found at {skill_path}"
     content = skill_path.read_text()
     assert "statement_integrity_bundle" in content
