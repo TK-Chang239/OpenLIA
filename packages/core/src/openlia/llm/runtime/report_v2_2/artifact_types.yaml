@@ -215,6 +215,24 @@ artifact_types:
       full: "All per-asset components (unrisked/risked NPV, royalty burden, cliff impact), concentration table, platform value, warnings, narrative"
     depends_on: []
 
+  - name: ep_sector_panel_output
+    description: >
+      E&P sector KPI panel covering five metric blocks: production (BOE/d, oil/gas/NGL mix,
+      YoY growth), per-unit economics (realized price, royalties, lifting costs, gathering,
+      G&A, netback per BOE, AISC per BOE), cash flow (EBITDAX, DACF, EBITDA, FCF),
+      capital efficiency (F&D cost per BOE, recycle ratio, reinvestment rate, maintenance FCF),
+      reserves (proved 1P, proved-developed %, RLI, organic RRR, total RRR, reserve additions),
+      balance sheet (Net Debt/EBITDAX, Net Debt/DACF), scenario economics (breakeven oil price,
+      FCF at $60/$80/$100), optional hedging block, composite E&P health score (0-100),
+      cycle phase (late_cycle/mid_cycle/early_cycle/trough), and warnings (negative netback,
+      organic RRR < 100%, Net Debt/EBITDAX > 2x, AISC > $50/BOE).
+      Mandatory for any oil/gas E&P initiation or quarterly update report.
+    fidelity:
+      headline: "E&P panel: netback $X/BOE, DACF $Y, organic RRR Z%, Net Debt/EBITDAX W"
+      summary: "Netback/BOE, AISC/BOE, DACF, recycle ratio, organic RRR, RLI, Net Debt/EBITDAX, health score"
+      full: "All five metric blocks (production, per-unit, cash flow, reserves, balance sheet), scenario economics, hedging, health score, cycle phase, warnings, narrative"
+    depends_on: []
+
   # -----------------------------------------------------------------------
   # EODHD adapter outputs (18 helpers, PR 1.1)
   # -----------------------------------------------------------------------
