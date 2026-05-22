@@ -967,3 +967,47 @@ artifact_types:
       - beneish_m_score_output
       - cross_statement_validation_output
       - one_time_item_output
+
+  # -----------------------------------------------------------------------
+  # Credit / solvency helpers (PR 2.7)
+  # -----------------------------------------------------------------------
+
+  - name: credit_solvency_output
+    description: >
+      Credit / solvency panel: EBIT and EBITDA interest coverage variants,
+      fixed-charge coverage, Debt/EBITDA, Net Debt/EBITDA, Debt/Equity,
+      Debt/Capital, current ratio, quick ratio, Cash/ST Debt. Multi-year trends,
+      implied synthetic rating (AAA–CCC proxy), credit score 0-100,
+      optional FRED OAS spread context. Warnings on Debt/EBITDA > 4x,
+      coverage < 3x, and material deteriorating trends.
+    fidelity:
+      headline: "Credit: Debt/EBITDA Xx, EBIT coverage Yx, implied rating Z (proxy)"
+      summary: "Key leverage and coverage ratios, implied rating proxy, credit score, top warnings"
+      full: "Full current-period ratios, 5-year trend series, interpretation, FRED spread context, all warnings"
+    depends_on: []
+
+  - name: five_step_dupont_output
+    description: >
+      Five-step DuPont ROE decomposition: tax burden (NI/EBT), interest burden
+      (EBT/EBIT), operating margin (EBIT/Sales), asset turnover (Sales/Assets),
+      and equity multiplier (Assets/Equity). Also 3-step DuPont (NI margin ×
+      turnover × multiplier), five-year ROE change with per-driver contributions,
+      and quality interpretation (high-quality vs leverage-driven improvement).
+    fidelity:
+      headline: "DuPont ROE Xx: margin Y%, turnover Zx, leverage Wx"
+      summary: "5-step and 3-step current-period factors; ROE change direction and primary driver"
+      full: "Full per-period time series for all 5 factors, ROE change decomposition, quality interpretation, narrative"
+    depends_on: []
+
+  - name: debt_maturity_ladder_output
+    description: >
+      Debt maturity ladder: year-by-year schedule of principal maturities with
+      weighted average coupon per bucket, instrument names, weighted average
+      maturity (WAM), weighted average coupon (WAC), refinancing wall detection
+      (>25% of total debt in a single year), refinancing risk score 0-100, and
+      optional stress test for incremental interest at elevated refi rate.
+    fidelity:
+      headline: "Debt ladder: WAM Xy, WAC Z%, refi wall detected: Y/N"
+      summary: "WAM, WAC, near-term maturities, refi wall year and %, risk score"
+      full: "Full year-by-year ladder, instrument names per bucket, WAM, WAC, wall detection, stress test, warnings"
+    depends_on: []
