@@ -1092,3 +1092,48 @@ artifact_types:
       summary: "Starting value, ending value, total change %, positive driver count, negative driver count, markdown table"
       full: "Full Plotly JSON chart, markdown table with all steps and running totals, positive/negative driver breakdown"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # Risk / macro helpers (PR 2.11)
+  # -----------------------------------------------------------------------
+
+  - name: drawdown_panel_output
+    description: >
+      Per-window drawdown statistics over 1Y/3Y/5Y/10Y/since-IPO horizons.
+      Includes max drawdown (depth, peak date, trough date, duration days),
+      recovery date and recovery duration, current drawdown, underwater curve
+      (% below peak over time), Calmar ratio (annualized return / max drawdown),
+      Sortino ratio (excess return / downside deviation), and a list of all
+      historical drawdowns exceeding 10% with their peak-trough-recovery triplets.
+    fidelity:
+      headline: "Drawdown panel: max DD X% over 3Y, current DD Y%, Calmar Z"
+      summary: "Max drawdown by window, current drawdown, recovery status, Calmar and Sortino ratios"
+      full: "Full per-window stats, underwater curve series, all drawdowns >10%, Calmar/Sortino by window, peak/trough/recovery dates"
+    depends_on:
+      - eodhd_eod_prices_output
+
+  - name: yield_curve_shape_output
+    description: >
+      Key yield-curve shape signals derived from UST rates. Includes 10Y-2Y spread,
+      10Y-3M spread (NY Fed recession signal), 5Y-2Y spread, 30Y-10Y spread,
+      inversion flag, days since last inversion, OLS slope across the curve (bps/year),
+      curvature score (belly shape), regime classification (steep / modestly upward /
+      flat / inverted), and historical comparison vs 1Y-ago and 5Y-ago snapshots.
+    fidelity:
+      headline: "Yield curve: regime X, 10Y-2Y spread Y bps, inverted: Z"
+      summary: "Key spreads (10Y-2Y, 10Y-3M), inversion flag, days since inversion, regime label"
+      full: "All spreads, slope, curvature, regime, historical snapshots, days-since-inversion, classification rationale"
+    depends_on: []
+
+  - name: commodity_exposure_output
+    description: >
+      Commodity exposure and sensitivity analysis linking company revenue or margin
+      to a commodity price series. Includes Pearson and Spearman correlation,
+      lagged correlation (lags 0-4 quarters with argmax), OLS regression slope,
+      and a plain-English interpretation of the relationship. Designed for energy,
+      materials, agricultural, and industrials companies with commodity-driven revenues.
+    fidelity:
+      headline: "Commodity exposure: Pearson r=X with Y, lag Z quarters"
+      summary: "Pearson/Spearman correlation, regression slope, argmax lag, one-line interpretation"
+      full: "Full correlation table by lag, regression output, sensitivity interpretation, commodity name and units"
+    depends_on: []
