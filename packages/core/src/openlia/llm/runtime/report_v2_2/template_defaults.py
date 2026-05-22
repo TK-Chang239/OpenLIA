@@ -22,7 +22,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import ValidationError
 
 from .enums import Fidelity
 from .materialize import resolve_section_plan  # re-export; logic lives there
@@ -151,7 +150,7 @@ def load_template_defaults(
     if candidate.exists():
         raw_data = yaml.safe_load(candidate.read_text()) or {}
         if not isinstance(raw_data, dict):
-            raise ValidationError(
+            raise ValueError(
                 f"section_plan_defaults.yaml for {template_id!r} must be a mapping"
             )
         return _parse_section_plan_yaml(raw_data)
