@@ -384,7 +384,7 @@ xlsx_bytes = wb.to_bytes()
     "ev_ebitda": {
       ...,
       "implied_ev": {"low": ..., "median": ..., "high": ...},
-      "implied_equity_value": {"low": implied_ev_low - net_debt + cash, ...}
+      "implied_equity_value": {"low": implied_ev_low - net_debt, ...}
     },
     "ev_sales": {...},
     "pb": {...}
@@ -393,7 +393,7 @@ xlsx_bytes = wb.to_bytes()
     "low": ...,
     "median": ...,
     "high": ...,
-    "methodology": "min of medians to max of medians across multiples used"
+    "methodology": "min, median, and max of the per-multiple medians across multiples used"
   },
   "warnings": ["..."],
   "applied_at": "2026-05-21T19:40:00Z",
@@ -427,14 +427,14 @@ xlsx_bytes = wb.to_bytes()
    For EV/EBITDA:
    ```
    implied_ev_low = ev_ebitda_min × subject.ebitda_ttm
-   implied_equity_value_low = implied_ev_low − subject.net_debt + subject.cash
+   implied_equity_value_low = implied_ev_low − subject.net_debt
    ```
-   (EV → equity bridge: subtract debt, add cash. If net_debt and cash are both provided, use `total_debt − cash`; if only `net_debt` provided, use that.)
+   (EV → equity bridge: `Equity = EV − net_debt`. Define `net_debt = total_debt − cash` once upstream from `subject` inputs and apply consistently. Do NOT add cash again — net_debt already nets it out.)
 
    For EV/Sales:
    ```
    implied_ev_low = ev_sales_min × subject.revenue_ttm
-   implied_equity_value_low = implied_ev_low − subject.net_debt + subject.cash
+   implied_equity_value_low = implied_ev_low − subject.net_debt
    ```
 
    For P/B:
@@ -443,9 +443,11 @@ xlsx_bytes = wb.to_bytes()
    ```
 
 4. **Combined range** (across all multiples used):
-   - `low = min(implied_equity_value_low across multiples)`
+   - `low = min(implied_equity_value_median across multiples)`
    - `median = median(implied_equity_value_median across multiples)`
-   - `high = max(implied_equity_value_high across multiples)`
+   - `high = max(implied_equity_value_median across multiples)`
+
+   (We synthesize across the per-multiple **medians**, not the per-multiple lows and highs. Combining lows-of-lows with highs-of-highs would compound peer dispersion and methodology dispersion, producing an artificially wide band. The min/median/max of medians is the football-field-style synthesis convention.)
 
 **Edge cases:**
 - Subject EPS ≤ 0: P/E excluded; multiple-specific warning emitted ("Subject is unprofitable on TTM basis; P/E methodology not applicable").
@@ -778,15 +780,22 @@ Returns either SVG (inline) or PNG (base64) per `output_format` directive in tem
 
 **NOPAT** (Net Operating Profit After Tax):
 ```
-NOPAT = Operating Income × (1 − effective_tax_rate)
+NOPAT = Operating_Income × (1 − effective_tax_rate)
 ```
 If effective_tax_rate not derivable from statements (tax_expense / pre_tax_income), use input `tax_rate`.
 
-**Invested Capital** (two valid definitions; we use the operating one):
+**Operating Income source — explicit choice:** the helper accepts an optional `use_adjusted_ebit` flag (default `False`). When `True`, the helper consumes adjusted EBIT from `one_time_item_identification` (task #7) — stripping impairments, restructuring, M&A costs, and other one-time items the user opted to exclude. When `False`, uses reported GAAP EBIT. The output explicitly records which was used so downstream prose can cite "ROIC (GAAP)" vs. "ROIC (adjusted)".
+
+**Invested Capital** (operating definition, applied identically in ROIC, ROIIC, and Economic Profit):
 ```
-Invested Capital = Total Equity + Total Debt − Cash & Equivalents
+Invested_Capital = Total_Equity + Total_Debt − Cash_and_Equivalents
 ```
-(Operating definition. Excludes excess cash. If "non-operating" assets significant, manual adjustment may be needed.)
+**Explicit treatment choices:**
+- **Operating leases (post-ASC 842 / IFRS 16):** included in `Total_Debt` when companies report operating lease liabilities on the balance sheet. This matches modern institutional practice but inflates IC vs. pre-2019 historical comparisons. Output flags `operating_leases_included: true/false` per period.
+- **Cash netting:** all cash and equivalents are netted (not just excess cash). Identifying excess cash requires a working-capital target that's hard to defend across companies. Output flags `cash_netting: "all_cash"` to be explicit.
+- **Minority interest, goodwill:** not deducted; included in invested capital as part of equity / asset base.
+
+Manual adjustment may be needed for unusual structures (large non-operating asset holdings, dual-class capital).
 
 **ROIC:**
 ```
@@ -799,11 +808,15 @@ ROIC = NOPAT / Average Invested Capital
 ROCE = EBIT / (Total Assets − Current Liabilities)
 ```
 
-**ROIIC** (Return on Incremental Invested Capital):
+**ROIIC** (Return on Incremental Invested Capital, contemporaneous convention):
 ```
-ROIIC_t = (NOPAT_t − NOPAT_{t-1}) / (Invested_Capital_{t-1} − Invested_Capital_{t-2})
+ROIIC_t = (NOPAT_t − NOPAT_{t-1}) / (Invested_Capital_t − Invested_Capital_{t-1})
 ```
-First period has no ROIIC (returns null).
+Numerator and denominator both span period t-1 → t (contemporaneous, not lagged). First period has no ROIIC (returns null).
+
+**Edge cases for ROIIC:**
+- `ΔIC_t ≈ 0` (denominator near zero, threshold ±1% of IC_{t-1}): ROIIC reported as `null` with reason `"insufficient incremental capital deployed"` to avoid explosive or sign-flipped values.
+- `ΔIC_t < 0` (capital base shrunk via buybacks > capex + WC growth): ROIIC reported with explicit sign-flip warning; interpreted as "returns generated despite (or because of) capital release" — flagged in narrative not silently negative.
 
 **ROIC-WACC spread:**
 ```
@@ -812,8 +825,10 @@ spread_t = ROIC_t − WACC_t
 
 **Economic profit (dollars):**
 ```
-Economic_Profit_t = (ROIC_t − WACC_t) × Invested_Capital_t
+Economic_Profit_t = NOPAT_t − WACC_t × Average_Invested_Capital_t
+                  ≡ (ROIC_t − WACC_t) × Average_Invested_Capital_t
 ```
+Uses **average invested capital** (same base as ROIC), not ending IC. This ensures `EP = spread × capital` reconciles cleanly to NOPAT under the existing ROIC definition.
 
 **Verdict generator:** LLM call given the time series + structured prompt to summarize trend (improving / deteriorating / consistent) + relative magnitude.
 
@@ -838,7 +853,7 @@ Economic_Profit_t = (ROIC_t − WACC_t) × Invested_Capital_t
   "periods": ["FY21", ..., "FY25"],
   "sloan_accruals_ratio": [0.05, 0.04, 0.06, 0.08, 0.05],
   "ocf_to_ni": [1.15, 1.20, 1.10, 0.95, 1.18],
-  "non_cash_earnings_pct": [0.12, 0.10, 0.15, 0.20, 0.13],
+  "accruals_pct_of_ni": [0.12, 0.10, 0.15, 0.20, 0.13],
   "capitalized_rd_pct": [0.0, 0.0, 0.05, 0.08, 0.10],
   "deferred_tax_movement": [...],
   "restructuring_addbacks": [...],
@@ -853,9 +868,12 @@ Economic_Profit_t = (ROIC_t − WACC_t) × Invested_Capital_t
 **Sloan accruals ratio** (Sloan 1996):
 ```
 Accruals_t = NI_t − CFO_t
-Sloan_Accruals_Ratio_t = (Accruals_t − Accruals_{t-1}) / Average_Total_Assets_{t}
+Sloan_Accruals_Ratio_t = Accruals_t / Average_Total_Assets_t
+                       (avg = (TA_start + TA_end) / 2)
 ```
-Higher absolute value = more accrual-driven earnings = lower quality. Threshold: > 0.10 is concerning.
+This is the **level** of accruals scaled by average total assets, not the YoY change. Higher absolute value = more accrual-driven earnings = lower quality. Threshold: > 0.10 is concerning per the broader Sloan literature.
+
+**Caveat:** Sloan's original 1996 measure is balance-sheet derived (Δnon-cash working capital − depreciation). We use the cash-flow proxy `NI − CFO`, which is widely accepted in modern usage but worth flagging in helper output.
 
 **OCF / NI:**
 ```
@@ -863,17 +881,17 @@ OCF_to_NI_t = CFO_t / NI_t
 ```
 < 1.0 means earnings exceed cash; ideally ≥ 1.0 (some industries naturally above due to D&A).
 
-**Non-cash earnings %:**
+**Accruals as % of earnings (was: "non-cash earnings %"):**
 ```
-Non_Cash_Earnings_Pct = (NI − CFO + Capex) / NI
+Accruals_Pct_of_NI = (NI − CFO) / NI
 ```
-High % = accounting-driven earnings.
+High % = accounting-driven earnings. **Note:** The previous formula `(NI − CFO + Capex) / NI` was algebraically equivalent to `1 − FCF/NI` (cash conversion), which conflates capex (a capital-allocation choice) with accruals (an earnings-quality measure). `fcf_to_ni` in §4.7 already covers cash conversion; this metric is now purely about accrual intensity, with capex excluded.
 
-**Capitalized R&D %:**
+**Capitalized R&D % (share of total R&D capitalized):**
 ```
-Capitalized_RD_Pct = Capitalized_RD / Total_RD_Expense
+Capitalized_RD_Pct = Capitalized_RD / (Capitalized_RD + Expensed_RD)
 ```
-From cash flow statement (investing activities). Companies with rising capitalization may be inflating margins.
+From cash flow statement (investing activities) and income statement. Denominator is **total R&D spend** (capitalized + expensed), so the ratio is the *capitalized share* of total R&D. Companies with rising capitalization shift expense out of the P&L, inflating margins.
 
 **Deferred tax movement:** YoY change in deferred tax liability. Large swings suggest aggressive timing.
 
@@ -881,7 +899,7 @@ From cash flow statement (investing activities). Companies with rising capitaliz
 
 **Overall quality score** (composite):
 ```
-score = w_1 × (1 − |sloan_accruals|/0.20) + w_2 × min(ocf_to_ni, 1.5)/1.5 + w_3 × (1 − non_cash_earnings_pct) + w_4 × (1 − capitalized_rd_pct/0.20)
+score = w_1 × (1 − |sloan_accruals|/0.20) + w_2 × min(ocf_to_ni, 1.5)/1.5 + w_3 × (1 − accruals_pct_of_ni) + w_4 × (1 − capitalized_rd_pct/0.20)
 ```
 Weights default: [0.30, 0.30, 0.20, 0.20]. Score ∈ [0, 1].
 
@@ -1406,11 +1424,14 @@ sustainability_score = R² × (1 − stdev / |mean(values)|)  # clamped [0, 1]
 **Algorithm:**
 
 ```
-Operating_Leverage_t = (OpInc_t − OpInc_{t-1}) / OpInc_{t-1}
-                     / (Revenue_t − Revenue_{t-1}) / Revenue_{t-1}
+Operating_Leverage_t = ((OpInc_t − OpInc_{t-1}) / OpInc_{t-1})
+                     ÷
+                       ((Revenue_t − Revenue_{t-1}) / Revenue_{t-1})
+
+  = OpInc_growth_pct_t / Revenue_growth_pct_t
 ```
 
-Skip periods with negative growth (denominator sign issue); flag separately.
+**Negative-growth handling (audit clarification):** Compute the ratio for all periods, including those where revenue or operating income declined. Sign-flip cases (revenue down, op income up — or vice versa) are flagged explicitly as `sign_divergence: true` with narrative explanation, since downturn deleverage is the entire reason to look at operating leverage. Do not silently drop these periods; they carry the most analytical signal.
 
 ---
 
@@ -1476,8 +1497,8 @@ Reconciliation: `sbc + secondary + ma − buybacks = end − start` ± rounding.
   "score": 7,
   "max_score": 9,
   "criteria": {
-    "profitability_ni_positive": 1,
     "profitability_roa_positive": 1,
+    "profitability_delta_roa_positive": 1,
     "profitability_cfo_positive": 1,
     "profitability_cfo_gt_ni": 1,
     "leverage_lt_debt_decreased": 0,
@@ -1492,13 +1513,13 @@ Reconciliation: `sbc + secondary + ma − buybacks = end − start` ± rounding.
 
 **Algorithm:**
 
-Each criterion = 1 if true, 0 if false:
+Each criterion = 1 if true, 0 if false. These are the canonical 9 Piotroski (2000) signals — note `Δ ROA > 0` is a distinct signal from `ROA > 0` (the latter tests the sign; the former tests improvement).
 
 **Profitability (4 criteria):**
-1. NI > 0 in current year
-2. ROA > 0 in current year (NI / total assets)
+1. ROA > 0 in current year (NI / total assets)
+2. **Δ ROA > 0** (ROA improved YoY: `ROA_t > ROA_{t-1}`)
 3. CFO > 0 in current year
-4. CFO > NI (earnings quality)
+4. CFO > NI (earnings quality — accruals signal)
 
 **Leverage / Liquidity / Source of Funds (3 criteria):**
 5. Long-term debt / Total assets has decreased YoY
@@ -1510,6 +1531,8 @@ Each criterion = 1 if true, 0 if false:
 9. Asset turnover (revenue / total assets) has increased YoY
 
 Sum = F-score. Range [0, 9]. Score ≥ 7 = strong; ≤ 3 = weak.
+
+**Note:** Earlier draft had `NI > 0` as a separate criterion, which is redundant with `ROA > 0` (since total assets are always positive, `NI > 0 ⟺ ROA > 0`). Corrected to `Δ ROA > 0` per Piotroski's original specification.
 
 ---
 
@@ -1548,6 +1571,7 @@ Sum = F-score. Range [0, 9]. Score ≥ 7 = strong; ≤ 3 = weak.
 6. **SGAI** (Sales, General & Admin Index) = `(SGA_t / Revenue_t) / (SGA_{t-1} / Revenue_{t-1})`
 7. **LVGI** (Leverage Index) = `(Total_Debt_t / Total_Assets_t) / (Total_Debt_{t-1} / Total_Assets_{t-1})`
 8. **TATA** (Total Accruals to Total Assets) = `(NI − CFO)_t / Total_Assets_t`
+   - **Methodology caveat:** This is the common modern cash-flow proxy. Beneish's original 1999 TATA uses a balance-sheet working-capital-delta construction: `(ΔCA − ΔCash − ΔCL + ΔSTD − Depreciation) / TA`. The `NI − CFO` proxy is widely accepted in modern usage but should be flagged in output so an auditor can cross-check against the original specification if material to a thesis.
 
 **M-score formula:**
 ```
@@ -1578,13 +1602,15 @@ M_score = −4.84 + 0.92 × DSRI + 0.528 × GMI + 0.404 × AQI + 0.892 × SGI + 
 **Algorithm:**
 
 ```
-DSO = Accounts_Receivable / Revenue × 365
-DIO = Inventory / COGS × 365
-DPO = Accounts_Payable / COGS × 365
+DSO = Accounts_Receivable_end / Revenue × 365
+DIO = Inventory_end / COGS × 365
+DPO = Accounts_Payable_end / COGS × 365
 CCC = DSO + DIO − DPO
 ```
 
 Trend classification via OLS slope.
+
+**Methodology caveat (recorded in output):** uses **period-end** balances and **total revenue / total COGS**. Textbook-purist version uses **average balances** and (for DSO) **credit sales only** / (for DPO) **purchases only**. The simpler version is appropriate for trend analysis where the noise from end-of-period balance vs. average is typically much smaller than the year-over-year change. Output includes `methodology: "period_end_total_revenue"` flag so prose can cite the convention.
 
 ---
 
@@ -1612,6 +1638,8 @@ Payout_Ratio = Dividends_Paid / NI
 Retention_Ratio = 1 − Payout_Ratio
 Sustainable_Growth_Rate = ROE × Retention_Ratio
 ```
+
+**Methodology caveat (recorded in output):** Uses the standard simple form `ROE × b`. If ROE is computed on ending equity, this slightly understates SGR because retained earnings haven't fully earned a return yet. The Higgins variant `ROE × b / (1 − ROE × b)` exists for the leverage-constant version, but the simple form is the conventional starting point in equity research. Output flags `methodology: "simple_roe_x_retention"` so prose can cite the convention.
 
 Compare to consensus from `eodhd_earnings_trends` long-term growth field.
 
@@ -1778,7 +1806,7 @@ Regression slope from `ols_regression` of subject_metric on commodity_price.
   "nrr": {"value": 1.18, "classification": "strong", "threshold_healthy": 1.10, "disclosed": true},
   "grr": {"value": 0.95, "classification": "strong", "threshold_healthy": 0.90, "disclosed": true},
   "implied_churn_rate": {"value": 0.05, "calculation": "1 - GRR", "disclosed": false},
-  "magic_number": {"value": 1.05, "classification": "efficient", "calculation": "(ΔARR × 4) / S&M_prior_quarter", "disclosed": false},
+  "magic_number": {"value": 1.05, "classification": "efficient", "calculation": "net_new_ARR_this_quarter / S&M_prior_quarter (no ×4 — ARR is already annualized)", "disclosed": false},
   "ltv_cac": {"value": 3.2, "classification": "healthy", "threshold_healthy": 3.0, "disclosed": true},
   "cac_payback_months": {"value": 18, "classification": "moderate", "disclosed": true},
   "customer_count": {"current": 5000, "yoy_growth_pct": 0.20, "disclosed": true},
@@ -1796,8 +1824,14 @@ ARR_QoQ_Growth = (ARR_current − ARR_prior_quarter) / ARR_prior_quarter
 Rule_of_40 = revenue_growth_rate × 100 + fcf_margin × 100  # both as percentages
   - classification: ≥ 50 "excellent", 40-49 "healthy", 30-39 "acceptable", < 30 "weak"
 
-Magic_Number = (new_arr_this_quarter × 4) / sm_spend_prior_quarter
+Magic_Number = net_new_ARR_this_quarter / sm_spend_prior_quarter
   - classification: > 1.0 "efficient", 0.5-1.0 "moderate", < 0.5 "inefficient"
+  - NO ×4 annualization: ARR is already an annualized recurring revenue figure
+  - net_new_ARR = ARR_current_quarter − ARR_prior_quarter (sequential)
+  - The original Scale Venture formula uses a QUARTERLY revenue delta in the
+    numerator with a ×4 annualizer: (Rev_Q − Rev_Q-1) × 4 / S&M_prior_Q.
+    That formula is mathematically equivalent ONLY when ARR ≈ revenue × 4.
+    Since this helper takes net-new ARR directly as input, no multiplier is applied.
 
 LTV_CAC = ltv / cac
   - classification: > 3.0 "healthy", 1.5-3.0 "moderate", < 1.5 "weak"
@@ -2010,7 +2044,7 @@ YoY change detection requires both current and prior 10-K.
       "guidance_for_period": "Q2 FY25",
       "guidance_issued": {"revenue_low": 1100, "revenue_high": 1150, "eps_low": 1.40, "eps_high": 1.45},
       "actual_results": {"revenue": 1130, "eps": 1.48},
-      "verdict": "beat_within_range | beat_above_range | within_range | miss"
+      "verdict": "beat_modest | beat_large | within_range | miss"
     }
   ],
   "summary": {
@@ -2018,8 +2052,8 @@ YoY change detection requires both current and prior 10-K.
     "miss_rate": 0.125,
     "within_range_rate": 0.250,
     "avg_revenue_surprise_pct": 1.2,
-    "credibility_score": 0.78,
-    "narrative": "Management has delivered above or within guidance 87.5% of the time over 8 quarters — high credibility."
+    "guidance_accuracy_heuristic": 0.78,
+    "narrative": "Management has delivered above or within guidance 87.5% of the time over 8 quarters — high guidance accuracy."
   }
 }
 ```
@@ -2027,12 +2061,17 @@ YoY change detection requires both current and prior 10-K.
 **Algorithm:**
 
 For each guidance issuance, find matching actuals from `eodhd_earnings_trends`. Compare against guidance range:
-- `beat_within_range`: actual > guidance_high but within 5% — interpreted as conservative guide
-- `beat_above_range`: actual > guidance_high by > 5%
+- `beat_modest`: actual > guidance_high but by ≤ 5% (conservative guide, narrow beat)
+- `beat_large`: actual > guidance_high by > 5% (significant beat above range)
 - `within_range`: guidance_low ≤ actual ≤ guidance_high
 - `miss`: actual < guidance_low
 
-Credibility score = weighted score where in-range and beat-within-range = 1.0, beat-above-range = 0.7 (suggests sandbagging), miss = 0.
+**Guidance accuracy heuristic** (note: this is an opinionated equity-research heuristic, not a neutral track-record metric):
+- Weighted score where `within_range` = 1.0, `beat_modest` = 1.0, `beat_large` = 0.7, `miss` = 0.
+- The 0.7 weight for `beat_large` reflects the **judgment** that chronic large beats indicate sandbagging — management deliberately guides low to ensure beats, which obscures the true business trajectory.
+- Users who disagree (e.g., prefer reward-the-beat framing) can override the weights via helper params.
+
+The output narrative explicitly distinguishes "guidance accuracy" (in-range delivery) from "management credibility on outlook" (the broader judgment), since the latter incorporates the heuristic above.
 
 ---
 
@@ -2091,29 +2130,50 @@ Future verifier extensions (task #10) — additional issue types:
 
 ---
 
-## 9. Open design questions for audit
+## 9. Audit resolutions and remaining open questions
 
-These are decisions where the design is set but worth flagging for an auditor's challenge:
+This section was updated 2026-05-21 after external audit. Items 1-11 below were the original open questions; resolutions are recorded inline.
 
-1. **Outlier filter default (IQR 1.5x) in `comparables`** — standard but conservative. Real research often uses 1.5x IQR or 2 stdev; we chose 1.5x IQR. Auditor should verify this is appropriate for typical equity-research peer sets (5-15 peers).
+### Resolved by audit
 
-2. **DCF terminal value method** — `dcf_valuation` already computes both perpetuity-growth and exit-multiple terminal values. `reverse_dcf` solves for terminal_growth by default; alternatives (exit multiple, explicit growth) are configurable but not the default. Auditor should verify default matches research conventions.
+1. **Outlier filter default (IQR 1.5×) in `comparables`** — **RESOLVED: keep.** Appropriate for 5-15 peer sets; stdev-based filtering is unstable at small n.
 
-3. **Sloan accruals ratio threshold (0.10)** — research literature suggests this threshold but varies. Auditor should verify against current academic literature.
+2. **DCF terminal value method** — **RESOLVED: keep.** `dcf_valuation` exposes both perpetuity and exit-multiple. `reverse_dcf` defaults to terminal_growth. Matches institutional convention.
 
-4. **Beneish M-score threshold (−1.78)** — original Beneish 1999 threshold. Newer research suggests sector adjustments may be needed. Auditor should verify this is still the most-cited threshold.
+3. **Sloan accruals ratio threshold (0.10)** — **RESOLVED: keep threshold; base measure corrected** (§4.2). Previously, the implementation took a first-difference (`(Accruals_t − Accruals_{t-1}) / avg_TA`) which is "accruals acceleration," not Sloan's level measure. Now reads `Accruals_t / avg_TA_t`. Threshold > 0.10 concerning is consistent with Sloan literature.
 
-5. **Operating leverage exclusion of negative growth periods** — masks the actual relationship in downturns. Alternative: include with sign flip and flag separately. Open for auditor review.
+4. **Beneish M-score threshold (−1.78)** — **RESOLVED: keep.** Audit confirmed −1.78 is correct for the 8-variable model (−2.22 is the 5-variable cutoff). Sector adjustment is a refinement, not a correction.
 
-6. **NOPAT calculation in ROIC** — we use Operating Income × (1 − effective tax rate). Alternative is EBIT × (1 − tax rate), or NOPAT from disclosed components. Auditor should verify our definition matches institutional practice.
+5. **Operating leverage exclusion of negative-growth periods** — **RESOLVED: include with sign-flip flag** (§4.14). Downturn deleverage is the entire reason to compute operating leverage; silent exclusion would discard the most analytically valuable signal.
 
-7. **Invested Capital definition** — Total Equity + Total Debt − Cash. Some practitioners include or exclude minority interest, goodwill, lease liabilities differently. Document our definition explicitly.
+6. **NOPAT calculation in ROIC** — **RESOLVED: explicit `use_adjusted_ebit` flag** (§4.1). Default is reported GAAP EBIT × (1 − effective_tax_rate); when set, consumes adjusted EBIT from `one_time_item_identification`. Output records which was used.
 
-8. **Magic Number formula** — `(ΔARR × 4) / S&M_prior_quarter`. Annualization factor of 4 is convention; auditor should verify.
+7. **Invested Capital definition** — **RESOLVED: explicit treatment recorded in output** (§4.1). `Total_Equity + Total_Debt − Cash`. Operating leases included in `Total_Debt` (post-ASC 842 / IFRS 16). All cash netted (no excess-cash heuristic). Applied identically across ROIC, ROIIC, EP.
 
-9. **Football-field methodology weighting** — we report unweighted median-of-medians. Alternative: weight by methodology confidence (e.g., DCF more weight than peer multiples for high-quality businesses). Currently a design choice not exposed.
+8. **Magic Number formula** — **CORRECTED** (§6.1). The original draft `(ΔARR × 4) / S&M_prior_Q` double-annualized ARR. Corrected to `net_new_ARR / S&M_prior_Q` (no ×4) since ARR is already an annualized figure.
 
-10. **Currency neutral growth** — when company discloses constant-currency growth, we use it directly. When estimating, we use `Reported − Constant_Currency` as Currency_Effect. Direction convention should be verified.
+9. **Football-field methodology weighting** — **OPEN.** Currently unweighted (min/median/max of per-multiple medians). Confidence weighting (DCF higher weight than multiples for high-quality businesses) is a defensible future addition but not currently exposed.
+
+10. **Currency neutral growth direction convention** — **RESOLVED: explicit in output**. `Constant_Currency_Growth = Reported_Growth − Currency_Effect`. When company-disclosed, use disclosure directly. Output records which path was taken.
+
+11. **EV→equity bridge in `comparables` (audit item, not previously open)** — **CORRECTED** (§3.1). Original formula `EV − net_debt + cash` double-counted cash. Corrected to `Equity = EV − net_debt` with `net_debt = total_debt − cash` defined once upstream.
+
+### Additional corrections from audit
+
+- **Piotroski F-score** (§4.17): removed redundant `NI > 0` signal (equivalent to `ROA > 0`); restored canonical `Δ ROA > 0` signal so all 9 distinct Piotroski criteria are present.
+- **Non-cash earnings %** (§4.2): renamed to `accruals_pct_of_ni` and changed formula from `(NI − CFO + Capex)/NI` (which conflates capex with accruals) to `(NI − CFO)/NI` (pure accruals).
+- **Capitalized R&D %** (§4.2): denominator clarified to `(Capitalized + Expensed)` so the ratio is the capitalized share of total R&D, not a ratio that can exceed 1.
+- **Economic profit base** (§4.1): now uses **average invested capital** (same as ROIC) instead of ending IC, so `EP = NOPAT − WACC × avg_IC ≡ spread × avg_IC` reconciles cleanly.
+- **ROIIC timing** (§4.1): contemporaneous convention (`ΔNOPAT_t / ΔIC_t`) instead of the original lagged form. Edge cases for near-zero/negative ΔIC documented.
+- **Operating leverage formula** (§4.14): parenthesization made explicit to prevent left-to-right misinterpretation.
+- **Comparables combined range** (§3.1): algorithm changed from min-of-lows / max-of-highs to min/median/max of per-multiple medians, matching the stated methodology and producing a less artificially-wide band.
+- **guidance_tracker labels** (§7.6): `beat_within_range` renamed to `beat_modest` (since the actual is *above* the range, not within); credibility scoring relabeled as "guidance accuracy heuristic" and explicitly marked as an opinionated judgment rather than neutral track-record metric.
+
+### Caveats added to output
+
+- DSO/DIO/DPO methodology: period-end + total revenue / total COGS (vs. purist average balances + credit sales / purchases only)
+- Sustainable growth rate methodology: simple `ROE × b` (vs. Higgins leverage-constant variant)
+- Beneish TATA methodology: `(NI − CFO) / TA` cash-flow proxy (vs. Beneish original working-capital-delta construction)
 
 ---
 
