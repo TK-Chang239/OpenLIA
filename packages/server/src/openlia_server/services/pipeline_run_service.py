@@ -91,9 +91,7 @@ def mark_running(session: Session, run_id: str) -> PipelineRun:
     return row
 
 
-def mark_completed(
-    session: Session, run_id: str, *, degraded: bool = False
-) -> PipelineRun:
+def mark_completed(session: Session, run_id: str, *, degraded: bool = False) -> PipelineRun:
     row = _require(session, run_id)
     now = _now()
     row.state = "DEGRADED" if degraded else "COMPLETED"

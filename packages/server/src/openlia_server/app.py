@@ -686,9 +686,7 @@ def create_app(
 
     app.include_router(build_secretary_router(db_session_factory=factory, mode=mode))
     app.include_router(build_equity_research_router(db_session_factory=factory, mode=mode))
-    app.include_router(
-        build_equity_research_v2_router(db_session_factory=factory, mode=mode)
-    )
+    app.include_router(build_equity_research_v2_router(db_session_factory=factory, mode=mode))
 
     # Wire the v2.2 stage factory so the SSE endpoints have a real pipeline.
     # Errors during provider resolution are deferred to request time — the

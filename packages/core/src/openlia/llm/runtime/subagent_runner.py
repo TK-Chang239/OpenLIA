@@ -549,7 +549,7 @@ class SubagentReportRunner:
                     messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
-                    # Planning produces 14 SectionPlans + thesis + themes; the
+                    # Planning produces one SectionPlan per template section + thesis + themes; the
                     # JSON shape needs ~3-5k tokens minimum, plus the model
                     # consumes meaningful reasoning budget before emitting. The
                     # iter-3 run with cap=4096 returned empty {} args twice

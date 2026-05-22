@@ -120,9 +120,7 @@ class Failed:
     reason: str
 
 
-RunEvent = (
-    StageStarted | StageCompleted | ClarifierPaused | Completed | Failed
-)
+RunEvent = StageStarted | StageCompleted | ClarifierPaused | Completed | Failed
 
 
 # ---------------------------------------------------------------------------
@@ -170,9 +168,7 @@ class RunnerV2:
             if getattr(self, name) is None
         ]
         if missing:
-            raise RuntimeError(
-                f"RunnerV2.execute() requires injected stages: missing {missing}"
-            )
+            raise RuntimeError(f"RunnerV2.execute() requires injected stages: missing {missing}")
 
     def execute(
         self,
@@ -216,15 +212,11 @@ class RunnerV2:
                 composer_inputs, template_spec, clarifier_answers
             )
 
-            research_pool = yield from self._stage_gather(
-                plan, composer_inputs
-            )
+            research_pool = yield from self._stage_gather(plan, composer_inputs)
 
             plan = yield from self._stage_model_plan(plan, research_pool)
 
-            model_artifacts = yield from self._stage_model_build(
-                plan, research_pool
-            )
+            model_artifacts = yield from self._stage_model_build(plan, research_pool)
 
             section_outputs = yield from self._stage_draft(
                 template_spec, plan, composer_inputs, research_pool, model_artifacts
@@ -296,9 +288,7 @@ class RunnerV2:
         yield StageCompleted(PipelineStage.RESEARCH_PLAN)
         return plan
 
-    def _stage_gather(
-        self, plan: Any, composer_inputs: dict[str, Any]
-    ) -> Iterator[RunEvent]:
+    def _stage_gather(self, plan: Any, composer_inputs: dict[str, Any]) -> Iterator[RunEvent]:
         self.current_stage = PipelineStage.GATHER
         yield StageStarted(PipelineStage.GATHER)
         research_pool = self.strand_dispatcher.dispatch(
@@ -316,9 +306,7 @@ class RunnerV2:
         yield StageCompleted(PipelineStage.MODEL_PLAN)
         return updated
 
-    def _stage_model_build(
-        self, plan: Any, research_pool: Any
-    ) -> Iterator[RunEvent]:
+    def _stage_model_build(self, plan: Any, research_pool: Any) -> Iterator[RunEvent]:
         self.current_stage = PipelineStage.MODEL_BUILD
         yield StageStarted(PipelineStage.MODEL_BUILD)
         all_artifacts = plan.required_artifacts + plan.optional_artifacts
@@ -401,12 +389,14 @@ class RunnerV2:
 
             new_blocks = result.final_blocks or s.blocks
             if result.final_status == "DEGRADED":
-                blocker_types = sorted({
-                    i.issue_type
-                    for r in result.rounds
-                    for i in r.issues
-                    if i.severity == "blocker"
-                })
+                blocker_types = sorted(
+                    {
+                        i.issue_type
+                        for r in result.rounds
+                        for i in r.issues
+                        if i.severity == "blocker"
+                    }
+                )
                 reason = (
                     "verifier persisted blockers: " + ", ".join(blocker_types)
                     if blocker_types
@@ -451,21 +441,27 @@ class RunnerV2:
         sections_dicts: list[dict[str, Any]] = []
         for s in section_outputs:
             if s.status == "SKIPPED":
-                sections_dicts.append({
-                    "id": s.section_id,
-                    "name": s.section_name,
-                    "blocks": [{
-                        "type": "skip_banner",
-                        "section_name": s.section_name,
-                        "reason": s.skip_reason or "",
-                    }],
-                })
+                sections_dicts.append(
+                    {
+                        "id": s.section_id,
+                        "name": s.section_name,
+                        "blocks": [
+                            {
+                                "type": "skip_banner",
+                                "section_name": s.section_name,
+                                "reason": s.skip_reason or "",
+                            }
+                        ],
+                    }
+                )
             else:
-                sections_dicts.append({
-                    "id": s.section_id,
-                    "name": s.section_name,
-                    "blocks": s.blocks,
-                })
+                sections_dicts.append(
+                    {
+                        "id": s.section_id,
+                        "name": s.section_name,
+                        "blocks": s.blocks,
+                    }
+                )
 
         # Accumulate per-section outcomes into the run summary.
         for s in section_outputs:
@@ -545,16 +541,11 @@ def _build_verification_history(
                 last_seen[sig] = r_idx
                 sig_to_issue[sig] = issue
 
-        last_round_sigs = {
-            (i.issue_type, i.evidence) for i in sr.rounds[-1].issues
-        }
+        last_round_sigs = {(i.issue_type, i.evidence) for i in sr.rounds[-1].issues}
 
         for sig, issue in sig_to_issue.items():
             if sig in last_round_sigs:
-                if (
-                    issue.severity == "blocker"
-                    and sr.final_status == "DEGRADED"
-                ):
+                if issue.severity == "blocker" and sr.final_status == "DEGRADED":
                     resolution = "persisted_degraded"
                     persisted += 1
                     resolved_in = None
@@ -586,5 +577,3 @@ def _build_verification_history(
         persisted_to_degraded=persisted,
         warnings_open=warnings_open,
     )
-
-

@@ -223,9 +223,7 @@ def test_cross_reference_sections_resolve_in_cited_docs(cross_reference_table):
                 rf"^### {re.escape(section_ref)}\s",
                 rf"^### {re.escape(section_ref)}`",
             ]
-            found = any(
-                re.search(p, doc_text, re.MULTILINE) for p in patterns
-            )
+            found = any(re.search(p, doc_text, re.MULTILINE) for p in patterns)
             assert found, (
                 f"§{section_ref} cited in §14 for {doc_label!r} "
                 f"(row text: {section_text!r}) does not resolve to any "
