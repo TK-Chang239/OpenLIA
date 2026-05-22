@@ -1,4 +1,4 @@
-"""Phase 3 exit gate — helper count and skill-doc invariants.
+"""Phase 3 exit gate — helper count, skill-doc invariants, and verifier coverage.
 
 This test is the machine-checkable part of the Phase 3 exit criteria defined in
 planning/phase-progress.md. It fails loudly if:
@@ -8,6 +8,7 @@ planning/phase-progress.md. It fails loudly if:
   3. Any of the 18 complex helpers from schema-and-skills §6 is either:
        a. Not registered in the runtime library_helpers registry, OR
        b. Registered but missing its skill_doc field (None or empty path).
+  4. Any of the 18 parent VerifierIssueType values is unreachable (impl-plan §16).
 
 If the helper count changes intentionally (e.g. a helper is added or removed),
 update EXPECTED_TOTAL_HELPERS and EXPECTED_CATEGORY_BREAKDOWN to match the new
@@ -19,7 +20,16 @@ from __future__ import annotations
 import pathlib
 
 import pytest
+from openlia.llm.runtime.report_v2_2.enums import VerifierIssueType
+from openlia.llm.runtime.report_v2_2.materialize import MaterializedSection, RenderedArtifact
+from openlia.llm.runtime.report_v2_2.section_plan import (
+    ReportSectionPlan,
+    SectionArtifactRef,
+    SectionPlan,
+)
 from openlia.llm.runtime.report_v2_2.tools.library_helpers import list_helpers
+from openlia.llm.runtime.report_v2_2.verifier import Verifier
+from openlia.llm.runtime.report_v2_2.verifier_models import VerifierIssue
 
 # ---------------------------------------------------------------------------
 # Expected totals — update when helpers are added / removed intentionally
@@ -220,4 +230,167 @@ def test_complex_helper_skill_doc_file_exists(helper_name: str) -> None:
     )
     assert skill_path.stat().st_size > 100, (
         f"Skill doc for {helper_name!r} at {skill_path} appears empty (< 100 bytes)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 exit gate: all 18 VerifierIssueType parent values must be reachable
+# Per impl-plan §16: "18 parent issue types reachable" is the Phase 2 exit gate.
+# ---------------------------------------------------------------------------
+
+# Helpers shared by the reachability fixtures below.
+
+
+def _make_ms(
+    section_id: str = "s1",
+    rendered_artifacts: list[RenderedArtifact] | None = None,
+    warnings: list[VerifierIssue] | None = None,
+) -> MaterializedSection:
+    return MaterializedSection(
+        section_id=section_id,
+        title="Test Section",
+        rendered_artifacts=rendered_artifacts or [],
+        materialization_warnings=warnings or [],
+    )
+
+
+def _make_ra(artifact_id: str) -> RenderedArtifact:
+    from openlia.llm.runtime.report_v2_2.enums import Fidelity
+
+    return RenderedArtifact(
+        artifact_id=artifact_id,
+        artifact_type=artifact_id,
+        helper_name="__test__",
+        fidelity=Fidelity.FULL,
+        content="content",
+        raw_data={},
+    )
+
+
+def _warn(issue_type: VerifierIssueType) -> VerifierIssue:
+    return VerifierIssue(
+        type=issue_type,
+        detail_code="test",
+        severity="blocking",
+        helper="__test__",
+        detail="test",
+    )
+
+
+def test_all_18_verifier_issue_types_reachable() -> None:
+    """Phase 2 exit gate (impl-plan §16): all 18 VerifierIssueType parent values must be
+    reachable via actual Verifier.verify() calls or materialization_warnings carry-through.
+
+    This test builds minimal synthetic inputs that trigger each issue type and asserts
+    that VerifierIssueType has exactly 18 members — no more, no less.
+    """
+    verifier = Verifier()
+    produced: set[VerifierIssueType] = set()
+
+    # CONTENT_TOO_SPARSE — min_words not met.
+    issues = verifier.verify(_make_ms(), "short", {}, min_words=500)
+    produced.update(i.type for i in issues)
+
+    # DIRECTIVE_UNMET — word count out of budget range.
+    issues = verifier.verify(_make_ms(), " ".join(["w"] * 10), {}, word_budget=500, tolerance_pct=5)
+    produced.update(i.type for i in issues)
+
+    # ARTIFACT_MISSING — rendered artifact not referenced in draft.
+    issues = verifier.verify(_make_ms(rendered_artifacts=[_make_ra("art1")]), "no mention", {})
+    produced.update(i.type for i in issues)
+
+    # NUMERIC_INCONSISTENCY — number in draft absent from helper outputs.
+    issues = verifier.verify(_make_ms(), "Revenue was $999.99 billion.", {"other": {"x": 1}})
+    produced.update(i.type for i in issues)
+
+    # BLOCK_PLAN_ARTIFACT_MISSING — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.BLOCK_PLAN_ARTIFACT_MISSING)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # BLOCK_ARTIFACT_TOO_LARGE — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.BLOCK_ARTIFACT_TOO_LARGE)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # BLOCK_SECTION_PLAN_INVALID — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.BLOCK_SECTION_PLAN_INVALID)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # BLOCK_HEADLINE_MISSING_QUANTITATIVE — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.BLOCK_HEADLINE_MISSING_QUANTITATIVE)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # BLOCK_SHAPE — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.BLOCK_SHAPE)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # TOMBSTONE — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.TOMBSTONE)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # CITATION_MISSING — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.CITATION_MISSING)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # FACTUAL_INCONSISTENCY — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.FACTUAL_INCONSISTENCY)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # REQUIRED_PARAM_UNRESOLVABLE — carried from materialization_warnings.
+    w = _warn(VerifierIssueType.REQUIRED_PARAM_UNRESOLVABLE)
+    issues = verifier.verify(_make_ms(warnings=[w]), "draft", {})
+    produced.update(i.type for i in issues)
+
+    # YEAR_SLIP — FY year token with drift >= 2 from as_of_year.
+    issues = verifier.verify(_make_ms(), "FY2015 revenue was strong.", {}, as_of_year=2025)
+    produced.update(i.type for i in issues)
+
+    # CITATION_UNRESOLVED — [^marker] with no matching artifact.
+    issues = verifier.verify(_make_ms(), "See [^ghost_artifact].", {})
+    produced.update(i.type for i in issues)
+
+    # CITATION_ORPHANED — rendered artifact never cited.
+    ms = _make_ms(rendered_artifacts=[_make_ra("orphan_art")])
+    issues = verifier.verify(ms, "No citation here.", {})
+    produced.update(i.type for i in issues)
+
+    # HELPER_UNAVAILABLE — section_plan references unregistered helper.
+    plan = ReportSectionPlan(
+        template_id="test",
+        sections=[
+            SectionPlan(
+                section_id="s1",
+                title="S1",
+                artifacts=[SectionArtifactRef(artifact_id="__no_such_helper__", fidelity="full")],
+            )
+        ],
+    )
+    issues = verifier.verify(_make_ms(section_id="s1"), "draft", {}, section_plan=plan)
+    produced.update(i.type for i in issues)
+
+    # INCOHERENT_PROSE — run-on sentence > 60 words.
+    long_sent = " ".join(["word"] * 65) + "."
+    issues = verifier.verify(_make_ms(), long_sent, {})
+    produced.update(i.type for i in issues)
+
+    # Assert all 18 enum values were produced.
+    all_types = set(VerifierIssueType)
+    missing = all_types - produced
+    assert not missing, (
+        f"Phase 2 exit gate (impl-plan §16): {len(missing)} VerifierIssueType value(s) "
+        f"were never produced by any Verifier.verify() call: "
+        f"{sorted(str(t) for t in missing)}. "
+        f"Each of the 18 parent issue types must be reachable."
+    )
+
+    assert len(all_types) == 18, (
+        f"VerifierIssueType must have exactly 18 values per impl-plan §16, "
+        f"got {len(all_types)}: {sorted(str(t) for t in all_types)}"
     )
