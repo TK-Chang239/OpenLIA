@@ -92,7 +92,7 @@ def test_drafter_skips_section_when_trigger_fires_false():
     sections = [
         _make_section(
             "macro_section", "Macro", "Write macro", [], trigger_when="macro strand available"
-        ),  # noqa: E501
+        ),
     ]
     dag = {"macro_section": []}
 
@@ -122,7 +122,7 @@ def test_drafter_drafts_section_when_trigger_fires_true():
     sections = [
         _make_section(
             "macro_section", "Macro", "Write macro", [], trigger_when="macro strand available"
-        ),  # noqa: E501
+        ),
     ]
     dag = {"macro_section": []}
 

@@ -4,6 +4,7 @@ Revision ID: a1b2c3d4e5f6
 Revises: f3d303f0d092
 Create Date: 2026-05-21 12:00:00.000000+00:00
 """
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -59,12 +60,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_pipeline_runs")),
     )
     with op.batch_alter_table("pipeline_runs", schema=None) as batch_op:
-        batch_op.create_index(
-            "ix_pipeline_runs_user_state", ["user_id", "state"], unique=False
-        )
-        batch_op.create_index(
-            "ix_pipeline_runs_session", ["session_id"], unique=False
-        )
+        batch_op.create_index("ix_pipeline_runs_user_state", ["user_id", "state"], unique=False)
+        batch_op.create_index("ix_pipeline_runs_session", ["session_id"], unique=False)
 
 
 def downgrade() -> None:

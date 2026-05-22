@@ -97,9 +97,7 @@ def _stage_completed_frame(stage: str) -> bytes:
     return _frame("stage.completed", {"stage": stage})
 
 
-def _clarifier_pause_frame(
-    run_id: str, round_num: int, output: ClarifierOutput
-) -> bytes:
+def _clarifier_pause_frame(run_id: str, round_num: int, output: ClarifierOutput) -> bytes:
     return _frame(
         "clarifier.pause",
         {
@@ -115,9 +113,7 @@ def _completed_frame(run_id: str, html: str) -> bytes:
 
 
 def _failed_frame(run_id: str, stage: str, reason: str) -> bytes:
-    return _frame(
-        "failed", {"run_id": run_id, "stage": stage, "reason": reason}
-    )
+    return _frame("failed", {"run_id": run_id, "stage": stage, "reason": reason})
 
 
 # ---------------------------------------------------------------------------
@@ -140,9 +136,7 @@ async def _drive_run(
     session so the SSE connection itself never holds a DB transaction open.
     """
     try:
-        for event in runner.execute(
-            composer_inputs, template_spec, resume_state=resume_state
-        ):
+        for event in runner.execute(composer_inputs, template_spec, resume_state=resume_state):
             if isinstance(event, StageStarted):
                 yield _stage_started_frame(event.stage.value)
             elif isinstance(event, StageCompleted):
@@ -156,8 +150,7 @@ async def _drive_run(
                         clarifier_output=event.output.model_dump(mode="json"),
                         clarifier_round=event.round,
                         clarification_history=[
-                            c.model_dump(mode="json")
-                            for c in event.clarification_history
+                            c.model_dump(mode="json") for c in event.clarification_history
                         ],
                     )
                     s.commit()
@@ -193,9 +186,7 @@ def _get_factory(request: Request) -> StageFactory:
             status_code=503,
             detail={
                 "code": "v2_engine_unavailable",
-                "message": (
-                    "v2.2 pipeline factory is not wired on this deployment."
-                ),
+                "message": ("v2.2 pipeline factory is not wired on this deployment."),
             },
         )
     return factory
@@ -211,13 +202,9 @@ def build_equity_research_v2_router(
     db_session_factory: Callable[[], DBSession],
     mode: str,
 ) -> APIRouter:
-    require_auth = build_require_auth(
-        db_session_factory=db_session_factory, mode=mode
-    )
+    require_auth = build_require_auth(db_session_factory=db_session_factory, mode=mode)
     session_dep = make_session_dependency(db_session_factory)
-    router = APIRouter(
-        prefix="/departments/equity-research/v2", tags=["equity-research-v2"]
-    )
+    router = APIRouter(prefix="/departments/equity-research/v2", tags=["equity-research-v2"])
 
     @router.post("/report")
     async def start_v2_report(
@@ -307,9 +294,7 @@ def build_equity_research_v2_router(
 
         # Hydrate template + clarification history from the row.
         try:
-            template_spec, _notices = load_template_v2(
-                row.template_raw, fmt=row.template_format
-            )
+            template_spec, _notices = load_template_v2(row.template_raw, fmt=row.template_format)
         except Exception as exc:
             raise HTTPException(
                 status_code=500,
@@ -385,6 +370,5 @@ def _resolve_template_raw(db: DBSession, report_template_id: str) -> str:
     if candidate.exists():
         return candidate.read_text()
     raise FileNotFoundError(
-        f"v2 template {report_template_id!r} not found in bundled set "
-        f"({bundled_dir})"
+        f"v2 template {report_template_id!r} not found in bundled set ({bundled_dir})"
     )

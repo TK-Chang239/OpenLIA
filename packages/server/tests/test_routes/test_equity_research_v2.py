@@ -44,9 +44,7 @@ class _FakeRunner:
         self._events = events
         self.called_with: dict[str, Any] = {}
 
-    def execute(
-        self, composer_inputs: dict[str, Any], template_spec: Any, *, resume_state=None
-    ):
+    def execute(self, composer_inputs: dict[str, Any], template_spec: Any, *, resume_state=None):
         self.called_with = {
             "composer_inputs": composer_inputs,
             "template_spec": template_spec,
@@ -137,9 +135,7 @@ def test_start_emits_stage_frames_and_completed_frame(v2_client):
     )
     app.state.v2_runner_stage_factory = lambda ctx: runner
 
-    resp = client.post(
-        "/api/departments/equity-research/v2/report", json=_ok_payload()
-    )
+    resp = client.post("/api/departments/equity-research/v2/report", json=_ok_payload())
     assert resp.status_code == 200
 
     frames = _parse_sse(resp.text)
@@ -196,19 +192,14 @@ def test_start_pauses_and_persists_on_clarifier_warnings(v2_client):
     )
     app.state.v2_runner_stage_factory = lambda ctx: runner
 
-    resp = client.post(
-        "/api/departments/equity-research/v2/report", json=_ok_payload()
-    )
+    resp = client.post("/api/departments/equity-research/v2/report", json=_ok_payload())
     assert resp.status_code == 200
 
     frames = _parse_sse(resp.text)
     pause_frames = [d for e, d in frames if e == "clarifier.pause"]
     assert len(pause_frames) == 1
     assert pause_frames[0]["round"] == 1
-    assert (
-        pause_frames[0]["output"]["blocking_warnings"][0]["capability_id"]
-        == "extra_passes"
-    )
+    assert pause_frames[0]["output"]["blocking_warnings"][0]["capability_id"] == "extra_passes"
 
     run_id = resp.headers["X-Run-Id"]
     with session_mod.SessionLocal() as s:
@@ -231,9 +222,7 @@ def test_start_marks_failed_when_runner_yields_failed(v2_client):
     )
     app.state.v2_runner_stage_factory = lambda ctx: runner
 
-    resp = client.post(
-        "/api/departments/equity-research/v2/report", json=_ok_payload()
-    )
+    resp = client.post("/api/departments/equity-research/v2/report", json=_ok_payload())
     assert resp.status_code == 200
 
     frames = _parse_sse(resp.text)
@@ -262,9 +251,7 @@ def test_start_returns_503_when_factory_unset(v2_client):
     # the "deployment without v2 wiring" path the route is meant to handle.
     if hasattr(app.state, "v2_runner_stage_factory"):
         delattr(app.state, "v2_runner_stage_factory")
-    resp = client.post(
-        "/api/departments/equity-research/v2/report", json=_ok_payload()
-    )
+    resp = client.post("/api/departments/equity-research/v2/report", json=_ok_payload())
     assert resp.status_code == 503
     assert resp.json()["detail"]["code"] == "v2_engine_unavailable"
 
@@ -341,9 +328,7 @@ def test_resume_re_streams_pipeline_with_user_answers(v2_client):
     # Resume passed the answers payload into the runner.
     assert runner.called_with["resume_state"] is not None
     assert (
-        runner.called_with["resume_state"].answers["warning_actions"][
-            "extra_passes"
-        ]
+        runner.called_with["resume_state"].answers["warning_actions"]["extra_passes"]
         == "proceed_without"
     )
 

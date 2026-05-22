@@ -164,7 +164,7 @@ class SectionDrafter:
         system = (
             f"Draft section '{section.name}'.\n"
             f"Directive: {section.directive}\n\n"
-            "Return a JSON object {\"blocks\": [...]} where each block is one"
+            'Return a JSON object {"blocks": [...]} where each block is one'
             " of these renderable shapes:\n"
             '  - {"type": "prose", "text": "markdown body"}\n'
             '  - {"type": "table", "headers": [..], "rows": [[..], ..],'

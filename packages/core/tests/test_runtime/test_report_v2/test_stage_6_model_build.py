@@ -37,9 +37,7 @@ def _make_dcf_helper(execute_fn=None) -> None:
         },
     )
     fn = execute_fn or (lambda **kw: {"npv": 100})
-    register_helper(
-        HelperRegistration(helper_schema=schema, execute=fn, available=True)
-    )
+    register_helper(HelperRegistration(helper_schema=schema, execute=fn, available=True))
 
 
 class TestBuildSuccess:
