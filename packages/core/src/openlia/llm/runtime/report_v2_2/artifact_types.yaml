@@ -178,6 +178,26 @@ artifact_types:
       full: "All five metric blocks (profitability, capital, credit, liquidity, cycle), health score, warnings, narrative"
     depends_on: []
 
+  - name: reit_valuation_panel_output
+    description: >
+      REIT KPI and valuation panel covering four metric blocks: income
+      (FFO, AFFO, AFFO payout ratio, FFO/AFFO QoQ and YoY growth),
+      valuation (P/FFO, P/AFFO, NAV per share, applied cap rate,
+      implied cap rate, premium/discount to NAV),
+      operating metrics (same-store NOI growth, occupancy rate, WALT,
+      re-leasing spreads, tenant concentration, lease expiry ladder),
+      and balance sheet (Net Debt/EBITDA, debt-to-assets, unsecured debt mix,
+      interest coverage, weighted average debt maturity).
+      Also produces AFFO sustainability score, composite REIT health score (0-100),
+      and warnings (AFFO payout > 80%, Net Debt/EBITDA > 7x, occupancy < 90%).
+      Mandatory for any equity REIT or REOC initiation or quarterly update report.
+      NAV calculation requires user-supplied cap rate assumptions.
+    fidelity:
+      headline: "REIT panel: FFO/sh $X, AFFO payout Y%, NAV $Z/sh (W% discount/premium)"
+      summary: "FFO, AFFO, payout ratio, NAV/share, premium/discount to NAV, SS NOI growth, occupancy, Net Debt/EBITDA, health score"
+      full: "All four metric blocks (income, valuation, operating, balance sheet), sustainability score, health score, warnings, narrative"
+    depends_on: []
+
   # -----------------------------------------------------------------------
   # EODHD adapter outputs (18 helpers, PR 1.1)
   # -----------------------------------------------------------------------

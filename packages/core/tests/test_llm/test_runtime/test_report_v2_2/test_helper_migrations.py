@@ -189,8 +189,9 @@ def test_artifact_type_registry_count() -> None:
     # + 3 risk/macro (PR 2.11): drawdown_panel_output, yield_curve_shape_output,
     #   commodity_exposure_output
     # + 1 sector banks (PR 3.1): banks_sector_panel_output
-    # = 98
-    assert len(all_types) == 98, f"Expected 98 artifact types, got {len(all_types)}: {names}"
+    # + 1 sector REITs (PR 3.2): reit_valuation_panel_output
+    # = 99
+    assert len(all_types) == 99, f"Expected 99 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -312,6 +313,8 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "commodity_exposure_output",
         # Sector modules Wave 1 (PR 3.1)
         "banks_sector_panel_output",
+        # Sector modules Wave 1 (PR 3.2)
+        "reit_valuation_panel_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
