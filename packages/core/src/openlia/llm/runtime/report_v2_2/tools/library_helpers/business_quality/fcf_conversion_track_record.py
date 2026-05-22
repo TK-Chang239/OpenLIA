@@ -137,8 +137,7 @@ _SCHEMA = HelperSchema(
                 name="fcf_conversion",
                 type="dict",
                 description=(
-                    "periods (label, fcf, ni, fcf_to_ni), "
-                    "avg_fcf_to_ni, stability_stdev, trend."
+                    "periods (label, fcf, ni, fcf_to_ni), avg_fcf_to_ni, stability_stdev, trend."
                 ),
             ),
         ],

@@ -108,9 +108,7 @@ def execute(
             "Risk/reward ratio undefined — check bear case rigor."
         )
     if bull_case_price <= current_price:
-        warnings.append(
-            "bull_case_price <= current_price: no upside identified."
-        )
+        warnings.append("bull_case_price <= current_price: no upside identified.")
 
     # Risk/reward ratio
     if downside_pct == 0 or downside_pct > 0:

@@ -215,8 +215,7 @@ _SCHEMA = HelperSchema(
                 required=False,
                 default=None,
                 description=(
-                    "Output from one_time_item_identification. "
-                    "Provides one-time item intensity."
+                    "Output from one_time_item_identification. Provides one-time item intensity."
                 ),
             ),
             "quality_of_earnings_output": HelperParam(

@@ -265,9 +265,7 @@ def test_capital_allocation_averages() -> None:
 def test_earnings_surprise_beat_rate() -> None:
     actuals = [1.0, 1.2, 0.9, 1.1, 1.3, 1.0, 1.2, 1.4]
     estimates = [0.95, 1.1, 1.0, 1.0, 1.2, 1.05, 1.1, 1.3]
-    result = get_helper("earnings_surprise_tracker").impl(
-        actuals=actuals, estimates=estimates
-    )
+    result = get_helper("earnings_surprise_tracker").impl(actuals=actuals, estimates=estimates)
     # Beats: q1(1.0>0.95), q2(1.2>1.1), q4(1.1>1.0), q5(1.3>1.2), q7(1.2>1.1), q8(1.4>1.3) = 6
     # Miss: q3(0.9<1.0), q6(1.0<1.05) = 2
     assert result["beat_count"] == 6
@@ -276,9 +274,7 @@ def test_earnings_surprise_beat_rate() -> None:
 
 
 def test_earnings_surprise_pct_formula() -> None:
-    result = get_helper("earnings_surprise_tracker").impl(
-        actuals=[1.10], estimates=[1.00]
-    )
+    result = get_helper("earnings_surprise_tracker").impl(actuals=[1.10], estimates=[1.00])
     # surprise_pct = (1.10 - 1.00) / abs(1.00) * 100 = 10%
     assert result["quarters"][0]["surprise_pct"] == pytest.approx(10.0, abs=0.01)
 
@@ -486,17 +482,13 @@ def test_organic_growth_decomposition() -> None:
 
 
 def test_cc_growth_tailwind() -> None:
-    result = get_helper("currency_neutral_growth").impl(
-        reported_growth_pct=12.0, fx_impact_pct=3.0
-    )
+    result = get_helper("currency_neutral_growth").impl(reported_growth_pct=12.0, fx_impact_pct=3.0)
     assert result["constant_currency_growth_pct"] == pytest.approx(9.0, abs=0.01)
     assert result["fx_characterization"] == "tailwind"
 
 
 def test_cc_growth_headwind() -> None:
-    result = get_helper("currency_neutral_growth").impl(
-        reported_growth_pct=8.0, fx_impact_pct=-4.0
-    )
+    result = get_helper("currency_neutral_growth").impl(reported_growth_pct=8.0, fx_impact_pct=-4.0)
     assert result["constant_currency_growth_pct"] == pytest.approx(12.0, abs=0.01)
     assert result["fx_characterization"] == "headwind"
 
@@ -609,9 +601,7 @@ def test_sbc_intensity_dilution_bps() -> None:
 
 
 def test_sbc_intensity_verdict_high() -> None:
-    result = get_helper("sbc_intensity").impl(
-        sbc=120.0, revenue=1000.0, market_cap=5000.0
-    )
+    result = get_helper("sbc_intensity").impl(sbc=120.0, revenue=1000.0, market_cap=5000.0)
     assert result["verdict"] == "high"
 
 

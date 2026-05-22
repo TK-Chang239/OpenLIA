@@ -269,18 +269,12 @@ def execute(
     # Warnings
     thr_pct = f"{_PAYOUT_WARNING_THRESHOLD:.0%}"
     if payout_of_ni is not None and payout_of_ni > _PAYOUT_WARNING_THRESHOLD:
-        warnings_list.append(
-            f"Payout ratio (NI) {payout_of_ni:.1%} exceeds {thr_pct} threshold"
-        )
+        warnings_list.append(f"Payout ratio (NI) {payout_of_ni:.1%} exceeds {thr_pct} threshold")
     if payout_of_fcf is not None and payout_of_fcf > _PAYOUT_WARNING_THRESHOLD:
-        warnings_list.append(
-            f"Payout ratio (FCF) {payout_of_fcf:.1%} exceeds {thr_pct} threshold"
-        )
+        warnings_list.append(f"Payout ratio (FCF) {payout_of_fcf:.1%} exceeds {thr_pct} threshold")
     cov_thr = _FCF_COVERAGE_WARNING_THRESHOLD
     if coverage_fcf is not None and coverage_fcf < cov_thr:
-        warnings_list.append(
-            f"FCF coverage {coverage_fcf:.2f}x is below {cov_thr:.1f}x minimum"
-        )
+        warnings_list.append(f"FCF coverage {coverage_fcf:.2f}x is below {cov_thr:.1f}x minimum")
 
     payouts_for_classify = {
         "of_ni": payout_of_ni,
