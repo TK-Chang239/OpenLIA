@@ -2,6 +2,11 @@
 
 Imports the implementation from report_v2 (no duplication) and declares a
 HelperSchema per the v2.2 four-tier contract.
+
+DEPRECATED as of v0.2.0. Slated for removal in a follow-up cleanup PR after 2.5.
+This wrapper remains registered for backward compatibility.
+Migrate to: ft_profitability_ratios, ft_liquidity_ratios, ft_solvency_ratios,
+ft_efficiency_ratios, ft_valuation_ratios (PR 1.2 FinanceToolkit helpers).
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from openlia.llm.runtime.report_v2_2.tools.library_helpers import register_helpe
 
 _SCHEMA = HelperSchema(
     version="0.1.0",
+    deprecated_at_version="0.2.0",
     directory=DirectoryEntry(
         name="ratio_calculator",
         category=Category.BUSINESS_QUALITY,

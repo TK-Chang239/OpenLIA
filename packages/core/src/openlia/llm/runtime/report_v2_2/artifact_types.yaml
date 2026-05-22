@@ -699,3 +699,214 @@ artifact_types:
       summary: "Methodologies summary table with ranges; current price position; median of medians"
       full: "Plotly JSON chart, full markdown table, per-methodology detail, verdict"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # Business quality bundle (PR 2.5) — 20 artifact types
+  # -----------------------------------------------------------------------
+
+  - name: roic_panel_output
+    description: >
+      ROIC panel: NOPAT / Invested Capital trend over time, ROIC vs WACC spread,
+      ROIIC (Return on Incremental Invested Capital), and Economic Profit
+      (EP = (ROIC - WACC) * IC).
+    fidelity:
+      headline: "ROIC X% (vs WACC Y%), EP $Z, ROIIC W%"
+      summary: "ROIC trend table, ROIC vs WACC spread, ROIIC, economic profit"
+      full: "Full ROIC panel: NOPAT/IC schedule, WACC delta, ROIIC, EP series, narratives"
+    depends_on: []
+
+  - name: quality_of_earnings_output
+    description: >
+      Earnings quality panel: accruals_pct_of_ni, Sloan ratio, CFO/NI, capitalized
+      R&D adjustment, and one-time item breakdown. Flags low-quality earnings.
+    fidelity:
+      headline: "QoE: accruals X% of NI, Sloan ratio Y, CFO/NI Z"
+      summary: "Accruals pct, Sloan ratio, CFO/NI, R&D capitalization delta, one-time flag"
+      full: "Full QoE panel: all six metrics, with/without R&D cap, one-time breakdown, warnings"
+    depends_on: []
+
+  - name: capital_allocation_history_output
+    description: >
+      Capital allocation history: capex, buybacks, dividends, M&A, and debt paydown
+      as % of CFO over time. Shows how management has deployed capital.
+    fidelity:
+      headline: "Capital allocation: capex X%, buybacks Y%, dividends Z% of CFO"
+      summary: "CFO allocation table by category over N years"
+      full: "Full allocation history per year with pct of CFO and absolute amounts"
+    depends_on: []
+
+  - name: earnings_surprise_tracker_output
+    description: >
+      Earnings surprise tracker: EPS beats/misses vs consensus, beat magnitude,
+      trend direction, and beat rate over the trailing N quarters.
+    fidelity:
+      headline: "Beat rate X% over N quarters, last surprise +/-Y%"
+      summary: "Beat/miss table last 8 quarters, beat rate, avg magnitude"
+      full: "Full per-quarter surprise data, trend analysis, magnitude distribution"
+    depends_on: []
+
+  - name: analyst_revision_momentum_output
+    description: >
+      Analyst estimate revision momentum: count of upward vs downward revisions,
+      net revision direction, and velocity of revision change.
+    fidelity:
+      headline: "Revisions: +X up / -Y down, net direction positive/negative"
+      summary: "Up vs down revision counts, net direction, velocity score"
+      full: "Full revision history with timestamps, magnitude, net score, velocity"
+    depends_on: []
+
+  - name: common_size_statements_output
+    description: >
+      Common-size financial statements: IS/BS/CFS line items as % of revenue (IS/CFS)
+      or total assets (BS), with optional peer comparison.
+    fidelity:
+      headline: "Common-size: gross margin X%, SG&A Y%, net margin Z%"
+      summary: "IS common-size (revenue, gross, op income, net income pct); BS asset mix"
+      full: "Full IS/BS/CFS common-size with all line items and optional peer deltas"
+    depends_on: []
+
+  - name: fcf_conversion_output
+    description: >
+      FCF conversion track record: FCF / Net Income ratio over time, stability,
+      trend direction, and average conversion rate.
+    fidelity:
+      headline: "FCF conversion: avg X% over N years, trend stable/improving/declining"
+      summary: "FCF/NI table per year, average, trend direction"
+      full: "Full FCF/NI series, stability analysis, explanation of divergences"
+    depends_on: []
+
+  - name: total_shareholder_yield_output
+    description: >
+      Total shareholder yield: dividend yield + buyback yield + debt paydown yield.
+      Per-component breakdown and combined TSY.
+    fidelity:
+      headline: "TSY X% (div Y%, buyback Z%, debt paydown W%)"
+      summary: "TSY total and per-component breakdown table"
+      full: "Full TSY computation: dividend yield, buyback yield, debt paydown yield, combined"
+    depends_on: []
+
+  - name: cross_statement_validation_output
+    description: >
+      Cross-statement coherence checks: IS net income vs retained earnings change on
+      BS; CFO bridge; BS accounting equation; NI to BS retained earnings reconciliation.
+      Flags inconsistencies above materiality threshold.
+    fidelity:
+      headline: "Cross-statement: N checks, M flags (largest delta $X)"
+      summary: "Check list with pass/fail and delta amounts"
+      full: "Full check-by-check detail: expected, actual, delta, materiality flag"
+    depends_on: []
+
+  - name: one_time_item_output
+    description: >
+      One-time item identification: impairments, restructuring, gains/losses on asset
+      sales, IPO/M&A costs. Per-item classification and total non-recurring impact.
+    fidelity:
+      headline: "One-time items: $X total (N items), Y% of reported NI"
+      summary: "Item list with type and amount; total non-recurring impact"
+      full: "Full per-item table: type, amount, classification rationale, adjusted metrics"
+    depends_on: []
+
+  - name: organic_vs_inorganic_growth_output
+    description: >
+      Revenue growth decomposition: organic growth, FX impact, acquisition contribution,
+      and total reported growth.
+    fidelity:
+      headline: "Organic growth X% (total Y%, FX Z%, M&A W%)"
+      summary: "Growth decomposition table: organic, FX, acquisition, total"
+      full: "Full decomposition per period: organic, constant-currency, acquisition lift, total"
+    depends_on: []
+
+  - name: currency_neutral_growth_output
+    description: >
+      Constant-currency (currency-neutral) revenue growth: reported growth vs
+      constant-currency growth, FX headwind/tailwind magnitude.
+    fidelity:
+      headline: "CC growth X% vs reported Y% (FX Z bp headwind/tailwind)"
+      summary: "Reported vs CC growth, FX impact, periods covered"
+      full: "Full constant-currency series per period with FX delta and trend"
+    depends_on: []
+
+  - name: margin_trajectory_output
+    description: >
+      Margin trajectory regression: linear regression on gross/operating/net margin
+      vs time, slope (bps/year), R-squared, and trend direction test.
+    fidelity:
+      headline: "Margin trend: op margin +/-X bps/yr (R2=Y), direction: expanding/contracting"
+      summary: "Regression slope and R2 for gross, operating, and net margin"
+      full: "Full regression results per margin type: slope, intercept, R2, p-value, trend verdict"
+    depends_on: []
+
+  - name: operating_leverage_output
+    description: >
+      Operating leverage analysis: fixed vs variable cost decomposition, degree of
+      operating leverage (DOL = %EBIT / %Revenue), and sensitivity to volume changes.
+    fidelity:
+      headline: "DOL X.Xx at current revenue (fixed cost ratio Y%)"
+      summary: "DOL, fixed cost %, variable cost %, EBIT sensitivity table"
+      full: "Full cost decomposition, DOL computation, sensitivity to revenue change, warnings"
+    depends_on: []
+
+  - name: sbc_intensity_output
+    description: >
+      Stock-based compensation intensity: SBC/revenue, SBC/market cap, SBC/operating
+      income, dilution impact from net new shares from SBC.
+    fidelity:
+      headline: "SBC: X% of revenue, Y% of market cap, dilution Z bps/yr"
+      summary: "SBC/revenue, SBC/mktcap, SBC/op income, dilution impact"
+      full: "Full SBC panel: absolute SBC, all three intensity ratios, dilution schedule, verdict"
+    depends_on: []
+
+  - name: cap_table_dilution_output
+    description: >
+      Cap table dilution analysis: share count evolution, annualized dilution rate,
+      gross dilution from SBC, offset from buybacks, and net dilution.
+    fidelity:
+      headline: "Net dilution X bps/yr (gross Y bps, buyback offset Z bps)"
+      summary: "Share count trend, gross dilution, buyback offset, net dilution"
+      full: "Full share count series, gross/net dilution per year, buyback offset, verdict"
+    depends_on: []
+
+  - name: piotroski_f_score_output
+    description: >
+      Custom Piotroski F-Score (9-point) with DROA audit fix: uses full-year YoY
+      DROA (not quarterly). Per-criterion breakdown across profitability, leverage,
+      and efficiency pillars.
+    fidelity:
+      headline: "Piotroski F-Score: X/9 (strength: strong/neutral/weak)"
+      summary: "F-Score total and three pillar sub-scores"
+      full: "Full 9-criterion breakdown with YoY DROA detail and audit notes"
+    depends_on: []
+
+  - name: cash_conversion_cycle_output
+    description: >
+      Cash conversion cycle: DSO (Days Sales Outstanding) + DIO (Days Inventory
+      Outstanding) - DPO (Days Payable Outstanding). Trend over time.
+    fidelity:
+      headline: "CCC X days (DSO Y, DIO Z, DPO W)"
+      summary: "CCC, DSO, DIO, DPO for current period; YoY delta"
+      full: "Full CCC series, component trends, interpretation, peer context"
+    depends_on: []
+
+  - name: sustainable_growth_rate_output
+    description: >
+      Sustainable growth rate: SGR = ROE * (1 - payout_ratio). Compares SGR to
+      actual revenue growth to flag unsustainable growth trajectories.
+    fidelity:
+      headline: "SGR X% vs actual growth Y% (ROE Z%, payout W%)"
+      summary: "SGR, ROE, payout ratio, actual growth, gap analysis"
+      full: "Full SGR derivation: ROE, retention ratio, SGR, actual growth delta, verdict"
+    depends_on: []
+
+  - name: forensic_panel_output
+    description: >
+      Forensic concern composite: aggregates one-time items, accruals from QoE panel,
+      SBC intensity, and channel-stuffing signal (AR/Revenue surge). Produces a
+      forensic concern score 0-100 (higher = worse).
+    fidelity:
+      headline: "Forensic score X/100 (concern level: low/medium/high)"
+      summary: "Score, concern level, top 2 contributing signals"
+      full: "Full forensic panel: per-signal scores, weights, composite score, narrative"
+    depends_on:
+      - one_time_item_output
+      - quality_of_earnings_output
+      - sbc_intensity_output
