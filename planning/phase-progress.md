@@ -4,6 +4,8 @@ Living checklist. **Update this file as part of each PR merge.** A PR is not "do
 
 For PR row definitions, design-doc refs, and acceptance criteria, see `2026-05-22-equity-research-implementation-plan.md`.
 
+**Design-doc status:** complete. The 7 design docs in `planning/README.md` cover every helper scheduled in this plan; §14 cross-reference in the impl plan resolves row-by-row (enforced by `test_cross_reference_sections_resolve_in_cited_docs`).
+
 ---
 
 ## Phase 0 — Foundation
