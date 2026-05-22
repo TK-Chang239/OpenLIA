@@ -1,4 +1,7 @@
 .openlia-smoke.db*
+.smoke_v2.db*
+.claude/settings.json
+.claude/settings.local.json
 
 # Python
 __pycache__/
