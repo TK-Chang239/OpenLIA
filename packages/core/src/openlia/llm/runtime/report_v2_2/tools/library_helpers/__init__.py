@@ -67,6 +67,7 @@ from . import (  # noqa: E402, F401
     chart_builder,
     comparables_run,
     cost_of_capital_builder,
+    credit,
     dcf_engine,
     dcf_valuation,
     ddm_family,
