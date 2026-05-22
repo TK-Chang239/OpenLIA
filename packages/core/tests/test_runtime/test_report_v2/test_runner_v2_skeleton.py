@@ -16,7 +16,9 @@ def test_pipeline_stages_in_order():
         "research_plan",
         "gather",
         "model_plan",
+        "stage_5b_planner_v2_2",  # v2.2 helper selection
         "model_build",
+        "stage_7a_materialize",  # v2.2 artifact materialization
         "draft",
         "verify",
         "assemble",

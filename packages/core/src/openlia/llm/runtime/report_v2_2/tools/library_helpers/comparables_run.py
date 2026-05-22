@@ -1,7 +1,7 @@
-"""comparables.run -- comparable companies multiples valuation helper.
+"""comparables_run -- comparable companies multiples valuation helper.
 
-Registered name: "comparables.run" (dot notation per schema-and-skills §6 row 3).
-Python module file uses underscore: comparables_run.py.
+Registered name: "comparables_run" (underscore, consistent with all other helpers).
+Python module file: comparables_run.py.
 
 Three logical sub-functions, all exposed through run():
 1. Peer set discovery -- find ~10 comparable peers by GICS sub-industry + size + geography.
@@ -657,7 +657,7 @@ def run(
 _SCHEMA = HelperSchema(
     version="0.1.0",
     directory=DirectoryEntry(
-        name="comparables.run",
+        name="comparables_run",
         category=Category.COMPARABLES,
         one_liner="Peer comps: P/E, EV/EBITDA, EV/Sales, P/B, PEG with EV bridge + blended range.",
     ),

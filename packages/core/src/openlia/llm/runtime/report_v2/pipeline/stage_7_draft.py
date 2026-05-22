@@ -77,7 +77,18 @@ class SectionDrafter:
         composer_inputs: dict[str, Any],
         research_pool: ResearchPool,
         model_artifacts: list[Any],
+        *,
+        materialized_by_section: dict[str, Any] | None = None,
     ) -> list[SectionOutput]:
+        """Draft all sections in topological order.
+
+        Args:
+            materialized_by_section: When Stage 7a ran, a mapping of
+                section_id → ``MaterializedSection`` from
+                ``report_v2_2.materialize``. When provided, each section is
+                drafted using ``build_drafter_prompt()`` (A-3). When None,
+                falls through to the existing v2 hand-rolled prompt path.
+        """
         sections_by_id: dict[str, Any] = {s.id: s for s in sections}
         order = topological_order(dag)
 
@@ -142,12 +153,16 @@ class SectionDrafter:
                     completed[section_id] = out
                     continue
 
+            materialized_section = (
+                materialized_by_section.get(section_id) if materialized_by_section else None
+            )
             out = self._draft_one(
                 section=section,
                 composer_inputs=composer_inputs,
                 research_pool=research_pool,
                 model_artifacts=model_artifacts,
                 deps_md=deps_md,
+                materialized_section=materialized_section,
             )
             completed[section_id] = out
 
@@ -160,37 +175,85 @@ class SectionDrafter:
         research_pool: ResearchPool,
         model_artifacts: list[Any],
         deps_md: dict[str, str],
+        *,
+        materialized_section: Any | None = None,
     ) -> SectionOutput:
-        system = (
-            f"Draft section '{section.name}'.\n"
-            f"Directive: {section.directive}\n\n"
-            'Return a JSON object {"blocks": [...]} where each block is one'
-            " of these renderable shapes:\n"
-            '  - {"type": "prose", "text": "markdown body"}\n'
-            '  - {"type": "table", "headers": [..], "rows": [[..], ..],'
-            ' "caption": "optional"}\n'
-            '  - {"type": "kpi_strip", "cells":'
-            ' [{"label": "..", "value": "..", "delta": "optional"}]}\n'
-            '  - {"type": "quote_block", "quote": "..", "source": "..",'
-            ' "citation_id": "optional"}\n\n'
-            "Produce AT LEAST one prose block summarising the section. Use"
-            " other block types only when the data clearly warrants them."
-            " Do NOT invent citations or numeric facts you cannot ground in"
-            " the research_pool_findings input."
-        )
-        user: dict[str, Any] = {
-            "composer_inputs": composer_inputs,
-            "research_pool_findings": research_pool.findings_by_strand,
-            "model_artifacts": [
-                {
-                    "id": getattr(getattr(a, "spec", a), "id", ""),
-                    "description": getattr(getattr(a, "spec", a), "description", ""),
-                    "status": getattr(a, "status", "OK"),
-                }
-                for a in model_artifacts
-            ],
-            "depends_on_outputs": deps_md,
-        }
+        """Draft one section.
+
+        When ``materialized_section`` is provided (Stage 7a ran), the system
+        prompt is built via ``report_v2_2.build_drafter_prompt()`` which
+        injects artifact provenance headers, thesis, and threading summaries
+        (A-3). When ``materialized_section`` is None, falls through to the
+        existing v2 hand-rolled prompt path unchanged.
+        """
+        if materialized_section is not None:
+            # v2.2 path: use build_drafter_prompt for artifact-injected prompt.
+            from openlia.llm.runtime.report_v2_2.drafter_prompt import (
+                build_drafter_prompt,
+            )
+
+            ticker = composer_inputs.get("ticker", "")
+            template_id = composer_inputs.get("template_id", "")
+            template_section_meta = {
+                "title": getattr(section, "name", ""),
+                "description": getattr(section, "directive", ""),
+            }
+            system = build_drafter_prompt(
+                section=materialized_section,
+                template_section_meta=template_section_meta,
+                thesis=composer_inputs.get("thesis", ""),
+                themes=list(getattr(materialized_section, "cross_section_themes", []) or []),
+                template_id=template_id or None,
+                ticker=ticker or None,
+            )
+            system += (
+                '\n\nReturn a JSON object {"blocks": [...]} where each block is one'
+                " of these renderable shapes:\n"
+                '  - {"type": "prose", "text": "markdown body"}\n'
+                '  - {"type": "table", "headers": [..], "rows": [[..], ..],'
+                ' "caption": "optional"}\n'
+                '  - {"type": "kpi_strip", "cells":'
+                ' [{"label": "..", "value": "..", "delta": "optional"}]}\n'
+                '  - {"type": "quote_block", "quote": "..", "source": "..",'
+                ' "citation_id": "optional"}\n'
+            )
+            user: dict[str, Any] = {
+                "composer_inputs": composer_inputs,
+                "depends_on_outputs": deps_md,
+            }
+        else:
+            # v2 path: hand-rolled system prompt.
+            system = (
+                f"Draft section '{section.name}'.\n"
+                f"Directive: {section.directive}\n\n"
+                'Return a JSON object {"blocks": [...]} where each block is one'
+                " of these renderable shapes:\n"
+                '  - {"type": "prose", "text": "markdown body"}\n'
+                '  - {"type": "table", "headers": [..], "rows": [[..], ..],'
+                ' "caption": "optional"}\n'
+                '  - {"type": "kpi_strip", "cells":'
+                ' [{"label": "..", "value": "..", "delta": "optional"}]}\n'
+                '  - {"type": "quote_block", "quote": "..", "source": "..",'
+                ' "citation_id": "optional"}\n\n'
+                "Produce AT LEAST one prose block summarising the section. Use"
+                " other block types only when the data clearly warrants them."
+                " Do NOT invent citations or numeric facts you cannot ground in"
+                " the research_pool_findings input."
+            )
+            user = {
+                "composer_inputs": composer_inputs,
+                "research_pool_findings": research_pool.findings_by_strand,
+                "model_artifacts": [
+                    {
+                        "id": getattr(getattr(a, "spec", a), "id", ""),
+                        "description": getattr(getattr(a, "spec", a), "description", ""),
+                        "status": getattr(a, "status", "OK"),
+                    }
+                    for a in model_artifacts
+                ],
+                "depends_on_outputs": deps_md,
+            }
+
         try:
             raw: dict[str, Any] = self._llm.call(system=system, user=user)
             return SectionOutput(

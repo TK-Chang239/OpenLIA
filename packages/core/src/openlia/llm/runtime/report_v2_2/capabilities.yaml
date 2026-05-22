@@ -154,7 +154,7 @@ helpers:
     - total_shareholder_yield
 
   comparables:
-    - comparables.run        # skill_doc: skills/comparables_run.md
+    - comparables_run        # skill_doc: skills/comparables_run.md
 
   dcf:
     - cost_of_capital_builder  # skill_doc: skills/cost_of_capital_builder.md
