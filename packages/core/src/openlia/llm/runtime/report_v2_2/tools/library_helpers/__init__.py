@@ -94,6 +94,7 @@ from . import (  # noqa: E402, F401
     sector,
     signals,
     sotp_builder,
+    statsmodels_helpers,
     tornado_diagram,
     waterfall_chart,
     workbook_builder,

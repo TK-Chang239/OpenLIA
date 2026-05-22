@@ -1236,3 +1236,77 @@ artifact_types:
       summary: "Pearson/Spearman correlation, regression slope, argmax lag, one-line interpretation"
       full: "Full correlation table by lag, regression output, sensitivity interpretation, commodity name and units"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # statsmodels regression helpers (PR 4.1)
+  # -----------------------------------------------------------------------
+
+  - name: ols_regression_output
+    description: >
+      OLS (or OLS with Newey-West HAC) regression result: per-variable coefficients,
+      standard errors, t-statistics, p-values, R², adjusted R², F-statistic,
+      F p-value, residuals series, fitted values series, and method label.
+    fidelity:
+      headline: "OLS: R²=X, F-stat=Y (p=Z), N obs"
+      summary: "Coefficients table (name, coef, SE, t-stat, p-value), R², adj-R², F-stat"
+      full: "Full regression output: all coefficients, SEs, t-stats, p-values, R², adj-R², F-stat, residuals, fitted values, method"
+    depends_on: []
+
+  - name: stationarity_test_output
+    description: >
+      ADF and KPSS stationarity test results for a univariate time series.
+      Includes test statistics, p-values, lag counts, critical values, individual
+      verdicts, and a consensus stationarity classification (stationary /
+      non_stationary / inconclusive).
+    fidelity:
+      headline: "Stationarity: consensus=X, ADF p=Y, KPSS p=Z"
+      summary: "ADF (stat, p-value, verdict) + KPSS (stat, p-value, verdict) + consensus"
+      full: "ADF and KPSS full output including lags used, critical values at 1%/5%/10%, verdicts, consensus, alpha"
+    depends_on: []
+
+  - name: autocorrelation_output
+    description: >
+      ACF and PACF series plus Ljung-Box portmanteau test and Durbin-Watson
+      statistic for a univariate time series. Includes autocorrelation
+      classification (none / mild / moderate / strong / decaying / oscillating).
+    fidelity:
+      headline: "Autocorrelation: LB p=X, classification=Y, DW=Z"
+      summary: "Ljung-Box (stat, p-value, verdict), Durbin-Watson, classification, lags"
+      full: "Full ACF and PACF series, Ljung-Box details, Durbin-Watson, classification, alpha"
+    depends_on: []
+
+  - name: heteroskedasticity_test_output
+    description: >
+      Breusch-Pagan and White's heteroskedasticity test results for OLS residuals.
+      Each test returns LM stat, LM p-value, F-stat, F p-value, and a verdict.
+      An overall_verdict flags heteroskedastic if either test rejects H0.
+    fidelity:
+      headline: "Heteroskedasticity: overall=X, BP p=Y, White p=Z"
+      summary: "Breusch-Pagan (stat, p-value, verdict) + White (stat, p-value, verdict) + overall"
+      full: "Full BP and White test statistics, p-values (LM and F forms), verdicts, overall verdict, alpha"
+    depends_on:
+      - ols_regression_output
+
+  - name: garch_volatility_output
+    description: >
+      GARCH(1,1) conditional volatility model fitted to a returns series.
+      Returns estimated parameters (omega, alpha, beta, persistence),
+      conditional volatility series, 1-step-ahead (or N-step) forecasted
+      volatility, log-likelihood, AIC, BIC, and model summary.
+    fidelity:
+      headline: "GARCH(1,1): alpha=X, beta=Y, persistence=Z, forecast vol=W"
+      summary: "Parameters (omega, alpha, beta, persistence), latest conditional vol, 1-step forecast, AIC/BIC"
+      full: "Full parameters, full conditional volatility series, forecasted volatility, log-likelihood, AIC, BIC, model summary"
+    depends_on: []
+
+  - name: var_model_output
+    description: >
+      Vector Autoregression VAR(p) model fitted to a multivariate stationary time
+      series. Returns lag order (IC-selected), per-lag coefficient matrices,
+      Granger causality matrix (p-values and verdicts for all variable pairs),
+      impulse response functions, AIC, BIC, and log-likelihood.
+    fidelity:
+      headline: "VAR(p=X): N variables, Granger causality summary, AIC=Y"
+      summary: "Lag order, variable names, Granger causality matrix (significant pairs), AIC/BIC"
+      full: "Full coefficient matrices per lag, complete Granger causality matrix with p-values and verdicts, impulse response functions, AIC, BIC, log-likelihood"
+    depends_on: []
