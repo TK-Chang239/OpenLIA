@@ -550,7 +550,9 @@ When all active tasks (#1-#8) land:
 | Signal & context helpers (#23) | 3 helpers (insider_signal_panel + moving_average_panel + historical_multiple_trends) |
 | **Wave 1 subtotal** | **~109 helpers** |
 
-**Combined Wave 0 + Wave 1 active: ~178 helpers.**
+**Combined Wave 0 + Wave 1 active: ~178 helpers (aspirational pre-rationalization count).**
+
+> **Post-PR rationalization target: ~120 active helpers.** The per-task sub-counts above were drafted before impl plan PR scopes consolidated many one-metric helpers into multi-metric panels (e.g. `roic_panel` covers ROIC + ROIIC + economic profit + spread as a single helper, where this table counted them individually). The impl plan §16 final-count target is the source of truth.
 
 **Wave 2 future (#22): ~32 sector helpers** (Mining 7 + Retail 7 + Telecom 6 + Semis 4 + Airlines 8).
 **Other future (#9 + #10): ~18 qualitative-framework + sector-research helpers + ~7 verifier issue types.**

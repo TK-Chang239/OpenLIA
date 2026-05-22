@@ -31,7 +31,9 @@ SKILLS_DIR = REPO_ROOT / _HELPERS / "skills"
 COMPLEX_HELPERS_REQUIRING_SKILL_DOCS: list[str] = [
     "dcf_engine",
     "cost_of_capital_builder",
-    "comparables_run",  # filename-safe form of comparables.run
+    # Registered name carries the dot (per schema-and-skills §6 row 3);
+    # Python module file is comparables_run.py — see filename_safe logic below.
+    "comparables.run",
     "ddm_family",
     "justified_multiples",
     "sotp_builder",
@@ -88,7 +90,11 @@ def test_skill_doc_exists_for_registered_complex_helper(helper_name: str):
     registered = _registered_complex_helpers()
     if helper_name not in registered:
         pytest.skip(f"{helper_name} not yet registered (expected during Phase 0-2)")
-    expected_path = SKILLS_DIR / f"{helper_name}.md"
+    # Helper names may contain dots (e.g. "comparables.run"); the skill doc
+    # filename uses underscores. The runtime helper name carries the dot;
+    # the file on disk does not.
+    filename_safe = helper_name.replace(".", "_")
+    expected_path = SKILLS_DIR / f"{filename_safe}.md"
     assert expected_path.exists(), (
         f"Complex helper {helper_name!r} is registered in the runtime but "
         f"its skill doc is missing at {expected_path}. "

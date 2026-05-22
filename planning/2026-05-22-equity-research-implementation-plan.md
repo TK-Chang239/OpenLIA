@@ -310,9 +310,11 @@ Group D — statement integrity / fundamental quality panels (§4.6, §4.9, §4.
 **Category:** `risk_macro`
 **Acceptance:** `drawdown_panel` returns max-drawdown, time-to-recovery, calmar ratio per design §5.1; `yield_curve_shape` returns 2s/10s, 3m/10y, NY-Fed recession-prob per design §5.2. Both unit-tested with synthetic series.
 
+**Dependency note (statsmodels):** `drawdown_panel` is pure cumulative-max math — no statsmodels needed. `yield_curve_shape`'s recession-probability output **consumes the NY-Fed disclosed value** (`get_macro_indicator` from EODHD), it does not re-fit the probit model in-process. So PR 2.11 has no hard dependency on PR 4.1 (statsmodels). If a future iteration wants to fit the probit locally, move PR 4.1 forward and add an ordering constraint to §9.
+
 **Risk:** low; both are mechanical computations against existing EODHD endpoints.
 
-**Phase 2 exit gate:** `stock_initiation_v2` template can run end-to-end against a tech ticker (MSFT, NVDA) and a value/cyclical ticker (CAT, X) and produce a complete report through Stage 7b. All 14 Stage 8 verifier issue types testable.
+**Phase 2 exit gate:** `stock_initiation_v2` template can run end-to-end against a tech ticker (MSFT, NVDA) and a value/cyclical ticker (CAT, X) and produce a complete report through Stage 7b. All 18 Stage 8 verifier parent issue types testable (14 original + 4 from PR 0.3); detail codes per schema-and-skills §5.1 tracked supplementally.
 
 ---
 
@@ -452,6 +454,11 @@ These don't block Phase 0 but each has a designated resolution PR:
 10. **Cross-report dedup** (artifact-injection §11): can artifacts computed for ticker A be cached and reused for ticker B in a sector batch? Defer to Phase 3 sector-batch design.
 11. **Drafter feedback loop** (artifact-injection §11): does the drafter ever request a higher fidelity than the planner allocated? If yes, how is that wired? Defer to first observed need.
 12. **Football-field methodology weighting** (helpers-design §9 item 9, marked OPEN): currently unweighted (min/median/max of per-multiple medians). Confidence weighting is a defensible future addition. Decide during PR 2.10 (which ships the football_field_chart helper).
+13. **GICS prefix routing verification** (sector-modules §7): the codes used (4010 banks; 4020 financials; 4030 insurance; 6010 REITs; 3520 pharma; 1010 E&P) must be verified against current GICS taxonomy. Decide during PR 0.4 (Stage 5 planner wiring); a mistake here causes sector panels to fail to auto-route on real tickers.
+14. **Pydantic artifact inventory** (PR 0.1 seed for `artifact_types.yaml`): no single inventory exists of which artifact types are populated at registry boot vs added per-helper-PR. Decide during PR 0.1 — list the seed set; subsequent PRs append.
+15. **Reference data licensing** (Damodaran, Citeline, CBRE, ICE BofA): each is publisher-restricted. The decision on whether to ship a snapshot in-repo, store a hash-pointer + external link, or require user-supplied values is per-source and should be made before the PR is in flight. Decide per-source: Damodaran in PR 2.2, Citeline in PR 3.3, CBRE in PR 3.2, ICE BofA in PR 1.2.
+16. **`royalty_stack_analyzer` standalone vs internal-only** (sector-modules §4): currently described as a sub-helper of `rnpv_pipeline`. Decide during PR 3.3 whether it registers as its own helper or stays a code module.
+17. **EV/EBITDA justified-multiple formula** (supplement §5): admittedly approximate when capital intensity shifts. Decide during PR 2.3 whether to tighten via the McKinsey EV/IC × IC/EBITDA derivation, or to add an explicit `when_not_to_use` pointing the planner away from this multiple for capital-shifting names.
 
 ---
 
@@ -555,6 +562,7 @@ Both docs are now landed (Commits 2 and 3 of this branch). Every `§N` citation 
 | supplement | §11 five_step_dupont | PR 2.7 |
 | supplement | §12 debt_maturity_ladder | PR 2.7 |
 | supplement | §13 workbook_builder helper | PR 2.10 |
+| supplement | §14 aggregator artifacts (forensic_panel + statement_integrity_panel) | PR 2.5, PR 2.6 |
 | **sector-modules** | §2 Banks panel | PR 3.1 |
 | sector-modules | §3 REITs panel | PR 3.2 |
 | sector-modules | §4 Pharma rNPV pipeline | PR 3.3 |
@@ -597,7 +605,7 @@ Each phase exit gate requires a smoke test against a defined ticker set. Test ex
 **Ticker set (4 names):** MSFT (large-cap tech growth), NVDA (high-multiple growth), CAT (industrial cyclical), X (deep-cyclical value).
 **Assertions:**
 - All 4 produce a complete report through Stage 7b
-- All 14 Stage 8 verifier issue types are reachable (at least one synthetic case per issue type, even if no real production case fires)
+- All 18 Stage 8 verifier parent issue types are reachable (at least one synthetic case per parent type, even if no real production case fires). Detail-code coverage tracked supplementally per schema-and-skills §5.1.
 - All 11 audit fixes are unit-tested with explicit assertions
 - Token cost per report is ≤ 15k for tool-related overhead (validates artifact-injection redesign projection)
 
@@ -621,8 +629,18 @@ After Phase 3, before declaring v2.2 GA: run all 5 templates × all 5 sector tic
 
 ## 16. Target tracking
 
-**Final helper count target:** ~178 active helpers (Wave 0 + Wave 1) at end of Phase 3. Tracked via `len(list_helpers())` in a Phase-3-exit-gate test.
+**Final helper count target:** ~120 active helpers (Wave 0 + Wave 1) at end of Phase 3. Tracked via `len(list_helpers())` in a Phase-3-exit-gate test.
+
+Breakdown:
+- Existing (migrated in PR 0.2): 7
+- Phase 1 adapter wrappers: ~33 (EODHD ~18 + FinanceToolkit ~15)
+- Phase 2 analytics: ~54 (comparables 3, DCF/COC 7, alt valuation 3, decision 6, business quality 19, forensic 4, credit 3, signals 3, saas 1, workbook/output 3, risk-macro 2)
+- Phase 3 sector panels + sub-helpers: ~10
+- Phase 4 supporting libs: ~14 (statsmodels 6 + cookbooks 8)
+- **Total: ~118**
+
+The earlier ~178 figure in `helper-stack §9` was an aspirational pre-PR-rationalization decomposition; the impl plan's per-PR scopes consolidate many one-metric helpers into multi-metric panels.
 
 **Skill doc count target:** 18 skill docs authored, one per helper on the schema-and-skills doc §6 list. Tracked via a CI test that counts `skills/*.md` files and matches against the registry's `skill_doc` references.
 
-**Verifier issue type count:** 14 (existing closed enum) + 4 (from PR 0.3) = 18 issue types reachable. Tracked via Phase 2 exit gate assertion.
+**Verifier issue type count:** 14 (existing closed enum) + 4 (from PR 0.3) = **18 parent issue types** reachable. Tracked via Phase 2 exit gate assertion. Detail codes (per schema-and-skills §5.1) are an open vocabulary that rides inside the closed parent enum; supplement and sector-modules introduce ~21 detail codes which are aggregated separately and reported in a supplementary telemetry table — not part of the closed-set invariant or gate counts.
