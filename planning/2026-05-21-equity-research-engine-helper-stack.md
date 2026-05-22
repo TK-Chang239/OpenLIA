@@ -361,6 +361,7 @@ Organized by analytic concern. Every helper registered with `HelperSchema` so th
 | 19 | Energy / E&P sector module | pending | #2, #5 |
 | 20 | Insurance sector module (P&C + Life) | pending | #2, #5 |
 | 21 | Forensic additions + dividend safety analysis | pending | #2, #4, #7 |
+| 23 | Signal & context helpers — insider, moving-average panel, historical multiple trends | pending | #2 |
 
 **Future (parked):**
 
@@ -546,9 +547,10 @@ When all active tasks (#1-#8) land:
 | Energy / E&P (#19) | 14 helpers |
 | Insurance (#20) | 11 helpers (P&C + Life) |
 | Forensic + dividend safety (#21) | 10 helpers (Dechow-Dichev + channel stuffing + deferred revenue + dividend coverage + safety + growth + payout multi-base + net buyback + sustainable growth + aristocrats flag) |
-| **Wave 1 subtotal** | **~106 helpers** |
+| Signal & context helpers (#23) | 3 helpers (insider_signal_panel + moving_average_panel + historical_multiple_trends) |
+| **Wave 1 subtotal** | **~109 helpers** |
 
-**Combined Wave 0 + Wave 1 active: ~175 helpers.**
+**Combined Wave 0 + Wave 1 active: ~178 helpers.**
 
 **Wave 2 future (#22): ~32 sector helpers** (Mining 7 + Retail 7 + Telecom 6 + Semis 4 + Airlines 8).
 **Other future (#9 + #10): ~18 qualitative-framework + sector-research helpers + ~7 verifier issue types.**
@@ -608,4 +610,6 @@ Audit also confirmed several earlier decisions:
 - Existing library helpers code: `packages/core/src/openlia/llm/runtime/report_v2/tools/library_helpers/`
 - Existing capability manifest: `packages/core/src/openlia/llm/runtime/report_v2/capabilities.yaml`
 - Stage 8 verifier 14-issue closed enum: defined in v2.2 design spec §8
+- Main helpers design doc: `planning/2026-05-21-equity-research-helpers-design.md`
+- Signal/context helpers design addendum (task #23): `planning/2026-05-21-helpers-design-signals-addendum.md`
 - Prior superseded audit (deleted): `planning/equity-research-tools-audit.md`
