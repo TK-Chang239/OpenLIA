@@ -65,6 +65,7 @@ from . import (  # noqa: E402, F401
     business_investment,
     chart_builder,
     dcf_valuation,
+    eodhd,
     excel_builder,
     forecast_builder,
     ratio_calculator,

@@ -169,8 +169,9 @@ def test_artifact_type_registry_count() -> None:
 
     all_types = _registry.list_all()
     names = [t.name for t in all_types]
-    assert len(all_types) == 12, (
-        f"Expected 12 artifact types (4 Stage-7a + 8 helper), got {len(all_types)}: {names}"
+    # 4 Stage-7a + 8 original helpers (PR 0.2) + 18 EODHD adapters (PR 1.1) = 30
+    assert len(all_types) == 30, (
+        f"Expected 30 artifact types, got {len(all_types)}: {names}"
     )
 
 
@@ -183,7 +184,7 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "materialized_section",
         "fidelity_hint",
         "rendered_artifact",
-        # Helper-produced
+        # Helper-produced (PR 0.2)
         "dcf_valuation_output",
         "chart_artifact",
         "ratio_panel",
@@ -192,6 +193,25 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "business_investment_output",
         "forecast_output",
         "workbook_artifact",
+        # EODHD adapters (PR 1.1)
+        "eodhd_fundamentals_output",
+        "eodhd_balance_sheet_output",
+        "eodhd_income_statement_output",
+        "eodhd_cash_flow_output",
+        "eodhd_eod_prices_output",
+        "eodhd_intraday_output",
+        "eodhd_real_time_quote_output",
+        "eodhd_dividends_output",
+        "eodhd_splits_output",
+        "eodhd_market_cap_history_output",
+        "eodhd_insider_transactions_output",
+        "eodhd_news_output",
+        "eodhd_sentiment_output",
+        "eodhd_company_info_output",
+        "eodhd_earnings_history_output",
+        "eodhd_upcoming_earnings_output",
+        "eodhd_technical_indicators_output",
+        "eodhd_macro_indicator_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
