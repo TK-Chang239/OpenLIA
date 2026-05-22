@@ -684,6 +684,26 @@ ResolveFn = Callable[..., ResolvedModel]
 ProviderFactory = Callable[[ResolvedModel], LLMProvider]
 
 
+def _required_rail_labels(request: ReportRequest) -> list[str] | None:
+    """Load rail.required_quick_stats from framework_template_spec if present.
+
+    Carry-over wiring from PR 0.0: makes enforce_required_rail template-driven.
+    Returns None when no spec is available (existing skip behaviour preserved).
+    """
+    spec_dict = getattr(request, "framework_template_spec", None)
+    if not isinstance(spec_dict, dict):
+        return None
+    try:
+        from openlia.llm.runtime.report_v2.template_v2.spec import TemplateSpecV2
+
+        spec = TemplateSpecV2.model_validate(spec_dict)
+        if spec.rail is None:
+            return None
+        return spec.rail.required_quick_stats  # may itself be None
+    except Exception:  # broad catch: malformed spec must never crash the runner
+        return None
+
+
 def _default_frameworks_root() -> Path:
     return Path(str(resources.files("openlia.reports.frameworks")))
 
@@ -1323,7 +1343,11 @@ class ReportRunner:
                 )
                 try:
                     validated_schema = validate_report_payload(candidate)
-                    enforce_required_rail(validated_schema, department_id=department_id)
+                    enforce_required_rail(
+                        validated_schema,
+                        department_id=department_id,
+                        required_labels=_required_rail_labels(request),
+                    )
                     validated_payload = candidate
                     final = response
                     # Phase 5d: surface uncited-claim warnings as traces.
