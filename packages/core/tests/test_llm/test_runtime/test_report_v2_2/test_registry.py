@@ -41,9 +41,21 @@ def _noop(**kwargs: object) -> dict:  # type: ignore[type-arg]
 
 @pytest.fixture(autouse=True)
 def _clean_registry() -> None:
+    """Save / clear / restore the global registry around each test in this file.
+
+    Earlier versions called reset_helpers_for_tests() on teardown, which left
+    subsequent test files with an empty global registry — breaking any test
+    that depended on the eager helper imports having registered helpers at
+    module-load time. The save/restore pattern keeps these tests isolated
+    without leaking the empty state into later files.
+    """
+    from openlia.llm.runtime.report_v2_2.tools.library_helpers import _REGISTRY
+
+    saved = dict(_REGISTRY)
     reset_helpers_for_tests()
     yield  # type: ignore[misc]
-    reset_helpers_for_tests()
+    _REGISTRY.clear()
+    _REGISTRY.update(saved)
 
 
 def test_register_and_list() -> None:
