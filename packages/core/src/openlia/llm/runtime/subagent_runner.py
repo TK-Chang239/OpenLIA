@@ -100,7 +100,7 @@ def _framework_summary(framework: dict[str, Any]) -> str:
     rather than emitting empty arguments. Earlier versions returned only
     `<id>: <title>` pairs; the planner then truncated mid-tool-call on
     every run because the prompt didn't give it enough substance to
-    anchor a 14-section plan."""
+    anchor the plan for len(template.sections) sections."""
     sections = framework.get("sections", []) or []
     lines: list[str] = ["Sections (render order):"]
     for s in sections:
@@ -123,6 +123,29 @@ def _section_titles(framework: dict[str, Any]) -> list[str]:
 
 
 TraceFn = Callable[[str, str, "dict[str, Any] | None"], None]
+
+
+def _threading_caps_from_request(request: Any) -> tuple[int | None, int | None]:
+    """Return (summary_word_cap, facts_cap) from framework_template_spec, or (None, None).
+
+    Carry-over wiring from PR 0.0: makes summarize_section_draft honour the
+    threading block declared in the template YAML.
+    Returns (None, None) when no spec / no threading block (uses function defaults).
+    """
+    spec_dict = getattr(request, "framework_template_spec", None)
+    if not isinstance(spec_dict, dict):
+        return None, None
+    try:
+        from openlia.llm.runtime.report_v2.template_v2.spec import TemplateSpecV2
+
+        spec = TemplateSpecV2.model_validate(spec_dict)
+        t = spec.threading
+        if t is None:
+            return None, None
+        return t.summary_word_cap, t.facts_cap
+    except (ValueError, TypeError, KeyError, AttributeError, LookupError):
+        # Narrowed from bare Exception: malformed spec must never crash the runner.
+        return None, None
 
 
 class SubagentReportRunner:
@@ -213,6 +236,7 @@ class SubagentReportRunner:
         report_id = self._report_id_factory()
         framework = _load_framework(self._frameworks_root, request.mode)
         style_guide = _load_style_guide(self._frameworks_root, request.mode)
+        _summary_word_cap, _facts_cap = _threading_caps_from_request(request)
 
         yield ReportStart(
             report_id=report_id,
@@ -348,9 +372,14 @@ class SubagentReportRunner:
                 section_id=section.section_id,
                 blocks=draft.blocks,
             )
-            prior_summaries.append(
-                summarize_section_draft(draft, title=sections_by_id[section.section_id].title)
-            )
+            _summarize_kwargs: dict[str, Any] = {
+                "title": sections_by_id[section.section_id].title,
+            }
+            if _summary_word_cap is not None:
+                _summarize_kwargs["summary_word_cap"] = _summary_word_cap
+            if _facts_cap is not None:
+                _summarize_kwargs["facts_cap"] = _facts_cap
+            prior_summaries.append(summarize_section_draft(draft, **_summarize_kwargs))
 
         if _cancelled():
             yield ReportError(report_id=report_id, error_class="cancelled", message="cancelled")
@@ -374,10 +403,11 @@ class SubagentReportRunner:
         editor = EditorClient(
             provider=flagship,
             repair_budget=1,
-            # 14 sections + cover + rail + citations easily exceeds 8192
-            # tokens in JSON. iter9 hit the cap and lost cover.title/etc,
-            # failing strict validation. 32768 gives substantial headroom
-            # for the full report plus model reasoning before tool call.
+            # Templates with many sections, plus cover + rail + citations,
+            # can easily exceed 8192 tokens in JSON. iter9 hit the cap and
+            # lost cover.title/etc, failing strict validation. 32768 gives
+            # substantial headroom for the full report plus model reasoning
+            # before tool call.
             max_output_tokens=32768,
             on_done=_editor_on_done,
         )
@@ -548,7 +578,7 @@ class SubagentReportRunner:
                     messages=messages,
                     tools=tools,
                     tool_choice=tool_choice,
-                    # Planning produces 14 SectionPlans + thesis + themes; the
+                    # Planning produces one SectionPlan per template section + thesis + themes; the
                     # JSON shape needs ~3-5k tokens minimum, plus the model
                     # consumes meaningful reasoning budget before emitting. The
                     # iter-3 run with cap=4096 returned empty {} args twice

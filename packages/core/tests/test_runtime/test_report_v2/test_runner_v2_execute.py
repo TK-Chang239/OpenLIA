@@ -222,9 +222,7 @@ def test_resume_skips_clarifier_and_drives_remaining_stages() -> None:
             "question_answers": {},
         },
     )
-    events = list(
-        runner.execute({"ticker": "AAPL"}, template, resume_state=resume)
-    )
+    events = list(runner.execute({"ticker": "AAPL"}, template, resume_state=resume))
 
     stages["clarifier"].clarify.assert_not_called()
     stages["research_planner"].plan.assert_called_once()
@@ -345,9 +343,7 @@ def test_verifier_promotes_persisted_blocker_section_to_degraded() -> None:
     final: Completed = events[-1]  # type: ignore[assignment]
     assert isinstance(final, Completed)
     assert runner.state == RunState.DEGRADED
-    thesis_outcomes = [
-        o for o in final.run_summary.outcomes if o.task_name == "Investment Thesis"
-    ]
+    thesis_outcomes = [o for o in final.run_summary.outcomes if o.task_name == "Investment Thesis"]
     assert thesis_outcomes and thesis_outcomes[0].status == "DEGRADED"
     assert "content_too_sparse" in (thesis_outcomes[0].notes or "")
 

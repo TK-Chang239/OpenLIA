@@ -12,6 +12,19 @@ composer_inputs:
 
 required_artifacts: []
 
+rail:
+  required_quick_stats:
+    - "Market Cap"
+    - "Sector"
+    - "Exchange"
+    - "52W Range"
+    - "ADTV (3mo)"
+    - "P/E (fwd)"
+
+threading:
+  summary_word_cap: 200
+  facts_cap: 5
+
 sections:
   - id: company_overview
     name: "Company Overview"
@@ -19,6 +32,9 @@ sections:
       Cover ticker, sector, headquarters, headcount, founding date, key
       milestones, and core value proposition. Include headline stats
       (market cap, revenue scale, headcount) and the positioning one-liner.
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: industry_overview
     name: "Industry Overview"
@@ -27,6 +43,9 @@ sections:
       sits within it. Cover TAM/SAM/SOM, major segments, and competitive
       landscape at a high level.
     depends_on: [company_overview]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: products_and_services
     name: "Products and Services"
@@ -35,6 +54,9 @@ sections:
       Cover what the company sells, who buys it, and why they choose it
       over alternatives.
     depends_on: [company_overview]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: business_model
     name: "Business Model"
@@ -43,6 +65,9 @@ sections:
       Explain how the company makes money and what sustains its competitive
       position.
     depends_on: [products_and_services]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: management_team
     name: "Management Team"
@@ -50,6 +75,9 @@ sections:
       Profile the C-suite and board with named individuals. Highlight
       tenure, relevant experience, and notable hires or departures.
     depends_on: [company_overview]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: historical_financials
     name: "Historical Financials"
@@ -58,6 +86,9 @@ sections:
       trends across multiple years. Use a combo chart for revenue bars
       plus a margin line, and a KPI table for the full multi-period grid.
     depends_on: [business_model]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: financial_analysis
     name: "Financial Analysis"
@@ -66,6 +97,9 @@ sections:
       Compare against peers where data is available. Identify inflection
       points and explain what drives them.
     depends_on: [historical_financials]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: financial_projections
     name: "Financial Projections"
@@ -74,6 +108,9 @@ sections:
       for the next three to five years. State assumptions explicitly
       and show how sensitivities affect the output.
     depends_on: [financial_analysis]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: competitive_analysis
     name: "Competitive Analysis"
@@ -82,6 +119,9 @@ sections:
       key dimensions (share, growth, margins, pricing). Use a comparison
       split for the subject vs. its top rival and a feature or share matrix.
     depends_on: [industry_overview]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: valuation_analysis
     name: "Valuation Analysis"
@@ -91,6 +131,9 @@ sections:
       single price target — show scenarios labeled by methodology (e.g.
       Conservative vs. Optimistic).
     depends_on: [financial_projections, competitive_analysis]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: risk_analysis
     name: "Risk Analysis"
@@ -99,6 +142,9 @@ sections:
       categories. Distinguish controlled from uncontrolled risks. Include
       a timeline for known risk events where applicable.
     depends_on: [business_model]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: investment_recommendation
     name: "Analyst View"
@@ -112,3 +158,6 @@ sections:
       Use third-person sourcing language throughout. Never write
       "we recommend", "our rating", or "our price target".
     depends_on: [valuation_analysis, risk_analysis]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80

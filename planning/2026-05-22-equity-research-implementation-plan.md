@@ -11,7 +11,7 @@
 This plan sequences the build of the equity research v2.2 helper stack. It assumes:
 
 - The five design docs are accepted as the contract (see project root: `planning/2026-05-21-*` and `planning/2026-05-22-*`).
-- Existing 6 library helpers (`peer_multiples_panel`, `dcf_valuation`, `commodity_exposure_tracker`, `budget_variance`, `business_investment`, `chart_builder`) plus `saas_metrics` are in `packages/core/src/openlia/llm/runtime/report_v2/tools/library_helpers/`. Three of those are slated for deprecation (`budget_variance`, `business_investment`, `ratio_calculator`); one for repurposing (`saas_metrics → saas_kpi_panel`); the rest stay and migrate to the new schema.
+- Existing 8 library helpers in `packages/core/src/openlia/llm/runtime/report_v2/tools/library_helpers/`: `budget_variance`, `business_investment`, `chart_builder`, `dcf_valuation`, `excel_builder`, `forecast_builder`, `ratio_calculator`, `saas_metrics`. Three are slated for deprecation in PR 2.5 (`budget_variance`, `business_investment`, `ratio_calculator`); one for repurposing in PR 2.9 (`saas_metrics → saas_kpi_panel`); the rest stay. All 8 migrate to the new schema in PR 0.2.
 - Stage 8 verifier is already wired (commit `597c5281` on main).
 
 Out of scope here:
@@ -57,13 +57,13 @@ Six phases. Phase 0 is hard prerequisite for everything else; Phases 1-2 unblock
 
 **Risk:** none meaningful; pure additive.
 
-### PR 0.2 — Migrate existing 7 helpers to new schema
+### PR 0.2 — Migrate existing 8 helpers to new schema
 
 **Implements:** schema-and-skills doc §3.4 (projection rules), §8 (implementation order step 1)
 
-**Files:** seven existing modules — `peer_multiples_panel`, `dcf_valuation`, `commodity_exposure_tracker`, `budget_variance`, `business_investment`, `chart_builder`, `saas_metrics` — each fills in `directory` / `selection` / `contract` sub-models; deletes the legacy `description`-only schema.
+**Files:** eight existing modules — `budget_variance`, `business_investment`, `chart_builder`, `dcf_valuation`, `excel_builder`, `forecast_builder`, `ratio_calculator`, `saas_metrics` — wrapped under `report_v2_2/tools/library_helpers/` with new `HelperSchema` (each declares `directory` / `selection` / `contract`). Implementations import from `report_v2/` (no duplication). The earlier plan referenced `peer_multiples_panel` and `commodity_exposure_tracker` — those do NOT exist as files in the v2 runtime, so they are dropped from PR 0.2 scope. `peer_multiples_panel` is built fresh in PR 2.1 (comparables suite); `commodity_exposure_tracker` is built in PR 2.11.
 
-Note: `budget_variance`, `business_investment`, and `ratio_calculator` are slated for deprecation in PR 2.5. `saas_metrics` is slated for repurpose in PR 2.9. PR 0.2 still migrates all seven to the new schema as a holding step — deletion / repurpose happens in the named PR.
+Note: `budget_variance`, `business_investment`, and `ratio_calculator` are slated for deprecation in PR 2.5. `saas_metrics` is slated for repurpose in PR 2.9. PR 0.2 still migrates all eight to the new schema as a holding step — deletion / repurpose happens in the named PR.
 
 **Acceptance:** every existing helper has a `DirectoryEntry`, `SelectionGuidance` with non-empty `when_to_use` / `when_not_to_use`, and `MechanicalContract` with `produces_artifacts` populated. Registry boot-time DAG passes.
 
@@ -632,12 +632,12 @@ After Phase 3, before declaring v2.2 GA: run all 5 templates × all 5 sector tic
 **Final helper count target:** ~120 active helpers (Wave 0 + Wave 1) at end of Phase 3. Tracked via `len(list_helpers())` in a Phase-3-exit-gate test.
 
 Breakdown:
-- Existing (migrated in PR 0.2): 7
+- Existing (migrated in PR 0.2): 8
 - Phase 1 adapter wrappers: ~33 (EODHD ~18 + FinanceToolkit ~15)
 - Phase 2 analytics: ~54 (comparables 3, DCF/COC 7, alt valuation 3, decision 6, business quality 19, forensic 4, credit 3, signals 3, saas 1, workbook/output 3, risk-macro 2)
 - Phase 3 sector panels + sub-helpers: ~10
 - Phase 4 supporting libs: ~14 (statsmodels 6 + cookbooks 8)
-- **Total: ~118**
+- **Total: ~119**
 
 The earlier ~178 figure in `helper-stack §9` was an aspirational pre-PR-rationalization decomposition; the impl plan's per-PR scopes consolidate many one-metric helpers into multi-metric panels.
 

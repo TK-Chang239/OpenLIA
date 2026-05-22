@@ -104,6 +104,10 @@ EXPECTED_TABLES = {
     "portfolio_quote_daily",
     # --- Custom report templates (PR 9) ---
     "report_templates",
+    # --- Document cache (PR 2026-05-21) ---
+    "cached_documents",
+    # --- Pipeline run telemetry (PR 2026-05-21) ---
+    "pipeline_runs",
 }
 
 

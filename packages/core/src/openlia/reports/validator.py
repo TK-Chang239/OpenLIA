@@ -13,37 +13,6 @@ from openlia.reports.schema import (
     ReportSchema,
 )
 
-# Frameworks whose rail must include a verdict and a known floor of
-# quick_stats labels. Keyed by department id (matches the framework JSON
-# file stem). Other report types (morning_briefing, sector_research) are
-# intentionally absent — their rails are quick-stats-only.
-_REQUIRED_RAIL_QUICK_STATS: dict[str, tuple[str, ...]] = {
-    "stock_initiation": (
-        "Market Cap",
-        "Sector",
-        "Exchange",
-        "52W Range",
-        "ADTV (3mo)",
-        "P/E (fwd)",
-    ),
-    "stock_update": (
-        "Market Cap",
-        "Sector",
-        "Exchange",
-        "52W Range",
-        "ADTV (3mo)",
-        "P/E (fwd)",
-    ),
-    "earnings_update": (
-        "Period",
-        "Market Cap",
-        "EPS Surprise",
-        "Revenue Surprise",
-        "Beats",
-        "Misses",
-    ),
-}
-
 
 @dataclass(frozen=True)
 class ReportValidationWarning:
@@ -112,16 +81,23 @@ def find_uncited_concrete_claims(schema: ReportSchema) -> list[ReportValidationW
     return warnings
 
 
-def enforce_required_rail(schema: ReportSchema, *, department_id: str) -> None:
+def enforce_required_rail(
+    schema: ReportSchema,
+    *,
+    department_id: str,
+    required_labels: tuple[str, ...] | list[str] | None = None,
+) -> None:
     """Enforce that single-stock and earnings-update reports populate the
     right-rail "Lia's Call" verdict and a known floor of quick_stats
     labels. Failures raise ``ReportValidationError`` so the writing
     loop's repair turn fires.
 
-    Reports outside the configured frameworks pass through untouched.
+    ``required_labels`` is provided by the caller from the template's
+    ``rail.required_quick_stats`` list. If ``None`` (not declared by the
+    template), rail validation is skipped entirely.
+
     Quick-stats matching is case-insensitive on the label.
     """
-    required_labels = _REQUIRED_RAIL_QUICK_STATS.get(department_id)
     if required_labels is None:
         return
     errors: list[tuple[str, str]] = []
