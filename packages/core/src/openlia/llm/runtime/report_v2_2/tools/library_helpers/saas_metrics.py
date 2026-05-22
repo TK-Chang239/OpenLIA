@@ -3,7 +3,9 @@
 Imports the implementation from report_v2 (no duplication) and declares a
 HelperSchema per the v2.2 four-tier contract.
 
-Pre-repurpose state — full saas_kpi_panel refactor lands in PR 2.9.
+DEPRECATED as of v0.2.0. Superseded by saas_kpi_panel (PR 2.9).
+This wrapper remains registered for backward compatibility; do not use for new
+analysis. Migrate to: saas_kpi_panel (Category.SAAS_KPIS).
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from openlia.llm.runtime.report_v2_2.tools.library_helpers import register_helpe
 
 _SCHEMA = HelperSchema(
     version="0.1.0",
+    deprecated_at_version="0.2.0",
     directory=DirectoryEntry(
         name="saas_metrics",
         category=Category.SAAS_KPIS,
@@ -40,6 +43,7 @@ _SCHEMA = HelperSchema(
             "Projecting MRR growth and profitability forward: mode='simulate'.",
         ],
         when_not_to_use=[
+            "DEPRECATED — prefer saas_kpi_panel for all new quarterly KPI analysis.",
             "Non-SaaS businesses — use ratio_calculator for general financial ratios.",
             "Full DCF valuation — use dcf_valuation instead.",
         ],
@@ -156,7 +160,7 @@ _SCHEMA = HelperSchema(
         produces_artifacts=["saas_metrics_output"],
         consumes_artifacts=[],
     ),
-    skill_doc=None,  # TODO(PR 2.9): repurpose as saas_kpi_panel with skill doc
+    skill_doc=None,
     verifier_hooks=[],
 )
 

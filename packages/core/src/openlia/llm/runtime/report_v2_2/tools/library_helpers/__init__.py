@@ -86,6 +86,7 @@ from . import (  # noqa: E402, F401
     ratio_calculator,
     reverse_dcf,
     risk_reward_calculator,
+    saas_kpi_panel,
     saas_metrics,
     scenario_weighting,
     sensitivity_table,

@@ -184,8 +184,9 @@ def test_artifact_type_registry_count() -> None:
     #   debt_maturity_ladder_output
     # + 3 signals (PR 2.8): insider_signal_output, moving_average_panel_output,
     #   historical_multiple_trends_output
-    # = 92
-    assert len(all_types) == 92, f"Expected 92 artifact types, got {len(all_types)}: {names}"
+    # + 1 SaaS KPI panel (PR 2.9): saas_kpi_panel_output
+    # = 93
+    assert len(all_types) == 93, f"Expected 93 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -297,6 +298,8 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "insider_signal_output",
         "moving_average_panel_output",
         "historical_multiple_trends_output",
+        # SaaS KPI panel (PR 2.9)
+        "saas_kpi_panel_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
