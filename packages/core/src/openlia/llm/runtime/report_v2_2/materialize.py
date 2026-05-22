@@ -15,7 +15,7 @@ Design choices:
 from __future__ import annotations
 
 import re
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel
 
@@ -28,6 +28,9 @@ from .section_plan import (
     SectionPlanOverride,
 )
 from .verifier_models import VerifierIssue
+
+if TYPE_CHECKING:
+    from .telemetry import TelemetryCollector
 
 # ---- token / char size caps per artifact-injection §2.2 ----
 # 1 token ≈ 4 chars (heuristic).
@@ -387,6 +390,7 @@ def materialize_section(
     helper_outputs: dict[str, Any],
     *,
     fidelity_override: dict[str, Fidelity] | None = None,
+    telemetry: TelemetryCollector | None = None,
 ) -> MaterializedSection:
     """Materialize one section. Per task spec §2.
 
@@ -436,6 +440,17 @@ def materialize_section(
             raw_data = {"value": str(raw)}
 
         artifact_type: str = getattr(raw, "artifact_type", None) or ref.artifact_id
+        was_truncated = content.endswith(_TRUNCATION_SUFFIX)
+
+        if telemetry is not None:
+            telemetry.record_materialize(
+                section_id=plan.section_id,
+                artifact_id=ref.artifact_id,
+                helper_name=_MATERIALIZATION_HELPER,
+                fidelity=effective_fidelity.value,
+                rendered_chars=len(content),
+                was_truncated=was_truncated,
+            )
 
         rendered.append(
             RenderedArtifact(
@@ -464,6 +479,8 @@ def materialize_section(
 def materialize(
     section_plan: ReportSectionPlan,
     artifacts: dict[str, Any],
+    *,
+    telemetry: TelemetryCollector | None = None,
 ) -> MaterializedReport:
     """Materialize a full report: resolve dedup, render, produce sectioned markdown.
 
@@ -519,6 +536,17 @@ def materialize(
                     raw_data = {"value": str(art)}
 
                 artifact_type = getattr(art, "artifact_type", None) or ref.artifact_id
+
+                if telemetry is not None:
+                    telemetry.record_materialize(
+                        section_id=section.section_id,
+                        artifact_id=ref.artifact_id,
+                        helper_name=_MATERIALIZATION_HELPER,
+                        fidelity=canonical_level.value,
+                        rendered_chars=len(content),
+                        was_truncated=content.endswith(_TRUNCATION_SUFFIX),
+                    )
+
                 section_rendered.append(
                     RenderedArtifact(
                         artifact_id=ref.artifact_id,

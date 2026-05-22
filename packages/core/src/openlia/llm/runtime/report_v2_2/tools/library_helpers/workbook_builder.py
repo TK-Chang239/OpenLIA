@@ -27,6 +27,7 @@ from openlia.llm.runtime.report_v2_2 import (
     HelperSchema,
     MechanicalContract,
     SelectionGuidance,
+    SkillDocRef,
     VerifierIssueType,
 )
 from openlia.llm.runtime.report_v2_2.tools.library_helpers import register_helper
@@ -435,7 +436,10 @@ _SCHEMA = HelperSchema(
         produces_artifacts=["workbook_artifact"],
         consumes_artifacts=[],
     ),
-    skill_doc=None,
+    skill_doc=SkillDocRef(
+        path="skills/workbook_builder.md",
+        estimated_tokens=1600,
+    ),
     verifier_hooks=[
         VerifierIssueType.BLOCK_SHAPE,
         VerifierIssueType.BLOCK_ARTIFACT_TOO_LARGE,
