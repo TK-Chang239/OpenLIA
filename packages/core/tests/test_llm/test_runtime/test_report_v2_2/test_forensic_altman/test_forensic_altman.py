@@ -10,6 +10,8 @@ Covers:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
 
@@ -677,11 +679,10 @@ def test_statement_integrity_bundle_skill_doc_path() -> None:
 
 def test_statement_integrity_skill_doc_file_exists() -> None:
     """Verify the skill doc file is present on disk."""
-    import pathlib
+    from openlia.llm.runtime.report_v2_2.tools import library_helpers
 
-    skill_path = pathlib.Path(
-        "/Users/tkchang/Projects/OpenLIA/packages/core/src/openlia/llm/runtime/"
-        "report_v2_2/tools/library_helpers/skills/statement_integrity_bundle.md"
+    skill_path = (
+        Path(library_helpers.__file__).parent / "skills" / "statement_integrity_bundle.md"
     )
     assert skill_path.exists(), f"Skill doc not found at {skill_path}"
     content = skill_path.read_text()
