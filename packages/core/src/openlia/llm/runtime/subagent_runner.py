@@ -143,7 +143,8 @@ def _threading_caps_from_request(request: Any) -> tuple[int | None, int | None]:
         if t is None:
             return None, None
         return t.summary_word_cap, t.facts_cap
-    except Exception:  # broad catch: malformed spec must never crash the runner
+    except (ValueError, TypeError, KeyError, AttributeError, LookupError):
+        # Narrowed from bare Exception: malformed spec must never crash the runner.
         return None, None
 
 

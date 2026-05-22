@@ -7,11 +7,17 @@ Verifies that all v2.2 foundations work end-to-end with canned/stubbed data:
 - Stage 7b prompt builder produces a non-empty well-formed prompt.
 - Stage 8 verifier completes without crashing.
 - SectionPlan + ReportSectionPlan schema round-trips.
+- Stage 5 planner: stubbed call returns valid PlannerOutput.
+- Sector routing: tech GICS codes fall back to default template.
+- Template defaults: 3-layer merge works end-to-end.
 
 No live LLM calls. All inputs are canned/stubbed.
 """
 
 from __future__ import annotations
+
+import asyncio
+import json
 
 from openlia.llm.runtime.report_v2_2.artifact_types import _registry as art_registry
 from openlia.llm.runtime.report_v2_2.drafter_prompt import build_drafter_prompt
@@ -21,10 +27,24 @@ from openlia.llm.runtime.report_v2_2.materialize import (
     materialize_section,
     resolve_section_plan,
 )
+from openlia.llm.runtime.report_v2_2.planner import (
+    Planner,
+    PlannerOutput,
+)
 from openlia.llm.runtime.report_v2_2.section_plan import (
+    PlannerOverrides,
     ReportSectionPlan,
     SectionArtifactRef,
     SectionPlan,
+    SectionPlanOverride,
+)
+from openlia.llm.runtime.report_v2_2.sector_router import (
+    clear_routing_cache,
+    route_to_sector_template,
+)
+from openlia.llm.runtime.report_v2_2.template_defaults import (
+    SEED_DEFAULTS,
+    load_template_defaults,
 )
 from openlia.llm.runtime.report_v2_2.tools.library_helpers import list_helpers
 from openlia.llm.runtime.report_v2_2.verifier import Verifier
@@ -293,3 +313,128 @@ def test_full_pipeline_plumbing() -> None:
         assert isinstance(prompt, str)
         assert len(prompt) > 0
         assert isinstance(issues, list)
+
+
+# ---- Gate: Sector routing (PR 0.4) ----
+
+
+def test_exit_gate_msft_tech_gics_falls_back_to_default() -> None:
+    """MSFT-like GICS tech code (451020 = IT Services) has no sector module → default."""
+    clear_routing_cache()
+    result = route_to_sector_template("451020")
+    assert result == "stock_initiation_v2"
+
+
+def test_exit_gate_none_gics_falls_back_to_default() -> None:
+    clear_routing_cache()
+    result = route_to_sector_template(None)
+    assert result == "stock_initiation_v2"
+
+
+def test_exit_gate_banks_gics_routes_correctly() -> None:
+    """Known sector code must not fall back to default."""
+    clear_routing_cache()
+    result = route_to_sector_template("401010")
+    assert result == "banks_v2_2"
+
+
+# ---- Gate: Stage 5 planner (PR 0.4) ----
+
+
+class _StubLLMForExitGate:
+    """Minimal stub returning a valid PlannerOutput JSON."""
+
+    def __init__(self, response_dict: dict) -> None:
+        self._response_dict = response_dict
+
+    async def generate(self, request):
+        from openlia.llm.types import LLMResponse
+
+        return LLMResponse(
+            text=json.dumps(self._response_dict),
+            finish_reason="stop",
+            input_tokens=50,
+            output_tokens=100,
+        )
+
+
+_STUB_PLANNER_RESPONSE = {
+    "helper_selection": [
+        {
+            "section_id": "executive_summary",
+            "helpers": [
+                {
+                    "helper_name": "dcf_valuation",
+                    "params": {},
+                    "artifact_id": "dcf_output",
+                }
+            ],
+        }
+    ],
+    "planner_overrides": [],
+    "open_questions": [],
+    "cross_section_themes": ["Cloud growth", "AI monetisation"],
+}
+
+
+def test_exit_gate_planner_stubbed_returns_valid_output() -> None:
+    """Stubbed Stage 5 LLM call produces a valid PlannerOutput."""
+    stub = _StubLLMForExitGate(_STUB_PLANNER_RESPONSE)
+    planner = Planner(
+        llm=stub,  # type: ignore[arg-type]
+        ticker="MSFT",
+        template_sections=[
+            {
+                "section_id": "executive_summary",
+                "title": "Executive Summary",
+                "default_artifacts": [{"artifact_id": "dcf_output", "fidelity": "headline"}],
+            }
+        ],
+        template_id="stock_initiation_v2",
+    )
+    output = asyncio.run(planner.aplan())
+    assert isinstance(output, PlannerOutput)
+    assert len(output.helper_selection) == 1
+    assert output.helper_selection[0].section_id == "executive_summary"
+    assert output.cross_section_themes == ["Cloud growth", "AI monetisation"]
+
+
+# ---- Gate: Template defaults 3-layer merge (PR 0.4) ----
+
+
+def test_exit_gate_template_defaults_three_layer_merge() -> None:
+    """Resolved SectionPlan reflects 3-layer merge: template default → planner override."""
+    # Layer 2: template defaults (SEED_DEFAULTS has valuation_comps with SUMMARY for
+    # historical_multiple_trends).
+    # Layer 3: planner override upgrades it to FULL.
+    overrides = PlannerOverrides(
+        template_id="stock_initiation_v2",
+        overrides=[
+            SectionPlanOverride(
+                section_id="valuation_comps",
+                operation="change_fidelity",
+                artifact_id="historical_multiple_trends",
+                fidelity=Fidelity.FULL,
+            )
+        ],
+        rationale="User wants full peer trend detail.",
+    )
+    resolved = resolve_section_plan(SEED_DEFAULTS, overrides)
+
+    comps = next(s for s in resolved.sections if s.section_id == "valuation_comps")
+    hist = next(a for a in comps.artifacts if a.artifact_id == "historical_multiple_trends")
+    # Layer 3 wins.
+    assert hist.fidelity == Fidelity.FULL
+    # Non-overridden artifact still at template default (FULL from SEED_DEFAULTS).
+    dcf = next(s for s in resolved.sections if s.section_id == "valuation_dcf")
+    dcf_art = next(a for a in dcf.artifacts if a.artifact_id == "dcf_base_valuation")
+    assert dcf_art.fidelity == Fidelity.FULL
+    # Audit trail populated.
+    assert len(resolved.overrides_applied) == 1
+
+
+def test_exit_gate_load_template_defaults_fallback() -> None:
+    """load_template_defaults falls back to SEED_DEFAULTS for stock_initiation_v2."""
+    defaults = load_template_defaults("stock_initiation_v2")
+    assert defaults.template_id == "stock_initiation_v2"
+    assert len(defaults.sections) >= 4

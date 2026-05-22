@@ -700,7 +700,8 @@ def _required_rail_labels(request: ReportRequest) -> list[str] | None:
         if spec.rail is None:
             return None
         return spec.rail.required_quick_stats  # may itself be None
-    except Exception:  # broad catch: malformed spec must never crash the runner
+    except (ValueError, TypeError, KeyError, AttributeError, LookupError):
+        # Narrowed from bare Exception: malformed spec must never crash the runner.
         return None
 
 
