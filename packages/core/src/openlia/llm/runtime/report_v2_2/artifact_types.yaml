@@ -233,6 +233,30 @@ artifact_types:
       full: "All five metric blocks (production, per-unit, cash flow, reserves, balance sheet), scenario economics, hedging, health score, cycle phase, warnings, narrative"
     depends_on: []
 
+  - name: insurance_valuation_panel_output
+    description: >
+      Insurance KPI panel covering P&C and/or Life sub-blocks depending on segment mix.
+      P&C block: premiums written/earned, premium growth YoY, loss ratio, expense ratio,
+      policyholder dividend ratio, combined ratio, combined ratio ex-cat, prior-year reserve
+      development (favorable vs adverse), underwriting profit/loss, catastrophe load %,
+      reinsurance dependence note.
+      Life block: gross/net premiums, benefits and claims paid, change in reserves,
+      embedded value (disclosed), value of in-force (VIF), new business value (VNB),
+      VNB margin (NBV / APE), EV per share, price-to-EV, solvency ratio, persistency rate.
+      Cross-cutting: investment portfolio (invested assets, investment yield, realized gains),
+      balance sheet (GAAP BVPS, tangible BVPS, TBVPS growth, P/TBV, P/BV), ROE,
+      float metrics (float/equity ratio, float generation cost for P&C),
+      capital adequacy (RBC ratio, Solvency II SCR coverage, BCAR rating),
+      composite insurance health score (0-100), underwriting cycle phase
+      (hardening/softening/stable), and warnings (combined ratio > 100%, adverse reserve
+      development, solvency below 150%, negative GAAP equity).
+      Mandatory for any Insurance-sector initiation or quarterly update report.
+    fidelity:
+      headline: "Insurance panel: combined ratio X% (P&C) / VNB margin Y% (Life), ROE Z%, health score W"
+      summary: "Combined ratio, loss/expense ratios, investment yield, BVPS GAAP/tangible, ROE, solvency, health score"
+      full: "All sub-blocks (pc, life, investment portfolio, balance sheet, float metrics, capital adequacy), cycle phase, health score, warnings, narrative"
+    depends_on: []
+
   # -----------------------------------------------------------------------
   # EODHD adapter outputs (18 helpers, PR 1.1)
   # -----------------------------------------------------------------------
