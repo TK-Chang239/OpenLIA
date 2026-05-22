@@ -2,12 +2,12 @@
 
 Covers B-1 through B-4 and advisory A-2, A-3, A-7, A-9 fixes:
 
-  - RunnerV2 with planner_v2_2=None runs end-to-end as before (regression)
-  - RunnerV2 with planner_v2_2 injected activates Stage 5b + 7a in the pipeline
+  - RunnerV2 with planner_v2_2_llm=None runs end-to-end as before (regression)
+  - RunnerV2 with planner_v2_2_llm injected activates Stage 5b + 7a in the pipeline
   - A PlannerOutput with an unknown helper name emits HELPER_UNAVAILABLE
   - build_drafter_prompt() is called when MaterializedSection is available;
     v2 prompt path used when not
-  - make_v2_runner_stage_factory() returns a RunnerV2 with planner_v2_2 populated
+  - make_v2_runner_stage_factory() returns a RunnerV2 with planner_v2_2_llm populated
   - Planner.plan() raises when called from a running event loop (A-2)
   - comparables_run helper is registered under underscore name (A-9)
 """
@@ -41,6 +41,7 @@ from openlia.llm.runtime.report_v2_2.planner import (
     Planner,
     PlannerOutput,
 )
+from openlia.llm.types import LLMResponse
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -136,14 +137,24 @@ def _minimal_planner_output(helper_name: str = "dcf_engine") -> PlannerOutput:
     )
 
 
-class _AsyncPlannerStub:
-    """Minimal async planner stub that returns a canned PlannerOutput."""
+class _StubLLMProvider:
+    """Minimal async LLMProvider stub that returns a canned PlannerOutput as JSON.
 
-    def __init__(self, output: PlannerOutput) -> None:
-        self._output = output
+    The RunnerV2 now constructs a fresh Planner per-run using the injected
+    LLMProvider, so tests inject this stub as ``planner_v2_2_llm`` and control
+    the returned PlannerOutput via the JSON body handed back from ``generate()``.
+    """
 
-    async def aplan(self) -> PlannerOutput:
-        return self._output
+    def __init__(self, planner_output: PlannerOutput) -> None:
+        self._json = planner_output.model_dump_json()
+
+    async def generate(self, request: Any) -> LLMResponse:
+        return LLMResponse(
+            text=self._json,
+            finish_reason="stop",
+            input_tokens=10,
+            output_tokens=20,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +163,9 @@ class _AsyncPlannerStub:
 
 
 def test_runner_without_planner_v2_2_completes_happy_path() -> None:
-    """Regression: planner_v2_2=None → v2 path unchanged, no Stage 5b/7a."""
+    """Regression: planner_v2_2_llm=None → v2 path unchanged, no Stage 5b/7a."""
     stages = _wire_stage_mocks()
-    runner = RunnerV2(**stages)  # planner_v2_2 defaults to None
+    runner = RunnerV2(**stages)  # planner_v2_2_llm defaults to None
 
     events = list(runner.execute({"ticker": "AAPL"}, _empty_template()))
 
@@ -175,10 +186,10 @@ def test_runner_without_planner_v2_2_completes_happy_path() -> None:
 def test_runner_with_planner_v2_2_activates_stage_5b_and_7a() -> None:
     """B-1 + B-2: Stage 5b (PLANNER_V2_2) and 7a (MATERIALIZE) appear in the event stream."""
     planner_output = _minimal_planner_output()
-    stub_planner = _AsyncPlannerStub(planner_output)
+    stub_llm = _StubLLMProvider(planner_output)
 
     stages = _wire_stage_mocks()
-    runner = RunnerV2(**stages, planner_v2_2=stub_planner)
+    runner = RunnerV2(**stages, planner_v2_2_llm=stub_llm)
 
     events = list(runner.execute({"ticker": "AAPL"}, _empty_template()))
 
@@ -208,10 +219,10 @@ def test_runner_with_planner_v2_2_activates_stage_5b_and_7a() -> None:
 def test_unknown_helper_name_emits_helper_unavailable_issue() -> None:
     """B-3 + A-7: PlannerOutput with unregistered helper name triggers HELPER_UNAVAILABLE."""
     planner_output = _minimal_planner_output(helper_name="__no_such_helper_xyz__")
-    stub_planner = _AsyncPlannerStub(planner_output)
+    stub_llm = _StubLLMProvider(planner_output)
 
     stages = _wire_stage_mocks()
-    runner = RunnerV2(**stages, planner_v2_2=stub_planner)
+    runner = RunnerV2(**stages, planner_v2_2_llm=stub_llm)
 
     events = list(runner.execute({"ticker": "AAPL"}, _empty_template()))
 
@@ -233,10 +244,10 @@ def test_helper_unavailable_issue_carries_correct_type() -> None:
     from openlia.llm.runtime.report_v2.runner_v2 import RunnerV2 as _RunnerV2
 
     planner_output = _minimal_planner_output(helper_name="__ghost_helper__")
-    stub_planner = _AsyncPlannerStub(planner_output)
+    stub_llm = _StubLLMProvider(planner_output)
 
     stages = _wire_stage_mocks()
-    runner = _RunnerV2(**stages, planner_v2_2=stub_planner)
+    runner = _RunnerV2(**stages, planner_v2_2_llm=stub_llm)
 
     events = list(runner.execute({"ticker": "AAPL"}, _empty_template()))
     assert isinstance(events[-1], Completed)
@@ -344,10 +355,13 @@ def test_draft_one_uses_v2_prompt_when_no_materialized_section() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_make_v2_runner_stage_factory_populates_planner_v2_2() -> None:
-    """B-4: factory constructs RunnerV2 with planner_v2_2 populated."""
-    from openlia.llm.runtime.report_v2_2.planner import Planner as PlannerV22
+def test_make_v2_runner_stage_factory_populates_planner_v2_2_llm() -> None:
+    """B-4: factory constructs RunnerV2 with planner_v2_2_llm populated.
 
+    The factory no longer constructs a Planner at factory time. It injects the
+    LLMProvider as planner_v2_2_llm; RunnerV2._stage_planner_v2_2() constructs
+    a fresh Planner per-run with the live ticker + template context.
+    """
     fake_provider = Mock()
     fake_provider.generate = Mock()
 
@@ -361,8 +375,9 @@ def test_make_v2_runner_stage_factory_populates_planner_v2_2() -> None:
         runner = factory(None)
 
     assert isinstance(runner, RunnerV2)
-    assert runner.planner_v2_2 is not None, "planner_v2_2 must be injected by the factory"
-    assert isinstance(runner.planner_v2_2, PlannerV22)
+    assert runner.planner_v2_2_llm is not None, "planner_v2_2_llm must be injected by the factory"
+    # The injected value is the LLMProvider (fake_provider), not a Planner.
+    assert runner.planner_v2_2_llm is fake_provider
 
 
 # ---------------------------------------------------------------------------
