@@ -5,6 +5,24 @@ from openlia.reports.validator import (
     validate_report_payload,
 )
 
+_STOCK_INITIATION_LABELS = (
+    "Market Cap",
+    "Sector",
+    "Exchange",
+    "52W Range",
+    "ADTV (3mo)",
+    "P/E (fwd)",
+)
+
+_EARNINGS_UPDATE_LABELS = (
+    "Period",
+    "Market Cap",
+    "EPS Surprise",
+    "Revenue Surprise",
+    "Beats",
+    "Misses",
+)
+
 
 def _good() -> dict:
     return {
@@ -102,13 +120,17 @@ def _good_with_rail(department: str) -> dict:
 
 def test_enforce_required_rail_passes_when_complete():
     schema = validate_report_payload(_good_with_rail("stock_initiation"))
-    enforce_required_rail(schema, department_id="stock_initiation")
+    enforce_required_rail(
+        schema, department_id="stock_initiation", required_labels=_STOCK_INITIATION_LABELS
+    )
 
 
-def test_enforce_required_rail_skips_unconfigured_departments():
+def test_enforce_required_rail_skips_when_no_required_labels():
+    # No required_labels passed — validator skips rail check entirely.
     schema = validate_report_payload(_good())  # no rail
     enforce_required_rail(schema, department_id="morning_briefing")
     enforce_required_rail(schema, department_id="equity_research")
+    enforce_required_rail(schema, department_id="stock_initiation")  # no labels = skip
 
 
 def test_enforce_required_rail_fails_on_missing_verdict():
@@ -116,7 +138,9 @@ def test_enforce_required_rail_fails_on_missing_verdict():
     payload["rail"]["verdict"] = None
     schema = validate_report_payload(payload)
     with pytest.raises(ReportValidationError) as exc:
-        enforce_required_rail(schema, department_id="stock_initiation")
+        enforce_required_rail(
+            schema, department_id="stock_initiation", required_labels=_STOCK_INITIATION_LABELS
+        )
     assert any("rail.verdict" in p for p, _ in exc.value.errors)
 
 
@@ -127,7 +151,9 @@ def test_enforce_required_rail_fails_on_missing_quick_stat_label():
     ]
     schema = validate_report_payload(payload)
     with pytest.raises(ReportValidationError) as exc:
-        enforce_required_rail(schema, department_id="stock_initiation")
+        enforce_required_rail(
+            schema, department_id="stock_initiation", required_labels=_STOCK_INITIATION_LABELS
+        )
     msgs = " ".join(m for _, m in exc.value.errors)
     assert "'Sector'" in msgs
 
@@ -137,7 +163,9 @@ def test_enforce_required_rail_label_match_is_case_insensitive():
     for m in payload["rail"]["quick_stats"]:
         m["label"] = m["label"].upper()
     schema = validate_report_payload(payload)
-    enforce_required_rail(schema, department_id="stock_initiation")
+    enforce_required_rail(
+        schema, department_id="stock_initiation", required_labels=_STOCK_INITIATION_LABELS
+    )
 
 
 def test_enforce_required_rail_earnings_update_required_labels():
@@ -151,4 +179,6 @@ def test_enforce_required_rail_earnings_update_required_labels():
         {"label": "Misses", "value": "0"},
     ]
     schema = validate_report_payload(payload)
-    enforce_required_rail(schema, department_id="earnings_update")
+    enforce_required_rail(
+        schema, department_id="earnings_update", required_labels=_EARNINGS_UPDATE_LABELS
+    )

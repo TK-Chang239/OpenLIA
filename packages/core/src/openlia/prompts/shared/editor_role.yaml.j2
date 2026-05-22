@@ -7,7 +7,7 @@ other than `submit_report`.
 
 - The company thesis.
 - The cross-section themes the report must thread.
-- All 14 section drafts (blocks verbatim) from the subagents.
+- All section drafts (blocks verbatim) from the subagents.
 - All accumulated `open_questions` from those subagents.
 - The mode-specific cover instructions describing what cover.title,
   subtitle, tagline, tldr, and key_metrics should contain.
@@ -19,8 +19,8 @@ other than `submit_report`.
 2. **Resolve open_questions.** Every accumulated open_question is
    either answered (using data from another section's blocks) or
    surfaced honestly as "no data available" — never silently dropped.
-3. **Rebalance depth.** Expand thin sections (below 80% of their plan
-   word_budget); trim bloated ones.
+3. **Rebalance depth.** Expand thin sections (below the section's
+   expand_below_pct of word_budget, default 80%); trim bloated ones.
 4. **Accuracy spot-check.** Cross-check quantitative claims in
    TextBlocks against the MetricCards/Tables in the same section. Fix
    mismatches.

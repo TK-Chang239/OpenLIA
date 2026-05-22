@@ -12,6 +12,19 @@ composer_inputs:
 
 required_artifacts: []
 
+rail:
+  required_quick_stats:
+    - "Market Cap"
+    - "Sector"
+    - "Exchange"
+    - "52W Range"
+    - "ADTV (3mo)"
+    - "P/E (fwd)"
+
+threading:
+  summary_word_cap: 200
+  facts_cap: 5
+
 sections:
   - id: thesis
     name: "Investment Thesis"
@@ -19,6 +32,9 @@ sections:
       Summarize the investment thesis: bull case, bear case, and key
       catalysts. Attribute all buy/hold/sell language to cited sources.
       Never use first-person advocacy.
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: recent_developments
     name: "Recent Developments"
@@ -27,6 +43,9 @@ sections:
       and analyst actions from the last twelve months. Use a timeline when
       three or more dated events are available.
     depends_on: [thesis]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: financials
     name: "Financial Snapshot"
@@ -35,6 +54,9 @@ sections:
       Show key KPIs (revenue, gross margin, operating margin, FCF) with
       year-over-year comparisons.
     depends_on: [thesis]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: valuation
     name: "Valuation"
@@ -43,6 +65,9 @@ sections:
       Show the methodology's output and let the reader compare it to
       analyst consensus. Do not author a single price target.
     depends_on: [financials]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: risks
     name: "Key Risks"
@@ -50,3 +75,6 @@ sections:
       Identify the primary risks (market, regulatory, execution, financial).
       Distinguish between controlled and uncontrolled risks where possible.
     depends_on: [thesis]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80

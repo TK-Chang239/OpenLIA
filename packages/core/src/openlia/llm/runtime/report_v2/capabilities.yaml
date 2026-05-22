@@ -93,6 +93,8 @@ known_template_keys:
   - output_artifacts
   - sections
   - verifier_severity_overrides
+  - rail
+  - threading
 
 cache:
   enabled: true
