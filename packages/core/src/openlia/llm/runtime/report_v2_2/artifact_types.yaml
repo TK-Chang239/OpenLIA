@@ -910,3 +910,60 @@ artifact_types:
       - one_time_item_output
       - quality_of_earnings_output
       - sbc_intensity_output
+
+  # -----------------------------------------------------------------------
+  # Forensic / credit integrity helpers (PR 2.6)
+  # -----------------------------------------------------------------------
+
+  - name: altman_z_variants_output
+    description: >
+      Altman Z-score computed in up to four published variants: Z (public manufacturer
+      1968), Z' (private manufacturer 1983), Z" (non-manufacturer 1995), and EM Z"
+      (emerging markets; Z" + 3.25 constant). Each variant produces a score,
+      classification (safe / gray / distress), and per-component contribution table.
+    fidelity:
+      headline: "Altman Z: score X (zone: safe/gray/distress), variant Y"
+      summary: "Z-score, classification, thresholds, and key component contributions"
+      full: "All components with value/weight/contribution for the selected variant(s)"
+    depends_on: []
+
+  - name: dividend_safety_output
+    description: >
+      Dividend sustainability assessment: NI-based, FCF-based, and EBITDA-based payout
+      ratios; coverage ratios (reciprocals); dividend track record (unbroken payment streak,
+      growth streak, cut count, CAGR); configurable NI/FCF stress test with verdict bands;
+      composite safety score 0-100 (higher = safer); and classification
+      (safe / moderate / at_risk / distressed).
+    fidelity:
+      headline: "Dividend: payout X% of NI, Y% of FCF, classification Z, safety score W/100"
+      summary: "Payout ratios, coverage ratios, streak years, stress verdict, classification"
+      full: "Full panel: all payout/coverage metrics, streak history, CAGR, stress test, warnings"
+    depends_on: []
+
+  - name: beneish_m_score_output
+    description: >
+      Beneish M-score earnings manipulation detector: all 8 sub-indices (DSRI, GMI, AQI,
+      SGI, DEPI, SGAI, LVGI, TATA), composite M-score, classification vs. -1.78 threshold
+      (likely_manipulator / no_signal), and top-driver contributions.
+    fidelity:
+      headline: "Beneish M-score: X (threshold -1.78) — classification: Y"
+      summary: "M-score, classification, top 3 contributing indices"
+      full: "All 8 sub-indices with values and weighted contributions, full classification detail"
+    depends_on: []
+
+  - name: statement_integrity_bundle_output
+    description: >
+      Composite financial-statement integrity bundle (also documented as
+      statement_integrity_panel). Aggregates altman_z_variants, beneish_m_score,
+      cross_statement_validation, and one_time_item_identification into a single
+      0-100 integrity score (higher = better integrity) with per-component scores,
+      top concerns, and classification (high_integrity / moderate_integrity / low_integrity).
+    fidelity:
+      headline: "Statement integrity: score X/100, classification Y"
+      summary: "Composite score, classification, per-component scores (Altman, Beneish, cross-stmt, OTI)"
+      full: "Full composite with component scores, weights, top concerns, aggregated warnings"
+    depends_on:
+      - altman_z_variants_output
+      - beneish_m_score_output
+      - cross_statement_validation_output
+      - one_time_item_output

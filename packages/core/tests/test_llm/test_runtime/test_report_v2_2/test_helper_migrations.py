@@ -178,8 +178,10 @@ def test_artifact_type_registry_count() -> None:
     #   risk_reward_output, implied_upside_downside_output, rating_assignment,
     #   football_field_chart_output
     # + 20 business quality bundle (PR 2.5)
-    # = 82
-    assert len(all_types) == 82, f"Expected 82 artifact types, got {len(all_types)}: {names}"
+    # + 4 forensic/credit integrity (PR 2.6): altman_z_variants_output, dividend_safety_output,
+    #   beneish_m_score_output, statement_integrity_bundle_output
+    # = 86
+    assert len(all_types) == 86, f"Expected 86 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -278,6 +280,11 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "cash_conversion_cycle_output",
         "sustainable_growth_rate_output",
         "forensic_panel_output",
+        # Forensic / credit integrity helpers (PR 2.6)
+        "altman_z_variants_output",
+        "dividend_safety_output",
+        "beneish_m_score_output",
+        "statement_integrity_bundle_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
