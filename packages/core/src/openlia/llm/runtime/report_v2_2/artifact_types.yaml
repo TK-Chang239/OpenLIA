@@ -1011,3 +1011,54 @@ artifact_types:
       summary: "WAM, WAC, near-term maturities, refi wall year and %, risk score"
       full: "Full year-by-year ladder, instrument names per bucket, WAM, WAC, wall detection, stress test, warnings"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # Signals helpers (PR 2.8)
+  # -----------------------------------------------------------------------
+
+  - name: insider_signal_output
+    description: >
+      Insider trading signal derived from SEC Form 4 transactions. Filters out
+      compensation-related codes (A/M/F/G/C/D/X); aggregates only discretionary
+      open-market buys (P) and sells (S) over configurable lookback windows
+      (default 90d / 180d / 365d). Detects cluster buying (>=3 distinct insiders
+      in 30 days), role-weights net activity (CEO/CFO > Director), and classifies
+      signal direction (bullish / mildly_bullish / neutral / mildly_bearish / bearish)
+      with confidence (high / moderate / low).
+    fidelity:
+      headline: "Insider signal: classification X, confidence Y, cluster detected Z"
+      summary: "90d window: buy count, sell count, net value, cluster flag, signal classification"
+      full: "All windows (90d/180d/365d): buy/sell aggregates, role-weighted net value, largest buy, excluded code counts, signal classification and confidence"
+    depends_on:
+      - eodhd_insider_transactions_output
+
+  - name: moving_average_panel_output
+    description: >
+      Moving average trend panel derived from split-adjusted price (or multiple) series.
+      Computes SMA/EMA for configurable windows (default 20/50/100/200); price-vs-MA
+      position (% above/below); MA slope and slope state (rising/flattening/falling);
+      golden cross / death cross detection for (50/200) and (20/50) pairs with date,
+      return-since-cross, and optional volume confirmation; 200-day stretch z-score;
+      MA stack (bullish/bearish/mixed); and trend regime (uptrend/downtrend/range).
+      Works on price series or valuation multiple series (series_kind="multiple").
+    fidelity:
+      headline: "MA panel: trend regime X, 200d stretch Y%, golden/death cross Z"
+      summary: "Current price vs 50/200-day MA, trend regime, most recent crossover, 200d stretch pct"
+      full: "All MA windows with value/pct/slope; crossovers with date/return/volume confirmation; 200d z-score; narrative"
+    depends_on:
+      - eodhd_eod_prices_output
+
+  - name: historical_multiple_trends_output
+    description: >
+      Historical valuation multiple trends over 1Y/3Y/5Y/10Y windows for P/E, P/S,
+      EV/EBITDA, and P/B. Per multiple: min/p25/median/mean/p75/max/stdev; current
+      percentile rank vs own history; z-score vs window mean; vs-median-pct deviation;
+      OLS re-rating / de-rating trend; < 10th or > 90th percentile warnings; optional
+      sector premium/discount overlay; optional forward/trailing spread with implied
+      growth read. NM (loss) periods flagged and excluded from P/E stats.
+    fidelity:
+      headline: "Multiple trends: P/E at Xth percentile of 5Y history, trend: Y"
+      summary: "Per multiple: current, 5Y percentile, z-score, re-rating trend direction"
+      full: "All multiples with full stats by window, percentile ranks, z-scores, sector overlay, forward/trailing spread, NM flags, warnings"
+    depends_on:
+      - eodhd_market_cap_history_output
