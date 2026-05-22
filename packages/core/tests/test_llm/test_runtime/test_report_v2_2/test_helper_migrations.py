@@ -172,8 +172,10 @@ def test_artifact_type_registry_count() -> None:
     # 4 Stage-7a + 8 original helpers (PR 0.2) + 18 EODHD adapters (PR 1.1)
     # + 15 FinanceToolkit helpers + 1 FRED helper (PR 1.2)
     # + 1 comparables_output (PR 2.1)
-    # + 6 DCF/COC/sensitivity bundle (PR 2.2) = 53
-    assert len(all_types) == 53, f"Expected 53 artifact types, got {len(all_types)}: {names}"
+    # + 6 DCF/COC/sensitivity bundle (PR 2.2)
+    # + 3 alternative valuation (PR 2.3): ddm_output, justified_multiples_output, sotp_output
+    # = 56
+    assert len(all_types) == 56, f"Expected 56 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -240,6 +242,10 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "tornado_diagram_output",
         "scenario_panel",
         "reverse_dcf_output",
+        # Alternative valuation helpers (PR 2.3)
+        "ddm_output",
+        "justified_multiples_output",
+        "sotp_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (

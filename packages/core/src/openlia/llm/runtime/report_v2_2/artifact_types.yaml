@@ -588,3 +588,45 @@ artifact_types:
       full: "Full Newton iteration log, sensitivity around implied value, interpretation"
     depends_on:
       - cost_of_capital_output
+
+  # -----------------------------------------------------------------------
+  # Alternative valuation helpers (PR 2.3)
+  # -----------------------------------------------------------------------
+
+  - name: ddm_output
+    description: >
+      Dividend discount model valuation result: selected model variant
+      (Gordon, two-stage, three-stage, H-model), per-stage PV breakdown,
+      implied equity value per share, sustainability check (sustainable growth gap,
+      payout vs. ROE), and optional comparison across all four methods.
+    fidelity:
+      headline: "DDM implied value $X/share (model: Y, Re=Z%, g=W%)"
+      summary: "Model variant, price per share, PV breakdown by stage, sustainability verdict"
+      full: "Full stage-by-stage dividend schedule, TV computation, sustainability check, alternative models table"
+    depends_on:
+      - cost_of_capital_output
+
+  - name: justified_multiples_output
+    description: >
+      Fundamental-justified trading multiples derived from company ROE, growth,
+      payout ratio, and cost of equity: forward P/E, trailing P/E, P/B, and
+      EV/EBITDA. Includes per-multiple formula decomposition, actual current
+      multiples comparison, and spread (premium/discount vs. fundamentals).
+    fidelity:
+      headline: "Justified fwd P/E Xx, P/B Yx (vs actual Zx, Wx)"
+      summary: "Justified vs. actual multiples table for P/E, P/B, EV/EBITDA with spread %"
+      full: "Full justified multiples with formula traces, all spreads, verdict bands, and warnings"
+    depends_on:
+      - cost_of_capital_output
+
+  - name: sotp_output
+    description: >
+      Sum-of-the-parts valuation: per-segment EV (EBITDA multiple, P/S, P/B,
+      DCF, or user-supplied), segment concentration ratios, corporate overhead
+      deduction, optional conglomerate discount, equity bridge (EV minus net debt
+      minus minority interest), and implied per-share equity value.
+    fidelity:
+      headline: "SOTP implied $X/share (N segments, Y% conglomerate discount)"
+      summary: "Segment EVs table, overhead deduction, discount, equity bridge, per-share value"
+      full: "Full segment detail, concentration warnings, equity bridge, sensitivity to discount assumption"
+    depends_on: []
