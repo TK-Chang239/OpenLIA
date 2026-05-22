@@ -1,0 +1,134 @@
+# Artifact type registry — seed for v2.2 report engine.
+# Each entry declares fidelity descriptions and DAG dependencies.
+# Entries for the 7 existing helpers (migrating in PR 0.2) plus the 4 Stage-7a
+# core types (landing in PR 0.3).
+#
+# IMPORTANT: depends_on lists ArtifactType names that MUST be produced before
+# this type can be consumed. Boot-time DAG validation enforces no cycles.
+
+artifact_types:
+
+  # -----------------------------------------------------------------------
+  # Stage-7a core types (PR 0.3)
+  # -----------------------------------------------------------------------
+
+  - name: section_plan
+    description: >
+      Structured plan mapping report sections to artifact IDs and fidelity levels.
+      Produced by Stage 5 planner; consumed by Stage 7a materialization.
+    fidelity:
+      headline: "One-line summary of section layout (N sections, M artifacts)"
+      summary: "Section list with artifact IDs and requested fidelity levels"
+      full: "Complete ReportSectionPlan JSON including overrides_applied"
+    depends_on: []
+
+  - name: materialized_section
+    description: >
+      Rendered markdown for a single report section after fidelity projection and
+      deduplication. Produced by Stage 7a; consumed by Stage 7b drafter.
+    fidelity:
+      headline: "Section title + one-sentence summary of rendered content"
+      summary: "Section title + first artifact headline + artifact count"
+      full: "Full rendered section markdown with all artifact renders at resolved fidelity"
+    depends_on:
+      - section_plan
+
+  - name: fidelity_hint
+    description: >
+      Planner-emitted advisory specifying preferred fidelity for a named artifact
+      in the current run. Overrides template defaults when present.
+    fidelity:
+      headline: "Artifact ID + fidelity level override"
+      summary: "Artifact ID + fidelity + rationale note"
+      full: "Full SectionPlanOverride record with rationale"
+    depends_on:
+      - section_plan
+
+  - name: rendered_artifact
+    description: >
+      Markdown-rendered form of any helper-produced artifact at a specific fidelity.
+      The Stage-7a output atom that Stage-7b consumes.
+    fidelity:
+      headline: "One-liner with the key number from the artifact"
+      summary: "Compact table or chart caption (~200-400 tokens)"
+      full: "Complete artifact markdown (~800-2000 tokens)"
+    depends_on: []
+
+  # -----------------------------------------------------------------------
+  # Existing helper artifacts (7 helpers migrating in PR 0.2)
+  # -----------------------------------------------------------------------
+
+  - name: dcf_valuation_output
+    description: >
+      Full DCF valuation result: WACC, projected FCF schedule, terminal value
+      (perpetuity and exit-multiple methods), enterprise and equity value, per-share
+      value, and 2-D sensitivity table over WACC × terminal growth.
+    fidelity:
+      headline: "DCF fair value = $X (perpetuity) / $Y (exit multiple)"
+      summary: "WACC, terminal growth, EV and equity value per method, implied price range"
+      full: "Complete FCF schedule, terminal value decomposition, sensitivity grid"
+    depends_on: []
+
+  - name: chart_artifact
+    description: >
+      Inline SVG chart (line, bar, scatter, or heatmap) rendered by matplotlib.
+      General-purpose visual; consumed by any section that needs a chart embed.
+    fidelity:
+      headline: "Chart title and type (e.g. 'Revenue trend — line chart')"
+      summary: "Chart title, axes labels, and data range summary"
+      full: "Inline SVG content (base64 or raw SVG string)"
+    depends_on: []
+
+  - name: ratio_panel
+    description: >
+      Financial ratios across profitability, liquidity, leverage, efficiency, and
+      valuation categories with benchmark interpretation.
+      NOTE: slated for deprecation in PR 2.5; replaced by per-category panels.
+    fidelity:
+      headline: "Key ratios summary: ROE X%, gross margin Y%, D/E Z"
+      summary: "Profitability + liquidity + valuation ratios table with benchmark flags"
+      full: "All five ratio categories with values, formulas, and interpretations"
+    depends_on: []
+
+  - name: saas_metrics_output
+    description: >
+      SaaS unit economics: MRR/ARR, ARPA, churn, CAC, LTV, LTV:CAC, payback,
+      NRR, Rule of 40. Supports metrics, quick-ratio, and simulation modes.
+      NOTE: will be repurposed as saas_kpi_panel in PR 2.9.
+    fidelity:
+      headline: "ARR $X, NRR Y%, LTV:CAC Z — Rule of 40: W"
+      summary: "Core SaaS KPIs table: ARR, churn, CAC, LTV, NRR, Rule of 40"
+      full: "Full SaaS metrics with quick ratio breakdown and unit economics simulation"
+    depends_on: []
+
+  - name: budget_variance_output
+    description: >
+      Budget variance analysis with materiality filtering and department/category
+      breakdown. Favorable/unfavorable classification per line item.
+      NOTE: slated for deprecation in PR 2.5 alongside budget_variance helper.
+    fidelity:
+      headline: "Revenue variance $X (Y% fav/unfav), N material variances"
+      summary: "Revenue and expense variance summary, material variance count by dept"
+      full: "All line-item variances, department summary, category summary, exec summary"
+    depends_on: []
+
+  - name: business_investment_output
+    description: >
+      Business investment analysis: ROI, payback, NPV, IRR, scoring rubric, and
+      base/upside/downside scenario comparison.
+      NOTE: slated for deprecation in PR 2.5 alongside business_investment helper.
+    fidelity:
+      headline: "ROI X%, NPV $Y, IRR Z% — verdict: <scoring verdict>"
+      summary: "Summary metrics: ROI, payback, NPV, IRR, scoring total, verdict"
+      full: "Full scoring rubric, all three scenarios, flags list"
+    depends_on: []
+
+  - name: forecast_output
+    description: >
+      Driver-based revenue forecast with trend analysis, scenario modeling
+      (base/bull/bear), and 13-week rolling cash flow projection.
+    fidelity:
+      headline: "Base case revenue $X over N periods (Y% growth)"
+      summary: "Trend direction, scenario comparison table, cash runway"
+      full: "Full period-by-period forecast for all scenarios plus rolling cash flow"
+    depends_on: []
