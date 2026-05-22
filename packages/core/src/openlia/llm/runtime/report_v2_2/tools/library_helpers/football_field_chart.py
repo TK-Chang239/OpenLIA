@@ -45,9 +45,7 @@ def _median_of_medians(methodologies: list[dict[str, Any]]) -> float | None:
     return (sorted_m[mid - 1] + sorted_m[mid]) / 2.0
 
 
-def _current_price_position(
-    current_price: float, methodologies: list[dict[str, Any]]
-) -> str:
+def _current_price_position(current_price: float, methodologies: list[dict[str, Any]]) -> str:
     """Describe where current price falls relative to the overall range."""
     all_lows = [float(m["low"]) for m in methodologies if m.get("low") is not None]
     all_highs = [float(m["high"]) for m in methodologies if m.get("high") is not None]
@@ -73,12 +71,8 @@ def _current_price_position(
     return "high end of range"
 
 
-def _build_markdown_table(
-    methodologies: list[dict[str, Any]], currency: str
-) -> str:
-    header = (
-        f"| Methodology | Low ({currency}) | Median ({currency}) | High ({currency}) |"
-    )
+def _build_markdown_table(methodologies: list[dict[str, Any]], currency: str) -> str:
+    header = f"| Methodology | Low ({currency}) | Median ({currency}) | High ({currency}) |"
     separator = "|---|---|---|---|"
     rows = []
     for m in methodologies:
@@ -238,8 +232,7 @@ def execute(
             raise ValueError(f"Methodology {m.get('name', i)!r}: missing 'low' or 'high'.")
         if m["low"] > m["high"]:
             warnings.append(
-                f"Methodology {m['name']!r}: low ({m['low']}) > high ({m['high']}). "
-                "Check inputs."
+                f"Methodology {m['name']!r}: low ({m['low']}) > high ({m['high']}). Check inputs."
             )
 
     mom = _median_of_medians(methodologies)

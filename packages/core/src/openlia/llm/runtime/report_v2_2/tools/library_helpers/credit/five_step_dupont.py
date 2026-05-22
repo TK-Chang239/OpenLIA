@@ -145,9 +145,7 @@ def _decompose_roe_change(
             f"ROE +{delta_roe * 100:.1f} pts; high-quality improvement (margin + turnover driven)."
         )
     elif delta_roe > 0 and leverage_drivers > 0.5 * delta_roe:
-        interpretation = (
-            f"ROE +{delta_roe * 100:.1f} pts; primarily leverage-driven improvement."
-        )
+        interpretation = f"ROE +{delta_roe * 100:.1f} pts; primarily leverage-driven improvement."
     elif delta_roe < 0:
         interpretation = f"ROE {delta_roe * 100:.1f} pts; deterioration over the period."
     else:

@@ -60,9 +60,7 @@ def _validate_and_normalise(
     dropped = [it for it in items if it.get("value") is None]
 
     if not live:
-        raise ValueError(
-            "All methodology_targets have null values; cannot compute blended target."
-        )
+        raise ValueError("All methodology_targets have null values; cannot compute blended target.")
 
     # Resolve weights
     if auto_weight == "equal":
@@ -176,8 +174,7 @@ def execute(
     if reweighted:
         dropped_names = [it.get("name", "?") for it in dropped]
         warnings.append(
-            f"Dropped {len(dropped)} null-value method(s): {dropped_names}. "
-            "Weights renormalized."
+            f"Dropped {len(dropped)} null-value method(s): {dropped_names}. Weights renormalized."
         )
 
     dominant = [it for it in live if it["_resolved_weight"] > _DOMINANT_WEIGHT_THRESHOLD]

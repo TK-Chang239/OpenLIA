@@ -200,8 +200,7 @@ def execute(
         pct_str = f"{refi_wall['pct_of_total_debt'] * 100:.1f}%"
         amt_str = f"{refi_wall['principal_at_wall']:,.0f}"
         warnings.append(
-            f"Refinancing wall in {refi_wall['year']}: "
-            f"{pct_str} of total debt ({amt_str})."
+            f"Refinancing wall in {refi_wall['year']}: {pct_str} of total debt ({amt_str})."
         )
     if wam is not None and wam < 2.0:
         warnings.append(f"Short WAM {wam:.1f} years - near-term refinancing pressure.")

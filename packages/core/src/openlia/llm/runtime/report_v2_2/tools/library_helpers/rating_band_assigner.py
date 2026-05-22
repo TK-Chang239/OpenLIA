@@ -157,9 +157,7 @@ def execute(
 
     bands = rating_bands_config or _DEFAULT_BANDS
     rating = _resolve_rating(expected_total_return_pct, risk_reward_ratio, bands)
-    conviction = _conviction(
-        conviction_score, risk_reward_ratio, dispersion_stdev, blended_target
-    )
+    conviction = _conviction(conviction_score, risk_reward_ratio, dispersion_stdev, blended_target)
 
     warnings: list[str] = []
 
@@ -170,9 +168,7 @@ def execute(
             "Verify rating_bands_config."
         )
     if rating == "SELL" and expected_total_return_pct > 0.10:
-        warnings.append(
-            "SELL rating with ETR > +10% — check R/R condition that triggered SELL."
-        )
+        warnings.append("SELL rating with ETR > +10% — check R/R condition that triggered SELL.")
 
     # Explanatory prose
     etr_str = f"{expected_total_return_pct:+.1%}"
@@ -196,13 +192,9 @@ def execute(
             f"conviction {conv_str}."
         ),
         "UNDERPERFORM": (
-            f"ETR {etr_str} below -5% with R/R {rr_str} under 1.5x; "
-            f"conviction {conv_str}."
+            f"ETR {etr_str} below -5% with R/R {rr_str} under 1.5x; conviction {conv_str}."
         ),
-        "SELL": (
-            f"ETR {etr_str} triggers SELL; "
-            f"R/R {rr_str}; conviction {conv_str}."
-        ),
+        "SELL": (f"ETR {etr_str} triggers SELL; R/R {rr_str}; conviction {conv_str}."),
     }
     why_this_rating = why_map.get(rating, f"ETR {etr_str}, R/R {rr_str}.")
 
@@ -271,8 +263,7 @@ _SCHEMA = HelperSchema(
                 type="float",
                 default=0.5,
                 description=(
-                    "Analyst confidence [0, 1]; informed by dispersion, "
-                    "DCF TV %, quality panels."
+                    "Analyst confidence [0, 1]; informed by dispersion, DCF TV %, quality panels."
                 ),
                 required=False,
             ),
