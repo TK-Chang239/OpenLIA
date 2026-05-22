@@ -23,9 +23,9 @@ export function ConversionPromptButton() {
       style={{
         padding: "0.25rem 0.625rem",
         fontSize: "0.8125rem",
-        border: "1px solid var(--color-border, #d1d5db)",
+        border: "1px solid var(--color-border-subtle)",
         borderRadius: "0.25rem",
-        background: "var(--color-surface, #fff)",
+        background: "var(--color-bg-elevated)",
         cursor: "pointer",
       }}
     >
