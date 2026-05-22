@@ -32,12 +32,13 @@ Hard prerequisite for everything else. Phase 0 exit gate (smoke test on MSFT) mu
 - [ ] **PR 2.2** — DCF engine + cost of capital (tasks #12, #6)
 - [ ] **PR 2.3** — Alternative valuation (DDM family + justified multiples + SOTP) (task #13)
 - [ ] **PR 2.4** — Decision layer (task #14)
-- [ ] **PR 2.5** — Business quality + statement integrity + deprecation cleanup (task #7)
-- [ ] **PR 2.6** — Forensic + dividend safety (task #21)
-- [ ] **PR 2.7** — Credit + solvency + 5-step DuPont (task #15)
+- [ ] **PR 2.5** — Business quality + statement integrity + deprecation cleanup (task #7) — covers all of helpers-design §4.1-§4.20 except §4.18 Beneish (which ships in PR 2.6); may execute as 2-3 internal commits
+- [ ] **PR 2.6** — Forensic + dividend safety (task #21) — Beneish M-score (§4.18) + Altman variants (supplement §8) + dividend_safety_panel (supplement §9)
+- [ ] **PR 2.7** — Credit + solvency + 5-step DuPont + debt-maturity ladder (task #15) — supplement §10-§12
 - [ ] **PR 2.8** — Signal & context helpers (task #23)
 - [ ] **PR 2.9** — saas_kpi_panel repurpose (task #11)
 - [ ] **PR 2.10** — Workbook builder + remaining outputs (task #8)
+- [ ] **PR 2.11** — Risk / macro helpers — drawdown_panel + yield_curve_shape (helpers-design §5.1, §5.2)
 - [ ] **Phase 2 exit gate** — MSFT, NVDA, CAT, X all produce complete reports; all 14 verifier issue types reachable; tool-overhead ≤ 15k tokens
 
 ---
