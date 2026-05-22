@@ -26,13 +26,14 @@ gics_routing:
   banks:
     template: "banks_v2_2"
     gics_codes:
-      - "401010"  # Commercial Banks & Thrifts — verified
-      - "401020"  # Diversified Banks — verified
-      - "402020"  # Diversified Financial Services — verified
+      - "401010"  # Diversified Banks — verified (GICS 2023)
+      - "401020"  # Regional Banks — verified (GICS 2023; renamed from "Commercial Banks & Thrifts" pre-2023)
+      - "402020"  # Investment Banking & Brokerage — verified (GICS 2023; old "Diversified Financial Services" name retired)
       # Note: 401010 / 401020 are both within the Banks industry (4010).
-      # 402020 (Diversified Financial Services) is often grouped with banks
-      # for fundamental analysis even though it is technically a separate
-      # industry (4020).
+      # 402020 (Investment Banking & Brokerage) is grouped with banks here
+      # as a POLICY CHOICE for fundamental analysis; technically a separate
+      # industry (4020 — Capital Markets). Remove from this list if your
+      # framework treats them as a distinct sector.
 
   reits:
     template: "reits_v2_2"
@@ -59,9 +60,9 @@ gics_routing:
   energy_ep:
     template: "energy_ep_v2_2"
     gics_codes:
-      - "101010"  # Energy Equipment & Services — verified
-      - "101020"  # Oil & Gas Drilling — verified          # TODO: verify (may be sub of 101010)
-      - "101030"  # Oil & Gas Equipment & Services — TODO: verify
+      - "101010"  # Energy Equipment & Services — verified (GICS 2023; only sub-industry in 1010)
+      # 101020 and 101030 removed: under GICS 2023, industry 1010 has only one
+      # sub-industry (101010). The 102xxx codes below cover the full E&P range.
       - "102010"  # Integrated Oil & Gas — verified
       - "102020"  # Oil & Gas Exploration & Production — verified
       - "102030"  # Oil & Gas Refining & Marketing — verified
