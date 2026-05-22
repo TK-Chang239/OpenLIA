@@ -54,6 +54,18 @@ See `phase-progress.md` for the current build state — which PRs are merged, wh
 
 ---
 
+## v2.2 engine runtime docs
+
+| File | Purpose |
+|---|---|
+| `packages/core/src/openlia/llm/runtime/report_v2_2/capabilities.yaml` | Engine capabilities + full helper catalogue (113 helpers, 18 skill docs) |
+| `packages/core/src/openlia/llm/runtime/report_v2_2/telemetry.py` | Token-cost telemetry — Stage 7a materialize events + Stage 7b drafter call events |
+| `packages/core/src/openlia/llm/runtime/report_v2_2/tools/library_helpers/skills/` | Skill docs for the 18 complex helpers (§6) |
+| `packages/core/tests/test_llm/test_runtime/test_report_v2_2/test_phase_3_exit_gate.py` | Phase 3 exit gate: helper count (113), category breakdown, all 18 §6 helpers registered with skill docs |
+| `packages/core/tests/test_skill_docs_presence.py` | Skill-doc CI: strict FAIL (not skip) for any §6 complex helper in v2.2 registry without skill_doc wired |
+
+---
+
 ## Other docs in this folder (not related to v2.2 helper work)
 
 | File | Purpose |
