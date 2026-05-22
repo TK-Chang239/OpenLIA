@@ -64,6 +64,7 @@ from . import (  # noqa: E402, F401
     budget_variance,
     business_investment,
     chart_builder,
+    comparables_run,
     dcf_valuation,
     eodhd,
     excel_builder,

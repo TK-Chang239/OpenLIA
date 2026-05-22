@@ -500,3 +500,20 @@ artifact_types:
       summary: "HY OAS, IG OAS, 10Y Treasury, HY-IG spread differential"
       full: "All spread values, as-of date, FRED series IDs, and source"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # Comparables suite (PR 2.1)
+  # -----------------------------------------------------------------------
+
+  - name: comparables_output
+    description: >
+      Comparable companies multiples valuation: peer set, EV bridge, per-multiple
+      statistics (P/E, EV/EBITDA, EV/Sales, P/B, P/FCF, PEG, EV/EBIT) for TTM and
+      NTM, implied values per multiple, and a blended valuation range across all
+      multiples using the p25-to-p75 peer spread applied to the subject company's
+      TTM metrics.
+    fidelity:
+      headline: "Comps blended range: low $X / median $Y / high $Z (N peers, M multiples)"
+      summary: "Peer set, EV bridge, key multiples table (P/E, EV/EBITDA, EV/Sales), blended range"
+      full: "Full peer panel, EV bridge with warning, all multiples stats, all implied values, blended range"
+    depends_on: []
