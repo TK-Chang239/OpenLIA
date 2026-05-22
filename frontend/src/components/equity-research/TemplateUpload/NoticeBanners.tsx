@@ -17,8 +17,9 @@ export function NoticeBanners({ notices }: Props) {
           }
           style={{
             padding: "0.75rem",
-            background: "var(--color-warning-bg, #fffbeb)",
-            border: "1px solid var(--color-warning-border, #fcd34d)",
+            background:
+              "color-mix(in srgb, var(--color-feedback-warning) 10%, transparent)",
+            border: "1px solid var(--color-feedback-warning)",
             borderRadius: "0.375rem",
             fontSize: "0.875rem",
           }}
