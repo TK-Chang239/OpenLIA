@@ -8,7 +8,7 @@
 
 ## 0. Purpose
 
-Defines the formal `HelperSchema` shape that all ~178 library helpers must register with, the four-tier exposure model that controls what the LLM sees at each stage, the closed `ArtifactType` registry that makes the helper-to-helper graph machine-resolvable, and the list of ~18 helpers that warrant full `skills.md` documentation beyond the structured schema.
+Defines the formal `HelperSchema` shape that all ~120 library helpers must register with, the four-tier exposure model that controls what the LLM sees at each stage, the closed `ArtifactType` registry that makes the helper-to-helper graph machine-resolvable, and the list of 18 helpers that warrant full `skills.md` documentation beyond the structured schema.
 
 This document supersedes the schema notes in §1 of `planning/2026-05-21-equity-research-engine-helper-stack.md`.
 
@@ -21,7 +21,7 @@ The previously documented "three-layer" model was undercounted. With `skill_doc`
 | Tier | What | Always loaded? | Tokens (typical) |
 |---|---|---|---|
 | **L1** | Category index — 19 categories + one-liners | yes, cached across sessions | ~1k |
-| **L1.5** | Helper directory — ~178 helper one-liners + category tag | yes, cached across sessions | ~12-18k (cached → ~1-2k effective) |
+| **L1.5** | Helper directory — ~120 helper one-liners + category tag | yes, cached across sessions | ~8-12k (cached → ~1-2k effective) |
 | **L2** | Selection guidance + mechanical contract for planner-picked helpers | per run, cached across stages | ~5-8k for ~12 picked helpers |
 | **L3** | Skill docs — full `skills.md` for complex helpers, opt-in per helper | on demand, only when planner requests | ~1.5-3k per loaded skill |
 | **L4** | Execution — Python | never | 0 |
@@ -299,6 +299,54 @@ def validate_artifact(helper_name: str, artifact: Any) -> list[VerifierIssue]:
 ```
 
 This closes the coherence gap from the previous draft: there is exactly one source of truth for output shape (the Pydantic model), and `HelperOutput.description` exists only to brief the drafter on what to expect.
+
+### 5.1 Parent issue types vs detail codes
+
+The closed `VerifierIssueType` enum stays at **18 parent types** (14 original + 4 from PR 0.3 materialization). Helpers and panels frequently want to surface finer-grained conditions ("terminal-value is 85% of EV", "CET1 buffer below minimum", "PoS outside [0,1]"). Those are **detail codes** carried inside the existing parent type, not new enum entries.
+
+```python
+class VerifierIssue(BaseModel):
+    type: VerifierIssueType                       # closed parent enum (18 values)
+    detail_code: str | None = None                # e.g. "tv_pct_high", "cet1_below_minimum"
+    severity: Literal["blocking", "advisory"] = "blocking"
+    helper: str
+    detail: str                                   # human-readable message
+```
+
+Convention: any `block_<name>` identifier appearing in a design doc that is **not** in the closed 18-type enum is a `detail_code` riding on the most appropriate parent type. Examples:
+
+| Design-doc reference | Parent type | detail_code | severity |
+|---|---|---|---|
+| `block_terminal_growth_exceeds_rfr` | `block_terminal_growth` | `g_exceeds_rfr` | blocking |
+| `block_tv_pct_high` | `block_shape` | `tv_pct_high` | advisory |
+| `block_growth_exceeds_discount` (DDM) | `block_terminal_growth` | `g_exceeds_re` | blocking |
+| `block_growth_exceeds_re` (justified mults) | `block_terminal_growth` | `g_exceeds_re` | blocking |
+| `block_growth_exceeds_roe` | `block_shape` | `g_exceeds_roe` | blocking |
+| `block_negative_ebitda_with_multiple` | `block_shape` | `negative_ebitda_with_multiple` | blocking |
+| `block_variant_misapplied` (Altman) | `block_shape` | `variant_misapplied` | blocking |
+| `block_negative_equity` / `block_negative_book_value` | `block_shape` | `negative_equity` | blocking |
+| `block_rating_internal_inconsistency` | `block_shape` | `rating_inconsistent` | blocking |
+| `block_pos_outside_range` | `block_shape` | `pos_outside_range` | blocking |
+| `block_stage_not_in_table` | `block_shape` | `stage_not_in_pos_table` | blocking |
+| `block_cet1_below_minimum` | `block_shape` | `cet1_below_minimum` | advisory |
+| `block_ffo_disclosure_mismatch` | `numeric_inconsistency` | `ffo_disclosure_drift` | advisory |
+| `block_payout_high` | `block_shape` | `affo_payout_high` | advisory |
+| `block_negative_netback` | `block_shape` | `negative_netback` | advisory |
+| `block_rrr_below_one` | `block_shape` | `rrr_below_one` | advisory |
+| `block_combined_ratio_extreme` | `block_shape` | `combined_ratio_extreme` | advisory |
+| `block_adverse_py_development_pattern` | `tombstone` | `adverse_py_development` | blocking |
+| `block_rating_proxy_disclaimer` | `tombstone` | `rating_proxy_disclaimer_missing` | blocking |
+
+Detail-code vocabulary is **open** (snake_case string), but every code used in a helper's verifier hooks must:
+
+1. Appear in the helper's `skills.md` "Common pitfalls" section, OR
+2. Be documented inline in the helper's `MechanicalContract` notes.
+
+Boot-time validation enforces (1) for the 18 helpers on the skills.md list. Other helpers may use detail codes freely; codes are aggregated for telemetry into a separate counter from parent types.
+
+### 5.2 Counting issues for exit gates
+
+Phase exit gates count **parent issue types reachable**, not detail codes. So "Phase 2 exit gate: all 18 parent issue types reachable" stays the right framing; detail-code coverage is reported in a supplementary table and is not gate-blocking.
 
 ---
 

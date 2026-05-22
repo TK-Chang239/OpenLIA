@@ -143,8 +143,8 @@ INTENTIONALLY_UNMAPPED_SECTIONS: dict[str, dict[str, str]] = {
     },
     "supplement": {
         "§1": "Document purpose meta-section",
-        "§14": "Verifier-hook coverage map — review summary, not a PR-buildable item",
-        "§15": "References / bibliography",
+        "§15": "Verifier-hook coverage map — review summary, not a PR-buildable item",
+        "§16": "References / bibliography",
     },
     "sector-modules": {
         "§1": "Document purpose meta-section",

@@ -1367,7 +1367,90 @@ The class handles formatting conventions (number formats by metric type, bold to
 
 ---
 
-## 14. Verifier-hook coverage map
+## 14. Aggregator artifacts — `forensic_panel` and `statement_integrity_panel`
+
+The impl plan PRs 2.5 and 2.6 ship two aggregator artifacts that compose constituent helper outputs into a single drafter-facing panel. Their per-constituent helpers are designed in §8 (Altman), helpers-design §4.18 (Beneish), §4.2 (quality_of_earnings), §4.17 (Piotroski), etc.; the aggregator shape is designed here.
+
+### 14.1 `forensic_panel` (PR 2.6)
+
+```python
+class ForensicPanel(RenderableArtifact):
+    """Composite forensic-quality view: bankruptcy risk + earnings manipulation + accruals quality."""
+    altman: AltmanZArtifact          # from supplement §8 (altman_z_variants)
+    beneish: BeneishMScoreArtifact   # from helpers-design §4.18
+    sloan_accruals: SloanAccrualsView  # projected from quality_of_earnings_panel (helpers-design §4.2)
+    composite_classification: Literal[
+        "no_red_flags", "single_advisory", "multiple_advisory",
+        "single_distress_signal", "multiple_distress_signals"
+    ]
+    composite_score: float            # 0-1; weighted blend documented below
+    narrative: str                    # ~3-5 sentences synthesizing the three sub-views
+    warnings: list[str]
+    data_as_of: date
+```
+
+`composite_classification` decision table:
+
+| Altman | Beneish M | Sloan | Composite |
+|---|---|---|---|
+| safe | low (M < -1.78) | low (< 0.05) | no_red_flags |
+| gray | low | low or moderate | single_advisory |
+| safe or gray | moderate (-1.78 to -1.0) | moderate | single_advisory |
+| any | high (M > -1.0) | moderate or high | multiple_advisory |
+| distress | low | low | single_distress_signal |
+| distress | moderate or high | moderate or high | multiple_distress_signals |
+| safe or gray | low | high (> 0.10) | single_advisory |
+
+`composite_score` formula (advisory only — not a hard verdict):
+```
+composite_score = 0.40 * altman_distress_proximity
+                + 0.35 * beneish_manipulation_proximity
+                + 0.25 * sloan_proximity_to_threshold
+```
+Each sub-score normalized to [0, 1] where 1 = closer to distress / manipulation / low quality. Weights documented as opinionated.
+
+**to_markdown fidelities:**
+- HEADLINE: classification + composite_score in one line (≤ 120 tokens)
+- SUMMARY: classification + per-sub-helper headline numbers (Altman variant + Z, Beneish M, Sloan ratio) + 1-line narrative (≤ 600 tokens)
+- FULL: classification + composite_score + per-sub-helper full output blocks via their own to_markdown(FULL) + 3-5 sentence synthesis narrative (≤ 3000 tokens, hard cap; may require dropping older trend years if exceeded)
+
+### 14.2 `statement_integrity_panel` (PR 2.5)
+
+```python
+class StatementIntegrityPanel(RenderableArtifact):
+    """Composite financial-statement-integrity view: cross-statement reconciliation + accrual quality + Piotroski."""
+    piotroski: PiotroskiArtifact            # from helpers-design §4.17
+    cross_statement_validation: CrossStatementValidationArtifact  # from helpers-design §4.9
+    accrual_quality_view: AccrualQualityView  # projected from quality_of_earnings_panel
+    composite_classification: Literal[
+        "high_integrity", "high_integrity_with_caveats",
+        "moderate_integrity", "low_integrity"
+    ]
+    narrative: str
+    warnings: list[str]
+    data_as_of: date
+```
+
+`composite_classification` rules:
+- `high_integrity`: Piotroski >= 7, no cross-statement discrepancies, Sloan accruals < 0.05
+- `high_integrity_with_caveats`: Piotroski >= 6 with one ≥ -1pt deterioration, OR Sloan 0.05-0.10
+- `moderate_integrity`: Piotroski 4-5, OR Sloan 0.10-0.15, OR a single cross-statement discrepancy
+- `low_integrity`: Piotroski < 4, OR Sloan > 0.15, OR multiple cross-statement discrepancies
+
+No composite numeric score; the classification carries the synthesis. The constituent helpers retain their own scores.
+
+**to_markdown fidelities:** mirror the forensic_panel structure (HEADLINE classification, SUMMARY per-sub-helper headline + 1-line narrative, FULL constituent expansions + synthesis).
+
+### 14.3 Common conventions for aggregator artifacts
+
+1. **Composition, not duplication:** the aggregator stores typed references to constituent artifacts (already materialized by Stage 7a). It does not re-render the underlying numbers; `to_markdown(level)` delegates to each sub-artifact's own renderer.
+2. **Highest-fidelity-wins still applies:** if both the aggregator and a constituent (e.g. `altman` standalone) appear in the section_plan, the higher-fidelity rendering wins; the constituent in the aggregator is replaced by a back-reference per artifact-injection §5.
+3. **Classification is opinionated:** all composite classifications are heuristics documented in the helper's `skills.md`. The narrative must use conditional language ("multiple advisory signals — investigate") rather than verdict language ("avoid this name").
+4. **Artifact IDs:** `forensic_panel`, `statement_integrity_panel`. Both register in `artifact_types.yaml` (PR 0.1).
+
+---
+
+## 15. Verifier-hook coverage map
 
 | Helper | New verifier hook needed? | Existing closed-enum coverage |
 |---|---|---|
@@ -1389,7 +1472,7 @@ All new helpers fit within the existing 14 + 4 closed verifier issue enum (14 fr
 
 ---
 
-## 15. References
+## 16. References
 
 - Altman, E. (1968). "Financial Ratios, Discriminant Analysis, and the Prediction of Corporate Bankruptcy"
 - Altman, E. (1983, 1995, 2017). Z-variant publications including emerging-markets adjustment

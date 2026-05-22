@@ -41,7 +41,7 @@ Hard prerequisite for everything else. Phase 0 exit gate (smoke test on MSFT) mu
 - [ ] **PR 2.9** — saas_kpi_panel repurpose (task #11)
 - [ ] **PR 2.10** — Workbook builder + remaining outputs (task #8)
 - [ ] **PR 2.11** — Risk / macro helpers — drawdown_panel + yield_curve_shape (helpers-design §5.1, §5.2)
-- [ ] **Phase 2 exit gate** — MSFT, NVDA, CAT, X all produce complete reports; all 14 verifier issue types reachable; tool-overhead ≤ 15k tokens
+- [ ] **Phase 2 exit gate** — MSFT, NVDA, CAT, X all produce complete reports; all 18 verifier parent issue types reachable (detail codes per schema-and-skills §5.1 tracked supplementally); tool-overhead ≤ 15k tokens
 
 ---
 
@@ -80,9 +80,9 @@ After Phase 3 closes:
 - [ ] 4 Phase-2 tickers on `stock_initiation_v2` = 29 reports total
 - [ ] No ticker fails to produce a complete report
 - [ ] p95 token cost ≤ 1.5× per-phase budget
-- [ ] Final helper count target: ~178 active helpers
+- [ ] Final helper count target: ~120 active helpers (rationalized from the ~178 in helper-stack §9 — see impl plan §16 for the per-phase breakdown)
 - [ ] Final skill doc count: 18 skill docs (one per schema-and-skills §6 entry)
-- [ ] Final verifier issue type count: 18 (14 existing + 4 from PR 0.3)
+- [ ] Final verifier parent issue type count: 18 (14 existing + 4 from PR 0.3); detail-code count machine-tabulated separately, no closed-set invariant
 
 ---
 
