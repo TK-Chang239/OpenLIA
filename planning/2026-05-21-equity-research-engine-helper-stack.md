@@ -333,6 +333,8 @@ Organized by analytic concern. Every helper registered with `HelperSchema` so th
 
 ## 6. Active task list
 
+**Wave 0 — Foundation + existing-helper rationalization:**
+
 | # | Task | Status | Depends on |
 |---|---|---|---|
 | 1 | Build `comparables.py` library helper | pending | — |
@@ -340,10 +342,33 @@ Organized by analytic concern. Every helper registered with `HelperSchema` so th
 | 3 | FinanceToolkit integration as v2.2 helper backend (incl. `ratio_calculator` deprecation) | pending | #2 |
 | 4 | statsmodels integration (narrow scope) as v2.2 helper backend | pending | — |
 | 5 | claude-cookbooks pattern adoption (PDF multimodal, xlsx, NLP helpers) | pending | — (benefits from #2) |
-| 6 | DCF deliverable + valuation visual helpers bundle | pending | #1 |
+| 6 | DCF deliverable + valuation visual helpers bundle | pending | #1, #12 |
 | 7 | Business quality + statement integrity helpers bundle (incl. `budget_variance` + `business_investment` deprecations) | pending | #2, #3 |
 | 8 | Structured multi-sheet workbook builder + remaining output helpers | pending | #6, #7 |
 | 11 | Repurpose `saas_metrics.py` → `saas_kpi_panel` (quarterly disclosed metrics) | pending | — |
+
+**Wave 1 — Institutional valuation + sector breadth (from external audit, 2026-05-21):**
+
+| # | Task | Status | Depends on |
+|---|---|---|---|
+| 12 | DCF engine institutional mechanics + cost-of-capital build (CAPM/Hamada/CRP/mid-year/McKinsey KVD) | pending | — |
+| 13 | Alternative valuation methodologies (DDM family + Justified Multiples + SOTP + RI for financials) | pending | #12 |
+| 14 | Decision layer — price target blender + ETR + risk/reward + rating bands | pending | #12, #13 |
+| 15 | Credit + solvency expansion + Altman variants + 5-step DuPont | pending | — |
+| 16 | Banks sector module | pending | #2 |
+| 17 | REITs sector module | pending | #2 |
+| 18 | Pharma / biotech rNPV sector module | pending | #2, #5 |
+| 19 | Energy / E&P sector module | pending | #2, #5 |
+| 20 | Insurance sector module (P&C + Life) | pending | #2, #5 |
+| 21 | Forensic additions + dividend safety analysis | pending | #2, #4, #7 |
+
+**Future (parked):**
+
+| # | Task | Status | Depends on |
+|---|---|---|---|
+| 9 | [FUTURE] Qualitative framework helpers + sector research helpers | parked | post-Wave-1 |
+| 10 | [FUTURE] Verifier process-quality enforcement extensions | parked | post-Wave-1 |
+| 22 | [FUTURE] Wave 2 sector modules (Mining, Retail, Telecom, Semis, Airlines) | parked | post-Wave-1 |
 
 ### 6.1 Dependency graph
 
@@ -493,6 +518,8 @@ To prevent scope creep and keep the helper catalog tight, these were explicitly 
 
 When all active tasks (#1-#8) land:
 
+**Wave 0 (foundation):**
+
 | Source | Helper count |
 |---|---|
 | Existing in code (PR #151), after §4.1 rationalization | 4 kept (DCF, forecast_builder, chart_builder, excel_builder) + 1 repurposed (saas_kpi_panel via task #11). `ratio_calculator`, `budget_variance`, `business_investment` deprecated. |
@@ -503,7 +530,30 @@ When all active tasks (#1-#8) land:
 | Custom valuation deliverables (#1, #6) | 7 helpers |
 | Custom business quality + integrity (#7) | 20 helpers |
 | Custom output + risk/macro (#8) | 4 helpers (incl. WorkbookTemplate class) |
-| **Total** | **~69 helpers** |
+| **Wave 0 subtotal** | **~69 helpers** |
+
+**Wave 1 (institutional valuation + sector breadth, from audit):**
+
+| Source | Helper count |
+|---|---|
+| DCF engine + cost-of-capital (#12) | 12 helpers (engine extensions + CAPM/Hamada/cost-of-debt/CRP/normalized-earnings) |
+| Alternative valuation (#13) | 11 helpers (DDM family ×4 + justified multiples ×5 + SOTP + RI) |
+| Decision layer (#14) | 5 helpers (price target blender, ETR, risk/reward, implied upside/downside, rating bands) |
+| Credit + Altman + DuPont (#15) | 11 helpers (4 Altman variants + interest coverage suite + net debt/EBITDA + fixed charge + defensive interval + debt maturity wall + 5-step DuPont) |
+| Banks (#16) | 14 helpers |
+| REITs (#17) | 13 helpers |
+| Pharma rNPV (#18) | 5 helpers |
+| Energy / E&P (#19) | 14 helpers |
+| Insurance (#20) | 11 helpers (P&C + Life) |
+| Forensic + dividend safety (#21) | 10 helpers (Dechow-Dichev + channel stuffing + deferred revenue + dividend coverage + safety + growth + payout multi-base + net buyback + sustainable growth + aristocrats flag) |
+| **Wave 1 subtotal** | **~106 helpers** |
+
+**Combined Wave 0 + Wave 1 active: ~175 helpers.**
+
+**Wave 2 future (#22): ~32 sector helpers** (Mining 7 + Retail 7 + Telecom 6 + Semis 4 + Airlines 8).
+**Other future (#9 + #10): ~18 qualitative-framework + sector-research helpers + ~7 verifier issue types.**
+
+With three-layer exposure, the LLM never sees more than ~10-15 helper schemas per run; planner picks from the catalog based on prompt + template + capability manifest. The scale of the catalog doesn't inflate per-run context cost.
 
 With three-layer exposure, the LLM never sees more than ~10-15 helper schemas per run; the planner picks based on prompt + template + capability manifest.
 
@@ -518,7 +568,40 @@ With three-layer exposure, the LLM never sees more than ~10-15 helper schemas pe
 
 ---
 
-## 11. References
+## 11. External audit expansion (2026-05-21, post-initial-design)
+
+After initial commit, an external audit identified three major gap areas:
+
+1. **DCF projection engine plumbing** (CAPM build, Hamada relevering, mid-year convention, McKinsey Key Value Driver terminal value)
+2. **Sector-specific KPI modules** (banks, REITs, insurance, E&P, pharma, mining, retail, airlines, telecom, semis) — required for credible coverage of ~40% of the S&P 500
+3. **Decision layer** (price target blending, expected total return, risk/reward, rating bands) — the missing output that converts analysis into a recommendation
+
+Adopted in Wave 1 (tasks #12-#21):
+- All of #1 (DCF mechanics)
+- All of #3 (decision layer)
+- 5 Wave 1 sector modules: Banks, REITs, Pharma rNPV, Energy/E&P, Insurance (audit's Wave 1)
+- DDM family + justified multiples + SOTP (promoted from conditional)
+- Altman Z variants (Z, Z', Z", EM Z") with auto-select
+- Credit + solvency expansion
+- 5-step DuPont
+- Dechow-Dichev accrual quality + channel stuffing + deferred revenue
+- Dividend safety analysis
+
+Deferred to Wave 2 (task #22):
+- Mining, Retail, Telecom, Semis, Airlines sector modules
+
+Pushed back on (kept earlier cut decision):
+- Sortino / Treynor / Information Ratio / Calmar / Modigliani M² / upside-downside capture — portfolio metrics; single-name equity research rarely cites these. Reconsider only if OpenLIA spins up a portfolio department.
+- Merton/KMV Distance to Default — useful for credit-sensitive coverage; not table-stakes for equity research.
+- Build-up cost of equity — private/illiquid only; not in OpenLIA's coverage scope.
+- BCG growth-share matrix, sector rotation — decorative; LLM narrates equivalents without a forcing function.
+
+Audit also confirmed several earlier decisions:
+- IQR 1.5× outlier filter in comparables: keep
+- Beneish M-score threshold −1.78 for 8-variable model: keep
+- NOPAT calculation: clarified via `use_adjusted_ebit` flag in task #12
+
+## 12. References
 
 - v2.2 design spec: `docs/superpowers/specs/2026-05-21-equity-research-v2.2-design.md`
 - v2.2 implementation plan: `docs/superpowers/plans/2026-05-21-equity-research-v2.2.md`
