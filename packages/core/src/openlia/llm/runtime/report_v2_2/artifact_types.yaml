@@ -144,3 +144,187 @@ artifact_types:
       summary: "Sheet list with row counts and column headers"
       full: "Full workbook (raw xlsx bytes, base64-encoded for transport)"
     depends_on: []
+
+  # -----------------------------------------------------------------------
+  # EODHD adapter outputs (18 helpers, PR 1.1)
+  # -----------------------------------------------------------------------
+
+  - name: eodhd_fundamentals_output
+    description: >
+      Full fundamentals snapshot from EODHD: general company info, earnings history,
+      financials (balance sheet, income statement, cash flow), highlights, valuation,
+      and analyst ratings for a single ticker.
+    fidelity:
+      headline: "Ticker fundamentals snapshot (market cap, PE, EPS, sector)"
+      summary: "Key highlights: market cap, P/E, EPS, revenue, profit margin, analyst rating"
+      full: "Complete fundamentals JSON: General, Highlights, Valuation, Financials, Earnings"
+    depends_on: []
+
+  - name: eodhd_balance_sheet_output
+    description: >
+      Quarterly and/or annual balance sheet time series from EODHD for a single ticker.
+      Includes assets, liabilities, equity line items per period.
+    fidelity:
+      headline: "Balance sheet: latest total assets, total liabilities, equity"
+      summary: "Last 4 quarters: total assets, total liabilities, total equity"
+      full: "Full quarterly and annual balance sheet series with all line items"
+    depends_on: []
+
+  - name: eodhd_income_statement_output
+    description: >
+      Quarterly and/or annual income statement time series from EODHD for a single ticker.
+      Includes revenue, gross profit, operating income, net income, EPS per period.
+    fidelity:
+      headline: "Income statement: latest revenue, net income, EPS"
+      summary: "Last 4 quarters: revenue, gross profit, operating income, net income"
+      full: "Full quarterly and annual income statement series with all line items"
+    depends_on: []
+
+  - name: eodhd_cash_flow_output
+    description: >
+      Quarterly and/or annual cash flow statement time series from EODHD for a single ticker.
+      Includes operating, investing, financing cash flows and free cash flow per period.
+    fidelity:
+      headline: "Cash flow: latest operating CF, free CF"
+      summary: "Last 4 quarters: operating CF, investing CF, financing CF, free CF"
+      full: "Full quarterly and annual cash flow series with all line items"
+    depends_on: []
+
+  - name: eodhd_eod_prices_output
+    description: >
+      End-of-day OHLCV price series from EODHD for a single ticker over a date range.
+      Includes open, high, low, close, adjusted close, and volume per trading day.
+    fidelity:
+      headline: "EOD prices: date range, latest close, N trading days"
+      summary: "First and last date, latest close, adjusted close, average volume"
+      full: "Full OHLCV series with adjusted close per trading day"
+    depends_on: []
+
+  - name: eodhd_intraday_output
+    description: >
+      Intraday OHLCV price series from EODHD for a single ticker at 1m, 5m, or 1h intervals.
+    fidelity:
+      headline: "Intraday prices: interval, date range, N bars"
+      summary: "Interval, date range, latest bar OHLCV"
+      full: "Full intraday OHLCV series for the requested interval and period"
+    depends_on: []
+
+  - name: eodhd_real_time_quote_output
+    description: >
+      Live or last-trade quote from EODHD for a single ticker.
+      Includes last price, open, high, low, volume, change, and percent change.
+    fidelity:
+      headline: "Live quote: last price, change %, volume"
+      summary: "Last price, open, high, low, volume, change, percent change"
+      full: "Full live quote record with all fields"
+    depends_on: []
+
+  - name: eodhd_dividends_output
+    description: >
+      Historical dividend payment history from EODHD for a single ticker.
+      Includes payment date, declaration date, record date, ex-dividend date, and amount.
+    fidelity:
+      headline: "Dividends: N payments, latest dividend $X"
+      summary: "Last 4 dividend payments: date, amount, currency"
+      full: "Full dividend history with all dates and amounts"
+    depends_on: []
+
+  - name: eodhd_splits_output
+    description: >
+      Historical stock split history from EODHD for a single ticker.
+      Includes split date and split ratio.
+    fidelity:
+      headline: "Splits: N splits, latest ratio X:Y"
+      summary: "All splits: date and ratio"
+      full: "Full split history with dates and ratios"
+    depends_on: []
+
+  - name: eodhd_market_cap_history_output
+    description: >
+      Historical market capitalization series from EODHD for a single ticker.
+      Daily or monthly market cap in USD over a date range.
+    fidelity:
+      headline: "Market cap history: latest $X, date range"
+      summary: "Latest, min, max market cap over the period"
+      full: "Full daily market cap series over the requested date range"
+    depends_on: []
+
+  - name: eodhd_insider_transactions_output
+    description: >
+      Insider trading transactions from EODHD for a single ticker.
+      Includes transaction date, insider name, transaction type, shares, and value.
+    fidelity:
+      headline: "Insider transactions: N trades, latest transaction type"
+      summary: "Last 5 insider transactions: date, insider, type, shares, value"
+      full: "Full insider transaction history for the ticker"
+    depends_on: []
+
+  - name: eodhd_news_output
+    description: >
+      Recent financial news articles from EODHD for a single ticker.
+      Includes title, link, publication date, and summary text.
+    fidelity:
+      headline: "News: N articles, latest headline"
+      summary: "Last 5 article titles and dates"
+      full: "Full article list with titles, dates, links, and summaries"
+    depends_on: []
+
+  - name: eodhd_sentiment_output
+    description: >
+      Sentiment scores from EODHD for a single ticker over a date range.
+      Includes normalized sentiment score and count per date.
+    fidelity:
+      headline: "Sentiment: latest score, N-day trend direction"
+      summary: "Last 5 sentiment scores with dates"
+      full: "Full sentiment series over the requested date range"
+    depends_on: []
+
+  - name: eodhd_company_info_output
+    description: >
+      Company profile and general information from EODHD for a single ticker.
+      Includes name, description, sector, industry, exchange, country, and employee count.
+    fidelity:
+      headline: "Company: name, sector, exchange, country"
+      summary: "Name, description excerpt, sector, industry, exchange, country, employees"
+      full: "Full company profile including address, fiscal year end, IPO date"
+    depends_on: []
+
+  - name: eodhd_earnings_history_output
+    description: >
+      Historical EPS/earnings actuals and estimates from EODHD for a single ticker.
+      Includes report date, EPS actual, EPS estimate, and surprise per quarter.
+    fidelity:
+      headline: "Earnings history: latest EPS actual vs estimate, surprise %"
+      summary: "Last 4 quarters: report date, EPS actual, estimate, surprise"
+      full: "Full earnings history with all quarterly actuals and estimates"
+    depends_on: []
+
+  - name: eodhd_upcoming_earnings_output
+    description: >
+      Upcoming earnings calendar from EODHD for a single ticker or date range.
+      Includes ticker, report date, EPS estimate, and revenue estimate.
+    fidelity:
+      headline: "Upcoming earnings: next report date, EPS estimate"
+      summary: "Next N earnings events: ticker, date, EPS estimate, revenue estimate"
+      full: "Full upcoming earnings calendar for the ticker or date range"
+    depends_on: []
+
+  - name: eodhd_technical_indicators_output
+    description: >
+      Technical indicator values from EODHD for a single ticker and function (SMA, EMA, RSI, MACD, etc.).
+      Returns a time series of indicator values for the requested period.
+    fidelity:
+      headline: "Technical indicator: function, period, latest value"
+      summary: "Last 5 indicator values with dates"
+      full: "Full indicator time series over the requested date range"
+    depends_on: []
+
+  - name: eodhd_macro_indicator_output
+    description: >
+      Macroeconomic indicator series from EODHD for a country (GDP, CPI, unemployment, etc.).
+      Returns annual or quarterly time series of the requested indicator.
+    fidelity:
+      headline: "Macro indicator: country, indicator, latest value and year"
+      summary: "Last 5 data points: date, value"
+      full: "Full macro indicator time series for the country and indicator"
+    depends_on: []
