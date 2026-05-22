@@ -1075,3 +1075,20 @@ artifact_types:
       full: "All multiples with full stats by window, percentile ranks, z-scores, sector overlay, forward/trailing spread, NM flags, warnings"
     depends_on:
       - eodhd_market_cap_history_output
+
+  # -----------------------------------------------------------------------
+  # Output bundle helpers (PR 2.10)
+  # -----------------------------------------------------------------------
+
+  - name: waterfall_chart_output
+    description: >
+      Multi-step bridge (waterfall) chart visualizing how a starting value
+      is built up or torn down through a series of labeled driver deltas to
+      reach an ending value. Classic uses: revenue bridge, EPS walk, NI
+      decomposition. Produces Plotly JSON chart and a markdown table with
+      cumulative running totals.
+    fidelity:
+      headline: "Waterfall bridge: starting X -> ending Y (total change Z, N drivers)"
+      summary: "Starting value, ending value, total change %, positive driver count, negative driver count, markdown table"
+      full: "Full Plotly JSON chart, markdown table with all steps and running totals, positive/negative driver breakdown"
+    depends_on: []

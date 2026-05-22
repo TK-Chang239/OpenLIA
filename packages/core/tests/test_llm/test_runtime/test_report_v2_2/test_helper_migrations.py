@@ -185,8 +185,9 @@ def test_artifact_type_registry_count() -> None:
     # + 3 signals (PR 2.8): insider_signal_output, moving_average_panel_output,
     #   historical_multiple_trends_output
     # + 1 SaaS KPI panel (PR 2.9): saas_kpi_panel_output
-    # = 93
-    assert len(all_types) == 93, f"Expected 93 artifact types, got {len(all_types)}: {names}"
+    # + 1 output bundle (PR 2.10): waterfall_chart_output
+    # = 94
+    assert len(all_types) == 94, f"Expected 94 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -300,6 +301,8 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "historical_multiple_trends_output",
         # SaaS KPI panel (PR 2.9)
         "saas_kpi_panel_output",
+        # Output bundle (PR 2.10)
+        "waterfall_chart_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
