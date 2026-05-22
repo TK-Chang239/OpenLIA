@@ -85,6 +85,7 @@ from . import (  # noqa: E402, F401
     rating_band_assigner,
     ratio_calculator,
     reverse_dcf,
+    risk_macro,
     risk_reward_calculator,
     saas_kpi_panel,
     saas_metrics,

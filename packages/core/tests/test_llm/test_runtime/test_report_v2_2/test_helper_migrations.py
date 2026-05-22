@@ -186,8 +186,10 @@ def test_artifact_type_registry_count() -> None:
     #   historical_multiple_trends_output
     # + 1 SaaS KPI panel (PR 2.9): saas_kpi_panel_output
     # + 1 output bundle (PR 2.10): waterfall_chart_output
-    # = 94
-    assert len(all_types) == 94, f"Expected 94 artifact types, got {len(all_types)}: {names}"
+    # + 3 risk/macro (PR 2.11): drawdown_panel_output, yield_curve_shape_output,
+    #   commodity_exposure_output
+    # = 97
+    assert len(all_types) == 97, f"Expected 97 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -303,6 +305,10 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "saas_kpi_panel_output",
         # Output bundle (PR 2.10)
         "waterfall_chart_output",
+        # Risk / macro helpers (PR 2.11)
+        "drawdown_panel_output",
+        "yield_curve_shape_output",
+        "commodity_exposure_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (
