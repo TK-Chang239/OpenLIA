@@ -2,6 +2,12 @@
 
 Imports the implementation from report_v2 (no duplication) and declares a
 HelperSchema per the v2.2 four-tier contract.
+
+DEPRECATED as of v0.2.0. Slated for removal in a follow-up cleanup PR after 2.5.
+This wrapper remains registered for backward compatibility.
+There is no direct PR 2.5 replacement; budget variance is not part of the equity
+research business quality bundle. Callers using this for cost-structure analysis
+should migrate to common_size_statements or capital_allocation_history.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ from openlia.llm.runtime.report_v2_2.tools.library_helpers import register_helpe
 
 _SCHEMA = HelperSchema(
     version="0.1.0",
+    deprecated_at_version="0.2.0",
     directory=DirectoryEntry(
         name="budget_variance",
         category=Category.STATEMENT_INTEGRITY,

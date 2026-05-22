@@ -177,8 +177,9 @@ def test_artifact_type_registry_count() -> None:
     # + 6 decision layer (PR 2.4): price_target_blended, expected_total_return_output,
     #   risk_reward_output, implied_upside_downside_output, rating_assignment,
     #   football_field_chart_output
-    # = 62
-    assert len(all_types) == 62, f"Expected 62 artifact types, got {len(all_types)}: {names}"
+    # + 20 business quality bundle (PR 2.5)
+    # = 82
+    assert len(all_types) == 82, f"Expected 82 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -256,6 +257,27 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "implied_upside_downside_output",
         "rating_assignment",
         "football_field_chart_output",
+        # Business quality bundle (PR 2.5)
+        "roic_panel_output",
+        "quality_of_earnings_output",
+        "capital_allocation_history_output",
+        "earnings_surprise_tracker_output",
+        "analyst_revision_momentum_output",
+        "common_size_statements_output",
+        "fcf_conversion_output",
+        "total_shareholder_yield_output",
+        "cross_statement_validation_output",
+        "one_time_item_output",
+        "organic_vs_inorganic_growth_output",
+        "currency_neutral_growth_output",
+        "margin_trajectory_output",
+        "operating_leverage_output",
+        "sbc_intensity_output",
+        "cap_table_dilution_output",
+        "piotroski_f_score_output",
+        "cash_conversion_cycle_output",
+        "sustainable_growth_rate_output",
+        "forensic_panel_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (

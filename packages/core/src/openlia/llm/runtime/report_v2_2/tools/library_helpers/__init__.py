@@ -63,6 +63,7 @@ def reset_helpers_for_tests() -> None:
 from . import (  # noqa: E402, F401
     budget_variance,
     business_investment,
+    business_quality,
     chart_builder,
     comparables_run,
     cost_of_capital_builder,
@@ -79,8 +80,8 @@ from . import (  # noqa: E402, F401
     implied_upside_downside,
     justified_multiples,
     price_target_blender,
-    ratio_calculator,
     rating_band_assigner,
+    ratio_calculator,
     reverse_dcf,
     risk_reward_calculator,
     saas_metrics,
