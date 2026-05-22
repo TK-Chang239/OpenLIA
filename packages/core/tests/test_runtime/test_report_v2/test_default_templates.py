@@ -1,31 +1,42 @@
-import pytest
 from pathlib import Path
+
+import pytest
 from openlia.llm.runtime.report_v2.template_v2.loader_v2 import load_template_v2
 
 TEMPLATE_DIR = (
     Path(__file__).parent.parent.parent.parent
-    / "src" / "openlia" / "llm" / "runtime" / "report_v2" / "templates"
+    / "src"
+    / "openlia"
+    / "llm"
+    / "runtime"
+    / "report_v2"
+    / "templates"
 )
 
 
-@pytest.mark.parametrize("filename,expected_report_type", [
-    ("stock_research_v2.yaml", "equity_research"),
-    ("stock_initiation_v2.yaml", "equity_research"),
-    ("sector_research_v2.yaml", "sector_research"),
-])
+@pytest.mark.parametrize(
+    "filename,expected_report_type",
+    [
+        ("stock_research_v2.yaml", "equity_research"),
+        ("stock_initiation_v2.yaml", "equity_research"),
+        ("sector_research_v2.yaml", "sector_research"),
+    ],
+)
 def test_default_templates_load_without_notices(filename, expected_report_type):
     raw = (TEMPLATE_DIR / filename).read_text()
     spec, notices = load_template_v2(raw, fmt="yaml")
     assert spec.report_type == expected_report_type
     # Default templates should not have any unknown_key or reserved_key notices
     structural_notices = [n for n in notices if n.kind in ("reserved_key", "unknown_key")]
-    assert structural_notices == [], (
-        f"{filename} produced unexpected notices: {structural_notices}"
-    )
+    assert structural_notices == [], f"{filename} produced unexpected notices: {structural_notices}"
 
 
 def test_all_three_templates_have_at_least_one_section():
-    for filename in ("stock_research_v2.yaml", "stock_initiation_v2.yaml", "sector_research_v2.yaml"):
+    for filename in (
+        "stock_research_v2.yaml",
+        "stock_initiation_v2.yaml",
+        "sector_research_v2.yaml",
+    ):
         raw = (TEMPLATE_DIR / filename).read_text()
         spec, _ = load_template_v2(raw, fmt="yaml")
         assert len(spec.sections) >= 1

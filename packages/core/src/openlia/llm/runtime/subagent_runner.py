@@ -100,7 +100,7 @@ def _framework_summary(framework: dict[str, Any]) -> str:
     rather than emitting empty arguments. Earlier versions returned only
     `<id>: <title>` pairs; the planner then truncated mid-tool-call on
     every run because the prompt didn't give it enough substance to
-    anchor a 14-section plan."""
+    anchor the plan for len(template.sections) sections."""
     sections = framework.get("sections", []) or []
     lines: list[str] = ["Sections (render order):"]
     for s in sections:
@@ -374,10 +374,11 @@ class SubagentReportRunner:
         editor = EditorClient(
             provider=flagship,
             repair_budget=1,
-            # 14 sections + cover + rail + citations easily exceeds 8192
-            # tokens in JSON. iter9 hit the cap and lost cover.title/etc,
-            # failing strict validation. 32768 gives substantial headroom
-            # for the full report plus model reasoning before tool call.
+            # Templates with many sections, plus cover + rail + citations,
+            # can easily exceed 8192 tokens in JSON. iter9 hit the cap and
+            # lost cover.title/etc, failing strict validation. 32768 gives
+            # substantial headroom for the full report plus model reasoning
+            # before tool call.
             max_output_tokens=32768,
             on_done=_editor_on_done,
         )
