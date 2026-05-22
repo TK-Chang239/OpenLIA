@@ -103,6 +103,19 @@ artifact_types:
     depends_on: []
     deprecated_at_pr: "2.9"
 
+  - name: saas_kpi_panel_output
+    description: >
+      Quarterly SaaS KPI synthesis panel: ARR (YoY/QoQ growth), NRR, GRR,
+      implied churn rate, Magic Number (net_new_ARR / S&M_prior_Q), RPO,
+      Billings, CAC payback period, LTV/CAC, customer concentration, Rule of 40,
+      composite SaaS health score, disclosure completeness, and warnings.
+      Supersedes saas_metrics_output (deprecated at PR 2.9).
+    fidelity:
+      headline: "ARR $X (YoY +Y%), NRR Z%, Rule of 40: W, Magic Number: V"
+      summary: "ARR growth, NRR, GRR, Magic Number, LTV:CAC, Rule of 40, health score"
+      full: "All KPIs with classifications, thresholds, disclosure flags, warnings, and narrative"
+    depends_on: []
+
   - name: budget_variance_output
     description: >
       Budget variance analysis with materiality filtering and department/category
