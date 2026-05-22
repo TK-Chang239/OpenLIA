@@ -250,16 +250,18 @@ class SimpleStrandSubagent:
             cid = str(c.get("id") or f"{getattr(strand, 'id', 'cite')}-{len(citations)}")
             title = c.get("title") or c.get("source") or "Untitled source"
             url = c.get("url")
-            citations.append({
-                "id": cid,
-                "source_type": "internal_model",
-                "tool": None,
-                "url": url,
-                "title": str(title),
-                "retrieved_at": now_iso,
-                "snippet": c.get("snippet"),
-                "served_from_cache": False,
-            })
+            citations.append(
+                {
+                    "id": cid,
+                    "source_type": "internal_model",
+                    "tool": None,
+                    "url": url,
+                    "title": str(title),
+                    "retrieved_at": now_iso,
+                    "snippet": c.get("snippet"),
+                    "served_from_cache": False,
+                }
+            )
 
         return {
             "findings": findings,
@@ -286,12 +288,8 @@ def _build_provider_from_env() -> LLMProvider:
 
     if kind == "anthropic" or (kind is None and anthropic_key):
         if not anthropic_key:
-            raise RuntimeError(
-                "OPENLIA_V2_LLM_KIND=anthropic but ANTHROPIC_API_KEY is unset"
-            )
-        model = os.environ.get(
-            "OPENLIA_V2_ANTHROPIC_MODEL", "claude-sonnet-4-6"
-        )
+            raise RuntimeError("OPENLIA_V2_LLM_KIND=anthropic but ANTHROPIC_API_KEY is unset")
+        model = os.environ.get("OPENLIA_V2_ANTHROPIC_MODEL", "claude-sonnet-4-6")
         return build_adapter(
             kind="anthropic",
             credentials=ProviderCredentials(api_key=anthropic_key, base_url=None),
@@ -355,16 +353,19 @@ def make_v2_runner_stage_factory(
             drafter=section_drafter,
             section_directives={},
         )
+
+        # The Planner is constructed fresh per-run inside RunnerV2._stage_planner_v2_2()
+        # using the live ticker + template sections from that run's composer_inputs and
+        # template_spec. We only inject the LLMProvider here (stateless request-maker).
         return RunnerV2(
             clarifier=Clarifier(llm),
             research_planner=ResearchPlanner(llm),
-            strand_dispatcher=StrandDispatcher(
-                SimpleStrandSubagent(llm), max_workers=4
-            ),
+            strand_dispatcher=StrandDispatcher(SimpleStrandSubagent(llm), max_workers=4),
             model_planner=ModelPlanner(llm),
             model_builder=ModelBuilder(llm, max_workers=2),
             section_drafter=section_drafter,
             verifier=verifier,
+            planner_v2_2_llm=provider,
         )
 
     return _factory

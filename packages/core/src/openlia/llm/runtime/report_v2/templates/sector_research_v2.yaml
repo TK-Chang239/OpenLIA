@@ -12,6 +12,13 @@ composer_inputs:
 
 required_artifacts: []
 
+rail:
+  required_quick_stats: null
+
+threading:
+  summary_word_cap: 200
+  facts_cap: 5
+
 sections:
   - id: industry_primer
     name: "Industry Primer"
@@ -20,6 +27,9 @@ sections:
       Cover TAM, growth rate, and the major structural forces shaping
       the industry. Preferred exhibits: a table for TAM/SAM/SOM and
       a pie or treemap for segment breakdown.
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: key_drivers
     name: "Key Drivers and Trends"
@@ -28,6 +38,9 @@ sections:
       will most influence performance over the next twelve to thirty-six
       months. Distinguish cyclical from secular trends.
     depends_on: [industry_primer]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: competitive_landscape
     name: "Competitive Landscape"
@@ -36,6 +49,9 @@ sections:
       position. Highlight consolidation dynamics, new entrants, and
       barriers to entry. Use a ranked table or treemap for market share.
     depends_on: [industry_primer]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80
 
   - id: sector_theses
     name: "Sector Theses"
@@ -46,3 +62,6 @@ sections:
       which player types benefit most. Attribute all buy/hold/sell
       language to cited analyst sources.
     depends_on: [key_drivers, competitive_landscape]
+    min_words: 200
+    tolerance_pct: 20
+    expand_below_pct: 80

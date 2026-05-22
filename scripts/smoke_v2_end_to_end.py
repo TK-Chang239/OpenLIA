@@ -88,6 +88,7 @@ def _seed_user(session_factory) -> None:
 
 def main() -> int:
     _load_dotenv()
+    ticker = (sys.argv[1] if len(sys.argv) > 1 else "AAPL").upper()
 
     # Force the v2 factory to use a deterministic provider for the smoke run.
     # Anthropic is preferred (project's primary). Toggle via
@@ -116,15 +117,15 @@ def main() -> int:
 
     payload = {
         "user_input": (
-            "Generate an equity research report on AAPL covering the"
+            f"Generate an equity research report on {ticker} covering the"
             " investment thesis, recent developments, financials, valuation,"
             " and key risks."
         ),
         "report_template_id": "stock_research_v2",
-        "composer_inputs": {"ticker": "AAPL"},
+        "composer_inputs": {"ticker": ticker},
     }
 
-    print(f"smoke: starting v2 run at {datetime.now(UTC).isoformat()}", flush=True)
+    print(f"smoke: starting v2 run for {ticker} at {datetime.now(UTC).isoformat()}", flush=True)
     started = time.monotonic()
     resp = client.post(
         "/api/departments/equity-research/v2/report",

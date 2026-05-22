@@ -1,5 +1,6 @@
 .openlia-smoke.db*
 .smoke_v2.db*
+.smoke_runs/
 .claude/settings.json
 .claude/settings.local.json
 

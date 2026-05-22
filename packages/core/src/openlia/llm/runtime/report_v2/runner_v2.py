@@ -12,10 +12,32 @@ the server's route handler. This module's only contract is the event
 stream.
 
 See docs/superpowers/specs/2026-05-21-equity-research-v2.2-design.md §2.
+
+v2.2 extension: if ``planner_v2_2_llm`` is injected at construction, two
+extra stages are activated:
+
+  Stage 5b — PLANNER_V2_2: constructs a fresh ``Planner`` using the
+      per-run ticker (from ``composer_inputs``) and template sections
+      (from ``template_spec``), calls ``planner.aplan()`` (async, no
+      deadlock risk), and stores the resulting ``PlannerOutput``.
+
+  Stage 7a — MATERIALIZE: resolves each ``HelperInvocation`` in the
+      PlannerOutput to a registered helper, invokes it, collects artifacts
+      into a dict, runs ``resolve_section_plan`` + ``materialize()``, and
+      stores the resulting ``MaterializedReport`` for Stage 7b.
+
+When ``planner_v2_2_llm is None`` both extra stages are silently skipped
+so existing v2 pipelines continue to work without change.
+
+The Planner is constructed fresh per-run (not stored on the RunnerV2
+instance) so no per-run state (ticker, template sections) leaks between
+concurrent reports.
 """
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -57,7 +79,9 @@ class PipelineStage(StrEnum):
     RESEARCH_PLAN = "research_plan"
     GATHER = "gather"
     MODEL_PLAN = "model_plan"
+    PLANNER_V2_2 = "stage_5b_planner_v2_2"
     MODEL_BUILD = "model_build"
+    MATERIALIZE = "stage_7a_materialize"
     DRAFT = "draft"
     VERIFY = "verify"
     ASSEMBLE = "assemble"
@@ -120,9 +144,7 @@ class Failed:
     reason: str
 
 
-RunEvent = (
-    StageStarted | StageCompleted | ClarifierPaused | Completed | Failed
-)
+RunEvent = StageStarted | StageCompleted | ClarifierPaused | Completed | Failed
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +163,15 @@ class RunnerV2:
     All stage fields default to None so the existing skeleton tests
     (RunnerV2() with no args) keep working; execute() raises a clear error
     if any required stage is missing when invoked.
+
+    Optional v2.2 extension:
+        planner_v2_2_llm: An ``LLMProvider`` used to construct a fresh
+            ``Planner`` per-run. When set, Stage 5b (helper selection) and
+            Stage 7a (materialization) are activated. When None (default),
+            both stages are silently skipped for full backwards compatibility
+            with existing v2 tests and routes. The Planner is constructed
+            inside ``_stage_planner_v2_2()`` using the per-run ticker and
+            template sections — no shared mutable state across requests.
     """
 
     clarifier: Clarifier | None = None
@@ -150,6 +181,10 @@ class RunnerV2:
     model_builder: ModelBuilder | None = None
     section_drafter: SectionDrafter | None = None
     verifier: Verifier | None = None
+    # v2.2 extension: an LLMProvider used to construct a fresh Planner per-run.
+    # Typed Any to avoid a hard import of report_v2_2 in this module (keeps the
+    # v2 package self-contained). When None, Stage 5b + 7a are silently skipped.
+    planner_v2_2_llm: Any | None = None
 
     state: RunState = RunState.STARTED
     current_stage: PipelineStage | None = None
@@ -170,9 +205,7 @@ class RunnerV2:
             if getattr(self, name) is None
         ]
         if missing:
-            raise RuntimeError(
-                f"RunnerV2.execute() requires injected stages: missing {missing}"
-            )
+            raise RuntimeError(f"RunnerV2.execute() requires injected stages: missing {missing}")
 
     def execute(
         self,
@@ -216,18 +249,32 @@ class RunnerV2:
                 composer_inputs, template_spec, clarifier_answers
             )
 
-            research_pool = yield from self._stage_gather(
-                plan, composer_inputs
-            )
+            research_pool = yield from self._stage_gather(plan, composer_inputs)
 
             plan = yield from self._stage_model_plan(plan, research_pool)
 
-            model_artifacts = yield from self._stage_model_build(
-                plan, research_pool
-            )
+            # Stage 5b: v2.2 Planner (helper selection). Skipped when
+            # planner_v2_2_llm is None (backwards-compatible v2 path).
+            planner_output: Any | None = None
+            if self.planner_v2_2_llm is not None:
+                planner_output = yield from self._stage_planner_v2_2(composer_inputs, template_spec)
+
+            model_artifacts = yield from self._stage_model_build(plan, research_pool)
+
+            # Stage 7a: materialization. Skipped when no planner_output.
+            materialized_report: Any | None = None
+            if planner_output is not None:
+                materialized_report = yield from self._stage_materialize(
+                    template_spec, planner_output, model_artifacts, composer_inputs
+                )
 
             section_outputs = yield from self._stage_draft(
-                template_spec, plan, composer_inputs, research_pool, model_artifacts
+                template_spec,
+                plan,
+                composer_inputs,
+                research_pool,
+                model_artifacts,
+                materialized_report=materialized_report,
             )
 
             section_outputs, verification_history = yield from self._stage_verify(
@@ -296,9 +343,7 @@ class RunnerV2:
         yield StageCompleted(PipelineStage.RESEARCH_PLAN)
         return plan
 
-    def _stage_gather(
-        self, plan: Any, composer_inputs: dict[str, Any]
-    ) -> Iterator[RunEvent]:
+    def _stage_gather(self, plan: Any, composer_inputs: dict[str, Any]) -> Iterator[RunEvent]:
         self.current_stage = PipelineStage.GATHER
         yield StageStarted(PipelineStage.GATHER)
         research_pool = self.strand_dispatcher.dispatch(
@@ -316,9 +361,210 @@ class RunnerV2:
         yield StageCompleted(PipelineStage.MODEL_PLAN)
         return updated
 
-    def _stage_model_build(
-        self, plan: Any, research_pool: Any
+    def _stage_planner_v2_2(
+        self,
+        composer_inputs: dict[str, Any],
+        template_spec: Any,
     ) -> Iterator[RunEvent]:
+        """Stage 5b: v2.2 Planner — helper selection and planner overrides.
+
+        Constructs a fresh ``Planner`` per-run using:
+          - ``planner_v2_2_llm`` injected at RunnerV2 construction
+          - ``ticker`` from ``composer_inputs``
+          - ``template_sections`` derived from ``template_spec.sections``
+          - ``available_helpers`` from ``list_helpers()``
+
+        This avoids storing a stateful Planner instance on RunnerV2 (no shared
+        mutable state across concurrent requests).
+
+        Calls ``planner.aplan()`` via the ThreadPoolExecutor guard so it is
+        safe to call from both sync and async contexts (no bare asyncio.run).
+        Returns the ``PlannerOutput`` for Stage 7a.
+        """
+        from openlia.llm.runtime.report_v2_2.planner import Planner, sections_from_spec
+        from openlia.llm.runtime.report_v2_2.tools.library_helpers import list_helpers
+
+        self.current_stage = PipelineStage.PLANNER_V2_2
+        yield StageStarted(PipelineStage.PLANNER_V2_2)
+
+        ticker: str = composer_inputs.get("ticker", "")
+        template_id: str = getattr(template_spec, "template_id", "stock_initiation_v2")
+        template_sections = sections_from_spec(template_spec)
+        available_helpers = [
+            {
+                "name": h.schema.directory.name,
+                "category": h.schema.directory.category.value,
+                "one_liner": h.schema.directory.one_liner,
+            }
+            for h in list_helpers()
+        ]
+
+        planner = Planner(
+            llm=self.planner_v2_2_llm,
+            ticker=ticker,
+            template_sections=template_sections,
+            available_helpers=available_helpers,
+            template_id=template_id,
+        )
+
+        # Use the same ThreadPoolExecutor guard as v2_stage_factory._run_sync:
+        # this avoids the asyncio.run-inside-running-loop deadlock (A-2).
+        try:
+            asyncio.get_running_loop()
+            # Running inside an event loop — dispatch to a worker thread.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                planner_output = ex.submit(asyncio.run, planner.aplan()).result()
+        except RuntimeError:
+            # No running loop — safe to call asyncio.run directly.
+            planner_output = asyncio.run(planner.aplan())
+
+        yield StageCompleted(PipelineStage.PLANNER_V2_2)
+        return planner_output
+
+    def _stage_materialize(
+        self,
+        template_spec: Any,
+        planner_output: Any,
+        model_artifacts: list,
+        composer_inputs: dict[str, Any],
+    ) -> Iterator[RunEvent]:
+        """Stage 7a: materialize helpers and render artifacts.
+
+        For each HelperInvocation in planner_output.helper_selection:
+          1. Resolve helper name via get_helper().
+          2. Emit HELPER_UNAVAILABLE VerifierIssue and skip on miss (A-7).
+          3. Invoke helper impl(**inv.params) and collect output keyed by
+             inv.artifact_id.
+        Then resolve the section plan and call materialize() to produce a
+        MaterializedReport used by Stage 7b's build_drafter_prompt().
+        """
+        from openlia.llm.runtime.report_v2_2.enums import VerifierIssueType
+        from openlia.llm.runtime.report_v2_2.materialize import (
+            MaterializationError,
+            MaterializedReport,
+            materialize,
+            resolve_section_plan,
+        )
+        from openlia.llm.runtime.report_v2_2.template_defaults import load_template_defaults
+        from openlia.llm.runtime.report_v2_2.tools.library_helpers import get_helper
+        from openlia.llm.runtime.report_v2_2.verifier_models import VerifierIssue
+
+        self.current_stage = PipelineStage.MATERIALIZE
+        yield StageStarted(PipelineStage.MATERIALIZE)
+
+        template_id: str = getattr(template_spec, "template_id", "unknown")
+        artifacts: dict[str, Any] = {}
+        unavailable_issues: list[VerifierIssue] = []
+
+        for selection in planner_output.helper_selection:
+            for inv in selection.helpers:
+                helper = get_helper(inv.helper_name)
+                if helper is None:
+                    unavailable_issues.append(
+                        VerifierIssue(
+                            type=VerifierIssueType.HELPER_UNAVAILABLE,
+                            detail_code="planner_named_unknown_helper",
+                            helper=inv.helper_name,
+                            detail=(
+                                f"Planner selected helper {inv.helper_name!r} which is "
+                                "not registered in the v2.2 library_helpers registry."
+                            ),
+                            severity="blocking",
+                        )
+                    )
+                    continue
+
+                try:
+                    result = helper.impl(**inv.params)
+                    artifacts[inv.artifact_id] = result
+                except Exception as exc:
+                    unavailable_issues.append(
+                        VerifierIssue(
+                            type=VerifierIssueType.HELPER_UNAVAILABLE,
+                            detail_code="helper_invocation_error",
+                            helper=inv.helper_name,
+                            detail=f"Helper {inv.helper_name!r} raised: {exc}",
+                            severity="blocking",
+                        )
+                    )
+
+        # Resolve the section plan: load template defaults then apply overrides.
+        # Fall back to an empty plan when no defaults are found for this template.
+        try:
+            template_defaults = load_template_defaults(template_id)
+        except FileNotFoundError:
+            from openlia.llm.runtime.report_v2_2.section_plan import ReportSectionPlan
+
+            template_defaults = ReportSectionPlan(template_id=template_id, sections=[])
+
+        # Pick the first planner_overrides entry that matches this template.
+        matching_override = next(
+            (o for o in planner_output.planner_overrides if o.template_id == template_id),
+            None,
+        )
+        resolved_plan = resolve_section_plan(template_defaults, matching_override)
+
+        # Materialize: drop any artifacts referenced in the plan that are
+        # missing from our collected dict (materialization raises on missing;
+        # we pre-filter to avoid a hard crash when helpers failed above).
+        referenced_ids = {
+            ref.artifact_id for sec in resolved_plan.sections for ref in sec.artifacts
+        }
+        available = {k: v for k, v in artifacts.items() if k in referenced_ids}
+
+        # Patch the section plan to only reference available artifacts.
+        from openlia.llm.runtime.report_v2_2.section_plan import (
+            ReportSectionPlan,
+            SectionArtifactRef,
+            SectionPlan,
+        )
+
+        filtered_sections: list[SectionPlan] = []
+        for sec in resolved_plan.sections:
+            filtered_artifacts: list[SectionArtifactRef] = [
+                ref for ref in sec.artifacts if ref.artifact_id in available
+            ]
+            filtered_sections.append(
+                SectionPlan(
+                    section_id=sec.section_id,
+                    title=sec.title,
+                    artifacts=filtered_artifacts,
+                    drafter_brief=sec.drafter_brief,
+                )
+            )
+        filtered_plan = ReportSectionPlan(
+            template_id=resolved_plan.template_id,
+            sections=filtered_sections,
+            overrides_applied=resolved_plan.overrides_applied,
+        )
+
+        try:
+            materialized = materialize(filtered_plan, available)
+        except MaterializationError as exc:
+            # Degrade gracefully: return a minimal empty MaterializedReport.
+            materialized = MaterializedReport(
+                template_id=template_id,
+                sections=[],
+                markdown="",
+            )
+            unavailable_issues.append(
+                VerifierIssue(
+                    type=VerifierIssueType.HELPER_UNAVAILABLE,
+                    detail_code="materialize_error",
+                    helper="__stage_7a__",
+                    detail=f"Stage 7a materialize() failed: {exc}",
+                    severity="blocking",
+                )
+            )
+
+        # Attach any HELPER_UNAVAILABLE issues to the materialized report so
+        # Stage 8 can surface them.
+        materialized.__dict__["_unavailable_issues"] = unavailable_issues
+
+        yield StageCompleted(PipelineStage.MATERIALIZE)
+        return materialized
+
+    def _stage_model_build(self, plan: Any, research_pool: Any) -> Iterator[RunEvent]:
         self.current_stage = PipelineStage.MODEL_BUILD
         yield StageStarted(PipelineStage.MODEL_BUILD)
         all_artifacts = plan.required_artifacts + plan.optional_artifacts
@@ -336,15 +582,34 @@ class RunnerV2:
         composer_inputs: dict[str, Any],
         research_pool: Any,
         model_artifacts: list,
+        *,
+        materialized_report: Any | None = None,
     ) -> Iterator[RunEvent]:
+        """Stage 7b: draft all sections.
+
+        When ``materialized_report`` is provided (Stage 7a ran), each section
+        drafter call receives a ``materialized_section`` kwarg so SectionDrafter
+        can use ``build_drafter_prompt()`` for artifact-injected prompts (A-3).
+
+        When ``materialized_report`` is None (v2 path), falls through to the
+        existing v2 hand-rolled prompt path unchanged.
+        """
         self.current_stage = PipelineStage.DRAFT
         yield StageStarted(PipelineStage.DRAFT)
+
+        # Build a lookup from section_id → MaterializedSection when available.
+        materialized_by_section: dict[str, Any] = {}
+        if materialized_report is not None:
+            for ms in getattr(materialized_report, "sections", []):
+                materialized_by_section[ms.section_id] = ms
+
         outputs = self.section_drafter.draft_all(
             sections=template_spec.sections,
             dag=plan.section_dag,
             composer_inputs=composer_inputs,
             research_pool=research_pool,
             model_artifacts=model_artifacts,
+            materialized_by_section=materialized_by_section or None,
         )
         yield StageCompleted(PipelineStage.DRAFT)
         return outputs
@@ -401,12 +666,14 @@ class RunnerV2:
 
             new_blocks = result.final_blocks or s.blocks
             if result.final_status == "DEGRADED":
-                blocker_types = sorted({
-                    i.issue_type
-                    for r in result.rounds
-                    for i in r.issues
-                    if i.severity == "blocker"
-                })
+                blocker_types = sorted(
+                    {
+                        i.issue_type
+                        for r in result.rounds
+                        for i in r.issues
+                        if i.severity == "blocker"
+                    }
+                )
                 reason = (
                     "verifier persisted blockers: " + ", ".join(blocker_types)
                     if blocker_types
@@ -451,21 +718,27 @@ class RunnerV2:
         sections_dicts: list[dict[str, Any]] = []
         for s in section_outputs:
             if s.status == "SKIPPED":
-                sections_dicts.append({
-                    "id": s.section_id,
-                    "name": s.section_name,
-                    "blocks": [{
-                        "type": "skip_banner",
-                        "section_name": s.section_name,
-                        "reason": s.skip_reason or "",
-                    }],
-                })
+                sections_dicts.append(
+                    {
+                        "id": s.section_id,
+                        "name": s.section_name,
+                        "blocks": [
+                            {
+                                "type": "skip_banner",
+                                "section_name": s.section_name,
+                                "reason": s.skip_reason or "",
+                            }
+                        ],
+                    }
+                )
             else:
-                sections_dicts.append({
-                    "id": s.section_id,
-                    "name": s.section_name,
-                    "blocks": s.blocks,
-                })
+                sections_dicts.append(
+                    {
+                        "id": s.section_id,
+                        "name": s.section_name,
+                        "blocks": s.blocks,
+                    }
+                )
 
         # Accumulate per-section outcomes into the run summary.
         for s in section_outputs:
@@ -545,16 +818,11 @@ def _build_verification_history(
                 last_seen[sig] = r_idx
                 sig_to_issue[sig] = issue
 
-        last_round_sigs = {
-            (i.issue_type, i.evidence) for i in sr.rounds[-1].issues
-        }
+        last_round_sigs = {(i.issue_type, i.evidence) for i in sr.rounds[-1].issues}
 
         for sig, issue in sig_to_issue.items():
             if sig in last_round_sigs:
-                if (
-                    issue.severity == "blocker"
-                    and sr.final_status == "DEGRADED"
-                ):
+                if issue.severity == "blocker" and sr.final_status == "DEGRADED":
                     resolution = "persisted_degraded"
                     persisted += 1
                     resolved_in = None
@@ -586,5 +854,3 @@ def _build_verification_history(
         persisted_to_degraded=persisted,
         warnings_open=warnings_open,
     )
-
-
