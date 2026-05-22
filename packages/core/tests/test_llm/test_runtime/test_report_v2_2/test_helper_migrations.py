@@ -182,8 +182,10 @@ def test_artifact_type_registry_count() -> None:
     #   beneish_m_score_output, statement_integrity_bundle_output
     # + 3 credit/solvency (PR 2.7): credit_solvency_output, five_step_dupont_output,
     #   debt_maturity_ladder_output
-    # = 89
-    assert len(all_types) == 89, f"Expected 89 artifact types, got {len(all_types)}: {names}"
+    # + 3 signals (PR 2.8): insider_signal_output, moving_average_panel_output,
+    #   historical_multiple_trends_output
+    # = 92
+    assert len(all_types) == 92, f"Expected 92 artifact types, got {len(all_types)}: {names}"
 
 
 def test_artifact_type_registry_contains_expected_names() -> None:
@@ -291,6 +293,10 @@ def test_artifact_type_registry_contains_expected_names() -> None:
         "credit_solvency_output",
         "five_step_dupont_output",
         "debt_maturity_ladder_output",
+        # Signals helpers (PR 2.8)
+        "insider_signal_output",
+        "moving_average_panel_output",
+        "historical_multiple_trends_output",
     }
     registered = {t.name for t in _registry.list_all()}
     assert expected == registered, (

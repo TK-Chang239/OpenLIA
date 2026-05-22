@@ -89,6 +89,7 @@ from . import (  # noqa: E402, F401
     saas_metrics,
     scenario_weighting,
     sensitivity_table,
+    signals,
     sotp_builder,
     tornado_diagram,
 )
