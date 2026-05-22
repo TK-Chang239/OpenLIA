@@ -159,6 +159,26 @@ artifact_types:
     depends_on: []
 
   # -----------------------------------------------------------------------
+  # Sector module outputs (Wave 1, PR 3.x)
+  # -----------------------------------------------------------------------
+
+  - name: banks_sector_panel_output
+    description: >
+      Institutional bank KPI panel covering five metric blocks: profitability
+      (NIM, RoTCE, ROA, ROE, efficiency ratio, fee income mix), capital adequacy
+      (CET1, Tier 1, Total Capital, leverage ratio, buffer vs regulatory minimum),
+      credit quality (NCO rate, NPL ratio, ACL coverage ratio, LLP build/release),
+      liquidity (loan-to-deposit ratio, wholesale funding mix, deposit cost),
+      credit-cycle phase classification, composite bank health score (0-100),
+      warnings (CET1 within 100bps of minimum, NCO surge), and narrative.
+      Mandatory for any Banks-sector initiation or quarterly update report.
+    fidelity:
+      headline: "Bank panel: NIM X%, RoTCE Y%, CET1 Z% (buffer: W), NCO: V%"
+      summary: "NIM, RoTCE, efficiency ratio, CET1 buffer adequacy, NCO rate, cycle phase, health score"
+      full: "All five metric blocks (profitability, capital, credit, liquidity, cycle), health score, warnings, narrative"
+    depends_on: []
+
+  # -----------------------------------------------------------------------
   # EODHD adapter outputs (18 helpers, PR 1.1)
   # -----------------------------------------------------------------------
 
