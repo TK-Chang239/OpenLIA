@@ -1,0 +1,54 @@
+"""Helper registry for report_v2_2 library helpers.
+
+Helpers self-register at module import via register_helper().
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+
+from openlia.llm.runtime.report_v2_2.schema import HelperSchema
+
+
+@dataclass
+class RegisteredHelper:
+    schema: HelperSchema
+    impl: Callable  # type: ignore[type-arg]
+
+
+_REGISTRY: dict[str, RegisteredHelper] = {}
+
+
+def register_helper(schema: HelperSchema, impl: Callable) -> None:  # type: ignore[type-arg]
+    """Register a helper. Helpers call this at module import.
+
+    Raises ValueError on duplicate name or unknown artifact_type.
+    """
+    if schema.directory.name in _REGISTRY:
+        raise ValueError(f"Helper {schema.directory.name!r} already registered")
+
+    # Validate all declared artifact types exist in the ArtifactType registry.
+    from openlia.llm.runtime.report_v2_2.artifact_types import _registry as art_reg
+
+    for artifact_id in schema.contract.produces_artifacts + schema.contract.consumes_artifacts:
+        if art_reg.get(artifact_id) is None:
+            raise ValueError(
+                f"Helper {schema.directory.name!r} declares artifact_type "
+                f"{artifact_id!r} which is not in the ArtifactType registry"
+            )
+
+    _REGISTRY[schema.directory.name] = RegisteredHelper(schema=schema, impl=impl)
+
+
+def list_helpers() -> list[RegisteredHelper]:
+    return list(_REGISTRY.values())
+
+
+def get_helper(name: str) -> RegisteredHelper | None:
+    return _REGISTRY.get(name)
+
+
+def reset_helpers_for_tests() -> None:
+    """Clear registry. Use only in test fixtures."""
+    _REGISTRY.clear()
