@@ -75,9 +75,25 @@ class ComputeStage(Stage):
 
         # Rebuild the bundle so the derived_from validator runs over the
         # combined facts. Mutating the dict in place would skip validation.
+        # Explicit duplicate-id check mirrors ResearchBundle.add() — a
+        # silent dict-merge overwrite would defeat the schema invariant
+        # that fact ids are unique, and the bug only shows up in the docx
+        # later. Better to fail loud here.
+        new_by_id: dict[str, BundleFact] = {}
+        for fact in new_facts:
+            if fact.id in new_by_id:
+                raise RuntimeError(
+                    f"COMPUTE produced duplicate fact id '{fact.id}' within one run."
+                )
+            if fact.id in bundle.facts:
+                raise RuntimeError(
+                    f"COMPUTE fact id '{fact.id}' collides with an existing bundle fact."
+                )
+            new_by_id[fact.id] = fact
+
         state.bundle = ResearchBundle(
             tickers=bundle.tickers,
-            facts={**bundle.facts, **{f.id: f for f in new_facts}},
+            facts={**bundle.facts, **new_by_id},
         )
         return state
 

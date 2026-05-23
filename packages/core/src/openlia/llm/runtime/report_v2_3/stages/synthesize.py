@@ -112,6 +112,19 @@ class SynthesizeStage(Stage):
                     f"{sorted(missing_chart_facts)}"
                 )
 
+        # Each mandate.chart_ids must point at a real ChartSpec. Without
+        # this check a phantom id would slip past synthesis, WriteStage
+        # would allow {{FIG:phantom}} (writer figs subset of mandate
+        # chart_ids), and ASSEMBLE's resolve() would raise late.
+        chart_ids = {c.id for c in thesis.charts}
+        for mandate in thesis.mandates:
+            phantom_charts = set(mandate.chart_ids) - chart_ids
+            if phantom_charts:
+                raise RuntimeError(
+                    f"Mandate for section '{mandate.section_id}' references "
+                    f"unknown charts: {sorted(phantom_charts)}"
+                )
+
         # Mandates may only reference bundle facts; the schema does not check
         # this because the bundle is not on the thesis. We check it here so
         # writers cannot be asked to use a fact_id that does not exist.
