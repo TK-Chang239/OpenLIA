@@ -1105,6 +1105,10 @@ export default function EquityResearch(): JSX.Element {
               onOpenReport={onV23OpenReport}
               onSelectPastRun={onV23SelectPastRun}
               assignments={v23Assignments}
+              mode={config.report_mode}
+              length={config.report_length}
+              firstName={firstName(user?.display_name)}
+              onModeClick={() => setSettingsOpen(true)}
             />
           </div>
         ) : !sessionId ? (
