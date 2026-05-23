@@ -6,8 +6,12 @@ Real stages are wired in progressively as the engine PRs land. Today:
 - PLAN: real when `planner_client` is supplied; NoOp otherwise.
 - SYNTHESIZE: real when `synthesizer_client` is supplied; NoOp otherwise.
 - WRITE: real when `writer_client` is supplied; NoOp otherwise.
-- Everything else (RESEARCH, COMPUTE, VISUALIZE, VERIFY, ASSEMBLE):
-  still NoOp, swapped in subsequent PRs.
+- ASSEMBLE: real by default — no LLM client needed. Falls back to a
+  graceful no-op on `state` when upstream stages have not populated
+  sections/bundle/thesis/outline, so the factory works for both
+  fully-wired runs and partially-NoOp runs.
+- Everything else (RESEARCH, COMPUTE, VISUALIZE, VERIFY): still NoOp,
+  swapped in subsequent PRs.
 
 A `V23RunnerFactory` is a callable held on `app.state.v2_3_runner_factory`
 that the route layer invokes per request to build a `ReportRunner`. The
@@ -28,9 +32,9 @@ from openlia.llm.runtime.report_v2_3.slots import V23Slot
 from openlia.llm.runtime.report_v2_3.stages import (
     PIPELINE_ORDER,
     ClarifyStage,
-    NoOpAssembleStage,
     NoOpStage,
     PlanStage,
+    RealAssembleStage,
     Stage,
     StageContext,
     SynthesizeStage,
@@ -64,7 +68,7 @@ def make_v2_3_runner_factory(
             stages[V23Slot.WRITE] = WriteStage(writer_client)
         return ReportRunner(
             stages=stages,
-            assemble=NoOpAssembleStage(),
+            assemble=RealAssembleStage(),
             ctx=StageContext(clients={}, tools={}, extras={}),
         )
 
