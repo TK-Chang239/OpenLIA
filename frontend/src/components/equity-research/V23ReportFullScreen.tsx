@@ -59,7 +59,6 @@ export function V23ReportFullScreen({ runId, onClose }: Props): JSX.Element {
   return (
     <div
       data-testid="er-v2-3-report-fullscreen"
-      data-print-target="v23-report-fullscreen"
       className="fixed inset-0 z-50 flex flex-col bg-[--color-bg-base]"
     >
       <header

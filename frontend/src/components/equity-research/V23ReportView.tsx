@@ -22,6 +22,7 @@ import type {
   V23RunPayload,
 } from "../../api/equity-research-v2-3";
 import { V23ChartSVG } from "./V23ChartSVG";
+import { V23ValuationCard } from "./V23ValuationCard";
 
 interface Props {
   payload: V23RunPayload;
@@ -49,6 +50,7 @@ export function V23ReportView({ payload }: Props): JSX.Element {
       <PrintBar onPrint={print} />
       <ReportHeader payload={payload} />
       <Thesis payload={payload} />
+      <V23ValuationCard payload={payload} />
 
       {payload.sections.map((section) => {
         const body = payload.section_bodies[section.id] ?? "";
