@@ -24,6 +24,7 @@ import {
   type V23RunPayload,
   type V23RunState,
   type V23Stage,
+  getV23Run,
   getV23RunPayload,
   streamV23Answer,
   streamV23Run,
@@ -44,7 +45,22 @@ const STAGE_LABEL: Record<V23Stage, string> = {
   verify: "Verifying",
 };
 
-export function V23Composer(): JSX.Element {
+interface Props {
+  /** When set, the composer hydrates from this run id on mount via
+   *  GET /runs/{id}. Used by the page to reattach a run after a page
+   *  reload (URL carries ?run_id_v23=<id>). */
+  initialRunId?: string | null;
+  /** Notify the parent whenever the active run changes — on terminal
+   *  state from SSE (we learn the run_id then), on reattach, or when the
+   *  user starts a fresh run (id reset to null). Parent mirrors this to
+   *  the URL so a reload restores the same view. */
+  onRunIdChange?: (runId: string | null) => void;
+}
+
+export function V23Composer({
+  initialRunId = null,
+  onRunIdChange,
+}: Props = {}): JSX.Element {
   const [prompt, setPrompt] = useState("");
   const [tickers, setTickers] = useState("");
   const [reportType, setReportType] = useState<V23ReportType>("initiation");
@@ -58,6 +74,47 @@ export function V23Composer(): JSX.Element {
   const [payload, setPayload] = useState<V23RunPayload | null>(null);
   const [payloadError, setPayloadError] = useState<string | null>(null);
   const streamRef = useRef<AbortController | null>(null);
+  // Track the last run_id we surfaced to the parent so we don't fire
+  // onRunIdChange on every render once the id stabilises.
+  const lastEmittedRunIdRef = useRef<string | null>(null);
+
+  // Reattach: when the page mounts (or navigates) with ?run_id_v23=<id>,
+  // pull the persisted state so the user lands back on the report,
+  // clarify modal, or error banner they left.
+  useEffect(() => {
+    if (!initialRunId) return;
+    if (run?.run_id === initialRunId) return;
+    let cancelled = false;
+    setError(null);
+    getV23Run(initialRunId)
+      .then((state) => {
+        if (cancelled) return;
+        setRun(state);
+        setStage(null);
+        if (state.status === "running") {
+          // Engine kept advancing while the tab was gone but we have no
+          // live SSE to re-subscribe to. The complete-status effect will
+          // pick up the payload as soon as the run terminates; a follow-up
+          // PR adds polling for the in-between window.
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load run");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialRunId, run?.run_id]);
+
+  // Surface the active run_id to the parent so it can persist it in the
+  // URL. Fires on terminal SSE state, on reattach, and on reset.
+  useEffect(() => {
+    const next = run?.run_id ?? null;
+    if (next === lastEmittedRunIdRef.current) return;
+    lastEmittedRunIdRef.current = next;
+    onRunIdChange?.(next);
+  }, [run?.run_id, onRunIdChange]);
 
   const parsedTickers = tickers
     .split(/[,\s]+/)
@@ -129,6 +186,8 @@ export function V23Composer(): JSX.Element {
     setError(null);
     setBusy(true);
     setAnswers({});
+    setRun(null);
+    setStage(null);
     setPayload(null);
     setPayloadError(null);
     closeStream();

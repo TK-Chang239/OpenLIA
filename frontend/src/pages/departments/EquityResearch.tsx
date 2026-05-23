@@ -81,7 +81,9 @@ interface PersistedToolCall {
 const DISABLED_CONNECTORS_LS_KEY = "equity-research:disabled-connector-ids";
 const DISABLED_SKILLS_LS_KEY = "equity-research:disabled-skill-ids";
 const ENGINE_V2_LS_KEY = "equity-research:engine-v2-enabled";
-const ENGINE_V23_LS_KEY = "equity-research:engine-v2-3-preview";
+// New key (post-default-flip): "0" opts out to the v2.2 legacy surface;
+// any other value (including unset) lands the user on v2.3.
+const ENGINE_V23_LS_KEY = "equity-research:engine-v2-3";
 
 // Friendly labels for the v2 pipeline stages emitted via SSE. Kept in
 // sync with `PipelineStage` in core/.../runner_v2.py and the diagram in
@@ -156,6 +158,24 @@ export default function EquityResearch(): JSX.Element {
   // v2 reports use a sibling param so the v1 reattach path
   // (useReportStreamAttach) doesn't pick up a pipeline_run id.
   const runIdV2Param = searchParams.get("run_id_v2");
+  // v2.3 reattach. V23Composer reads this on mount via GET /runs/{id}
+  // and surfaces the cached report, clarify modal, or error state.
+  const runIdV23Param = searchParams.get("run_id_v23");
+
+  const onV23RunIdChange = useCallback(
+    (runId: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (runId) next.set("run_id_v23", runId);
+          else next.delete("run_id_v23");
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   // Reattach to an in-progress (or completed) background report via ?report_id.
   useReportStreamAttach(reportIdParam);
@@ -215,15 +235,16 @@ export default function EquityResearch(): JSX.Element {
   const [forceCacheRefresh, setForceCacheRefresh] = useState(false);
   const [capabilityManifest, setCapabilityManifest] =
     useState<CapabilityManifest | null>(null);
-  // v2.2 engine is the default for this dev branch. The flag is still
-  // honoured for rollback — explicitly set to "0" in localStorage to fall
-  // back to the v1 WavedReportRunner. Unset / "1" → v2.
-  const [engineV23Preview, setEngineV23Preview] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(ENGINE_V23_LS_KEY) === "1";
+  // v2.3 is the default surface as of the v2.3 UI rebuild. Set
+  // ENGINE_V23_LS_KEY to "0" in localStorage to fall back to the v2.2
+  // chat/composer (kept reachable from the v2.3 surface via "Use v2.2
+  // legacy"). Any other value — including unset — selects v2.3.
+  const [useV23, setUseV23] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem(ENGINE_V23_LS_KEY) !== "0";
   });
-  const toggleEngineV23Preview = useCallback(() => {
-    setEngineV23Preview((prev) => {
+  const toggleUseV23 = useCallback(() => {
+    setUseV23((prev) => {
       const next = !prev;
       if (typeof window !== "undefined") {
         window.localStorage.setItem(ENGINE_V23_LS_KEY, next ? "1" : "0");
@@ -1006,30 +1027,43 @@ export default function EquityResearch(): JSX.Element {
   return (
     <div className="flex h-full flex-col bg-[--color-bg-base]">
       <div className="relative flex flex-1 min-h-0 flex-col">
-        {!sessionId ? (
+        {useV23 ? (
           <div className="flex flex-1 min-h-0 flex-col">
             <div className="flex items-center justify-end px-4 pt-3">
               <button
                 type="button"
-                onClick={toggleEngineV23Preview}
-                data-testid="er-v2-3-preview-toggle"
+                onClick={toggleUseV23}
+                data-testid="er-engine-toggle"
                 className="inline-flex items-center gap-[6px] rounded-sm border border-[--color-border-subtle] bg-[--color-bg-base] px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
               >
-                {engineV23Preview ? "Hide v2.3 preview" : "Try v2.3 preview"}
+                Use v2.2 (legacy)
               </button>
             </div>
-            {engineV23Preview ? (
-              <div className="mx-auto w-full max-w-[760px] flex-1 overflow-auto p-6">
-                <V23Composer />
-              </div>
-            ) : (
-              <WelcomeStage
-                firstName={firstName(user?.display_name)}
-                mode={config.report_mode}
-                length={config.report_length}
-                onModeRowClick={() => setSettingsOpen(true)}
+            <div className="mx-auto w-full max-w-[760px] flex-1 overflow-auto p-6">
+              <V23Composer
+                initialRunId={runIdV23Param}
+                onRunIdChange={onV23RunIdChange}
               />
-            )}
+            </div>
+          </div>
+        ) : !sessionId ? (
+          <div className="flex flex-1 min-h-0 flex-col">
+            <div className="flex items-center justify-end px-4 pt-3">
+              <button
+                type="button"
+                onClick={toggleUseV23}
+                data-testid="er-engine-toggle"
+                className="inline-flex items-center gap-[6px] rounded-sm border border-[--color-border-subtle] bg-[--color-bg-base] px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
+              >
+                Use v2.3
+              </button>
+            </div>
+            <WelcomeStage
+              firstName={firstName(user?.display_name)}
+              mode={config.report_mode}
+              length={config.report_length}
+              onModeRowClick={() => setSettingsOpen(true)}
+            />
           </div>
         ) : (
           <div className="relative flex-1 min-h-0">
@@ -1337,40 +1371,42 @@ export default function EquityResearch(): JSX.Element {
         </div>
       ) : null}
 
-      <ErComposer
-        value={input}
-        onChange={setInput}
-        onSubmit={handleComposerSubmit}
-        onStop={handleStop}
-        isStreaming={isStreaming}
-        placeholder={placeholder}
-        mode={config.report_mode}
-        length={config.report_length}
-        onModeClick={() => setSettingsOpen(true)}
-        modelPicker={
-          engineV2Enabled ? (
-            <V2EngineModelsPicker
-              onAssignmentsChange={(snap) => setV2MissingSlots(snap.missing)}
+      {!useV23 ? (
+        <ErComposer
+          value={input}
+          onChange={setInput}
+          onSubmit={handleComposerSubmit}
+          onStop={handleStop}
+          isStreaming={isStreaming}
+          placeholder={placeholder}
+          mode={config.report_mode}
+          length={config.report_length}
+          onModeClick={() => setSettingsOpen(true)}
+          modelPicker={
+            engineV2Enabled ? (
+              <V2EngineModelsPicker
+                onAssignmentsChange={(snap) => setV2MissingSlots(snap.missing)}
+              />
+            ) : (
+              <ModelPicker />
+            )
+          }
+          toolPicker={
+            <ToolPicker
+              sessionId={sessionId}
+              initialDisabledConnectorIds={disabledConnectorIds}
+              initialDisabledSkillIds={disabledSkillIds}
+              onChange={(next) => {
+                setDisabledConnectorIds(next.disabledConnectorIds);
+                setDisabledSkillIds(next.disabledSkillIds);
+              }}
             />
-          ) : (
-            <ModelPicker />
-          )
-        }
-        toolPicker={
-          <ToolPicker
-            sessionId={sessionId}
-            initialDisabledConnectorIds={disabledConnectorIds}
-            initialDisabledSkillIds={disabledSkillIds}
-            onChange={(next) => {
-              setDisabledConnectorIds(next.disabledConnectorIds);
-              setDisabledSkillIds(next.disabledSkillIds);
-            }}
-          />
-        }
-        initialValue={!sessionId ? promptParam ?? undefined : undefined}
-        ticker={!sessionId ? tickerInput : undefined}
-        onTickerChange={!sessionId ? setTickerInput : undefined}
-      />
+          }
+          initialValue={!sessionId ? promptParam ?? undefined : undefined}
+          ticker={!sessionId ? tickerInput : undefined}
+          onTickerChange={!sessionId ? setTickerInput : undefined}
+        />
+      ) : null}
 
       <ReportSettingsModal
         open={settingsOpen}
@@ -1385,7 +1421,7 @@ export default function EquityResearch(): JSX.Element {
         }}
       />
 
-      {v2Stream.state.status === "paused" && v2Stream.state.pausedOutput &&
+      {!useV23 && v2Stream.state.status === "paused" && v2Stream.state.pausedOutput &&
        v2Stream.state.runId ? (
         <ClarifierModal
           output={v2Stream.state.pausedOutput}
