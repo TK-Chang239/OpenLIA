@@ -14,9 +14,10 @@
  * the per-user assignments + persistence + clarify round-trip work in
  * a browser. Richer UX (report renderer, history, retries) follows.
  */
-import { AlertTriangle, Loader2, Send } from "lucide-react";
+import { AlertTriangle, Download, Loader2, Send } from "lucide-react";
 import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 
+import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import {
   type V23ClarifyQuestion,
   type V23ReportType,
@@ -24,6 +25,7 @@ import {
   type V23Stage,
   streamV23Answer,
   streamV23Run,
+  v23DocxUrl,
 } from "../../api/equity-research-v2-3";
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
 import { V23RepoPanel } from "./V23RepoPanel";
@@ -48,6 +50,8 @@ export function V23Composer(): JSX.Element {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [assignments, setAssignments] = useState<AssignmentsResponse | null>(null);
+  const [repoRefreshKey, setRepoRefreshKey] = useState(0);
   const streamRef = useRef<AbortController | null>(null);
 
   const parsedTickers = tickers
@@ -75,15 +79,23 @@ export function V23Composer(): JSX.Element {
       } else if (evt.event === "failed") {
         setError(evt.data.error);
         setBusy(false);
+        setRepoRefreshKey((k) => k + 1);
       } else if (evt.event === "completed") {
         setStage(null);
       } else if (evt.event === "state") {
         setRun(evt.data);
         setBusy(false);
+        setRepoRefreshKey((k) => k + 1);
       }
     },
     [],
   );
+
+  const clarifyAssigned = Boolean(assignments?.assignments?.clarify);
+  const totalSlots = assignments
+    ? Object.keys(assignments.assignments).length
+    : 0;
+  const readyToRun = clarifyAssigned;
 
   const send = () => {
     if (parsedTickers.length === 0 || !prompt.trim()) {
@@ -133,10 +145,30 @@ export function V23Composer(): JSX.Element {
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
           Equity Research v2.3 (preview)
         </span>
-        <V23EngineModelsPicker />
+        <V23EngineModelsPicker onAssignmentsChange={setAssignments} />
       </div>
 
-      <V23RepoPanel />
+      {!readyToRun && assignments !== null ? (
+        <div
+          role="status"
+          data-testid="er-v2-3-setup-banner"
+          className="flex items-start gap-[10px] rounded-md border border-[--color-feedback-warning] bg-[rgba(255,180,0,0.08)] px-3 py-2 text-[12px] text-[--color-text-primary]"
+        >
+          <AlertTriangle size={13} className="mt-[2px] text-[--color-feedback-warning]" />
+          <div className="flex flex-1 flex-col gap-[2px]">
+            <span className="font-medium">
+              Configure engine models before running a v2.3 report.
+            </span>
+            <span className="text-[--color-text-secondary]">
+              At minimum, assign a model to the <strong>Clarify</strong> slot
+              ({totalSlots}/7 assigned). Open <em>Engine models</em> above, or
+              visit Settings → Models to enable a provider/model first.
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      <V23RepoPanel refreshKey={repoRefreshKey} />
 
 
       <input
@@ -173,7 +205,12 @@ export function V23Composer(): JSX.Element {
         <button
           type="button"
           onClick={send}
-          disabled={busy}
+          disabled={busy || !readyToRun}
+          title={
+            !readyToRun
+              ? "Assign at least the Clarify model in Engine models first"
+              : ""
+          }
           data-testid="er-v2-3-send"
           className="inline-flex h-9 items-center gap-[6px] rounded-md bg-[--color-accent-primary] px-3 font-display text-[13px] font-medium text-[--color-accent-on] hover:bg-[--color-accent-hover] disabled:cursor-not-allowed disabled:opacity-40"
         >
@@ -236,12 +273,24 @@ function V23RunBadge({
   return (
     <div
       data-testid="er-v2-3-run-status"
-      className="flex items-center justify-between rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em]"
+      className="flex items-center justify-between gap-[10px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em]"
     >
       <span className="text-[--color-text-tertiary]">{run.run_id.slice(0, 12)}…</span>
-      <span className={statusColor}>
-        {run.status} · {stageLabel}
-        {run.retry_count > 0 ? ` · retry ${run.retry_count}` : ""}
+      <span className={`flex items-center gap-[8px] ${statusColor}`}>
+        <span>
+          {run.status} · {stageLabel}
+          {run.retry_count > 0 ? ` · retry ${run.retry_count}` : ""}
+        </span>
+        {run.status === "complete" ? (
+          <a
+            href={v23DocxUrl(run.run_id)}
+            download
+            data-testid="er-v2-3-download"
+            className="inline-flex items-center gap-[4px] rounded-md border border-[--color-feedback-success] bg-[--color-bg-elevated] px-2 py-[2px] text-[--color-feedback-success] hover:bg-[rgba(80,180,80,0.10)]"
+          >
+            <Download size={11} /> .docx
+          </a>
+        ) : null}
       </span>
     </div>
   );

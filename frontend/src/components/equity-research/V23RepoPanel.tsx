@@ -35,9 +35,15 @@ export interface V23RepoPanelProps {
   /** Optional callback when the user clicks a row — caller can resume
    *  / reattach by run_id. */
   onSelect?: (summary: V23RunSummary) => void;
+  /** Bump this to trigger a fresh list — parent uses it to re-fetch
+   *  once a streaming run produces a new persisted row. */
+  refreshKey?: number;
 }
 
-export function V23RepoPanel({ onSelect }: V23RepoPanelProps): JSX.Element {
+export function V23RepoPanel({
+  onSelect,
+  refreshKey,
+}: V23RepoPanelProps): JSX.Element {
   const [rows, setRows] = useState<V23RunSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +63,7 @@ export function V23RepoPanel({ onSelect }: V23RepoPanelProps): JSX.Element {
 
   useEffect(() => {
     refresh();
-  }, [refresh]);
+  }, [refresh, refreshKey]);
 
   const remove = async (run_id: string) => {
     if (!window.confirm("Delete this v2.3 run? This cannot be undone.")) return;
