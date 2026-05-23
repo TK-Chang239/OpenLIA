@@ -361,18 +361,41 @@ def test_make_v2_runner_stage_factory_populates_planner_v2_2_llm() -> None:
     The factory no longer constructs a Planner at factory time. It injects the
     LLMProvider as planner_v2_2_llm; RunnerV2._stage_planner_v2_2() constructs
     a fresh Planner per-run with the live ticker + template context.
+
+    Post-bdfec9dd the factory takes a per-slot ``ResolvedModel`` mapping from
+    ``ctx.models_by_slot``; one LLMProvider is built per slot through
+    ``_build_provider_from_resolved``.
     """
+    from openlia.llm.runtime.report_v2.slots import V2Slot
+    from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
+
     fake_provider = Mock()
     fake_provider.generate = Mock()
 
+    def _resolved(slot: V2Slot) -> ResolvedModel:
+        return ResolvedModel(
+            provider_kind="openai",
+            provider_id=f"prov-{slot.value}",
+            model_id=f"model-{slot.value}",
+            model_ref=f"openai:{slot.value}",
+            credentials=ProviderCredentials(
+                api_key="sk-test", base_url=None, env_var_name="OPENAI_API_KEY"
+            ),
+            capabilities=Capabilities(),
+            overrides={},
+        )
+
+    class _Ctx:
+        models_by_slot = {slot.value: _resolved(slot) for slot in V2Slot}
+
     with patch(
-        "openlia_server.services.v2_stage_factory._build_provider_from_env",
+        "openlia_server.services.v2_stage_factory._build_provider_from_resolved",
         return_value=fake_provider,
     ):
         from openlia_server.services.v2_stage_factory import make_v2_runner_stage_factory
 
         factory = make_v2_runner_stage_factory()
-        runner = factory(None)
+        runner = factory(_Ctx())
 
     assert isinstance(runner, RunnerV2)
     assert runner.planner_v2_2_llm is not None, "planner_v2_2_llm must be injected by the factory"

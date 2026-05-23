@@ -32,11 +32,13 @@ from openlia.llm.runtime.report_v2.pipeline.trigger_evaluator import TriggerEval
 from openlia.llm.runtime.report_v2.pipeline.verifier_llm import LLMVerifier
 from openlia.llm.runtime.report_v2.runner_v2 import RunnerV2
 from openlia.llm.runtime.report_v2.slots import V2Slot
+from openlia.llm.runtime.report_v2_3.clients.llm_researcher import ToolTurnResponse
 from openlia.llm.types import (
     LLMRequest,
     Message,
     ResolvedModel,
     ResponseFormat,
+    ToolSchema,
 )
 
 log = logging.getLogger(__name__)
@@ -112,6 +114,53 @@ class SyncJsonLlmClient:
             )
             return {"value": parsed}
         return parsed
+
+
+# ---------------------------------------------------------------------------
+# Sync tool-use LLM client — wraps async LLMProvider for the v2.3 researcher.
+# ---------------------------------------------------------------------------
+
+
+class SyncToolLlmClient:
+    """Sync ``.send(...)`` wrapper that runs one tool-use turn.
+
+    Matches the v2.3 ``ToolLLMClient`` protocol. Each call hands the
+    provider the current conversation + tool schemas and returns the
+    text + tool calls from a single turn — the v2.3 ``LLMResearcherClient``
+    owns the loop and decides when to stop. Tool execution happens in
+    the researcher, NOT here.
+    """
+
+    def __init__(
+        self,
+        provider: LLMProvider,
+        *,
+        max_tokens: int = 4096,
+        temperature: float = 0.3,
+    ) -> None:
+        self._provider = provider
+        self._max_tokens = max_tokens
+        self._temperature = temperature
+
+    def send(
+        self,
+        *,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolSchema],
+    ) -> ToolTurnResponse:
+        request = LLMRequest(
+            messages=list(messages),
+            system=system,
+            tools=list(tools) if tools else None,
+            max_tokens=self._max_tokens,
+            temperature=self._temperature,
+        )
+        response = _run_sync(self._provider.generate(request))
+        return ToolTurnResponse(
+            text=response.text or "",
+            tool_calls=tuple(response.tool_calls),
+        )
 
 
 def _json_default(value: Any) -> Any:
@@ -313,9 +362,7 @@ def build_runner_v2(*, models_by_slot: dict[str, ResolvedModel]) -> RunnerV2:
             max_workers=4,
         ),
         model_planner=ModelPlanner(llm_by_slot[V2Slot.MODEL_PLANNER.value]),
-        model_builder=ModelBuilder(
-            llm_by_slot[V2Slot.MODEL_BUILDER.value], max_workers=2
-        ),
+        model_builder=ModelBuilder(llm_by_slot[V2Slot.MODEL_BUILDER.value], max_workers=2),
         section_drafter=section_drafter,
         verifier=verifier,
         planner_v2_2_llm=providers[V2Slot.PLANNER_V2_2.value],

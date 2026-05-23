@@ -7,10 +7,11 @@ import socket
 import subprocess
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
 import typer
 import uvicorn
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from sqlalchemy import select
 
 from openlia_server._cli_support import (
@@ -42,13 +43,34 @@ from openlia_server.services.auth import tokens as tokens_service
 from openlia_server.services.auth.errors import AuthError
 from openlia_server.services.auth.password_reset import TokenInvalidError
 
-# Load `.env` from the current working directory (typically the repo root)
-# before any typer command body runs. All env reads live inside command
-# functions, not at module import time, so loading here is safe.
+
+# Load `.env` before any typer command body runs. All env reads live inside
+# command functions, not at module import time, so loading here is safe.
 # `override=False` means an explicit shell `export` always wins over the
 # file. `.env.local` overlays `.env` only for keys not already present.
-load_dotenv(".env", override=False)
-load_dotenv(".env.local", override=False)
+#
+# Resolution order, each independent and using override=False:
+#   1. Walk up from the current working directory.
+#   2. Walk up from this module's directory (covers `uv run openlia serve`
+#      invoked from a subdir like ./frontend/, where the CWD-based search
+#      would miss the repo-root .env).
+def _load_env_files() -> None:
+    seen: set[str] = set()
+    for filename in (".env", ".env.local"):
+        for path in (
+            find_dotenv(filename=filename, usecwd=True),
+            find_dotenv(filename=filename, raise_error_if_not_found=False),
+        ):
+            if not path:
+                continue
+            resolved = str(Path(path).resolve())
+            if resolved in seen:
+                continue
+            load_dotenv(resolved, override=False)
+            seen.add(resolved)
+
+
+_load_env_files()
 
 app = typer.Typer(
     name="openlia",

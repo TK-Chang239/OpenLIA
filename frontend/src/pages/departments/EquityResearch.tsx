@@ -52,6 +52,7 @@ import { ReportCard } from "../../components/equity-research/ReportCard";
 import { FailedReportCard } from "../../components/equity-research/FailedReportCard";
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
+import { V23Composer } from "../../components/equity-research/V23Composer";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import {
   useReportStream,
@@ -80,6 +81,7 @@ interface PersistedToolCall {
 const DISABLED_CONNECTORS_LS_KEY = "equity-research:disabled-connector-ids";
 const DISABLED_SKILLS_LS_KEY = "equity-research:disabled-skill-ids";
 const ENGINE_V2_LS_KEY = "equity-research:engine-v2-enabled";
+const ENGINE_V23_LS_KEY = "equity-research:engine-v2-3-preview";
 
 // Friendly labels for the v2 pipeline stages emitted via SSE. Kept in
 // sync with `PipelineStage` in core/.../runner_v2.py and the diagram in
@@ -216,6 +218,20 @@ export default function EquityResearch(): JSX.Element {
   // v2.2 engine is the default for this dev branch. The flag is still
   // honoured for rollback — explicitly set to "0" in localStorage to fall
   // back to the v1 WavedReportRunner. Unset / "1" → v2.
+  const [engineV23Preview, setEngineV23Preview] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(ENGINE_V23_LS_KEY) === "1";
+  });
+  const toggleEngineV23Preview = useCallback(() => {
+    setEngineV23Preview((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(ENGINE_V23_LS_KEY, next ? "1" : "0");
+      }
+      return next;
+    });
+  }, []);
+
   const [engineV2Enabled, setEngineV2EnabledState] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem(ENGINE_V2_LS_KEY) !== "0";
@@ -991,12 +1007,30 @@ export default function EquityResearch(): JSX.Element {
     <div className="flex h-full flex-col bg-[--color-bg-base]">
       <div className="relative flex flex-1 min-h-0 flex-col">
         {!sessionId ? (
-          <WelcomeStage
-            firstName={firstName(user?.display_name)}
-            mode={config.report_mode}
-            length={config.report_length}
-            onModeRowClick={() => setSettingsOpen(true)}
-          />
+          <div className="flex flex-1 min-h-0 flex-col">
+            <div className="flex items-center justify-end px-4 pt-3">
+              <button
+                type="button"
+                onClick={toggleEngineV23Preview}
+                data-testid="er-v2-3-preview-toggle"
+                className="inline-flex items-center gap-[6px] rounded-sm border border-[--color-border-subtle] bg-[--color-bg-base] px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
+              >
+                {engineV23Preview ? "Hide v2.3 preview" : "Try v2.3 preview"}
+              </button>
+            </div>
+            {engineV23Preview ? (
+              <div className="mx-auto w-full max-w-[760px] flex-1 overflow-auto p-6">
+                <V23Composer />
+              </div>
+            ) : (
+              <WelcomeStage
+                firstName={firstName(user?.display_name)}
+                mode={config.report_mode}
+                length={config.report_length}
+                onModeRowClick={() => setSettingsOpen(true)}
+              />
+            )}
+          </div>
         ) : (
           <div className="relative flex-1 min-h-0">
             <MessageList autoscrollKey={autoscrollKey}>
