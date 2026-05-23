@@ -14,6 +14,7 @@ from .noop import NoOpAssembleStage, NoOpStage
 from .plan import PlanStage
 from .synthesize import SynthesizeStage
 from .verify import VerifyStage
+from .visualize import VisualizeStage
 from .write import WriteStage
 
 __all__ = [
@@ -30,5 +31,6 @@ __all__ = [
     "StageContext",
     "SynthesizeStage",
     "VerifyStage",
+    "VisualizeStage",
     "WriteStage",
 ]
