@@ -9,6 +9,7 @@ from .base import (
 )
 from .clarify import ClarifyStage
 from .noop import NoOpAssembleStage, NoOpStage
+from .plan import PlanStage
 from .synthesize import SynthesizeStage
 from .write import WriteStage
 
@@ -19,6 +20,7 @@ __all__ = [
     "ClarifyStage",
     "NoOpAssembleStage",
     "NoOpStage",
+    "PlanStage",
     "Stage",
     "StageContext",
     "SynthesizeStage",

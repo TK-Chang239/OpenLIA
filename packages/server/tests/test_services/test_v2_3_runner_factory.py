@@ -15,6 +15,10 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from openlia.llm.runtime.report_v2_3.clients.clarifier import FakeClarifierClient
+from openlia.llm.runtime.report_v2_3.clients.planner import (
+    FakePlannerClient,
+    PlannerRequest,
+)
 from openlia.llm.runtime.report_v2_3.clients.synthesizer import FakeSynthesizerClient
 from openlia.llm.runtime.report_v2_3.clients.writer import (
     FakeWriterClient,
@@ -151,6 +155,62 @@ def test_factory_synthesize_failure_marks_run_failed() -> None:
     assert state.status == RunStatus.FAILED
     assert state.last_error is not None
     assert "synthesize" in state.last_error
+
+
+def test_factory_with_planner_populates_outline() -> None:
+    """Planner wired alone: outline must land on state.outline. Bundle/
+    outline pre-seeding from `_seed_state` is overwritten by the real
+    planner — that's the contract."""
+    fresh_outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(id="thesis", title="Thesis"),
+            OutlineSection(id="risks", title="Risks"),
+        ],
+    )
+    fake_planner = FakePlannerClient(result=fresh_outline)
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])),
+        planner_client=fake_planner,
+    )
+
+    state = factory().start(_seed_state())
+    assert state.status == RunStatus.COMPLETE
+    assert state.outline is fresh_outline
+    assert [s.id for s in state.outline.sections] == ["thesis", "risks"]
+    assert len(fake_planner.calls) == 1
+    request = fake_planner.calls[0]
+    assert isinstance(request, PlannerRequest)
+    assert request.tickers == ["NVDA"]
+    # CLARIFY result must flow into PLAN — the planner needs the captured
+    # assumptions to shape the outline.
+    assert isinstance(request.clarify_result, ClarifyProceed)
+    assert request.clarify_result.assumptions == ["x"]
+
+
+def test_factory_planner_output_flows_to_synthesizer() -> None:
+    """When PLAN + SYNTHESIZE are both real, the outline PLAN produces is
+    the one SYNTHESIZE receives — the runner threads stage outputs into
+    the next stage's input through ReportState."""
+    fresh_outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[OutlineSection(id="overview", title="Overview")],
+    )
+    fake_planner = FakePlannerClient(result=fresh_outline)
+    fake_synth = FakeSynthesizerClient(result=_thesis())
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])),
+        planner_client=fake_planner,
+        synthesizer_client=fake_synth,
+    )
+
+    state = factory().start(_seed_state())
+    assert state.status == RunStatus.COMPLETE
+    # The synthesizer must have been called with the outline PLAN produced,
+    # not the one pre-seeded by `_seed_state`.
+    assert fake_synth.calls[0].outline is fresh_outline
 
 
 def test_factory_with_writer_populates_sections() -> None:

@@ -3,9 +3,10 @@
 Real stages are wired in progressively as the engine PRs land. Today:
 
 - CLARIFY: real, requires `clarifier_client`.
+- PLAN: real when `planner_client` is supplied; NoOp otherwise.
 - SYNTHESIZE: real when `synthesizer_client` is supplied; NoOp otherwise.
 - WRITE: real when `writer_client` is supplied; NoOp otherwise.
-- Everything else (PLAN, RESEARCH, COMPUTE, VISUALIZE, VERIFY, ASSEMBLE):
+- Everything else (RESEARCH, COMPUTE, VISUALIZE, VERIFY, ASSEMBLE):
   still NoOp, swapped in subsequent PRs.
 
 A `V23RunnerFactory` is a callable held on `app.state.v2_3_runner_factory`
@@ -19,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from openlia.llm.runtime.report_v2_3.clients.clarifier import ClarifierClient
+from openlia.llm.runtime.report_v2_3.clients.planner import PlannerClient
 from openlia.llm.runtime.report_v2_3.clients.synthesizer import SynthesizerClient
 from openlia.llm.runtime.report_v2_3.clients.writer import WriterClient
 from openlia.llm.runtime.report_v2_3.runner import ReportRunner
@@ -28,6 +30,7 @@ from openlia.llm.runtime.report_v2_3.stages import (
     ClarifyStage,
     NoOpAssembleStage,
     NoOpStage,
+    PlanStage,
     Stage,
     StageContext,
     SynthesizeStage,
@@ -40,6 +43,7 @@ V23RunnerFactory = Callable[[], ReportRunner]
 def make_v2_3_runner_factory(
     clarifier_client: ClarifierClient,
     *,
+    planner_client: PlannerClient | None = None,
     synthesizer_client: SynthesizerClient | None = None,
     writer_client: WriterClient | None = None,
 ) -> V23RunnerFactory:
@@ -52,6 +56,8 @@ def make_v2_3_runner_factory(
     def _factory() -> ReportRunner:
         stages: dict[V23Slot, Stage] = {slot: NoOpStage(slot) for slot in PIPELINE_ORDER}
         stages[V23Slot.CLARIFY] = ClarifyStage(clarifier_client)
+        if planner_client is not None:
+            stages[V23Slot.PLAN] = PlanStage(planner_client)
         if synthesizer_client is not None:
             stages[V23Slot.SYNTHESIZE] = SynthesizeStage(synthesizer_client)
         if writer_client is not None:
