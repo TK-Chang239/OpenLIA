@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 
 import type { ClarifierOutput } from "../../api/clarifier";
+import type { ReportV2Wire } from "./adapters/v2BlockAdapter";
 
 export type V2Stage =
   | "clarify"
@@ -43,7 +44,8 @@ export interface V2StreamState {
   runId: string | null;
   pausedOutput: ClarifierOutput | null;
   pausedRound: number | null;
-  html: string | null;
+  /** Structured ReportV2 payload, populated on the `completed` event. */
+  report: ReportV2Wire | null;
   failedStage: V2Stage | null;
   failedReason: string | null;
 }
@@ -55,7 +57,7 @@ const INITIAL: V2StreamState = {
   runId: null,
   pausedOutput: null,
   pausedRound: null,
-  html: null,
+  report: null,
   failedStage: null,
   failedReason: null,
 };
@@ -123,13 +125,13 @@ export function v2Reducer(state: V2StreamState, action: Action): V2StreamState {
       };
     }
     case "completed": {
-      const html = String(data.html ?? "");
+      const report = (data.report as ReportV2Wire | undefined) ?? null;
       const runId = String(data.run_id ?? state.runId ?? "");
       return {
         ...state,
         status: "complete",
         runId,
-        html,
+        report,
       };
     }
     case "failed": {

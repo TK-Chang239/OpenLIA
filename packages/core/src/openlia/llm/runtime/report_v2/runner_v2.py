@@ -60,9 +60,10 @@ from openlia.llm.runtime.report_v2.pipeline.stage_8_verify import (
     Verifier,
 )
 from openlia.llm.runtime.report_v2.pipeline.stage_9_assemble import (
-    assemble_report,
+    build_report_v2,
 )
 from openlia.llm.runtime.report_v2.schemas.clarifier import ClarifierOutput
+from openlia.llm.runtime.report_v2.schemas.report_v2 import ReportV2
 from openlia.llm.runtime.report_v2.schemas.run_summary import (
     RunSummary,
     TaskOutcome,
@@ -133,9 +134,15 @@ class ClarifierPaused:
 
 @dataclass(frozen=True)
 class Completed:
-    html: str
-    run_summary: RunSummary
-    verification_history: VerificationHistory
+    """Final event of a successful v2.2 run.
+
+    Carries the structured ReportV2 payload (typed cover/sections/citations/
+    run_summary/verification_history). The route persists it as JSON on
+    the pipeline_runs row and forwards it to the frontend on the SSE
+    `completed` event so React renders through the v1 ReportRenderer.
+    """
+
+    report: ReportV2
 
 
 @dataclass(frozen=True)
@@ -286,18 +293,18 @@ class RunnerV2:
                 composer_inputs=composer_inputs,
             )
 
-            html, run_summary = yield from self._stage_assemble(
-                template_spec, section_outputs, research_pool, verification_history
+            report = yield from self._stage_assemble(
+                template_spec,
+                section_outputs,
+                research_pool,
+                verification_history,
+                composer_inputs,
             )
 
             # Preserve DEGRADED if any section failed; otherwise mark COMPLETED.
             if self.state != RunState.DEGRADED:
                 self.state = RunState.COMPLETED
-            yield Completed(
-                html=html,
-                run_summary=run_summary,
-                verification_history=verification_history,
-            )
+            yield Completed(report=report)
         except Exception as exc:
             stage = self.current_stage or PipelineStage.CLARIFY
             self.state = RunState.FAILED
@@ -709,12 +716,16 @@ class RunnerV2:
         section_outputs: list,
         research_pool: Any,
         verification_history: VerificationHistory,
+        composer_inputs: dict[str, Any],
     ) -> Iterator[RunEvent]:
         self.current_stage = PipelineStage.ASSEMBLE
         yield StageStarted(PipelineStage.ASSEMBLE)
 
         # OK sections render their blocks; SKIPPED sections render a banner.
         # DEGRADED sections fall through with whatever the drafter produced.
+        # Status / skip_reason / degraded_reason ride along so the frontend
+        # can colour-code the section header (DEGRADED) without re-deriving
+        # it from a banner block.
         sections_dicts: list[dict[str, Any]] = []
         for s in section_outputs:
             if s.status == "SKIPPED":
@@ -722,6 +733,8 @@ class RunnerV2:
                     {
                         "id": s.section_id,
                         "name": s.section_name,
+                        "status": "SKIPPED",
+                        "skip_reason": s.skip_reason,
                         "blocks": [
                             {
                                 "type": "skip_banner",
@@ -736,6 +749,8 @@ class RunnerV2:
                     {
                         "id": s.section_id,
                         "name": s.section_name,
+                        "status": s.status,
+                        "degraded_reason": s.degraded_reason,
                         "blocks": s.blocks,
                     }
                 )
@@ -758,13 +773,15 @@ class RunnerV2:
             engine_version=manifest.engine_version,
             template_id=getattr(template_spec, "template_id", "unknown"),
             template_name=getattr(template_spec, "template_name", "unknown"),
-            composer_inputs={},
+            composer_inputs=dict(composer_inputs),
             outcomes=list(self.outcomes),
         )
         pool_citations = {c.id: c for c in research_pool.citations}
 
-        html = assemble_report(
+        report = build_report_v2(
             sections=sections_dicts,
+            composer_inputs=composer_inputs,
+            template_spec=template_spec,
             pool_citations=pool_citations,
             run_summary=run_summary,
             verification_history=verification_history,
@@ -772,7 +789,7 @@ class RunnerV2:
         )
 
         yield StageCompleted(PipelineStage.ASSEMBLE)
-        return (html, run_summary)
+        return report
 
     # ------------------------------------------------------------------ legacy
 

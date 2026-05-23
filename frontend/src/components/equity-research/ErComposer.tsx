@@ -46,10 +46,17 @@ const LENGTH_KEY: Record<ReportLength, string> = {
   elaborative: "equity_research.length_elaborative",
 };
 
+export interface ComposerSubmitPayload {
+  /** Ticker symbol the report is about. Empty string in chat-follow-up mode. */
+  ticker: string;
+  /** Free-form prompt / additional context. */
+  prompt: string;
+}
+
 interface Props {
   value: string;
   onChange: (next: string) => void;
-  onSubmit: (text: string, attachments?: File[]) => void;
+  onSubmit: (payload: ComposerSubmitPayload, attachments?: File[]) => void;
   onStop?: () => void;
   isStreaming: boolean;
   placeholder: string;
@@ -61,6 +68,13 @@ interface Props {
   initialValue?: string;
   /** Disables submission entirely (e.g., config still loading). */
   disabled?: boolean;
+  /**
+   * When defined, renders a ticker input above the prompt textarea and treats
+   * `ticker` as a required field (Send disabled until non-empty). Omit during
+   * chat follow-up where the ticker is fixed by the session.
+   */
+  ticker?: string;
+  onTickerChange?: (next: string) => void;
 }
 
 export function ErComposer({
@@ -77,14 +91,18 @@ export function ErComposer({
   toolPicker,
   initialValue,
   disabled,
+  ticker,
+  onTickerChange,
 }: Props): JSX.Element {
   const { t } = useTranslation();
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const tickerRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const helperId = useId();
   const [attachments, setAttachments] = useState<File[]>([]);
   const [attachmentErrors, setAttachmentErrors] = useState<string[]>([]);
   const seededRef = useRef<string | null>(initialValue ?? null);
+  const tickerEnabled = ticker !== undefined;
 
   const validateFile = (f: File): string | null => {
     if (f.size > PER_FILE_MAX_BYTES) {
@@ -115,10 +133,22 @@ export function ErComposer({
 
   const submit = () => {
     if (disabled) return;
-    const trimmed = value.trim();
-    if (!trimmed && attachments.length === 0) return;
-    if (attachments.length > 0) onSubmit(trimmed, attachments);
-    else onSubmit(trimmed);
+    const trimmedPrompt = value.trim();
+    const trimmedTicker = (ticker ?? "").trim().toUpperCase();
+    if (tickerEnabled) {
+      if (!trimmedTicker) {
+        tickerRef.current?.focus();
+        return;
+      }
+    } else if (!trimmedPrompt && attachments.length === 0) {
+      return;
+    }
+    const payload: ComposerSubmitPayload = {
+      ticker: trimmedTicker,
+      prompt: trimmedPrompt,
+    };
+    if (attachments.length > 0) onSubmit(payload, attachments);
+    else onSubmit(payload);
     setAttachments([]);
     setAttachmentErrors([]);
   };
@@ -128,6 +158,19 @@ export function ErComposer({
       e.preventDefault();
       submit();
     }
+  };
+
+  const handleTickerKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      taRef.current?.focus();
+    }
+  };
+
+  const handleTickerChange = (raw: string) => {
+    if (!onTickerChange) return;
+    const cleaned = raw.toUpperCase().replace(/[^A-Z0-9.\-]/g, "").slice(0, 10);
+    onTickerChange(cleaned);
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -161,7 +204,10 @@ export function ErComposer({
   };
 
   const sendDisabled =
-    disabled || (value.trim().length === 0 && attachments.length === 0);
+    disabled ||
+    (tickerEnabled
+      ? (ticker ?? "").trim().length === 0
+      : value.trim().length === 0 && attachments.length === 0);
 
   return (
     <div className="flex-shrink-0 border-t border-[--color-border-subtle] bg-[--color-bg-base] px-6 pt-3 pb-[18px]">
@@ -169,6 +215,34 @@ export function ErComposer({
         className="mx-auto max-w-[720px] rounded-[12px] border border-[--color-border-subtle] bg-[--color-bg-elevated] p-1 transition-all duration-normal ease-out focus-within:border-[--color-feedback-success] focus-within:shadow-[0_0_0_3px_rgba(212,255,0,0.12)]"
         data-testid="er-composer"
       >
+        {tickerEnabled ? (
+          <div className="flex items-center gap-[10px] border-b border-[--color-border-subtle] px-[14px] py-[8px]">
+            <label
+              htmlFor={`${helperId}-ticker`}
+              className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]"
+            >
+              {t("equity_research.composer_ticker_label", "Ticker")}
+            </label>
+            <input
+              ref={tickerRef}
+              id={`${helperId}-ticker`}
+              type="text"
+              inputMode="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={ticker}
+              placeholder="AAPL"
+              onChange={(e) => handleTickerChange(e.target.value)}
+              onKeyDown={handleTickerKeyDown}
+              data-testid="er-composer-ticker"
+              className="w-[120px] border-0 bg-transparent font-mono text-[13.5px] uppercase tracking-[0.04em] text-[--color-text-primary] outline-none placeholder:text-[--color-text-tertiary]"
+              aria-label={t("equity_research.aria_ticker", "Ticker symbol")}
+            />
+            <span className="font-mono text-[9.5px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+              {t("equity_research.composer_ticker_hint", "subject of the report")}
+            </span>
+          </div>
+        ) : null}
         <textarea
           ref={taRef}
           id={`${helperId}-ta`}
@@ -176,7 +250,14 @@ export function ErComposer({
           aria-describedby={helperId}
           rows={1}
           value={value}
-          placeholder={placeholder}
+          placeholder={
+            tickerEnabled
+              ? t(
+                  "equity_research.composer_prompt_placeholder",
+                  "optional: focus, context, or specific questions",
+                )
+              : placeholder
+          }
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           className="w-full min-h-[44px] resize-none border-0 bg-transparent px-[14px] pt-3 pb-[6px] font-display text-[14.5px] leading-[1.5] text-[--color-text-primary] outline-none placeholder:text-[--color-text-tertiary]"

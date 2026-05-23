@@ -9,7 +9,7 @@ const INITIAL: V2StreamState = {
   runId: null,
   pausedOutput: null,
   pausedRound: null,
-  html: null,
+  report: null,
   failedStage: null,
   failedReason: null,
 };
@@ -95,14 +95,24 @@ describe("v2Reducer", () => {
     expect(next.pausedRound).toBeNull();
   });
 
-  it("completed captures html and sets status to complete", () => {
+  it("completed captures structured report and sets status to complete", () => {
+    const fakeReport = {
+      engine_version: "2.2",
+      generated_at: "2026-05-22T19:30:00Z",
+      template_id: "stock_research_v2",
+      template_name: "Stock Research (v2)",
+      cover: { title: "AAPL", ticker: "AAPL" },
+      sections: [{ id: "intro", name: "Intro", blocks: [] }],
+      citations: [],
+      run_summary: { engine_version: "2.2" },
+    };
     const next = v2Reducer(INITIAL, {
       kind: "EVENT",
       event: "completed",
-      data: { run_id: "r1", html: "<article>OK</article>" },
+      data: { run_id: "r1", report: fakeReport },
     });
     expect(next.status).toBe("complete");
-    expect(next.html).toBe("<article>OK</article>");
+    expect(next.report).toEqual(fakeReport);
     expect(next.runId).toBe("r1");
   });
 

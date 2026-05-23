@@ -36,4 +36,5 @@ from openlia_server.db.models import (  # noqa: F401
     graph,
     cache,
     pipeline_runs,
+    er_v2_models,
 )
