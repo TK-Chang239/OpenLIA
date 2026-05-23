@@ -209,6 +209,23 @@ export default function EquityResearch(): JSX.Element {
     );
   }, [setSearchParams]);
 
+  const onV23SelectPastRun = useCallback(
+    (runId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("run_id_v23", runId);
+          // Selecting a past run lands the user on the composer, not
+          // on a stale report overlay.
+          next.delete("view");
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
+
   // Reattach to an in-progress (or completed) background report via ?report_id.
   useReportStreamAttach(reportIdParam);
 
@@ -1076,6 +1093,7 @@ export default function EquityResearch(): JSX.Element {
                 initialRunId={runIdV23Param}
                 onRunIdChange={onV23RunIdChange}
                 onOpenReport={onV23OpenReport}
+                onSelectPastRun={onV23SelectPastRun}
               />
             </div>
           </div>
