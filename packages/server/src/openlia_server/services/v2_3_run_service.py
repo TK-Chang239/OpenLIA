@@ -13,7 +13,9 @@ HTTP response.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 
+from openlia.llm.runtime.report_v2_3.events import RunnerEvent
 from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
@@ -26,6 +28,8 @@ from sqlalchemy.orm import Session as DBSession
 from .v2_3_runner_factory import V23RunnerFactory
 from .v2_3_state_store import SqlStateStore
 
+Observer = Callable[[RunnerEvent], None]
+
 
 def start_run(
     *,
@@ -36,8 +40,16 @@ def start_run(
     language: Language,
     report_type: ReportType,
     tickers: list[str],
+    observer: Observer | None = None,
 ) -> ReportState:
-    """Begin a new v2.3 run. Persists the resulting state."""
+    """Begin a new v2.3 run. Persists the resulting state.
+
+    When ``observer`` is supplied, the runner emits ``RunnerEvent``
+    instances at every stage boundary so an SSE route can stream
+    progress live. The observer is invoked synchronously inside the
+    runner; the route layer typically passes a callback that pushes to
+    a queue consumed by the SSE generator.
+    """
     state = ReportState(
         run_id=str(uuid.uuid4()),
         user_id=user_id,
@@ -47,7 +59,7 @@ def start_run(
         tickers=tickers,
     )
     runner = runner_factory()
-    state = runner.start(state)
+    state = runner.start(state, observer=observer)
 
     store = SqlStateStore(db)
     store.save(state)
@@ -62,6 +74,7 @@ def answer_run(
     user_id: str,
     run_id: str,
     answers: ClarifyAnswers,
+    observer: Observer | None = None,
 ) -> ReportState:
     """Resume a suspended run with the user's clarifier answers."""
     store = SqlStateStore(db)
@@ -70,7 +83,7 @@ def answer_run(
         raise PermissionError(f"run {run_id} does not belong to user {user_id}")
 
     runner = runner_factory()
-    state = runner.resume(state, answers)
+    state = runner.resume(state, answers, observer=observer)
 
     store.save(state)
     db.commit()
