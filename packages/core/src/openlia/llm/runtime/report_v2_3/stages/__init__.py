@@ -9,6 +9,7 @@ from .base import (
 )
 from .clarify import ClarifyStage
 from .noop import NoOpAssembleStage, NoOpStage
+from .synthesize import SynthesizeStage
 
 __all__ = [
     "ASSEMBLE_SLOT_KEY",
@@ -19,4 +20,5 @@ __all__ = [
     "NoOpStage",
     "Stage",
     "StageContext",
+    "SynthesizeStage",
 ]
