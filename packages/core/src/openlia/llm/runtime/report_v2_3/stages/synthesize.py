@@ -51,17 +51,13 @@ class SynthesizeStage(Stage):
     @staticmethod
     def _require_bundle(state: ReportState) -> ResearchBundle:
         if state.bundle is None:
-            raise RuntimeError(
-                "SYNTHESIZE requires state.bundle to be populated by RESEARCH."
-            )
+            raise RuntimeError("SYNTHESIZE requires state.bundle to be populated by RESEARCH.")
         return state.bundle
 
     @staticmethod
     def _require_outline(state: ReportState) -> Outline:
         if state.outline is None:
-            raise RuntimeError(
-                "SYNTHESIZE requires state.outline to be populated by PLAN."
-            )
+            raise RuntimeError("SYNTHESIZE requires state.outline to be populated by PLAN.")
         return state.outline
 
     # ------------------------------------------------------------------
@@ -100,16 +96,13 @@ class SynthesizeStage(Stage):
             cf.fact_id for cf in thesis.canonical_figures if cf.fact_id not in bundle_fact_ids
         ]
         if bad_canonical:
-            raise RuntimeError(
-                f"Thesis canonical_figures reference unknown facts: {bad_canonical}"
-            )
+            raise RuntimeError(f"Thesis canonical_figures reference unknown facts: {bad_canonical}")
 
         for chart in thesis.charts:
             missing_chart_facts = chart.referenced_fact_ids() - bundle_fact_ids
             if missing_chart_facts:
                 raise RuntimeError(
-                    f"Chart '{chart.id}' references unknown facts: "
-                    f"{sorted(missing_chart_facts)}"
+                    f"Chart '{chart.id}' references unknown facts: {sorted(missing_chart_facts)}"
                 )
 
         # Each mandate.chart_ids must point at a real ChartSpec. Without
@@ -129,9 +122,7 @@ class SynthesizeStage(Stage):
         # this because the bundle is not on the thesis. We check it here so
         # writers cannot be asked to use a fact_id that does not exist.
         for mandate in thesis.mandates:
-            missing_mandate_facts = (
-                set(mandate.relevant_fact_ids) - bundle_fact_ids
-            )
+            missing_mandate_facts = set(mandate.relevant_fact_ids) - bundle_fact_ids
             if missing_mandate_facts:
                 raise RuntimeError(
                     f"Mandate for section '{mandate.section_id}' references "

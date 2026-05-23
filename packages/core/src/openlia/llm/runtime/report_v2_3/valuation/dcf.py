@@ -64,21 +64,15 @@ def dcf(inputs: DCFInputs, bundle: ResearchBundle) -> DCFResult:
     horizon = len(fcfs)
     terminal_fcf = fcfs[-1] * (1.0 + inputs.terminal_growth)
     terminal_value = terminal_fcf / (inputs.wacc - inputs.terminal_growth)
-    pv_terminal = terminal_value / (discount_factor ** horizon)
+    pv_terminal = terminal_value / (discount_factor**horizon)
 
     enterprise_value = pv_explicit + pv_terminal
 
     grounding = set(inputs.grounding_fact_ids)
     net_debt = (
-        _resolve_scalar(bundle, _NET_DEBT_FACT_ID)
-        if _NET_DEBT_FACT_ID in grounding
-        else None
+        _resolve_scalar(bundle, _NET_DEBT_FACT_ID) if _NET_DEBT_FACT_ID in grounding else None
     )
-    shares = (
-        _resolve_scalar(bundle, _SHARES_FACT_ID)
-        if _SHARES_FACT_ID in grounding
-        else None
-    )
+    shares = _resolve_scalar(bundle, _SHARES_FACT_ID) if _SHARES_FACT_ID in grounding else None
 
     equity_value = enterprise_value - net_debt if net_debt is not None else enterprise_value
     if shares and shares > 0:

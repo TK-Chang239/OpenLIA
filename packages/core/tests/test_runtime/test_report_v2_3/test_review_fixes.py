@@ -138,9 +138,7 @@ def test_synthesize_accepts_mandate_with_valid_chart_id() -> None:
             )
         ],
     )
-    state = SynthesizeStage(FakeSynthesizerClient(result=thesis)).run(
-        _state_for_synth(), _ctx()
-    )
+    state = SynthesizeStage(FakeSynthesizerClient(result=thesis)).run(_state_for_synth(), _ctx())
     assert state.thesis is thesis
 
 

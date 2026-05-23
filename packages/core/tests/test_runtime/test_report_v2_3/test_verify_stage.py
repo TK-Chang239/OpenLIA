@@ -99,14 +99,18 @@ def _state(*, sections: list[WrittenSection] | None = None) -> ReportState:
     )
     s.bundle = _bundle()
     s.thesis = _thesis()
-    s.sections = sections if sections is not None else [
-        WrittenSection(section_id="overview", title="Overview", body="Margin {{CITE:gm}}."),
-        WrittenSection(
-            section_id="financials",
-            title="Financials",
-            body="Rev {{CITE:rev_ttm}} see {{FIG:rev_chart}}.",
-        ),
-    ]
+    s.sections = (
+        sections
+        if sections is not None
+        else [
+            WrittenSection(section_id="overview", title="Overview", body="Margin {{CITE:gm}}."),
+            WrittenSection(
+                section_id="financials",
+                title="Financials",
+                body="Rev {{CITE:rev_ttm}} see {{FIG:rev_chart}}.",
+            ),
+        ]
+    )
     return s
 
 
@@ -216,9 +220,7 @@ def test_deterministic_broken_fig_ref_caught() -> None:
     assert state.verify_result is not None
     issues = state.verify_result.issues
     assert any(
-        i.kind == IssueKind.BROKEN_FIG_REF
-        and i.severity == IssueSeverity.HIGH
-        for i in issues
+        i.kind == IssueKind.BROKEN_FIG_REF and i.severity == IssueSeverity.HIGH for i in issues
     )
 
 

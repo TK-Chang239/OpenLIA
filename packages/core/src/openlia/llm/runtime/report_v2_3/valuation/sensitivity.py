@@ -22,9 +22,7 @@ from ..schemas import (
 from .dcf import dcf
 
 
-def sensitivity(
-    inputs: SensitivityInputs, bundle: ResearchBundle
-) -> SensitivityResult:
+def sensitivity(inputs: SensitivityInputs, bundle: ResearchBundle) -> SensitivityResult:
     grid: list[list[float]] = []
     for row_value in inputs.row_values:
         row: list[float] = []
@@ -48,9 +46,7 @@ def _override_drivers(base: DCFInputs, driver: str, value: float) -> DCFInputs:
     return base.model_copy(update={driver: value})
 
 
-def sensitivity_result_to_fact(
-    result: SensitivityResult, inputs: SensitivityInputs
-) -> BundleFact:
+def sensitivity_result_to_fact(result: SensitivityResult, inputs: SensitivityInputs) -> BundleFact:
     """One BundleFact for the whole grid (locked design from spec §4.2b)."""
     derived = [inputs.base.revenue_base_fact_id, *inputs.base.grounding_fact_ids]
     return BundleFact(

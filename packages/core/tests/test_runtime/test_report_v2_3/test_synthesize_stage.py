@@ -160,9 +160,7 @@ def test_missing_outline_raises() -> None:
 
 
 def test_language_mismatch_raises() -> None:
-    stage = SynthesizeStage(
-        FakeSynthesizerClient(result=_thesis(language=Language.ZH_TW))
-    )
+    stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(language=Language.ZH_TW)))
     with pytest.raises(RuntimeError, match="language"):
         stage.run(_state(language=Language.EN), _ctx())
 
@@ -175,9 +173,7 @@ def test_missing_mandate_for_outline_section_raises() -> None:
             does_not_cover="x",
         )
     ]
-    stage = SynthesizeStage(
-        FakeSynthesizerClient(result=_thesis(mandates=mandates))
-    )
+    stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(mandates=mandates)))
     with pytest.raises(RuntimeError, match="missing mandates"):
         stage.run(_state(), _ctx())
 
@@ -188,18 +184,14 @@ def test_stray_mandate_not_in_outline_raises() -> None:
         SectionMandate(section_id="financials", covers="x", does_not_cover="y"),
         SectionMandate(section_id="ghost", covers="x", does_not_cover="y"),
     ]
-    stage = SynthesizeStage(
-        FakeSynthesizerClient(result=_thesis(mandates=mandates))
-    )
+    stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(mandates=mandates)))
     with pytest.raises(RuntimeError, match="not in outline"):
         stage.run(_state(), _ctx())
 
 
 def test_canonical_figure_for_unknown_fact_raises() -> None:
     canonical = [CanonicalFigure(fact_id="not_in_bundle", display="x")]
-    stage = SynthesizeStage(
-        FakeSynthesizerClient(result=_thesis(canonical=canonical))
-    )
+    stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(canonical=canonical)))
     with pytest.raises(RuntimeError, match="canonical_figures"):
         stage.run(_state(), _ctx())
 
@@ -216,9 +208,7 @@ def test_chart_referencing_unknown_fact_raises() -> None:
             series=[ChartSeries(name="rev", value_fact_ids=["ghost_fact"])],
         )
     ]
-    stage = SynthesizeStage(
-        FakeSynthesizerClient(result=_thesis(charts=charts))
-    )
+    stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(charts=charts)))
     with pytest.raises(RuntimeError, match="references unknown facts"):
         stage.run(_state(), _ctx())
 
@@ -233,8 +223,6 @@ def test_mandate_referencing_unknown_fact_raises() -> None:
         ),
         SectionMandate(section_id="financials", covers="x", does_not_cover="y"),
     ]
-    stage = SynthesizeStage(
-        FakeSynthesizerClient(result=_thesis(mandates=mandates))
-    )
+    stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(mandates=mandates)))
     with pytest.raises(RuntimeError, match="references unknown facts"):
         stage.run(_state(), _ctx())

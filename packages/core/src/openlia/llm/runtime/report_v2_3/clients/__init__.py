@@ -9,6 +9,13 @@ resolved via the per-user `er_v2_3_model_assignments` mapping).
 from .clarifier import ClarifierClient, ClarifierRequest, FakeClarifierClient
 from .compute import ComputeClient, ComputeRequest, FakeComputeClient
 from .llm_clarifier import LLMClarifierClient
+from .llm_researcher import (
+    MAX_RESEARCH_TURNS,
+    FakeToolLLMClient,
+    LLMResearcherClient,
+    ToolLLMClient,
+    ToolTurnResponse,
+)
 from .planner import FakePlannerClient, PlannerClient, PlannerRequest
 from .researcher import FakeResearcherClient, ResearcherClient, ResearchRequest
 from .synthesizer import (
@@ -20,6 +27,7 @@ from .verifier import FakeVerifierClient, VerifierClient, VerifierRequest
 from .writer import FakeWriterClient, WriterClient, WriterRequest
 
 __all__ = [
+    "MAX_RESEARCH_TURNS",
     "ClarifierClient",
     "ClarifierRequest",
     "ComputeClient",
@@ -29,15 +37,19 @@ __all__ = [
     "FakePlannerClient",
     "FakeResearcherClient",
     "FakeSynthesizerClient",
+    "FakeToolLLMClient",
     "FakeVerifierClient",
     "FakeWriterClient",
     "LLMClarifierClient",
+    "LLMResearcherClient",
     "PlannerClient",
     "PlannerRequest",
     "ResearchRequest",
     "ResearcherClient",
     "SynthesizerClient",
     "SynthesizerRequest",
+    "ToolLLMClient",
+    "ToolTurnResponse",
     "VerifierClient",
     "VerifierRequest",
     "WriterClient",
