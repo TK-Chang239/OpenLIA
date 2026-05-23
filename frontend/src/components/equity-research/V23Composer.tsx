@@ -22,13 +22,11 @@ import {
   type V23ReportType,
   type V23RunState,
   type V23Stage,
-  answerV23Run,
-  getV23Run,
-  startV23Run,
+  streamV23Answer,
+  streamV23Run,
 } from "../../api/equity-research-v2-3";
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
 
-const POLL_INTERVAL_MS = 1500;
 const STAGE_LABEL: Record<V23Stage, string> = {
   clarify: "Clarifying",
   plan: "Planning",
@@ -45,43 +43,48 @@ export function V23Composer(): JSX.Element {
   const [tickers, setTickers] = useState("");
   const [reportType, setReportType] = useState<V23ReportType>("initiation");
   const [run, setRun] = useState<V23RunState | null>(null);
+  const [stage, setStage] = useState<V23Stage | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const streamRef = useRef<AbortController | null>(null);
 
   const parsedTickers = tickers
     .split(/[,\s]+/)
     .map((t) => t.trim().toUpperCase())
     .filter(Boolean);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current !== null) {
-      clearTimeout(pollRef.current);
-      pollRef.current = null;
+  const closeStream = useCallback(() => {
+    if (streamRef.current !== null) {
+      streamRef.current.abort();
+      streamRef.current = null;
     }
   }, []);
 
-  useEffect(() => () => stopPolling(), [stopPolling]);
+  useEffect(() => () => closeStream(), [closeStream]);
 
-  const scheduleNextPoll = useCallback(
-    (state: V23RunState) => {
-      stopPolling();
-      if (state.status !== "running") return;
-      pollRef.current = setTimeout(async () => {
-        try {
-          const next = await getV23Run(state.run_id);
-          setRun(next);
-          scheduleNextPoll(next);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : "poll failed");
-        }
-      }, POLL_INTERVAL_MS);
+  const handleStreamEvent = useCallback(
+    (evt: import("../../api/equity-research-v2-3").V23StreamEvent) => {
+      if (evt.event === "stage_started") {
+        setStage(evt.data.slot);
+      } else if (evt.event === "stage_completed") {
+        // No-op: stage_started already reflects the active stage.
+      } else if (evt.event === "suspended") {
+        setStage(evt.data.slot);
+      } else if (evt.event === "failed") {
+        setError(evt.data.error);
+        setBusy(false);
+      } else if (evt.event === "completed") {
+        setStage(null);
+      } else if (evt.event === "state") {
+        setRun(evt.data);
+        setBusy(false);
+      }
     },
-    [stopPolling],
+    [],
   );
 
-  const send = async () => {
+  const send = () => {
     if (parsedTickers.length === 0 || !prompt.trim()) {
       setError("Provide at least one ticker and a prompt.");
       return;
@@ -89,34 +92,35 @@ export function V23Composer(): JSX.Element {
     setError(null);
     setBusy(true);
     setAnswers({});
-    try {
-      const next = await startV23Run({
+    closeStream();
+    streamRef.current = streamV23Run(
+      {
         raw_prompt: prompt,
         tickers: parsedTickers,
         report_type: reportType,
-      });
-      setRun(next);
-      scheduleNextPoll(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to start run");
-    } finally {
-      setBusy(false);
-    }
+      },
+      {
+        onEvent: handleStreamEvent,
+        onError: (e) => {
+          setError(e.message);
+          setBusy(false);
+        },
+      },
+    );
   };
 
-  const submitAnswers = async () => {
+  const submitAnswers = () => {
     if (!run) return;
     setBusy(true);
     setError(null);
-    try {
-      const next = await answerV23Run(run.run_id, answers);
-      setRun(next);
-      scheduleNextPoll(next);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to submit answers");
-    } finally {
-      setBusy(false);
-    }
+    closeStream();
+    streamRef.current = streamV23Answer(run.run_id, answers, {
+      onEvent: handleStreamEvent,
+      onError: (e) => {
+        setError(e.message);
+        setBusy(false);
+      },
+    });
   };
 
   const needsClarify =
@@ -187,7 +191,15 @@ export function V23Composer(): JSX.Element {
         </div>
       ) : null}
 
-      {run ? <V23RunBadge run={run} /> : null}
+      {run ? <V23RunBadge run={run} liveStage={stage} /> : null}
+      {!run && stage !== null ? (
+        <div
+          data-testid="er-v2-3-live-stage"
+          className="flex items-center justify-end rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[--color-text-secondary]"
+        >
+          {STAGE_LABEL[stage]}…
+        </div>
+      ) : null}
 
       {needsClarify ? (
         <ClarifyForm
@@ -202,9 +214,15 @@ export function V23Composer(): JSX.Element {
   );
 }
 
-function V23RunBadge({ run }: { run: V23RunState }): JSX.Element {
-  const stageLabel =
-    run.current_stage !== null ? STAGE_LABEL[run.current_stage] : "Idle";
+function V23RunBadge({
+  run,
+  liveStage,
+}: {
+  run: V23RunState;
+  liveStage: V23Stage | null;
+}): JSX.Element {
+  const activeStage = liveStage ?? run.current_stage;
+  const stageLabel = activeStage !== null ? STAGE_LABEL[activeStage] : "Idle";
   const statusColor =
     run.status === "failed"
       ? "text-[--color-feedback-danger]"
