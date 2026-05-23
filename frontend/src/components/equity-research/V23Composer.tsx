@@ -30,7 +30,7 @@ import {
   v23DocxUrl,
 } from "../../api/equity-research-v2-3";
 import { V23ClarifyModal } from "./V23ClarifyModal";
-import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
+import { V23FailedReportCard } from "./V23FailedReportCard";
 import { V23RepoPanel } from "./V23RepoPanel";
 import { V23ReportCard } from "./V23ReportCard";
 import { V23StageStrip } from "./V23StageStrip";
@@ -78,6 +78,11 @@ interface Props {
    *  page mirrors this into ?run_id_v23=<id> which triggers the
    *  composer's own reattach effect on the next render. */
   onSelectPastRun?: (runId: string) => void;
+  /** Engine model assignments snapshot, sourced from the
+   *  V23EngineModelsPicker that now lives in the page header. When
+   *  null the composer assumes the picker is still loading and keeps
+   *  the run button disabled with a generic prompt. */
+  assignments?: AssignmentsResponse | null;
 }
 
 export function V23Composer({
@@ -85,6 +90,7 @@ export function V23Composer({
   onRunIdChange,
   onOpenReport,
   onSelectPastRun,
+  assignments = null,
 }: Props = {}): JSX.Element {
   const [prompt, setPrompt] = useState("");
   const [tickers, setTickers] = useState("");
@@ -102,7 +108,6 @@ export function V23Composer({
   const [clarifyDismissed, setClarifyDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [assignments, setAssignments] = useState<AssignmentsResponse | null>(null);
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
   const [payload, setPayload] = useState<V23RunPayload | null>(null);
   const [payloadError, setPayloadError] = useState<string | null>(null);
@@ -320,13 +325,26 @@ export function V23Composer({
   const needsClarify =
     run?.status === "waiting_on_user" && run.pending_questions.length > 0;
 
+  const restart = useCallback(() => {
+    closeStream();
+    setRun(null);
+    setStage(null);
+    setCompletedStages(new Set());
+    setFailedStage(null);
+    setClarifyDismissed(false);
+    setAnswers({});
+    setPayload(null);
+    setPayloadError(null);
+    setError(null);
+    setBusy(false);
+  }, [closeStream]);
+
   return (
     <div className="flex flex-col gap-[14px]" data-testid="er-v2-3-composer">
       <div className="flex items-center justify-between gap-[10px]">
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
           Equity Research v2.3
         </span>
-        <V23EngineModelsPicker onAssignmentsChange={setAssignments} />
       </div>
 
       {!readyToRun && assignments !== null ? (
@@ -432,6 +450,16 @@ export function V23Composer({
         />
       ) : null}
       {run !== null ? <V23RunBadge run={run} liveStage={stage} /> : null}
+
+      {run?.status === "failed" ? (
+        <V23FailedReportCard
+          runId={run.run_id}
+          failedStage={failedStage ?? run.current_stage}
+          lastError={run.last_error}
+          retryCount={run.retry_count}
+          onRestart={restart}
+        />
+      ) : null}
 
       {needsClarify && clarifyDismissed ? (
         <button

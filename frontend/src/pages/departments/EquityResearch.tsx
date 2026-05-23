@@ -53,7 +53,9 @@ import { FailedReportCard } from "../../components/equity-research/FailedReportC
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
 import { V23Composer } from "../../components/equity-research/V23Composer";
+import { V23EngineModelsPicker } from "../../components/equity-research/V23EngineModelsPicker";
 import { V23ReportFullScreen } from "../../components/equity-research/V23ReportFullScreen";
+import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import {
   useReportStream,
@@ -208,6 +210,14 @@ export default function EquityResearch(): JSX.Element {
       { replace: false },
     );
   }, [setSearchParams]);
+
+  // The v2.3 engine-models picker now lives in the page header rather
+  // than inside the composer. We hold its snapshot here so the composer
+  // can gate the Run button on the user having assigned at least the
+  // clarify slot.
+  const [v23Assignments, setV23Assignments] = useState<AssignmentsResponse | null>(
+    null,
+  );
 
   const onV23SelectPastRun = useCallback(
     (runId: string) => {
@@ -1078,7 +1088,8 @@ export default function EquityResearch(): JSX.Element {
       <div className="relative flex flex-1 min-h-0 flex-col">
         {useV23 ? (
           <div className="flex flex-1 min-h-0 flex-col">
-            <div className="flex items-center justify-end px-4 pt-3">
+            <div className="flex items-center justify-end gap-2 px-4 pt-3">
+              <V23EngineModelsPicker onAssignmentsChange={setV23Assignments} />
               <button
                 type="button"
                 onClick={toggleUseV23}
@@ -1094,6 +1105,7 @@ export default function EquityResearch(): JSX.Element {
                 onRunIdChange={onV23RunIdChange}
                 onOpenReport={onV23OpenReport}
                 onSelectPastRun={onV23SelectPastRun}
+                assignments={v23Assignments}
               />
             </div>
           </div>
