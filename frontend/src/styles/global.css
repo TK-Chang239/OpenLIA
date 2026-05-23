@@ -501,6 +501,51 @@ body {
   .report__main table thead {
     display: table-header-group;
   }
+
+  /* ---------------------------------------------------------------
+   * v2.3 report view — single-DOM "print to PDF" path.
+   *
+   * When a v2.3 report is on the page (signalled by
+   * data-print-target="v23-report"), printing isolates that subtree
+   * and lays it out on white paper. Same DOM as the on-screen view,
+   * no Playwright dependency on the server. See
+   * report_output_rendering_spec.md §3b/§6.
+   * --------------------------------------------------------------- */
+  body:has([data-print-target="v23-report"]) {
+    visibility: hidden;
+    background: #ffffff !important;
+  }
+  [data-print-target="v23-report"],
+  [data-print-target="v23-report"] * {
+    visibility: visible;
+  }
+  [data-print-target="v23-report"] {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: none !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Figures + captions are one unit; never split a chart from its caption. */
+  [data-print-target="v23-report"] figure {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* Headings glue to their following content. */
+  [data-print-target="v23-report"] h2,
+  [data-print-target="v23-report"] h3 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  /* The "Save as PDF" trigger has no business showing up in the PDF. */
+  [data-print-hide="true"] {
+    display: none !important;
+  }
 }
 
 /* Loading bar — used by route Suspense fallbacks before code chunks load. */
