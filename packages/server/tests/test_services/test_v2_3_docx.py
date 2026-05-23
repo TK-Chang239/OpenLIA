@@ -172,12 +172,17 @@ def test_rendered_document_resolves_footnote_markers() -> None:
     blob = render_docx(_state_ready_to_render())
     doc = Document(io.BytesIO(blob))
     body_text = "\n".join(p.text for p in doc.paragraphs)
-    # Numbered marker landed in the body; the placeholder did not survive.
-    assert "[^1]" in body_text
+    # PR16: ``[^1]`` was rewritten into a real Word footnote reference so it
+    # no longer appears as visible text; ``{{CITE:}}`` likewise.
+    assert "[^1]" not in body_text
     assert "{{CITE:" not in body_text
     # Figure was numbered and the placeholder was replaced.
     assert "Figure 1" in body_text
     assert "{{FIG:" not in body_text
+    # Native footnote reference and the footnotes part both exist.
+    body_xml = doc.part.element.body.xml
+    assert "footnoteReference" in body_xml
+    assert any(rel.reltype.endswith("/footnotes") for rel in doc.part.rels.values())
 
 
 def test_rendered_document_contains_references_section() -> None:
