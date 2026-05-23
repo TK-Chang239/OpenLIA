@@ -20,6 +20,9 @@ def test_serve_calls_bootstrap_before_uvicorn(
     with (
         patch("openlia_server.cli.bootstrap") as mock_bootstrap,
         patch("openlia_server.cli.uvicorn.run") as mock_uvicorn,
+        # Preflight bind check inspects the OS — pin it to "free" so the test
+        # is not sensitive to a developer's local process holding 8080.
+        patch("openlia_server.cli._check_port_available", return_value=None),
     ):
         mock_bootstrap.return_value = None
         result = runner.invoke(app, ["serve"])
