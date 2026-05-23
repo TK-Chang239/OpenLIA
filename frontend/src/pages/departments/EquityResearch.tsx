@@ -53,6 +53,7 @@ import { FailedReportCard } from "../../components/equity-research/FailedReportC
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
 import { V23Composer } from "../../components/equity-research/V23Composer";
+import { V23ReportFullScreen } from "../../components/equity-research/V23ReportFullScreen";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import {
   useReportStream,
@@ -161,6 +162,10 @@ export default function EquityResearch(): JSX.Element {
   // v2.3 reattach. V23Composer reads this on mount via GET /runs/{id}
   // and surfaces the cached report, clarify modal, or error state.
   const runIdV23Param = searchParams.get("run_id_v23");
+  // ?view=report mounts the full-screen V23ReportFullScreen overlay
+  // over the page; the overlay self-fetches the payload from runIdV23.
+  const viewParam = searchParams.get("view");
+  const reportOverlayOpen = viewParam === "report" && Boolean(runIdV23Param);
 
   const onV23RunIdChange = useCallback(
     (runId: string | null) => {
@@ -169,6 +174,8 @@ export default function EquityResearch(): JSX.Element {
           const next = new URLSearchParams(prev);
           if (runId) next.set("run_id_v23", runId);
           else next.delete("run_id_v23");
+          // Closing the run also closes any open report overlay.
+          if (!runId) next.delete("view");
           return next;
         },
         { replace: true },
@@ -176,6 +183,31 @@ export default function EquityResearch(): JSX.Element {
     },
     [setSearchParams],
   );
+
+  const onV23OpenReport = useCallback(
+    (_runId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("view", "report");
+          return next;
+        },
+        { replace: false },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const onV23CloseReport = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("view");
+        return next;
+      },
+      { replace: false },
+    );
+  }, [setSearchParams]);
 
   // Reattach to an in-progress (or completed) background report via ?report_id.
   useReportStreamAttach(reportIdParam);
@@ -1043,6 +1075,7 @@ export default function EquityResearch(): JSX.Element {
               <V23Composer
                 initialRunId={runIdV23Param}
                 onRunIdChange={onV23RunIdChange}
+                onOpenReport={onV23OpenReport}
               />
             </div>
           </div>
@@ -1420,6 +1453,13 @@ export default function EquityResearch(): JSX.Element {
           await patch(p);
         }}
       />
+
+      {reportOverlayOpen && runIdV23Param ? (
+        <V23ReportFullScreen
+          runId={runIdV23Param}
+          onClose={onV23CloseReport}
+        />
+      ) : null}
 
       {!useV23 && v2Stream.state.status === "paused" && v2Stream.state.pausedOutput &&
        v2Stream.state.runId ? (

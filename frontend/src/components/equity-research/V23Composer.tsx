@@ -32,7 +32,7 @@ import {
 } from "../../api/equity-research-v2-3";
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
 import { V23RepoPanel } from "./V23RepoPanel";
-import { V23ReportView } from "./V23ReportView";
+import { V23ReportCard } from "./V23ReportCard";
 import { V23StageStrip } from "./V23StageStrip";
 
 const STAGE_LABEL: Record<V23Stage, string> = {
@@ -71,11 +71,15 @@ interface Props {
    *  user starts a fresh run (id reset to null). Parent mirrors this to
    *  the URL so a reload restores the same view. */
   onRunIdChange?: (runId: string | null) => void;
+  /** Fired when the user clicks "Open Report" on a completed run; the
+   *  page sets ?view=report so the full-screen overlay mounts. */
+  onOpenReport?: (runId: string) => void;
 }
 
 export function V23Composer({
   initialRunId = null,
   onRunIdChange,
+  onOpenReport,
 }: Props = {}): JSX.Element {
   const [prompt, setPrompt] = useState("");
   const [tickers, setTickers] = useState("");
@@ -415,7 +419,13 @@ export function V23Composer({
         />
       ) : null}
 
-      {payload !== null ? <V23ReportView payload={payload} /> : null}
+      {payload !== null ? (
+        <V23ReportCard
+          payload={payload}
+          completedAt={run?.status === "complete" ? new Date().toISOString() : null}
+          onOpen={() => onOpenReport?.(payload.run_id)}
+        />
+      ) : null}
       {payloadError !== null ? (
         <div
           role="alert"
