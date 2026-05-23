@@ -16,6 +16,13 @@ from .llm_researcher import (
     ToolLLMClient,
     ToolTurnResponse,
 )
+from .llm_stage_clients import (
+    LLMComputeClient,
+    LLMPlannerClient,
+    LLMSynthesizerClient,
+    LLMVerifierClient,
+    LLMWriterClient,
+)
 from .planner import FakePlannerClient, PlannerClient, PlannerRequest
 from .researcher import FakeResearcherClient, ResearcherClient, ResearchRequest
 from .synthesizer import (
@@ -41,7 +48,12 @@ __all__ = [
     "FakeVerifierClient",
     "FakeWriterClient",
     "LLMClarifierClient",
+    "LLMComputeClient",
+    "LLMPlannerClient",
     "LLMResearcherClient",
+    "LLMSynthesizerClient",
+    "LLMVerifierClient",
+    "LLMWriterClient",
     "PlannerClient",
     "PlannerRequest",
     "ResearchRequest",
