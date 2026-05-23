@@ -14,6 +14,7 @@ from .synthesizer import (
     SynthesizerClient,
     SynthesizerRequest,
 )
+from .verifier import FakeVerifierClient, VerifierClient, VerifierRequest
 from .writer import FakeWriterClient, WriterClient, WriterRequest
 
 __all__ = [
@@ -22,12 +23,15 @@ __all__ = [
     "FakeClarifierClient",
     "FakePlannerClient",
     "FakeSynthesizerClient",
+    "FakeVerifierClient",
     "FakeWriterClient",
     "LLMClarifierClient",
     "PlannerClient",
     "PlannerRequest",
     "SynthesizerClient",
     "SynthesizerRequest",
+    "VerifierClient",
+    "VerifierRequest",
     "WriterClient",
     "WriterRequest",
 ]
