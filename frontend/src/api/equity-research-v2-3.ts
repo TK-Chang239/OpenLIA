@@ -142,6 +142,93 @@ export function v23DocxUrl(runId: string): string {
 
 
 // ---------------------------------------------------------------------------
+// Structured payload — the source of truth the browser renderer consumes.
+//
+// `<V23ReportView>` plots this with inline-SVG charts (recharts). The same
+// payload backs the .docx renderer on the server side; both are independent
+// renderings of one structure (no docx -> browser parse, no drift).
+// ---------------------------------------------------------------------------
+
+export type V23ChartType =
+  | "column"
+  | "bar"
+  | "line"
+  | "area"
+  | "pie"
+  | "scatter";
+
+export interface V23BundleSeriesPoint {
+  period: string;
+  value: number;
+}
+
+export interface V23BundleFact {
+  id: string;
+  label: string;
+  /** Scalar value (number / string) or a time-series (list of points). */
+  value: number | string | V23BundleSeriesPoint[];
+  unit: string | null;
+  ticker: string | null;
+}
+
+export interface V23ChartSeries {
+  name: string;
+  value_fact_ids: string[];
+}
+
+export interface V23ChartSpec {
+  id: string;
+  section_id: string;
+  claim: string;
+  chart_type: V23ChartType;
+  title: string;
+  category_labels: string[];
+  series: V23ChartSeries[];
+  x_axis_label: string | null;
+  y_axis_label: string | null;
+}
+
+export interface V23CanonicalFigure {
+  fact_id: string;
+  display: string;
+}
+
+export interface V23OutlineSection {
+  id: string;
+  title: string;
+}
+
+export interface V23ThesisPayload {
+  language: V23Language;
+  central_argument: string;
+  key_takeaways: string[];
+  valuation_stance: string;
+  canonical_figures: V23CanonicalFigure[];
+}
+
+export interface V23RunPayload {
+  run_id: string;
+  tickers: string[];
+  report_type: V23ReportType;
+  language: V23Language;
+  thesis: V23ThesisPayload;
+  sections: V23OutlineSection[];
+  /** Resolved prose; still carries `[^N]` and `{{FIG:id}}` markers. */
+  section_bodies: Record<string, string>;
+  footnotes: string[];
+  charts: V23ChartSpec[];
+  figure_labels: Record<string, number>;
+  bundle_facts: Record<string, V23BundleFact>;
+}
+
+export function getV23RunPayload(runId: string): Promise<V23RunPayload> {
+  return request<V23RunPayload>(
+    `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(runId)}/payload`,
+  );
+}
+
+
+// ---------------------------------------------------------------------------
 // SSE streaming
 // ---------------------------------------------------------------------------
 

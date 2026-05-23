@@ -14,6 +14,11 @@ Plain JSON endpoints (SSE companion lives in equity_research_v2_3_sse.py):
     Drop a run from persistence.
 - ``GET    /api/departments/equity-research/v2.3/runs/{run_id}/docx``
     Render the completed run as a Word document and stream it back.
+- ``GET    /api/departments/equity-research/v2.3/runs/{run_id}/payload``
+    Return the run's structured payload (resolved report + charts + minimal
+    bundle facts) so the React renderer can produce the on-screen view.
+    The docx and the browser view both consume this payload — one source
+    of truth, two renderers.
 
 Factory resolution order, per request:
 
@@ -115,6 +120,96 @@ class RunStateOut(BaseModel):
             last_error=state.last_error,
             retry_count=state.retry_count,
         )
+
+
+class PayloadBundleSeriesPoint(BaseModel):
+    period: str
+    value: float
+
+
+class PayloadBundleFact(BaseModel):
+    """Bundle fact projected for the browser renderer.
+
+    Carries only the fields the React side needs to plot a chart or
+    look up a value — `Provenance` is intentionally dropped because the
+    footnote text already encodes the resolved citation.
+    """
+
+    id: str
+    label: str
+    value: float | str | list[PayloadBundleSeriesPoint]
+    unit: str | None = None
+    ticker: str | None = None
+
+
+class PayloadChartSeries(BaseModel):
+    name: str
+    value_fact_ids: list[str]
+
+
+class PayloadChartSpec(BaseModel):
+    id: str
+    section_id: str
+    claim: str
+    chart_type: str
+    title: str
+    category_labels: list[str]
+    series: list[PayloadChartSeries]
+    x_axis_label: str | None = None
+    y_axis_label: str | None = None
+
+
+class PayloadCanonicalFigure(BaseModel):
+    fact_id: str
+    display: str
+
+
+class PayloadOutlineSection(BaseModel):
+    id: str
+    title: str
+
+
+class PayloadThesis(BaseModel):
+    language: str
+    central_argument: str
+    key_takeaways: list[str]
+    valuation_stance: str
+    canonical_figures: list[PayloadCanonicalFigure]
+
+
+class RunPayloadOut(BaseModel):
+    """JSON shape consumed by ``<V23ReportView>`` in the frontend.
+
+    Fields:
+    - ``run_id`` / ``tickers`` / ``report_type`` / ``language`` — cover-page
+      metadata.
+    - ``thesis`` — central argument, takeaways, canonical figures.
+    - ``sections`` — ordered (id, title) pairs so the renderer keeps the
+      outline's section order.
+    - ``section_bodies`` — resolved prose; still carries ``[^N]`` footnote
+      markers and ``{{FIG:id}}`` chart placeholders for the renderer to
+      transform inline.
+    - ``footnotes`` — index N -> the resolved citation text the marker
+      points at.
+    - ``charts`` — ChartSpecs assigned to sections, keyed by id.
+    - ``figure_labels`` — chart id -> 1-based figure number (the renderer
+      shows "Figure N: …" in captions).
+    - ``bundle_facts`` — minimal projection of facts the charts reference,
+      so the React chart components can plot real numbers instead of
+      placeholders.
+    """
+
+    run_id: str
+    tickers: list[str]
+    report_type: str
+    language: str
+    thesis: PayloadThesis
+    sections: list[PayloadOutlineSection]
+    section_bodies: dict[str, str]
+    footnotes: list[str]
+    charts: list[PayloadChartSpec]
+    figure_labels: dict[str, int]
+    bundle_facts: dict[str, PayloadBundleFact]
 
 
 def _engine_unavailable() -> HTTPException:
@@ -306,7 +401,112 @@ def build_equity_research_v2_3_router(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @router.get("/runs/{run_id}/payload", response_model=RunPayloadOut)
+    def get_run_payload(
+        run_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RunPayloadOut:
+        try:
+            state = svc.get_run(db=db, user_id=user.id, run_id=run_id)
+        except StateNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "run_not_found", "message": f"run {run_id} not found"},
+            ) from None
+        except PermissionError:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "run_not_yours", "message": "run belongs to another user"},
+            ) from None
+        if (
+            state.status != RunStatus.COMPLETE
+            or state.resolved is None
+            or state.thesis is None
+            or state.outline is None
+            or state.bundle is None
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "run_not_complete",
+                    "message": (
+                        "payload export is only available for completed runs; "
+                        f"current status is {state.status.value}."
+                    ),
+                },
+            )
+        return _project_payload(state)
+
     return router
+
+
+def _project_payload(state: ReportState) -> RunPayloadOut:
+    """Project a completed ``ReportState`` into the JSON shape the React
+    renderer consumes. Strips ``Provenance`` (encoded into footnotes already)
+    and narrows ``BundleFact.value`` to the renderable subset.
+    """
+    assert state.resolved is not None
+    assert state.thesis is not None
+    assert state.outline is not None
+    assert state.bundle is not None
+
+    charts_payload = [
+        PayloadChartSpec(
+            id=c.id,
+            section_id=c.section_id,
+            claim=c.claim,
+            chart_type=c.chart_type.value,
+            title=c.title,
+            category_labels=list(c.category_labels),
+            series=[
+                PayloadChartSeries(name=s.name, value_fact_ids=list(s.value_fact_ids))
+                for s in c.series
+            ],
+            x_axis_label=c.x_axis_label,
+            y_axis_label=c.y_axis_label,
+        )
+        for c in state.thesis.charts
+    ]
+
+    bundle_facts: dict[str, PayloadBundleFact] = {}
+    for fid, fact in state.bundle.facts.items():
+        value: float | str | list[PayloadBundleSeriesPoint]
+        raw = fact.value
+        if isinstance(raw, (int, float, str)):
+            value = raw if isinstance(raw, str) else float(raw)
+        else:
+            value = [PayloadBundleSeriesPoint(period=p.period, value=p.value) for p in raw.points]
+        bundle_facts[fid] = PayloadBundleFact(
+            id=fact.id,
+            label=fact.label,
+            value=value,
+            unit=fact.unit,
+            ticker=fact.ticker,
+        )
+
+    return RunPayloadOut(
+        run_id=state.run_id,
+        tickers=list(state.tickers),
+        report_type=state.report_type.value,
+        language=state.language.value,
+        thesis=PayloadThesis(
+            language=state.thesis.language.value,
+            central_argument=state.thesis.central_argument,
+            key_takeaways=list(state.thesis.key_takeaways),
+            valuation_stance=state.thesis.valuation_stance,
+            canonical_figures=[
+                PayloadCanonicalFigure(fact_id=cf.fact_id, display=cf.display)
+                for cf in state.thesis.canonical_figures
+            ],
+        ),
+        sections=[PayloadOutlineSection(id=s.id, title=s.title) for s in state.outline.sections],
+        section_bodies=dict(state.resolved.section_bodies),
+        footnotes=list(state.resolved.footnotes),
+        charts=charts_payload,
+        figure_labels=dict(state.resolved.figure_labels),
+        bundle_facts=bundle_facts,
+    )
 
 
 def _per_user_factory(db: DBSession, user: User) -> V23RunnerFactory | None:

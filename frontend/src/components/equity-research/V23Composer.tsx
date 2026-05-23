@@ -21,14 +21,17 @@ import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import {
   type V23ClarifyQuestion,
   type V23ReportType,
+  type V23RunPayload,
   type V23RunState,
   type V23Stage,
+  getV23RunPayload,
   streamV23Answer,
   streamV23Run,
   v23DocxUrl,
 } from "../../api/equity-research-v2-3";
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
 import { V23RepoPanel } from "./V23RepoPanel";
+import { V23ReportView } from "./V23ReportView";
 
 const STAGE_LABEL: Record<V23Stage, string> = {
   clarify: "Clarifying",
@@ -52,6 +55,8 @@ export function V23Composer(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<AssignmentsResponse | null>(null);
   const [repoRefreshKey, setRepoRefreshKey] = useState(0);
+  const [payload, setPayload] = useState<V23RunPayload | null>(null);
+  const [payloadError, setPayloadError] = useState<string | null>(null);
   const streamRef = useRef<AbortController | null>(null);
 
   const parsedTickers = tickers
@@ -67,6 +72,25 @@ export function V23Composer(): JSX.Element {
   }, []);
 
   useEffect(() => () => closeStream(), [closeStream]);
+
+  // Fetch the structured payload whenever a run reaches `complete`.
+  useEffect(() => {
+    if (run?.status !== "complete") return;
+    let cancelled = false;
+    setPayloadError(null);
+    getV23RunPayload(run.run_id)
+      .then((p) => {
+        if (!cancelled) setPayload(p);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setPayloadError(e instanceof Error ? e.message : "failed to load report payload");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [run?.status, run?.run_id]);
 
   const handleStreamEvent = useCallback(
     (evt: import("../../api/equity-research-v2-3").V23StreamEvent) => {
@@ -105,6 +129,8 @@ export function V23Composer(): JSX.Element {
     setError(null);
     setBusy(true);
     setAnswers({});
+    setPayload(null);
+    setPayloadError(null);
     closeStream();
     streamRef.current = streamV23Run(
       {
@@ -250,6 +276,16 @@ export function V23Composer(): JSX.Element {
           onSubmit={submitAnswers}
           busy={busy}
         />
+      ) : null}
+
+      {payload !== null ? <V23ReportView payload={payload} /> : null}
+      {payloadError !== null ? (
+        <div
+          role="alert"
+          className="rounded-md border border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-danger]"
+        >
+          Could not load the report view: {payloadError}. The .docx download still works.
+        </div>
       ) : null}
     </div>
   );
