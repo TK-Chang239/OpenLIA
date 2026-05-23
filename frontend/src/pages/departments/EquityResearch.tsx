@@ -1386,7 +1386,7 @@ export default function EquityResearch(): JSX.Element {
         ) : null}
       </div>
 
-      {!sessionId ? (
+      {!useV23 && !sessionId ? (
         <div className="mx-auto w-full max-w-3xl px-4 pb-2">
           <div className="mb-2 flex items-center justify-end">
             <span
