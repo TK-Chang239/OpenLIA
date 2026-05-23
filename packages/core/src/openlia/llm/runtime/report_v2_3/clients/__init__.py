@@ -12,12 +12,16 @@ from .synthesizer import (
     SynthesizerClient,
     SynthesizerRequest,
 )
+from .writer import FakeWriterClient, WriterClient, WriterRequest
 
 __all__ = [
     "ClarifierClient",
     "ClarifierRequest",
     "FakeClarifierClient",
     "FakeSynthesizerClient",
+    "FakeWriterClient",
     "SynthesizerClient",
     "SynthesizerRequest",
+    "WriterClient",
+    "WriterRequest",
 ]
