@@ -7,12 +7,14 @@ from .base import (
     Stage,
     StageContext,
 )
+from .clarify import ClarifyStage
 from .noop import NoOpAssembleStage, NoOpStage
 
 __all__ = [
     "ASSEMBLE_SLOT_KEY",
     "PIPELINE_ORDER",
     "AssembleStage",
+    "ClarifyStage",
     "NoOpAssembleStage",
     "NoOpStage",
     "Stage",
