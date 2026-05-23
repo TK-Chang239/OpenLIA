@@ -1,4 +1,4 @@
-"""v2.3 equity-research run-lifecycle routes (PR3 scope).
+"""v2.3 equity-research run-lifecycle routes.
 
 Plain JSON endpoints — no SSE yet:
 
@@ -9,13 +9,21 @@ Plain JSON endpoints — no SSE yet:
 - ``GET  /api/departments/equity-research/v2.3/runs/{run_id}``
     Read the persisted state.
 
-The runner factory is injected via ``app.state.v2_3_runner_factory``; if it
-is unset (no clarifier client available in this deployment) the routes
-respond 503 with ``code=v2_3_engine_unavailable``.
+Factory resolution order, per request:
+
+1. If the caller has per-stage model assignments in
+   ``er_v2_3_model_assignments``, build a per-user factory through
+   ``build_v2_3_runner_factory_from_models``. This is the production
+   path.
+2. Otherwise fall back to ``app.state.v2_3_runner_factory`` — the
+   env-driven factory (set at app startup) — for smoke / dev runs
+   where no per-user picker exists yet.
+3. If neither is available, respond 503.
 """
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,16 +37,20 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ReportType,
     RunStatus,
 )
-from openlia.llm.runtime.report_v2_3.slots import V23Slot
+from openlia.llm.runtime.report_v2_3.slots import LLM_V23_SLOTS, V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import er_v2_3_models as model_assignments_svc
 from openlia_server.services import v2_3_run_service as svc
+from openlia_server.services.llm_registry import SQLModelRegistry
 from openlia_server.services.v2_3_runner_factory import V23RunnerFactory
+from openlia_server.services.v2_3_wiring import build_v2_3_runner_factory_from_models
 
 
 class StartPayload(BaseModel):
@@ -71,13 +83,9 @@ class RunStateOut(BaseModel):
     def from_state(cls, state: ReportState) -> RunStateOut:
         cr: ClarifyResultOut | None = None
         if isinstance(state.clarify_result, ClarifyProceed):
-            cr = ClarifyResultOut(
-                outcome="proceed", assumptions=state.clarify_result.assumptions
-            )
+            cr = ClarifyResultOut(outcome="proceed", assumptions=state.clarify_result.assumptions)
         elif isinstance(state.clarify_result, ClarifyNeedsInput):
-            cr = ClarifyResultOut(
-                outcome="needs_input", questions=state.clarify_result.questions
-            )
+            cr = ClarifyResultOut(outcome="needs_input", questions=state.clarify_result.questions)
         return cls(
             run_id=state.run_id,
             status=state.status,
@@ -111,11 +119,14 @@ def build_equity_research_v2_3_router(
         tags=["equity-research-v2.3"],
     )
 
-    def _factory(request: Request) -> V23RunnerFactory:
-        factory = getattr(request.app.state, "v2_3_runner_factory", None)
-        if factory is None:
+    def _factory(request: Request, db: DBSession, user: User) -> V23RunnerFactory:
+        per_user = _per_user_factory(db, user)
+        if per_user is not None:
+            return per_user
+        env_factory = getattr(request.app.state, "v2_3_runner_factory", None)
+        if env_factory is None:
             raise _engine_unavailable()
-        return factory
+        return env_factory
 
     @router.post("/runs", response_model=RunStateOut)
     def start_run(
@@ -126,7 +137,7 @@ def build_equity_research_v2_3_router(
     ) -> RunStateOut:
         state = svc.start_run(
             db=db,
-            runner_factory=_factory(request),
+            runner_factory=_factory(request, db, user),
             user_id=user.id,
             raw_prompt=payload.raw_prompt,
             language=payload.language,
@@ -146,7 +157,7 @@ def build_equity_research_v2_3_router(
         try:
             state = svc.answer_run(
                 db=db,
-                runner_factory=_factory(request),
+                runner_factory=_factory(request, db, user),
                 user_id=user.id,
                 run_id=run_id,
                 answers=ClarifyAnswers(answers=payload.answers),
@@ -190,3 +201,65 @@ def build_equity_research_v2_3_router(
         return RunStateOut.from_state(state)
 
     return router
+
+
+def _per_user_factory(db: DBSession, user: User) -> V23RunnerFactory | None:
+    """Resolve the caller's saved v2.3 model assignments and build a runner
+    factory bound to them. Returns None when no clarify assignment exists
+    so the route can fall back to the env-driven factory.
+
+    Any assigned model id that does not resolve raises 422 — silently
+    NoOp'ing a stage the user asked to enable would surprise them.
+    """
+    mapping = model_assignments_svc.get_assignments(db, user_id=user.id)
+    if "clarify" not in mapping:
+        return None
+    registry = SQLModelRegistry(db)
+    resolved: dict[str, ResolvedModel] = {}
+    unresolved: list[dict[str, str]] = []
+    for slot, model_id in mapping.items():
+        if slot not in {s.value for s in LLM_V23_SLOTS}:
+            continue
+        row = registry.get_by_id(model_id)
+        if row is None:
+            unresolved.append({"slot": slot, "model_id": model_id})
+            continue
+        resolved[slot] = _to_resolved_model(row)
+    if unresolved:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "models_unresolvable",
+                "message": (
+                    "One or more assigned v2.3 models could not be resolved; "
+                    "re-assign the affected slots."
+                ),
+                "unresolved": unresolved,
+            },
+        )
+    eodhd_key = os.getenv("EODHD_API_KEY")
+    return build_v2_3_runner_factory_from_models(models_by_slot=resolved, eodhd_api_key=eodhd_key)
+
+
+def _to_resolved_model(row: object) -> ResolvedModel:
+    """Translate an ``LLMModel`` ORM row into a ``ResolvedModel`` dataclass."""
+    provider = row.provider  # type: ignore[attr-defined]
+    credentials = ProviderCredentials(
+        api_key=provider.api_key,
+        base_url=provider.base_url,
+        env_var_name=provider.env_var_name,
+    )
+    return ResolvedModel(
+        provider_kind=provider.kind,
+        provider_id=provider.id,
+        model_id=row.id,  # type: ignore[attr-defined]
+        model_ref=row.model_ref,  # type: ignore[attr-defined]
+        credentials=credentials,
+        capabilities=Capabilities(
+            structured_output=True,
+            tool_calling=True,
+            max_context_tokens=128_000,
+            max_output_tokens=4096,
+        ),
+        overrides=row.overrides or {},  # type: ignore[attr-defined]
+    )
