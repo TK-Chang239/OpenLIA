@@ -112,6 +112,8 @@ EXPECTED_TABLES = {
     "er_v2_model_assignments",
     # --- v2.3 suspended run state (PR 2026-05-22) ---
     "er_v2_3_run_state",
+    # --- v2.3 per-stage model assignments (PR14, 2026-05-23) ---
+    "er_v2_3_model_assignments",
 }
 
 

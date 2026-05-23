@@ -3,20 +3,21 @@
 Consumes a completed ``ReportState`` (with ``state.resolved`` populated by
 AssembleStage) and returns ``.docx`` bytes. Sections are rendered in
 outline order; each section's resolved body keeps the deterministic
-``[^N]`` footnote markers from ``schemas.resolve()``, then the document
-ends with a "References" section listing one entry per footnote.
+``[^N]`` footnote markers from ``schemas.resolve()``, then those markers
+get rewritten into native Word footnote references and the footnotes
+themselves into a real ``word/footnotes.xml`` part (see
+``v2_3_docx_native``).
 
-Charts are rendered as **Figure N: <claim>** captions followed by a
-native Word data table whose rows are ``ChartSpec.category_labels`` and
-whose columns are the chart's series. This is a faithful, citeable
-rendering of the chart's *data* — a native chart graphic is left to a
-follow-up PR; the data table preserves what the chart was meant to show.
+Charts try a matplotlib-rendered PNG embedded via ``add_picture``
+first (``v2_3_docx_chart``); when rendering is impossible (no
+matplotlib, mis-shaped data, unsupported chart type) the renderer
+falls back to a data table so the figure is never silently dropped.
+The chart-data table view is still emitted alongside the image as a
+machine-readable backup.
 
-Why not native Word footnotes / native Word chart graphics here:
-python-docx 1.x has no high-level API for either. Both require direct
-OOXML manipulation; doing them well is a significant amount of code that
-is better landed as its own PR with golden-file tests. The current
-output is honest about what it shows and can be read in Word today.
+A "References" section is still rendered as a tail for readers /
+viewers that don't honor native footnotes (notably some web preview
+tools). Native + tail dual-render is intentional belt-and-suspenders.
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ from typing import Any
 
 from docx import Document
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from docx.shared import Pt, RGBColor
+from docx.shared import Inches, Pt, RGBColor
 from openlia.llm.runtime.report_v2_3.schemas import (
     BundleFact,
     BundleSeries,
@@ -36,6 +37,9 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ResolvedReport,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
+
+from .v2_3_docx_chart import try_render_chart_png
+from .v2_3_docx_native import attach_native_footnotes
 
 
 def render_docx(state: ReportState) -> bytes:
@@ -73,11 +77,14 @@ def render_docx(state: ReportState) -> bytes:
                 doc.add_paragraph(stripped)
 
         for chart in charts_by_section.get(outline_section.id, []):
-            _add_chart_data_table(
-                doc, chart, state.bundle, state.resolved.figure_labels
-            )
+            _add_chart_data_table(doc, chart, state.bundle, state.resolved.figure_labels)
 
     _add_references(doc, state.resolved)
+    # Rewrite the deterministic ``[^N]`` markers AssembleStage produced into
+    # real Word footnote references + a footnotes.xml package part. Done
+    # AFTER all paragraphs are in the doc so the rewrite covers every
+    # body paragraph in one pass.
+    attach_native_footnotes(doc, state.resolved.footnotes)
     return _serialize(doc)
 
 
@@ -147,9 +154,7 @@ def _add_chart_data_table(
     figure_labels: dict[str, int],
 ) -> None:
     figure_n = figure_labels.get(chart.id)
-    caption_text = (
-        f"Figure {figure_n}: {chart.title}" if figure_n is not None else chart.title
-    )
+    caption_text = f"Figure {figure_n}: {chart.title}" if figure_n is not None else chart.title
     caption = doc.add_paragraph()
     caption_run = caption.add_run(caption_text)
     caption_run.bold = True
@@ -159,6 +164,14 @@ def _add_chart_data_table(
         for run in claim.runs:
             run.italic = True
             run.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+
+    # Try a real graphic first. The data table follows as a backup so
+    # screen readers / Word search still see the numbers.
+    png = try_render_chart_png(chart, bundle)
+    if png is not None:
+        import io as _io
+
+        doc.add_picture(_io.BytesIO(png), width=Inches(6.0))
 
     table = doc.add_table(rows=1 + len(chart.category_labels), cols=1 + len(chart.series))
     try:
@@ -184,9 +197,7 @@ def _add_chart_data_table(
             cells[col_idx].text = _series_cell_value(series, row_idx - 1, bundle)
 
 
-def _series_cell_value(
-    series: Any, idx: int, bundle: ResearchBundle
-) -> str:
+def _series_cell_value(series: Any, idx: int, bundle: ResearchBundle) -> str:
     if len(series.value_fact_ids) == 1:
         fact = bundle.facts.get(series.value_fact_ids[0])
         if fact is not None and isinstance(fact.value, BundleSeries):
