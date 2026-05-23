@@ -27,6 +27,11 @@ from openlia.llm.runtime.report_v2.schemas.clarifier import (
     CapabilityWarning,
     ClarifierOutput,
 )
+from openlia.llm.runtime.report_v2.schemas.report_v2 import (
+    ReportV2,
+    ReportV2Cover,
+    ReportV2Section,
+)
 from openlia.llm.runtime.report_v2.schemas.run_summary import RunSummary
 from openlia.llm.runtime.report_v2.schemas.verification_history import (
     VerificationHistory,
@@ -58,11 +63,19 @@ def v2_client(tmp_path, monkeypatch):
     """Spin up a TestClient with a temp SQLite + an authenticated local user."""
     import openlia_server.db.models.register_all  # noqa: F401 — register all ORM models
     from openlia_server.app import create_app
+    from openlia_server.routes.departments import equity_research_v2 as v2_route
 
     monkeypatch.setenv("OPENLIA_MODE", "personal")
     monkeypatch.setenv("OPENLIA_DB_URL", f"sqlite:///{tmp_path}/v2.db")
     session_mod.configure_engine(f"sqlite:///{tmp_path}/v2.db")
     Base.metadata.create_all(session_mod.get_engine())
+
+    # The route preflight resolves per-slot model assignments before calling
+    # the factory. Route tests use a stub factory that ignores models, so we
+    # bypass the resolver and return an empty mapping here.
+    monkeypatch.setattr(
+        v2_route, "_resolve_models_by_slot_for_user", lambda db, user_id: {}
+    )
 
     with session_mod.SessionLocal() as s:
         s.add(
@@ -106,6 +119,25 @@ def _ok_payload() -> dict:
     }
 
 
+def _fake_report(run_summary: RunSummary) -> ReportV2:
+    """Minimal ReportV2 stand-in for runner-stream tests."""
+    return ReportV2(
+        engine_version=run_summary.engine_version,
+        generated_at=datetime(2026, 5, 22, tzinfo=UTC),
+        template_id=run_summary.template_id,
+        template_name=run_summary.template_name,
+        cover=ReportV2Cover(title="AAPL", ticker="AAPL"),
+        sections=[
+            ReportV2Section(
+                id="intro",
+                name="Introduction",
+                blocks=[{"type": "prose", "text": "OK"}],
+            )
+        ],
+        run_summary=run_summary,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Start endpoint — happy path
 # ---------------------------------------------------------------------------
@@ -126,11 +158,7 @@ def test_start_emits_stage_frames_and_completed_frame(v2_client):
             StageCompleted(PipelineStage.CLARIFY),
             StageStarted(PipelineStage.RESEARCH_PLAN),
             StageCompleted(PipelineStage.RESEARCH_PLAN),
-            Completed(
-                html="<article>OK</article>",
-                run_summary=fake_run_summary,
-                verification_history=VerificationHistory(),
-            ),
+            Completed(report=_fake_report(fake_run_summary)),
         ]
     )
     app.state.v2_runner_stage_factory = lambda ctx: runner
@@ -148,8 +176,11 @@ def test_start_emits_stage_frames_and_completed_frame(v2_client):
         "completed",
     ]
     run_id = resp.headers["X-Run-Id"]
-    assert frames[-1][1]["run_id"] == run_id
-    assert frames[-1][1]["html"] == "<article>OK</article>"
+    completed_payload = frames[-1][1]
+    assert completed_payload["run_id"] == run_id
+    # SSE ships the structured ReportV2 payload, not HTML.
+    assert completed_payload["report"]["engine_version"] == "2.2"
+    assert completed_payload["report"]["sections"][0]["id"] == "intro"
 
     # Persistence: row landed in COMPLETED state.
     with session_mod.SessionLocal() as s:
@@ -303,11 +334,7 @@ def test_resume_re_streams_pipeline_with_user_answers(v2_client):
         events=[
             StageStarted(PipelineStage.RESEARCH_PLAN),
             StageCompleted(PipelineStage.RESEARCH_PLAN),
-            Completed(
-                html="<article>done</article>",
-                run_summary=fake_run_summary,
-                verification_history=VerificationHistory(),
-            ),
+            Completed(report=_fake_report(fake_run_summary)),
         ]
     )
     app.state.v2_runner_stage_factory = lambda ctx: runner
@@ -323,7 +350,10 @@ def test_resume_re_streams_pipeline_with_user_answers(v2_client):
     assert resp.status_code == 200
 
     frames = _parse_sse(resp.text)
-    assert ("completed", {"run_id": run_id, "html": "<article>done</article>"}) in frames
+    completed = [payload for name, payload in frames if name == "completed"]
+    assert len(completed) == 1
+    assert completed[0]["run_id"] == run_id
+    assert completed[0]["report"]["engine_version"] == "2.2"
 
     # Resume passed the answers payload into the runner.
     assert runner.called_with["resume_state"] is not None

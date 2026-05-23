@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import RepoItem, Report
+from openlia_server.db.models.pipeline_runs import PipelineRun
 
 SortKey = Literal[
     "saved_desc",
@@ -68,6 +69,73 @@ def save_to_repo(db: Session, *, user_id: str, report_id: str) -> RepoItem:
 def unsave_from_repo(db: Session, *, user_id: str, report_id: str) -> None:
     db.query(RepoItem).filter(RepoItem.user_id == user_id, RepoItem.report_id == report_id).delete()
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# v2.2 pipeline-run repo support — polymorphic mirror of the v1 helpers.
+# ---------------------------------------------------------------------------
+
+
+def save_v2_run_to_repo(
+    db: Session, *, user_id: str, pipeline_run_id: str
+) -> RepoItem:
+    """Save a v2.2 pipeline_run to the user's repo. Idempotent."""
+    existing = db.execute(
+        select(RepoItem).where(
+            RepoItem.user_id == user_id,
+            RepoItem.pipeline_run_id == pipeline_run_id,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    run = db.get(PipelineRun, pipeline_run_id)
+    if run is None or run.user_id != user_id:
+        raise LookupError(f"pipeline_run {pipeline_run_id} not found")
+    if run.deleted_at is not None:
+        raise LookupError(f"pipeline_run {pipeline_run_id} has been deleted")
+    item = RepoItem(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        report_id=None,
+        pipeline_run_id=pipeline_run_id,
+    )
+    db.add(item)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return db.execute(
+            select(RepoItem).where(
+                RepoItem.user_id == user_id,
+                RepoItem.pipeline_run_id == pipeline_run_id,
+            )
+        ).scalar_one()
+    db.refresh(item)
+    return item
+
+
+def unsave_v2_run_from_repo(
+    db: Session, *, user_id: str, pipeline_run_id: str
+) -> None:
+    db.query(RepoItem).filter(
+        RepoItem.user_id == user_id,
+        RepoItem.pipeline_run_id == pipeline_run_id,
+    ).delete()
+    db.commit()
+
+
+def is_v2_run_saved(
+    db: Session, *, user_id: str, pipeline_run_id: str
+) -> bool:
+    return (
+        db.execute(
+            select(RepoItem.id).where(
+                RepoItem.user_id == user_id,
+                RepoItem.pipeline_run_id == pipeline_run_id,
+            )
+        ).first()
+        is not None
+    )
 
 
 def list_items(db: Session, *, user_id: str) -> list[RepoItem]:

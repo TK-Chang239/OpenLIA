@@ -160,7 +160,14 @@ export function FileViewer(): JSX.Element | null {
               current.source.kind === "report" ? current.source.reportId : undefined
             }
             initialSaved={current.initialSaved}
-            hideSaveToRepoButton={current.hideSaveToRepoButton ?? false}
+            // SaveToRepoButton in the viewer header is v1-only — it
+            // expects a reports.id and calls /api/repo/items. The v2
+            // ReportCard handles save/unsave directly, so we hide the
+            // viewer header save button for v2_report sources. The
+            // download button IS v2-aware (engine prop).
+            hideSaveToRepoButton={
+              current.hideSaveToRepoButton ?? current.source.kind === "v2_report"
+            }
             onClose={close}
             closeButtonRef={closeButtonRef}
           />

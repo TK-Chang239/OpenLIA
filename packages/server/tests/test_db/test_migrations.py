@@ -108,6 +108,8 @@ EXPECTED_TABLES = {
     "cached_documents",
     # --- Pipeline run telemetry (PR 2026-05-21) ---
     "pipeline_runs",
+    # --- v2.2 per-stage model assignments (PR 2026-05-22) ---
+    "er_v2_model_assignments",
 }
 
 

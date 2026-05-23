@@ -328,6 +328,16 @@ export function reportDocxUrl(reportId: string): string {
   return `/api/reports/${reportId}/export/docx`;
 }
 
+// v2.2 pipeline_run export URLs. Backend routes mirror v1 verbatim with a
+// /departments/equity-research/v2/runs/{run_id}/export.{pdf,docx} prefix.
+export function v2RunPdfUrl(runId: string): string {
+  return `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}/export.pdf`;
+}
+
+export function v2RunDocxUrl(runId: string): string {
+  return `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}/export.docx`;
+}
+
 export type DownloadFormat = "pdf" | "docx";
 
 export interface DownloadResult {
@@ -376,12 +386,21 @@ export function parseFilenameFromHeader(
   return fallback;
 }
 
+export type ReportEngine = "v1" | "v2";
+
 export async function downloadReportBlob(
   reportId: string,
   format: DownloadFormat,
+  engine: ReportEngine = "v1",
 ): Promise<DownloadResult> {
   const url =
-    format === "pdf" ? reportPdfUrl(reportId) : reportDocxUrl(reportId);
+    engine === "v2"
+      ? format === "pdf"
+        ? v2RunPdfUrl(reportId)
+        : v2RunDocxUrl(reportId)
+      : format === "pdf"
+        ? reportPdfUrl(reportId)
+        : reportDocxUrl(reportId);
   const resp = await fetch(url, { credentials: "include" });
   if (!resp.ok) {
     let detail = `Download failed (${resp.status})`;

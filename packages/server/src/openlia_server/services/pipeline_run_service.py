@@ -91,12 +91,27 @@ def mark_running(session: Session, run_id: str) -> PipelineRun:
     return row
 
 
-def mark_completed(session: Session, run_id: str, *, degraded: bool = False) -> PipelineRun:
+def mark_completed(
+    session: Session,
+    run_id: str,
+    *,
+    degraded: bool = False,
+    final_report: dict[str, Any] | None = None,
+) -> PipelineRun:
+    """Mark a run COMPLETED (or DEGRADED) and persist its ReportV2 JSON.
+
+    `final_report` is the ReportV2.model_dump() payload — typed cover,
+    sections (with typed-block dicts), citations, run_summary,
+    verification_history.
+    """
     row = _require(session, run_id)
     now = _now()
     row.state = "DEGRADED" if degraded else "COMPLETED"
     row.completed_at = now
     row.updated_at = now
+    if final_report is not None:
+        row.final_report_json = final_report
+        row.final_report_at = now
     session.flush()
     return row
 
@@ -114,6 +129,19 @@ def mark_failed(session: Session, run_id: str, *, reason: str) -> PipelineRun:
 
 def get_run(session: Session, run_id: str) -> PipelineRun | None:
     return session.get(PipelineRun, run_id)
+
+
+def soft_delete_run(session: Session, run_id: str) -> PipelineRun:
+    """Tombstone a run (sets deleted_at). The row stays for audit/retention;
+    GET endpoints filter it out, and repo_items pointing at it cascade away
+    naturally via the FK.
+    """
+    row = _require(session, run_id)
+    if row.deleted_at is None:
+        row.deleted_at = _now()
+        row.updated_at = row.deleted_at
+        session.flush()
+    return row
 
 
 def _require(session: Session, run_id: str) -> PipelineRun:

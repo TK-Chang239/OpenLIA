@@ -18,6 +18,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     ForeignKey,
     Index,
@@ -253,14 +254,25 @@ class WatchlistItem(Base):
 
 
 class RepoItem(Base):
+    """Saved-report pointer. Polymorphic: each row references *either* a
+    v1 report (``report_id``) *or* a v2.2 pipeline run (``pipeline_run_id``),
+    enforced by a CHECK constraint. Listing endpoints fan out and merge
+    both sources before returning to the frontend.
+    """
+
     __tablename__ = "repo_items"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     user_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    report_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=False
+    report_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("reports.id", ondelete="CASCADE"), nullable=True
+    )
+    pipeline_run_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("pipeline_runs.id", ondelete="CASCADE"),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         UTCDateTime(), nullable=False, server_default=func.now()
@@ -268,7 +280,15 @@ class RepoItem(Base):
 
     __table_args__ = (
         UniqueConstraint("user_id", "report_id", name="uq_repo_items_user_report"),
+        UniqueConstraint(
+            "user_id", "pipeline_run_id", name="uq_repo_items_user_pipeline_run"
+        ),
         Index("ix_repo_items_user_id_created_at", "user_id", "created_at"),
+        CheckConstraint(
+            "(report_id IS NOT NULL AND pipeline_run_id IS NULL) OR "
+            "(report_id IS NULL AND pipeline_run_id IS NOT NULL)",
+            name="ck_repo_items_exactly_one_target",
+        ),
     )
 
 

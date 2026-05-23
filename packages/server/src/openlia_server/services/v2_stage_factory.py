@@ -1,19 +1,10 @@
 """Production v2.2 stage factory.
 
-Builds a ``RunnerV2`` with all six required stages wired to a real LLM
-provider. Selection order for the provider:
-
-1. ``OPENLIA_V2_LLM_KIND`` env var (one of "anthropic" | "openai") combined
-   with the matching API key var ``ANTHROPIC_API_KEY`` / ``OPENAI_API_KEY``.
-2. Auto-detect: if ``ANTHROPIC_API_KEY`` is set, use Anthropic; otherwise
-   fall back to OpenAI.
-
-The factory is intentionally env-driven (not DB-resolved) so the v2.2
-pipeline can be exercised end-to-end without requiring a configured
-``equity_research`` department model assignment. Once production model
-resolution lands on top of the SQL registry, swap the env-based provider
-construction for ``resolve_for_department`` in
-``packages/core/src/openlia/llm/resolver.py``.
+Builds a ``RunnerV2`` with all 8 LLM-using stages wired to per-slot models
+chosen by the caller. The factory accepts a `models_by_slot` mapping built
+by the route layer from the caller's ``er_v2_model_assignments`` DB rows;
+no env-driven default is supplied — runs are refused upstream when any
+slot is unassigned.
 """
 
 from __future__ import annotations
@@ -21,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 import re
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -41,11 +31,11 @@ from openlia.llm.runtime.report_v2.pipeline.stage_8_verify import Verifier
 from openlia.llm.runtime.report_v2.pipeline.trigger_evaluator import TriggerEvaluator
 from openlia.llm.runtime.report_v2.pipeline.verifier_llm import LLMVerifier
 from openlia.llm.runtime.report_v2.runner_v2 import RunnerV2
+from openlia.llm.runtime.report_v2.slots import V2Slot
 from openlia.llm.types import (
-    Capabilities,
     LLMRequest,
     Message,
-    ProviderCredentials,
+    ResolvedModel,
     ResponseFormat,
 )
 
@@ -272,55 +262,17 @@ class SimpleStrandSubagent:
 
 
 # ---------------------------------------------------------------------------
-# Provider selection from env.
+# Provider construction from a ResolvedModel.
 # ---------------------------------------------------------------------------
 
 
-def _build_provider_from_env() -> LLMProvider:
-    """Construct an LLMProvider for v2.2 from process environment variables.
-
-    Chooses Anthropic first when both keys are present (Claude is the
-    project's primary model). Override via ``OPENLIA_V2_LLM_KIND``.
-    """
-    kind = os.environ.get("OPENLIA_V2_LLM_KIND", "").strip().lower() or None
-    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
-    openai_key = os.environ.get("OPENAI_API_KEY")
-
-    if kind == "anthropic" or (kind is None and anthropic_key):
-        if not anthropic_key:
-            raise RuntimeError("OPENLIA_V2_LLM_KIND=anthropic but ANTHROPIC_API_KEY is unset")
-        model = os.environ.get("OPENLIA_V2_ANTHROPIC_MODEL", "claude-sonnet-4-6")
-        return build_adapter(
-            kind="anthropic",
-            credentials=ProviderCredentials(api_key=anthropic_key, base_url=None),
-            model=model,
-            capabilities=Capabilities(
-                streaming=True,
-                tool_calling=True,
-                structured_output=True,
-                max_context_tokens=200_000,
-                max_output_tokens=8192,
-            ),
-        )
-
-    if kind in {"openai", None} and openai_key:
-        model = os.environ.get("OPENLIA_V2_OPENAI_MODEL", "gpt-4o-mini")
-        return build_adapter(
-            kind="openai",
-            credentials=ProviderCredentials(api_key=openai_key, base_url=None),
-            model=model,
-            capabilities=Capabilities(
-                streaming=True,
-                tool_calling=True,
-                structured_output=True,
-                max_context_tokens=128_000,
-                max_output_tokens=4096,
-            ),
-        )
-
-    raise RuntimeError(
-        "v2 stage factory: no LLM credentials found in env "
-        "(set ANTHROPIC_API_KEY or OPENAI_API_KEY)"
+def _build_provider_from_resolved(resolved: ResolvedModel) -> LLMProvider:
+    """Construct an LLMProvider for a single DB-resolved model row."""
+    return build_adapter(
+        kind=resolved.provider_kind,
+        credentials=resolved.credentials,
+        model=resolved.model_ref,
+        capabilities=resolved.capabilities,
     )
 
 
@@ -329,43 +281,63 @@ def _build_provider_from_env() -> LLMProvider:
 # ---------------------------------------------------------------------------
 
 
-def make_v2_runner_stage_factory(
-    *,
-    provider_factory: Callable[[], LLMProvider] | None = None,
-) -> Callable[[Any], RunnerV2]:
+def build_runner_v2(*, models_by_slot: dict[str, ResolvedModel]) -> RunnerV2:
+    """Construct a fresh ``RunnerV2`` whose stages each speak to the model
+    chosen for their slot.
+
+    `models_by_slot` keys MUST be the ``V2Slot`` string values; every slot
+    in ``REQUIRED_V2_SLOTS`` must be present (the caller validates this).
+    """
+    providers: dict[str, LLMProvider] = {
+        slot: _build_provider_from_resolved(rm) for slot, rm in models_by_slot.items()
+    }
+    llm_by_slot: dict[str, SyncJsonLlmClient] = {
+        slot: SyncJsonLlmClient(p) for slot, p in providers.items()
+    }
+
+    drafter_llm = llm_by_slot[V2Slot.SECTION_DRAFTER.value]
+    verifier_llm = llm_by_slot[V2Slot.LLM_VERIFIER.value]
+
+    section_drafter = SectionDrafter(drafter_llm, TriggerEvaluator(drafter_llm))
+    verifier = Verifier(
+        llm_verifier=LLMVerifier(verifier_llm),
+        drafter=section_drafter,
+        section_directives={},
+    )
+
+    return RunnerV2(
+        clarifier=Clarifier(llm_by_slot[V2Slot.CLARIFIER.value]),
+        research_planner=ResearchPlanner(llm_by_slot[V2Slot.RESEARCH_PLANNER.value]),
+        strand_dispatcher=StrandDispatcher(
+            SimpleStrandSubagent(llm_by_slot[V2Slot.STRAND_SUBAGENT.value]),
+            max_workers=4,
+        ),
+        model_planner=ModelPlanner(llm_by_slot[V2Slot.MODEL_PLANNER.value]),
+        model_builder=ModelBuilder(
+            llm_by_slot[V2Slot.MODEL_BUILDER.value], max_workers=2
+        ),
+        section_drafter=section_drafter,
+        verifier=verifier,
+        planner_v2_2_llm=providers[V2Slot.PLANNER_V2_2.value],
+    )
+
+
+def make_v2_runner_stage_factory() -> Callable[[Any], RunnerV2]:
     """Build the callable assigned to ``app.state.v2_runner_stage_factory``.
 
-    Each invocation creates a fresh ``RunnerV2`` so per-run state (current
-    stage, accumulated outcomes) does not leak between concurrent reports.
-    A single shared ``LLMProvider`` is OK — the adapters are stateless
-    request-makers.
+    The returned factory expects ``ctx.models_by_slot`` to be populated by
+    the caller. Each invocation creates a fresh ``RunnerV2`` so per-run
+    state (current stage, accumulated outcomes) does not leak between
+    concurrent reports.
     """
-    resolver = provider_factory or _build_provider_from_env
 
-    def _factory(_ctx: Any) -> RunnerV2:
-        provider = resolver()
-        llm = SyncJsonLlmClient(provider)
-        section_drafter = SectionDrafter(llm, TriggerEvaluator(llm))
-        # Per-run Verifier; directives are refreshed by the runner against the
-        # active template_spec before stage 8 executes.
-        verifier = Verifier(
-            llm_verifier=LLMVerifier(llm),
-            drafter=section_drafter,
-            section_directives={},
-        )
-
-        # The Planner is constructed fresh per-run inside RunnerV2._stage_planner_v2_2()
-        # using the live ticker + template sections from that run's composer_inputs and
-        # template_spec. We only inject the LLMProvider here (stateless request-maker).
-        return RunnerV2(
-            clarifier=Clarifier(llm),
-            research_planner=ResearchPlanner(llm),
-            strand_dispatcher=StrandDispatcher(SimpleStrandSubagent(llm), max_workers=4),
-            model_planner=ModelPlanner(llm),
-            model_builder=ModelBuilder(llm, max_workers=2),
-            section_drafter=section_drafter,
-            verifier=verifier,
-            planner_v2_2_llm=provider,
-        )
+    def _factory(ctx: Any) -> RunnerV2:
+        models = getattr(ctx, "models_by_slot", None)
+        if not models:
+            raise RuntimeError(
+                "v2 stage factory: ctx.models_by_slot is empty; route must "
+                "supply a per-slot model mapping"
+            )
+        return build_runner_v2(models_by_slot=models)
 
     return _factory

@@ -169,8 +169,10 @@ def test_happy_path_yields_all_stages_and_completes() -> None:
 
     final = events[-1]
     assert isinstance(final, Completed)
-    assert "<article" in final.html
-    assert final.run_summary.template_id == "stock_research_v2"
+    # Report shape — engine + run summary should always be populated.
+    assert final.report.engine_version
+    assert final.report.run_summary.template_id == "stock_research_v2"
+    assert final.report.run_summary.template_id == "stock_research_v2"
     assert runner.state == RunState.COMPLETED
 
 
@@ -292,7 +294,7 @@ def test_degraded_section_marks_run_state_degraded() -> None:
     assert isinstance(events[-1], Completed)
     assert runner.state == RunState.DEGRADED
     final: Completed = events[-1]  # type: ignore[assignment]
-    notes = [o.notes for o in final.run_summary.outcomes]
+    notes = [o.notes for o in final.report.run_summary.outcomes]
     assert "LLM call timed out" in notes
     # Drafter-degraded sections must not be re-verified.
     stages["verifier"].verify_with_retry.assert_not_called()
@@ -343,11 +345,12 @@ def test_verifier_promotes_persisted_blocker_section_to_degraded() -> None:
     final: Completed = events[-1]  # type: ignore[assignment]
     assert isinstance(final, Completed)
     assert runner.state == RunState.DEGRADED
-    thesis_outcomes = [o for o in final.run_summary.outcomes if o.task_name == "Investment Thesis"]
+    thesis_outcomes = [o for o in final.report.run_summary.outcomes if o.task_name == "Investment Thesis"]
     assert thesis_outcomes and thesis_outcomes[0].status == "DEGRADED"
     assert "content_too_sparse" in (thesis_outcomes[0].notes or "")
 
-    history = final.verification_history
+    history = final.report.verification_history
+    assert history is not None
     assert history.total_issues_raised == 1
     assert history.persisted_to_degraded == 1
 
@@ -391,8 +394,15 @@ def test_verifier_redrafted_blocks_flow_into_assemble() -> None:
     final: Completed = events[-1]  # type: ignore[assignment]
     assert isinstance(final, Completed)
     assert runner.state == RunState.COMPLETED
-    assert "Clean redrafted thesis." in final.html
-    assert "[placeholder]" not in final.html
+    # Redrafted blocks land on the thesis section verbatim — the assembler
+    # passes typed-block dicts through unchanged.
+    thesis = next(s for s in final.report.sections if s.id == "thesis")
+    block_texts = " ".join(b.get("text", "") for b in thesis.blocks)
+    assert "Clean redrafted thesis." in block_texts
+    assert "[placeholder]" not in block_texts
 
-    assert final.verification_history.total_issues_raised == 1
-    assert final.verification_history.resolved_on_first_retry == 1
+    # Verification history rides on the report payload (dev_mode=true in
+    # capabilities.yaml means it's included).
+    assert final.report.verification_history is not None
+    assert final.report.verification_history.total_issues_raised == 1
+    assert final.report.verification_history.resolved_on_first_retry == 1
