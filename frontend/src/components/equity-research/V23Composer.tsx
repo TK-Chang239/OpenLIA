@@ -26,6 +26,7 @@ import {
   streamV23Run,
 } from "../../api/equity-research-v2-3";
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
+import { V23RepoPanel } from "./V23RepoPanel";
 
 const STAGE_LABEL: Record<V23Stage, string> = {
   clarify: "Clarifying",
@@ -134,6 +135,9 @@ export function V23Composer(): JSX.Element {
         </span>
         <V23EngineModelsPicker />
       </div>
+
+      <V23RepoPanel />
+
 
       <input
         type="text"

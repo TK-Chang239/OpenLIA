@@ -100,6 +100,48 @@ export function getV23Run(runId: string): Promise<V23RunState> {
 
 
 // ---------------------------------------------------------------------------
+// Repository surface — list / delete / docx download
+// ---------------------------------------------------------------------------
+
+export interface V23RunSummary {
+  run_id: string;
+  status: V23RunStatus;
+  tickers: string[];
+  raw_prompt: string;
+  report_type: V23ReportType;
+  language: V23Language;
+  created_at: string;
+  updated_at: string;
+}
+
+export function listV23Runs(opts?: {
+  status?: V23RunStatus;
+  limit?: number;
+}): Promise<V23RunSummary[]> {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  const url = `/api/departments/equity-research/v2.3/runs${qs ? `?${qs}` : ""}`;
+  return request<V23RunSummary[]>(url);
+}
+
+export function deleteV23Run(runId: string): Promise<void> {
+  return request<void>(
+    `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(runId)}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Returns a URL the browser can navigate to in order to download the docx.
+ *  The browser session cookie is sent automatically.
+ */
+export function v23DocxUrl(runId: string): string {
+  return `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(runId)}/docx`;
+}
+
+
+// ---------------------------------------------------------------------------
 // SSE streaming
 // ---------------------------------------------------------------------------
 

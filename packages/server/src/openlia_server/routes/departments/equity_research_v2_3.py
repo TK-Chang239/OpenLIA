@@ -1,13 +1,19 @@
 """v2.3 equity-research run-lifecycle routes.
 
-Plain JSON endpoints — no SSE yet:
+Plain JSON endpoints (SSE companion lives in equity_research_v2_3_sse.py):
 
-- ``POST /api/departments/equity-research/v2.3/runs``
+- ``POST   /api/departments/equity-research/v2.3/runs``
     Start a new v2.3 run; returns the resulting (possibly suspended) state.
-- ``POST /api/departments/equity-research/v2.3/runs/{run_id}/answer``
+- ``POST   /api/departments/equity-research/v2.3/runs/{run_id}/answer``
     Resume a suspended run with the user's clarifier answers.
-- ``GET  /api/departments/equity-research/v2.3/runs/{run_id}``
+- ``GET    /api/departments/equity-research/v2.3/runs/{run_id}``
     Read the persisted state.
+- ``GET    /api/departments/equity-research/v2.3/runs``
+    List the caller's runs (newest first). Optional ``status`` filter.
+- ``DELETE /api/departments/equity-research/v2.3/runs/{run_id}``
+    Drop a run from persistence.
+- ``GET    /api/departments/equity-research/v2.3/runs/{run_id}/docx``
+    Render the completed run as a Word document and stream it back.
 
 Factory resolution order, per request:
 
@@ -25,8 +31,10 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import Response
 from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
@@ -49,6 +57,7 @@ from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import er_v2_3_models as model_assignments_svc
 from openlia_server.services import v2_3_run_service as svc
 from openlia_server.services.llm_registry import SQLModelRegistry
+from openlia_server.services.v2_3_docx import render_docx
 from openlia_server.services.v2_3_runner_factory import V23RunnerFactory
 from openlia_server.services.v2_3_wiring import build_v2_3_runner_factory_from_models
 
@@ -68,6 +77,17 @@ class ClarifyResultOut(BaseModel):
     outcome: str
     assumptions: list[str] = Field(default_factory=list)
     questions: list[ClarifyQuestion] = Field(default_factory=list)
+
+
+class RunSummaryOut(BaseModel):
+    run_id: str
+    status: str
+    tickers: list[str]
+    raw_prompt: str
+    report_type: str
+    language: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class RunStateOut(BaseModel):
@@ -199,6 +219,92 @@ def build_equity_research_v2_3_router(
                 detail={"code": "run_not_yours", "message": "run belongs to another user"},
             ) from None
         return RunStateOut.from_state(state)
+
+    @router.get("/runs", response_model=list[RunSummaryOut])
+    def list_runs(
+        status: str | None = Query(default=None),
+        limit: int = Query(default=50, ge=1, le=200),
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> list[RunSummaryOut]:
+        rows = svc.list_runs(db=db, user_id=user.id, status=status, limit=limit)
+        return [
+            RunSummaryOut(
+                run_id=r.run_id,
+                status=r.status,
+                tickers=r.tickers,
+                raw_prompt=r.raw_prompt,
+                report_type=r.report_type,
+                language=r.language,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    @router.delete("/runs/{run_id}", status_code=204)
+    def delete_run(
+        run_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        try:
+            svc.delete_run(db=db, user_id=user.id, run_id=run_id)
+        except StateNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "run_not_found", "message": f"run {run_id} not found"},
+            ) from None
+        except PermissionError:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "run_not_yours", "message": "run belongs to another user"},
+            ) from None
+        return Response(status_code=204)
+
+    @router.get("/runs/{run_id}/docx")
+    def download_docx(
+        run_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        try:
+            state = svc.get_run(db=db, user_id=user.id, run_id=run_id)
+        except StateNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "run_not_found", "message": f"run {run_id} not found"},
+            ) from None
+        except PermissionError:
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "run_not_yours", "message": "run belongs to another user"},
+            ) from None
+        if state.status != RunStatus.COMPLETE or state.resolved is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "run_not_complete",
+                    "message": (
+                        "docx export is only available for completed runs; "
+                        f"current status is {state.status.value}."
+                    ),
+                },
+            )
+        try:
+            blob = render_docx(state)
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail={"code": "render_failed", "message": str(exc)},
+            ) from None
+        ticker_part = "_".join(state.tickers) if state.tickers else "report"
+        filename = f"v2.3_{ticker_part}_{state.run_id[:8]}.docx"
+        return Response(
+            content=blob,
+            media_type=("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     return router
 
