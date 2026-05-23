@@ -1099,15 +1099,13 @@ export default function EquityResearch(): JSX.Element {
                 Use v2.2 (legacy)
               </button>
             </div>
-            <div className="mx-auto w-full max-w-[760px] flex-1 overflow-auto p-6">
-              <V23Composer
-                initialRunId={runIdV23Param}
-                onRunIdChange={onV23RunIdChange}
-                onOpenReport={onV23OpenReport}
-                onSelectPastRun={onV23SelectPastRun}
-                assignments={v23Assignments}
-              />
-            </div>
+            <V23Composer
+              initialRunId={runIdV23Param}
+              onRunIdChange={onV23RunIdChange}
+              onOpenReport={onV23OpenReport}
+              onSelectPastRun={onV23SelectPastRun}
+              assignments={v23Assignments}
+            />
           </div>
         ) : !sessionId ? (
           <div className="flex flex-1 min-h-0 flex-col">
