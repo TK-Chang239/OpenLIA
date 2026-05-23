@@ -10,6 +10,7 @@ from .clarifier import ClarifierClient, ClarifierRequest, FakeClarifierClient
 from .compute import ComputeClient, ComputeRequest, FakeComputeClient
 from .llm_clarifier import LLMClarifierClient
 from .planner import FakePlannerClient, PlannerClient, PlannerRequest
+from .researcher import FakeResearcherClient, ResearcherClient, ResearchRequest
 from .synthesizer import (
     FakeSynthesizerClient,
     SynthesizerClient,
@@ -26,12 +27,15 @@ __all__ = [
     "FakeClarifierClient",
     "FakeComputeClient",
     "FakePlannerClient",
+    "FakeResearcherClient",
     "FakeSynthesizerClient",
     "FakeVerifierClient",
     "FakeWriterClient",
     "LLMClarifierClient",
     "PlannerClient",
     "PlannerRequest",
+    "ResearchRequest",
+    "ResearcherClient",
     "SynthesizerClient",
     "SynthesizerRequest",
     "VerifierClient",
