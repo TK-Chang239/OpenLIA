@@ -7,5 +7,17 @@ resolved via the per-user `er_v2_3_model_assignments` mapping).
 """
 
 from .clarifier import ClarifierClient, ClarifierRequest, FakeClarifierClient
+from .synthesizer import (
+    FakeSynthesizerClient,
+    SynthesizerClient,
+    SynthesizerRequest,
+)
 
-__all__ = ["ClarifierClient", "ClarifierRequest", "FakeClarifierClient"]
+__all__ = [
+    "ClarifierClient",
+    "ClarifierRequest",
+    "FakeClarifierClient",
+    "FakeSynthesizerClient",
+    "SynthesizerClient",
+    "SynthesizerRequest",
+]
