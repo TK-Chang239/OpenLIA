@@ -20,7 +20,11 @@ export type FileKind =
 
 export type FileSource =
   | { kind: "attachment"; attachmentId: string }
-  | { kind: "report"; reportId: string };
+  | { kind: "report"; reportId: string }
+  // v2.2 equity-research runs persist their final HTML on the
+  // pipeline_runs row, not in the v1 reports table. The viewer renders
+  // that HTML inside the same chrome by branching on this source kind.
+  | { kind: "v2_report"; runId: string };
 
 export interface FileViewerTarget {
   filename: string;

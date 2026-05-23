@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import type { ReportMode } from "../../api/equity-research";
+import type { ReportEngine } from "../../api/reports";
 import { createSession } from "../../api/chat";
 import { DeleteReportDialog } from "../report/DeleteReportDialog";
 import { ReportDownloadButton } from "../report/ReportDownloadButton";
@@ -77,6 +78,13 @@ interface CompletedProps {
   initialSaved?: boolean;
   /** ISO timestamp; when set, render the tombstone variant. */
   expiredAt?: string | null;
+  /** Hide the inline Download button. Rarely needed now that
+   *  ReportDownloadButton accepts an `engine` prop — kept as an escape
+   *  hatch for surfaces where downloads aren't yet wired. */
+  hideDownload?: boolean;
+  /** Which engine emitted the report. Routes the inline
+   *  ReportDownloadButton at the right export URL. */
+  engine?: ReportEngine;
 }
 
 function formatDate(iso: string): string {
@@ -106,6 +114,8 @@ function CompletedReportCard({
   onDelete,
   initialSaved = false,
   expiredAt = null,
+  hideDownload = false,
+  engine = "v1",
 }: CompletedProps): JSX.Element {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
@@ -324,7 +334,13 @@ function CompletedReportCard({
           {t("equity_research.report_card.discuss")}
         </button>
 
-        <ReportDownloadButton reportId={reportId} variant="primary" />
+        {hideDownload ? null : (
+          <ReportDownloadButton
+            reportId={reportId}
+            variant="primary"
+            engine={engine}
+          />
+        )}
 
         <div className="flex-1" />
 

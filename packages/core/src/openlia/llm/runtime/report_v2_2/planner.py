@@ -117,7 +117,18 @@ def _parse_planner_response(text: str) -> PlannerOutput:
         inner = lines[1:end] if end else lines[1:]
         stripped = "\n".join(inner).strip()
 
-    raw: dict[str, Any] = json.loads(stripped)
+    try:
+        raw: dict[str, Any] = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        tail = stripped[-400:] if len(stripped) > 400 else stripped
+        raise ValueError(
+            f"planner_v2_2 returned malformed JSON ({exc.msg} at line {exc.lineno} "
+            f"col {exc.colno}). Response length={len(stripped)} chars. "
+            f"Last 400 chars: {tail!r}. "
+            "Most common cause: the planner LLM hit its max_tokens cap and the "
+            "JSON was truncated mid-string. Raise Planner(max_tokens=...) or pick "
+            "a model whose per-call output cap is at least 8k tokens."
+        ) from exc
 
     # Normalise: planner_overrides may be a list of raw dicts already matching
     # PlannerOverrides, or may need the overrides.overrides nesting.
@@ -180,7 +191,7 @@ class Planner:
         template_sections: list[dict[str, Any]],
         available_helpers: list[dict[str, Any]] | None = None,
         template_id: str = "stock_initiation_v2",
-        max_tokens: int = 2048,
+        max_tokens: int = 8192,
         temperature: float = 0.2,
     ) -> None:
         """
@@ -222,10 +233,27 @@ class Planner:
         request = self._build_request()
         response = await self._llm.generate(request)
         logger.debug(
-            "Planner LLM response: %d input tokens, %d output tokens",
+            "Planner LLM response: %d input tokens, %d output tokens, finish=%s",
             response.input_tokens,
             response.output_tokens,
+            response.finish_reason,
         )
+        # Detect provider-reported truncation up front. Different adapters use
+        # different finish_reason strings ("length", "max_tokens",
+        # "MAX_TOKENS"); normalise and treat any of them as truncation.
+        if response.finish_reason and response.finish_reason.lower() in (
+            "length",
+            "max_tokens",
+        ):
+            raise ValueError(
+                f"planner_v2_2 LLM output was truncated by the provider "
+                f"(finish_reason={response.finish_reason!r}, "
+                f"output_tokens={response.output_tokens}, "
+                f"requested max_tokens={self._max_tokens}). The planner emits "
+                "structured JSON; truncation produces unparseable output. Raise "
+                "Planner(max_tokens=...) or pick a model with a larger per-call "
+                "output cap."
+            )
         return _parse_planner_response(response.text)
 
     def plan(self) -> PlannerOutput:

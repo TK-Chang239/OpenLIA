@@ -19,10 +19,24 @@ class RepoSaveIn(BaseModel):
     report_id: str
 
 
+class RepoSaveV2In(BaseModel):
+    pipeline_run_id: str
+
+
 class RepoItemOut(BaseModel):
     id: str
-    report_id: str
+    report_id: str | None = None
+    pipeline_run_id: str | None = None
     created_at: datetime
+
+
+class RepoV2SavedListOut(BaseModel):
+    """Lightweight saved-state list — just the pipeline_run ids the user has
+    bookmarked. Frontend's SavedReportsContext uses this for the v2
+    ReportCard's `initialSaved` prop on page load.
+    """
+
+    saved_run_ids: list[str]
 
 
 class RepoRowOut(BaseModel):
@@ -172,5 +186,47 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         user: User = require_auth,
     ) -> None:
         svc.unsave_from_repo(db, user_id=user.id, report_id=report_id)
+
+    # --- v2.2 pipeline-run mirrors ---------------------------------------
+
+    @router.post(
+        "/v2-runs",
+        response_model=RepoItemOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def save_v2_ep(
+        body: RepoSaveV2In,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoItemOut:
+        try:
+            item = svc.save_v2_run_to_repo(
+                db, user_id=user.id, pipeline_run_id=body.pipeline_run_id
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "pipeline_run_not_found", "message": str(exc)},
+            ) from exc
+        return RepoItemOut.model_validate(item, from_attributes=True)
+
+    @router.delete("/v2-runs", status_code=status.HTTP_204_NO_CONTENT)
+    def unsave_v2_ep(
+        pipeline_run_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> None:
+        svc.unsave_v2_run_from_repo(
+            db, user_id=user.id, pipeline_run_id=pipeline_run_id
+        )
+
+    @router.get("/v2-runs", response_model=RepoV2SavedListOut)
+    def list_v2_saved_ep(
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoV2SavedListOut:
+        rows = svc.list_items(db, user_id=user.id)
+        ids = [r.pipeline_run_id for r in rows if r.pipeline_run_id is not None]
+        return RepoV2SavedListOut(saved_run_ids=ids)
 
     return router

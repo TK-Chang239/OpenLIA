@@ -77,3 +77,49 @@ export const unsaveFromRepo = (reportId: string) =>
 
 /** Alias used by Equity Research ReportCard.onSave (NEW-14-05). */
 export const saveReportToRepo = (reportId: string) => saveToRepo(reportId);
+
+// v2.2 pipeline-run mirrors of the v1 save/unsave/list helpers. The
+// backend stores both kinds of saves in repo_items via a polymorphic
+// pointer (report_id XOR pipeline_run_id); the frontend keeps the
+// surfaces separate so callers stay explicit about which engine wrote
+// the artifact.
+
+export const saveV2RunToRepo = (runId: string) =>
+  fetchJson<RepoItem>("/api/repo/v2-runs", {
+    method: "POST",
+    json: { pipeline_run_id: runId },
+  });
+
+export const unsaveV2RunFromRepo = (runId: string) =>
+  fetchJson<void>(
+    `/api/repo/v2-runs?pipeline_run_id=${encodeURIComponent(runId)}`,
+    { method: "DELETE" },
+  );
+
+/** Returns the v2.2 pipeline_run ids the current user has saved.
+ *  SavedReportsContext fetches this on mount so the v2 ReportCard's
+ *  `initialSaved` prop is correct after a reload. */
+export const listSavedV2Runs = () =>
+  fetchJson<{ saved_run_ids: string[] }>("/api/repo/v2-runs");
+
+export const deleteV2Run = (runId: string) =>
+  fetchJson<void>(
+    `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}`,
+    { method: "DELETE" },
+  );
+
+export interface V2RunMeta {
+  id: string;
+  state: string;
+  deleted_at: string | null;
+  expired_at: string | null;
+  created_at: string | null;
+  has_report: boolean;
+  title: string | null;
+  ticker: string | null;
+}
+
+export const fetchV2RunMeta = (runId: string) =>
+  fetchJson<V2RunMeta>(
+    `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}/meta`,
+  );

@@ -1,98 +1,112 @@
-"""Full report assembler for Equity Research v2.2.
+"""Build the structured ReportV2 payload at the end of a v2.2 run.
 
-Task O5 — stage 9.
+Replaces the prior HTML-stringifying assembler. v1's React renderer (and
+therefore v2's, after WS-B) dispatches on typed block dicts to produce
+branded components (ReportCover, BlockRenderer, CitationsRail, charts), so
+the backend has no business collapsing those dicts to HTML before they
+reach the frontend.
 
-Combines block rendering, citation substitution, and section ordering into a
-single HTML document.
+Inputs come from the v2.2 pipeline:
+  - sections          : assembled section dicts (id, name, status,
+                        blocks, skip_reason, degraded_reason). Built by
+                        runner_v2._stage_assemble from SectionOutput.
+  - composer_inputs   : the original user inputs (ticker, prompt, …).
+                        Used to synthesise the cover.
+  - template_spec     : the loaded TemplateSpecV2. Provides template_id,
+                        template_name, report_type for the cover eyebrow.
+  - research_pool     : citation list shipped through verbatim.
+  - run_summary       : populated by the runner.
+  - verification_history: included only in dev_mode.
 """
 
 from __future__ import annotations
 
-import html as _html
+from datetime import datetime, timezone
+from typing import Any
 
-from openlia.llm.runtime.report_v2.rendering.block_renderer import render_block
-from openlia.llm.runtime.report_v2.rendering.citation_manifest import (
-    assemble_citation_manifest,
-    render_sources_footer,
-    substitute_markers,
-)
-from openlia.llm.runtime.report_v2.rendering.run_summary_renderer import render_run_summary
-from openlia.llm.runtime.report_v2.rendering.verification_history_renderer import (
-    render_verification_history,
+from openlia.llm.runtime.report_v2.schemas.report_v2 import (
+    ReportV2,
+    ReportV2Cover,
+    ReportV2Section,
 )
 from openlia.llm.runtime.report_v2.schemas.research_pool import Citation
 from openlia.llm.runtime.report_v2.schemas.run_summary import RunSummary
 from openlia.llm.runtime.report_v2.schemas.verification_history import VerificationHistory
 
 
-def _collect_block_texts(sections: list[dict]) -> list[str]:
-    """Extract text values from every block that carries a 'text' key.
+def _synthesise_cover(
+    composer_inputs: dict[str, Any],
+    template_spec: Any,
+) -> ReportV2Cover:
+    """Build a minimal cover from the inputs the pipeline already has.
 
-    Used by assemble_citation_manifest to scan for [c:id] markers.
+    Analyst-consensus and key-metric blocks live on the v1 cover too, but
+    the v2.2 backend doesn't emit them yet. They'll fill in once their
+    upstream stages exist; for now the cover is title + eyebrow + tagline
+    + ticker, which is what ReportCover renders with at minimum.
     """
-    texts: list[str] = []
-    for section in sections:
-        for block in section.get("blocks", []):
-            if isinstance(block, dict) and "text" in block:
-                texts.append(block["text"])
-    return texts
+    ticker = str(composer_inputs.get("ticker") or "").strip().upper() or None
+    prompt = str(composer_inputs.get("prompt") or "").strip()
+
+    template_name = str(getattr(template_spec, "template_name", "") or "").strip()
+    report_type = str(getattr(template_spec, "report_type", "") or "").strip()
+
+    eyebrow_parts = [p for p in ("Equity Research", report_type or template_name) if p]
+    eyebrow = " — ".join(eyebrow_parts) if eyebrow_parts else None
+
+    title = ticker or template_name or "Equity Research Report"
+    tagline = prompt if prompt else (template_name or None)
+
+    return ReportV2Cover(
+        title=title,
+        eyebrow=eyebrow,
+        subtitle=template_name or None,
+        tagline=tagline,
+        ticker=ticker,
+    )
 
 
-def assemble_report(
-    sections: list[dict],
+def build_report_v2(
+    *,
+    sections: list[dict[str, Any]],
+    composer_inputs: dict[str, Any],
+    template_spec: Any,
     pool_citations: dict[str, Citation],
     run_summary: RunSummary,
     verification_history: VerificationHistory,
     dev_mode: bool,
-) -> str:
-    """Assemble the full report HTML document.
+) -> ReportV2:
+    """Build a ReportV2 from the assembled section dicts + pipeline metadata.
 
-    Section ordering:
-      1. Template sections (input order)
-      2. Sources (omitted when no citations)
-      3. Run Summary
-      4. Verification History (only when dev_mode=True)
+    Section dicts must include ``id``, ``name``, ``blocks``. They may
+    optionally include ``status`` (default "OK"), ``skip_reason``, and
+    ``degraded_reason``.
 
-    Wrapped in <article class="openlia-report"> with a <footer>.
+    Citations are passed through as the deduplicated list the renderer
+    expects (preserves first-appearance order from the citation manifest).
     """
-    block_texts = _collect_block_texts(sections)
-    manifest = assemble_citation_manifest(pool_citations, block_texts)
-
-    parts: list[str] = ['<article class="openlia-report">']
-
-    # Template sections
-    for section in sections:
-        section_id = _html.escape(str(section.get("id", "")), quote=True)
-        section_name = _html.escape(str(section.get("name", "")))
-        rendered_blocks: list[str] = []
-        for block in section.get("blocks", []):
-            if not isinstance(block, dict):
-                continue
-            rendered = render_block(block)
-            rendered = substitute_markers(rendered, manifest)
-            rendered_blocks.append(rendered)
-        parts.append(
-            f'<section id="{section_id}"><h2>{section_name}</h2>'
-            + "".join(rendered_blocks)
-            + "</section>"
+    typed_sections: list[ReportV2Section] = [
+        ReportV2Section(
+            id=str(s.get("id", "")),
+            name=str(s.get("name", "")),
+            status=s.get("status", "OK"),
+            blocks=list(s.get("blocks", []) or []),
+            skip_reason=s.get("skip_reason"),
+            degraded_reason=s.get("degraded_reason"),
         )
+        for s in sections
+    ]
 
-    # Sources
-    sources_html = render_sources_footer(manifest)
-    if sources_html:
-        parts.append(sources_html)
+    cover = _synthesise_cover(composer_inputs, template_spec)
 
-    # Run Summary
-    parts.append(render_run_summary(run_summary))
-
-    # Verification History (dev_mode only)
-    verification_html = render_verification_history(verification_history, dev_mode)
-    if verification_html:
-        parts.append(verification_html)
-
-    # Footer
-    engine_version = _html.escape(run_summary.engine_version)
-    parts.append(f'<footer class="report-footer">Engine v{engine_version}</footer>')
-
-    parts.append("</article>")
-    return "".join(parts)
+    return ReportV2(
+        engine_version=run_summary.engine_version,
+        generated_at=datetime.now(tz=timezone.utc),
+        template_id=run_summary.template_id,
+        template_name=run_summary.template_name,
+        cover=cover,
+        sections=typed_sections,
+        citations=list(pool_citations.values()),
+        run_summary=run_summary,
+        verification_history=verification_history if dev_mode else None,
+    )

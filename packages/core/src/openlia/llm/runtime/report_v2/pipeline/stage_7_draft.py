@@ -208,8 +208,11 @@ class SectionDrafter:
             )
             system += (
                 '\n\nReturn a JSON object {"blocks": [...]} where each block is one'
-                " of these renderable shapes:\n"
-                '  - {"type": "prose", "text": "markdown body"}\n'
+                " of these renderable shapes. The `type` field MUST be exactly"
+                " one of the literals below (lower-case). Do NOT substitute"
+                " similar names such as `paragraph`, `text`, `markdown`,"
+                " or `table_block` — the renderer rejects anything else.\n"
+                '  - {"type": "prose", "text": "markdown body"}    # use for ALL body text\n'
                 '  - {"type": "table", "headers": [..], "rows": [[..], ..],'
                 ' "caption": "optional"}\n'
                 '  - {"type": "kpi_strip", "cells":'
@@ -227,8 +230,11 @@ class SectionDrafter:
                 f"Draft section '{section.name}'.\n"
                 f"Directive: {section.directive}\n\n"
                 'Return a JSON object {"blocks": [...]} where each block is one'
-                " of these renderable shapes:\n"
-                '  - {"type": "prose", "text": "markdown body"}\n'
+                " of these renderable shapes. The `type` field MUST be exactly"
+                " one of the literals below (lower-case). Do NOT substitute"
+                " similar names such as `paragraph`, `text`, `markdown`,"
+                " or `table_block` — the renderer rejects anything else.\n"
+                '  - {"type": "prose", "text": "markdown body"}    # use for ALL body text\n'
                 '  - {"type": "table", "headers": [..], "rows": [[..], ..],'
                 ' "caption": "optional"}\n'
                 '  - {"type": "kpi_strip", "cells":'

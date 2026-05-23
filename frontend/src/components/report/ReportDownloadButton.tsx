@@ -5,6 +5,7 @@ import {
   downloadReportBlob,
   triggerBrowserSave,
   type DownloadFormat,
+  type ReportEngine,
 } from "../../api/reports";
 import { useToast } from "../primitives/Toast";
 
@@ -12,6 +13,9 @@ interface ReportDownloadButtonProps {
   readonly reportId: string;
   readonly variant?: "icon" | "primary";
   readonly className?: string;
+  /** Which engine emitted the report — selects the right export URL.
+   *  Defaults to "v1" so existing call-sites keep working. */
+  readonly engine?: ReportEngine;
 }
 
 const docxEnabled = (): boolean =>
@@ -22,6 +26,7 @@ export function ReportDownloadButton({
   reportId,
   variant = "icon",
   className,
+  engine = "v1",
 }: ReportDownloadButtonProps): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
@@ -31,7 +36,7 @@ export function ReportDownloadButton({
     async (fmt: DownloadFormat) => {
       setBusy(true);
       try {
-        const { blob, filename } = await downloadReportBlob(reportId, fmt);
+        const { blob, filename } = await downloadReportBlob(reportId, fmt, engine);
         triggerBrowserSave(blob, filename);
       } catch (err) {
         toast.push({
@@ -42,7 +47,7 @@ export function ReportDownloadButton({
         setBusy(false);
       }
     },
-    [reportId, toast],
+    [reportId, toast, engine],
   );
 
   const showDocx = docxEnabled();

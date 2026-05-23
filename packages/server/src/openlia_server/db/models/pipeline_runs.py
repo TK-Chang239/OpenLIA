@@ -52,6 +52,14 @@ class PipelineRun(Base):
     updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     paused_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # ReportV2 payload (structured cover/sections/citations/run_summary)
+    # persisted as JSON. Frontend renders this through v1's ReportRenderer
+    # after a thin block-type adapter (see WS-B).
+    final_report_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    final_report_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # Soft-delete (Delete button on the v2 ReportCard) + retention sweep.
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    expired_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
 
     __table_args__ = (
         Index("ix_pipeline_runs_user_state", "user_id", "state"),

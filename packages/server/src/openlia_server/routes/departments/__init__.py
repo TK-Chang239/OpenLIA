@@ -9,6 +9,9 @@ from openlia_server.routes.departments.equity_research import (
 from openlia_server.routes.departments.equity_research_v2 import (
     build_equity_research_v2_router,
 )
+from openlia_server.routes.departments.equity_research_v2_models import (
+    build_equity_research_v2_models_router,
+)
 from openlia_server.routes.departments.macro_research import (
     build_macro_research_router,
 )
@@ -27,6 +30,7 @@ __all__ = [
     "build_earnings_update_router",
     "build_equity_research_router",
     "build_equity_research_v2_router",
+    "build_equity_research_v2_models_router",
     "build_macro_research_router",
     "build_morning_briefing_router",
     "build_panic_thermometer_router",
