@@ -167,7 +167,7 @@ def _build_eodhd_tools() -> list:
 
     from openlia.llm.runtime.report_v2_3.research import build_research_tools
 
-    client = APIClient(api_token=key)
+    client = APIClient(api_key=key)
 
     def fundamentals(ticker: str) -> dict:
         raw = client.get_fundamentals_data(ticker)

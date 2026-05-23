@@ -370,7 +370,7 @@ def _build_eodhd_tool_set(eodhd_api_key: str) -> list[Any]:
     """Adapt ``eodhd.APIClient`` to the v2.3 transport signatures."""
     from eodhd import APIClient
 
-    client = APIClient(api_token=eodhd_api_key)
+    client = APIClient(api_key=eodhd_api_key)
 
     def fundamentals(ticker: str) -> dict:
         raw = client.get_fundamentals_data(ticker)
