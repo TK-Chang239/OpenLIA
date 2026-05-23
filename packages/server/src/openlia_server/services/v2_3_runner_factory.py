@@ -6,12 +6,13 @@ Real stages are wired in progressively as the engine PRs land. Today:
 - PLAN: real when `planner_client` is supplied; NoOp otherwise.
 - SYNTHESIZE: real when `synthesizer_client` is supplied; NoOp otherwise.
 - WRITE: real when `writer_client` is supplied; NoOp otherwise.
+- VERIFY: real when `verifier_client` is supplied; NoOp otherwise.
 - ASSEMBLE: real by default — no LLM client needed. Falls back to a
   graceful no-op on `state` when upstream stages have not populated
   sections/bundle/thesis/outline, so the factory works for both
   fully-wired runs and partially-NoOp runs.
-- Everything else (RESEARCH, COMPUTE, VISUALIZE, VERIFY): still NoOp,
-  swapped in subsequent PRs.
+- Everything else (RESEARCH, COMPUTE, VISUALIZE): still NoOp, swapped
+  in subsequent PRs.
 
 A `V23RunnerFactory` is a callable held on `app.state.v2_3_runner_factory`
 that the route layer invokes per request to build a `ReportRunner`. The
@@ -26,6 +27,7 @@ from collections.abc import Callable
 from openlia.llm.runtime.report_v2_3.clients.clarifier import ClarifierClient
 from openlia.llm.runtime.report_v2_3.clients.planner import PlannerClient
 from openlia.llm.runtime.report_v2_3.clients.synthesizer import SynthesizerClient
+from openlia.llm.runtime.report_v2_3.clients.verifier import VerifierClient
 from openlia.llm.runtime.report_v2_3.clients.writer import WriterClient
 from openlia.llm.runtime.report_v2_3.runner import ReportRunner
 from openlia.llm.runtime.report_v2_3.slots import V23Slot
@@ -38,6 +40,7 @@ from openlia.llm.runtime.report_v2_3.stages import (
     Stage,
     StageContext,
     SynthesizeStage,
+    VerifyStage,
     WriteStage,
 )
 
@@ -50,6 +53,7 @@ def make_v2_3_runner_factory(
     planner_client: PlannerClient | None = None,
     synthesizer_client: SynthesizerClient | None = None,
     writer_client: WriterClient | None = None,
+    verifier_client: VerifierClient | None = None,
 ) -> V23RunnerFactory:
     """Return a factory that builds a fresh ReportRunner per call.
 
@@ -66,6 +70,8 @@ def make_v2_3_runner_factory(
             stages[V23Slot.SYNTHESIZE] = SynthesizeStage(synthesizer_client)
         if writer_client is not None:
             stages[V23Slot.WRITE] = WriteStage(writer_client)
+        if verifier_client is not None:
+            stages[V23Slot.VERIFY] = VerifyStage(verifier_client)
         return ReportRunner(
             stages=stages,
             assemble=RealAssembleStage(),
