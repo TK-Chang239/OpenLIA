@@ -13,7 +13,8 @@
  *
  * Anything else is paragraph text, separated by blank lines.
  */
-import { type JSX, type ReactNode, useMemo } from "react";
+import { Printer } from "lucide-react";
+import { type JSX, type ReactNode, useCallback, useMemo } from "react";
 
 import type {
   V23BundleFact,
@@ -35,11 +36,17 @@ export function V23ReportView({ payload }: Props): JSX.Element {
     [payload.charts],
   );
 
+  const print = useCallback(() => {
+    if (typeof window !== "undefined") window.print();
+  }, []);
+
   return (
     <article
       data-testid="er-v2-3-report-view"
+      data-print-target="v23-report"
       className="flex flex-col gap-4 rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-5 py-5 text-[13.5px] leading-[1.55] text-[--color-text-primary]"
     >
+      <PrintBar onPrint={print} />
       <ReportHeader payload={payload} />
       <Thesis payload={payload} />
 
@@ -68,6 +75,25 @@ export function V23ReportView({ payload }: Props): JSX.Element {
     </article>
   );
 }
+
+function PrintBar({ onPrint }: { onPrint: () => void }): JSX.Element {
+  return (
+    <div
+      data-print-hide="true"
+      className="flex items-center justify-end"
+    >
+      <button
+        type="button"
+        onClick={onPrint}
+        data-testid="er-v2-3-print"
+        className="inline-flex items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-2 py-[3px] font-mono text-[10.5px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
+      >
+        <Printer size={11} /> Save as PDF
+      </button>
+    </div>
+  );
+}
+
 
 function ReportHeader({ payload }: { payload: V23RunPayload }): JSX.Element {
   return (
