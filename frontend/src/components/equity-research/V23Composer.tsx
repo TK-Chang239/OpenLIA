@@ -33,6 +33,7 @@ import {
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
 import { V23RepoPanel } from "./V23RepoPanel";
 import { V23ReportView } from "./V23ReportView";
+import { V23StageStrip } from "./V23StageStrip";
 
 const STAGE_LABEL: Record<V23Stage, string> = {
   clarify: "Clarifying",
@@ -44,6 +45,21 @@ const STAGE_LABEL: Record<V23Stage, string> = {
   visualize: "Validating charts",
   verify: "Verifying",
 };
+
+// Pipeline execution order, used to (a) decide which stages to mark
+// complete on reattach (everything before the persisted current_stage)
+// and (b) infer the failed slot when the engine reports a terminal
+// failure without naming the slot. Keep in sync with V23StageStrip.
+const STAGE_ORDER: readonly V23Stage[] = [
+  "clarify",
+  "plan",
+  "research",
+  "compute",
+  "synthesize",
+  "write",
+  "visualize",
+  "verify",
+];
 
 interface Props {
   /** When set, the composer hydrates from this run id on mount via
@@ -66,6 +82,10 @@ export function V23Composer({
   const [reportType, setReportType] = useState<V23ReportType>("initiation");
   const [run, setRun] = useState<V23RunState | null>(null);
   const [stage, setStage] = useState<V23Stage | null>(null);
+  const [completedStages, setCompletedStages] = useState<Set<V23Stage>>(
+    () => new Set(),
+  );
+  const [failedStage, setFailedStage] = useState<V23Stage | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -80,22 +100,27 @@ export function V23Composer({
 
   // Reattach: when the page mounts (or navigates) with ?run_id_v23=<id>,
   // pull the persisted state so the user lands back on the report,
-  // clarify modal, or error banner they left.
+  // clarify modal, or error banner they left. Mid-RUNNING reattach is
+  // handled by the polling effect below (no live SSE to re-subscribe to).
   useEffect(() => {
     if (!initialRunId) return;
     if (run?.run_id === initialRunId) return;
     let cancelled = false;
     setError(null);
+    setFailedStage(null);
     getV23Run(initialRunId)
       .then((state) => {
         if (cancelled) return;
         setRun(state);
-        setStage(null);
-        if (state.status === "running") {
-          // Engine kept advancing while the tab was gone but we have no
-          // live SSE to re-subscribe to. The complete-status effect will
-          // pick up the payload as soon as the run terminates; a follow-up
-          // PR adds polling for the in-between window.
+        setStage(state.current_stage);
+        // Infer the completed-stage set from position in the linear
+        // pipeline: anything before current_stage is treated as
+        // complete. Retries can't be reconstructed from a persisted
+        // snapshot — the chip shows retry_count only when the SSE
+        // stream is live.
+        setCompletedStages(stagesBefore(state.current_stage));
+        if (state.status === "failed" && state.current_stage) {
+          setFailedStage(state.current_stage);
         }
       })
       .catch((e: unknown) => {
@@ -130,6 +155,45 @@ export function V23Composer({
 
   useEffect(() => () => closeStream(), [closeStream]);
 
+  // Polling fallback: when a run is RUNNING but no live SSE stream is
+  // attached (page reload mid-run, or SSE errored after we cached the
+  // run_id), poll the run state until it leaves RUNNING. Each tick
+  // also refreshes the inferred completed-stage set so the strip
+  // advances as the engine progresses on the server.
+  useEffect(() => {
+    if (run?.status !== "running") return;
+    if (busy) return; // a live SSE stream is in flight
+    const runId = run.run_id;
+    let cancelled = false;
+    let timer: number | null = null;
+    const tick = () => {
+      if (cancelled) return;
+      getV23Run(runId)
+        .then((next) => {
+          if (cancelled) return;
+          setRun(next);
+          if (next.current_stage !== null) {
+            setStage(next.current_stage);
+            setCompletedStages(stagesBefore(next.current_stage));
+          }
+          if (next.status === "running") {
+            timer = window.setTimeout(tick, 1500);
+          }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          // Transient error — keep polling; surfacing a banner here would
+          // flicker as the network recovers.
+          timer = window.setTimeout(tick, 1500);
+        });
+    };
+    timer = window.setTimeout(tick, 1500);
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [run?.run_id, run?.status, busy]);
+
   // Fetch the structured payload whenever a run reaches `complete`.
   useEffect(() => {
     if (run?.status !== "complete") return;
@@ -154,11 +218,18 @@ export function V23Composer({
       if (evt.event === "stage_started") {
         setStage(evt.data.slot);
       } else if (evt.event === "stage_completed") {
-        // No-op: stage_started already reflects the active stage.
+        const slot = evt.data.slot;
+        setCompletedStages((prev) => {
+          if (prev.has(slot)) return prev;
+          const next = new Set(prev);
+          next.add(slot);
+          return next;
+        });
       } else if (evt.event === "suspended") {
         setStage(evt.data.slot);
       } else if (evt.event === "failed") {
         setError(evt.data.error);
+        if (evt.data.slot) setFailedStage(evt.data.slot);
         setBusy(false);
         setRepoRefreshKey((k) => k + 1);
       } else if (evt.event === "completed") {
@@ -188,6 +259,8 @@ export function V23Composer({
     setAnswers({});
     setRun(null);
     setStage(null);
+    setCompletedStages(new Set());
+    setFailedStage(null);
     setPayload(null);
     setPayloadError(null);
     closeStream();
@@ -228,7 +301,7 @@ export function V23Composer({
     <div className="flex flex-col gap-[14px]" data-testid="er-v2-3-composer">
       <div className="flex items-center justify-between gap-[10px]">
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-          Equity Research v2.3 (preview)
+          Equity Research v2.3
         </span>
         <V23EngineModelsPicker onAssignmentsChange={setAssignments} />
       </div>
@@ -317,15 +390,20 @@ export function V23Composer({
         </div>
       ) : null}
 
-      {run ? <V23RunBadge run={run} liveStage={stage} /> : null}
-      {!run && stage !== null ? (
-        <div
-          data-testid="er-v2-3-live-stage"
-          className="flex items-center justify-end rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[--color-text-secondary]"
-        >
-          {STAGE_LABEL[stage]}…
-        </div>
+      {run !== null || stage !== null ? (
+        <V23StageStrip
+          activeStage={
+            run?.status === "complete"
+              ? null
+              : (stage ?? run?.current_stage ?? null)
+          }
+          completed={completedStages}
+          failedStage={failedStage}
+          retryCount={run?.retry_count ?? 0}
+          allComplete={run?.status === "complete"}
+        />
       ) : null}
+      {run !== null ? <V23RunBadge run={run} liveStage={stage} /> : null}
 
       {needsClarify ? (
         <ClarifyForm
@@ -348,6 +426,13 @@ export function V23Composer({
       ) : null}
     </div>
   );
+}
+
+function stagesBefore(current: V23Stage | null): Set<V23Stage> {
+  if (current === null) return new Set();
+  const idx = STAGE_ORDER.indexOf(current);
+  if (idx <= 0) return new Set();
+  return new Set(STAGE_ORDER.slice(0, idx));
 }
 
 function V23RunBadge({
