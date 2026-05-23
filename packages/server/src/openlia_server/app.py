@@ -60,6 +60,9 @@ from openlia_server.routes.departments.equity_research import (
 from openlia_server.routes.departments.equity_research_v2 import (
     build_equity_research_v2_router,
 )
+from openlia_server.routes.departments.equity_research_v2_3 import (
+    build_equity_research_v2_3_router,
+)
 from openlia_server.routes.departments.equity_research_v2_models import (
     build_equity_research_v2_models_router,
 )
@@ -693,6 +696,13 @@ def create_app(
     app.include_router(
         build_equity_research_v2_models_router(db_session_factory=factory, mode=mode)
     )
+    app.include_router(
+        build_equity_research_v2_3_router(db_session_factory=factory, mode=mode)
+    )
+    # The v2.3 runner factory is wired by deployments that have a real
+    # ClarifierClient configured. PR3 ships the suspend/resume control flow
+    # only; tests inject `app.state.v2_3_runner_factory` directly. When unset
+    # the v2.3 routes respond 503 with code=v2_3_engine_unavailable.
 
     # Wire the v2.2 stage factory so the SSE endpoints have a real pipeline.
     # Errors during provider resolution are deferred to request time — the
