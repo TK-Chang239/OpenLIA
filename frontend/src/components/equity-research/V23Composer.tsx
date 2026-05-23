@@ -14,9 +14,10 @@
  * the per-user assignments + persistence + clarify round-trip work in
  * a browser. Richer UX (report renderer, history, retries) follows.
  */
-import { AlertTriangle, ArrowUp, Download, Square } from "lucide-react";
+import { AlertTriangle, Download } from "lucide-react";
 import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 
+import type { ReportLength, ReportMode } from "../../api/equity-research";
 import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import {
   type V23ReportType,
@@ -29,11 +30,22 @@ import {
   streamV23Run,
   v23DocxUrl,
 } from "../../api/equity-research-v2-3";
+import { type ComposerSubmitPayload, ErComposer } from "./ErComposer";
 import { V23ClarifyModal } from "./V23ClarifyModal";
 import { V23FailedReportCard } from "./V23FailedReportCard";
 import { V23RepoPanel } from "./V23RepoPanel";
 import { V23ReportCard } from "./V23ReportCard";
 import { V23StageStrip } from "./V23StageStrip";
+import { WelcomeStage } from "./WelcomeStage";
+
+// v2.2 ReportMode -> v2.3 ReportType. v2.3 also offers morning_brief
+// and earnings_review which v2.2 doesn't model — defer surfacing
+// those until the Report Settings modal learns about v2.3 modes.
+const MODE_TO_V23_TYPE: Record<ReportMode, V23ReportType> = {
+  stock_initiation: "initiation",
+  stock_update: "update",
+  sector_research: "initiation",
+};
 
 const STAGE_LABEL: Record<V23Stage, string> = {
   clarify: "Clarifying",
@@ -83,6 +95,15 @@ interface Props {
    *  null the composer assumes the picker is still loading and keeps
    *  the run button disabled with a generic prompt. */
   assignments?: AssignmentsResponse | null;
+  /** v2.2 ReportMode + ReportLength threaded through to the shared
+   *  WelcomeStage/ErComposer chrome. The composer maps mode -> v2.3
+   *  report_type on submit so the engine respects the user's choice. */
+  mode: ReportMode;
+  length: ReportLength;
+  /** User's display name for the welcome greeting. */
+  firstName: string;
+  /** Open the Report Settings modal — wired by the page. */
+  onModeClick: () => void;
 }
 
 export function V23Composer({
@@ -91,10 +112,13 @@ export function V23Composer({
   onOpenReport,
   onSelectPastRun,
   assignments = null,
-}: Props = {}): JSX.Element {
+  mode,
+  length,
+  firstName,
+  onModeClick,
+}: Props): JSX.Element {
   const [prompt, setPrompt] = useState("");
-  const [tickers, setTickers] = useState("");
-  const [reportType, setReportType] = useState<V23ReportType>("initiation");
+  const [tickerInput, setTickerInput] = useState("");
   const [run, setRun] = useState<V23RunState | null>(null);
   const [stage, setStage] = useState<V23Stage | null>(null);
   const [completedStages, setCompletedStages] = useState<Set<V23Stage>>(
@@ -168,10 +192,11 @@ export function V23Composer({
     }
   }, [run?.status, clarifyDismissed]);
 
-  const parsedTickers = tickers
-    .split(/[,\s]+/)
-    .map((t) => t.trim().toUpperCase())
-    .filter(Boolean);
+  const parseTickers = (raw: string): string[] =>
+    raw
+      .split(/[,\s]+/)
+      .map((t) => t.trim().toUpperCase())
+      .filter(Boolean);
 
   const closeStream = useCallback(() => {
     if (streamRef.current !== null) {
@@ -276,8 +301,10 @@ export function V23Composer({
     : 0;
   const readyToRun = clarifyAssigned;
 
-  const send = () => {
-    if (parsedTickers.length === 0 || !prompt.trim()) {
+  const handleComposerSubmit = (payload: ComposerSubmitPayload) => {
+    const parsed = parseTickers(payload.ticker);
+    const promptText = payload.prompt.trim();
+    if (parsed.length === 0 || !promptText) {
       setError("Provide at least one ticker and a prompt.");
       return;
     }
@@ -291,12 +318,13 @@ export function V23Composer({
     setClarifyDismissed(false);
     setPayload(null);
     setPayloadError(null);
+    setPrompt("");
     closeStream();
     streamRef.current = streamV23Run(
       {
-        raw_prompt: prompt,
-        tickers: parsedTickers,
-        report_type: reportType,
+        raw_prompt: promptText,
+        tickers: parsed,
+        report_type: MODE_TO_V23_TYPE[mode],
       },
       {
         onEvent: handleStreamEvent,
@@ -346,22 +374,30 @@ export function V23Composer({
     setBusy(false);
   }, [closeStream]);
 
+  const placeholder = isWelcome
+    ? "What should this report cover? (e.g., focus on AI infra margins)"
+    : "Ask for another v2.3 report…";
+
   return (
     <div
       className="flex flex-1 min-h-0 flex-col"
       data-testid="er-v2-3-composer"
     >
-      {/* Main scrollable area: hero (welcome) or active content. */}
-      <div className="flex-1 overflow-y-auto px-6 py-6">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4">
-          {isWelcome ? (
-            <>
-              <WelcomeHero
-                onPickTicker={(t) => setTickers(t)}
-                disableChips={busy}
-              />
+      {/* Main scrollable area: WelcomeStage (welcome) or active content. */}
+      <div className="flex flex-1 min-h-0 flex-col overflow-y-auto">
+        {isWelcome ? (
+          <>
+            <WelcomeStage
+              firstName={firstName}
+              mode={mode}
+              length={length}
+              onModeRowClick={onModeClick}
+            />
+            <div className="mx-auto w-full max-w-[760px] px-4 pb-4">
               {!readyToRun && assignments !== null ? (
-                <SetupBanner totalSlots={totalSlots} />
+                <div className="mb-3">
+                  <SetupBanner totalSlots={totalSlots} />
+                </div>
               ) : null}
               <V23RepoPanel
                 refreshKey={repoRefreshKey}
@@ -371,102 +407,101 @@ export function V23Composer({
                     : undefined
                 }
               />
-            </>
-          ) : (
-            <>
-              {run !== null || stage !== null ? (
-                <V23StageStrip
-                  activeStage={
-                    run?.status === "complete"
-                      ? null
-                      : (stage ?? run?.current_stage ?? null)
-                  }
-                  completed={completedStages}
-                  failedStage={failedStage}
-                  retryCount={run?.retry_count ?? 0}
-                  allComplete={run?.status === "complete"}
-                />
-              ) : null}
-
-              {run !== null ? <V23RunBadge run={run} liveStage={stage} /> : null}
-
-              {needsClarify && clarifyDismissed ? (
-                <button
-                  type="button"
-                  onClick={() => setClarifyDismissed(false)}
-                  data-testid="er-v2-3-clarify-reopen"
-                  className="self-start inline-flex items-center gap-[6px] rounded-full border border-[--color-feedback-warning] bg-[rgba(255,180,0,0.08)] px-3 py-[3px] font-mono text-[10.5px] uppercase tracking-[0.08em] text-[--color-feedback-warning] hover:bg-[rgba(255,180,0,0.16)]"
-                >
-                  <AlertTriangle size={11} /> Continue clarifying (
-                  {run.pending_questions.length})
-                </button>
-              ) : null}
-
-              {run?.status === "failed" ? (
-                <V23FailedReportCard
-                  runId={run.run_id}
-                  failedStage={failedStage ?? run.current_stage}
-                  lastError={run.last_error}
-                  retryCount={run.retry_count}
-                  onRestart={restart}
-                />
-              ) : null}
-
-              {payload !== null ? (
-                <V23ReportCard
-                  payload={payload}
-                  completedAt={
-                    run?.status === "complete"
-                      ? new Date().toISOString()
-                      : null
-                  }
-                  onOpen={() => onOpenReport?.(payload.run_id)}
-                />
-              ) : null}
-              {payloadError !== null ? (
-                <div
-                  role="alert"
-                  className="rounded-md border border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-danger]"
-                >
-                  Could not load the report view: {payloadError}. The .docx
-                  download still works.
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom-pinned composer bar. */}
-      <div className="flex-shrink-0 border-t border-[--color-border-subtle] bg-[--color-bg-base] px-6 py-4">
-        <div className="mx-auto w-full max-w-[760px]">
-          {error ? (
-            <div
-              role="alert"
-              data-testid="er-v2-3-error"
-              className="mb-2 flex items-center gap-[8px] rounded-md border border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-danger]"
-            >
-              <AlertTriangle size={13} /> {error}
             </div>
-          ) : null}
-          <ComposerBar
-            tickers={tickers}
-            onTickersChange={setTickers}
-            reportType={reportType}
-            onReportTypeChange={setReportType}
-            prompt={prompt}
-            onPromptChange={setPrompt}
-            isWelcome={isWelcome}
-            busy={busy}
-            readyToRun={readyToRun}
-            onRun={send}
-            onStop={stop}
-          />
-          <p className="mt-2 text-center font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            Press Enter to send · Shift+Enter for new line
-          </p>
-        </div>
+          </>
+        ) : (
+          <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-6 py-6">
+            {run !== null || stage !== null ? (
+              <V23StageStrip
+                activeStage={
+                  run?.status === "complete"
+                    ? null
+                    : (stage ?? run?.current_stage ?? null)
+                }
+                completed={completedStages}
+                failedStage={failedStage}
+                retryCount={run?.retry_count ?? 0}
+                allComplete={run?.status === "complete"}
+              />
+            ) : null}
+
+            {run !== null ? <V23RunBadge run={run} liveStage={stage} /> : null}
+
+            {needsClarify && clarifyDismissed ? (
+              <button
+                type="button"
+                onClick={() => setClarifyDismissed(false)}
+                data-testid="er-v2-3-clarify-reopen"
+                className="self-start inline-flex items-center gap-[6px] rounded-full border border-[--color-feedback-warning] bg-[rgba(255,180,0,0.08)] px-3 py-[3px] font-mono text-[10.5px] uppercase tracking-[0.08em] text-[--color-feedback-warning] hover:bg-[rgba(255,180,0,0.16)]"
+              >
+                <AlertTriangle size={11} /> Continue clarifying (
+                {run.pending_questions.length})
+              </button>
+            ) : null}
+
+            {run?.status === "failed" ? (
+              <V23FailedReportCard
+                runId={run.run_id}
+                failedStage={failedStage ?? run.current_stage}
+                lastError={run.last_error}
+                retryCount={run.retry_count}
+                onRestart={restart}
+              />
+            ) : null}
+
+            {payload !== null ? (
+              <V23ReportCard
+                payload={payload}
+                completedAt={
+                  run?.status === "complete"
+                    ? new Date().toISOString()
+                    : null
+                }
+                onOpen={() => onOpenReport?.(payload.run_id)}
+              />
+            ) : null}
+            {payloadError !== null ? (
+              <div
+                role="alert"
+                className="rounded-md border border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-danger]"
+              >
+                Could not load the report view: {payloadError}. The .docx
+                download still works.
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
+
+      {/* Inline error sits above the composer so it's visible on submit. */}
+      {error ? (
+        <div className="flex-shrink-0 border-t border-[--color-border-subtle] bg-[--color-bg-base] px-6 pt-3">
+          <div
+            role="alert"
+            data-testid="er-v2-3-error"
+            className="mx-auto flex max-w-[760px] items-center gap-[8px] rounded-md border border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] px-3 py-2 text-[12px] text-[--color-feedback-danger]"
+          >
+            <AlertTriangle size={13} /> {error}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Bottom-pinned ErComposer — the same composer v2.2 uses, so v2.3
+       *  shares the welcome/composer chrome pixel-for-pixel. */}
+      <ErComposer
+        value={prompt}
+        onChange={setPrompt}
+        onSubmit={handleComposerSubmit}
+        onStop={stop}
+        isStreaming={busy}
+        placeholder={placeholder}
+        mode={mode}
+        length={length}
+        onModeClick={onModeClick}
+        disabled={!readyToRun}
+        ticker={isWelcome ? tickerInput : undefined}
+        onTickerChange={isWelcome ? setTickerInput : undefined}
+      />
 
       {/* Clarify modal — overlay above everything else. */}
       {needsClarify && !clarifyDismissed ? (
@@ -480,43 +515,6 @@ export function V23Composer({
           onDismiss={() => setClarifyDismissed(true)}
         />
       ) : null}
-    </div>
-  );
-}
-
-function WelcomeHero({
-  onPickTicker,
-  disableChips,
-}: {
-  onPickTicker: (ticker: string) => void;
-  disableChips: boolean;
-}): JSX.Element {
-  const chips = ["AAPL", "TSLA", "NVDA", "MSFT"];
-  return (
-    <div
-      data-testid="er-v2-3-welcome-hero"
-      className="flex flex-col items-center gap-3 px-4 pb-2 pt-8"
-    >
-      <h1 className="font-display text-[28px] font-semibold tracking-tight text-[--color-text-primary]">
-        Equity Research
-      </h1>
-      <p className="text-[14px] text-[--color-text-secondary]">
-        Research companies, sectors, and market trends
-      </p>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-        {chips.map((t) => (
-          <button
-            key={t}
-            type="button"
-            disabled={disableChips}
-            onClick={() => onPickTicker(t)}
-            data-testid={`er-v2-3-suggest-${t}`}
-            className="rounded-full border border-[--color-border-subtle] bg-[--color-bg-base] px-3.5 py-[6px] font-mono text-[11.5px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:bg-[--color-surface-hover] hover:text-[--color-text-primary] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {t}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
@@ -540,112 +538,6 @@ function SetupBanner({ totalSlots }: { totalSlots: number }): JSX.Element {
           Assign at least the <strong>Clarify</strong> slot ({totalSlots}/7
           assigned). Open <em>Engine models</em> in the page header.
         </span>
-      </div>
-    </div>
-  );
-}
-
-function ComposerBar({
-  tickers,
-  onTickersChange,
-  reportType,
-  onReportTypeChange,
-  prompt,
-  onPromptChange,
-  isWelcome,
-  busy,
-  readyToRun,
-  onRun,
-  onStop,
-}: {
-  tickers: string;
-  onTickersChange: (v: string) => void;
-  reportType: V23ReportType;
-  onReportTypeChange: (v: V23ReportType) => void;
-  prompt: string;
-  onPromptChange: (v: string) => void;
-  isWelcome: boolean;
-  busy: boolean;
-  readyToRun: boolean;
-  onRun: () => void;
-  onStop: () => void;
-}): JSX.Element {
-  const promptPlaceholder = isWelcome
-    ? "What should this report cover? (e.g., focus on AI infra margins)"
-    : "Ask for another report…";
-
-  const onKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      if (!busy && readyToRun) onRun();
-    }
-  };
-
-  return (
-    <div className="rounded-[14px] border border-[--color-border-subtle] bg-[--color-bg-input] p-2 transition-all duration-normal ease-out focus-within:border-[--color-feedback-success] focus-within:shadow-[0_0_0_3px_rgba(212,255,0,0.10)]">
-      <div className="flex items-center gap-2 border-b border-[--color-border-subtle] px-2 py-1.5">
-        <input
-          type="text"
-          value={tickers}
-          onChange={(e) => onTickersChange(e.target.value)}
-          placeholder="Tickers (NVDA, AVGO, …)"
-          data-testid="er-v2-3-tickers"
-          className="min-w-0 flex-1 bg-transparent font-mono text-[12px] uppercase tracking-[0.05em] text-[--color-text-primary] outline-none placeholder:normal-case placeholder:text-[--color-text-tertiary]"
-        />
-        <span className="font-mono text-[10px] text-[--color-text-tertiary]">
-          ·
-        </span>
-        <select
-          value={reportType}
-          onChange={(e) => onReportTypeChange(e.target.value as V23ReportType)}
-          data-testid="er-v2-3-report-type"
-          className="bg-transparent font-mono text-[11px] uppercase tracking-[0.08em] text-[--color-text-secondary] outline-none hover:text-[--color-text-primary]"
-        >
-          <option value="initiation">Initiation</option>
-          <option value="update">Update</option>
-          <option value="morning_brief">Morning brief</option>
-          <option value="earnings_review">Earnings review</option>
-        </select>
-      </div>
-
-      <div className="flex items-end gap-2 px-2 pb-1 pt-2">
-        <textarea
-          value={prompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          placeholder={promptPlaceholder}
-          rows={1}
-          data-testid="er-v2-3-prompt"
-          aria-label="Equity research v2.3 prompt"
-          className="max-h-[180px] min-h-[36px] flex-1 resize-none bg-transparent text-[13px] leading-[1.5] text-[--color-text-primary] outline-none placeholder:text-[--color-text-tertiary]"
-        />
-        {busy ? (
-          <button
-            type="button"
-            onClick={onStop}
-            data-testid="er-v2-3-stop"
-            aria-label="Stop streaming"
-            className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-[--color-surface-active] text-[--color-text-secondary] hover:text-[--color-text-primary]"
-          >
-            <Square size={13} />
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onRun}
-            disabled={!readyToRun}
-            data-testid="er-v2-3-send"
-            aria-label="Run v2.3 report"
-            title={
-              !readyToRun
-                ? "Assign at least the Clarify model in Engine models first"
-                : ""
-            }
-            className="inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-[--color-accent-primary] text-[--color-accent-on] hover:bg-[--color-accent-hover] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            <ArrowUp size={14} />
-          </button>
-        )}
       </div>
     </div>
   );
