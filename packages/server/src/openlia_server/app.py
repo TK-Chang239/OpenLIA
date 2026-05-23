@@ -699,10 +699,22 @@ def create_app(
     app.include_router(
         build_equity_research_v2_3_router(db_session_factory=factory, mode=mode)
     )
-    # The v2.3 runner factory is wired by deployments that have a real
-    # ClarifierClient configured. PR3 ships the suspend/resume control flow
-    # only; tests inject `app.state.v2_3_runner_factory` directly. When unset
-    # the v2.3 routes respond 503 with code=v2_3_engine_unavailable.
+    # Wire the v2.3 runner factory when an OpenAI-backed CLARIFY model is
+    # configured via env (OPENAI_API_KEY + OPENLIA_V2_3_CLARIFY_MODEL). If
+    # the env is incomplete the factory stays unset and the v2.3 routes
+    # respond 503 with code=v2_3_engine_unavailable. Failures during
+    # adapter construction are logged but never abort startup — they would
+    # also surface as 503 from the routes.
+    try:
+        from openlia_server.services.v2_3_wiring import (
+            build_v2_3_runner_factory_from_env,
+        )
+
+        v2_3_factory = build_v2_3_runner_factory_from_env()
+        if v2_3_factory is not None:
+            app.state.v2_3_runner_factory = v2_3_factory
+    except Exception:
+        log.exception("v2.3 runner factory wiring failed — /v2.3 routes will 503")
 
     # Wire the v2.2 stage factory so the SSE endpoints have a real pipeline.
     # Errors during provider resolution are deferred to request time — the
