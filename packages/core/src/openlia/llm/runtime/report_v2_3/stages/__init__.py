@@ -12,6 +12,7 @@ from .clarify import ClarifyStage
 from .compute import ComputeStage
 from .noop import NoOpAssembleStage, NoOpStage
 from .plan import PlanStage
+from .research import ResearchStage
 from .synthesize import SynthesizeStage
 from .verify import VerifyStage
 from .visualize import VisualizeStage
@@ -27,6 +28,7 @@ __all__ = [
     "NoOpStage",
     "PlanStage",
     "RealAssembleStage",
+    "ResearchStage",
     "Stage",
     "StageContext",
     "SynthesizeStage",

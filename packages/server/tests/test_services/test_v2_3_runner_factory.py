@@ -20,6 +20,7 @@ from openlia.llm.runtime.report_v2_3.clients.planner import (
     FakePlannerClient,
     PlannerRequest,
 )
+from openlia.llm.runtime.report_v2_3.clients.researcher import FakeResearcherClient
 from openlia.llm.runtime.report_v2_3.clients.synthesizer import FakeSynthesizerClient
 from openlia.llm.runtime.report_v2_3.clients.verifier import (
     FakeVerifierClient,
@@ -389,3 +390,141 @@ def test_verify_clean_run_does_not_retry() -> None:
     assert state.status == RunStatus.COMPLETE
     assert state.retry_count == 0
     assert len(fake_writer.calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Full pipeline — every stage wired as real, no state pre-seeding
+# ---------------------------------------------------------------------------
+
+
+def test_all_eight_stages_compose_end_to_end() -> None:
+    """The capstone integration test for the v2.3 pipeline shape: every
+    client wired with fakes, fresh ReportState in, ResolvedReport out.
+
+    Proves the contract chain holds:
+      CLARIFY -> PLAN -> RESEARCH -> COMPUTE -> SYNTHESIZE -> WRITE ->
+      VISUALIZE -> VERIFY -> ASSEMBLE
+    """
+    # PLAN produces an outline that requests DCF and lists data_needs that
+    # the researcher will satisfy.
+    planned_outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(id="overview", title="Overview"),
+            OutlineSection(id="financials", title="Financials"),
+        ],
+        valuation_plan=ValuationPlan(methods=[ValuationMethod.DCF]),
+    )
+
+    # RESEARCH produces the raw bundle the rest of the pipeline consumes.
+    src = DataProviderSource(
+        provider="EODHD",
+        endpoint="fundamentals/income_statement",
+        period="TTM",
+        retrieved_at=datetime.now(UTC),
+    )
+    researched_bundle = ResearchBundle(
+        tickers=["NVDA"],
+        facts={
+            "rev_ttm": BundleFact(id="rev_ttm", label="Revenue TTM", value=100.0, source=src),
+            "gm": BundleFact(id="gm", label="Gross margin", value=0.65, source=src),
+        },
+    )
+
+    # COMPUTE proposes DCF inputs that ground in the rev_ttm fact.
+    dcf_inputs = DCFInputs(
+        revenue_base_fact_id="rev_ttm",
+        revenue_growth_path=[0.10, 0.10],
+        margin_path=[0.30, 0.30],
+        wacc=0.10,
+        terminal_growth=0.02,
+        tax_rate=0.20,
+    )
+
+    # SYNTHESIZE builds a thesis that references the post-COMPUTE bundle
+    # (so canonical_figures and mandates can mention dcf_fair_value).
+    def _synth_responder(req):
+        return ReportThesis(
+            language=Language.EN,
+            central_argument="Durable data-center growth supports a fair-value premium.",
+            key_takeaways=["DC revenue scaled", "Margins held"],
+            valuation_stance="Fair value above current price.",
+            valuation_plan=ValuationPlan(methods=[ValuationMethod.DCF]),
+            canonical_figures=[
+                CanonicalFigure(fact_id="gm", display="65.0%"),
+                CanonicalFigure(fact_id="dcf_fair_value", display="$354"),
+            ],
+            mandates=[
+                SectionMandate(
+                    section_id="overview",
+                    covers="business overview",
+                    does_not_cover="financials",
+                    relevant_fact_ids=["rev_ttm"],
+                ),
+                SectionMandate(
+                    section_id="financials",
+                    covers="financials including DCF",
+                    does_not_cover="overview",
+                    relevant_fact_ids=["rev_ttm", "gm", "dcf_fair_value"],
+                ),
+            ],
+            charts=[],
+        )
+
+    # WRITE produces sections whose placeholders are subsets of mandate
+    # relevant_fact_ids.
+    def _writer_responder(req):
+        sid = req.section_mandate.section_id
+        if sid == "overview":
+            body = "Revenue trended at {{CITE:rev_ttm}} over the trailing period."
+        else:
+            body = (
+                "Margins at {{CITE:gm}}; revenue {{CITE:rev_ttm}}; "
+                "fair value {{CITE:dcf_fair_value}}."
+            )
+        return WrittenSection(section_id=sid, title=sid.title(), body=body)
+
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"])),
+        planner_client=FakePlannerClient(result=planned_outline),
+        researcher_client=FakeResearcherClient(result=researched_bundle),
+        compute_client=FakeComputeClient(inputs_by_method={ValuationMethod.DCF: dcf_inputs}),
+        synthesizer_client=FakeSynthesizerClient(responder=_synth_responder),
+        writer_client=FakeWriterClient(responder=_writer_responder),
+        verifier_client=FakeVerifierClient(result=VerifyResult()),
+    )
+
+    # Fresh state — no pre-seeding. Every stage owns its slice.
+    state = ReportState(
+        run_id="r-end-to-end",
+        user_id="u",
+        raw_prompt="initiate on NVDA",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+    )
+
+    state = factory().start(state)
+
+    assert state.status == RunStatus.COMPLETE
+    assert state.retry_count == 0
+    assert state.outline is planned_outline
+    # Bundle = RESEARCH output plus COMPUTE-added DCF facts.
+    assert "rev_ttm" in state.bundle.facts  # from RESEARCH
+    assert "dcf_fair_value" in state.bundle.facts  # added by COMPUTE
+    assert "dcf_enterprise_value" in state.bundle.facts
+    # Thesis carries dcf_fair_value as a canonical figure.
+    fact_ids = {cf.fact_id for cf in state.thesis.canonical_figures}
+    assert "dcf_fair_value" in fact_ids
+    # Two sections written in outline order.
+    assert [s.section_id for s in state.sections] == ["overview", "financials"]
+    # ASSEMBLE resolved placeholders deterministically.
+    assert state.resolved is not None
+    assert "[^1]" in state.resolved.section_bodies["overview"]
+    # Footnotes deduped — overview cites rev_ttm; financials cites gm,
+    # rev_ttm again, dcf_fair_value — total 3 distinct facts cited.
+    assert len(state.resolved.footnotes) == 3
+    # Verify result clean.
+    assert state.verify_result is not None
+    assert state.verify_result.must_rewrite is False
