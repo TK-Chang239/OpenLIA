@@ -42,9 +42,7 @@ class VisualizeStage(Stage):
         return state
 
 
-def _validate_chart_renderability(
-    chart: ChartSpec, bundle: ResearchBundle
-) -> None:
+def _validate_chart_renderability(chart: ChartSpec, bundle: ResearchBundle) -> None:
     bundle_fact_ids = set(bundle.facts.keys())
     n_categories = len(chart.category_labels)
 

@@ -186,18 +186,18 @@ def test_missing_thesis_raises() -> None:
     state = _state()
     state.thesis = None
     with pytest.raises(RuntimeError, match=r"state\.thesis"):
-        WriteStage(
-            FakeWriterClient(result=WrittenSection(section_id="x", title="x", body=""))
-        ).run(state, _ctx())
+        WriteStage(FakeWriterClient(result=WrittenSection(section_id="x", title="x", body=""))).run(
+            state, _ctx()
+        )
 
 
 def test_missing_bundle_raises() -> None:
     state = _state()
     state.bundle = None
     with pytest.raises(RuntimeError, match=r"state\.bundle"):
-        WriteStage(
-            FakeWriterClient(result=WrittenSection(section_id="x", title="x", body=""))
-        ).run(state, _ctx())
+        WriteStage(FakeWriterClient(result=WrittenSection(section_id="x", title="x", body=""))).run(
+            state, _ctx()
+        )
 
 
 # ---------------------------------------------------------------------------

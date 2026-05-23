@@ -82,9 +82,7 @@ def _resolve_scalar(bundle: ResearchBundle, fact_id: str) -> float | None:
     return None
 
 
-def comps_result_to_facts(
-    result: CompsResult, inputs: CompsInputs
-) -> list[BundleFact]:
+def comps_result_to_facts(result: CompsResult, inputs: CompsInputs) -> list[BundleFact]:
     """Decompose a CompsResult into computed BundleFacts.
 
     One fact per implied-value multiple, plus the full peer table as a

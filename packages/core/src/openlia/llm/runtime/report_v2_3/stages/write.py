@@ -43,9 +43,7 @@ class WriteStage(Stage):
         if state.bundle is None:
             raise RuntimeError("WRITE requires state.bundle.")
 
-        prior_by_section: dict[str, WrittenSection] = {
-            s.section_id: s for s in state.sections
-        }
+        prior_by_section: dict[str, WrittenSection] = {s.section_id: s for s in state.sections}
         critique_by_section: dict[str, list[VerifyIssue]] = (
             self._group_critique(state) if state.verify_result is not None else {}
         )

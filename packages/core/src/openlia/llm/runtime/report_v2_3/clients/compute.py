@@ -53,9 +53,7 @@ class FakeComputeClient(ComputeClient):
         responder: Callable[[ComputeRequest], ValuationInputs] | None = None,
     ) -> None:
         if (inputs_by_method is None) == (responder is None):
-            raise ValueError(
-                "Provide exactly one of `inputs_by_method` or `responder`."
-            )
+            raise ValueError("Provide exactly one of `inputs_by_method` or `responder`.")
         self._inputs_by_method = inputs_by_method
         self._responder = responder
         self.calls: list[ComputeRequest] = []

@@ -41,8 +41,7 @@ class PlanStage(Stage):
     def _validate_outline(outline: Outline, state: ReportState) -> None:
         if outline.tickers != state.tickers:
             raise RuntimeError(
-                f"Outline tickers {outline.tickers} do not match run tickers "
-                f"{state.tickers}."
+                f"Outline tickers {outline.tickers} do not match run tickers {state.tickers}."
             )
         if outline.report_type != state.report_type:
             raise RuntimeError(
