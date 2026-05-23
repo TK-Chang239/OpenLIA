@@ -29,6 +29,7 @@ frontend/vitest.config.js
 .env
 .env.local
 .env.*.local
+scripts/smoke_v2_3.env
 
 # Git worktrees
 .worktrees/
