@@ -416,11 +416,18 @@ class OutlineSection(BaseModel):
 
 
 class Outline(BaseModel):
-    """Output of PLAN."""
+    """Output of PLAN.
+
+    `valuation_plan` is set here (rather than later on ReportThesis) so
+    COMPUTE — which runs *between* RESEARCH and SYNTHESIZE — knows which
+    valuation methods to execute. SYNTHESIZE then copies the same plan
+    onto the thesis so writers and ASSEMBLE see one consistent record.
+    """
 
     tickers: list[str] = Field(..., min_length=1)
     report_type: ReportType
     sections: list[OutlineSection]
+    valuation_plan: ValuationPlan = Field(default_factory=ValuationPlan)
 
 
 class SectionMandate(BaseModel):

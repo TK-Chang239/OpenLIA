@@ -4,6 +4,7 @@ Real stages are wired in progressively as the engine PRs land. Today:
 
 - CLARIFY: real, requires `clarifier_client`.
 - PLAN: real when `planner_client` is supplied; NoOp otherwise.
+- COMPUTE: real when `compute_client` is supplied; NoOp otherwise.
 - SYNTHESIZE: real when `synthesizer_client` is supplied; NoOp otherwise.
 - WRITE: real when `writer_client` is supplied; NoOp otherwise.
 - VERIFY: real when `verifier_client` is supplied; NoOp otherwise.
@@ -11,8 +12,8 @@ Real stages are wired in progressively as the engine PRs land. Today:
   graceful no-op on `state` when upstream stages have not populated
   sections/bundle/thesis/outline, so the factory works for both
   fully-wired runs and partially-NoOp runs.
-- Everything else (RESEARCH, COMPUTE, VISUALIZE): still NoOp, swapped
-  in subsequent PRs.
+- Everything else (RESEARCH, VISUALIZE): still NoOp, swapped in
+  subsequent PRs.
 
 A `V23RunnerFactory` is a callable held on `app.state.v2_3_runner_factory`
 that the route layer invokes per request to build a `ReportRunner`. The
@@ -25,6 +26,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from openlia.llm.runtime.report_v2_3.clients.clarifier import ClarifierClient
+from openlia.llm.runtime.report_v2_3.clients.compute import ComputeClient
 from openlia.llm.runtime.report_v2_3.clients.planner import PlannerClient
 from openlia.llm.runtime.report_v2_3.clients.synthesizer import SynthesizerClient
 from openlia.llm.runtime.report_v2_3.clients.verifier import VerifierClient
@@ -34,6 +36,7 @@ from openlia.llm.runtime.report_v2_3.slots import V23Slot
 from openlia.llm.runtime.report_v2_3.stages import (
     PIPELINE_ORDER,
     ClarifyStage,
+    ComputeStage,
     NoOpStage,
     PlanStage,
     RealAssembleStage,
@@ -51,6 +54,7 @@ def make_v2_3_runner_factory(
     clarifier_client: ClarifierClient,
     *,
     planner_client: PlannerClient | None = None,
+    compute_client: ComputeClient | None = None,
     synthesizer_client: SynthesizerClient | None = None,
     writer_client: WriterClient | None = None,
     verifier_client: VerifierClient | None = None,
@@ -66,6 +70,8 @@ def make_v2_3_runner_factory(
         stages[V23Slot.CLARIFY] = ClarifyStage(clarifier_client)
         if planner_client is not None:
             stages[V23Slot.PLAN] = PlanStage(planner_client)
+        if compute_client is not None:
+            stages[V23Slot.COMPUTE] = ComputeStage(compute_client)
         if synthesizer_client is not None:
             stages[V23Slot.SYNTHESIZE] = SynthesizeStage(synthesizer_client)
         if writer_client is not None:

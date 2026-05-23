@@ -15,6 +15,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from openlia.llm.runtime.report_v2_3.clients.clarifier import FakeClarifierClient
+from openlia.llm.runtime.report_v2_3.clients.compute import FakeComputeClient
 from openlia.llm.runtime.report_v2_3.clients.planner import (
     FakePlannerClient,
     PlannerRequest,
@@ -33,6 +34,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     CanonicalFigure,
     ClarifyProceed,
     DataProviderSource,
+    DCFInputs,
     IssueKind,
     IssueSeverity,
     Language,
@@ -43,6 +45,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ResearchBundle,
     RunStatus,
     SectionMandate,
+    ValuationMethod,
     ValuationPlan,
     VerifyIssue,
     VerifyResult,
@@ -301,6 +304,67 @@ def test_verify_high_issue_triggers_write_retry_through_factory() -> None:
     assert second_call.critique[0].kind == IssueKind.VALUE_MISMATCH
     # Final section body reflects the rewrite suffix.
     assert state.sections[0].body.endswith("(rewritten)")
+
+
+def test_factory_with_compute_adds_dcf_facts_to_bundle() -> None:
+    """When PLAN emits a valuation_plan and COMPUTE is wired, DCF facts
+    must land in the bundle BEFORE SYNTHESIZE reads it — that's the spec's
+    "thesis informed by the DCF, not asserted before it exists" rule."""
+
+    outline_with_dcf = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[OutlineSection(id="overview", title="Overview")],
+        valuation_plan=ValuationPlan(methods=[ValuationMethod.DCF]),
+    )
+    dcf_inputs = DCFInputs(
+        revenue_base_fact_id="rev_ttm",
+        revenue_growth_path=[0.10, 0.10],
+        margin_path=[0.30, 0.30],
+        wacc=0.10,
+        terminal_growth=0.02,
+        tax_rate=0.20,
+    )
+
+    captured_bundle: dict[str, object] = {}
+
+    def _record_synth(req):
+        captured_bundle["bundle"] = req.bundle
+        return _thesis()
+
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])),
+        planner_client=FakePlannerClient(result=outline_with_dcf),
+        compute_client=FakeComputeClient(
+            inputs_by_method={ValuationMethod.DCF: dcf_inputs}
+        ),
+        synthesizer_client=FakeSynthesizerClient(responder=_record_synth),
+    )
+
+    state = factory().start(_seed_state())
+    assert state.status == RunStatus.COMPLETE
+    # DCF facts must be in the final bundle.
+    assert "dcf_fair_value" in state.bundle.facts
+    assert "dcf_enterprise_value" in state.bundle.facts
+    # And they had landed in the bundle BEFORE synthesize was called —
+    # SYNTHESIZE got the post-COMPUTE bundle.
+    synth_bundle = captured_bundle["bundle"]
+    assert "dcf_fair_value" in synth_bundle.facts
+
+
+def test_factory_compute_skipped_when_plan_is_empty() -> None:
+    """Morning-brief-style runs have no valuation methods. COMPUTE should
+    be a no-op even when its client is wired."""
+    fake_compute = FakeComputeClient(inputs_by_method={})
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])),
+        compute_client=fake_compute,
+    )
+    state = factory().start(_seed_state())
+    assert state.status == RunStatus.COMPLETE
+    assert fake_compute.calls == []
+    # No DCF facts added.
+    assert "dcf_fair_value" not in state.bundle.facts
 
 
 def test_verify_clean_run_does_not_retry() -> None:

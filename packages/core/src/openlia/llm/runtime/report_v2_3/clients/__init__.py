@@ -7,6 +7,7 @@ resolved via the per-user `er_v2_3_model_assignments` mapping).
 """
 
 from .clarifier import ClarifierClient, ClarifierRequest, FakeClarifierClient
+from .compute import ComputeClient, ComputeRequest, FakeComputeClient
 from .llm_clarifier import LLMClarifierClient
 from .planner import FakePlannerClient, PlannerClient, PlannerRequest
 from .synthesizer import (
@@ -20,7 +21,10 @@ from .writer import FakeWriterClient, WriterClient, WriterRequest
 __all__ = [
     "ClarifierClient",
     "ClarifierRequest",
+    "ComputeClient",
+    "ComputeRequest",
     "FakeClarifierClient",
+    "FakeComputeClient",
     "FakePlannerClient",
     "FakeSynthesizerClient",
     "FakeVerifierClient",

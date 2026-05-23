@@ -9,6 +9,7 @@ from .base import (
     StageContext,
 )
 from .clarify import ClarifyStage
+from .compute import ComputeStage
 from .noop import NoOpAssembleStage, NoOpStage
 from .plan import PlanStage
 from .synthesize import SynthesizeStage
@@ -20,6 +21,7 @@ __all__ = [
     "PIPELINE_ORDER",
     "AssembleStage",
     "ClarifyStage",
+    "ComputeStage",
     "NoOpAssembleStage",
     "NoOpStage",
     "PlanStage",
