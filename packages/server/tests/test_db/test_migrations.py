@@ -110,6 +110,8 @@ EXPECTED_TABLES = {
     "pipeline_runs",
     # --- v2.2 per-stage model assignments (PR 2026-05-22) ---
     "er_v2_model_assignments",
+    # --- v2.3 suspended run state (PR 2026-05-22) ---
+    "er_v2_3_run_state",
 }
 
 
