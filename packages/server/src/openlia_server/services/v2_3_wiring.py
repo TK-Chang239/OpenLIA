@@ -14,6 +14,13 @@ Env contract — RESEARCH (optional; enables real research):
   with tool_calling enabled)
 - ``EODHD_API_KEY``                 — auth for the EODHD data tools
 
+Env contract — other stages (each optional; each NoOps when unset):
+- ``OPENLIA_V2_3_PLAN_MODEL``        — PLAN model id
+- ``OPENLIA_V2_3_COMPUTE_MODEL``     — COMPUTE input-proposal model id
+- ``OPENLIA_V2_3_SYNTHESIZE_MODEL``  — SYNTHESIZE model id
+- ``OPENLIA_V2_3_WRITE_MODEL``       — WRITE model id
+- ``OPENLIA_V2_3_VERIFY_MODEL``      — VERIFY model id
+
 CLARIFY-only optionals:
 - ``OPENAI_BASE_URL``                       — base URL override
 - ``OPENLIA_V2_3_CLARIFY_MAX_TOKENS``       — int; default 1024
@@ -24,21 +31,33 @@ RESEARCH-only optionals:
 - ``OPENLIA_V2_3_RESEARCH_TEMPERATURE``     — float; default 0.3
 - ``OPENLIA_V2_3_RESEARCH_MAX_TURNS``       — int; default 12
 
+Each non-CLARIFY stage also takes ``OPENLIA_V2_3_<STAGE>_MAX_TOKENS``
+and ``OPENLIA_V2_3_<STAGE>_TEMPERATURE`` overrides. The defaults are
+tuned per stage in ``_STAGE_DEFAULTS`` below.
+
 When any CLARIFY var is missing the function returns ``None`` and the
-v2.3 routes respond 503 — same shape as the v2.2 engine. RESEARCH falls
-back to a NoOp stage when its own vars are missing, so the rest of the
-pipeline still composes for tests / no-EODHD smoke runs.
+v2.3 routes respond 503 — same shape as the v2.2 engine. The other
+stages fall back to NoOp when their own vars are missing, so the rest
+of the pipeline still composes for tests / no-EODHD smoke runs.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from typing import Any
 
 from openlia.llm.adapters import build_adapter
 from openlia.llm.runtime.report_v2_3.clients.llm_clarifier import LLMClarifierClient
 from openlia.llm.runtime.report_v2_3.clients.llm_researcher import LLMResearcherClient
+from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+    LLMComputeClient,
+    LLMPlannerClient,
+    LLMSynthesizerClient,
+    LLMVerifierClient,
+    LLMWriterClient,
+)
 from openlia.llm.runtime.report_v2_3.clients.researcher import ResearcherClient
 from openlia.llm.runtime.report_v2_3.research import build_research_tools
 from openlia.llm.types import Capabilities, ProviderCredentials
@@ -65,13 +84,94 @@ def build_v2_3_runner_factory_from_env() -> V23RunnerFactory | None:
     base_url = os.getenv("OPENAI_BASE_URL")
     clarifier = _build_clarifier(api_key=api_key, model=clarify_model, base_url=base_url)
     researcher = _build_researcher(api_key=api_key, base_url=base_url)
+    planner = _build_json_stage_client(
+        api_key=api_key, base_url=base_url, stage="PLAN", ctor=LLMPlannerClient
+    )
+    compute = _build_json_stage_client(
+        api_key=api_key, base_url=base_url, stage="COMPUTE", ctor=LLMComputeClient
+    )
+    synthesizer = _build_json_stage_client(
+        api_key=api_key, base_url=base_url, stage="SYNTHESIZE", ctor=LLMSynthesizerClient
+    )
+    writer = _build_json_stage_client(
+        api_key=api_key, base_url=base_url, stage="WRITE", ctor=LLMWriterClient
+    )
+    verifier = _build_json_stage_client(
+        api_key=api_key, base_url=base_url, stage="VERIFY", ctor=LLMVerifierClient
+    )
 
     log.info(
-        "v2.3 engine wired (clarify model=%s; research=%s)",
+        "v2.3 engine wired (clarify=%s, research=%s, plan=%s, compute=%s, "
+        "synthesize=%s, write=%s, verify=%s)",
         clarify_model,
         "real" if researcher is not None else "noop",
+        "real" if planner is not None else "noop",
+        "real" if compute is not None else "noop",
+        "real" if synthesizer is not None else "noop",
+        "real" if writer is not None else "noop",
+        "real" if verifier is not None else "noop",
     )
-    return make_v2_3_runner_factory(clarifier, researcher_client=researcher)
+    return make_v2_3_runner_factory(
+        clarifier,
+        planner_client=planner,
+        researcher_client=researcher,
+        compute_client=compute,
+        synthesizer_client=synthesizer,
+        writer_client=writer,
+        verifier_client=verifier,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Per-stage defaults (model token budget + temperature)
+# ---------------------------------------------------------------------------
+
+
+_STAGE_DEFAULTS: dict[str, tuple[int, float]] = {
+    # max_tokens, temperature
+    "PLAN": (2048, 0.3),
+    "COMPUTE": (1024, 0.2),
+    "SYNTHESIZE": (4096, 0.3),
+    "WRITE": (4096, 0.4),
+    "VERIFY": (2048, 0.2),
+}
+
+
+def _build_json_stage_client(
+    *,
+    api_key: str,
+    base_url: str | None,
+    stage: str,
+    ctor: Callable[[Callable[..., dict]], Any],
+) -> Any | None:
+    """Generic builder for the JSON-only stages (PLAN/COMPUTE/SYNTHESIZE/
+    WRITE/VERIFY). Each follows the LLMClarifier pattern: one OpenAI
+    provider, one SyncJsonLlmClient, one stage client constructor."""
+    model = os.getenv(f"OPENLIA_V2_3_{stage}_MODEL")
+    if not model:
+        log.info("OPENLIA_V2_3_%s_MODEL unset; %s stage will NoOp.", stage, stage)
+        return None
+    default_max, default_temp = _STAGE_DEFAULTS[stage]
+    max_tokens = int(os.getenv(f"OPENLIA_V2_3_{stage}_MAX_TOKENS", str(default_max)))
+    temperature = float(os.getenv(f"OPENLIA_V2_3_{stage}_TEMPERATURE", str(default_temp)))
+
+    credentials = ProviderCredentials(
+        api_key=api_key,
+        base_url=base_url,
+        env_var_name="OPENAI_API_KEY",
+    )
+    provider = build_adapter(
+        kind="openai",
+        credentials=credentials,
+        model=model,
+        capabilities=Capabilities(
+            structured_output=True,
+            max_context_tokens=128_000,
+            max_output_tokens=max_tokens,
+        ),
+    )
+    json_client = SyncJsonLlmClient(provider, max_tokens=max_tokens, temperature=temperature)
+    return ctor(json_client.call)
 
 
 def _build_clarifier(*, api_key: str, model: str, base_url: str | None) -> LLMClarifierClient:
