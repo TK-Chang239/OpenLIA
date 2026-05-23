@@ -184,12 +184,17 @@ Rules:
 - Every fact MUST have either `evidence_id` (pointing at a tool call
   that returned the number) OR both `computed_from` (list of other
   fact ids in this batch) AND `method` (one-line description).
-- `value` may be a number, a string label, or a time-series object
+- Each `value` is a single atomic data point: a number, a date, a
+  ticker, or a short label (twelve words or fewer). For multi-period
+  data, use a time-series object
   `{"points": [{"period": "2025-Q4", "value": 60.9}, ...], "unit": "USD_billions"}`.
+  Save narrative prose for SYNTHESIZE / WRITE — RESEARCH facts stay
+  compact so the downstream stages can compose freely.
 - Fact ids are stable handles — choose short, snake_case strings.
-- DON'T fabricate. If a tool returned no data, say so by simply not
-  emitting that fact; surface the gap so WRITE can flag it.
-- DON'T cite the model. The fact must trace to a tool call.
+- Emit a fact only when a tool call returned the data. Skip facts
+  with no tool-call backing so WRITE can flag the gap.
+- Every fact must trace to a tool call (or to other facts in this
+  batch via `computed_from` + `method`).
 """.strip()
 
 
