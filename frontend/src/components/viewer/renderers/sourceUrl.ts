@@ -16,5 +16,10 @@ export function sourceUrl(source: FileSource): string {
       "sourceUrl(): report sources don't have a fetchable body URL — use fetchReport()/ReportDownloadButton",
     );
   }
+  if (source.kind === "v2_report") {
+    throw new Error(
+      "sourceUrl(): v2_report sources are rendered via the v2 HTML endpoint inside StructuredReportRenderer",
+    );
+  }
   return downloadUrlForAttachment(source.attachmentId);
 }

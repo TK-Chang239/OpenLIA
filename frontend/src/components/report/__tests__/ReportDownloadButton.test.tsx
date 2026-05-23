@@ -45,7 +45,7 @@ describe("ReportDownloadButton", () => {
     await user.click(screen.getByRole("button", { name: /download/i }));
     await user.click(await screen.findByRole("menuitem", { name: /pdf/i }));
     await waitFor(() => {
-      expect(downloadReportBlob).toHaveBeenCalledWith("abc", "pdf");
+      expect(downloadReportBlob).toHaveBeenCalledWith("abc", "pdf", "v1");
       expect(triggerBrowserSave).toHaveBeenCalledWith(
         expect.any(Blob),
         "AAPL.pdf",

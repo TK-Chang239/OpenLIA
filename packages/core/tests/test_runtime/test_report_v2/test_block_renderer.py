@@ -99,6 +99,20 @@ def test_excel_attachment_renders_download_link():
     assert "financials.xlsx" in out
 
 
-def test_unknown_block_type_raises_value_error():
-    with pytest.raises(ValueError, match="unknown block type"):
-        render_block({"type": "mystery_block"})
+def test_unknown_block_type_renders_visible_placeholder():
+    # Unknown block types now degrade to a visible placeholder rather than
+    # aborting Stage 9 assembly — one stray block from the drafter must not
+    # delete every other section's work.
+    out = render_block({"type": "mystery_block"})
+    assert 'class="unknown-block"' in out
+    assert 'data-block-type="mystery_block"' in out
+    assert "[unknown block type: mystery_block]" in out
+
+
+def test_paragraph_alias_renders_as_prose():
+    # The drafter LLM frequently emits "paragraph" instead of the schema's
+    # "prose" — accept it as a synonym so this common alias does not crash
+    # the pipeline.
+    out = render_block({"type": "paragraph", "text": "Hello **world**."})
+    assert 'class="prose"' in out
+    assert "<strong>world</strong>" in out

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.content import RepoItem, Report
+from openlia_server.db.models.pipeline_runs import PipelineRun
 from openlia_server.db.models.dashboard import MrAssessmentCache, RsSnapshot
 from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
@@ -154,6 +155,31 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
     deleted_ids = sweep_expired_reports(session=session, bundle_dir=bundle_dir)
     reports_hard_deleted = len(deleted_ids)
 
+    # v2.2 pipeline_runs retention: same shape as v1. Tombstone (set
+    # expired_at) any COMPLETED/DEGRADED run past the cutoff that has
+    # no repo_items bookmark and no soft-delete yet. The card flips to
+    # the v1-shared tombstone state via the v2 ReportCard's expiredAt
+    # prop on the next reload.
+    v2_candidate_ids = list(
+        session.execute(
+            select(PipelineRun.id).where(
+                PipelineRun.state.in_(("COMPLETED", "DEGRADED")),
+                PipelineRun.expired_at.is_(None),
+                PipelineRun.deleted_at.is_(None),
+                PipelineRun.created_at < report_cutoff,
+                ~exists().where(RepoItem.pipeline_run_id == PipelineRun.id),
+            )
+        ).scalars()
+    )
+    v2_runs_tombstoned = 0
+    if v2_candidate_ids:
+        session.execute(
+            update(PipelineRun)
+            .where(PipelineRun.id.in_(v2_candidate_ids))
+            .values(expired_at=now, updated_at=now)
+        )
+        v2_runs_tombstoned = len(v2_candidate_ids)
+
     return {
         "sessions_deleted": int(sessions_deleted),
         "password_resets_expired": int(password_resets_expired),
@@ -165,6 +191,7 @@ def run_maintenance_once(session: Session) -> dict[str, int]:
         "lia_guardrail_events_deleted": int(lia_guardrail_events_deleted),
         "reports_tombstoned": int(reports_tombstoned),
         "reports_hard_deleted": int(reports_hard_deleted),
+        "v2_runs_tombstoned": int(v2_runs_tombstoned),
     }
 
 

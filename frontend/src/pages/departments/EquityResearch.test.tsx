@@ -115,17 +115,28 @@ let originalFetch: typeof fetch | undefined;
 
 beforeEach(() => {
   originalFetch = globalThis.fetch;
+  // The v2.2 engine is now the runtime default; these tests exercise the v1
+  // WavedReportRunner path, so pin the flag off explicitly until v1 is
+  // retired and per-test v2 fixtures replace them.
+  localStorage.setItem("equity-research:engine-v2-enabled", "0");
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch as typeof fetch;
   vi.clearAllMocks();
   localStorage.removeItem("chat_followup_intro_toast_seen");
+  localStorage.removeItem("equity-research:engine-v2-enabled");
 });
 
 function submitInput(value: string) {
-  const ta = screen.getByPlaceholderText(/Enter a ticker/i) as HTMLTextAreaElement;
-  fireEvent.change(ta, { target: { value } });
+  // The redesigned ErComposer has a dedicated ticker input above the prompt
+  // textarea. Tests previously typed the ticker into the textarea (when the
+  // composer was a single field); now they type it into the ticker input and
+  // submit via the textarea's Enter handler. Prompt stays empty — submission
+  // is allowed when the ticker is set.
+  const tickerEl = screen.getByTestId("er-composer-ticker") as HTMLInputElement;
+  fireEvent.change(tickerEl, { target: { value } });
+  const ta = screen.getByLabelText(/Equity research prompt/i) as HTMLTextAreaElement;
   fireEvent.keyDown(ta, { key: "Enter", code: "Enter" });
 }
 
@@ -142,9 +153,7 @@ describe("EquityResearchPage", () => {
       // Welcome view is the first thing the user sees, not a placeholder.
       expect(screen.getByTestId("er-welcome-stage")).toBeInTheDocument();
       // The composer is mounted too — the page shell is fully usable.
-      expect(
-        screen.getByPlaceholderText(/Enter a ticker/i),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("er-composer-ticker")).toBeInTheDocument();
     } finally {
       erConfigMockState.loading = false;
     }
@@ -266,10 +275,10 @@ describe("EquityResearchPage", () => {
     });
   });
 
-  it("pre-fills the input from the ?ticker= query param (NEW-21-09)", () => {
+  it("pre-fills the ticker from the ?ticker= query param (NEW-21-09)", () => {
     renderPage(["/equity-research?ticker=NVDA"]);
-    const textarea = screen.getByPlaceholderText(/Enter a ticker/i) as HTMLTextAreaElement;
-    expect(textarea.value).toBe("NVDA");
+    const tickerEl = screen.getByTestId("er-composer-ticker") as HTMLInputElement;
+    expect(tickerEl.value).toBe("NVDA");
   });
 
   it("composer mode pill opens the report settings modal", () => {

@@ -18,7 +18,7 @@ from openlia.llm.runtime.report_v2.pipeline.stage_4_gather import StrandDispatch
 from openlia.llm.runtime.report_v2.pipeline.stage_5_model_plan import ModelPlanner
 from openlia.llm.runtime.report_v2.pipeline.stage_6_model_build import ModelBuilder
 from openlia.llm.runtime.report_v2.pipeline.stage_7_draft import SectionDrafter
-from openlia.llm.runtime.report_v2.pipeline.stage_9_assemble import assemble_report
+from openlia.llm.runtime.report_v2.pipeline.stage_9_assemble import build_report_v2
 from openlia.llm.runtime.report_v2.pipeline.trigger_evaluator import TriggerEvaluator
 from openlia.llm.runtime.report_v2.schemas.research_pool import Citation, ResearchPool
 from openlia.llm.runtime.report_v2.schemas.run_summary import RunSummary, TaskOutcome
@@ -202,19 +202,22 @@ def test_e2e_stock_research_produces_html_report() -> None:
     verification_history = VerificationHistory()
     pool_citations = {c.id: c for c in research_pool.citations}
 
-    html = assemble_report(
+    report = build_report_v2(
         sections=sections_dicts,
+        composer_inputs=composer_inputs,
+        template_spec=template_spec,
         pool_citations=pool_citations,
         run_summary=run_summary,
         verification_history=verification_history,
         dev_mode=manifest.dev_mode,
     )
 
-    assert '<article class="openlia-report">' in html
-    assert '<section id="sources">' in html
-    assert '<section id="run_summary">' in html
-    # dev_mode=true in capabilities.yaml
-    assert '<section id="verification_history"' in html
+    assert report.engine_version
+    assert len(report.sections) >= 1
+    assert len(report.citations) >= 1
+    assert report.run_summary.engine_version == manifest.engine_version
+    # dev_mode=true in capabilities.yaml → verification_history present
+    assert report.verification_history is not None
 
 
 # ---------------------------------------------------------------------------
@@ -311,13 +314,16 @@ def test_e2e_with_trigger_when_false_renders_skip_banner() -> None:
         for s in outputs
         if s.status == "OK"
     ]
-    # Add skipped section as skip_banner block
+    # Add skipped section as skip_banner block. Section status rides on
+    # the dict so build_report_v2 preserves it on the typed model.
     for s in outputs:
         if s.status == "SKIPPED":
             sections_dicts.append(
                 {
                     "id": s.section_id,
                     "name": s.section_name,
+                    "status": "SKIPPED",
+                    "skip_reason": s.skip_reason,
                     "blocks": [
                         {
                             "type": "skip_banner",
@@ -335,15 +341,19 @@ def test_e2e_with_trigger_when_false_renders_skip_banner() -> None:
         composer_inputs={"ticker": "AAPL"},
         outcomes=[],
     )
-    html = assemble_report(
+    report = build_report_v2(
         sections=sections_dicts,
+        composer_inputs={"ticker": "AAPL"},
+        template_spec=Mock(template_id="stock_research_v2", template_name="Stock Research (v2)", report_type="stock_initiation"),
         pool_citations={},
         run_summary=run_summary,
         verification_history=VerificationHistory(),
         dev_mode=False,
     )
 
-    assert "skipped" in html.lower()
+    macro = next(s for s in report.sections if s.id == "macro_outlook")
+    assert macro.status == "SKIPPED"
+    assert macro.blocks[0]["type"] == "skip_banner"
 
 
 # ---------------------------------------------------------------------------
@@ -371,12 +381,14 @@ def test_e2e_html_has_engine_version_footer() -> None:
         ],
     )
 
-    html = assemble_report(
+    report = build_report_v2(
         sections=sections_dicts,
+        composer_inputs={"ticker": "AAPL"},
+        template_spec=Mock(template_id="stock_research_v2", template_name="Stock Research (v2)", report_type="stock_initiation"),
         pool_citations={},
         run_summary=run_summary,
         verification_history=VerificationHistory(),
         dev_mode=False,
     )
 
-    assert "Engine v2.2" in html
+    assert report.engine_version == "2.2"

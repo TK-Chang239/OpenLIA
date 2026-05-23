@@ -11,11 +11,25 @@ def _esc(s: str) -> str:
     return html.escape(s, quote=True)
 
 
-def render_block(b: dict) -> str:
-    t = b.get("type")
+# Section-drafter LLMs frequently invent type names borrowed from generic
+# markdown / prosemirror vocabularies ("paragraph", "text", "markdown") when
+# the drafter prompt only whitelists "prose". Treating these as prose lets one
+# slightly off-schema block survive instead of crashing Stage 9 (Assemble) and
+# killing the whole run. Update the drafter prompt in parallel so the LLM
+# stops emitting them, but keep this alias map as a safety net.
+_PROSE_ALIASES = frozenset({"prose", "paragraph", "text", "markdown", "md"})
 
-    if t == "prose":
-        return f'<div class="prose">{_md.render(b.get("text", ""))}</div>'
+
+def render_block(b: dict) -> str:
+    raw_t = b.get("type")
+    t = raw_t.lower() if isinstance(raw_t, str) else raw_t
+
+    if t in _PROSE_ALIASES:
+        # Body text can come in via either "text" (the canonical key the
+        # prompt asks for) or "content" / "markdown" (what LLMs sometimes
+        # emit when they alias the block name too).
+        body = b.get("text") or b.get("content") or b.get("markdown") or ""
+        return f'<div class="prose">{_md.render(body)}</div>'
 
     if t == "table":
         headers = "".join(f"<th>{_esc(h)}</th>" for h in b.get("headers", []))
@@ -86,4 +100,13 @@ def render_block(b: dict) -> str:
             f"</a>"
         )
 
-    raise ValueError(f"unknown block type: {t!r}")
+    # Unknown block type: render a visible placeholder rather than aborting
+    # the whole Stage 9 assembly. The drafter prompt enumerates the valid
+    # set, but a single off-schema block from one section should not delete
+    # every other section's work. Keep the marker visible in dev so future
+    # alias slips are obvious.
+    return (
+        f'<div class="unknown-block" data-block-type="{_esc(str(raw_t))}">'
+        f"[unknown block type: {_esc(str(raw_t))}]"
+        f"</div>"
+    )
