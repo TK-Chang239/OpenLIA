@@ -16,6 +16,10 @@ from datetime import UTC, datetime
 
 from openlia.llm.runtime.report_v2_3.clients.clarifier import FakeClarifierClient
 from openlia.llm.runtime.report_v2_3.clients.synthesizer import FakeSynthesizerClient
+from openlia.llm.runtime.report_v2_3.clients.writer import (
+    FakeWriterClient,
+    WriterRequest,
+)
 from openlia.llm.runtime.report_v2_3.schemas import (
     BundleFact,
     CanonicalFigure,
@@ -30,6 +34,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     RunStatus,
     SectionMandate,
     ValuationPlan,
+    WrittenSection,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
 from openlia_server.services.v2_3_runner_factory import make_v2_3_runner_factory
@@ -146,3 +151,29 @@ def test_factory_synthesize_failure_marks_run_failed() -> None:
     assert state.status == RunStatus.FAILED
     assert state.last_error is not None
     assert "synthesize" in state.last_error
+
+
+def test_factory_with_writer_populates_sections() -> None:
+    """When a writer client is wired and a thesis is on the state, the
+    runner reaches WRITE and produces one section per mandate."""
+
+    def _responder(req: WriterRequest) -> WrittenSection:
+        sid = req.section_mandate.section_id
+        return WrittenSection(
+            section_id=sid,
+            title=sid.title(),
+            body=f"body of {sid} citing {{{{CITE:rev_ttm}}}}",
+        )
+
+    fake_writer = FakeWriterClient(responder=_responder)
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])),
+        synthesizer_client=FakeSynthesizerClient(result=_thesis()),
+        writer_client=fake_writer,
+    )
+
+    state = factory().start(_seed_state())
+    assert state.status == RunStatus.COMPLETE
+    assert [s.section_id for s in state.sections] == ["overview"]
+    assert state.sections[0].cited_fact_ids() == ["rev_ttm"]
+    assert len(fake_writer.calls) == 1
