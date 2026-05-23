@@ -237,8 +237,13 @@ def _build_factory() -> Callable[[], Any]:
     research_model = os.environ.get("OPENLIA_V2_3_RESEARCH_MODEL")
     tools = _build_eodhd_tools()
     if research_model and tools:
-        prov = _build_openai_provider(research_model, tool_calling=True)
-        researcher = LLMResearcherClient(_SyncToolClient(prov), tools, max_turns=12)
+        research_max_tokens = int(os.environ.get("OPENLIA_V2_3_RESEARCH_MAX_TOKENS", "8192"))
+        prov = _build_openai_provider(
+            research_model, tool_calling=True, max_tokens=research_max_tokens
+        )
+        researcher = LLMResearcherClient(
+            _SyncToolClient(prov, max_tokens=research_max_tokens), tools, max_turns=12
+        )
     elif research_model and not tools:
         print("WARN: OPENLIA_V2_3_RESEARCH_MODEL set but EODHD_API_KEY missing; RESEARCH = NoOp.")
 

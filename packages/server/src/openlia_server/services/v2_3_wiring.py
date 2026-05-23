@@ -207,7 +207,7 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
         log.info("EODHD_API_KEY unset; RESEARCH stage will NoOp (no data tools).")
         return None
 
-    max_tokens = int(os.getenv("OPENLIA_V2_3_RESEARCH_MAX_TOKENS", "4096"))
+    max_tokens = int(os.getenv("OPENLIA_V2_3_RESEARCH_MAX_TOKENS", "8192"))
     temperature = float(os.getenv("OPENLIA_V2_3_RESEARCH_TEMPERATURE", "0.3"))
     max_turns = int(os.getenv("OPENLIA_V2_3_RESEARCH_MAX_TURNS", "12"))
 
