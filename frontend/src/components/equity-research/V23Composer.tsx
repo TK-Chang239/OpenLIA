@@ -19,7 +19,6 @@ import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 
 import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import {
-  type V23ClarifyQuestion,
   type V23ReportType,
   type V23RunPayload,
   type V23RunState,
@@ -30,6 +29,7 @@ import {
   streamV23Run,
   v23DocxUrl,
 } from "../../api/equity-research-v2-3";
+import { V23ClarifyModal } from "./V23ClarifyModal";
 import { V23EngineModelsPicker } from "./V23EngineModelsPicker";
 import { V23RepoPanel } from "./V23RepoPanel";
 import { V23ReportCard } from "./V23ReportCard";
@@ -74,12 +74,17 @@ interface Props {
   /** Fired when the user clicks "Open Report" on a completed run; the
    *  page sets ?view=report so the full-screen overlay mounts. */
   onOpenReport?: (runId: string) => void;
+  /** Fired when the user picks a past run from the repo panel; the
+   *  page mirrors this into ?run_id_v23=<id> which triggers the
+   *  composer's own reattach effect on the next render. */
+  onSelectPastRun?: (runId: string) => void;
 }
 
 export function V23Composer({
   initialRunId = null,
   onRunIdChange,
   onOpenReport,
+  onSelectPastRun,
 }: Props = {}): JSX.Element {
   const [prompt, setPrompt] = useState("");
   const [tickers, setTickers] = useState("");
@@ -91,6 +96,10 @@ export function V23Composer({
   );
   const [failedStage, setFailedStage] = useState<V23Stage | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  // Tracks whether the user has dismissed the clarify modal for the
+  // current waiting_on_user phase so we know whether to render the
+  // "Continue clarifying" pill in place of the modal itself.
+  const [clarifyDismissed, setClarifyDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assignments, setAssignments] = useState<AssignmentsResponse | null>(null);
@@ -144,6 +153,15 @@ export function V23Composer({
     lastEmittedRunIdRef.current = next;
     onRunIdChange?.(next);
   }, [run?.run_id, onRunIdChange]);
+
+  // Auto-reopen the clarify modal whenever the run transitions back into
+  // a fresh waiting_on_user phase (e.g. a new clarify round after the
+  // user resumed). The dismissed flag is per-phase, not per-run.
+  useEffect(() => {
+    if (run?.status !== "waiting_on_user") {
+      if (clarifyDismissed) setClarifyDismissed(false);
+    }
+  }, [run?.status, clarifyDismissed]);
 
   const parsedTickers = tickers
     .split(/[,\s]+/)
@@ -265,6 +283,7 @@ export function V23Composer({
     setStage(null);
     setCompletedStages(new Set());
     setFailedStage(null);
+    setClarifyDismissed(false);
     setPayload(null);
     setPayloadError(null);
     closeStream();
@@ -284,12 +303,12 @@ export function V23Composer({
     );
   };
 
-  const submitAnswers = () => {
+  const submitAnswers = (override?: Record<string, string>) => {
     if (!run) return;
     setBusy(true);
     setError(null);
     closeStream();
-    streamRef.current = streamV23Answer(run.run_id, answers, {
+    streamRef.current = streamV23Answer(run.run_id, override ?? answers, {
       onEvent: handleStreamEvent,
       onError: (e) => {
         setError(e.message);
@@ -330,7 +349,12 @@ export function V23Composer({
         </div>
       ) : null}
 
-      <V23RepoPanel refreshKey={repoRefreshKey} />
+      <V23RepoPanel
+        refreshKey={repoRefreshKey}
+        onSelect={
+          onSelectPastRun ? (summary) => onSelectPastRun(summary.run_id) : undefined
+        }
+      />
 
 
       <input
@@ -409,13 +433,26 @@ export function V23Composer({
       ) : null}
       {run !== null ? <V23RunBadge run={run} liveStage={stage} /> : null}
 
-      {needsClarify ? (
-        <ClarifyForm
+      {needsClarify && clarifyDismissed ? (
+        <button
+          type="button"
+          onClick={() => setClarifyDismissed(false)}
+          data-testid="er-v2-3-clarify-reopen"
+          className="self-start inline-flex items-center gap-[6px] rounded-full border border-[--color-feedback-warning] bg-[rgba(255,180,0,0.08)] px-3 py-[3px] font-mono text-[10.5px] uppercase tracking-[0.08em] text-[--color-feedback-warning] hover:bg-[rgba(255,180,0,0.16)]"
+        >
+          <AlertTriangle size={11} /> Continue clarifying ({run.pending_questions.length})
+        </button>
+      ) : null}
+
+      {needsClarify && !clarifyDismissed ? (
+        <V23ClarifyModal
           questions={run.pending_questions}
           answers={answers}
-          onChange={setAnswers}
-          onSubmit={submitAnswers}
           busy={busy}
+          onChange={setAnswers}
+          onSubmit={() => submitAnswers()}
+          onUseDefaults={() => submitAnswers({})}
+          onDismiss={() => setClarifyDismissed(true)}
         />
       ) : null}
 
@@ -486,59 +523,3 @@ function V23RunBadge({
   );
 }
 
-function ClarifyForm({
-  questions,
-  answers,
-  onChange,
-  onSubmit,
-  busy,
-}: {
-  questions: V23ClarifyQuestion[];
-  answers: Record<string, string>;
-  onChange: (next: Record<string, string>) => void;
-  onSubmit: () => void;
-  busy: boolean;
-}): JSX.Element {
-  return (
-    <div
-      data-testid="er-v2-3-clarify"
-      className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-3"
-    >
-      <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-        Clarify · {questions.length} question(s)
-      </div>
-      <ul className="flex flex-col gap-2">
-        {questions.map((q) => (
-          <li key={q.id} className="flex flex-col gap-[4px]">
-            <label className="text-[12.5px] text-[--color-text-primary]" htmlFor={`q-${q.id}`}>
-              {q.question}
-            </label>
-            <span className="text-[11px] text-[--color-text-tertiary]">
-              {q.why_blocking} · default: {q.default}
-            </span>
-            <input
-              id={`q-${q.id}`}
-              type="text"
-              value={answers[q.id] ?? ""}
-              onChange={(e) => onChange({ ...answers, [q.id]: e.target.value })}
-              placeholder={q.default}
-              className="h-8 rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-2 font-mono text-[11.5px] text-[--color-text-primary]"
-              data-testid={`er-v2-3-clarify-${q.id}`}
-            />
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex justify-end">
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={busy}
-          data-testid="er-v2-3-clarify-submit"
-          className="inline-flex h-8 items-center rounded-md bg-[--color-accent-primary] px-3 font-display text-[12.5px] font-medium text-[--color-accent-on] hover:bg-[--color-accent-hover] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {busy ? "Sending..." : "Continue"}
-        </button>
-      </div>
-    </div>
-  );
-}
