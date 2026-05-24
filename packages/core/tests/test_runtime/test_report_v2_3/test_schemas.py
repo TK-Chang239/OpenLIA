@@ -506,3 +506,20 @@ def test_estimate_re_accepts_negative_values():
     body = "{{ESTIMATE:downside_pct|-0.15|percent|bear case 12mo}}"
     matches = ESTIMATE_RE.findall(body)
     assert matches == [("downside_pct", "-0.15", "percent", "bear case 12mo")]
+
+
+def test_derive_re_handles_three_or_more_input_fact_ids():
+    """The CSV input list should support any number of fact_ids, not just two."""
+    body = "{{DERIVE:growth_rate|a,b,c,d|new_id}}"
+    matches = DERIVE_RE.findall(body)
+    assert matches == [("growth_rate", "a,b,c,d", "new_id")]
+
+
+def test_estimate_re_basis_tolerates_single_close_brace():
+    """The basis field is prose; a lone '}' (e.g. mathematical or set notation
+    inside the rationale) must not terminate the match — only '}}' does."""
+    body = "{{ESTIMATE:x|0.1|percent|projection from sensitivity grid {wacc=9%}}}"
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [
+        ("x", "0.1", "percent", "projection from sensitivity grid {wacc=9%}")
+    ]

@@ -541,7 +541,7 @@ DERIVE_RE = re.compile(
 #   value is a signed decimal (no thousands separator); unit may be empty.
 #   basis is free prose with no '}}' (regex is non-greedy on '}').
 ESTIMATE_RE = re.compile(
-    r"\{\{ESTIMATE:([a-zA-Z0-9_]+)\|(-?\d+(?:\.\d+)?)\|([a-zA-Z_%]*)\|([^}]+?)\}\}"
+    r"\{\{ESTIMATE:([a-zA-Z0-9_]+)\|(-?\d+(?:\.\d+)?)\|([a-zA-Z_%]*)\|(.+?)\}\}(?!\})"
 )
 
 
