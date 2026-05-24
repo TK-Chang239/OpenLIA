@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 from openlia.llm.runtime.report_v2_3.schemas import (
+    DERIVE_RE,
+    ESTIMATE_RE,
     BundleFact,
     BundleSeries,
     BundleSeriesPoint,
@@ -469,3 +471,38 @@ def test_resolve_raises_on_unknown_figure_ref() -> None:
     s1 = WrittenSection(section_id="s1", title="S1", body="see {{FIG:ghost}}")
     with pytest.raises(ValueError, match="no ChartSpec"):
         resolve([s1], bundle, [], ["s1"])
+
+
+def test_derive_re_matches_three_pipe_separated_fields():
+    body = "Revenue grew {{DERIVE:growth_rate|rev_fy25,rev_fy24|rev_growth_yoy}} year over year."
+    matches = DERIVE_RE.findall(body)
+    assert matches == [("growth_rate", "rev_fy25,rev_fy24", "rev_growth_yoy")]
+
+
+def test_derive_re_rejects_uppercase_method_name():
+    # Methods are lowercase identifiers; uppercase should not match.
+    body = "X {{DERIVE:GROWTH_RATE|a,b|c}}"
+    assert DERIVE_RE.findall(body) == []
+
+
+def test_estimate_re_matches_four_pipe_separated_fields():
+    body = (
+        "We see {{ESTIMATE:upside_pct|0.10|percent|"
+        "projection from margin-expansion thesis}} of upside."
+    )
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [
+        ("upside_pct", "0.10", "percent", "projection from margin-expansion thesis")
+    ]
+
+
+def test_estimate_re_accepts_empty_unit():
+    body = "{{ESTIMATE:rating_score|7.5||composite of qual factors}}"
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [("rating_score", "7.5", "", "composite of qual factors")]
+
+
+def test_estimate_re_accepts_negative_values():
+    body = "{{ESTIMATE:downside_pct|-0.15|percent|bear case 12mo}}"
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [("downside_pct", "-0.15", "percent", "bear case 12mo")]
