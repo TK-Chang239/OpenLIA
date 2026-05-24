@@ -41,6 +41,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 from openlia.llm.runtime.report_v2_3.stages import VerifyStage, WriteStage
 from openlia.llm.runtime.report_v2_3.stages.base import StageContext
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _src() -> DataProviderSource:
@@ -94,6 +95,7 @@ def test_number_origin_discipline_holds_through_write_and_verify():
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     state.bundle = bundle
     state.outline = outline

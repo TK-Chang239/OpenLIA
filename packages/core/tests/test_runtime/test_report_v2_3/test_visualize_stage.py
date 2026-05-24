@@ -22,6 +22,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.stages import StageContext, VisualizeStage
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _src() -> DataProviderSource:
@@ -60,6 +61,7 @@ def _state(
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     s.bundle = ResearchBundle(
         tickers=["NVDA"],

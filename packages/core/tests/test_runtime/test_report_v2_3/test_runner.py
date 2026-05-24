@@ -23,6 +23,7 @@ from openlia.llm.runtime.report_v2_3.stages import (
     StageContext,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _ctx() -> StageContext:
@@ -37,6 +38,7 @@ def _fresh_state() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
 
 
