@@ -50,7 +50,7 @@ from ..schemas import (
 )
 from ..slots import V23Slot
 from ..state import ReportState
-from ._mint import MintError, mint_inline_facts  # noqa: F401  (MintError re-exported for callers)
+from ._mint import mint_inline_facts
 from .base import Stage, StageContext
 
 log = logging.getLogger(__name__)
