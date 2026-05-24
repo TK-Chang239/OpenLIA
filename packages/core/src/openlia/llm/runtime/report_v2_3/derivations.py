@@ -16,8 +16,8 @@ where COMPUTE already runs it.
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from numbers import Real
+from typing import Protocol
 
 from .schemas import BundleFact, ComputedSource
 
@@ -87,9 +87,24 @@ def ratio(numerator: BundleFact, denominator: BundleFact, *, new_id: str, label:
     )
 
 
+class DerivationFn(Protocol):
+    """Callable shape every derivation in DERIVATION_REGISTRY satisfies.
+    Mint-step call sites that look a method up by name now get a
+    type-checked signature."""
+
+    def __call__(
+        self,
+        current: BundleFact,
+        prior: BundleFact,
+        *,
+        new_id: str,
+        label: str,
+    ) -> BundleFact: ...
+
+
 # Registry the mint step looks methods up in. Keep keys in sync with
 # the DERIVE marker grammar documented in WRITE_SYSTEM_PROMPT.
-DERIVATION_REGISTRY: dict[str, Callable[..., BundleFact]] = {
+DERIVATION_REGISTRY: dict[str, DerivationFn] = {
     "growth_rate": growth_rate,
     "yoy_delta": yoy_delta,
     "ratio": ratio,
