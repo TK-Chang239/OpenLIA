@@ -530,6 +530,75 @@ class ResolvedReport(BaseModel):
     figure_labels: dict[str, int]
 
 
+def format_fact_value(fact: BundleFact) -> str:
+    """Format a fact's scalar value for inline display in prose.
+
+    Picks a unit-aware presentation so readers see "$451.4B" or "32.3%"
+    instead of raw numbers. Time-series facts default to the latest
+    period's value — writers that want a specific period should cite a
+    derived scalar fact instead. The resolver uses this helper when
+    substituting {{CITE:fact_id}} so every numerical claim renders as
+    "<value> [^N]" without the writer having to spell the value out.
+    """
+    raw = fact.value
+    unit = (fact.unit or "").strip()
+    if isinstance(raw, BundleSeries):
+        if not raw.points:
+            return fact.label
+        latest = raw.points[-1]
+        return f"{_format_scalar(latest.value, unit)} ({latest.period})"
+    if isinstance(raw, str):
+        # String values include human-set strings like "Buy" — surface
+        # as-is; the writer was supposed to ground these textually too.
+        return raw
+    return _format_scalar(float(raw), unit)
+
+
+def _format_scalar(value: float, unit: str) -> str:
+    unit_lower = unit.lower()
+    if unit_lower in {"percent", "pct", "%"}:
+        return f"{value:.1f}%"
+    if unit_lower in {"x", "multiple"}:
+        return f"{value:.1f}x"
+    if unit_lower in {"usd"}:
+        return f"${_format_magnitude(value)}"
+    if unit_lower in {"usd_millions", "usd_mn", "usdm"}:
+        return f"${_format_magnitude(value * 1_000_000)}"
+    if unit_lower in {"usd_billions", "usd_bn", "usdb"}:
+        return f"${_format_magnitude(value * 1_000_000_000)}"
+    if unit_lower in {"shares", "shares_millions", "count"}:
+        return _format_magnitude(value)
+    if unit_lower in {"per_share", "usd_per_share"}:
+        return f"${value:,.2f}"
+    if unit_lower in {"basis_points", "bps"}:
+        return f"{value:.0f}bps"
+    if unit_lower in {"ticker", "string", ""}:
+        # No unit info — print a clean number. Integer-valued floats
+        # render without a trailing ".0".
+        if abs(value - round(value)) < 1e-9:
+            return f"{int(round(value)):,}"
+        return f"{value:,.2f}"
+    # Unknown unit — pass it through after the number for transparency
+    # rather than guessing wrong.
+    return f"{value:,.2f} {unit}"
+
+
+def _format_magnitude(value: float) -> str:
+    """USD magnitude with trillion/billion/million suffix."""
+    abs_v = abs(value)
+    if abs_v >= 1_000_000_000_000:
+        return f"{value / 1_000_000_000_000:.2f}T"
+    if abs_v >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    if abs_v >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if abs_v >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    if abs_v < 10:
+        return f"{value:,.2f}"
+    return f"{value:,.0f}"
+
+
 def render_citation(fact: BundleFact) -> str:
     """Render a single footnote line from provenance. Format is owned here, so
     it is consistent everywhere."""
@@ -590,7 +659,12 @@ def resolve(
             if fact_id not in footnote_index:
                 footnote_index[fact_id] = len(footnotes) + 1
                 footnotes.append(render_citation(bundle.get(fact_id)))
-            return f"[^{footnote_index[fact_id]}]"
+            # The marker carries BOTH the formatted value AND the
+            # superscript footnote — writers were producing "$[^N]" by
+            # using {{CITE:...}} as a value placeholder, so the resolver
+            # now does the substitution itself. The writer's contract is
+            # simply "for any numerical claim, emit one {{CITE:fact_id}}".
+            return f"{format_fact_value(bundle.get(fact_id))} [^{footnote_index[fact_id]}]"
 
         def _fig_sub(m: re.Match) -> str:
             chart_id = m.group(1)

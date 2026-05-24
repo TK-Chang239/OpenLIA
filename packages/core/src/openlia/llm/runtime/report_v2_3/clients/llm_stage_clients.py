@@ -237,7 +237,7 @@ Output is a single JSON ReportThesis matching:
 
 {
   "language": "en",
-  "central_argument": "One sentence the whole report hangs on.",
+  "central_argument": "ONE SHORT SENTENCE — max 20 words. Hard cap.",
   "key_takeaways": ["short bullet", "another short bullet"],
   "valuation_stance": "A 1-2 sentence stance: long/short/hold and why.",
   "valuation_plan": {"methods": ["dcf"]},
@@ -270,6 +270,9 @@ Output is a single JSON ReportThesis matching:
 
 Rules:
 
+- ``central_argument`` is the cover hero — keep it to ONE sentence,
+  ≤ 20 words, no clauses chained with "but"/"however" that bury the
+  punchline. The longer "why" belongs in ``valuation_stance``.
 - ``language`` MUST equal the request's language.
 - ``valuation_plan.methods`` MUST mirror the outline's plan unless
   research shows a method is impossible (e.g. no peers found).
@@ -319,20 +322,37 @@ Output is a single JSON WrittenSection:
 {
   "section_id": "business",
   "title": "Business overview",
-  "body": "NVIDIA's Data Center revenue reached ${{CITE:rev_dc_fy25}}, a ..."
+  "body": "NVIDIA's Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
 }
 
-Citation + figure discipline:
+Citation contract — read carefully:
 
-- Every numerical claim MUST be supported by a ``{{CITE:fact_id}}``
-  placeholder whose fact_id appears in ``relevant_facts``. ASSEMBLE
-  numbers footnotes deterministically — you never write [^1] yourself.
-- Use ``{{FIG:chart_id}}`` to reference a chart. The chart_id MUST be
-  in ``assigned_charts``. ASSEMBLE numbers figures deterministically —
-  do not write "Figure 1".
+- ``{{CITE:fact_id}}`` is a self-contained insertion: the ASSEMBLE
+  stage replaces the token with the fact's FORMATTED VALUE AND a
+  superscript footnote, e.g. "{{CITE:revenue_ttm}}" becomes
+  "$451.4B [^7]". DO NOT prepend currency symbols, units, or the
+  numeric value yourself — that produces "$$451.4B [^7]" or "451.4B
+  [^7]" with a stray decoration. Write the surrounding prose around
+  the marker as if it were already a noun phrase carrying the number.
+- Every numerical claim MUST be a ``{{CITE:fact_id}}`` token whose
+  fact_id appears in ``relevant_facts``. Never invent a fact_id.
+- ``{{FIG:chart_id}}`` references a chart by id from ``assigned_charts``.
+  ASSEMBLE rewrites it as "Figure N" — do not write "Figure 1"
+  yourself, and do not pre-position the marker with parentheses; put
+  it where you want the chart anchored in the prose.
 - DON'T cite or reference anything outside the mandate's slice.
 - ``does_not_cover`` is a hard boundary — leave that material to its
   owning section.
+
+Examples (good vs bad):
+
+  GOOD: "Revenue reached {{CITE:revenue_ttm}} in the trailing twelve
+         months, up from prior years."
+  BAD:  "Revenue reached ${{CITE:revenue_ttm}} in the trailing twelve
+         months."                              ^ stray "$" survives
+
+  GOOD: "The stock trades at {{CITE:forward_pe}} forward earnings."
+  BAD:  "The stock trades at [^15] forward earnings."  ^ never write [^N]
 
 Rewrite path:
 
