@@ -664,24 +664,61 @@ Length budget — match the requested ``length``:
 Length is a target band, not a hard ceiling. Don't pad to reach it; if
 the bundle only supports a shorter section, write the shorter section.
 
-Citation contract — read carefully:
+Number grammar — every number in the body comes from one of three markers.
+The engine resolves all three to {{CITE:<id>}} before VERIFY runs, so the
+report's reader sees consistent footnotes; the deterministic check after
+you write will reject any digit-bearing token outside these markers.
+
+1. Cite an existing fact when the number already lives in the bundle:
+     {{CITE:rev_ttm}}
+   Use this whenever the bundle already carries the value you want to claim.
+
+2. Derive a new fact from existing ones when the number is arithmetic
+   over bundle facts (growth rates, YoY deltas, ratios):
+     {{DERIVE:growth_rate|rev_fy25,rev_fy24|rev_growth_yoy}}
+   Grammar: {{DERIVE:<method>|<input_fact_ids_csv>|<new_fact_id>}}
+   Methods available: growth_rate, yoy_delta, ratio.
+   The engine runs the math, mints a ComputedSource fact at <new_fact_id>,
+   and rewrites your marker to {{CITE:<new_fact_id>}}.
+
+3. State an estimate when the number is analyst judgment with no
+   underlying calculation — projections, scenario calls, view-driven
+   targets:
+     {{ESTIMATE:upside_pct|0.10|percent|projection from margin-expansion thesis}}
+   Grammar: {{ESTIMATE:<new_fact_id>|<value>|<unit>|<basis>}}
+   The engine mints an EstimateSource fact at <new_fact_id> with your
+   basis text as the footnote, and rewrites your marker to
+   {{CITE:<new_fact_id>}}. The footnote will render as
+   "Estimate: <basis>." so the reader sees this is judgment, not a
+   measured figure.
+
+Exemptions (the deterministic check ignores these): 4-digit years
+("2025"), fiscal-year tokens ("FY2025"), quarter labels ("Q3"), and
+ordinals ("3rd"). Anything else with a digit needs one of the three
+markers.
+
+Worked example (showing all three):
+  "Revenue {{CITE:rev_ttm}} grew
+   {{DERIVE:growth_rate|rev_ttm,rev_prior|rev_growth_yoy}} year over year,
+   and we see {{ESTIMATE:upside_pct|0.10|percent|
+   margin expansion against current multiple}} of further upside."
+
+Marker rendering notes:
 
 - ``{{CITE:fact_id}}`` is a self-contained insertion: the ASSEMBLE
   stage replaces the token with the fact's FORMATTED VALUE AND a
   superscript footnote, e.g. "{{CITE:revenue_ttm}}" becomes
-  "$451.4B [^7]". DO NOT prepend currency symbols, units, or the
-  numeric value yourself — that produces "$$451.4B [^7]" or "451.4B
-  [^7]" with a stray decoration. Write the surrounding prose around
-  the marker as if it were already a noun phrase carrying the number.
-- Every numerical claim MUST be a ``{{CITE:fact_id}}`` token whose
-  fact_id appears in ``relevant_facts``. Never invent a fact_id.
+  "$451.4B [^7]". Write the surrounding prose around the marker as if
+  it were already a noun phrase carrying the number — leave currency
+  symbols, units, and the numeric value to the engine so you don't end
+  up with "$$451.4B [^7]" or stray decorations.
+- For ``{{CITE:fact_id}}``, the fact_id should appear in
+  ``relevant_facts``. Use real ids from that map.
 - ``{{FIG:chart_id}}`` references a chart by id from ``assigned_charts``.
-  ASSEMBLE rewrites it as "Figure N" — do not write "Figure 1"
-  yourself, and do not pre-position the marker with parentheses; put
-  it where you want the chart anchored in the prose.
-- DON'T cite or reference anything outside the mandate's slice.
-- ``does_not_cover`` is a hard boundary — leave that material to its
-  owning section.
+  ASSEMBLE rewrites it as "Figure N" — write the marker where you want
+  the chart anchored in the prose and let the engine number it.
+- Stay inside the mandate's slice. ``does_not_cover`` is a hard
+  boundary — leave that material to its owning section.
 
 Examples (good vs bad):
 
@@ -691,7 +728,7 @@ Examples (good vs bad):
          months."                              ^ stray "$" survives
 
   GOOD: "The stock trades at {{CITE:forward_pe}} forward earnings."
-  BAD:  "The stock trades at [^15] forward earnings."  ^ never write [^N]
+  BAD:  "The stock trades at [^15] forward earnings."  ^ leave [^N] to the engine
 
 Rewrite path:
 
