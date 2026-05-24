@@ -49,7 +49,7 @@ from .base import Stage, StageContext
 # decimal / thousands-comma, then optional magnitude or unit suffix.
 # Examples matched: $60.9B, 1,200, 25%, 15x, 200, 18.5, 60.9, $1.2M.
 _NUMERIC_TOKEN_RE = re.compile(
-    r"\$?\d[\d,]*(?:\.\d+)?(?:[%xX]|[KkMmBbTt](?=\b|$))?"
+    r"-?\$?\d[\d,]*(?:\.\d+)?(?:[%xX]|[KkMmBbTt](?=\b|$))?"
 )
 
 # Token-level exempt patterns.
@@ -180,6 +180,6 @@ def _is_exempt(token: str, body: str, start: int, end: int) -> bool:
     if start >= 1 and body[start - 1].upper() == "Q":
         return True
     # Ordinal: the regex captures "3" in "3rd"; check the two trailing chars.
-    if _ORDINAL_SUFFIX_RE.match(body[end : end + 3]):
+    if _ORDINAL_SUFFIX_RE.match(body[end : end + 2]):
         return True
     return False
