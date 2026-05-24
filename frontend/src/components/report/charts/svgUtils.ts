@@ -41,11 +41,13 @@ export function niceTicks(min: number, max: number, count = 4): number[] {
   return ticks;
 }
 
-/** Format a numeric axis tick with k/M suffix when appropriate. */
+/** Format a numeric axis tick with k/M/B/T suffix when appropriate. */
 export function formatTick(v: number): string {
   const abs = Math.abs(v);
+  if (abs >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
   if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
   if (abs >= 100) return v.toFixed(0);
   if (abs >= 10) return v.toFixed(1);
   if (abs > 0) return v.toFixed(2);

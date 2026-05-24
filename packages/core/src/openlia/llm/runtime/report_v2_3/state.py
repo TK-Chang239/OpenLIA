@@ -22,6 +22,7 @@ from .schemas import (
     ClarifyResult,
     Language,
     Outline,
+    ReportLength,
     ReportThesis,
     ReportType,
     ResearchBundle,
@@ -57,6 +58,13 @@ class ReportState(BaseModel):
     raw_prompt: str
     language: Language
     report_type: ReportType
+    length: ReportLength = ReportLength.NORMAL
+    # Optional reference to a user-uploaded report template (UUID from
+    # the report_templates table). When set, the planner uses the
+    # template's section plan instead of the built-in section list for
+    # `report_type`. Built-in templates correspond 1:1 to the
+    # `ReportType` enum members and are selected by leaving this None.
+    template_id: str | None = None
     tickers: list[str] = Field(..., min_length=1)
     model_assignments: dict[V23Slot, str] = Field(
         default_factory=dict,

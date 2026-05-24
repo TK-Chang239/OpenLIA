@@ -9,30 +9,31 @@
  *
  * This adapter bridges the two so v2.3 reports render through the same
  * branded chrome — ReportCover, TableOfContents, BlockRenderer, the
- * native chart components, and the CitationsRail — instead of a custom
- * minimal layout that diverges from the rest of the product.
+ * native chart components, and the CitationsRail.
  *
- * Key decisions:
- *   - Footnote markers `[^N]` map to v1's `[N]` markers (CitationRefs
- *     parses the bracketed integer form), and `payload.footnotes[i]`
- *     becomes Citation { id: "fn-N", title: footnote_text }.
- *   - Each section gets a text block built from the section_body, plus
- *     one chart block per spec whose section_id matches. Charts the LLM
- *     placed inline via `{{FIG:id}}` are stripped from the prose; the
- *     same charts then render at the end of their section so the order
- *     of charts in the spec is preserved and unrendered charts can't
- *     orphan (which they did in the previous V23ReportView because the
- *     writer rarely emits the marker).
- *   - Cover lifts thesis fields: central_argument -> subtitle, key
- *     takeaways -> tldr bullets, valuation_stance -> tagline,
- *     canonical_figures -> key_metrics.
+ * The adapter doesn't only translate; it also *synthesises* the richer
+ * block types the v2.3 payload doesn't carry explicitly:
+ *
+ *   - `key_finding` blocks lifted from `thesis.key_takeaways`
+ *   - a top-of-report `metric_cards` block built from canonical figures
+ *   - a `rating_badge` block parsed from `valuation_stance`
+ *   - consensus_rating / consensus_upside_pct on the cover, parsed from
+ *     valuation_stance so the cover hero matches v2.2's verdict block
+ *
+ * These blocks are prepended to the FIRST section so the reader sees the
+ * "headline" view (takeaways + key metrics + rating) before the body
+ * prose, mirroring how the v2.2 helpers position them.
  */
 import type {
   Citation,
+  MetaStats,
   Metric,
+  Rail,
   ReportBlock,
+  ReportCover,
   ReportSchema,
   ReportSection,
+  Verdict,
 } from "../../../api/reports";
 import type {
   V23BundleFact,
@@ -45,6 +46,7 @@ import type {
 const REPORT_TYPE_TITLE: Record<string, string> = {
   initiation: "Stock Initiation Report",
   update: "Stock Update Report",
+  sector_research: "Sector Research Report",
   morning_brief: "Morning Brief",
   earnings_review: "Earnings Review",
 };
@@ -61,6 +63,26 @@ const CHART_TYPE_MAP: Record<V23ChartType, string> = {
 const FIG_RE = /\{\{FIG:([a-zA-Z0-9_]+)\}\}/g;
 const FOOTNOTE_RE = /\[\^(\d+)\]/g;
 
+// Canonical analyst rating vocabulary used to extract a discrete rating
+// from valuation_stance (a 1-2 sentence prose stance). Order matters:
+// longer phrases first so "strong buy" wins over "buy".
+const RATING_PHRASES: ReadonlyArray<[string, string]> = [
+  ["strong buy", "Strong Buy"],
+  ["strong sell", "Strong Sell"],
+  ["overweight", "Overweight"],
+  ["underweight", "Underweight"],
+  ["outperform", "Outperform"],
+  ["underperform", "Underperform"],
+  ["accumulate", "Accumulate"],
+  ["reduce", "Reduce"],
+  ["buy", "Buy"],
+  ["sell", "Sell"],
+  ["hold", "Hold"],
+  ["neutral", "Neutral"],
+];
+
+const UPSIDE_RE = /([+-]?\d+(?:\.\d+)?)\s*%\s*(?:upside|downside)?/i;
+
 export function adaptV23PayloadToSchema(payload: V23RunPayload): ReportSchema {
   const chartsBySection = new Map<string, V23ChartSpec[]>();
   for (const chart of payload.charts) {
@@ -69,10 +91,26 @@ export function adaptV23PayloadToSchema(payload: V23RunPayload): ReportSchema {
     chartsBySection.set(chart.section_id, list);
   }
 
-  const sections: ReportSection[] = payload.sections.map((s) => {
+  const keyMetrics = buildKeyMetrics(payload);
+  const ratingFromStance = parseRating(payload.thesis.valuation_stance);
+  const upsidePct = parseUpsidePct(payload.thesis.valuation_stance);
+
+  const sections: ReportSection[] = payload.sections.map((s, idx) => {
     const rawBody = payload.section_bodies[s.id] ?? "";
     const text = stripFiguresAndNormaliseMarkers(rawBody);
     const blocks: ReportBlock[] = [];
+
+    // Prepend headline blocks to the FIRST section: takeaways as
+    // key_finding callouts, a metric_cards grid, and a rating_badge.
+    // The cover already shows tldr/key_metrics/tagline, but the section
+    // body is where readers spend time — surfacing these inline makes
+    // the report feel scannable rather than burying everything in prose.
+    if (idx === 0) {
+      for (const block of headlineBlocks(payload, keyMetrics, ratingFromStance)) {
+        blocks.push(block);
+      }
+    }
+
     if (text.trim().length > 0) {
       blocks.push({ type: "text", content: text });
     }
@@ -88,27 +126,201 @@ export function adaptV23PayloadToSchema(payload: V23RunPayload): ReportSchema {
     title: line,
   }));
 
-  const keyMetrics: Metric[] = payload.thesis.canonical_figures.map((cf) => ({
-    label: factLabel(cf.fact_id, payload.bundle_facts),
-    value: cf.display,
-  }));
+  const cover: ReportCover = {
+    eyebrow: REPORT_TYPE_TITLE[payload.report_type] ?? payload.report_type,
+    title: payload.tickers.join(", "),
+    subtitle: payload.thesis.central_argument,
+    tagline: payload.thesis.valuation_stance,
+    tldr: payload.thesis.key_takeaways,
+    tldr_label: "Key takeaways",
+    key_metrics: keyMetrics,
+    ticker: payload.tickers[0] ?? null,
+    consensus_rating: ratingFromStance,
+    consensus_upside_pct: upsidePct,
+  };
 
   return {
     schema_version: "2.0",
     department: "equity_research",
-    cover: {
-      eyebrow: REPORT_TYPE_TITLE[payload.report_type] ?? payload.report_type,
-      title: payload.tickers.join(", "),
-      subtitle: payload.thesis.central_argument,
-      tagline: payload.thesis.valuation_stance,
-      tldr: payload.thesis.key_takeaways,
-      tldr_label: "Key takeaways",
-      key_metrics: keyMetrics,
-      ticker: payload.tickers[0] ?? null,
-    },
+    cover,
     sections,
     citations,
+    meta_stats: buildMetaStats(payload, citations),
+    rail: buildRail(payload, keyMetrics, ratingFromStance, upsidePct),
   };
+}
+
+/** Left-rail "Report Stats" card. Counts what we can derive from the
+ *  payload; leaves tokens/model unset since the v2.3 payload doesn't
+ *  carry them (would require a server change to surface). */
+function buildMetaStats(payload: V23RunPayload, citations: Citation[]): MetaStats {
+  const wordCount = Object.values(payload.section_bodies)
+    .map(stripFiguresAndNormaliseMarkers)
+    .join(" ")
+    .split(/\s+/)
+    .filter(Boolean).length;
+  // ~250 wpm is the standard adult silent-reading baseline; round up so
+  // a 1-paragraph note still reads as "1 min" not "0".
+  const estReadMinutes = Math.max(1, Math.round(wordCount / 250));
+  const webSearchQueries = citations.filter((c) => /https?:\/\//.test(c.title ?? "")).length;
+  return {
+    sections_count: payload.sections.length,
+    sources_count: citations.length,
+    est_read_minutes: estReadMinutes,
+    web_search_queries: webSearchQueries > 0 ? webSearchQueries : null,
+    tokens_used: null,
+    model_id: null,
+  };
+}
+
+/** Right-rail card. Surfaces the analyst verdict (parsed from
+ *  valuation_stance) and the same canonical figures the cover shows,
+ *  so the reader sees the headline numbers wherever they look. */
+function buildRail(
+  _payload: V23RunPayload,
+  keyMetrics: Metric[],
+  rating: string | null,
+  upsidePct: number | null,
+): Rail | null {
+  const verdict: Verdict | null = rating
+    ? {
+        rating,
+        upside: upsidePct != null ? `${upsidePct > 0 ? "+" : ""}${upsidePct.toFixed(1)}%` : null,
+        as_of: null,
+      }
+    : null;
+  // Cap quick_stats at 4 — rail real estate is tight; the cover already
+  // shows the longer list.
+  const quickStats = keyMetrics.slice(0, 4);
+  if (verdict === null && quickStats.length === 0) return null;
+  return {
+    verdict,
+    quick_stats: quickStats,
+    sparkline: null,
+  };
+}
+
+/** Build the "above the fold" blocks prepended to the first section.
+ *  Order: rating badge -> key metrics grid -> takeaway callouts. */
+function headlineBlocks(
+  payload: V23RunPayload,
+  keyMetrics: Metric[],
+  rating: string | null,
+): ReportBlock[] {
+  const blocks: ReportBlock[] = [];
+
+  if (rating !== null) {
+    blocks.push({ type: "rating_badge", rating } as unknown as ReportBlock);
+  }
+
+  if (keyMetrics.length > 0) {
+    blocks.push({
+      type: "metric_cards",
+      metrics: keyMetrics,
+    } as unknown as ReportBlock);
+  }
+
+  // Cap takeaways at 5; longer lists drown the reader.
+  const takeaways = payload.thesis.key_takeaways.slice(0, 5);
+  for (const takeaway of takeaways) {
+    blocks.push({
+      type: "key_finding",
+      content: takeaway,
+    } as unknown as ReportBlock);
+  }
+
+  return blocks;
+}
+
+function buildKeyMetrics(payload: V23RunPayload): Metric[] {
+  return payload.thesis.canonical_figures.map((cf) => {
+    const fact = payload.bundle_facts[cf.fact_id];
+    const delta = fact ? deltaFromSeries(fact) : null;
+    return {
+      label: factLabel(cf.fact_id, payload.bundle_facts),
+      value: humaniseDisplay(cf.display, fact),
+      ...(delta !== null
+        ? {
+            delta: delta.text,
+            delta_direction: delta.direction,
+          }
+        : {}),
+    } satisfies Metric;
+  });
+}
+
+/** Defensive number formatter for canonical_figures display strings.
+ *  The SYNTHESIZE prompt asks the LLM to emit "$60.9B" / "14.2%", but
+ *  when it slips and emits a raw "60900000000" the metric card would
+ *  show 11 digits and be unreadable. Detect that and reformat using
+ *  the fact's unit hint (if available). Leave already-formatted strings
+ *  alone — anything with a non-digit/period character is treated as
+ *  the LLM's deliberate display. */
+function humaniseDisplay(display: string, fact: V23BundleFact | undefined): string {
+  const trimmed = (display ?? "").trim();
+  if (!isRawNumeric(trimmed)) return trimmed;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n)) return trimmed;
+  const unit = (fact?.unit ?? "").toLowerCase();
+  if (unit === "percent" || unit === "pct" || unit === "%") return `${n.toFixed(1)}%`;
+  if (unit === "x" || unit === "multiple") return `${n.toFixed(1)}x`;
+  if (unit === "bps" || unit === "basis_points") return `${Math.round(n)}bps`;
+  let multiplier = 1;
+  if (unit === "usd_millions" || unit === "usd_mn" || unit === "usdm") multiplier = 1_000_000;
+  else if (unit === "usd_billions" || unit === "usd_bn" || unit === "usdb") multiplier = 1_000_000_000;
+  const scaled = n * multiplier;
+  const prefix = unit.startsWith("usd") ? "$" : "";
+  return `${prefix}${magnitude(scaled)}`;
+}
+
+function isRawNumeric(s: string): boolean {
+  return /^-?\d+(?:\.\d+)?$/.test(s);
+}
+
+function magnitude(v: number): string {
+  const abs = Math.abs(v);
+  if (abs >= 1_000_000_000_000) return `${(v / 1_000_000_000_000).toFixed(2)}T`;
+  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  if (abs < 10 && abs > 0) return v.toFixed(2);
+  return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
+}
+
+/** Derive a YoY-style delta from the last two points of a time-series
+ *  fact. Returns null for scalar facts or single-point series. */
+function deltaFromSeries(
+  fact: V23BundleFact,
+): { text: string; direction: "up" | "down" | "flat" } | null {
+  const v = fact.value;
+  if (!Array.isArray(v) || v.length < 2) return null;
+  const points = v as V23BundleSeriesPoint[];
+  const last = points[points.length - 1];
+  const prev = points[points.length - 2];
+  if (prev.value === 0) return null;
+  const pct = ((last.value - prev.value) / Math.abs(prev.value)) * 100;
+  const direction = pct > 0.5 ? "up" : pct < -0.5 ? "down" : "flat";
+  const sign = pct > 0 ? "+" : "";
+  return { text: `${sign}${pct.toFixed(1)}% YoY`, direction };
+}
+
+function parseRating(stance: string): string | null {
+  const lower = stance.toLowerCase();
+  for (const [phrase, label] of RATING_PHRASES) {
+    if (lower.includes(phrase)) return label;
+  }
+  return null;
+}
+
+function parseUpsidePct(stance: string): number | null {
+  const m = stance.match(UPSIDE_RE);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  // Only surface if the surrounding text mentions upside/downside; a
+  // bare "12%" inside the stance is too ambiguous to claim as upside.
+  if (!/upside|downside|implies|target/i.test(stance)) return null;
+  return /downside/i.test(stance) ? -Math.abs(n) : n;
 }
 
 /** Drop `{{FIG:…}}` placeholders (charts render as their own blocks)
@@ -132,8 +344,6 @@ function chartSpecToBlock(
     }
     return { name: s.name, values };
   });
-  // ReportBlock's chart variant is loosely typed (Record<string, unknown>)
-  // so the concrete chart components can pick out the keys they need.
   return {
     type,
     title: spec.title,

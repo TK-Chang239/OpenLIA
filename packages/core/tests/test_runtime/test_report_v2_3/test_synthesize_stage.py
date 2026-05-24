@@ -189,14 +189,23 @@ def test_stray_mandate_not_in_outline_raises() -> None:
         stage.run(_state(), _ctx())
 
 
-def test_canonical_figure_for_unknown_fact_raises() -> None:
-    canonical = [CanonicalFigure(fact_id="not_in_bundle", display="x")]
+def test_canonical_figure_for_unknown_fact_is_dropped() -> None:
+    # The LLM routinely names plausible-sounding fact ids the bundle
+    # doesn't carry. Dropping the entry is the right tradeoff — failing
+    # the whole run for one stray cover metric loses the entire report.
+    canonical = [
+        CanonicalFigure(fact_id="rev_ttm", display="$60.9B"),
+        CanonicalFigure(fact_id="not_in_bundle", display="x"),
+    ]
     stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(canonical=canonical)))
-    with pytest.raises(RuntimeError, match="canonical_figures"):
-        stage.run(_state(), _ctx())
+    out = stage.run(_state(), _ctx())
+    assert out.thesis is not None
+    assert [cf.fact_id for cf in out.thesis.canonical_figures] == ["rev_ttm"]
 
 
-def test_chart_referencing_unknown_fact_raises() -> None:
+def test_chart_referencing_unknown_fact_is_dropped() -> None:
+    # A chart with any phantom fact id would mis-plot, so we drop the
+    # entire chart (with a warning) rather than render a partial.
     charts = [
         ChartSpec(
             id="rev_chart",
@@ -209,11 +218,12 @@ def test_chart_referencing_unknown_fact_raises() -> None:
         )
     ]
     stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(charts=charts)))
-    with pytest.raises(RuntimeError, match="references unknown facts"):
-        stage.run(_state(), _ctx())
+    out = stage.run(_state(), _ctx())
+    assert out.thesis is not None
+    assert out.thesis.charts == []
 
 
-def test_mandate_referencing_unknown_fact_raises() -> None:
+def test_mandate_referencing_unknown_fact_strips_the_phantom() -> None:
     mandates = [
         SectionMandate(
             section_id="overview",
@@ -224,5 +234,7 @@ def test_mandate_referencing_unknown_fact_raises() -> None:
         SectionMandate(section_id="financials", covers="x", does_not_cover="y"),
     ]
     stage = SynthesizeStage(FakeSynthesizerClient(result=_thesis(mandates=mandates)))
-    with pytest.raises(RuntimeError, match="references unknown facts"):
-        stage.run(_state(), _ctx())
+    out = stage.run(_state(), _ctx())
+    assert out.thesis is not None
+    overview = next(m for m in out.thesis.mandates if m.section_id == "overview")
+    assert overview.relevant_fact_ids == ["rev_ttm"]

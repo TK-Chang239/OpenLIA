@@ -327,6 +327,10 @@ def test_max_turns_exceeded_raises() -> None:
 
 
 def test_evidence_id_must_resolve_to_a_tool_call() -> None:
+    # A fabricated evidence_id is skipped (logged) rather than raised on.
+    # When EVERY fact has one, the bundle is empty and we surface the
+    # zero-usable-facts error so the run still fails loudly. A single
+    # bad evidence_id alongside good ones now only skips that one fact.
     llm = FakeToolLLMClient(
         turns=[
             ToolTurnResponse(
@@ -346,7 +350,7 @@ def test_evidence_id_must_resolve_to_a_tool_call() -> None:
         ]
     )
     researcher = LLMResearcherClient(llm, _tools())
-    with pytest.raises(RuntimeError, match="tc_ghost"):
+    with pytest.raises(RuntimeError, match="no usable facts"):
         researcher.research(_request())
 
 

@@ -42,12 +42,26 @@ class Language(StrEnum):
 
 
 class ReportType(StrEnum):
-    """High-level report shape. Drives default sections and valuation plan."""
+    """High-level report shape. Drives default sections and valuation plan.
+
+    Surfaced to users as a "template" — built-in templates map 1:1 to enum
+    members; user-uploaded custom templates live in a separate table and are
+    keyed by their own UUID rather than this enum.
+    """
 
     INITIATION = "initiation"
     UPDATE = "update"
+    SECTOR_RESEARCH = "sector_research"
     MORNING_BRIEF = "morning_brief"
     EARNINGS_REVIEW = "earnings_review"
+
+
+class ReportLength(StrEnum):
+    """Per-run length budget. Drives writer word targets per section."""
+
+    CONCISE = "concise"
+    NORMAL = "normal"
+    ELABORATIVE = "elaborative"
 
 
 class RunStatus(StrEnum):
@@ -98,6 +112,7 @@ class IssueKind(StrEnum):
     REDUNDANCY = "redundancy"
     CHART_TEXT_MISMATCH = "chart_text_mismatch"
     BROKEN_FIG_REF = "broken_fig_ref"
+    THESIS_DRIFT = "thesis_drift"
 
 
 # ---------------------------------------------------------------------------
@@ -576,7 +591,7 @@ def _format_scalar(value: float, unit: str) -> str:
         # No unit info — print a clean number. Integer-valued floats
         # render without a trailing ".0".
         if abs(value - round(value)) < 1e-9:
-            return f"{int(round(value)):,}"
+            return f"{round(value):,}"
         return f"{value:,.2f}"
     # Unknown unit — pass it through after the number for transparency
     # rather than guessing wrong.

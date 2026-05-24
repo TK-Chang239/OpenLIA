@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
 from openlia.llm.runtime.report_v2_3.schemas import (
     BundleFact,
     BundleSeries,
@@ -161,26 +160,34 @@ def test_missing_bundle_is_noop() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_chart_referencing_unknown_fact_raises() -> None:
+def test_chart_referencing_unknown_fact_is_dropped() -> None:
+    # When the only fact_id in a series doesn't exist, the chart has
+    # nothing to plot — dropped (not raised on) so the whole report
+    # still ships.
     state = _state(
         facts={"other_fact": _scalar("other_fact", 1.0)},
         charts=[_series_chart(n_categories=1, value_fact_ids=["ghost"])],
     )
-    with pytest.raises(RuntimeError, match="unknown facts"):
-        VisualizeStage().run(state, _ctx())
+    out = VisualizeStage().run(state, _ctx())
+    assert out.thesis is not None
+    assert out.thesis.charts == []
 
 
-def test_series_with_too_few_points_raises() -> None:
-    facts = {"rev_q": _series_fact("rev_q", [("Q1", 10.0)])}  # only 1 point
+def test_series_with_too_few_points_is_truncated() -> None:
+    # 1-point BundleSeries + 3 categories → chart truncated to 1 category
+    # instead of failing the run.
+    facts = {"rev_q": _series_fact("rev_q", [("Q1", 10.0)])}
     state = _state(
         facts=facts,
         charts=[_series_chart(n_categories=3, value_fact_ids=["rev_q"])],
     )
-    with pytest.raises(RuntimeError, match=r"\d+ points but .* \d+ categories"):
-        VisualizeStage().run(state, _ctx())
+    out = VisualizeStage().run(state, _ctx())
+    assert out.thesis is not None
+    assert len(out.thesis.charts) == 1
+    assert len(out.thesis.charts[0].category_labels) == 1
 
 
-def test_multi_fact_series_with_too_few_fact_ids_raises() -> None:
+def test_multi_fact_series_with_too_few_fact_ids_is_truncated() -> None:
     facts = {
         "rev_q1": _scalar("rev_q1", 10.0),
         "rev_q2": _scalar("rev_q2", 11.0),
@@ -189,5 +196,8 @@ def test_multi_fact_series_with_too_few_fact_ids_raises() -> None:
         facts=facts,
         charts=[_series_chart(n_categories=3, value_fact_ids=["rev_q1", "rev_q2"])],
     )
-    with pytest.raises(RuntimeError, match="fact ids supplied"):
-        VisualizeStage().run(state, _ctx())
+    out = VisualizeStage().run(state, _ctx())
+    assert out.thesis is not None
+    assert len(out.thesis.charts) == 1
+    assert len(out.thesis.charts[0].category_labels) == 2
+    assert out.thesis.charts[0].series[0].value_fact_ids == ["rev_q1", "rev_q2"]

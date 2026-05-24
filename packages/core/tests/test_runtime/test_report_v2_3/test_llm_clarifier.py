@@ -47,12 +47,16 @@ def test_proceed_path_parses_assumptions() -> None:
     assert result.assumptions == ["audience: PM"]
     # The system prompt and the structured user payload reach the underlying call.
     assert fake.calls[0]["system"] == SYSTEM_PROMPT
-    assert fake.calls[0]["user"] == {
-        "raw_prompt": "write initiation on NVDA",
-        "language": "en",
-        "report_type": "initiation",
-        "tickers": ["NVDA"],
-    }
+    user = fake.calls[0]["user"]
+    assert user["raw_prompt"] == "write initiation on NVDA"
+    assert user["language"] == "en"
+    assert user["tickers"] == ["NVDA"]
+    # CLARIFY is fed the template's id + a brief shape description so
+    # the LLM can ask questions specific to the chosen template
+    # instead of generic ones.
+    assert user["template"]["id"] == "initiation"
+    assert isinstance(user["template"]["shape"], str)
+    assert len(user["template"]["shape"]) > 0
 
 
 def test_needs_input_path_parses_questions() -> None:

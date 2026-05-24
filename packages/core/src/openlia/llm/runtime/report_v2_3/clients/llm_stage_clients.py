@@ -70,6 +70,94 @@ def _validate(adapter: TypeAdapter, raw: dict[str, Any], stage: str) -> Any:
         ) from exc
 
 
+def _call_with_repair(
+    *,
+    json_call: JsonCall,
+    system: str,
+    user: Any,
+    adapter: TypeAdapter,
+    stage: str,
+    sanitiser: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    post_validator: Callable[[Any], list[str]] | None = None,
+    max_retries: int = 1,
+) -> Any:
+    """Call the LLM, validate, and on failure re-prompt once with the
+    errors so the model can self-repair.
+
+    This absorbs most of the "Stage X raised: malformed JSON" failures
+    we hit in production: the model violates a constraint (invalid
+    enum, dangling reference, missing field), the schema flags exactly
+    what's wrong, and we hand the model its own output + the error list
+    and ask it to fix only what's broken. One retry is enough for ~70%
+    of these — beyond that the model is genuinely confused and we
+    should fail loud rather than burn tokens on the same problem.
+
+    Three failure modes are caught uniformly:
+    - **Pydantic ValidationError** from `adapter.validate_python` —
+      missing fields, invalid enums, wrong types.
+    - **Post-validation complaints** from `post_validator(parsed)` —
+      cross-reference checks the schema cannot express (e.g. "this
+      chart's fact_id doesn't exist in the bundle"). Returning a
+      non-empty list of error strings triggers a repair.
+    - **Sanitiser repair** — `sanitiser` runs before validation and
+      fixes deterministic patterns silently (drop invalid enum values).
+      Anything it cannot fix falls through to repair.
+    """
+
+    def _try(raw: dict[str, Any]) -> tuple[Any, list[Any] | None]:
+        """Sanitise + validate + post-validate. Returns (parsed, errors).
+        On success, errors is None. On failure, errors is the list of
+        complaints to feed back to the LLM."""
+        cleaned = sanitiser(raw) if sanitiser is not None else raw
+        try:
+            parsed = adapter.validate_python(cleaned)
+        except ValidationError as exc:
+            return None, exc.errors(include_url=False)
+        if post_validator is not None:
+            complaints = post_validator(parsed)
+            if complaints:
+                return None, complaints
+        return parsed, None
+
+    raw = json_call(system=system, user=user)
+    parsed, last_errors = _try(raw)
+    if parsed is not None:
+        return parsed
+    last_raw = raw
+
+    for attempt in range(max_retries):
+        log.warning(
+            "%s: validation failed (attempt %d/%d), asking LLM to repair. First error: %s",
+            stage,
+            attempt + 1,
+            max_retries + 1,
+            last_errors[0] if last_errors else "<none>",
+        )
+        repair_user = {
+            "original_request": user,
+            "your_previous_output": last_raw,
+            "validation_errors": last_errors,
+            "instruction": (
+                "Your previous JSON output failed validation. Re-emit the "
+                "FULL corrected JSON object addressing the errors above. "
+                "Keep every part of your previous output that was valid — "
+                "only change what the errors flag. Output JSON only, no "
+                "prose."
+            ),
+        }
+        raw = json_call(system=system, user=repair_user)
+        parsed, last_errors = _try(raw)
+        if parsed is not None:
+            return parsed
+        last_raw = raw
+
+    fragment = json.dumps(last_raw, default=str)[:400]
+    raise RuntimeError(
+        f"{stage} LLM returned malformed JSON after {max_retries + 1} attempts: "
+        f"{last_errors}; head={fragment!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # PLAN
 # ---------------------------------------------------------------------------
@@ -133,8 +221,13 @@ class LLMPlannerClient(PlannerClient):
         self._call = json_call
 
     def plan(self, request: PlannerRequest) -> Outline:
-        raw = self._call(system=PLAN_SYSTEM_PROMPT, user=_planner_payload(request))
-        return _validate(_OUTLINE_ADAPTER, raw, stage="PLAN")
+        return _call_with_repair(
+            json_call=self._call,
+            system=PLAN_SYSTEM_PROMPT,
+            user=_planner_payload(request),
+            adapter=_OUTLINE_ADAPTER,
+            stage="PLAN",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -216,11 +309,16 @@ class LLMComputeClient(ComputeClient):
         self._call = json_call
 
     def propose_inputs(self, request: ComputeRequest) -> ValuationInputs:
-        raw = self._call(system=COMPUTE_SYSTEM_PROMPT, user=_compute_payload(request))
         adapter = _COMPUTE_ADAPTER_BY_METHOD.get(request.method)
         if adapter is None:
             raise RuntimeError(f"COMPUTE: unknown method {request.method!r}.")
-        return _validate(adapter, raw, stage=f"COMPUTE/{request.method.value}")
+        return _call_with_repair(
+            json_call=self._call,
+            system=COMPUTE_SYSTEM_PROMPT,
+            user=_compute_payload(request),
+            adapter=adapter,
+            stage=f"COMPUTE/{request.method.value}",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -280,10 +378,76 @@ Rules:
 - Every ``charts[].section_id`` MUST match a mandate; chart fact ids
   MUST be in the bundle; the section's ``relevant_fact_ids`` MUST
   include every fact the chart uses.
+- ``charts[].chart_type`` MUST be one of EXACTLY these values:
+  ``"column"``, ``"bar"``, ``"line"``, ``"area"``, ``"pie"``,
+  ``"scatter"``. Do NOT invent other values (no ``"text"``,
+  ``"table"``, ``"heatmap"``, etc. — if the data wouldn't plot as one
+  of the six, omit the chart). Each ChartSpec needs at least one
+  series with at least one fact_id; if you can't satisfy that, drop
+  the chart rather than emit a placeholder.
+- ``mandates[].chart_ids`` is a strict subset of ``charts[].id``. NEVER
+  name a chart in a mandate that you didn't also define in ``charts``;
+  if a section shouldn't have a chart, leave ``chart_ids`` as ``[]``.
 - ``canonical_figures[].fact_id`` MUST exist in the bundle and the
   ``display`` string MUST be the final rendering in the report's
   language (e.g. ``$60.9B``, ``14.2%``).
 - Output JSON only.
+
+Chart-selection guide — pick the form that fits the data, not the
+form that's easiest to fill:
+
+- ``line``: time-series of ONE metric across >= 4 periods. Use this for
+  revenue trajectory, price history, margin trend over years. If the
+  bundle carries only 2-3 periods, do NOT make a line — write the
+  comparison in prose and skip the chart.
+- ``area``: same shape as line but when you want to emphasise the
+  cumulative magnitude (e.g. stacked revenue mix over time). Avoid
+  single-series area; line conveys the same trend cleaner.
+- ``column`` (vertical bars): cross-sectional comparison of 3-10
+  categories of the SAME metric (revenue by segment, employees by
+  region, capex by year-bucket). Each category must be meaningfully
+  comparable — apples-to-apples.
+- ``bar`` (horizontal): use when category labels are long (full peer
+  names, country names). Same data shape as column otherwise.
+- ``pie``: composition / share-of-total ONLY, where the parts sum to
+  a meaningful whole (revenue mix by segment, geographic split). Cap
+  at 5-7 slices. Never use pie for trends, comparisons across time,
+  or unrelated quantities.
+- ``scatter``: relationship between TWO numeric variables across many
+  entities (peer P/E vs. growth, ROIC vs. leverage). Minimum ~5
+  points; fewer than that and the relationship isn't visible.
+
+Anti-patterns — do NOT do these (they are the most common bad chart
+choices we see):
+
+- Two-bar column / bar charts (e.g. 52-week low vs. high; this-year vs.
+  last-year revenue). Two data points is a sentence, not a chart.
+  Write it in prose and cite the facts.
+- One-point line / area / column (chart with a single data point is
+  meaningless — just cite the number).
+- Pie chart of unrelated metrics (e.g. "revenue + EBITDA + FCF" in
+  one pie — they don't sum to anything).
+- Range / endpoint charts (52-week range, target-price range): we
+  don't have a range chart type. Either show the full time series as
+  a line (if you have it) or omit the chart and quote the endpoints.
+- Charts whose ``claim`` is generic ("shows financial performance",
+  "displays valuation metrics"). If you cannot write a one-sentence,
+  non-obvious insight the chart proves, the chart isn't earning its
+  page space — drop it.
+- Mixing units inside one series. Every fact in
+  ``series.value_fact_ids`` MUST share the same ``unit`` value (look
+  at ``bundle.facts[fact_id].unit``). A series cannot plot
+  ``USD_millions`` next to ``USD`` next to ``percent`` — the y-axis
+  becomes meaningless and one bar dwarfs the rest. Example of the
+  bug we're trying to avoid: plotting DCF enterprise value
+  (``USD_millions``, ~30,000) next to per-share comps targets
+  (``USD``, ~$3,000) on the same column chart — one bar reads as a
+  trillion, the rest as flat. If your candidate facts span units,
+  EITHER convert/derive new facts in a single unit (e.g. compute
+  per-share equivalents for everything) OR omit the chart.
+
+If the bundle doesn't support a section's chart well, leave that
+``mandates[].chart_ids`` empty rather than forcing a weak chart.
 """.strip()
 
 
@@ -299,13 +463,176 @@ def _synthesize_payload(request: SynthesizerRequest) -> dict[str, Any]:
     }
 
 
+# Mirrors ``ChartType`` in schemas.py — duplicated here so the SYNTHESIZE
+# pre-validation pass can sanitise charts without importing the enum and
+# coupling the prompt to schema internals.
+_VALID_CHART_TYPES = frozenset({"column", "bar", "line", "area", "pie", "scatter"})
+
+
+def _sanitise_synthesize_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    """Coerce an LLM-emitted thesis dict into a shape the validator will
+    accept, dropping LLM noise that doesn't justify failing the run.
+
+    Specifically:
+    - Charts with a ``chart_type`` outside the engine's enum are dropped
+      (the LLM occasionally invents "text" / "table" / "heatmap").
+    - Mandate ``chart_ids`` that no longer point at a real chart (because
+      we dropped the chart above, OR because the LLM hallucinated the
+      id) are stripped from the mandate. The section then renders
+      without that chart instead of failing the whole run.
+    - Canonical figure entries whose ``fact_id`` is malformed
+      (non-string, empty) are dropped — the per-fact existence check
+      against the bundle still runs in the stage validator and catches
+      genuine misses.
+
+    The result still goes through full Pydantic validation, so any
+    structural problem this pass doesn't recognise still surfaces.
+    """
+    if not isinstance(raw, dict):
+        return raw
+
+    # 1. Drop charts whose chart_type isn't in the enum.
+    charts = raw.get("charts")
+    surviving_chart_ids: set[str] = set()
+    if isinstance(charts, list):
+        sanitised_charts: list[Any] = []
+        for chart in charts:
+            if not isinstance(chart, dict):
+                continue
+            ct = chart.get("chart_type")
+            cid = chart.get("id")
+            if isinstance(ct, str) and ct in _VALID_CHART_TYPES:
+                sanitised_charts.append(chart)
+                if isinstance(cid, str):
+                    surviving_chart_ids.add(cid)
+            else:
+                log.warning(
+                    "SYNTHESIZE: dropping chart with unsupported chart_type=%r (id=%r)",
+                    ct,
+                    cid,
+                )
+        raw["charts"] = sanitised_charts
+
+    # 2. Strip phantom chart_ids from mandates (chart was dropped above
+    #    OR the LLM hallucinated an id that never appeared in charts).
+    mandates = raw.get("mandates")
+    if isinstance(mandates, list):
+        for mandate in mandates:
+            if not isinstance(mandate, dict):
+                continue
+            cids = mandate.get("chart_ids")
+            if not isinstance(cids, list):
+                continue
+            kept = [c for c in cids if isinstance(c, str) and c in surviving_chart_ids]
+            phantom = [c for c in cids if c not in kept]
+            if phantom:
+                log.warning(
+                    "SYNTHESIZE: stripping phantom chart_ids %r from mandate %r",
+                    phantom,
+                    mandate.get("section_id"),
+                )
+                mandate["chart_ids"] = kept
+
+    # 3. Drop canonical_figures entries with malformed fact_ids; the
+    #    bundle-existence check in the stage validator still catches
+    #    references to facts that simply don't exist.
+    cfs = raw.get("canonical_figures")
+    if isinstance(cfs, list):
+        raw["canonical_figures"] = [
+            cf
+            for cf in cfs
+            if isinstance(cf, dict) and isinstance(cf.get("fact_id"), str) and cf["fact_id"].strip()
+        ]
+
+    return raw
+
+
+def _thesis_bundle_complaints(thesis: ReportThesis, bundle: Any) -> list[str]:
+    """Structured error list for thesis -> bundle cross-references.
+
+    Returns one string per phantom reference the LLM emitted. The
+    repair loop feeds these back so the LLM can either fix the
+    reference (use a real fact_id) or drop the chart / canonical_figure
+    on the retry — instead of us silently stripping and leaving the
+    LLM unaware. Empty list means everything resolves.
+
+    `bundle` is typed loosely (Any) to keep the client module free of
+    a circular import; we only call `bundle.facts.keys()` on it.
+    """
+    fact_ids = set(bundle.facts.keys())
+    complaints: list[str] = []
+
+    bad_canonical = [cf.fact_id for cf in thesis.canonical_figures if cf.fact_id not in fact_ids]
+    if bad_canonical:
+        complaints.append(
+            f"canonical_figures reference fact_ids that do not exist in the bundle: "
+            f"{sorted(set(bad_canonical))}. Use only ids from the bundle facts map, "
+            f"or drop the canonical_figure entry."
+        )
+
+    for chart in thesis.charts:
+        missing = chart.referenced_fact_ids() - fact_ids
+        if missing:
+            complaints.append(
+                f"chart '{chart.id}' series.value_fact_ids reference fact_ids that "
+                f"do not exist in the bundle: {sorted(missing)}. Either use real "
+                f"fact_ids from the bundle, or omit the chart entirely if no "
+                f"suitable facts exist."
+            )
+            # Skip the unit check when refs are bad — units of missing
+            # facts can't be inspected and the missing-refs complaint
+            # already tells the LLM to repair this chart.
+            continue
+        for series in chart.series:
+            units = {bundle.facts[fid].unit or "" for fid in series.value_fact_ids}
+            if len(units) > 1:
+                detail = {fid: bundle.facts[fid].unit for fid in series.value_fact_ids}
+                complaints.append(
+                    f"chart '{chart.id}' series '{series.name}' mixes unit types "
+                    f"across its value_fact_ids: {detail}. A single series must "
+                    f"share one unit (the y-axis is meaningless otherwise — one "
+                    f"value will dwarf the rest). Either pick facts that share "
+                    f"a unit, derive intermediate facts in a common unit, or "
+                    f"omit the chart."
+                )
+
+    chart_ids = {c.id for c in thesis.charts}
+    for mandate in thesis.mandates:
+        phantom_charts = set(mandate.chart_ids) - chart_ids
+        if phantom_charts:
+            complaints.append(
+                f"mandate for section '{mandate.section_id}' references chart_ids "
+                f"that you did not define in the charts array: {sorted(phantom_charts)}."
+            )
+        missing_facts = set(mandate.relevant_fact_ids) - fact_ids
+        if missing_facts:
+            complaints.append(
+                f"mandate for section '{mandate.section_id}' references fact_ids "
+                f"that do not exist in the bundle: {sorted(missing_facts)}."
+            )
+
+    return complaints
+
+
 class LLMSynthesizerClient(SynthesizerClient):
     def __init__(self, json_call: JsonCall) -> None:
         self._call = json_call
 
     def synthesize(self, request: SynthesizerRequest) -> ReportThesis:
-        raw = self._call(system=SYNTHESIZE_SYSTEM_PROMPT, user=_synthesize_payload(request))
-        return _validate(_THESIS_ADAPTER, raw, stage="SYNTHESIZE")
+        # The post_validator closure captures the bundle so the LLM
+        # gets a structured complaint when its chart/canonical/mandate
+        # refs miss real fact_ids — this is what was causing reports to
+        # ship with zero charts (the LLM invented chart_rev_2022 style
+        # ids and the silent-strip in the stage dropped the whole chart).
+        return _call_with_repair(
+            json_call=self._call,
+            system=SYNTHESIZE_SYSTEM_PROMPT,
+            user=_synthesize_payload(request),
+            adapter=_THESIS_ADAPTER,
+            stage="SYNTHESIZE",
+            sanitiser=_sanitise_synthesize_raw,
+            post_validator=lambda thesis: _thesis_bundle_complaints(thesis, request.bundle),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -324,6 +651,18 @@ Output is a single JSON WrittenSection:
   "title": "Business overview",
   "body": "NVIDIA's Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
 }
+
+Length budget — match the requested ``length``:
+
+- ``concise``:     ~150-250 words. One tight paragraph or two short ones.
+                   Surface only the load-bearing facts; skip nuance.
+- ``normal``:      ~300-500 words. 2-3 paragraphs. Headline + supporting
+                   detail + a forward-looking note.
+- ``elaborative``: ~600-900 words. 3-5 paragraphs. Add second-order
+                   detail, counterpoints, and quantified context.
+
+Length is a target band, not a hard ceiling. Don't pad to reach it; if
+the bundle only supports a shorter section, write the shorter section.
 
 Citation contract — read carefully:
 
@@ -365,10 +704,18 @@ Output JSON only.
 
 
 def _write_payload(request: WriterRequest) -> dict[str, Any]:
+    # Key ordering is deliberate for OpenAI prompt-caching: the prefix
+    # of the user message must be byte-identical across the N parallel
+    # WRITE calls for the cache to hit. ``language``, ``length``, and
+    # ``thesis`` are identical for every section in a run, so we serialize
+    # them FIRST. The section-specific bits (mandate, facts, charts,
+    # retry context) come last so they form the cache-miss tail. Result:
+    # roughly one section's worth of input billed, not six.
     return {
-        "section_mandate": request.section_mandate.model_dump(mode="json"),
-        "thesis": request.thesis.model_dump(mode="json"),
         "language": request.language.value,
+        "length": request.length.value,
+        "thesis": request.thesis.model_dump(mode="json"),
+        "section_mandate": request.section_mandate.model_dump(mode="json"),
         "relevant_facts": {
             fid: f.model_dump(mode="json") for fid, f in request.relevant_facts.items()
         },
@@ -391,8 +738,13 @@ class LLMWriterClient(WriterClient):
         self._call = json_call
 
     def write(self, request: WriterRequest) -> WrittenSection:
-        raw = self._call(system=WRITE_SYSTEM_PROMPT, user=_write_payload(request))
-        return _validate(_WRITTEN_SECTION_ADAPTER, raw, stage="WRITE")
+        return _call_with_repair(
+            json_call=self._call,
+            system=WRITE_SYSTEM_PROMPT,
+            user=_write_payload(request),
+            adapter=_WRITTEN_SECTION_ADAPTER,
+            stage="WRITE",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -401,9 +753,14 @@ class LLMWriterClient(WriterClient):
 
 
 VERIFY_SYSTEM_PROMPT = """You are the VERIFY stage of an equity-research
-report pipeline. Read the drafted sections + the research bundle + the
-thesis and surface coherence problems that a writer cannot catch from
-inside their own section.
+report pipeline. Read the drafted sections + the thesis and surface
+coherence problems that a writer cannot catch from inside their own
+section.
+
+You receive only the sections and the thesis — the full research bundle
+is NOT in your input. A deterministic check has already validated every
+``{{CITE:fact_id}}`` against the bundle and confirmed each cited value
+resolves; your job is the qualitative read.
 
 Output is a single JSON VerifyResult:
 
@@ -411,23 +768,26 @@ Output is a single JSON VerifyResult:
   "issues": [
     {
       "section_id": "valuation",
-      "kind": "value_mismatch",
+      "kind": "cross_section_contradiction",
       "severity": "high",
-      "detail": "Body says revenue grew 25% but the cited fact rev_yoy_fy25 is 0.42."
+      "detail": "Valuation says margins expanding but financials show compression."
     }
   ]
 }
 
-What to look for (LLM-only checks — deterministic checks run before
-you):
+What to look for (LLM-only checks — deterministic value-resolution
+runs before you, so do NOT flag value_mismatch — the runner already
+catches numeric drift):
 
-- value_mismatch: prose number disagrees with the cited fact's value.
 - cross_section_contradiction: two sections take incompatible stances
   on the same point.
 - redundancy: two sections substantially restate the same material.
 - chart_text_mismatch: prose describing a chart diverges from what
-  the chart's series shows.
+  the chart's series shows (chart series are listed inline on the
+  thesis).
 - uncited_number: a numerical claim has no ``{{CITE:}}`` token.
+- thesis_drift: a section's takeaway contradicts the central_argument
+  or valuation_stance.
 
 Severity:
 
@@ -442,13 +802,60 @@ JSON only.
 
 
 def _verify_payload(request: VerifierRequest) -> dict[str, Any]:
+    # Bundle deliberately omitted — deterministic CITE re-resolution
+    # already validates every numeric claim against the bundle. The LLM
+    # verifier only needs the prose + the thesis to do its qualitative
+    # checks (contradictions, redundancy, chart-text drift), which
+    # roughly halves VERIFY input cost.
     return {
-        "raw_prompt": request.raw_prompt,
         "language": request.language.value,
         "thesis": request.thesis.model_dump(mode="json"),
-        "bundle": request.bundle.model_dump(mode="json"),
         "sections": [s.model_dump(mode="json") for s in request.sections],
+        "raw_prompt": request.raw_prompt,
     }
+
+
+_VALID_VERIFY_KINDS = frozenset(
+    {
+        "uncited_number",
+        "dangling_cite",
+        "value_mismatch",
+        "cross_section_contradiction",
+        "redundancy",
+        "chart_text_mismatch",
+        "broken_fig_ref",
+        "thesis_drift",
+    }
+)
+
+
+def _sanitise_verify_raw(raw: dict[str, Any]) -> dict[str, Any]:
+    """Drop verify issues with unknown `kind` values. The schema enum
+    is finite; an LLM that names a kind we don't have ("hallucination",
+    "tone_mismatch") should not nuke the entire VERIFY result — we
+    keep the issues we recognise and log the strays.
+    """
+    if not isinstance(raw, dict):
+        return raw
+    issues = raw.get("issues")
+    if not isinstance(issues, list):
+        return raw
+    kept: list[Any] = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            continue
+        kind = issue.get("kind")
+        if isinstance(kind, str) and kind in _VALID_VERIFY_KINDS:
+            kept.append(issue)
+        else:
+            log.warning(
+                "VERIFY: dropping issue with unknown kind=%r (section=%r, detail=%r).",
+                kind,
+                issue.get("section_id"),
+                (issue.get("detail") or "")[:120],
+            )
+    raw["issues"] = kept
+    return raw
 
 
 class LLMVerifierClient(VerifierClient):
@@ -456,8 +863,14 @@ class LLMVerifierClient(VerifierClient):
         self._call = json_call
 
     def verify(self, request: VerifierRequest) -> VerifyResult:
-        raw = self._call(system=VERIFY_SYSTEM_PROMPT, user=_verify_payload(request))
-        return _validate(_VERIFY_RESULT_ADAPTER, raw, stage="VERIFY")
+        return _call_with_repair(
+            json_call=self._call,
+            system=VERIFY_SYSTEM_PROMPT,
+            user=_verify_payload(request),
+            adapter=_VERIFY_RESULT_ADAPTER,
+            stage="VERIFY",
+            sanitiser=_sanitise_verify_raw,
+        )
 
 
 __all__ = [
