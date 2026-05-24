@@ -242,13 +242,17 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
 
 _STAGE_DEFAULTS_PER_USER: dict[str, tuple[int, float]] = {
     # Mirrors _STAGE_DEFAULTS but includes CLARIFY (env path keeps its own
-    # block for backwards compat).
+    # block for backwards compat). RESEARCH carries the largest output
+    # budget because the LLM emits the full facts array at the end of its
+    # tool-use loop — multi-ticker initiation runs routinely produce
+    # 8k+ tokens of JSON. WRITE is also bumped so per-section bodies
+    # have room to render footnote-cited prose.
     "clarify": (1024, 0.2),
     "plan": (2048, 0.3),
-    "research": (4096, 0.3),
+    "research": (16384, 0.3),
     "compute": (1024, 0.2),
     "synthesize": (4096, 0.3),
-    "write": (4096, 0.4),
+    "write": (8192, 0.4),
     "verify": (2048, 0.2),
 }
 
