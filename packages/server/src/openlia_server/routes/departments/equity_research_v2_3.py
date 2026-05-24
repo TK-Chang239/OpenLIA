@@ -50,9 +50,10 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ReportType,
     RunStatus,
 )
+from openlia.llm.resolver import ResolvedModelRow
 from openlia.llm.runtime.report_v2_3.slots import LLM_V23_SLOTS, V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
+from openlia.llm.types import Capabilities, ResolvedModel
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -547,25 +548,26 @@ def _per_user_factory(db: DBSession, user: User) -> V23RunnerFactory | None:
     return build_v2_3_runner_factory_from_models(models_by_slot=resolved, eodhd_api_key=eodhd_key)
 
 
-def _to_resolved_model(row: object) -> ResolvedModel:
-    """Translate an ``LLMModel`` ORM row into a ``ResolvedModel`` dataclass."""
-    provider = row.provider  # type: ignore[attr-defined]
-    credentials = ProviderCredentials(
-        api_key=provider.api_key,
-        base_url=provider.base_url,
-        env_var_name=provider.env_var_name,
-    )
+def _to_resolved_model(row: ResolvedModelRow) -> ResolvedModel:
+    """Translate the SQL registry's ``ResolvedModelRow`` into the
+    ``ResolvedModel`` dataclass the runtime adapters consume.
+
+    ``ResolvedModelRow`` already flattens provider + credentials, so this
+    is mostly a field rename. v2.3 caps are hard-coded for now since the
+    per-stage profiles are still being wired (PR12 follow-up); the row's
+    ``capability_override`` is intentionally ignored until then.
+    """
     return ResolvedModel(
-        provider_kind=provider.kind,
-        provider_id=provider.id,
-        model_id=row.id,  # type: ignore[attr-defined]
-        model_ref=row.model_ref,  # type: ignore[attr-defined]
-        credentials=credentials,
+        provider_kind=row.provider_kind,
+        provider_id=row.provider_id,
+        model_id=row.model_id,
+        model_ref=row.model_ref,
+        credentials=row.credentials,
         capabilities=Capabilities(
             structured_output=True,
             tool_calling=True,
             max_context_tokens=128_000,
             max_output_tokens=4096,
         ),
-        overrides=row.overrides or {},  # type: ignore[attr-defined]
+        overrides=row.overrides or {},
     )
