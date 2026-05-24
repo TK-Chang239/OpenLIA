@@ -29,7 +29,7 @@ class DerivationError(RuntimeError):
 
 
 def _scalar(fact: BundleFact) -> float:
-    if not isinstance(fact.value, Real) or isinstance(fact.value, bool):
+    if not isinstance(fact.value, Real):
         raise DerivationError(
             f"Fact '{fact.id}' is non-numeric (value={fact.value!r}); "
             "derivations require scalar numeric inputs."
