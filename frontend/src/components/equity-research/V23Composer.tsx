@@ -30,6 +30,7 @@ import {
   streamV23Run,
   v23DocxUrl,
 } from "../../api/equity-research-v2-3";
+import { UserBubble } from "../chat/UserBubble";
 import { type ComposerSubmitPayload, ErComposer } from "./ErComposer";
 import { V23ClarifyModal } from "./V23ClarifyModal";
 import { V23FailedReportCard } from "./V23FailedReportCard";
@@ -125,6 +126,11 @@ export function V23Composer({
     () => new Set(),
   );
   const [failedStage, setFailedStage] = useState<V23Stage | null>(null);
+  // Captured at submit time so we can render a UserBubble immediately
+  // (the SSE state frame that carries run.raw_prompt only lands on
+  // terminal status). On reattach, run.raw_prompt fills these in.
+  const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null);
+  const [submittedTickers, setSubmittedTickers] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   // Tracks whether the user has dismissed the clarify modal for the
   // current waiting_on_user phase so we know whether to render the
@@ -155,6 +161,8 @@ export function V23Composer({
         if (cancelled) return;
         setRun(state);
         setStage(state.current_stage);
+        setSubmittedPrompt(state.raw_prompt);
+        setSubmittedTickers(state.tickers);
         // Infer the completed-stage set from position in the linear
         // pipeline: anything before current_stage is treated as
         // complete. Retries can't be reconstructed from a persisted
@@ -318,6 +326,8 @@ export function V23Composer({
     setClarifyDismissed(false);
     setPayload(null);
     setPayloadError(null);
+    setSubmittedPrompt(promptText);
+    setSubmittedTickers(parsed);
     setPrompt("");
     closeStream();
     streamRef.current = streamV23Run(
@@ -365,6 +375,8 @@ export function V23Composer({
     setPayloadError(null);
     setError(null);
     setBusy(false);
+    setSubmittedPrompt(null);
+    setSubmittedTickers([]);
   }, [closeStream]);
 
   const isWelcome =
@@ -411,6 +423,18 @@ export function V23Composer({
           </>
         ) : (
           <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-6 py-6">
+            {submittedPrompt ? (
+              <div className="flex flex-col items-end gap-1">
+                <UserBubble
+                  content={
+                    submittedTickers.length > 0
+                      ? `${submittedTickers.join(", ")} — ${submittedPrompt}`
+                      : submittedPrompt
+                  }
+                />
+              </div>
+            ) : null}
+
             {run !== null || stage !== null ? (
               <V23StageStrip
                 activeStage={
