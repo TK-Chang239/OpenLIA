@@ -14,6 +14,11 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     Language,
     ReportType,
 )
+from openlia.llm.runtime.report_v2_3.templates import (
+    SectionSpec,
+    TemplateSpec,
+    get_builtin,
+)
 
 
 def _request() -> ClarifierRequest:
@@ -22,6 +27,7 @@ def _request() -> ClarifierRequest:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
 
 
@@ -100,6 +106,28 @@ def test_needs_input_with_too_many_questions_rejected() -> None:
     fake = _RecordingCall({"outcome": "needs_input", "questions": questions})
     with pytest.raises(RuntimeError, match=r"malformed JSON for ClarifyResult"):
         LLMClarifierClient(fake).clarify(_request())
+
+
+def test_clarifier_prompt_includes_template_shape_description() -> None:
+    """The clarifier prompt must surface the template's
+    shape_description so the LLM understands what kind of report the
+    user is building. Replaces the hardcoded _BUILTIN_TEMPLATE_SHAPES
+    lookup."""
+    custom = TemplateSpec(
+        template_id="custom_x",
+        name="Custom",
+        shape_description="UNIQUE_SHAPE_MARKER for prompt assertion.",
+        sections=[SectionSpec(id="a", title="A", intent="A section.")],
+    )
+    req = ClarifierRequest(
+        raw_prompt="initiate on NVDA",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+        template=custom,
+    )
+    prompt = LLMClarifierClient._build_user_prompt(req)
+    assert "UNIQUE_SHAPE_MARKER for prompt assertion." in prompt
 
 
 def test_question_missing_required_field_rejected() -> None:

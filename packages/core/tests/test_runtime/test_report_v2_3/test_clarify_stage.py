@@ -54,6 +54,21 @@ def test_proceed_path_records_result_and_does_not_suspend() -> None:
     assert client.calls[0].tickers == ["NVDA"]
 
 
+def test_stage_threads_state_template_into_request() -> None:
+    """The CLARIFY stage must pass state.template into the ClarifierRequest
+    so the clarifier prompt sees the chosen template's shape_description
+    (this is what replaces the hardcoded _BUILTIN_TEMPLATE_SHAPES blob)."""
+    client = FakeClarifierClient(result=ClarifyProceed())
+    stage = ClarifyStage(client)
+    state = _state()
+    expected_template = state.template
+
+    stage.run(state, _ctx())
+
+    assert len(client.calls) == 1
+    assert client.calls[0].template is expected_template
+
+
 def test_needs_input_path_suspends_with_questions() -> None:
     question = ClarifyQuestion(
         id="horizon",
@@ -244,6 +259,7 @@ def test_fake_clarifier_responder_varies_by_call() -> None:
         language=Language.EN,
         report_type=ReportType.UPDATE,
         tickers=["X"],
+        template=get_builtin(ReportType.UPDATE),
     )
     assert isinstance(client.clarify(req), ClarifyNeedsInput)
     assert isinstance(client.clarify(req), ClarifyProceed)
