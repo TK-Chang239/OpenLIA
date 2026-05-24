@@ -889,6 +889,11 @@ export default function EquityResearch(): JSX.Element {
     chatStreamResetRef.current();
     fileViewer.close();
     clearV2xUrlParams();
+    // The chat-history dropdown lists v2.2 sessions only, so switching
+    // to one means leaving the v2.3 surface. Without this, the page
+    // would stay on the v2.3 composer with no session-aware UI to
+    // render the picked session's history.
+    setUseV23(false);
   }, [fileViewer, clearV2xUrlParams]);
 
   const handleNewChat = useCallback(() => {

@@ -150,8 +150,30 @@ export function V23Composer({
   // pull the persisted state so the user lands back on the report,
   // clarify modal, or error banner they left. Mid-RUNNING reattach is
   // handled by the polling effect below (no live SSE to re-subscribe to).
+  //
+  // When ?run_id_v23 transitions from a value to null (parent cleared
+  // it — e.g. New Chat in the topbar), tear the run state down so the
+  // user lands on a clean welcome screen instead of seeing the stale
+  // active surface.
   useEffect(() => {
-    if (!initialRunId) return;
+    if (initialRunId === null) {
+      if (run !== null || payload !== null || busy || stage !== null) {
+        closeStream();
+        setRun(null);
+        setStage(null);
+        setCompletedStages(new Set());
+        setFailedStage(null);
+        setClarifyDismissed(false);
+        setAnswers({});
+        setPayload(null);
+        setPayloadError(null);
+        setError(null);
+        setBusy(false);
+        setSubmittedPrompt(null);
+        setSubmittedTickers([]);
+      }
+      return;
+    }
     if (run?.run_id === initialRunId) return;
     let cancelled = false;
     setError(null);
@@ -180,6 +202,7 @@ export function V23Composer({
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialRunId, run?.run_id]);
 
   // Surface the active run_id to the parent so it can persist it in the
