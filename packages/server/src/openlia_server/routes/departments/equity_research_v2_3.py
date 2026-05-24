@@ -40,6 +40,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from openlia.llm.capabilities import capabilities_for
+from openlia.llm.resolver import ResolvedModelRow
 from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
@@ -47,12 +49,13 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyProceed,
     ClarifyQuestion,
     Language,
+    ReportLength,
     ReportType,
     RunStatus,
 )
 from openlia.llm.runtime.report_v2_3.slots import LLM_V23_SLOTS, V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from openlia.llm.types import Capabilities, ProviderCredentials, ResolvedModel
+from openlia.llm.types import ResolvedModel
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -71,7 +74,19 @@ class StartPayload(BaseModel):
     raw_prompt: str
     language: Language = Language.EN
     report_type: ReportType = ReportType.INITIATION
-    tickers: list[str] = Field(..., min_length=1)
+    length: ReportLength = ReportLength.NORMAL
+    # Optional custom-template selector. When null, the run uses the
+    # built-in template for `report_type` (one of: initiation, update,
+    # sector_research, morning_brief, earnings_review). When set, must
+    # be a UUID from the report_templates table; the planner pulls the
+    # template's section plan in place of the built-in default.
+    template_id: str | None = None
+    # Optional when the caller uses the single-textarea composer; in
+    # that case CLARIFY extracts the subject ticker from `raw_prompt`
+    # and the runner copies `inferred_tickers` onto the state before
+    # PLAN. Non-empty when the caller already pinned a subject (the
+    # v2.2 two-field composer path).
+    tickers: list[str] = Field(default_factory=list)
 
 
 class AnswerPayload(BaseModel):
@@ -90,6 +105,7 @@ class RunSummaryOut(BaseModel):
     tickers: list[str]
     raw_prompt: str
     report_type: str
+    length: str
     language: str
     created_at: datetime
     updated_at: datetime
@@ -103,6 +119,14 @@ class RunStateOut(BaseModel):
     clarify_result: ClarifyResultOut | None
     last_error: str | None
     retry_count: int
+    # Echoed so the composer can render a UserBubble with the user's
+    # original request even after a page reload reattaches the run.
+    raw_prompt: str
+    tickers: list[str]
+    report_type: str
+    length: str
+    language: str
+    template_id: str | None = None
 
     @classmethod
     def from_state(cls, state: ReportState) -> RunStateOut:
@@ -119,6 +143,12 @@ class RunStateOut(BaseModel):
             clarify_result=cr,
             last_error=state.last_error,
             retry_count=state.retry_count,
+            raw_prompt=state.raw_prompt,
+            tickers=list(state.tickers),
+            report_type=state.report_type.value,
+            length=state.length.value,
+            language=state.language.value,
+            template_id=state.template_id,
         )
 
 
@@ -257,6 +287,8 @@ def build_equity_research_v2_3_router(
             raw_prompt=payload.raw_prompt,
             language=payload.language,
             report_type=payload.report_type,
+            length=payload.length,
+            template_id=payload.template_id,
             tickers=payload.tickers,
         )
         return RunStateOut.from_state(state)
@@ -330,6 +362,7 @@ def build_equity_research_v2_3_router(
                 tickers=r.tickers,
                 raw_prompt=r.raw_prompt,
                 report_type=r.report_type,
+                length=r.length,
                 language=r.language,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
@@ -547,25 +580,28 @@ def _per_user_factory(db: DBSession, user: User) -> V23RunnerFactory | None:
     return build_v2_3_runner_factory_from_models(models_by_slot=resolved, eodhd_api_key=eodhd_key)
 
 
-def _to_resolved_model(row: object) -> ResolvedModel:
-    """Translate an ``LLMModel`` ORM row into a ``ResolvedModel`` dataclass."""
-    provider = row.provider  # type: ignore[attr-defined]
-    credentials = ProviderCredentials(
-        api_key=provider.api_key,
-        base_url=provider.base_url,
-        env_var_name=provider.env_var_name,
+def _to_resolved_model(row: ResolvedModelRow) -> ResolvedModel:
+    """Translate the SQL registry's ``ResolvedModelRow`` into the
+    ``ResolvedModel`` dataclass the runtime adapters consume.
+
+    Capabilities are pulled from the central registry (`capabilities_for`)
+    so per-model facts like ``web_search_native``, vision, and the real
+    token caps flow through. Without this lookup the wiring layer falls
+    back to a minimal Capabilities() that always reports
+    web_search_native=False — and the v2.3 researcher silently runs
+    without web_search.
+    """
+    capabilities = capabilities_for(
+        provider_kind=row.provider_kind,
+        model=row.model_ref,
+        override=row.overrides,
     )
     return ResolvedModel(
-        provider_kind=provider.kind,
-        provider_id=provider.id,
-        model_id=row.id,  # type: ignore[attr-defined]
-        model_ref=row.model_ref,  # type: ignore[attr-defined]
-        credentials=credentials,
-        capabilities=Capabilities(
-            structured_output=True,
-            tool_calling=True,
-            max_context_tokens=128_000,
-            max_output_tokens=4096,
-        ),
-        overrides=row.overrides or {},  # type: ignore[attr-defined]
+        provider_kind=row.provider_kind,
+        provider_id=row.provider_id,
+        model_id=row.model_id,
+        model_ref=row.model_ref,
+        credentials=row.credentials,
+        capabilities=capabilities,
+        overrides=row.overrides or {},
     )

@@ -25,6 +25,7 @@ from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
     Language,
+    ReportLength,
     ReportType,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
@@ -53,6 +54,7 @@ class RunSummary:
     tickers: list[str]
     raw_prompt: str
     report_type: str
+    length: str
     language: str
     created_at: datetime
     updated_at: datetime
@@ -66,7 +68,9 @@ def start_run(
     raw_prompt: str,
     language: Language,
     report_type: ReportType,
+    length: ReportLength,
     tickers: list[str],
+    template_id: str | None = None,
     observer: Observer | None = None,
 ) -> ReportState:
     """Begin a new v2.3 run. Persists the resulting state.
@@ -83,6 +87,8 @@ def start_run(
         raw_prompt=raw_prompt,
         language=language,
         report_type=report_type,
+        length=length,
+        template_id=template_id,
         tickers=tickers,
     )
     runner = runner_factory()
@@ -154,6 +160,7 @@ def list_runs(
                 tickers=list(payload.get("tickers") or []),
                 raw_prompt=str(payload.get("raw_prompt") or ""),
                 report_type=str(payload.get("report_type") or ""),
+                length=str(payload.get("length") or "normal"),
                 language=str(payload.get("language") or ""),
                 created_at=row.created_at,
                 updated_at=row.updated_at,

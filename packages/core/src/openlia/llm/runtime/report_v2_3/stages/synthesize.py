@@ -15,11 +15,15 @@ mismatch caught at VERIFY.
 
 from __future__ import annotations
 
+import logging
+
 from ..clients.synthesizer import SynthesizerClient, SynthesizerRequest
 from ..schemas import Outline, ReportThesis, ResearchBundle
 from ..slots import V23Slot
 from ..state import ReportState
 from .base import Stage, StageContext
+
+log = logging.getLogger(__name__)
 
 
 class SynthesizeStage(Stage):
@@ -41,9 +45,80 @@ class SynthesizeStage(Stage):
         )
         thesis = self._client.synthesize(request)
 
+        self._strip_phantom_fact_refs(thesis, bundle)
         self._validate_thesis(thesis, bundle, outline, state)
         state.thesis = thesis
         return state
+
+    # ------------------------------------------------------------------
+    # Defensive coercion — strip LLM hallucinations before validation
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _strip_phantom_fact_refs(thesis: ReportThesis, bundle: ResearchBundle) -> None:
+        """Drop thesis references to fact_ids that don't exist in the bundle.
+
+        SYNTHESIZE LLMs routinely invent plausible-sounding fact ids
+        (``geo_mix``, ``rev_mix_segments``) when the bundle doesn't carry
+        them. Failing the whole run for one stray reference is overkill —
+        the writer can render the section with the facts that DO exist.
+        We surface each strip as a warning so the divergence is visible
+        in logs without nuking the report.
+
+        - canonical_figures with bad fact_ids → drop the entry (cover
+          shows fewer metrics).
+        - charts that reference any unknown fact → drop the whole chart
+          (a half-resolved chart would mis-plot).
+        - mandate.relevant_fact_ids → filter the list (writer just has
+          access to a smaller slice).
+        - mandate.chart_ids → restripped after charts are dropped, so
+          mandates can't point at a chart we just removed.
+        """
+        bundle_fact_ids = set(bundle.facts.keys())
+
+        before_cf = len(thesis.canonical_figures)
+        thesis.canonical_figures = [
+            cf for cf in thesis.canonical_figures if cf.fact_id in bundle_fact_ids
+        ]
+        if len(thesis.canonical_figures) != before_cf:
+            log.warning(
+                "SYNTHESIZE: dropped %d canonical_figures with unknown fact_ids.",
+                before_cf - len(thesis.canonical_figures),
+            )
+
+        surviving_charts = []
+        for chart in thesis.charts:
+            missing = chart.referenced_fact_ids() - bundle_fact_ids
+            if missing:
+                log.warning(
+                    "SYNTHESIZE: dropping chart %r — references unknown facts %s.",
+                    chart.id,
+                    sorted(missing),
+                )
+                continue
+            surviving_charts.append(chart)
+        thesis.charts = surviving_charts
+        chart_ids = {c.id for c in thesis.charts}
+
+        for mandate in thesis.mandates:
+            kept_facts = [fid for fid in mandate.relevant_fact_ids if fid in bundle_fact_ids]
+            phantom_facts = set(mandate.relevant_fact_ids) - set(kept_facts)
+            if phantom_facts:
+                log.warning(
+                    "SYNTHESIZE: stripping unknown fact_ids %s from mandate %r.",
+                    sorted(phantom_facts),
+                    mandate.section_id,
+                )
+                mandate.relevant_fact_ids = kept_facts
+
+            kept_charts = [cid for cid in mandate.chart_ids if cid in chart_ids]
+            phantom_charts = set(mandate.chart_ids) - set(kept_charts)
+            if phantom_charts:
+                log.warning(
+                    "SYNTHESIZE: stripping phantom chart_ids %s from mandate %r.",
+                    sorted(phantom_charts),
+                    mandate.section_id,
+                )
+                mandate.chart_ids = kept_charts
 
     # ------------------------------------------------------------------
     # Preconditions
@@ -90,25 +165,22 @@ class SynthesizeStage(Stage):
                 f"Thesis has mandates for sections not in outline: {sorted(stray_mandates)}"
             )
 
+        # Structural guards — phantom fact/chart refs were stripped in
+        # _strip_phantom_fact_refs above, so these checks should never
+        # fire in practice. Kept as fail-fast invariants in case the
+        # strip helper ever drifts out of sync with the rules below.
         bundle_fact_ids = set(bundle.facts.keys())
-
         bad_canonical = [
             cf.fact_id for cf in thesis.canonical_figures if cf.fact_id not in bundle_fact_ids
         ]
         if bad_canonical:
             raise RuntimeError(f"Thesis canonical_figures reference unknown facts: {bad_canonical}")
-
         for chart in thesis.charts:
             missing_chart_facts = chart.referenced_fact_ids() - bundle_fact_ids
             if missing_chart_facts:
                 raise RuntimeError(
                     f"Chart '{chart.id}' references unknown facts: {sorted(missing_chart_facts)}"
                 )
-
-        # Each mandate.chart_ids must point at a real ChartSpec. Without
-        # this check a phantom id would slip past synthesis, WriteStage
-        # would allow {{FIG:phantom}} (writer figs subset of mandate
-        # chart_ids), and ASSEMBLE's resolve() would raise late.
         chart_ids = {c.id for c in thesis.charts}
         for mandate in thesis.mandates:
             phantom_charts = set(mandate.chart_ids) - chart_ids
@@ -117,11 +189,6 @@ class SynthesizeStage(Stage):
                     f"Mandate for section '{mandate.section_id}' references "
                     f"unknown charts: {sorted(phantom_charts)}"
                 )
-
-        # Mandates may only reference bundle facts; the schema does not check
-        # this because the bundle is not on the thesis. We check it here so
-        # writers cannot be asked to use a fact_id that does not exist.
-        for mandate in thesis.mandates:
             missing_mandate_facts = set(mandate.relevant_fact_ids) - bundle_fact_ids
             if missing_mandate_facts:
                 raise RuntimeError(

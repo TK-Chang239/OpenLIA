@@ -137,10 +137,11 @@ def test_factory_with_synthesizer_populates_thesis() -> None:
     assert request.clarify_result.assumptions == ["x"]
 
 
-def test_factory_synthesize_failure_marks_run_failed() -> None:
-    """If the synthesizer returns a thesis that fails validation, the stage
-    raises and the runner converts that into a FAILED state — better than
-    silently advancing to WRITE with a broken thesis."""
+def test_factory_synthesize_strips_phantom_fact_refs() -> None:
+    """If the synthesizer returns a thesis whose mandate references a fact_id
+    that does not exist in the bundle, the SynthesizeStage gracefully strips
+    the phantom ref and the run continues — better than failing the whole
+    report because the LLM hallucinated one missing key."""
     bad_thesis = ReportThesis(
         language=Language.EN,
         central_argument="x",
@@ -148,7 +149,6 @@ def test_factory_synthesize_failure_marks_run_failed() -> None:
         valuation_stance="x",
         valuation_plan=ValuationPlan(),
         canonical_figures=[],
-        # mandate references a section NOT in our seeded outline.
         mandates=[
             SectionMandate(
                 section_id="overview",
@@ -164,9 +164,10 @@ def test_factory_synthesize_failure_marks_run_failed() -> None:
         synthesizer_client=FakeSynthesizerClient(result=bad_thesis),
     )
     state = factory().start(_seed_state())
-    assert state.status == RunStatus.FAILED
-    assert state.last_error is not None
-    assert "synthesize" in state.last_error
+    assert state.status == RunStatus.COMPLETE
+    assert state.thesis is not None
+    mandate = next(m for m in state.thesis.mandates if m.section_id == "overview")
+    assert mandate.relevant_fact_ids == ["rev_ttm"]
 
 
 def test_factory_with_planner_populates_outline() -> None:
@@ -336,9 +337,7 @@ def test_factory_with_compute_adds_dcf_facts_to_bundle() -> None:
     factory = make_v2_3_runner_factory(
         FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])),
         planner_client=FakePlannerClient(result=outline_with_dcf),
-        compute_client=FakeComputeClient(
-            inputs_by_method={ValuationMethod.DCF: dcf_inputs}
-        ),
+        compute_client=FakeComputeClient(inputs_by_method={ValuationMethod.DCF: dcf_inputs}),
         synthesizer_client=FakeSynthesizerClient(responder=_record_synth),
     )
 

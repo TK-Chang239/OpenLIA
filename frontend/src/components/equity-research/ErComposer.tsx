@@ -9,6 +9,14 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
+// NOTE: The v2.3 surface no longer asks for a ticker separately —
+// the prompt textarea alone is enough; CLARIFY extracts the subject
+// ticker (or sector/topic) from `raw_prompt` and the runner copies
+// `inferred_tickers` onto the state before PLAN. The legacy two-field
+// shape is still supported as an opt-in via the `ticker` /
+// `onTickerChange` props (used by the v2.2 EquityResearch page); when
+// those are omitted the composer renders a single textarea.
+
 import type { ReportLength, ReportMode } from "../../api/equity-research";
 import { PendingAttachmentChip } from "../chat/PendingAttachmentChip";
 
@@ -47,9 +55,11 @@ const LENGTH_KEY: Record<ReportLength, string> = {
 };
 
 export interface ComposerSubmitPayload {
-  /** Ticker symbol the report is about. Empty string in chat-follow-up mode. */
+  /** Ticker entered through the legacy ticker field. Empty string
+   *  when the composer is in single-textarea mode (v2.3 path). */
   ticker: string;
-  /** Free-form prompt / additional context. */
+  /** Free-form prompt. In single-textarea mode this carries everything
+   *  the user typed; the backend extracts ticker/sector/topic from it. */
   prompt: string;
 }
 
@@ -68,11 +78,9 @@ interface Props {
   initialValue?: string;
   /** Disables submission entirely (e.g., config still loading). */
   disabled?: boolean;
-  /**
-   * When defined, renders a ticker input above the prompt textarea and treats
-   * `ticker` as a required field (Send disabled until non-empty). Omit during
-   * chat follow-up where the ticker is fixed by the session.
-   */
+  /** Legacy opt-in: when set, renders a separate ticker input above
+   *  the textarea and treats it as required. v2.3 callers omit this
+   *  and let the prompt carry the subject. */
   ticker?: string;
   onTickerChange?: (next: string) => void;
 }

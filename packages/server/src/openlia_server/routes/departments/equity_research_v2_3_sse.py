@@ -62,6 +62,7 @@ from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
     Language,
+    ReportLength,
     ReportType,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
@@ -85,7 +86,12 @@ class StartStreamPayload(BaseModel):
     raw_prompt: str
     language: Language = Language.EN
     report_type: ReportType = ReportType.INITIATION
-    tickers: list[str] = Field(..., min_length=1)
+    length: ReportLength = ReportLength.NORMAL
+    # See StartPayload in equity_research_v2_3.py for semantics.
+    template_id: str | None = None
+    # Optional — empty list means "let CLARIFY infer the subject
+    # ticker from raw_prompt".
+    tickers: list[str] = Field(default_factory=list)
 
 
 class AnswerStreamPayload(BaseModel):
@@ -131,6 +137,8 @@ def build_equity_research_v2_3_sse_router(
                     raw_prompt=payload.raw_prompt,
                     language=payload.language,
                     report_type=payload.report_type,
+                    length=payload.length,
+                    template_id=payload.template_id,
                     tickers=payload.tickers,
                     observer=observer,
                 )

@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 
 import pytest
 from openlia.llm.runtime.report_v2_3.schemas import (
+    DERIVE_RE,
+    ESTIMATE_RE,
     BundleFact,
     BundleSeries,
     BundleSeriesPoint,
@@ -21,6 +23,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     DataProviderSource,
     DCFInputs,
     DCFResult,
+    EstimateSource,
     FilingSource,
     Language,
     Outline,
@@ -30,6 +33,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ResearchBundle,
     SectionMandate,
     SensitivityInputs,
+    SourceType,
     ValuationMethod,
     ValuationPlan,
     WebSource,
@@ -332,6 +336,74 @@ def test_render_citation_per_provenance_variant() -> None:
     assert render_citation(computed) == "Author calculation: EV / EBITDA."
 
 
+def test_estimate_source_round_trips_through_provenance_union():
+    fact = BundleFact(
+        id="upside_pct",
+        label="Implied upside",
+        value=0.10,
+        unit="percent",
+        source=EstimateSource(
+            basis="projection from margin-expansion thesis",
+            derived_from=[],
+            stage="write",
+        ),
+    )
+    dumped = fact.model_dump_json()
+    restored = BundleFact.model_validate_json(dumped)
+    assert isinstance(restored.source, EstimateSource)
+    assert restored.source.type == SourceType.ESTIMATE
+    assert restored.source.basis == "projection from margin-expansion thesis"
+
+
+def test_render_citation_handles_estimate_source():
+    fact = BundleFact(
+        id="upside_pct",
+        label="Implied upside",
+        value=0.10,
+        unit="percent",
+        source=EstimateSource(
+            basis="margin-expansion thesis",
+            derived_from=[],
+            stage="write",
+        ),
+    )
+    assert render_citation(fact) == "Estimate: margin-expansion thesis."
+
+
+def test_estimate_source_records_derived_from_when_supplied():
+    fact = BundleFact(
+        id="upside_to_target",
+        label="Upside to target",
+        value=0.15,
+        unit="percent",
+        source=EstimateSource(
+            basis="target $120 vs current price",
+            derived_from=["price_target", "px_last"],
+            stage="write",
+        ),
+    )
+    assert fact.source.derived_from == ["price_target", "px_last"]
+
+
+def test_research_bundle_rejects_estimate_with_dangling_derived_from():
+    """EstimateSource.derived_from must be subject to the same integrity
+    check as ComputedSource.derived_from — dangling fact_ids should fail
+    bundle construction."""
+    bad_fact = BundleFact(
+        id="upside_to_target",
+        label="Upside to target",
+        value=0.15,
+        unit="percent",
+        source=EstimateSource(
+            basis="target $120 vs current price",
+            derived_from=["nonexistent_fact"],
+            stage="write",
+        ),
+    )
+    with pytest.raises(ValueError, match="derives from missing facts"):
+        ResearchBundle(tickers=["NVDA"], facts={"upside_to_target": bad_fact})
+
+
 # ---------------------------------------------------------------------------
 # resolve() — the deterministic ASSEMBLE pass
 # ---------------------------------------------------------------------------
@@ -399,3 +471,55 @@ def test_resolve_raises_on_unknown_figure_ref() -> None:
     s1 = WrittenSection(section_id="s1", title="S1", body="see {{FIG:ghost}}")
     with pytest.raises(ValueError, match="no ChartSpec"):
         resolve([s1], bundle, [], ["s1"])
+
+
+def test_derive_re_matches_three_pipe_separated_fields():
+    body = "Revenue grew {{DERIVE:growth_rate|rev_fy25,rev_fy24|rev_growth_yoy}} year over year."
+    matches = DERIVE_RE.findall(body)
+    assert matches == [("growth_rate", "rev_fy25,rev_fy24", "rev_growth_yoy")]
+
+
+def test_derive_re_rejects_uppercase_method_name():
+    # Methods are lowercase identifiers; uppercase should not match.
+    body = "X {{DERIVE:GROWTH_RATE|a,b|c}}"
+    assert DERIVE_RE.findall(body) == []
+
+
+def test_estimate_re_matches_four_pipe_separated_fields():
+    body = (
+        "We see {{ESTIMATE:upside_pct|0.10|percent|"
+        "projection from margin-expansion thesis}} of upside."
+    )
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [
+        ("upside_pct", "0.10", "percent", "projection from margin-expansion thesis")
+    ]
+
+
+def test_estimate_re_accepts_empty_unit():
+    body = "{{ESTIMATE:rating_score|7.5||composite of qual factors}}"
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [("rating_score", "7.5", "", "composite of qual factors")]
+
+
+def test_estimate_re_accepts_negative_values():
+    body = "{{ESTIMATE:downside_pct|-0.15|percent|bear case 12mo}}"
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [("downside_pct", "-0.15", "percent", "bear case 12mo")]
+
+
+def test_derive_re_handles_three_or_more_input_fact_ids():
+    """The CSV input list should support any number of fact_ids, not just two."""
+    body = "{{DERIVE:growth_rate|a,b,c,d|new_id}}"
+    matches = DERIVE_RE.findall(body)
+    assert matches == [("growth_rate", "a,b,c,d", "new_id")]
+
+
+def test_estimate_re_basis_tolerates_single_close_brace():
+    """The basis field is prose; a lone '}' (e.g. mathematical or set notation
+    inside the rationale) must not terminate the match — only '}}' does."""
+    body = "{{ESTIMATE:x|0.1|percent|projection from sensitivity grid {wacc=9%}}}"
+    matches = ESTIMATE_RE.findall(body)
+    assert matches == [
+        ("x", "0.1", "percent", "projection from sensitivity grid {wacc=9%}")
+    ]

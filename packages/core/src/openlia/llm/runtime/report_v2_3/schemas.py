@@ -42,12 +42,26 @@ class Language(StrEnum):
 
 
 class ReportType(StrEnum):
-    """High-level report shape. Drives default sections and valuation plan."""
+    """High-level report shape. Drives default sections and valuation plan.
+
+    Surfaced to users as a "template" — built-in templates map 1:1 to enum
+    members; user-uploaded custom templates live in a separate table and are
+    keyed by their own UUID rather than this enum.
+    """
 
     INITIATION = "initiation"
     UPDATE = "update"
+    SECTOR_RESEARCH = "sector_research"
     MORNING_BRIEF = "morning_brief"
     EARNINGS_REVIEW = "earnings_review"
+
+
+class ReportLength(StrEnum):
+    """Per-run length budget. Drives writer word targets per section."""
+
+    CONCISE = "concise"
+    NORMAL = "normal"
+    ELABORATIVE = "elaborative"
 
 
 class RunStatus(StrEnum):
@@ -65,6 +79,7 @@ class SourceType(StrEnum):
     WEB = "web"  # qualitative / narrative
     FILING = "filing"  # 10-K, 10-Q, 8-K, etc.
     COMPUTED = "computed"  # derived from other facts
+    ESTIMATE = "estimate"  # analyst judgment — explicit, no external source
 
 
 class ChartType(StrEnum):
@@ -98,6 +113,7 @@ class IssueKind(StrEnum):
     REDUNDANCY = "redundancy"
     CHART_TEXT_MISMATCH = "chart_text_mismatch"
     BROKEN_FIG_REF = "broken_fig_ref"
+    THESIS_DRIFT = "thesis_drift"
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +161,29 @@ class ComputedSource(BaseModel):
     )
 
 
-Provenance = DataProviderSource | WebSource | FilingSource | ComputedSource
+class EstimateSource(BaseModel):
+    """An explicit analyst estimate. No external provider produced this — it
+    is judgment formed at write time. Made first-class so estimates do not
+    masquerade as sourced facts and so the reader sees the distinction in
+    the footnote."""
+
+    type: Literal[SourceType.ESTIMATE] = SourceType.ESTIMATE
+    basis: str = Field(
+        ...,
+        min_length=1,
+        description="Short prose explaining why the analyst holds this view.",
+    )
+    derived_from: list[str] = Field(
+        default_factory=list,
+        description="Optional: fact_ids of measured/computed facts that informed "
+        "the estimate. Empty when the estimate is pure thesis.",
+    )
+    stage: Literal["synthesize", "write"]
+
+
+Provenance = (
+    DataProviderSource | WebSource | FilingSource | ComputedSource | EstimateSource
+)
 
 
 # ---------------------------------------------------------------------------
@@ -202,7 +240,7 @@ class ResearchBundle(BaseModel):
     @model_validator(mode="after")
     def _check_derived_chains(self) -> ResearchBundle:
         for fid, fact in self.facts.items():
-            if isinstance(fact.source, ComputedSource):
+            if isinstance(fact.source, (ComputedSource, EstimateSource)):
                 missing = [d for d in fact.source.derived_from if d not in self.facts]
                 if missing:
                     raise ValueError(f"Fact '{fid}' derives from missing facts: {missing}")
@@ -372,6 +410,12 @@ class ClarifyProceed(BaseModel):
 
     outcome: Literal["proceed"] = "proceed"
     assumptions: list[str] = Field(default_factory=list)
+    # Tickers CLARIFY extracted from the user's free-form prompt. Used
+    # only when the run was started without an explicit ticker list
+    # (the new single-textarea composer path). The runner copies these
+    # onto `state.tickers` before PLAN so downstream stages see the
+    # subject without the user having to spell it out twice.
+    inferred_tickers: list[str] = Field(default_factory=list)
 
 
 class ClarifyNeedsInput(BaseModel):
@@ -482,6 +526,24 @@ class ReportThesis(BaseModel):
 CITE_RE = re.compile(r"\{\{CITE:([a-zA-Z0-9_]+)\}\}")
 FIG_RE = re.compile(r"\{\{FIG:([a-zA-Z0-9_]+)\}\}")
 
+# Inline minting grammar — resolved by WriteStage before VERIFY sees the body.
+# DERIVE: {{DERIVE:<method>|<input_fact_ids_csv>|<new_fact_id>}}
+#   method ∈ DERIVATION_REGISTRY keys (lowercase identifiers).
+#   input_fact_ids_csv is a comma-separated list of bundle fact_ids the
+#     method consumes.
+#   new_fact_id becomes the BundleFact.id of the resulting ComputedSource fact.
+DERIVE_RE = re.compile(
+    r"\{\{DERIVE:([a-z_]+)\|([a-zA-Z0-9_,]+)\|([a-zA-Z0-9_]+)\}\}"
+)
+
+# ESTIMATE: {{ESTIMATE:<new_fact_id>|<value>|<unit>|<basis>}}
+#   new_fact_id becomes the BundleFact.id of the resulting EstimateSource fact.
+#   value is a signed decimal (no thousands separator); unit may be empty.
+#   basis is free prose with no '}}' (regex is non-greedy on '}').
+ESTIMATE_RE = re.compile(
+    r"\{\{ESTIMATE:([a-zA-Z0-9_]+)\|(-?\d+(?:\.\d+)?)\|([a-zA-Z_%]*)\|(.+?)\}\}(?!\})"
+)
+
 
 class WrittenSection(BaseModel):
     """Output of one WRITE call. Body contains {{CITE:}} and {{FIG:}} tokens."""
@@ -530,6 +592,75 @@ class ResolvedReport(BaseModel):
     figure_labels: dict[str, int]
 
 
+def format_fact_value(fact: BundleFact) -> str:
+    """Format a fact's scalar value for inline display in prose.
+
+    Picks a unit-aware presentation so readers see "$451.4B" or "32.3%"
+    instead of raw numbers. Time-series facts default to the latest
+    period's value — writers that want a specific period should cite a
+    derived scalar fact instead. The resolver uses this helper when
+    substituting {{CITE:fact_id}} so every numerical claim renders as
+    "<value> [^N]" without the writer having to spell the value out.
+    """
+    raw = fact.value
+    unit = (fact.unit or "").strip()
+    if isinstance(raw, BundleSeries):
+        if not raw.points:
+            return fact.label
+        latest = raw.points[-1]
+        return f"{_format_scalar(latest.value, unit)} ({latest.period})"
+    if isinstance(raw, str):
+        # String values include human-set strings like "Buy" — surface
+        # as-is; the writer was supposed to ground these textually too.
+        return raw
+    return _format_scalar(float(raw), unit)
+
+
+def _format_scalar(value: float, unit: str) -> str:
+    unit_lower = unit.lower()
+    if unit_lower in {"percent", "pct", "%"}:
+        return f"{value:.1f}%"
+    if unit_lower in {"x", "multiple"}:
+        return f"{value:.1f}x"
+    if unit_lower in {"usd"}:
+        return f"${_format_magnitude(value)}"
+    if unit_lower in {"usd_millions", "usd_mn", "usdm"}:
+        return f"${_format_magnitude(value * 1_000_000)}"
+    if unit_lower in {"usd_billions", "usd_bn", "usdb"}:
+        return f"${_format_magnitude(value * 1_000_000_000)}"
+    if unit_lower in {"shares", "shares_millions", "count"}:
+        return _format_magnitude(value)
+    if unit_lower in {"per_share", "usd_per_share"}:
+        return f"${value:,.2f}"
+    if unit_lower in {"basis_points", "bps"}:
+        return f"{value:.0f}bps"
+    if unit_lower in {"ticker", "string", ""}:
+        # No unit info — print a clean number. Integer-valued floats
+        # render without a trailing ".0".
+        if abs(value - round(value)) < 1e-9:
+            return f"{round(value):,}"
+        return f"{value:,.2f}"
+    # Unknown unit — pass it through after the number for transparency
+    # rather than guessing wrong.
+    return f"{value:,.2f} {unit}"
+
+
+def _format_magnitude(value: float) -> str:
+    """USD magnitude with trillion/billion/million suffix."""
+    abs_v = abs(value)
+    if abs_v >= 1_000_000_000_000:
+        return f"{value / 1_000_000_000_000:.2f}T"
+    if abs_v >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    if abs_v >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if abs_v >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    if abs_v < 10:
+        return f"{value:,.2f}"
+    return f"{value:,.0f}"
+
+
 def render_citation(fact: BundleFact) -> str:
     """Render a single footnote line from provenance. Format is owned here, so
     it is consistent everywhere."""
@@ -546,6 +677,8 @@ def render_citation(fact: BundleFact) -> str:
         return f"{s.company} {s.form_type} ({s.fiscal_period}){page}."
     if isinstance(s, ComputedSource):
         return f"Author calculation: {s.method}."
+    if isinstance(s, EstimateSource):
+        return f"Estimate: {s.basis}."
     raise TypeError(f"Unknown source type: {type(s)}")
 
 
@@ -590,7 +723,12 @@ def resolve(
             if fact_id not in footnote_index:
                 footnote_index[fact_id] = len(footnotes) + 1
                 footnotes.append(render_citation(bundle.get(fact_id)))
-            return f"[^{footnote_index[fact_id]}]"
+            # The marker carries BOTH the formatted value AND the
+            # superscript footnote — writers were producing "$[^N]" by
+            # using {{CITE:...}} as a value placeholder, so the resolver
+            # now does the substitution itself. The writer's contract is
+            # simply "for any numerical claim, emit one {{CITE:fact_id}}".
+            return f"{format_fact_value(bundle.get(fact_id))} [^{footnote_index[fact_id]}]"
 
         def _fig_sub(m: re.Match) -> str:
             chart_id = m.group(1)
