@@ -275,3 +275,26 @@ def test_missing_sections_raises() -> None:
     state.sections = []
     with pytest.raises(RuntimeError, match=r"state\.sections"):
         VerifyStage(FakeVerifierClient(result=VerifyResult())).run(state, _ctx())
+
+
+def test_verify_flags_uncited_number_through_deterministic_path() -> None:
+    """A naked number in body text must reach state.verify_result as a
+    HIGH UNCITED_NUMBER issue via the deterministic path, even when the
+    LLM verifier reports nothing."""
+    state = _state(
+        sections=[
+            WrittenSection(
+                section_id="overview",
+                title="Overview",
+                body="Trades at 15x forward earnings.",
+            )
+        ]
+    )
+
+    stage = VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[])))
+    stage.run(state, _ctx())
+
+    assert state.verify_result is not None
+    kinds = [i.kind for i in state.verify_result.issues]
+    assert IssueKind.UNCITED_NUMBER in kinds
+    assert state.verify_result.must_rewrite is True
