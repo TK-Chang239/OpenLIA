@@ -41,6 +41,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     Language,
     Outline,
     OutlineSection,
+    ReportLength,
     ReportThesis,
     ReportType,
     ResearchBundle,
@@ -54,6 +55,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
 from openlia.llm.runtime.report_v2_3.templates import get_builtin
+from openlia_server.services.v2_3_run_service import start_run
 from openlia_server.services.v2_3_runner_factory import make_v2_3_runner_factory
 
 
@@ -530,3 +532,24 @@ def test_all_eight_stages_compose_end_to_end() -> None:
     # Verify result clean.
     assert state.verify_result is not None
     assert state.verify_result.must_rewrite is False
+
+
+def test_run_state_carries_builtin_template_for_each_report_type(db_session) -> None:
+    """The wiring layer must auto-populate state.template from
+    BUILTIN_TEMPLATES so every downstream stage receives a non-None
+    template."""
+    factory = make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"]))
+    )
+    for rt in ReportType:
+        state = start_run(
+            db=db_session,
+            runner_factory=factory,
+            user_id="u-1",
+            raw_prompt="initiate on NVDA",
+            language=Language.EN,
+            report_type=rt,
+            length=ReportLength.NORMAL,
+            tickers=["NVDA"],
+        )
+        assert state.template == get_builtin(rt), f"Wrong template for {rt}"
