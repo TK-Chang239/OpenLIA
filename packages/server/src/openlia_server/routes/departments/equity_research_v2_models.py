@@ -20,10 +20,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException
+from openlia.llm.runtime.report_v2.slots import REQUIRED_V2_SLOTS, V2Slot
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
-from openlia.llm.runtime.report_v2.slots import REQUIRED_V2_SLOTS, V2Slot
 from openlia_server.db.deps import make_session_dependency
 from openlia_server.db.models.auth import User
 from openlia_server.middleware.auth import build_require_auth

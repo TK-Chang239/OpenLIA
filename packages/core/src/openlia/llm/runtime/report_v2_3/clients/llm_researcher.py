@@ -34,9 +34,10 @@ import json
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from openlia.llm.types import Message, ToolCall, ToolSchema
+from openlia.llm.types import Citation, Message, ToolCall, ToolSchema
 
 from ..research.tools import (
     ResearchTool,
@@ -51,6 +52,7 @@ from ..schemas import (
     ComputedSource,
     Provenance,
     ResearchBundle,
+    WebSource,
 )
 from .researcher import ResearcherClient, ResearchRequest
 
@@ -67,10 +69,18 @@ MAX_RESEARCH_TURNS = 12
 
 @dataclass(frozen=True, slots=True)
 class ToolTurnResponse:
-    """One LLM turn. Either tool_calls is non-empty OR text is."""
+    """One LLM turn. Either tool_calls is non-empty OR text is.
+
+    ``citations`` carries provider-native source references (today: the
+    URL annotations OpenAI's web_search tool attaches inline). The
+    researcher converts these into ``WebSource`` provenance entries so
+    facts the LLM cites with ``evidence_id: "web_N"`` resolve to a real
+    footnote in the rendered report.
+    """
 
     text: str
     tool_calls: tuple[ToolCall, ...] = ()
+    citations: tuple[Citation, ...] = ()
 
 
 class ToolLLMClient(Protocol):
@@ -151,6 +161,23 @@ How you work:
    turn. Re-call tools as needed. Each tool call result is labeled
    with `evidence_id` — that's the handle you use later to cite it.
 
+   Two kinds of evidence sources are available:
+
+   - Data tools (``get_fundamentals``, ``get_historical_prices``,
+     ``get_company_news``) — call these for hard financial / market
+     numbers. Each call returns an ``evidence_id`` (e.g. ``tc_abc123``).
+   - Native ``web_search`` — when you need narrative, qualitative, or
+     recent context that the data tools don't cover (regulatory action,
+     management commentary, product launches, analyst notes, sector
+     reads), use web search. Web-search results arrive with stable ids
+     of the form ``web_1``, ``web_2``, ``web_3`` … in the order they
+     were retrieved across the run. Use those exact strings as
+     ``evidence_id`` when you turn a web fact into a Fact entry. Quote
+     a short verbatim snippet — VERIFY uses it to value-match.
+
+   Prefer using BOTH kinds together: data tools for the quantitative
+   spine, web_search for the narrative that contextualises the numbers.
+
 3. When you have enough evidence to cover the outline, STOP calling
    tools. On your final turn emit exactly one JSON object — no prose,
    no markdown fences — matching this shape:
@@ -184,10 +211,32 @@ Rules:
 - Every fact MUST have either `evidence_id` (pointing at a tool call
   that returned the number) OR both `computed_from` (list of other
   fact ids in this batch) AND `method` (one-line description).
+- `evidence_id` MUST be one of the EXACT strings you have already seen
+  this run: either an id from a `tool` message (those look like
+  `tc_abc123` / `call_xyz789` — the provider's call id), or one of the
+  `web_1`, `web_2`, … ids assigned to web_search results. NEVER invent
+  an evidence_id from scratch (e.g. `turn1view0`, `obs_3`, `result_a`
+  are NOT valid). If you can't trace a fact to one of those exact
+  strings, you don't have evidence for it — omit the fact.
+- `computed_from` entries MUST reference fact ids you also emit IN THE
+  SAME `facts` array. Don't reference imagined inputs (e.g.
+  `gross_profit_history_proxy` doesn't exist unless you emit a fact
+  with that id). If you need an intermediate to compute a derived fact,
+  EITHER emit that intermediate as its own fact first OR compute the
+  final fact directly from an evidence_id-backed source.
 - Each `value` is a single atomic data point: a number, a date, a
   ticker, or a short label (twelve words or fewer). For multi-period
-  data, use a time-series object
+  data of ONE METRIC, use a time-series object
   `{"points": [{"period": "2025-Q4", "value": 60.9}, ...], "unit": "USD_billions"}`.
+  `point.value` MUST be a plain JSON number — not a string, not a
+  nested object, not a units-bearing literal like `"$60.9B"`. Put any
+  unit on the series via the `unit` field instead.
+- ONE FACT = ONE METRIC. Never emit a fact whose value is an entire
+  income statement, balance sheet, or multi-metric dump. If you want
+  three years of revenue, gross profit, and EBITDA, emit THREE facts
+  (revenue_ts, gross_profit_ts, ebitda_ts), each a time-series of
+  ONE metric. Names like `historical_income_statement` are wrong —
+  break them apart into one fact per line item.
   Save narrative prose for SYNTHESIZE / WRITE — RESEARCH facts stay
   compact so the downstream stages can compose freely.
 - Fact ids are stable handles — choose short, snake_case strings.
@@ -228,6 +277,7 @@ class LLMResearcherClient(ResearcherClient):
 
     def research(self, request: ResearchRequest) -> ResearchBundle:
         evidence: dict[str, Provenance] = {}
+        web_url_to_id: dict[str, str] = {}
         messages: list[Message] = [Message(role="user", content=_initial_user_text(request))]
 
         for turn in range(self._max_turns):
@@ -236,6 +286,7 @@ class LLMResearcherClient(ResearcherClient):
                 messages=messages,
                 tools=self._tool_schemas,
             )
+            self._harvest_web_citations(response.citations, evidence, web_url_to_id)
             if response.tool_calls:
                 messages.append(
                     Message(
@@ -266,6 +317,37 @@ class LLMResearcherClient(ResearcherClient):
     # -----------------------------------------------------------------
     # Internals
     # -----------------------------------------------------------------
+
+    def _harvest_web_citations(
+        self,
+        citations: tuple[Citation, ...],
+        evidence: dict[str, Provenance],
+        url_to_id: dict[str, str],
+    ) -> None:
+        """Convert provider-native URL citations into evidence_id-addressable
+        WebSource provenance entries.
+
+        OpenAI's native web_search inlines url_citation annotations on the
+        response text. We assign each unique URL a stable id of the form
+        ``web_1``, ``web_2`` …, in first-seen order across the entire run.
+        The system prompt tells the LLM those exact strings are valid
+        ``evidence_id`` values for facts derived from web hits.
+        """
+        for cite in citations:
+            url = cite.url
+            if not isinstance(url, str) or not url.strip() or cite.kind != "web":
+                continue
+            if url in url_to_id:
+                continue
+            web_id = f"web_{len(url_to_id) + 1}"
+            url_to_id[url] = web_id
+            evidence[web_id] = WebSource(
+                url=url,
+                title=cite.title,
+                publisher=cite.source,
+                snippet=cite.snippet or (cite.title or url),
+                retrieved_at=datetime.now(UTC),
+            )
 
     def _execute_tool_call(self, call: ToolCall) -> tuple[Message, Provenance | None]:
         tool = self._tools.get(call.name)
@@ -309,13 +391,64 @@ class LLMResearcherClient(ResearcherClient):
         if not isinstance(raw_facts, list) or not raw_facts:
             raise RuntimeError(f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}")
 
-        bundle = ResearchBundle(tickers=list(request.tickers))
+        bundle = ResearchBundle.model_construct(tickers=list(request.tickers), facts={})
+        skipped = 0
         for entry in raw_facts:
             if not isinstance(entry, dict):
-                raise RuntimeError(f"Fact entry must be an object, got: {entry!r}")
-            fact = _build_fact(entry, evidence)
-            bundle.add(fact)
-        return bundle
+                log.warning("RESEARCH: skipping non-object fact entry: %r", entry)
+                skipped += 1
+                continue
+            try:
+                fact = _build_fact(entry, evidence)
+            except RuntimeError as exc:
+                log.warning(
+                    "RESEARCH: skipping malformed fact %r: %s",
+                    entry.get("id"),
+                    exc,
+                )
+                skipped += 1
+                continue
+            if fact.id in bundle.facts:
+                log.warning("RESEARCH: skipping duplicate fact id %r.", fact.id)
+                skipped += 1
+                continue
+            bundle.facts[fact.id] = fact
+
+        # Prune ComputedSource facts whose `derived_from` references are
+        # not in the bundle. Iterate to a fixed point — pruning A can
+        # break B if B derived from A. The ResearchBundle model_validator
+        # raises on any dangling reference, so we have to repair before
+        # re-validating.
+        while True:
+            dangling = [
+                fid
+                for fid, fact in bundle.facts.items()
+                if isinstance(fact.source, ComputedSource)
+                and any(d not in bundle.facts for d in fact.source.derived_from)
+            ]
+            if not dangling:
+                break
+            for fid in dangling:
+                missing = [
+                    d for d in bundle.facts[fid].source.derived_from if d not in bundle.facts
+                ]
+                log.warning(
+                    "RESEARCH: skipping computed fact %r — derives from missing facts %s.",
+                    fid,
+                    sorted(missing),
+                )
+                del bundle.facts[fid]
+                skipped += 1
+
+        if not bundle.facts:
+            raise RuntimeError(
+                f"RESEARCH produced no usable facts (skipped {skipped} of "
+                f"{len(raw_facts)} — every fact had a broken evidence_id, "
+                f"missing field, unsupported value type, or dangling computed-from)."
+            )
+        # Re-validate the cleaned bundle through Pydantic so downstream
+        # stages (COMPUTE re-hydrates from JSON) see the same shape we do.
+        return ResearchBundle.model_validate(bundle.model_dump())
 
 
 # ---------------------------------------------------------------------------
@@ -425,10 +558,17 @@ def _build_fact(entry: dict[str, Any], evidence: dict[str, Provenance]) -> Bundl
 
 
 def _coerce_value(raw: Any, fact_id: str) -> float | str | BundleSeries:
+    if isinstance(raw, bool):
+        # bool is an int subclass; reject before the (int, float) branch
+        # eats it as 0/1.
+        return str(raw)
     if isinstance(raw, (int, float)):
         return float(raw)
     if isinstance(raw, str):
-        return raw
+        # Try numeric strings ("1500000", "1.5e9", "$60.9B", "14.2%") so
+        # an LLM that quotes its numbers still produces a usable fact.
+        coerced = _try_parse_number(raw)
+        return coerced if coerced is not None else raw
     if isinstance(raw, dict) and "points" in raw:
         points_raw = raw.get("points") or []
         if not isinstance(points_raw, list) or not points_raw:
@@ -436,17 +576,67 @@ def _coerce_value(raw: Any, fact_id: str) -> float | str | BundleSeries:
         points = []
         for p in points_raw:
             if not isinstance(p, dict):
-                raise RuntimeError(f"Fact {fact_id!r}: point must be an object.")
+                log.warning("Fact %r: dropping non-object point %r from time-series.", fact_id, p)
+                continue
             period = p.get("period")
-            value = p.get("value")
             if not isinstance(period, str):
-                raise RuntimeError(f"Fact {fact_id!r}: point.period must be a string.")
-            if not isinstance(value, (int, float)):
-                raise RuntimeError(f"Fact {fact_id!r}: point.value must be numeric.")
+                log.warning("Fact %r: dropping point with non-string period %r.", fact_id, period)
+                continue
+            value = p.get("value")
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                if isinstance(value, str):
+                    parsed = _try_parse_number(value)
+                    if parsed is not None:
+                        points.append(BundleSeriesPoint(period=period, value=parsed))
+                        continue
+                log.warning(
+                    "Fact %r: dropping point %r with non-numeric value %r.",
+                    fact_id,
+                    period,
+                    value,
+                )
+                continue
             points.append(BundleSeriesPoint(period=period, value=float(value)))
+        if not points:
+            raise RuntimeError(
+                f"Fact {fact_id!r}: time-series `points` had no usable numeric points "
+                f"(check the LLM is emitting one metric per fact, not a packed line-item dump)."
+            )
         unit = raw.get("unit")
         return BundleSeries(points=points, unit=unit if isinstance(unit, str) else None)
     raise RuntimeError(f"Fact {fact_id!r}: unsupported value type {type(raw).__name__}.")
+
+
+_NUMBER_SUFFIXES: tuple[tuple[str, float], ...] = (
+    ("t", 1_000_000_000_000.0),
+    ("b", 1_000_000_000.0),
+    ("m", 1_000_000.0),
+    ("k", 1_000.0),
+)
+
+
+def _try_parse_number(s: str) -> float | None:
+    """Best-effort coercion of human-formatted numbers ($1.5B, 14.2%, etc.).
+    Returns None when the string clearly isn't numeric so callers can fall
+    back to keeping it as a string label."""
+    cleaned = s.strip().replace(",", "").replace("$", "").replace("_", "")
+    if not cleaned:
+        return None
+    is_percent = cleaned.endswith("%")
+    if is_percent:
+        cleaned = cleaned[:-1].strip()
+    multiplier = 1.0
+    if cleaned and cleaned[-1].lower() in {"t", "b", "m", "k"}:
+        suffix = cleaned[-1].lower()
+        for token, mult in _NUMBER_SUFFIXES:
+            if token == suffix:
+                multiplier = mult
+                cleaned = cleaned[:-1].strip()
+                break
+    try:
+        return float(cleaned) * multiplier
+    except ValueError:
+        return None
 
 
 def _require_str(entry: dict[str, Any], key: str) -> str:

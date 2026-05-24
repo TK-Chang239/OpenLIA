@@ -72,7 +72,12 @@ async def test_generate_targets_responses_endpoint() -> None:
 
 async def test_generate_appends_native_web_search_tool() -> None:
     """When `web_search` is in native_tools, the Responses request
-    includes `{"type":"web_search"}` in its tools array."""
+    includes `{"type":"web_search_preview"}` in its tools array.
+
+    Note the wire-level type is `web_search_preview`, not `web_search` —
+    that's the spec gpt-5.4 needs to actually emit url_citation
+    annotations. The internal capability name we advertise (and the
+    native_tools entry callers pass) stays `web_search`."""
     adapter = _adapter()
     captured: dict = {}
 
@@ -88,7 +93,7 @@ async def test_generate_appends_native_web_search_tool() -> None:
                 native_tools=("web_search",),
             )
         )
-    assert {"type": "web_search"} in captured["body"]["tools"]
+    assert {"type": "web_search_preview"} in captured["body"]["tools"]
 
 
 async def test_generate_translates_chat_completions_tool_choice_to_responses_shape() -> None:
@@ -210,7 +215,7 @@ async def test_generate_renders_function_tools_in_responses_shape() -> None:
     assert len(fn_entries) == 1
     assert fn_entries[0]["name"] == "submit_report"
     assert "parameters" in fn_entries[0]
-    web = [t for t in tools if t.get("type") == "web_search"]
+    web = [t for t in tools if t.get("type") == "web_search_preview"]
     assert len(web) == 1
 
 

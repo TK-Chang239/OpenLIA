@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react';
-import { paletteColor } from './svgUtils';
+import { formatTick, paletteColor } from './svgUtils';
 import { useChartTooltip } from './useChartTooltip';
 
 export interface LineSeries {
@@ -93,12 +93,6 @@ function niceTicks(min: number, max: number, count = 4): number[] {
   const ticks: number[] = [];
   for (let v = niceMin; v <= niceMax + niceStep / 2; v += niceStep) ticks.push(Number(v.toFixed(8)));
   return ticks;
-}
-
-function formatTick(v: number): string {
-  if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(1)}k`;
-  if (Math.abs(v) >= 100) return v.toFixed(0);
-  return v.toFixed(1);
 }
 
 function formatValue(v: number | undefined): string {

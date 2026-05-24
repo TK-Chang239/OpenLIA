@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.auth import PasswordResetRequest
 from openlia_server.db.models.auth import Session as AuthSession
 from openlia_server.db.models.content import RepoItem, Report
-from openlia_server.db.models.pipeline_runs import PipelineRun
 from openlia_server.db.models.dashboard import MrAssessmentCache, RsSnapshot
+from openlia_server.db.models.pipeline_runs import PipelineRun
 from openlia_server.db.models.safety import LiaGuardrailEvent
 from openlia_server.db.models.scheduler import JobRun, UserNotification
 from openlia_server.scheduler.executors.base import BaseExecutor, JobOutcome

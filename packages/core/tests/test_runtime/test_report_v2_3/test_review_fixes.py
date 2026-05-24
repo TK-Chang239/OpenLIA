@@ -85,7 +85,10 @@ def _state_for_synth() -> ReportState:
     return s
 
 
-def test_synthesize_rejects_mandate_referencing_phantom_chart() -> None:
+def test_synthesize_strips_mandate_referencing_phantom_chart() -> None:
+    # Phantom chart_ids are stripped rather than raised on — the section
+    # still renders, just without the missing chart. Keeps a single bad
+    # LLM reference from nuking the entire report.
     thesis = ReportThesis(
         language=Language.EN,
         central_argument="growth",
@@ -104,8 +107,9 @@ def test_synthesize_rejects_mandate_referencing_phantom_chart() -> None:
         ],
         charts=[],  # empty — no chart spec for ghost_chart
     )
-    with pytest.raises(RuntimeError, match="unknown charts"):
-        SynthesizeStage(FakeSynthesizerClient(result=thesis)).run(_state_for_synth(), _ctx())
+    out = SynthesizeStage(FakeSynthesizerClient(result=thesis)).run(_state_for_synth(), _ctx())
+    assert out.thesis is not None
+    assert out.thesis.mandates[0].chart_ids == []
 
 
 def test_synthesize_accepts_mandate_with_valid_chart_id() -> None:

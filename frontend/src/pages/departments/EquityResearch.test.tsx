@@ -119,6 +119,9 @@ beforeEach(() => {
   // WavedReportRunner path, so pin the flag off explicitly until v1 is
   // retired and per-test v2 fixtures replace them.
   localStorage.setItem("equity-research:engine-v2-enabled", "0");
+  // v2.3 is the default page surface since the v2.3 UI rebuild; these tests
+  // verify the v2.2-and-earlier composer/chat path, so opt out of v2.3.
+  localStorage.setItem("equity-research:engine-v2-3", "0");
 });
 
 afterEach(() => {
@@ -126,6 +129,7 @@ afterEach(() => {
   vi.clearAllMocks();
   localStorage.removeItem("chat_followup_intro_toast_seen");
   localStorage.removeItem("equity-research:engine-v2-enabled");
+  localStorage.removeItem("equity-research:engine-v2-3");
 });
 
 function submitInput(value: string) {

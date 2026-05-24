@@ -22,6 +22,7 @@ from .schemas import (
     ClarifyResult,
     Language,
     Outline,
+    ReportLength,
     ReportThesis,
     ReportType,
     ResearchBundle,
@@ -57,7 +58,19 @@ class ReportState(BaseModel):
     raw_prompt: str
     language: Language
     report_type: ReportType
-    tickers: list[str] = Field(..., min_length=1)
+    length: ReportLength = ReportLength.NORMAL
+    # Optional reference to a user-uploaded report template (UUID from
+    # the report_templates table). When set, the planner uses the
+    # template's section plan instead of the built-in section list for
+    # `report_type`. Built-in templates correspond 1:1 to the
+    # `ReportType` enum members and are selected by leaving this None.
+    template_id: str | None = None
+    # Subject tickers. Allowed to start empty when the run was kicked
+    # off through the single-textarea composer; CLARIFY then extracts
+    # them from `raw_prompt` and copies `inferred_tickers` here before
+    # PLAN. Stages downstream of CLARIFY may continue to assume this
+    # is non-empty.
+    tickers: list[str] = Field(default_factory=list)
     model_assignments: dict[V23Slot, str] = Field(
         default_factory=dict,
         description="V23Slot -> stored model_id; resolver expands to ResolvedModel at call time.",

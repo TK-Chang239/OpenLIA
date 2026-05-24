@@ -386,21 +386,22 @@ export function parseFilenameFromHeader(
   return fallback;
 }
 
-export type ReportEngine = "v1" | "v2";
+export type ReportEngine = "v1" | "v2" | "v23";
 
 export async function downloadReportBlob(
   reportId: string,
   format: DownloadFormat,
   engine: ReportEngine = "v1",
 ): Promise<DownloadResult> {
-  const url =
-    engine === "v2"
-      ? format === "pdf"
-        ? v2RunPdfUrl(reportId)
-        : v2RunDocxUrl(reportId)
-      : format === "pdf"
-        ? reportPdfUrl(reportId)
-        : reportDocxUrl(reportId);
+  let url: string;
+  if (engine === "v23") {
+    // v2.3 only emits docx today; PDF is browser-print from the viewer.
+    url = `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(reportId)}/docx`;
+  } else if (engine === "v2") {
+    url = format === "pdf" ? v2RunPdfUrl(reportId) : v2RunDocxUrl(reportId);
+  } else {
+    url = format === "pdf" ? reportPdfUrl(reportId) : reportDocxUrl(reportId);
+  }
   const resp = await fetch(url, { credentials: "include" });
   if (!resp.ok) {
     let detail = `Download failed (${resp.status})`;

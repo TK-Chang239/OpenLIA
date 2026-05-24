@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from openlia.llm.runtime.report_v2.slots import REQUIRED_V2_SLOTS, V2Slot
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from openlia.llm.runtime.report_v2.slots import REQUIRED_V2_SLOTS, V2Slot
 from openlia_server.db.models.er_v2_models import ErV2ModelAssignment
 
 

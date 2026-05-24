@@ -183,6 +183,49 @@ def test_plan_wraps_validation_errors_with_fragment() -> None:
         )
 
 
+def test_plan_repairs_after_one_validation_failure() -> None:
+    """When the first LLM response fails validation, the client should
+    re-prompt with the validation errors and accept the second response.
+    This is the headline cost-saver: most schema slip-ups are recoverable
+    in one round-trip instead of nuking the whole report."""
+    bad = {"sections": "not a list"}
+    good = {
+        "tickers": ["NVDA"],
+        "report_type": "initiation",
+        "sections": [
+            {
+                "id": "business",
+                "title": "Business",
+                "data_needs": [{"description": "rev mix", "expected_fact_ids": ["rev_mix"]}],
+            }
+        ],
+        "valuation_plan": {"methods": ["dcf"]},
+    }
+    sequence = [bad, good]
+    captured: list[dict[str, Any]] = []
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        captured.append({"system": system, "user": user})
+        return sequence.pop(0)
+
+    client = LLMPlannerClient(_call)
+    outline = client.plan(
+        PlannerRequest(
+            raw_prompt="x",
+            language=Language.EN,
+            report_type=ReportType.INITIATION,
+            tickers=["NVDA"],
+        )
+    )
+    assert isinstance(outline, Outline)
+    assert len(captured) == 2
+    # The second call carries the repair envelope with the prior raw + errors.
+    repair_user = captured[1]["user"]
+    assert "your_previous_output" in repair_user
+    assert "validation_errors" in repair_user
+    assert repair_user["your_previous_output"] == bad
+
+
 # ---------------------------------------------------------------------------
 # COMPUTE — method-dispatched validation
 # ---------------------------------------------------------------------------
@@ -327,6 +370,175 @@ def test_synthesize_returns_thesis() -> None:
     )
     assert isinstance(thesis, ReportThesis)
     assert thesis.canonical_figures[0].display == "$60.9B"
+
+
+def test_synthesize_repairs_chart_with_mixed_units() -> None:
+    """When SYNTHESIZE plots facts with mismatched units in one series
+    (e.g. USD_millions next to bare USD), the post_validator flags it
+    and the repair loop re-prompts. Without this, the chart's y-axis
+    becomes meaningless — one bar represents billions, others read as
+    flat zeros."""
+    # Two facts whose values are close numerically but have different
+    # units — the visual disaster scenario.
+    bundle = ResearchBundle(
+        tickers=["NBIS"],
+        facts={
+            "dcf_ev": BundleFact(
+                id="dcf_ev",
+                label="DCF EV",
+                value=38000.0,
+                unit="USD_millions",
+                source=_src(),
+            ),
+            "comps_target": BundleFact(
+                id="comps_target",
+                label="Comps target",
+                value=3886.0,
+                unit="USD",
+                source=_src(),
+            ),
+            "third_target": BundleFact(
+                id="third_target",
+                label="P/E target",
+                value=6800.0,
+                unit="USD",
+                source=_src(),
+            ),
+        },
+    )
+    base = {
+        "language": "en",
+        "central_argument": "x",
+        "key_takeaways": [],
+        "valuation_stance": "x",
+        "canonical_figures": [],
+        "mandates": [
+            {
+                "section_id": "business",
+                "covers": "x",
+                "does_not_cover": "y",
+                "chart_ids": ["bridge"],
+                "relevant_fact_ids": ["dcf_ev", "comps_target", "third_target"],
+            }
+        ],
+    }
+    bad_chart = {
+        "id": "bridge",
+        "section_id": "business",
+        "claim": "valuation dispersion is wide",
+        "chart_type": "column",
+        "title": "Valuation cross-check",
+        "category_labels": ["DCF", "Comps", "P/E"],
+        "series": [
+            {
+                "name": "Implied",
+                "value_fact_ids": ["dcf_ev", "comps_target", "third_target"],
+            }
+        ],
+    }
+    # On retry the model drops the chart entirely (right answer when
+    # units cannot be reconciled).
+    sequence = [
+        {**base, "charts": [bad_chart]},
+        {**base, "charts": [], "mandates": [{**base["mandates"][0], "chart_ids": []}]},
+    ]
+    captured: list[dict[str, Any]] = []
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        captured.append({"system": system, "user": user})
+        return sequence.pop(0)
+
+    client = LLMSynthesizerClient(_call)
+    thesis = client.synthesize(
+        SynthesizerRequest(
+            raw_prompt="x",
+            language=Language.EN,
+            bundle=bundle,
+            outline=_outline(),
+        )
+    )
+    assert thesis.charts == []
+    assert len(captured) == 2
+    errs = captured[1]["user"]["validation_errors"]
+    assert any("mixes unit types" in str(e) for e in errs)
+
+
+def test_synthesize_repairs_chart_with_phantom_fact_id() -> None:
+    """When SYNTHESIZE emits a chart whose series fact_ids don't exist
+    in the bundle, the post_validator should flag them and the repair
+    loop should re-prompt the LLM with a structured error so it can
+    use real fact_ids on the retry.
+
+    This is the failure mode that was shipping reports with zero charts:
+    LLM invents ids like ``chart_rev_2022``, silent strip drops the
+    whole chart, repair loop never fires because Pydantic accepted the
+    JSON shape."""
+    base = {
+        "language": "en",
+        "central_argument": "x",
+        "key_takeaways": [],
+        "valuation_stance": "x",
+        "canonical_figures": [],
+        "mandates": [
+            {
+                "section_id": "business",
+                "covers": "x",
+                "does_not_cover": "y",
+                "chart_ids": ["rev_chart"],
+                "relevant_fact_ids": ["rev_ttm"],
+            }
+        ],
+    }
+    bad_chart = {
+        "id": "rev_chart",
+        "section_id": "business",
+        "claim": "x",
+        "chart_type": "column",
+        "title": "Revenue",
+        "category_labels": ["a", "b", "c"],
+        "series": [
+            # All three references are invented; bundle only has rev_ttm.
+            {"name": "s", "value_fact_ids": ["chart_rev_2022", "chart_rev_2023", "chart_rev_2024"]}
+        ],
+    }
+    good_chart = {
+        "id": "rev_chart",
+        "section_id": "business",
+        "claim": "x",
+        "chart_type": "column",
+        "title": "Revenue",
+        "category_labels": ["a", "b", "c"],
+        # Three real refs (broadcasting rev_ttm; the test bundle only
+        # has one fact so the LLM realistically would have dropped the
+        # chart, but here we just want to prove the repair fired).
+        "series": [{"name": "s", "value_fact_ids": ["rev_ttm", "rev_ttm", "rev_ttm"]}],
+    }
+    sequence = [
+        {**base, "charts": [bad_chart]},
+        {**base, "charts": [good_chart]},
+    ]
+    captured: list[dict[str, Any]] = []
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        captured.append({"system": system, "user": user})
+        return sequence.pop(0)
+
+    client = LLMSynthesizerClient(_call)
+    thesis = client.synthesize(
+        SynthesizerRequest(
+            raw_prompt="x",
+            language=Language.EN,
+            bundle=_bundle(),
+            outline=_outline(),
+        )
+    )
+    assert len(thesis.charts) == 1
+    assert thesis.charts[0].series[0].value_fact_ids == ["rev_ttm", "rev_ttm", "rev_ttm"]
+    # Verify the repair envelope carried a complaint about the phantom ids.
+    assert len(captured) == 2
+    repair_user = captured[1]["user"]
+    errs = repair_user["validation_errors"]
+    assert any("chart_rev_2022" in str(e) for e in errs)
 
 
 def test_synthesize_rejects_chart_for_unknown_section() -> None:

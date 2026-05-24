@@ -9,12 +9,17 @@ Two layers of checks, cheap-to-expensive:
      a defense-in-depth pass.
    - `broken_fig_ref` — a `{{FIG:chart_id}}` whose chart_id is absent
      from thesis.charts.
+   - `uncited_number` — a digit-bearing token in body text that is
+     not inside a CITE/FIG marker and not in the exempt set
+     (years 1900-2099, fiscal-year tokens, ordinals, quarter tokens).
+     After WRITE's mint step, every legitimate numeric should be a
+     CITE marker; anything left is a fabrication.
 
 2. **LLM-driven**: pass thesis + bundle + sections to the verifier
    client for coherence-level checks (`value_mismatch`,
-   `cross_section_contradiction`, `redundancy`, `chart_text_mismatch`,
-   `uncited_number`). The client returns a `VerifyResult`; we merge
-   it with the deterministic findings into the final result on state.
+   `cross_section_contradiction`, `redundancy`, `chart_text_mismatch`).
+   The client returns a `VerifyResult`; we merge it with the
+   deterministic findings into the final result on state.
 
 The runner reads `state.verify_result.must_rewrite` and routes the
 offending sections back to WRITE for one bounded retry.
@@ -22,8 +27,12 @@ offending sections back to WRITE for one bounded retry.
 
 from __future__ import annotations
 
+import re
+
 from ..clients.verifier import VerifierClient, VerifierRequest
 from ..schemas import (
+    CITE_RE,
+    FIG_RE,
     IssueKind,
     IssueSeverity,
     ReportThesis,
@@ -35,6 +44,17 @@ from ..schemas import (
 from ..slots import V23Slot
 from ..state import ReportState
 from .base import Stage, StageContext
+
+# A digit-bearing token: optional leading $, then digits with optional
+# decimal / thousands-comma, then optional magnitude or unit suffix.
+# Examples matched: $60.9B, 1,200, 25%, 15x, 200, 18.5, 60.9, $1.2M.
+_NUMERIC_TOKEN_RE = re.compile(
+    r"-?\$?\d[\d,]*(?:\.\d+)?(?:[%xX]|[KkMmBbTt](?=\b|$))?"
+)
+
+# Token-level exempt patterns.
+_YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
+_ORDINAL_SUFFIX_RE = re.compile(r"(?:st|nd|rd|th)\b", re.IGNORECASE)
 
 
 class VerifyStage(Stage):
@@ -81,7 +101,7 @@ def _deterministic_checks(
     thesis: ReportThesis,
     bundle: ResearchBundle,
 ) -> list[VerifyIssue]:
-    """Walk every cite/fig placeholder; report missing referents as HIGH."""
+    """Walk every placeholder + every naked number; HIGH if integrity-violating."""
     bundle_fact_ids = set(bundle.facts.keys())
     chart_ids = {c.id for c in thesis.charts}
 
@@ -107,4 +127,59 @@ def _deterministic_checks(
                         detail=f"{{FIG:{chart_id}}} does not match any chart spec.",
                     )
                 )
+    issues.extend(_check_uncited_numbers(sections))
     return issues
+
+
+def _check_uncited_numbers(sections: list[WrittenSection]) -> list[VerifyIssue]:
+    """Flag digit-bearing tokens that are neither inside a marker nor exempt.
+
+    Strips CITE/FIG markers from a working copy of the body so the marker
+    payloads cannot trigger the scan, then walks every numeric token in
+    what remains and filters out the exempt classes (4-digit years,
+    fiscal-year tokens, ordinals, quarter labels).
+    """
+    issues: list[VerifyIssue] = []
+    for section in sections:
+        stripped = FIG_RE.sub("", CITE_RE.sub("", section.body))
+        violations: list[str] = []
+        for match in _NUMERIC_TOKEN_RE.finditer(stripped):
+            token = match.group(0)
+            if _is_exempt(token, stripped, match.start(), match.end()):
+                continue
+            violations.append(token)
+        if violations:
+            joined = ", ".join(violations)
+            issues.append(
+                VerifyIssue(
+                    section_id=section.section_id,
+                    kind=IssueKind.UNCITED_NUMBER,
+                    severity=IssueSeverity.HIGH,
+                    detail=(
+                        f"Numeric values not anchored to a fact: {joined}. "
+                        f"Use {{{{CITE:<fact_id>}}}} for sourced numbers, "
+                        f"{{{{DERIVE:<method>|<inputs>|<id>}}}} for derived "
+                        f"numbers, or "
+                        f"{{{{ESTIMATE:<id>|<value>|<unit>|<basis>}}}} for "
+                        f"analyst judgment."
+                    ),
+                )
+            )
+    return issues
+
+
+def _is_exempt(token: str, body: str, start: int, end: int) -> bool:
+    # 4-digit year alone (1900-2099)
+    if _YEAR_RE.match(token):
+        return True
+    # Fiscal-year token: the regex captures the digit tail of "FY2025";
+    # check the two preceding characters in the body.
+    if start >= 2 and body[start - 2 : start].upper() == "FY":
+        return True
+    # Quarter token: the regex captures the digit in "Q3"; check the prior char.
+    if start >= 1 and body[start - 1].upper() == "Q":
+        return True
+    # Ordinal: the regex captures "3" in "3rd"; check the two trailing chars.
+    if _ORDINAL_SUFFIX_RE.match(body[end : end + 2]):
+        return True
+    return False

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
     ClarifyQuestion,
@@ -12,7 +11,6 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.slots import V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from pydantic import ValidationError
 
 
 def _state() -> ReportState:
@@ -30,16 +28,19 @@ def _state() -> ReportState:
     )
 
 
-def test_report_state_requires_at_least_one_ticker() -> None:
-    with pytest.raises(ValidationError):
-        ReportState(
-            run_id="r",
-            user_id="u",
-            raw_prompt="p",
-            language=Language.EN,
-            report_type=ReportType.UPDATE,
-            tickers=[],
-        )
+def test_report_state_allows_empty_tickers_for_clarify_inference() -> None:
+    """Runs started via the single-textarea composer arrive with no
+    tickers; CLARIFY extracts them from `raw_prompt` and the runner
+    copies `inferred_tickers` onto state.tickers before PLAN."""
+    state = ReportState(
+        run_id="r",
+        user_id="u",
+        raw_prompt="initiation on Nvidia",
+        language=Language.EN,
+        report_type=ReportType.UPDATE,
+        tickers=[],
+    )
+    assert state.tickers == []
 
 
 def test_report_state_defaults_running_with_no_current_stage() -> None:

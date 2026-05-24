@@ -216,18 +216,25 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
         base_url=base_url,
         env_var_name="OPENAI_API_KEY",
     )
+    capabilities = Capabilities(
+        tool_calling=True,
+        structured_output=True,
+        web_search_native=True,
+        max_context_tokens=128_000,
+        max_output_tokens=max_tokens,
+    )
     provider = build_adapter(
         kind="openai",
         credentials=credentials,
         model=research_model,
-        capabilities=Capabilities(
-            tool_calling=True,
-            structured_output=True,
-            max_context_tokens=128_000,
-            max_output_tokens=max_tokens,
-        ),
+        capabilities=capabilities,
     )
-    tool_client = SyncToolLlmClient(provider, max_tokens=max_tokens, temperature=temperature)
+    tool_client = SyncToolLlmClient(
+        provider,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        native_tools=("web_search",),
+    )
     tools = _build_eodhd_tool_set(eodhd_key)
     return LLMResearcherClient(tool_client, tools, max_turns=max_turns)
 
@@ -242,13 +249,17 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
 
 _STAGE_DEFAULTS_PER_USER: dict[str, tuple[int, float]] = {
     # Mirrors _STAGE_DEFAULTS but includes CLARIFY (env path keeps its own
-    # block for backwards compat).
+    # block for backwards compat). RESEARCH carries the largest output
+    # budget because the LLM emits the full facts array at the end of its
+    # tool-use loop — multi-ticker initiation runs routinely produce
+    # 8k+ tokens of JSON. WRITE is also bumped so per-section bodies
+    # have room to render footnote-cited prose.
     "clarify": (1024, 0.2),
     "plan": (2048, 0.3),
-    "research": (4096, 0.3),
+    "research": (16384, 0.3),
     "compute": (1024, 0.2),
     "synthesize": (4096, 0.3),
-    "write": (4096, 0.4),
+    "write": (8192, 0.4),
     "verify": (2048, 0.2),
 }
 
@@ -317,20 +328,39 @@ def build_v2_3_runner_factory_from_models(
     researcher: ResearcherClient | None = None
     if "research" in models_by_slot and eodhd_api_key:
         max_tokens, temperature = _STAGE_DEFAULTS_PER_USER["research"]
+        resolved_research = models_by_slot["research"]
+        # Native web_search support is provider-conditional. The resolved
+        # model carries the capability from the model registry; we forward
+        # it so the adapter routes to the Responses API and surfaces URL
+        # citations that the researcher harvests into the evidence ledger.
+        web_search_native = bool(
+            getattr(getattr(resolved_research, "capabilities", None), "web_search_native", False)
+        )
         provider = build_adapter(
-            kind="openai",
-            credentials=models_by_slot["research"].credentials,
-            model=models_by_slot["research"].model_ref,
+            kind=resolved_research.provider_kind,
+            credentials=resolved_research.credentials,
+            model=resolved_research.model_ref,
             capabilities=Capabilities(
                 tool_calling=True,
                 structured_output=True,
+                web_search_native=web_search_native,
                 max_context_tokens=128_000,
                 max_output_tokens=max_tokens,
             ),
         )
-        tool_client = SyncToolLlmClient(provider, max_tokens=max_tokens, temperature=temperature)
+        tool_client = SyncToolLlmClient(
+            provider,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            native_tools=("web_search",) if web_search_native else (),
+        )
         tools = _build_eodhd_tool_set(eodhd_api_key)
         researcher = LLMResearcherClient(tool_client, tools, max_turns=research_max_turns)
+        log.info(
+            "v2.3 researcher wired (model=%s, web_search_native=%s)",
+            resolved_research.model_ref,
+            web_search_native,
+        )
     elif "research" in models_by_slot:
         log.info("research model assigned but EODHD_API_KEY missing; RESEARCH will NoOp.")
 
@@ -375,10 +405,12 @@ def _build_eodhd_tool_set(eodhd_api_key: str) -> list[Any]:
     def fundamentals(ticker: str) -> dict:
         raw = client.get_fundamentals_data(ticker)
         if isinstance(raw, dict):
-            return raw
-        if isinstance(raw, list) and raw and isinstance(raw[0], dict):
-            return raw[0]
-        return {"value": raw}
+            payload = raw
+        elif isinstance(raw, list) and raw and isinstance(raw[0], dict):
+            payload = raw[0]
+        else:
+            return {"value": raw}
+        return _trim_eodhd_fundamentals(payload)
 
     def prices(ticker: str, from_date: str, to_date: str) -> list:
         rows = client.get_eod_historical_stock_market_data(
@@ -391,3 +423,108 @@ def _build_eodhd_tool_set(eodhd_api_key: str) -> list[Any]:
         return list(rows) if rows else []
 
     return build_research_tools(fundamentals=fundamentals, prices=prices, news=news)
+
+
+# How many periods to keep when trimming the multi-year statements.
+# Five years annual + six quarters quarterly gives the model enough
+# trend to compute YoY/QoQ and CAGR without dumping the decade-long
+# EODHD history that bloats input cost by 5-10x.
+_EODHD_KEEP_ANNUAL = 5
+_EODHD_KEEP_QUARTERLY = 6
+
+# Top-level sections to drop wholesale — high-volume, low-signal for an
+# equity-research narrative. Holders/insider lists and the full splits/
+# dividend history alone routinely add 5-15k tokens per ticker.
+_EODHD_DROP_SECTIONS = frozenset(
+    {
+        "Holders",
+        "InsiderTransactions",
+        "outstandingShares",
+        "ETF_Data",
+        "ESGScores",
+        "Components",
+        "Listings",
+    }
+)
+
+
+def _trim_eodhd_fundamentals(payload: dict[str, Any]) -> dict[str, Any]:
+    """Strip EODHD fundamentals down to what an equity-research report
+    actually needs.
+
+    The raw EODHD payload is enormous: every quarter back to inception,
+    every dividend, every insider trade, every share-count change. The
+    model only reads a small slice of this to build a fact bundle, but
+    we pay for the full payload as input tokens on every RESEARCH turn
+    where the result is in scope. Trimming here cuts ~60-80% of the
+    bytes the model has to read without losing anything load-bearing.
+    """
+    if not isinstance(payload, dict):
+        return payload
+
+    trimmed: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key in _EODHD_DROP_SECTIONS:
+            continue
+        if key == "SplitsDividends" and isinstance(value, dict):
+            trimmed[key] = _trim_splits_dividends(value)
+            continue
+        if key == "Earnings" and isinstance(value, dict):
+            trimmed[key] = _trim_earnings(value)
+            continue
+        if key == "Financials" and isinstance(value, dict):
+            trimmed[key] = _trim_financials(value)
+            continue
+        trimmed[key] = value
+    return trimmed
+
+
+def _trim_splits_dividends(section: dict[str, Any]) -> dict[str, Any]:
+    """Keep current yield / payout fields; drop historical lists."""
+    keep_keys = {
+        "ForwardAnnualDividendRate",
+        "ForwardAnnualDividendYield",
+        "PayoutRatio",
+        "DividendDate",
+        "ExDividendDate",
+        "LastSplitFactor",
+        "LastSplitDate",
+    }
+    return {k: section.get(k) for k in keep_keys if k in section}
+
+
+def _trim_earnings(section: dict[str, Any]) -> dict[str, Any]:
+    """Earnings has History (per-quarter EPS) + Trend + Annual. Cap each
+    to the most recent N periods — older entries rarely earn their
+    tokens."""
+    out: dict[str, Any] = {}
+    for sub_key in ("History", "Trend", "Annual"):
+        block = section.get(sub_key)
+        out[sub_key] = _cap_period_dict(block, _EODHD_KEEP_QUARTERLY)
+    return out
+
+
+def _trim_financials(section: dict[str, Any]) -> dict[str, Any]:
+    """Income/Balance/CashFlow each carry yearly + quarterly maps keyed
+    by ISO date. Keep the N most recent of each."""
+    out: dict[str, Any] = {}
+    for stmt_key in ("Income_Statement", "Balance_Sheet", "Cash_Flow"):
+        stmt = section.get(stmt_key)
+        if not isinstance(stmt, dict):
+            continue
+        out[stmt_key] = {
+            "yearly": _cap_period_dict(stmt.get("yearly"), _EODHD_KEEP_ANNUAL),
+            "quarterly": _cap_period_dict(stmt.get("quarterly"), _EODHD_KEEP_QUARTERLY),
+            "currency_symbol": stmt.get("currency_symbol"),
+        }
+    return out
+
+
+def _cap_period_dict(block: Any, keep: int) -> dict[str, Any] | None:
+    """EODHD encodes period series as ``{"2025-12-31": {...}, ...}``.
+    Keep the ``keep`` most recent keys (lexicographic sort works because
+    keys are ISO dates)."""
+    if not isinstance(block, dict) or not block:
+        return block if isinstance(block, dict) else None
+    most_recent_first = sorted(block.keys(), reverse=True)[:keep]
+    return {k: block[k] for k in most_recent_first}
