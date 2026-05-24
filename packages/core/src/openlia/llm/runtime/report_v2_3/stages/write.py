@@ -16,6 +16,17 @@ rather than raise-on-mismatch:
 - ``{{FIG:<chart_id>}}`` markers outside the mandate's `chart_ids`
   are stripped for the same reason.
 
+Between the writer call and ``_coerce_section`` we run
+``mint_inline_facts`` to resolve any inline ``{{DERIVE:...}}`` and
+``{{ESTIMATE:...}}`` markers into typed BundleFacts (ComputedSource /
+EstimateSource) and replace them with ``{{CITE:<new_id>}}``. The minted
+facts are appended to ``state.bundle`` immediately so subsequent
+mandates can dedup against them, and the mandate handed to
+``_coerce_section`` is extended with the newly minted ids so the
+coercer does not strip the brand-new CITE markers as out-of-mandate.
+After the loop the bundle is rebuilt once via ``ResearchBundle`` so the
+derived_from validator runs over the combined facts (mirrors COMPUTE).
+
 On a VERIFY-driven retry, `state.verify_result` is forwarded to the
 client so the rewrite has the critique it must address. Sections that
 were not flagged still get re-generated for simplicity — bounded retry
@@ -29,14 +40,17 @@ import re
 
 from ..clients.writer import WriterClient, WriterRequest
 from ..schemas import (
+    BundleFact,
     ChartSpec,
     ReportThesis,
+    ResearchBundle,
     SectionMandate,
     VerifyIssue,
     WrittenSection,
 )
 from ..slots import V23Slot
 from ..state import ReportState
+from ._mint import MintError, mint_inline_facts  # noqa: F401  (MintError re-exported for callers)
 from .base import Stage, StageContext
 
 log = logging.getLogger(__name__)
@@ -63,6 +77,7 @@ class WriteStage(Stage):
         chart_by_section: dict[str, list[ChartSpec]] = self._group_charts(thesis)
 
         new_sections: list[WrittenSection] = []
+        minted_total: list[BundleFact] = []
         for mandate in thesis.mandates:
             relevant_facts = {
                 fid: state.bundle.facts[fid]
@@ -80,8 +95,37 @@ class WriteStage(Stage):
                 critique=critique_by_section.get(mandate.section_id),
             )
             section = self._client.write(request)
-            section = self._coerce_section(section, mandate)
+            # Resolve inline DERIVE/ESTIMATE markers BEFORE coercion.
+            # The minted facts get CITE markers in the body; we need
+            # _coerce_section to allow them through, so we extend the
+            # mandate's relevant_fact_ids for the coerce call only.
+            new_body, new_facts = mint_inline_facts(section.body, state.bundle, mandate)
+            if new_body != section.body:
+                section = section.model_copy(update={"body": new_body})
+            minted_total.extend(new_facts)
+            # Add minted facts to the bundle now so subsequent mandates
+            # can dedup against them. ResearchBundle.add raises on
+            # duplicate ids, which is the desired behavior.
+            for fact in new_facts:
+                state.bundle.add(fact)
+            extended_mandate = mandate.model_copy(
+                update={
+                    "relevant_fact_ids": [
+                        *mandate.relevant_fact_ids,
+                        *[f.id for f in new_facts],
+                    ]
+                }
+            )
+            section = self._coerce_section(section, extended_mandate)
             new_sections.append(section)
+
+        # Rebuild bundle once so the validator's derived_from chain check
+        # runs over the combined facts (mirrors compute.py's pattern).
+        if minted_total:
+            state.bundle = ResearchBundle(
+                tickers=state.bundle.tickers,
+                facts=dict(state.bundle.facts),
+            )
 
         state.sections = new_sections
         return state

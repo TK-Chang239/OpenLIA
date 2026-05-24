@@ -15,7 +15,9 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ChartSeries,
     ChartSpec,
     ChartType,
+    ComputedSource,
     DataProviderSource,
+    EstimateSource,
     IssueKind,
     IssueSeverity,
     Language,
@@ -307,3 +309,98 @@ def test_retry_passes_prior_attempt_and_critique_to_writer() -> None:
     assert financials_call.critique is not None
     assert len(financials_call.critique) == 1
     assert financials_call.critique[0].kind == IssueKind.VALUE_MISMATCH
+
+
+# ---------------------------------------------------------------------------
+# Inline DERIVE/ESTIMATE marker minting
+# ---------------------------------------------------------------------------
+
+
+def test_write_stage_mints_derive_marker_into_computed_fact():
+    """A DERIVE marker in the writer's body must be resolved into a
+    ComputedSource fact added to the bundle, and the marker replaced
+    with the corresponding CITE."""
+    state = _state(with_chart=False)
+    state.bundle.facts["rev_prior"] = BundleFact(
+        id="rev_prior", label="Revenue prior", value=80.0, source=_src()
+    )
+    # Widen the financials mandate so _coerce_section does not strip
+    # the inputs of the derivation.
+    state.thesis.mandates[1].relevant_fact_ids = ["rev_ttm", "gm", "rev_prior"]
+
+    def responder(req: WriterRequest) -> WrittenSection:
+        if req.section_mandate.section_id == "financials":
+            return WrittenSection(
+                section_id="financials",
+                title="Financials",
+                body=("Revenue grew {{DERIVE:growth_rate|rev_ttm,rev_prior|rev_growth_yoy}} YoY."),
+            )
+        return WrittenSection(
+            section_id=req.section_mandate.section_id,
+            title=req.section_mandate.section_id.title(),
+            body="No numbers here.",
+        )
+
+    stage = WriteStage(FakeWriterClient(responder=responder))
+    stage.run(state, _ctx())
+
+    fin = next(s for s in state.sections if s.section_id == "financials")
+    assert "{{DERIVE:" not in fin.body
+    assert "{{CITE:rev_growth_yoy}}" in fin.body
+    minted = state.bundle.facts["rev_growth_yoy"]
+    assert isinstance(minted.source, ComputedSource)
+    assert minted.source.derived_from == ["rev_ttm", "rev_prior"]
+
+
+def test_write_stage_mints_estimate_marker_into_estimate_fact():
+    """An ESTIMATE marker must mint an EstimateSource fact and the
+    body must end up with the corresponding CITE marker."""
+    state = _state(with_chart=False)
+
+    def responder(req: WriterRequest) -> WrittenSection:
+        if req.section_mandate.section_id == "overview":
+            return WrittenSection(
+                section_id="overview",
+                title="Overview",
+                body=(
+                    "Moat {{CITE:moat}} supports "
+                    "{{ESTIMATE:upside_pct|0.10|percent|"
+                    "thesis-led margin expansion}} of upside."
+                ),
+            )
+        return WrittenSection(
+            section_id=req.section_mandate.section_id,
+            title=req.section_mandate.section_id.title(),
+            body="No numbers here.",
+        )
+
+    stage = WriteStage(FakeWriterClient(responder=responder))
+    stage.run(state, _ctx())
+
+    ov = next(s for s in state.sections if s.section_id == "overview")
+    assert "{{ESTIMATE:" not in ov.body
+    assert "{{CITE:upside_pct}}" in ov.body
+    minted = state.bundle.facts["upside_pct"]
+    assert isinstance(minted.source, EstimateSource)
+    assert minted.source.basis == "thesis-led margin expansion"
+    assert minted.source.stage == "write"
+
+
+def test_write_stage_fails_loud_on_unknown_derive_input():
+    """A DERIVE referencing a fact that isn't in the bundle must fail
+    the run, not silently drop the section."""
+    state = _state(with_chart=False)
+
+    def responder(req: WriterRequest) -> WrittenSection:
+        return WrittenSection(
+            section_id=req.section_mandate.section_id,
+            title="T",
+            body="{{DERIVE:growth_rate|missing_a,missing_b|x}}"
+            if req.section_mandate.section_id == "financials"
+            else "ok",
+        )
+
+    stage = WriteStage(FakeWriterClient(responder=responder))
+    with pytest.raises(RuntimeError) as exc:
+        stage.run(state, _ctx())
+    assert "missing_a" in str(exc.value) or "missing_b" in str(exc.value)
