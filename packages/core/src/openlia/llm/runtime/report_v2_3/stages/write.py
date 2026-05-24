@@ -60,6 +60,7 @@ class WriteStage(Stage):
                 section_mandate=mandate,
                 thesis=thesis,
                 language=state.language,
+                length=state.length,
                 relevant_facts=relevant_facts,
                 assigned_charts=chart_by_section.get(mandate.section_id, []),
                 prior_attempt=prior_by_section.get(mandate.section_id),

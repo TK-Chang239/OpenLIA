@@ -42,7 +42,19 @@ from openlia.llm.types import (
 )
 
 _DEFAULT_BASE_URL = "https://api.openai.com"
-_WEB_SEARCH_NATIVE_TYPE = "web_search"
+# OpenAI's Responses API has two web-search tool shapes:
+#   - "web_search"          — performs search but does NOT emit
+#                             url_citation annotations for gpt-5.4
+#                             (observed empirically — search runs but 0
+#                             citations come back).
+#   - "web_search_preview"  — the newer spec gpt-5.4 needs to emit
+#                             url_citation annotations inline with the
+#                             response text. This is what the runtime
+#                             actually wants: the citations are the
+#                             whole point of native web search.
+# The internal name we advertise stays "web_search" (Capabilities.web_search_native,
+# request.native_tools); only the wire-level type sent to OpenAI changes.
+_WEB_SEARCH_NATIVE_TYPE = "web_search_preview"
 
 
 def _normalize_tool_choice(tc: object) -> object:
@@ -77,7 +89,10 @@ def _build_responses_tools(request: LLMRequest) -> list[dict] | None:
     native = "web_search" in request.native_tools
     function_tools = request.tools or []
     if native:
-        function_tools = [t for t in function_tools if t.name != _WEB_SEARCH_NATIVE_TYPE]
+        # Defensive: when native web_search is enabled, drop any
+        # function-tool named "web_search" (the canonical name we
+        # advertise) so it doesn't double up with the native tool.
+        function_tools = [t for t in function_tools if t.name != "web_search"]
 
     tools: list[dict] = [
         {

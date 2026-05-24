@@ -16,11 +16,20 @@ import { request } from "./_request";
 
 export type V23Language = "en" | "zh-TW";
 
+// Built-in report templates surfaced to the user as the "Template" picker.
+// User-uploaded custom templates live alongside these (handled separately by
+// the templates API and resolved server-side to a section plan); from the
+// engine's perspective the run still carries a built-in report_type because
+// the section plan baked into a custom template is materialized into outline
+// sections at PLAN time.
 export type V23ReportType =
   | "initiation"
   | "update"
+  | "sector_research"
   | "morning_brief"
   | "earnings_review";
+
+export type V23ReportLength = "concise" | "normal" | "elaborative";
 
 export type V23RunStatus =
   | "running"
@@ -64,13 +73,23 @@ export interface V23RunState {
   raw_prompt: string;
   tickers: string[];
   report_type: V23ReportType;
+  length: V23ReportLength;
   language: V23Language;
+  // UUID of the custom template this run was started with, or null
+  // when a built-in template (report_type) was used.
+  template_id: string | null;
 }
 
 export interface V23StartRunPayload {
   raw_prompt: string;
   language?: V23Language;
   report_type?: V23ReportType;
+  length?: V23ReportLength;
+  /** When set, must be a UUID from the /api/report-templates collection.
+   *  Picks a custom template; report_type then describes the closest
+   *  built-in shape for compatibility (e.g. the server uses it for the
+   *  default valuation_plan when the custom template doesn't specify). */
+  template_id?: string | null;
   tickers: string[];
 }
 
@@ -80,6 +99,7 @@ export function startV23Run(payload: V23StartRunPayload): Promise<V23RunState> {
     body: JSON.stringify({
       language: "en",
       report_type: "initiation",
+      length: "normal",
       ...payload,
     }),
   });
@@ -115,6 +135,7 @@ export interface V23RunSummary {
   tickers: string[];
   raw_prompt: string;
   report_type: V23ReportType;
+  length: V23ReportLength;
   language: V23Language;
   created_at: string;
   updated_at: string;
@@ -362,7 +383,12 @@ export function streamV23Run(
 ): AbortController {
   return openSseStream(
     "/api/departments/equity-research/v2.3/runs/stream",
-    { language: "en", report_type: "initiation", ...payload },
+    {
+      language: "en",
+      report_type: "initiation",
+      length: "normal",
+      ...payload,
+    },
     handlers,
   );
 }

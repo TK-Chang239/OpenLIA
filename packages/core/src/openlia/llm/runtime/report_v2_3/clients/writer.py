@@ -19,6 +19,7 @@ from ..schemas import (
     BundleFact,
     ChartSpec,
     Language,
+    ReportLength,
     ReportThesis,
     SectionMandate,
     VerifyIssue,
@@ -41,6 +42,7 @@ class WriterRequest:
     language: Language
     relevant_facts: dict[str, BundleFact]
     assigned_charts: list[ChartSpec]
+    length: ReportLength = ReportLength.NORMAL
     prior_attempt: WrittenSection | None = None
     critique: list[VerifyIssue] | None = None
 

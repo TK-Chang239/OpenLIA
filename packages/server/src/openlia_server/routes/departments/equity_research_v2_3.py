@@ -40,6 +40,8 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
+from openlia.llm.capabilities import capabilities_for
+from openlia.llm.resolver import ResolvedModelRow
 from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyAnswers,
@@ -47,13 +49,13 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ClarifyProceed,
     ClarifyQuestion,
     Language,
+    ReportLength,
     ReportType,
     RunStatus,
 )
-from openlia.llm.resolver import ResolvedModelRow
 from openlia.llm.runtime.report_v2_3.slots import LLM_V23_SLOTS, V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from openlia.llm.types import Capabilities, ResolvedModel
+from openlia.llm.types import ResolvedModel
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -72,6 +74,13 @@ class StartPayload(BaseModel):
     raw_prompt: str
     language: Language = Language.EN
     report_type: ReportType = ReportType.INITIATION
+    length: ReportLength = ReportLength.NORMAL
+    # Optional custom-template selector. When null, the run uses the
+    # built-in template for `report_type` (one of: initiation, update,
+    # sector_research, morning_brief, earnings_review). When set, must
+    # be a UUID from the report_templates table; the planner pulls the
+    # template's section plan in place of the built-in default.
+    template_id: str | None = None
     tickers: list[str] = Field(..., min_length=1)
 
 
@@ -91,6 +100,7 @@ class RunSummaryOut(BaseModel):
     tickers: list[str]
     raw_prompt: str
     report_type: str
+    length: str
     language: str
     created_at: datetime
     updated_at: datetime
@@ -109,7 +119,9 @@ class RunStateOut(BaseModel):
     raw_prompt: str
     tickers: list[str]
     report_type: str
+    length: str
     language: str
+    template_id: str | None = None
 
     @classmethod
     def from_state(cls, state: ReportState) -> RunStateOut:
@@ -129,7 +141,9 @@ class RunStateOut(BaseModel):
             raw_prompt=state.raw_prompt,
             tickers=list(state.tickers),
             report_type=state.report_type.value,
+            length=state.length.value,
             language=state.language.value,
+            template_id=state.template_id,
         )
 
 
@@ -268,6 +282,8 @@ def build_equity_research_v2_3_router(
             raw_prompt=payload.raw_prompt,
             language=payload.language,
             report_type=payload.report_type,
+            length=payload.length,
+            template_id=payload.template_id,
             tickers=payload.tickers,
         )
         return RunStateOut.from_state(state)
@@ -341,6 +357,7 @@ def build_equity_research_v2_3_router(
                 tickers=r.tickers,
                 raw_prompt=r.raw_prompt,
                 report_type=r.report_type,
+                length=r.length,
                 language=r.language,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
@@ -562,22 +579,24 @@ def _to_resolved_model(row: ResolvedModelRow) -> ResolvedModel:
     """Translate the SQL registry's ``ResolvedModelRow`` into the
     ``ResolvedModel`` dataclass the runtime adapters consume.
 
-    ``ResolvedModelRow`` already flattens provider + credentials, so this
-    is mostly a field rename. v2.3 caps are hard-coded for now since the
-    per-stage profiles are still being wired (PR12 follow-up); the row's
-    ``capability_override`` is intentionally ignored until then.
+    Capabilities are pulled from the central registry (`capabilities_for`)
+    so per-model facts like ``web_search_native``, vision, and the real
+    token caps flow through. Without this lookup the wiring layer falls
+    back to a minimal Capabilities() that always reports
+    web_search_native=False — and the v2.3 researcher silently runs
+    without web_search.
     """
+    capabilities = capabilities_for(
+        provider_kind=row.provider_kind,
+        model=row.model_ref,
+        override=row.overrides,
+    )
     return ResolvedModel(
         provider_kind=row.provider_kind,
         provider_id=row.provider_id,
         model_id=row.model_id,
         model_ref=row.model_ref,
         credentials=row.credentials,
-        capabilities=Capabilities(
-            structured_output=True,
-            tool_calling=True,
-            max_context_tokens=128_000,
-            max_output_tokens=4096,
-        ),
+        capabilities=capabilities,
         overrides=row.overrides or {},
     )

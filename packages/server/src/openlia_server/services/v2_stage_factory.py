@@ -137,10 +137,12 @@ class SyncToolLlmClient:
         *,
         max_tokens: int = 4096,
         temperature: float = 0.3,
+        native_tools: tuple[str, ...] = (),
     ) -> None:
         self._provider = provider
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self._native_tools = native_tools
 
     def send(
         self,
@@ -153,6 +155,7 @@ class SyncToolLlmClient:
             messages=list(messages),
             system=system,
             tools=list(tools) if tools else None,
+            native_tools=self._native_tools,
             max_tokens=self._max_tokens,
             temperature=self._temperature,
         )
@@ -160,6 +163,7 @@ class SyncToolLlmClient:
         return ToolTurnResponse(
             text=response.text or "",
             tool_calls=tuple(response.tool_calls),
+            citations=tuple(response.citations),
         )
 
 

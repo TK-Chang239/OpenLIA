@@ -14,12 +14,13 @@
  * the per-user assignments + persistence + clarify round-trip work in
  * a browser. Richer UX (report renderer, history, retries) follows.
  */
-import { AlertTriangle, Download } from "lucide-react";
+import { AlertTriangle, Download, MessageSquare } from "lucide-react";
 import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 
 import type { ReportLength, ReportMode } from "../../api/equity-research";
 import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import {
+  type V23ReportLength,
   type V23ReportType,
   type V23RunPayload,
   type V23RunState,
@@ -39,13 +40,22 @@ import { V23ReportCard } from "./V23ReportCard";
 import { V23StageStrip } from "./V23StageStrip";
 import { WelcomeStage } from "./WelcomeStage";
 
-// v2.2 ReportMode -> v2.3 ReportType. v2.3 also offers morning_brief
-// and earnings_review which v2.2 doesn't model — defer surfacing
-// those until the Report Settings modal learns about v2.3 modes.
+// Legacy v2.2 "mode" -> built-in v2.3 template id. Modes are being
+// retired in favour of first-class templates (where morning_brief,
+// earnings_review, and user-uploaded custom templates are peers of the
+// stock_* templates). Until the Report Settings modal learns about the
+// full v2.3 template list, the v2.2 mode the user picked maps to the
+// closest built-in template.
 const MODE_TO_V23_TYPE: Record<ReportMode, V23ReportType> = {
   stock_initiation: "initiation",
   stock_update: "update",
-  sector_research: "initiation",
+  sector_research: "sector_research",
+};
+
+const LENGTH_TO_V23: Record<ReportLength, V23ReportLength> = {
+  concise: "concise",
+  normal: "normal",
+  elaborative: "elaborative",
 };
 
 const STAGE_LABEL: Record<V23Stage, string> = {
@@ -145,19 +155,43 @@ export function V23Composer({
   // Track the last run_id we surfaced to the parent so we don't fire
   // onRunIdChange on every render once the id stabilises.
   const lastEmittedRunIdRef = useRef<string | null>(null);
+  // Mirrors of submittedPrompt / submittedTickers so the SSE handler
+  // can read the latest values without re-binding on every render.
+  const submittedPromptRef = useRef<string | null>(null);
+  const submittedTickersRef = useRef<string[]>([]);
+  useEffect(() => {
+    submittedPromptRef.current = submittedPrompt;
+  }, [submittedPrompt]);
+  useEffect(() => {
+    submittedTickersRef.current = submittedTickers;
+  }, [submittedTickers]);
+
+  // Tracks the previous value of `initialRunId` so the reattach effect
+  // can distinguish an explicit URL clear (value -> null, the New Chat
+  // case) from the harmless null -> null transitions that happen
+  // between SSE landing a fresh run and the parent mirroring the new
+  // run_id into the URL. Without this, a freshly completed run would
+  // be torn down a frame before the URL caught up, briefly showing the
+  // welcome screen.
+  const prevInitialRunIdRef = useRef<string | null | undefined>(initialRunId);
 
   // Reattach: when the page mounts (or navigates) with ?run_id_v23=<id>,
   // pull the persisted state so the user lands back on the report,
   // clarify modal, or error banner they left. Mid-RUNNING reattach is
   // handled by the polling effect below (no live SSE to re-subscribe to).
   //
-  // When ?run_id_v23 transitions from a value to null (parent cleared
-  // it — e.g. New Chat in the topbar), tear the run state down so the
-  // user lands on a clean welcome screen instead of seeing the stale
-  // active surface.
+  // Teardown rule: only clear local state when ?run_id_v23 just
+  // transitioned from a value to null AND that prior value matched the
+  // active run. The plain null/null case (SSE state landed before the
+  // URL bridge mirrored the new id) leaves local state alone.
   useEffect(() => {
+    const prev = prevInitialRunIdRef.current;
+    prevInitialRunIdRef.current = initialRunId;
+
     if (initialRunId === null) {
-      if (run !== null || payload !== null || busy || stage !== null) {
+      const explicitClear =
+        prev !== null && prev !== undefined && run?.run_id === prev;
+      if (explicitClear) {
         closeStream();
         setRun(null);
         setStage(null);
@@ -315,6 +349,29 @@ export function V23Composer({
         if (evt.data.slot) setFailedStage(evt.data.slot);
         setBusy(false);
         setRepoRefreshKey((k) => k + 1);
+        // Server's SSE driver doesn't emit a `state` frame when the
+        // worker raised mid-run, so without a synthetic run here the
+        // composer would land in (run=null, busy=false, stage=null,
+        // payload=null) — exactly the welcome-screen predicate. Mark
+        // the run failed locally so the FailedReportCard renders in
+        // place of the welcome stage.
+        setRun((prev) =>
+          prev ?? {
+            run_id: "",
+            status: "failed",
+            current_stage: evt.data.slot ?? null,
+            pending_questions: [],
+            clarify_result: null,
+            last_error: evt.data.error,
+            retry_count: 0,
+            raw_prompt: submittedPromptRef.current ?? "",
+            tickers: submittedTickersRef.current,
+            report_type: "initiation",
+            length: "normal",
+            language: "en",
+            template_id: null,
+          },
+        );
       } else if (evt.event === "completed") {
         setStage(null);
       } else if (evt.event === "state") {
@@ -358,6 +415,7 @@ export function V23Composer({
         raw_prompt: promptText,
         tickers: parsed,
         report_type: MODE_TO_V23_TYPE[mode],
+        length: LENGTH_TO_V23[length],
       },
       {
         onEvent: handleStreamEvent,
@@ -456,6 +514,13 @@ export function V23Composer({
                   }
                 />
               </div>
+            ) : null}
+
+            {run?.clarify_result?.outcome === "proceed" &&
+            run.clarify_result.assumptions.length > 0 ? (
+              <ClarifyAssumptionsCard
+                assumptions={run.clarify_result.assumptions}
+              />
             ) : null}
 
             {run !== null || stage !== null ? (
@@ -562,6 +627,30 @@ export function V23Composer({
           onDismiss={() => setClarifyDismissed(true)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function ClarifyAssumptionsCard({
+  assumptions,
+}: {
+  assumptions: string[];
+}): JSX.Element {
+  return (
+    <div
+      data-testid="er-v2-3-clarify-assumptions"
+      className="self-start rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-2 text-[12px]"
+    >
+      <div className="flex items-center gap-[6px] font-mono text-[10.5px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+        <MessageSquare size={11} /> Clarify · proceeded with assumptions
+      </div>
+      <ul className="mt-[6px] flex flex-col gap-[2px] text-[--color-text-secondary]">
+        {assumptions.map((a, i) => (
+          <li key={`${i}-${a}`} className="leading-[1.4]">
+            {a}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
