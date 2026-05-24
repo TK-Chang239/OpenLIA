@@ -42,6 +42,7 @@ from openlia.llm.runtime.report_v2_3.stages import (
     SynthesizeStage,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _src() -> DataProviderSource:
@@ -70,6 +71,7 @@ def _state_for_synth() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     s.bundle = ResearchBundle(
         tickers=["NVDA"],
@@ -159,6 +161,7 @@ def _state_for_compute() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     rev_fact = BundleFact(id="rev_ttm", label="Revenue TTM", value=100.0, source=_src())
     s.bundle = ResearchBundle(tickers=["NVDA"], facts={"rev_ttm": rev_fact})

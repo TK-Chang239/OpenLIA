@@ -53,6 +53,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     WrittenSection,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 from openlia_server.services.v2_3_runner_factory import make_v2_3_runner_factory
 
 
@@ -64,6 +65,7 @@ def _seed_state() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     src = DataProviderSource(
         provider="EODHD",
@@ -502,6 +504,7 @@ def test_all_eight_stages_compose_end_to_end() -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
 
     state = factory().start(state)

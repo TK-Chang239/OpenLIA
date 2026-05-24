@@ -11,6 +11,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.slots import V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _state() -> ReportState:
@@ -21,6 +22,7 @@ def _state() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
         model_assignments={
             V23Slot.CLARIFY: "claude-sonnet-4-6",
             V23Slot.SYNTHESIZE: "claude-opus-4-7",
@@ -39,8 +41,43 @@ def test_report_state_allows_empty_tickers_for_clarify_inference() -> None:
         language=Language.EN,
         report_type=ReportType.UPDATE,
         tickers=[],
+        template=get_builtin(ReportType.UPDATE),
     )
     assert state.tickers == []
+
+
+def test_report_state_requires_template() -> None:
+    """Constructing ReportState without a template must fail loudly —
+    every run needs the structure the template provides."""
+    import pytest
+
+    with pytest.raises(Exception):  # Pydantic ValidationError or TypeError
+        ReportState(
+            run_id="r",
+            user_id="u",
+            raw_prompt="p",
+            language=Language.EN,
+            report_type=ReportType.INITIATION,
+            tickers=["NVDA"],
+        )
+
+
+def test_report_state_carries_template_through_serialization() -> None:
+    """The template field must round-trip via the persistence layer."""
+    template = get_builtin(ReportType.INITIATION)
+    state = ReportState(
+        run_id="r",
+        user_id="u",
+        raw_prompt="p",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+        template=template,
+    )
+
+    dumped = state.model_dump_json()
+    restored = ReportState.model_validate_json(dumped)
+    assert restored.template == template
 
 
 def test_report_state_defaults_running_with_no_current_stage() -> None:

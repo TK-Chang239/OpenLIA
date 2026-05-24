@@ -18,6 +18,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.stages import ClarifyStage, StageContext
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _state() -> ReportState:
@@ -28,6 +29,7 @@ def _state() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
 
 
@@ -143,6 +145,7 @@ def test_proceed_copies_inferred_tickers_when_state_has_none() -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=[],
+        template=get_builtin(ReportType.INITIATION),
     )
     client = FakeClarifierClient(
         result=ClarifyProceed(inferred_tickers=["NVDA"], assumptions=["focus: AI"])
@@ -167,6 +170,7 @@ def test_proceed_does_not_overwrite_explicit_tickers() -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     client = FakeClarifierClient(
         result=ClarifyProceed(inferred_tickers=["AMD"])  # disagreement
@@ -196,6 +200,7 @@ def test_resume_with_ticker_answer_populates_state_tickers() -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=[],
+        template=get_builtin(ReportType.INITIATION),
     )
     state.clarify_result = ClarifyNeedsInput(questions=[q])
     state.suspend_for_clarify([q])

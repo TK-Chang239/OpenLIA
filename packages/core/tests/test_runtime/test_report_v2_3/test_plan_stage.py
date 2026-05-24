@@ -17,6 +17,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.stages import PlanStage, StageContext
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _state() -> ReportState:
@@ -27,6 +28,7 @@ def _state() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     s.clarify_result = ClarifyProceed(assumptions=["audience: PM", "horizon: 12 months"])
     return s
