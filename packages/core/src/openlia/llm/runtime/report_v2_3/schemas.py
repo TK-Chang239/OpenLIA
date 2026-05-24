@@ -526,6 +526,24 @@ class ReportThesis(BaseModel):
 CITE_RE = re.compile(r"\{\{CITE:([a-zA-Z0-9_]+)\}\}")
 FIG_RE = re.compile(r"\{\{FIG:([a-zA-Z0-9_]+)\}\}")
 
+# Inline minting grammar — resolved by WriteStage before VERIFY sees the body.
+# DERIVE: {{DERIVE:<method>|<input_fact_ids_csv>|<new_fact_id>}}
+#   method ∈ DERIVATION_REGISTRY keys (lowercase identifiers).
+#   input_fact_ids_csv is a comma-separated list of bundle fact_ids the
+#     method consumes.
+#   new_fact_id becomes the BundleFact.id of the resulting ComputedSource fact.
+DERIVE_RE = re.compile(
+    r"\{\{DERIVE:([a-z_]+)\|([a-zA-Z0-9_,]+)\|([a-zA-Z0-9_]+)\}\}"
+)
+
+# ESTIMATE: {{ESTIMATE:<new_fact_id>|<value>|<unit>|<basis>}}
+#   new_fact_id becomes the BundleFact.id of the resulting EstimateSource fact.
+#   value is a signed decimal (no thousands separator); unit may be empty.
+#   basis is free prose with no '}}' (regex is non-greedy on '}').
+ESTIMATE_RE = re.compile(
+    r"\{\{ESTIMATE:([a-zA-Z0-9_]+)\|(-?\d+(?:\.\d+)?)\|([a-zA-Z_%]*)\|([^}]+?)\}\}"
+)
+
 
 class WrittenSection(BaseModel):
     """Output of one WRITE call. Body contains {{CITE:}} and {{FIG:}} tokens."""
