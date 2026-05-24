@@ -104,6 +104,12 @@ class RunStateOut(BaseModel):
     clarify_result: ClarifyResultOut | None
     last_error: str | None
     retry_count: int
+    # Echoed so the composer can render a UserBubble with the user's
+    # original request even after a page reload reattaches the run.
+    raw_prompt: str
+    tickers: list[str]
+    report_type: str
+    language: str
 
     @classmethod
     def from_state(cls, state: ReportState) -> RunStateOut:
@@ -120,6 +126,10 @@ class RunStateOut(BaseModel):
             clarify_result=cr,
             last_error=state.last_error,
             retry_count=state.retry_count,
+            raw_prompt=state.raw_prompt,
+            tickers=list(state.tickers),
+            report_type=state.report_type.value,
+            language=state.language.value,
         )
 
 

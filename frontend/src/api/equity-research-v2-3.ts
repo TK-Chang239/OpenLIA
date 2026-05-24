@@ -59,6 +59,12 @@ export interface V23RunState {
   clarify_result: V23ClarifyResult | null;
   last_error: string | null;
   retry_count: number;
+  // Echoed so a reattached run can still render the user's original
+  // request (UserBubble) without an extra round trip to /runs.
+  raw_prompt: string;
+  tickers: string[];
+  report_type: V23ReportType;
+  language: V23Language;
 }
 
 export interface V23StartRunPayload {

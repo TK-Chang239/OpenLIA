@@ -861,6 +861,23 @@ export default function EquityResearch(): JSX.Element {
     }
   };
 
+  // Strip every v2.x-specific URL param so switching surfaces (v2.2
+   // session vs v2.3 run) doesn't accidentally re-hydrate the previous
+   // selection through one of the reattach effects.
+  const clearV2xUrlParams = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("run_id_v23");
+        next.delete("run_id_v2");
+        next.delete("report_id");
+        next.delete("view");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   const handleSelectSession = useCallback((id: string) => {
     if (id === sessionIdRef.current) return;
     setSessionId(id);
@@ -871,7 +888,8 @@ export default function EquityResearch(): JSX.Element {
     resetReportRef.current();
     chatStreamResetRef.current();
     fileViewer.close();
-  }, [fileViewer]);
+    clearV2xUrlParams();
+  }, [fileViewer, clearV2xUrlParams]);
 
   const handleNewChat = useCallback(() => {
     setSessionId(null);
@@ -887,7 +905,8 @@ export default function EquityResearch(): JSX.Element {
     resetReportRef.current();
     chatStreamResetRef.current();
     fileViewer.close();
-  }, [fileViewer]);
+    clearV2xUrlParams();
+  }, [fileViewer, clearV2xUrlParams]);
 
   // Publish chat-header state to the global TopBar so the breadcrumb
   // dropdown + New Chat button render. Register on welcome state too
