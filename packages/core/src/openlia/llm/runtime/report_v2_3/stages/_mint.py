@@ -51,7 +51,9 @@ def mint_inline_facts(
     re-runs over the combined facts).
     """
     new_facts: list[BundleFact] = []
-    seen_ids: set[str] = set()
+    # DERIVE runs before ESTIMATE so DERIVE-minted facts are visible to subsequent
+    # markers; the shared seen_markers dict catches cross-type new_id collisions.
+    seen_markers: dict[str, str] = {}
 
     # 1) DERIVE
     def _derive_sub(m: re.Match[str]) -> str:
@@ -68,8 +70,15 @@ def mint_inline_facts(
                     f"DERIVE: input fact '{fid}' not in bundle "
                     f"(section '{mandate.section_id}', method '{method_name}')."
                 )
-        if new_id in seen_ids:
-            return f"{{{{CITE:{new_id}}}}}"
+        raw = m.group(0)
+        if new_id in seen_markers:
+            if seen_markers[new_id] == raw:
+                return f"{{{{CITE:{new_id}}}}}"
+            raise MintError(
+                f"DERIVE: new_id '{new_id}' used by two different markers "
+                f"in section '{mandate.section_id}'. Each new_id must be unique to "
+                f"one marker — pick distinct ids."
+            )
         if new_id in bundle.facts:
             raise MintError(
                 f"DERIVE: new_id '{new_id}' collides with an existing bundle fact "
@@ -87,7 +96,7 @@ def mint_inline_facts(
                 f"'{mandate.section_id}': {exc}"
             ) from exc
         new_facts.append(fact)
-        seen_ids.add(new_id)
+        seen_markers[new_id] = raw
         return f"{{{{CITE:{new_id}}}}}"
 
     body = DERIVE_RE.sub(_derive_sub, body)
@@ -96,8 +105,15 @@ def mint_inline_facts(
     def _estimate_sub(m: re.Match[str]) -> str:
         new_id, value_str, unit, basis = m.group(1), m.group(2), m.group(3), m.group(4)
         value = float(value_str)
-        if new_id in seen_ids:
-            return f"{{{{CITE:{new_id}}}}}"
+        raw = m.group(0)
+        if new_id in seen_markers:
+            if seen_markers[new_id] == raw:
+                return f"{{{{CITE:{new_id}}}}}"
+            raise MintError(
+                f"ESTIMATE: new_id '{new_id}' used by two different markers "
+                f"in section '{mandate.section_id}'. Each new_id must be unique to "
+                f"one marker — pick distinct ids."
+            )
         if new_id in bundle.facts:
             raise MintError(
                 f"ESTIMATE: new_id '{new_id}' collides with an existing bundle "
@@ -115,7 +131,7 @@ def mint_inline_facts(
             ),
         )
         new_facts.append(fact)
-        seen_ids.add(new_id)
+        seen_markers[new_id] = raw
         return f"{{{{CITE:{new_id}}}}}"
 
     body = ESTIMATE_RE.sub(_estimate_sub, body)
@@ -124,5 +140,5 @@ def mint_inline_facts(
 
 
 def _label_from_id(fact_id: str) -> str:
-    """fact_id 'rev_growth_yoy' -> 'Rev growth yoy'. Cheap, deterministic."""
-    return fact_id.replace("_", " ").capitalize()
+    """fact_id 'rev_growth_yoy' -> 'Rev Growth Yoy'. Cheap, deterministic."""
+    return fact_id.replace("_", " ").title()
