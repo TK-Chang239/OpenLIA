@@ -812,9 +812,9 @@ Output is a single JSON VerifyResult:
   ]
 }
 
-What to look for (LLM-only checks — deterministic value-resolution
-runs before you, so do NOT flag value_mismatch — the runner already
-catches numeric drift):
+What to look for (LLM-only checks — deterministic checks already cover
+value_mismatch and uncited_number, so leave both to the runner and
+focus on coherence-level concerns):
 
 - cross_section_contradiction: two sections take incompatible stances
   on the same point.
@@ -822,7 +822,6 @@ catches numeric drift):
 - chart_text_mismatch: prose describing a chart diverges from what
   the chart's series shows (chart series are listed inline on the
   thesis).
-- uncited_number: a numerical claim has no ``{{CITE:}}`` token.
 - thesis_drift: a section's takeaway contradicts the central_argument
   or valuation_stance.
 
