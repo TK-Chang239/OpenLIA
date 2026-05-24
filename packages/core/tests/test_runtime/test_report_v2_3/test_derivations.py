@@ -48,12 +48,17 @@ def test_growth_rate_computes_pct_change_and_attaches_provenance():
 
 
 def test_yoy_delta_emits_absolute_difference():
-    cur = BundleFact(id="op_inc_fy25", label="Op income FY25", value=42.0, source=_src())
-    prev = BundleFact(id="op_inc_fy24", label="Op income FY24", value=30.0, source=_src())
+    cur = BundleFact(
+        id="op_inc_fy25", label="Op income FY25", value=42.0, unit="usd_millions", source=_src()
+    )
+    prev = BundleFact(
+        id="op_inc_fy24", label="Op income FY24", value=30.0, unit="usd_millions", source=_src()
+    )
 
     out = yoy_delta(cur, prev, new_id="op_inc_yoy", label="Op income YoY")
 
     assert out.value == pytest.approx(12.0)
+    assert out.unit == "usd_millions"
     assert out.source.method == "yoy_delta"
     assert out.source.derived_from == ["op_inc_fy25", "op_inc_fy24"]
 
