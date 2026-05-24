@@ -79,6 +79,7 @@ class SourceType(StrEnum):
     WEB = "web"  # qualitative / narrative
     FILING = "filing"  # 10-K, 10-Q, 8-K, etc.
     COMPUTED = "computed"  # derived from other facts
+    ESTIMATE = "estimate"  # analyst judgment — explicit, no external source
 
 
 class ChartType(StrEnum):
@@ -160,7 +161,29 @@ class ComputedSource(BaseModel):
     )
 
 
-Provenance = DataProviderSource | WebSource | FilingSource | ComputedSource
+class EstimateSource(BaseModel):
+    """An explicit analyst estimate. No external provider produced this — it
+    is judgment formed at write time. Made first-class so estimates do not
+    masquerade as sourced facts and so the reader sees the distinction in
+    the footnote."""
+
+    type: Literal[SourceType.ESTIMATE] = SourceType.ESTIMATE
+    basis: str = Field(
+        ...,
+        min_length=1,
+        description="Short prose explaining why the analyst holds this view.",
+    )
+    derived_from: list[str] = Field(
+        default_factory=list,
+        description="Optional: fact_ids of measured/computed facts that informed "
+        "the estimate. Empty when the estimate is pure thesis.",
+    )
+    stage: Literal["synthesize", "write"]
+
+
+Provenance = (
+    DataProviderSource | WebSource | FilingSource | ComputedSource | EstimateSource
+)
 
 
 # ---------------------------------------------------------------------------
@@ -636,6 +659,8 @@ def render_citation(fact: BundleFact) -> str:
         return f"{s.company} {s.form_type} ({s.fiscal_period}){page}."
     if isinstance(s, ComputedSource):
         return f"Author calculation: {s.method}."
+    if isinstance(s, EstimateSource):
+        return f"Estimate: {s.basis}."
     raise TypeError(f"Unknown source type: {type(s)}")
 
 

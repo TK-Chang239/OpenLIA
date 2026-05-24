@@ -21,6 +21,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     DataProviderSource,
     DCFInputs,
     DCFResult,
+    EstimateSource,
     FilingSource,
     Language,
     Outline,
@@ -30,6 +31,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ResearchBundle,
     SectionMandate,
     SensitivityInputs,
+    SourceType,
     ValuationMethod,
     ValuationPlan,
     WebSource,
@@ -330,6 +332,55 @@ def test_render_citation_per_provenance_variant() -> None:
         source=ComputedSource(method="EV / EBITDA", derived_from=["x"]),
     )
     assert render_citation(computed) == "Author calculation: EV / EBITDA."
+
+
+def test_estimate_source_round_trips_through_provenance_union():
+    fact = BundleFact(
+        id="upside_pct",
+        label="Implied upside",
+        value=0.10,
+        unit="percent",
+        source=EstimateSource(
+            basis="projection from margin-expansion thesis",
+            derived_from=[],
+            stage="write",
+        ),
+    )
+    dumped = fact.model_dump_json()
+    restored = BundleFact.model_validate_json(dumped)
+    assert isinstance(restored.source, EstimateSource)
+    assert restored.source.type == SourceType.ESTIMATE
+    assert restored.source.basis == "projection from margin-expansion thesis"
+
+
+def test_render_citation_handles_estimate_source():
+    fact = BundleFact(
+        id="upside_pct",
+        label="Implied upside",
+        value=0.10,
+        unit="percent",
+        source=EstimateSource(
+            basis="margin-expansion thesis",
+            derived_from=[],
+            stage="write",
+        ),
+    )
+    assert render_citation(fact) == "Estimate: margin-expansion thesis."
+
+
+def test_estimate_source_records_derived_from_when_supplied():
+    fact = BundleFact(
+        id="upside_to_target",
+        label="Upside to target",
+        value=0.15,
+        unit="percent",
+        source=EstimateSource(
+            basis="target $120 vs current price",
+            derived_from=["price_target", "px_last"],
+            stage="write",
+        ),
+    )
+    assert fact.source.derived_from == ["price_target", "px_last"]
 
 
 # ---------------------------------------------------------------------------
