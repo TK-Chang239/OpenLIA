@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
+
 from openlia.llm.runtime.report_v2_3.clients.verifier import FakeVerifierClient
 from openlia.llm.runtime.report_v2_3.clients.writer import FakeWriterClient, WriterRequest
 from openlia.llm.runtime.report_v2_3.schemas import (
@@ -121,6 +123,8 @@ def test_number_origin_discipline_holds_through_write_and_verify():
 
     minted_derived = state.bundle.facts["rev_growth_yoy"]
     assert isinstance(minted_derived.source, ComputedSource)
+    assert minted_derived.value == pytest.approx(0.25)
+    assert minted_derived.source.derived_from == ["rev_fy25", "rev_fy24"]
     assert render_citation(minted_derived) == "Author calculation: growth_rate."
 
     minted_estimate = state.bundle.facts["upside_pct"]
