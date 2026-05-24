@@ -205,36 +205,62 @@ def test_missing_bundle_raises() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_writer_returning_wrong_section_id_raises() -> None:
-    def _wrong_id(req: WriterRequest) -> WrittenSection:
-        return WrittenSection(section_id="not_the_mandate", title="x", body="")
+def test_writer_returning_wrong_section_id_is_coerced_to_mandate() -> None:
+    """The LLM occasionally echoes a different section_id from elsewhere
+    in the thesis. The mandate the writer was called with is the source
+    of truth — coerce the id silently rather than fail the whole run."""
 
-    with pytest.raises(RuntimeError, match="section_id"):
-        WriteStage(FakeWriterClient(responder=_wrong_id)).run(_state(), _ctx())
+    def _wrong_id_then_ok(req: WriterRequest) -> WrittenSection:
+        # First mandate ("overview") gets the wrong label; the body and
+        # citations are still correct for that mandate.
+        if req.section_mandate.section_id == "overview":
+            return WrittenSection(
+                section_id="competition",
+                title="Overview",
+                body="Moat: {{CITE:moat}}",
+            )
+        return WrittenSection(
+            section_id="financials",
+            title="Financials",
+            body="Rev: {{CITE:rev_ttm}}",
+        )
+
+    state = WriteStage(FakeWriterClient(responder=_wrong_id_then_ok)).run(_state(), _ctx())
+
+    assert [s.section_id for s in state.sections] == ["overview", "financials"]
+    assert "{{CITE:moat}}" in state.sections[0].body
 
 
-def test_section_citing_fact_outside_mandate_raises() -> None:
+def test_section_citing_fact_outside_mandate_strips_the_marker() -> None:
     """The 'overview' mandate only allows {{CITE:moat}}, but the writer
-    tries to cite a fact from the 'financials' slice — must reject."""
+    cites a fact from the 'financials' slice. The out-of-scope marker
+    is stripped from the body; allowed citations stay intact."""
 
     bodies = {
-        "overview": "Sneaky: {{CITE:rev_ttm}}.",  # rev_ttm is not in overview's slice
+        "overview": "Moat: {{CITE:moat}}. Sneaky: {{CITE:rev_ttm}}.",
         "financials": "Rev: {{CITE:rev_ttm}}.",
     }
     client = FakeWriterClient(responder=_responder_for_mandates(bodies))
-    with pytest.raises(RuntimeError, match="cites facts outside"):
-        WriteStage(client).run(_state(), _ctx())
+    state = WriteStage(client).run(_state(), _ctx())
+
+    overview = next(s for s in state.sections if s.section_id == "overview")
+    assert "{{CITE:moat}}" in overview.body
+    assert "{{CITE:rev_ttm}}" not in overview.body
 
 
-def test_section_referencing_chart_outside_mandate_raises() -> None:
-    """Only 'financials' has rev_chart assigned; 'overview' references it."""
+def test_section_referencing_chart_outside_mandate_strips_the_marker() -> None:
+    """Only 'financials' has rev_chart assigned; 'overview' references it
+    anyway. The FIG marker is stripped, body otherwise preserved."""
     bodies = {
-        "overview": "See {{FIG:rev_chart}}.",
+        "overview": "Moat: {{CITE:moat}}. See {{FIG:rev_chart}}.",
         "financials": "Rev: {{CITE:rev_ttm}}.",
     }
     client = FakeWriterClient(responder=_responder_for_mandates(bodies))
-    with pytest.raises(RuntimeError, match="charts outside"):
-        WriteStage(client).run(_state(), _ctx())
+    state = WriteStage(client).run(_state(), _ctx())
+
+    overview = next(s for s in state.sections if s.section_id == "overview")
+    assert "{{FIG:rev_chart}}" not in overview.body
+    assert "{{CITE:moat}}" in overview.body
 
 
 # ---------------------------------------------------------------------------
