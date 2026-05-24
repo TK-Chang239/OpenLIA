@@ -105,3 +105,21 @@ def test_reports_only_first_violation_per_section():
     assert "$60B" in detail
     assert "25%" in detail
     assert "12x" in detail
+
+
+def test_flags_body_leading_naked_number():
+    """A body that starts with a bare numeric token must be flagged.
+    Exercises the start>=1 / start>=2 guards in _is_exempt — those
+    must not silently exempt a leading number."""
+    issues = _check_uncited_numbers([_ws("15x forward earnings is the multiple.")])
+    assert len(issues) == 1
+    assert "15x" in issues[0].detail
+
+
+def test_flags_negative_number_with_full_token_in_detail():
+    """A negative number must be flagged AND the detail message must
+    include the minus sign so the rewrite prompt sees the actual token
+    the writer typed."""
+    issues = _check_uncited_numbers([_ws("Margins compressed -25% YoY.")])
+    assert len(issues) == 1
+    assert "-25%" in issues[0].detail
