@@ -89,7 +89,7 @@ export function adaptV23PayloadToSchema(payload: V23RunPayload): ReportSchema {
   }));
 
   const keyMetrics: Metric[] = payload.thesis.canonical_figures.map((cf) => ({
-    label: humaniseFactId(cf.fact_id),
+    label: factLabel(cf.fact_id, payload.bundle_facts),
     value: cf.display,
   }));
 
@@ -166,13 +166,68 @@ function resolveValueForCategory(
   return 0;
 }
 
-/** Convert a fact id like "revenue_ttm" into "Revenue ttm" for display
- *  on cover key metrics. The engine's labels would be richer but they
- *  aren't surfaced on canonical_figures. */
+/** Prefer the engine-supplied label from bundle_facts when present —
+ *  the writer set it for human display in the canonical table. Fall
+ *  back to a suffix-aware humaniser for cases where the canonical
+ *  figure references a fact the bundle doesn't carry (shouldn't
+ *  happen in practice but defends against legacy runs). */
+function factLabel(
+  factId: string,
+  facts: Record<string, V23BundleFact>,
+): string {
+  const fact = facts[factId];
+  if (fact && typeof fact.label === "string" && fact.label.trim().length > 0) {
+    return fact.label;
+  }
+  return humaniseFactId(factId);
+}
+
+// Common id suffixes -> display fragment. Picked greedily — order matters.
+const SUFFIX_MAP: ReadonlyArray<[string, string]> = [
+  ["_ttm", " (TTM)"],
+  ["_ntm", " (NTM)"],
+  ["_fy25", " FY2025"],
+  ["_fy24", " FY2024"],
+  ["_fy23", " FY2023"],
+  ["_fy22", " FY2022"],
+  ["_fy21", " FY2021"],
+  ["_5y", " (5y)"],
+  ["_3y", " (3y)"],
+  ["_yoy", " YoY"],
+  ["_qoq", " QoQ"],
+];
+
+const ACRONYMS = new Set([
+  "fcf",
+  "ebitda",
+  "ebit",
+  "eps",
+  "roic",
+  "roe",
+  "roa",
+  "pe",
+  "pb",
+  "ps",
+  "fpe",
+  "dcf",
+]);
+
 function humaniseFactId(id: string): string {
-  const parts = id.split("_");
-  if (parts.length === 0) return id;
-  return parts
-    .map((p, i) => (i === 0 ? p.charAt(0).toUpperCase() + p.slice(1) : p))
-    .join(" ");
+  let working = id;
+  let suffix = "";
+  for (const [tail, sfx] of SUFFIX_MAP) {
+    if (working.toLowerCase().endsWith(tail)) {
+      suffix = sfx;
+      working = working.slice(0, working.length - tail.length);
+      break;
+    }
+  }
+  const parts = working.split("_").filter(Boolean);
+  if (parts.length === 0) return id + suffix;
+  const formatted = parts.map((p, i) => {
+    if (ACRONYMS.has(p.toLowerCase())) return p.toUpperCase();
+    if (i === 0) return p.charAt(0).toUpperCase() + p.slice(1);
+    return p.toLowerCase();
+  });
+  return formatted.join(" ") + suffix;
 }
