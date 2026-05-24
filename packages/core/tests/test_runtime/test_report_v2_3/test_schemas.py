@@ -383,6 +383,25 @@ def test_estimate_source_records_derived_from_when_supplied():
     assert fact.source.derived_from == ["price_target", "px_last"]
 
 
+def test_research_bundle_rejects_estimate_with_dangling_derived_from():
+    """EstimateSource.derived_from must be subject to the same integrity
+    check as ComputedSource.derived_from — dangling fact_ids should fail
+    bundle construction."""
+    bad_fact = BundleFact(
+        id="upside_to_target",
+        label="Upside to target",
+        value=0.15,
+        unit="percent",
+        source=EstimateSource(
+            basis="target $120 vs current price",
+            derived_from=["nonexistent_fact"],
+            stage="write",
+        ),
+    )
+    with pytest.raises(ValueError, match="derives from missing facts"):
+        ResearchBundle(tickers=["NVDA"], facts={"upside_to_target": bad_fact})
+
+
 # ---------------------------------------------------------------------------
 # resolve() — the deterministic ASSEMBLE pass
 # ---------------------------------------------------------------------------

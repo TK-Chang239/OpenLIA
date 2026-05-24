@@ -240,7 +240,7 @@ class ResearchBundle(BaseModel):
     @model_validator(mode="after")
     def _check_derived_chains(self) -> ResearchBundle:
         for fid, fact in self.facts.items():
-            if isinstance(fact.source, ComputedSource):
+            if isinstance(fact.source, (ComputedSource, EstimateSource)):
                 missing = [d for d in fact.source.derived_from if d not in self.facts]
                 if missing:
                     raise ValueError(f"Fact '{fid}' derives from missing facts: {missing}")
