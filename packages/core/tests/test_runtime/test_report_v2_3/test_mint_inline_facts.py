@@ -124,3 +124,36 @@ def test_mint_step_passes_through_body_with_no_markers_untouched():
     new_body, new_facts = mint_inline_facts(body, bundle, _mandate())
     assert new_body == body
     assert new_facts == []
+
+
+def test_mixed_derive_and_estimate_both_resolve():
+    """The two-pass walk over DERIVE then ESTIMATE must handle both
+    marker types in one body. This is the primary integration path —
+    WriteStage will routinely emit a mix."""
+    bundle = _bundle()
+    body = (
+        "Grew {{DERIVE:growth_rate|rev_fy25,rev_fy24|rev_growth_yoy}} "
+        "with {{ESTIMATE:target_pe|25.0|x|consensus forward P/E}} target."
+    )
+    new_body, new_facts = mint_inline_facts(body, bundle, _mandate())
+    assert "{{CITE:rev_growth_yoy}}" in new_body
+    assert "{{CITE:target_pe}}" in new_body
+    assert "{{DERIVE:" not in new_body
+    assert "{{ESTIMATE:" not in new_body
+    assert len(new_facts) == 2
+    ids = {f.id for f in new_facts}
+    assert ids == {"rev_growth_yoy", "target_pe"}
+
+
+def test_cross_marker_id_collision_raises():
+    """A DERIVE and an ESTIMATE sharing the same new_id must fail loud,
+    not silently reuse the first mint's fact (which would drop the
+    second marker's content)."""
+    bundle = _bundle()
+    body = (
+        "{{DERIVE:growth_rate|rev_fy25,rev_fy24|shared_id}} and "
+        "{{ESTIMATE:shared_id|0.1|percent|something different}}"
+    )
+    with pytest.raises(MintError) as exc:
+        mint_inline_facts(body, bundle, _mandate())
+    assert "shared_id" in str(exc.value)
