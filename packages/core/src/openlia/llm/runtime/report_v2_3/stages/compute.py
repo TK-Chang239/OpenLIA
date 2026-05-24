@@ -23,6 +23,8 @@ the client.
 
 from __future__ import annotations
 
+import logging
+
 from ..clients.compute import ComputeClient, ComputeRequest
 from ..schemas import (
     BundleFact,
@@ -44,6 +46,8 @@ from ..valuation import (
     sensitivity_result_to_fact,
 )
 from .base import Stage, StageContext
+
+log = logging.getLogger(__name__)
 
 
 class ComputeStage(Stage):
@@ -70,8 +74,24 @@ class ComputeStage(Stage):
                 outline=outline,
                 clarify_result=state.clarify_result,
             )
-            inputs = self._client.propose_inputs(request)
-            new_facts.extend(_run_method(method, inputs, bundle))
+            # Per-method tolerance: an LLM that produces malformed inputs
+            # (e.g. Comps with peers=[] when the LLM can't find any), or
+            # math that can't compute (divide-by-zero, missing facts),
+            # should drop that method's contribution rather than abort
+            # the whole pipeline. Other methods still produce their
+            # facts, and downstream SYNTHESIZE/WRITE work off whatever
+            # COMPUTE managed to land. RuntimeError is the umbrella the
+            # LLM-validation wrappers + valuation math both raise.
+            try:
+                inputs = self._client.propose_inputs(request)
+                new_facts.extend(_run_method(method, inputs, bundle))
+            except RuntimeError as exc:
+                log.warning(
+                    "COMPUTE/%s skipped: %s",
+                    method.value,
+                    exc,
+                )
+                continue
 
         # Rebuild the bundle so the derived_from validator runs over the
         # combined facts. Mutating the dict in place would skip validation.

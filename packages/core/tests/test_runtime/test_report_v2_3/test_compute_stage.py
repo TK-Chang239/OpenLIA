@@ -176,15 +176,26 @@ def test_multiple_methods_dispatch_in_plan_order() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_dcf_method_rejects_non_dcf_inputs() -> None:
+def test_dcf_method_rejects_non_dcf_inputs(caplog) -> None:
+    # The per-method tolerance added for graceful-degradation now catches
+    # the type-mismatch RuntimeError, logs a warning, and continues. The
+    # bundle should be untouched (no facts from a malformed run).
     bad = CompsInputs(
         subject_ticker="NVDA",
         peers=[CompPeer(ticker="AMD", metric_fact_ids={"pe": "amd_pe"})],
         multiples=["pe"],
     )
     fake = FakeComputeClient(inputs_by_method={ValuationMethod.DCF: bad})
-    with pytest.raises(RuntimeError, match="DCFInputs"):
-        ComputeStage(fake).run(_state(methods=[ValuationMethod.DCF]), _ctx())
+    state = _state(methods=[ValuationMethod.DCF])
+    bundle_before = state.bundle
+    with caplog.at_level("WARNING"):
+        result = ComputeStage(fake).run(state, _ctx())
+    assert "COMPUTE/dcf skipped" in caplog.text
+    assert "DCFInputs" in caplog.text
+    # Bundle is rebuilt each run for validation, but the fact set is
+    # unchanged because the skipped method produced no new facts.
+    assert result.bundle is not None and bundle_before is not None
+    assert result.bundle.facts == bundle_before.facts
 
 
 # ---------------------------------------------------------------------------
