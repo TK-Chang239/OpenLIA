@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import pytest
@@ -132,7 +133,7 @@ def _ctx() -> StageContext:
 
 def _responder_for_mandates(
     bodies: dict[str, str],
-) -> callable:
+) -> Callable[[WriterRequest], WrittenSection]:
     def _make(request: WriterRequest) -> WrittenSection:
         sid = request.section_mandate.section_id
         return WrittenSection(
