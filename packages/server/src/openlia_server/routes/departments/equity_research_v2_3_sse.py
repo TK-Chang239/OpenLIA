@@ -89,7 +89,9 @@ class StartStreamPayload(BaseModel):
     length: ReportLength = ReportLength.NORMAL
     # See StartPayload in equity_research_v2_3.py for semantics.
     template_id: str | None = None
-    tickers: list[str] = Field(..., min_length=1)
+    # Optional — empty list means "let CLARIFY infer the subject
+    # ticker from raw_prompt".
+    tickers: list[str] = Field(default_factory=list)
 
 
 class AnswerStreamPayload(BaseModel):

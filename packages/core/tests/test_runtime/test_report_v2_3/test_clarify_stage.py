@@ -132,6 +132,81 @@ def test_resume_with_partial_answers_uses_defaults() -> None:
     ]
 
 
+def test_proceed_copies_inferred_tickers_when_state_has_none() -> None:
+    """Single-textarea path: run starts with tickers=[], CLARIFY extracts
+    them from the prompt and the stage copies them onto state.tickers
+    so PLAN/RESEARCH see a populated subject list."""
+    state = ReportState(
+        run_id="r",
+        user_id="u",
+        raw_prompt="write an initiation on Nvidia, focus on AI infra margins",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=[],
+    )
+    client = FakeClarifierClient(
+        result=ClarifyProceed(inferred_tickers=["NVDA"], assumptions=["focus: AI"])
+    )
+    stage = ClarifyStage(client)
+
+    state = stage.run(state, _ctx())
+
+    assert state.tickers == ["NVDA"]
+    assert isinstance(state.clarify_result, ClarifyProceed)
+    assert state.clarify_result.inferred_tickers == ["NVDA"]
+
+
+def test_proceed_does_not_overwrite_explicit_tickers() -> None:
+    """When the caller pinned tickers explicitly (two-field path), the
+    stage must NOT replace them even if the LLM returned a different
+    inferred list — the caller's choice wins."""
+    state = ReportState(
+        run_id="r",
+        user_id="u",
+        raw_prompt="initiation on NVDA",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+    )
+    client = FakeClarifierClient(
+        result=ClarifyProceed(inferred_tickers=["AMD"])  # disagreement
+    )
+    stage = ClarifyStage(client)
+
+    state = stage.run(state, _ctx())
+
+    assert state.tickers == ["NVDA"]
+
+
+def test_resume_with_ticker_answer_populates_state_tickers() -> None:
+    """When CLARIFY suspended asking for the subject ticker, the resume
+    path must lift the answer onto state.tickers so the run can continue."""
+    q = ClarifyQuestion(
+        id="ticker",
+        question="Which ticker should this report cover?",
+        why_blocking="pipeline needs a subject",
+        default="SPY",
+    )
+    stage = ClarifyStage(FakeClarifierClient(result=ClarifyProceed()))
+
+    state = ReportState(
+        run_id="r",
+        user_id="u",
+        raw_prompt="report on the AI infra space",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=[],
+    )
+    state.clarify_result = ClarifyNeedsInput(questions=[q])
+    state.suspend_for_clarify([q])
+    state.resume_with_answers(ClarifyAnswers(answers={"ticker": "NVDA AMD"}))
+
+    state = stage.run(state, _ctx())
+
+    assert state.tickers == ["NVDA", "AMD"]
+    assert isinstance(state.clarify_result, ClarifyProceed)
+
+
 def test_fake_clarifier_rejects_double_config() -> None:
     with pytest.raises(ValueError, match="exactly one"):
         FakeClarifierClient(

@@ -90,7 +90,11 @@ export interface V23StartRunPayload {
    *  built-in shape for compatibility (e.g. the server uses it for the
    *  default valuation_plan when the custom template doesn't specify). */
   template_id?: string | null;
-  tickers: string[];
+  /** Optional: omit (or pass []) to let CLARIFY infer the subject
+   *  ticker from `raw_prompt`. The single-textarea composer uses this
+   *  path. The two-field v2.2-style composer (still used by the
+   *  initial chat-follow-up shim) supplies tickers explicitly. */
+  tickers?: string[];
 }
 
 export function startV23Run(payload: V23StartRunPayload): Promise<V23RunState> {
