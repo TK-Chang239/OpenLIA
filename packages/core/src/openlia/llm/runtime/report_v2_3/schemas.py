@@ -387,6 +387,12 @@ class ClarifyProceed(BaseModel):
 
     outcome: Literal["proceed"] = "proceed"
     assumptions: list[str] = Field(default_factory=list)
+    # Tickers CLARIFY extracted from the user's free-form prompt. Used
+    # only when the run was started without an explicit ticker list
+    # (the new single-textarea composer path). The runner copies these
+    # onto `state.tickers` before PLAN so downstream stages see the
+    # subject without the user having to spell it out twice.
+    inferred_tickers: list[str] = Field(default_factory=list)
 
 
 class ClarifyNeedsInput(BaseModel):

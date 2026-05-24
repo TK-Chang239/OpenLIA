@@ -129,7 +129,6 @@ export function V23Composer({
   onModeClick,
 }: Props): JSX.Element {
   const [prompt, setPrompt] = useState("");
-  const [tickerInput, setTickerInput] = useState("");
   const [run, setRun] = useState<V23RunState | null>(null);
   const [stage, setStage] = useState<V23Stage | null>(null);
   const [completedStages, setCompletedStages] = useState<Set<V23Stage>>(
@@ -256,12 +255,6 @@ export function V23Composer({
       if (clarifyDismissed) setClarifyDismissed(false);
     }
   }, [run?.status, clarifyDismissed]);
-
-  const parseTickers = (raw: string): string[] =>
-    raw
-      .split(/[,\s]+/)
-      .map((t) => t.trim().toUpperCase())
-      .filter(Boolean);
 
   const closeStream = useCallback(() => {
     if (streamRef.current !== null) {
@@ -390,10 +383,9 @@ export function V23Composer({
   const readyToRun = clarifyAssigned;
 
   const handleComposerSubmit = (payload: ComposerSubmitPayload) => {
-    const parsed = parseTickers(payload.ticker);
     const promptText = payload.prompt.trim();
-    if (parsed.length === 0 || !promptText) {
-      setError("Provide at least one ticker and a prompt.");
+    if (!promptText) {
+      setError("Tell me what to research.");
       return;
     }
     setError(null);
@@ -407,13 +399,15 @@ export function V23Composer({
     setPayload(null);
     setPayloadError(null);
     setSubmittedPrompt(promptText);
-    setSubmittedTickers(parsed);
+    // Tickers land later — CLARIFY extracts them from the prompt and the
+    // SSE `state` frame echoes them back on completion. Until then the
+    // UserBubble shows just the prompt.
+    setSubmittedTickers([]);
     setPrompt("");
     closeStream();
     streamRef.current = streamV23Run(
       {
         raw_prompt: promptText,
-        tickers: parsed,
         report_type: MODE_TO_V23_TYPE[mode],
         length: LENGTH_TO_V23[length],
       },
@@ -468,7 +462,7 @@ export function V23Composer({
   }, [closeStream]);
 
   const placeholder = isWelcome
-    ? "What should this report cover? (e.g., focus on AI infra margins)"
+    ? "What should this report cover? (e.g., \"initiation on NVDA, focus on AI infra margins\")"
     : "Ask for another v2.3 report…";
 
   return (
@@ -611,8 +605,6 @@ export function V23Composer({
         length={length}
         onModeClick={onModeClick}
         disabled={!readyToRun}
-        ticker={isWelcome ? tickerInput : undefined}
-        onTickerChange={isWelcome ? setTickerInput : undefined}
       />
 
       {/* Clarify modal — overlay above everything else. */}

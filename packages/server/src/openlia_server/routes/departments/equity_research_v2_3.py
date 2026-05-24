@@ -81,7 +81,12 @@ class StartPayload(BaseModel):
     # be a UUID from the report_templates table; the planner pulls the
     # template's section plan in place of the built-in default.
     template_id: str | None = None
-    tickers: list[str] = Field(..., min_length=1)
+    # Optional when the caller uses the single-textarea composer; in
+    # that case CLARIFY extracts the subject ticker from `raw_prompt`
+    # and the runner copies `inferred_tickers` onto the state before
+    # PLAN. Non-empty when the caller already pinned a subject (the
+    # v2.2 two-field composer path).
+    tickers: list[str] = Field(default_factory=list)
 
 
 class AnswerPayload(BaseModel):
