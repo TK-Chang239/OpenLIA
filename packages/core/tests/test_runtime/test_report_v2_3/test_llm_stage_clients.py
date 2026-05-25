@@ -53,6 +53,7 @@ from openlia.llm.runtime.report_v2_3.templates import (
 def _template() -> TemplateSpec:
     return get_builtin(ReportType.INITIATION)
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -236,6 +237,43 @@ def test_plan_repairs_after_one_validation_failure() -> None:
     assert "your_previous_output" in repair_user
     assert "validation_errors" in repair_user
     assert repair_user["your_previous_output"] == bad
+
+
+def test_plan_system_prompt_no_longer_uses_nvda_as_example() -> None:
+    """PLAN_SYSTEM_PROMPT's JSON example should use a neutral
+    placeholder ticker, not NVDA."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    assert "NVDA" not in PLAN_SYSTEM_PROMPT
+
+
+def test_compute_and_write_prompts_use_neutral_examples() -> None:
+    """COMPUTE_SYSTEM_PROMPT (Comps example) and WRITE_SYSTEM_PROMPT
+    (body example) must use neutral placeholders, not specific tickers
+    or company names. Closes the coverage gap surfaced by Phase 2's
+    cross-cutting review."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        COMPUTE_SYSTEM_PROMPT,
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    assert "NVDA" not in COMPUTE_SYSTEM_PROMPT
+    assert "AVGO" not in COMPUTE_SYSTEM_PROMPT
+    assert "NVDA" not in WRITE_SYSTEM_PROMPT
+    assert "NVIDIA" not in WRITE_SYSTEM_PROMPT
+
+
+def test_research_prompt_uses_neutral_ticker_example() -> None:
+    """The RESEARCH SYSTEM_PROMPT's worked-example JSON must use a
+    neutral placeholder ticker, matching the Phase 2 convention applied
+    to CLARIFY/PLAN/COMPUTE."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "NVDA" not in RESEARCH_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -965,3 +1003,74 @@ def test_plan_payload_includes_template_sections():
     payload = _planner_payload(req)
     assert "template" in payload
     assert [s["id"] for s in payload["template"]["sections"]] == ["alpha", "beta"]
+
+
+def test_synthesize_prompt_no_longer_caps_central_argument_to_20_words():
+    """The 20-word hard cap on central_argument was an engine opinion
+    not a methodology guarantee — deleted in Phase 2."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    assert "20 words" not in SYNTHESIZE_SYSTEM_PROMPT
+    assert "20-word" not in SYNTHESIZE_SYSTEM_PROMPT
+    assert "Hard cap" not in SYNTHESIZE_SYSTEM_PROMPT
+
+
+def test_synthesize_prompt_no_longer_dictates_chart_selection():
+    """VisualizeStage already drops un-renderable charts deterministically.
+    The 50-line chart-selection guide + anti-patterns prose in
+    SYNTHESIZE_SYSTEM_PROMPT was redundant aesthetic opinion — deleted
+    in Phase 2."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    assert "Chart-selection guide" not in SYNTHESIZE_SYSTEM_PROMPT
+    assert "Anti-patterns" not in SYNTHESIZE_SYSTEM_PROMPT
+
+
+def test_write_prompt_no_longer_dictates_per_length_word_budgets():
+    """The hardcoded word bands per ReportLength enum value were an
+    engine opinion — the enum's semantic name (concise/normal/
+    elaborative) conveys intent without a numeric table. Deleted in
+    Phase 2."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    for band in ("150-250", "300-500", "600-900"):
+        assert band not in WRITE_SYSTEM_PROMPT, (
+            f"WRITE_SYSTEM_PROMPT still contains word band {band!r}"
+        )
+
+
+def test_v23_prompts_use_positive_phrasing_for_content_prescriptions():
+    """Per the `feedback_positive_prompts` convention, content-level
+    instructions in v2.3 prompts should be phrased positively. Schema-
+    level enum constraints ("chart_type MUST be one of ...") stay as
+    accurate API contract statements; this test targets the content-
+    prescriptive negatives from the audit."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+        SYNTHESIZE_SYSTEM_PROMPT,
+        VERIFY_SYSTEM_PROMPT,
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    # Sentinel phrases the audit flagged as content prescriptions —
+    # none should survive.
+    forbidden_phrases = [
+        "do NOT prepend",
+        "Never invent a fact_id",
+        "don't expand scope",
+        "Don't expand scope",
+    ]
+    for prompt_name, prompt in (
+        ("PLAN", PLAN_SYSTEM_PROMPT),
+        ("SYNTHESIZE", SYNTHESIZE_SYSTEM_PROMPT),
+        ("WRITE", WRITE_SYSTEM_PROMPT),
+        ("VERIFY", VERIFY_SYSTEM_PROMPT),
+    ):
+        for phrase in forbidden_phrases:
+            assert phrase not in prompt, f"{prompt_name}_SYSTEM_PROMPT still contains {phrase!r}"

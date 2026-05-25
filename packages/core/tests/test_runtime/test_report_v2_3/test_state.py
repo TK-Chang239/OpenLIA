@@ -50,8 +50,9 @@ def test_report_state_requires_template() -> None:
     """Constructing ReportState without a template must fail loudly —
     every run needs the structure the template provides."""
     import pytest
+    from pydantic import ValidationError
 
-    with pytest.raises(Exception):  # Pydantic ValidationError or TypeError
+    with pytest.raises(ValidationError):
         ReportState(
             run_id="r",
             user_id="u",

@@ -67,9 +67,7 @@ def test_exempts_fiscal_year_token():
 
 
 def test_exempts_ordinal_suffix():
-    issues = _check_uncited_numbers(
-        [_ws("Ranked 3rd in the segment and 12th overall.")]
-    )
+    issues = _check_uncited_numbers([_ws("Ranked 3rd in the segment and 12th overall.")])
     assert issues == []
 
 
@@ -79,17 +77,13 @@ def test_exempts_quarter_token():
 
 
 def test_flags_naked_number_alongside_cited_one():
-    issues = _check_uncited_numbers(
-        [_ws("Revenue {{CITE:rev_ttm}} but margins fell to 18.5%.")]
-    )
+    issues = _check_uncited_numbers([_ws("Revenue {{CITE:rev_ttm}} but margins fell to 18.5%.")])
     assert len(issues) == 1
     assert "18.5" in issues[0].detail
 
 
 def test_carries_section_id_through_to_issue():
-    issues = _check_uncited_numbers(
-        [_ws("Trades at 15x earnings.", section_id="valuation")]
-    )
+    issues = _check_uncited_numbers([_ws("Trades at 15x earnings.", section_id="valuation")])
     assert issues[0].section_id == "valuation"
 
 
@@ -97,9 +91,7 @@ def test_reports_only_first_violation_per_section():
     """A section with three naked numbers reports one issue listing
     all of them — not three separate issues — to keep the rewrite
     prompt focused."""
-    issues = _check_uncited_numbers(
-        [_ws("Revenue $60B, margin 25%, trading at 12x.")]
-    )
+    issues = _check_uncited_numbers([_ws("Revenue $60B, margin 25%, trading at 12x.")])
     assert len(issues) == 1
     detail = issues[0].detail
     assert "$60B" in detail
