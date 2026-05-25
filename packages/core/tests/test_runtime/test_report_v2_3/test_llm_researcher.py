@@ -541,6 +541,71 @@ def test_fake_rejects_both_or_neither() -> None:
 # ---------------------------------------------------------------------------
 
 
+def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
+    """The researcher's first user message must surface each data_need's
+    `source_class` so the model can route quantitative-vs-narrative
+    without guessing from the description."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        _initial_user_text,
+    )
+
+    outline = Outline(
+        tickers=["TEST"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="revenue, last 5 fiscal years",
+                        expected_fact_ids=["rev_fy_hist"],
+                        source_class="quantitative",
+                    ),
+                    DataNeed(
+                        description="recent regulatory investigations",
+                        expected_fact_ids=["regulatory_investigations"],
+                        source_class="narrative",
+                    ),
+                    DataNeed(
+                        description="business model summary",
+                        expected_fact_ids=["business_model"],
+                    ),  # default 'either'
+                ],
+            )
+        ],
+    )
+    request = ResearchRequest(
+        raw_prompt="initiate on TEST",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["TEST"],
+        outline=outline,
+        template=_template(),
+        clarify_result=None,
+    )
+
+    payload = json.loads(_initial_user_text(request))
+    needs = payload["sections"][0]["data_needs"]
+    assert [n["source_class"] for n in needs] == ["quantitative", "narrative", "either"]
+
+
+def test_research_prompt_routes_by_source_class_not_by_model_judgment() -> None:
+    """The RESEARCH prompt must explicitly route by `source_class` and
+    drop the prior `Prefer using BOTH kinds together` hedge that let the
+    model talk itself out of web_search."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "source_class" in RESEARCH_SYSTEM_PROMPT
+    for cls in ("quantitative", "narrative", "either"):
+        assert cls in RESEARCH_SYSTEM_PROMPT
+    # The old hedge text must not survive — its presence reverts the
+    # whole intervention to a soft preference.
+    assert "Prefer using BOTH kinds together" not in RESEARCH_SYSTEM_PROMPT
+
+
 def test_tool_execution_error_reaches_model_as_tool_message() -> None:
     def boom(_t: str) -> dict:
         raise RuntimeError("upstream is down")

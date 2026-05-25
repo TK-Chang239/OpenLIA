@@ -20,6 +20,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     CompPeer,
     CompsInputs,
     ComputedSource,
+    DataNeed,
     DataProviderSource,
     DCFInputs,
     DCFResult,
@@ -265,6 +266,35 @@ def test_outline_carries_report_type() -> None:
         sections=[OutlineSection(id="overview", title="Overview")],
     )
     assert outline.report_type == ReportType.INITIATION
+
+
+def test_data_need_source_class_defaults_to_either() -> None:
+    """Backward compat: persisted runs that pre-date the field round-trip
+    through Pydantic with `source_class="either"` so RESEARCH still has
+    a tag to read."""
+    need = DataNeed(description="business model summary")
+    assert need.source_class == "either"
+
+
+def test_data_need_accepts_three_source_classes() -> None:
+    for cls in ("quantitative", "narrative", "either"):
+        need = DataNeed(description="x", source_class=cls)
+        assert need.source_class == cls
+
+
+def test_data_need_rejects_unknown_source_class() -> None:
+    with pytest.raises(ValidationError):
+        DataNeed(description="x", source_class="qualitative")  # type: ignore[arg-type]
+
+
+def test_data_need_source_class_round_trips_through_model_dump() -> None:
+    """OutlineSection.data_needs serialises to JSON in state_json; the
+    field must round-trip so a paused run rehydrates with its tags."""
+    need = DataNeed(description="x", source_class="narrative")
+    dumped = need.model_dump()
+    assert dumped["source_class"] == "narrative"
+    rebuilt = DataNeed.model_validate(dumped)
+    assert rebuilt.source_class == "narrative"
 
 
 # ---------------------------------------------------------------------------
