@@ -359,7 +359,7 @@ Output is a single JSON ReportThesis matching:
 
 {
   "language": "en",
-  "central_argument": "ONE SHORT SENTENCE — max 20 words. Hard cap.",
+  "central_argument": "ONE SHORT SENTENCE — the report's hero line.",
   "key_takeaways": ["short bullet", "another short bullet"],
   "valuation_stance": "A 1-2 sentence stance: long/short/hold and why.",
   "valuation_plan": {"methods": ["dcf"]},
@@ -392,9 +392,7 @@ Output is a single JSON ReportThesis matching:
 
 Rules:
 
-- ``central_argument`` is the cover hero — keep it to ONE sentence,
-  ≤ 20 words, no clauses chained with "but"/"however" that bury the
-  punchline. The longer "why" belongs in ``valuation_stance``.
+- ``central_argument`` is the cover hero — keep it to one sentence. Lead with the takeaway.
 - ``language`` MUST equal the request's language.
 - ``valuation_plan.methods`` MUST mirror the outline's plan unless
   research shows a method is impossible (e.g. no peers found).
