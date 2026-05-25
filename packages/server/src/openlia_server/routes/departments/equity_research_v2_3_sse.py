@@ -66,6 +66,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ReportType,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.types import ReasoningEffort
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -76,6 +77,7 @@ from openlia_server.routes.departments.equity_research_v2_3 import (
     RunStateOut,
     _engine_unavailable,
     _per_user_factory,
+    _read_persisted_reasoning_effort,
 )
 from openlia_server.services import v2_3_run_service as svc
 
@@ -92,6 +94,10 @@ class StartStreamPayload(BaseModel):
     # Optional — empty list means "let CLARIFY infer the subject
     # ticker from raw_prompt".
     tickers: list[str] = Field(default_factory=list)
+    # User-selected extended-thinking effort (3-state pill on the report
+    # settings modal: off / medium / high). ``None`` = off; the runtime
+    # only applies the directive to PLAN + SYNTHESIZE stages.
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class AnswerStreamPayload(BaseModel):
@@ -110,10 +116,19 @@ def build_equity_research_v2_3_sse_router(
         tags=["equity-research-v2.3-sse"],
     )
 
-    def _resolve_factory(request: Request, db: DBSession, user: User):
-        per_user = _per_user_factory(db, user)
+    def _resolve_factory(
+        request: Request,
+        db: DBSession,
+        user: User,
+        *,
+        reasoning_effort: ReasoningEffort | None = None,
+    ):
+        per_user = _per_user_factory(db, user, reasoning_effort=reasoning_effort)
         if per_user is not None:
             return per_user
+        # Env-driven fallback factory was built once at startup with no
+        # reasoning_effort. The per-user path is what production users
+        # exercise; the env path is a dev convenience and stays flat.
         env_factory = getattr(request.app.state, "v2_3_runner_factory", None)
         if env_factory is None:
             raise _engine_unavailable()
@@ -126,7 +141,9 @@ def build_equity_research_v2_3_sse_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> StreamingResponse:
-        runner_factory = _resolve_factory(request, db, user)
+        runner_factory = _resolve_factory(
+            request, db, user, reasoning_effort=payload.reasoning_effort
+        )
 
         def _worker(observer):
             with db_session_factory() as worker_db:
@@ -140,6 +157,7 @@ def build_equity_research_v2_3_sse_router(
                     length=payload.length,
                     template_id=payload.template_id,
                     tickers=payload.tickers,
+                    reasoning_effort=payload.reasoning_effort,
                     observer=observer,
                 )
 
@@ -157,7 +175,13 @@ def build_equity_research_v2_3_sse_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> StreamingResponse:
-        runner_factory = _resolve_factory(request, db, user)
+        # Resume must use the same reasoning_effort the original start
+        # picked, so PLAN + SYNTHESIZE get the same ceiling growth. Read
+        # it off the persisted state (set on start_run) before building
+        # the factory — falls back to None for runs created before this
+        # field existed.
+        persisted_effort = _read_persisted_reasoning_effort(db, run_id)
+        runner_factory = _resolve_factory(request, db, user, reasoning_effort=persisted_effort)
         answers = ClarifyAnswers(answers=payload.answers)
 
         def _worker(observer):

@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
+from openlia.llm.types import ReasoningEffort
+
 from .schemas import (
     ClarifyAnswers,
     ClarifyQuestion,
@@ -84,6 +86,12 @@ class ReportState(BaseModel):
         default_factory=dict,
         description="V23Slot -> stored model_id; resolver expands to ResolvedModel at call time.",
     )
+    # User-selected reasoning effort for this run. Persisted on the run so
+    # the answer / resume path can rebuild the factory with the same
+    # PLAN + SYNTHESIZE ceiling growth the original POST set up. None =
+    # thinking off. See ``v2_3_wiring._REASONING_STAGES`` for the stages
+    # this applies to.
+    reasoning_effort: ReasoningEffort | None = None
 
     # Runtime control --------------------------------------------------------
     status: RunStatus = RunStatus.RUNNING

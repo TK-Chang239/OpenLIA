@@ -31,6 +31,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
 from openlia.llm.runtime.report_v2_3.templates import TemplateSpec, get_builtin
+from openlia.llm.types import ReasoningEffort
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
@@ -94,8 +95,7 @@ def _resolve_template(
                     "Re-upload via the v2.3 template flow."
                 ),
                 "errors": [
-                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
-                    for e in err.errors()
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in err.errors()
                 ],
             },
         ) from err
@@ -112,6 +112,7 @@ def start_run(
     length: ReportLength,
     tickers: list[str],
     template_id: str | None = None,
+    reasoning_effort: ReasoningEffort | None = None,
     observer: Observer | None = None,
 ) -> ReportState:
     """Begin a new v2.3 run. Persists the resulting state.
@@ -121,6 +122,11 @@ def start_run(
     progress live. The observer is invoked synchronously inside the
     runner; the route layer typically passes a callback that pushes to
     a queue consumed by the SSE generator.
+
+    ``reasoning_effort`` is persisted on the resulting state so the
+    answer / resume path can rebuild the factory with the same
+    PLAN + SYNTHESIZE ceiling growth — the runner_factory itself is
+    already constructed by the caller with this value.
     """
     template = _resolve_template(db, user_id, report_type, template_id)
     state = ReportState(
@@ -133,6 +139,7 @@ def start_run(
         template_id=template_id,
         tickers=tickers,
         template=template,
+        reasoning_effort=reasoning_effort,
     )
     runner = runner_factory()
     state = runner.start(state, observer=observer)

@@ -170,6 +170,110 @@ def test_get_run_returns_persisted_state(v2_3_client) -> None:
     assert body["status"] == "complete"
 
 
+# ---------------------------------------------------------------------------
+# reasoning_effort: POST body field is persisted on the run state
+# ---------------------------------------------------------------------------
+
+
+def _load_state(run_id: str):
+    from openlia_server.db import session as session_mod
+    from openlia_server.services.v2_3_state_store import SqlStateStore
+
+    with session_mod.SessionLocal() as s:
+        return SqlStateStore(s).load(run_id)
+
+
+def test_start_persists_reasoning_effort_from_payload(v2_3_client) -> None:
+    """The 3-state pill on the report modal posts reasoning_effort as one
+    of None / 'medium' / 'high'. The run service must save it on the
+    state so the answer / resume path can rebuild the factory with the
+    same PLAN + SYNTHESIZE ceiling growth."""
+    app, client = v2_3_client
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed()))
+
+    payload = _start_payload() | {"reasoning_effort": "high"}
+    resp = client.post("/api/departments/equity-research/v2.3/runs", json=payload)
+    assert resp.status_code == 200, resp.text
+
+    state = _load_state(resp.json()["run_id"])
+    assert state.reasoning_effort is not None
+    assert state.reasoning_effort.value == "high"
+
+
+def test_start_persists_reasoning_effort_medium(v2_3_client) -> None:
+    app, client = v2_3_client
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed()))
+
+    payload = _start_payload() | {"reasoning_effort": "medium"}
+    resp = client.post("/api/departments/equity-research/v2.3/runs", json=payload)
+    assert resp.status_code == 200, resp.text
+
+    state = _load_state(resp.json()["run_id"])
+    assert state.reasoning_effort is not None
+    assert state.reasoning_effort.value == "medium"
+
+
+def test_start_without_reasoning_effort_defaults_to_none(v2_3_client) -> None:
+    """Legacy callers that don't include the field must continue to work;
+    the persisted state's reasoning_effort stays None (= thinking off)."""
+    app, client = v2_3_client
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed()))
+
+    resp = client.post("/api/departments/equity-research/v2.3/runs", json=_start_payload())
+    assert resp.status_code == 200, resp.text
+
+    state = _load_state(resp.json()["run_id"])
+    assert state.reasoning_effort is None
+
+
+def test_start_rejects_invalid_reasoning_effort(v2_3_client) -> None:
+    """Unknown effort levels must fail validation, not silently coerce to
+    None — guards against typos the frontend won't catch."""
+    app, client = v2_3_client
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed()))
+
+    payload = _start_payload() | {"reasoning_effort": "extra-high"}
+    resp = client.post("/api/departments/equity-research/v2.3/runs", json=payload)
+    assert resp.status_code == 422
+
+
+def test_answer_resumes_run_that_was_started_with_reasoning_effort(v2_3_client) -> None:
+    """If start_run was given reasoning_effort, the answer / resume route
+    must complete the run successfully — the persisted effort is read on
+    resume to rebuild the factory. Asserts the round-trip; no quality
+    claim here, just no-crash on the resume leg with the field set."""
+    app, client = v2_3_client
+
+    question = ClarifyQuestion(
+        id="horizon",
+        question="what horizon?",
+        why_blocking="drives the model",
+        default="12 months",
+    )
+    _install_factory(app, FakeClarifierClient(result=ClarifyNeedsInput(questions=[question])))
+
+    start = client.post(
+        "/api/departments/equity-research/v2.3/runs",
+        json=_start_payload() | {"reasoning_effort": "high"},
+    )
+    assert start.status_code == 200, start.text
+    started = start.json()
+    assert started["status"] == "waiting_on_user"
+    run_id = started["run_id"]
+
+    answer = client.post(
+        f"/api/departments/equity-research/v2.3/runs/{run_id}/answer",
+        json={"answers": {"horizon": "24 months"}},
+    )
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["status"] == "complete"
+
+    # Effort survived suspend → answer → save cycle.
+    state = _load_state(run_id)
+    assert state.reasoning_effort is not None
+    assert state.reasoning_effort.value == "high"
+
+
 def test_get_run_returns_404_for_unknown_run_id(v2_3_client) -> None:
     app, client = v2_3_client
     _install_factory(app, FakeClarifierClient(result=ClarifyProceed()))
