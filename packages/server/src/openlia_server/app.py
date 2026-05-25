@@ -177,6 +177,34 @@ class _NoopEarningsRecentAdapter:
 log = logging.getLogger(__name__)
 
 
+def _configure_app_logging() -> None:
+    """Install an INFO-level stdout handler on the ``openlia`` and
+    ``openlia_server`` loggers.
+
+    Uvicorn's default LOGGING_CONFIG attaches handlers only to its own
+    ``uvicorn.*`` namespaces, so application loggers fall through to
+    Python's lastResort handler, which emits at WARNING+ and silently
+    drops INFO. Without this, per-stage telemetry like the ``llm_usage``
+    lines from ``v2_stage_factory`` never reaches the log even though
+    the code is calling ``log.info(...)``.
+
+    We target only ``openlia*`` so chatty third-party libraries (httpx,
+    asyncio, sqlalchemy.engine) stay at their library defaults. The
+    handler is tagged so the function is idempotent under repeated
+    ``create_app()`` calls in tests.
+    """
+    formatter = logging.Formatter("%(levelname)s %(name)s: %(message)s")
+    for name in ("openlia", "openlia_server"):
+        logger = logging.getLogger(name)
+        if any(getattr(h, "_openlia_app", False) for h in logger.handlers):
+            continue
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        handler._openlia_app = True  # type: ignore[attr-defined]
+        logger.addHandler(handler)
+        logger.setLevel(logging.INFO)
+
+
 def sweep_orphaned_generating_reports(db_session_factory: Callable) -> int:
     """Mark any 'generating' report rows as 'failed' with reason 'server_restart_interrupted'.
 
@@ -533,6 +561,7 @@ def create_app(
     db_session_factory: Callable[[], DBSession] | None = None,
     is_loopback_request: Callable[[Request], bool] | None = None,
 ) -> FastAPI:
+    _configure_app_logging()
     factory = db_session_factory or _default_session_factory
     mode = os.environ.get("OPENLIA_MODE", "personal").lower()
     app = FastAPI(
@@ -702,15 +731,11 @@ def create_app(
     app.include_router(
         build_equity_research_v2_models_router(db_session_factory=factory, mode=mode)
     )
-    app.include_router(
-        build_equity_research_v2_3_router(db_session_factory=factory, mode=mode)
-    )
+    app.include_router(build_equity_research_v2_3_router(db_session_factory=factory, mode=mode))
     app.include_router(
         build_equity_research_v2_3_models_router(db_session_factory=factory, mode=mode)
     )
-    app.include_router(
-        build_equity_research_v2_3_sse_router(db_session_factory=factory, mode=mode)
-    )
+    app.include_router(build_equity_research_v2_3_sse_router(db_session_factory=factory, mode=mode))
     # Wire the v2.3 runner factory when an OpenAI-backed CLARIFY model is
     # configured via env (OPENAI_API_KEY + OPENLIA_V2_3_CLARIFY_MODEL). If
     # the env is incomplete the factory stays unset and the v2.3 routes

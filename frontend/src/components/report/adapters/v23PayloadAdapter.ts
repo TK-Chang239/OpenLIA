@@ -293,6 +293,15 @@ function chartSpecToBlock(
   spec: V23ChartSpec,
   facts: Record<string, V23BundleFact>,
 ): ReportBlock {
+  // Tables aren't charts — the SYNTHESIZE prompt picks `chart_type='table'`
+  // when the data reads more naturally as a numeric grid (peer-comp panel,
+  // key-metric snapshot). They render via the TableBlock component, which
+  // wants `headers` + `rows`, not the chart shape's `categories` + `series`.
+  // Routing through chartSpecToBlock here would emit a chart-shaped object
+  // tagged `type:'table'` and crash TableBlock on `headers.map(...)`.
+  if (spec.chart_type === "table") {
+    return chartSpecToTableBlock(spec, facts);
+  }
   const type = CHART_TYPE_MAP[spec.chart_type] ?? "bar_chart";
   const categories = spec.category_labels;
   const series = spec.series.map((s) => {
@@ -312,6 +321,66 @@ function chartSpecToBlock(
     y_label: spec.y_axis_label,
     caption: spec.claim,
   } as unknown as ReportBlock;
+}
+
+
+/** Mirrors `_add_chart_data_table` in `v2_3_docx.py` — same layout so the
+ *  browser view and the docx render the same grid. First column is the
+ *  category axis (label = `x_axis_label` or "Category"); subsequent columns
+ *  are one per series, labeled by `series.name`. Each row is a category
+ *  with cells resolved from `bundle_facts` the way the docx renderer does. */
+function chartSpecToTableBlock(
+  spec: V23ChartSpec,
+  facts: Record<string, V23BundleFact>,
+): ReportBlock {
+  const categoryKey = "category";
+  const headers = [
+    { key: categoryKey, label: spec.x_axis_label || "Category" },
+    ...spec.series.map((s, i) => ({ key: `c${i}`, label: s.name })),
+  ];
+  const rows = spec.category_labels.map((category, rowIdx) => {
+    const row: Record<string, unknown> = { [categoryKey]: category };
+    spec.series.forEach((s, colIdx) => {
+      row[`c${colIdx}`] = resolveTableCell(s, rowIdx, facts);
+    });
+    return row;
+  });
+  return {
+    type: "table",
+    title: spec.title,
+    headers,
+    rows,
+  } as unknown as ReportBlock;
+}
+
+
+/** Cell-value resolution mirrors `_series_cell_value` in `v2_3_docx.py`.
+ *  - A series with exactly one fact_id pointing at a time-series fact
+ *    pulls its values from the series points, indexed by row.
+ *  - Otherwise the cell is the scalar at `value_fact_ids[rowIdx]`.
+ *  - Missing fact or out-of-range index renders as blank (the empty
+ *    string) — better than a `0` that would imply a real measurement. */
+function resolveTableCell(
+  series: { value_fact_ids: string[] },
+  rowIdx: number,
+  facts: Record<string, V23BundleFact>,
+): number | string {
+  if (series.value_fact_ids.length === 1) {
+    const fact = facts[series.value_fact_ids[0]];
+    if (fact && Array.isArray(fact.value)) {
+      const points = fact.value as V23BundleSeriesPoint[];
+      if (rowIdx < points.length) return points[rowIdx].value;
+      return "";
+    }
+  }
+  const factId = series.value_fact_ids[rowIdx];
+  if (factId === undefined) return "";
+  const fact = facts[factId];
+  if (!fact) return "";
+  if (typeof fact.value === "number" || typeof fact.value === "string") {
+    return fact.value;
+  }
+  return "";
 }
 
 function resolveValueForCategory(
