@@ -558,6 +558,108 @@ async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> No
     assert resp.cached_input_tokens == 0
 
 
+def _msg_response() -> dict:
+    return {
+        "id": "msg_test",
+        "type": "message",
+        "role": "assistant",
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": "ok"}],
+        "usage": {"input_tokens": 1, "output_tokens": 1},
+    }
+
+
+async def test_generate_emits_thinking_block_on_supported_model() -> None:
+    """Claude 4.x models accept `thinking={"type":"enabled","budget_tokens":N}`.
+    medium → 8192, high → 32768 per the adapter's effort-to-budget map."""
+    from openlia.llm.types import ReasoningEffort
+
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        import httpx
+
+        return httpx.Response(200, json=_msg_response())
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await _adapter(model="claude-sonnet-4-6").generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert captured.get("thinking") == {"type": "enabled", "budget_tokens": 32768}
+    # Anthropic requires temperature=1.0 with thinking enabled — adapter
+    # must override whatever the caller set.
+    assert captured.get("temperature") == 1.0
+
+
+async def test_generate_thinking_block_medium_uses_8192_budget() -> None:
+    from openlia.llm.types import ReasoningEffort
+
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        import httpx
+
+        return httpx.Response(200, json=_msg_response())
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await _adapter(model="claude-opus-4-1").generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.MEDIUM,
+            )
+        )
+    assert captured["thinking"] == {"type": "enabled", "budget_tokens": 8192}
+
+
+async def test_generate_omits_thinking_block_when_effort_none() -> None:
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        import httpx
+
+        return httpx.Response(200, json=_msg_response())
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await _adapter(model="claude-sonnet-4-6").generate(
+            LLMRequest(messages=[Message(role="user", content="hi")])
+        )
+    assert "thinking" not in captured
+
+
+async def test_generate_omits_thinking_block_on_unsupported_model() -> None:
+    """Claude 3.5 sonnet (and earlier) don't accept the thinking directive —
+    sending it returns 400. Adapter must drop the field on unsupported
+    models even when the caller passed one."""
+    from openlia.llm.types import ReasoningEffort
+
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        import httpx
+
+        return httpx.Response(200, json=_msg_response())
+
+    with respx.mock() as mock:
+        mock.post("https://api.anthropic.com/v1/messages").mock(side_effect=_capture)
+        await _adapter(model="claude-3-5-sonnet-20241022").generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert "thinking" not in captured
+
+
 async def test_stream_text_chunks_have_no_server_tool_event() -> None:
     """Plain text deltas must NOT set server_tool_event; otherwise the
     runtime would emit spurious ChatWebSearchInvoked events."""
