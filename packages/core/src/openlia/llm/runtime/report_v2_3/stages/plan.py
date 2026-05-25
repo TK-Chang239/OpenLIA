@@ -19,7 +19,7 @@ the valuation plan.
 from __future__ import annotations
 
 from ..clients.planner import PlannerClient, PlannerRequest
-from ..schemas import DataNeed, Outline, OutlineSection
+from ..schemas import Outline, OutlineSection
 from ..slots import V23Slot
 from ..state import ReportState
 from ..templates import TemplateSpec
@@ -78,14 +78,21 @@ def _coerce_outline_to_template(outline: Outline, template: TemplateSpec) -> Out
     the LLM dropped come back with an empty data_needs list — RESEARCH
     still fires but with no targeted hint.
     """
-    llm_needs_by_id: dict[str, list[DataNeed]] = {
-        s.id: list(s.data_needs) for s in outline.sections
+    llm_section_by_id: dict[str, OutlineSection] = {
+        s.id: s for s in outline.sections
     }
     coerced_sections = [
         OutlineSection(
             id=spec.id,
             title=spec.title,
-            data_needs=llm_needs_by_id.get(spec.id, []),
+            section_type=(
+                llm_section_by_id[spec.id].section_type
+                if spec.id in llm_section_by_id
+                else None
+            ),
+            data_needs=list(llm_section_by_id[spec.id].data_needs)
+            if spec.id in llm_section_by_id
+            else [],
         )
         for spec in template.sections
     ]

@@ -35,6 +35,9 @@ class VerifierRequest:
     thesis: ReportThesis
     bundle: ResearchBundle
     sections: list[WrittenSection]
+    # Phase 1 pass-through: carried for symmetry across all stage Requests
+    # so callers do not have to special-case which stages consume the
+    # template. Phase 3 will start using it for coverage checks.
     template: TemplateSpec
 
 
