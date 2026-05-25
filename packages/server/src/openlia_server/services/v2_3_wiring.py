@@ -60,7 +60,7 @@ from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
 )
 from openlia.llm.runtime.report_v2_3.clients.researcher import ResearcherClient
 from openlia.llm.runtime.report_v2_3.research import build_research_tools
-from openlia.llm.types import Capabilities, ProviderCredentials
+from openlia.llm.types import Capabilities, ProviderCredentials, ReasoningEffort
 
 from .v2_3_runner_factory import V23RunnerFactory, make_v2_3_runner_factory
 from .v2_stage_factory import SyncJsonLlmClient, SyncToolLlmClient
@@ -287,11 +287,57 @@ _STAGE_DEFAULTS_PER_USER: dict[str, tuple[int, float]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Extended-thinking / reasoning_effort wiring
+# ---------------------------------------------------------------------------
+
+
+# Token headroom added to `max_tokens` when reasoning is enabled. Thinking
+# tokens count against the same ceiling as visible output on every
+# provider, so the ceiling must absorb both. These numbers mirror the
+# per-provider _REASONING_BUDGET_BY_EFFORT tables in the Anthropic and
+# Gemini adapters. The sized-from-data ceiling pass will retune both
+# once production `reasoning_out=` log lines accumulate.
+_REASONING_OVERHEAD: dict[ReasoningEffort, int] = {
+    ReasoningEffort.MEDIUM: 8192,
+    ReasoningEffort.HIGH: 32768,
+}
+
+
+# Stages that get reasoning_effort applied when the user enables it.
+# Restricted to the two stages where deeper deliberation moves quality:
+# PLAN (structures the whole report; bad plan cascades into every later
+# stage) and SYNTHESIZE (cross-section reasoning over the full bundle).
+# Cheap stages (CLARIFY, COMPUTE, VERIFY) gain little, and WRITE is a
+# per-section drafter where extra latency multiplies across N sections.
+_REASONING_STAGES: frozenset[str] = frozenset({"plan", "synthesize"})
+
+
+def _resolve_stage_reasoning(
+    stage: str,
+    base_max: int,
+    reasoning_effort: ReasoningEffort | None,
+) -> tuple[int, ReasoningEffort | None]:
+    """Return (effective_max_tokens, effort_to_send) for ``stage``.
+
+    Off mode (None) or non-reasoning stage: returns (base_max, None) so
+    the client/adapter pair behaves exactly as before. Reasoning on
+    AND stage in _REASONING_STAGES: returns
+    (base_max + overhead[effort], effort) so the truncation guard
+    absorbs the thinking budget. Adapters whose model does not support
+    thinking will drop the effort and emit a flat call against the
+    grown ceiling — slightly wasteful but never wrong."""
+    if reasoning_effort is None or stage not in _REASONING_STAGES:
+        return base_max, None
+    return base_max + _REASONING_OVERHEAD[reasoning_effort], reasoning_effort
+
+
 def build_v2_3_runner_factory_from_models(
     *,
     models_by_slot: dict[str, Any],  # actually ResolvedModel
     eodhd_api_key: str | None = None,
     research_max_turns: int = 12,
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> V23RunnerFactory:
     """Build a V23RunnerFactory from per-user resolved models.
 
@@ -302,6 +348,11 @@ def build_v2_3_runner_factory_from_models(
 
     RESEARCH additionally requires ``eodhd_api_key`` to wire its tool
     set. Missing key -> NoOp RESEARCH stage even if a model is assigned.
+
+    ``reasoning_effort`` is the user-selected pill value from the
+    report request. When set, ``_REASONING_STAGES`` (PLAN + SYNTHESIZE)
+    receive the effort directive AND have their ``max_tokens`` grown
+    by ``_REASONING_OVERHEAD[effort]``. Other stages stay flat.
     """
     if "clarify" not in models_by_slot:
         raise ValueError(
@@ -314,7 +365,10 @@ def build_v2_3_runner_factory_from_models(
     )
     planner = (
         _build_json_client_from_resolved(
-            models_by_slot["plan"], stage="plan", ctor=LLMPlannerClient
+            models_by_slot["plan"],
+            stage="plan",
+            ctor=LLMPlannerClient,
+            reasoning_effort=reasoning_effort,
         )
         if "plan" in models_by_slot
         else None
@@ -328,7 +382,10 @@ def build_v2_3_runner_factory_from_models(
     )
     synthesizer = (
         _build_json_client_from_resolved(
-            models_by_slot["synthesize"], stage="synthesize", ctor=LLMSynthesizerClient
+            models_by_slot["synthesize"],
+            stage="synthesize",
+            ctor=LLMSynthesizerClient,
+            reasoning_effort=reasoning_effort,
         )
         if "synthesize" in models_by_slot
         else None
@@ -404,8 +461,10 @@ def _build_json_client_from_resolved(
     *,
     stage: str,
     ctor: Callable[[Callable[..., dict]], Any],
+    reasoning_effort: ReasoningEffort | None = None,
 ) -> Any:
-    max_tokens, temperature = _STAGE_DEFAULTS_PER_USER[stage]
+    base_max, temperature = _STAGE_DEFAULTS_PER_USER[stage]
+    max_tokens, effort = _resolve_stage_reasoning(stage, base_max, reasoning_effort)
     provider = build_adapter(
         kind=resolved.provider_kind,
         credentials=resolved.credentials,
@@ -417,7 +476,11 @@ def _build_json_client_from_resolved(
         ),
     )
     json_client = SyncJsonLlmClient(
-        provider, max_tokens=max_tokens, temperature=temperature, stage=stage
+        provider,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        stage=stage,
+        reasoning_effort=effort,
     )
     return ctor(json_client.call)
 
