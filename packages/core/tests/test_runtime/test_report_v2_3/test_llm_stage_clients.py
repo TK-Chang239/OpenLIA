@@ -1147,3 +1147,195 @@ def test_synthesize_prompt_advertises_widened_chart_type_enum() -> None:
         assert f'"{value}"' in SYNTHESIZE_SYSTEM_PROMPT, (
             f"SYNTHESIZE_SYSTEM_PROMPT missing {value!r} in chart_type enum"
         )
+
+
+# ---------------------------------------------------------------------------
+# Chart-fallback recovery — when the LLM's repair attempts fail
+# ---------------------------------------------------------------------------
+
+
+def _mixed_unit_bundle() -> ResearchBundle:
+    """Bundle whose two facts have different units — useful for the
+    chart-fallback tests that need a deterministic mixed-unit pair."""
+    return ResearchBundle(
+        tickers=["NVDA"],
+        facts={
+            "rd_expense_ttm": BundleFact(
+                id="rd_expense_ttm",
+                label="R&D expense (TTM)",
+                value=12.0,
+                unit="USD_billions",
+                source=_src(),
+            ),
+            "rd_as_pct_rev_ttm": BundleFact(
+                id="rd_as_pct_rev_ttm",
+                label="R&D as % of revenue (TTM)",
+                value=0.18,
+                unit="percent",
+                source=_src(),
+            ),
+            "rev_ttm": BundleFact(
+                id="rev_ttm",
+                label="Revenue TTM",
+                value=60.9,
+                unit="USD_billions",
+                source=_src(),
+            ),
+        },
+    )
+
+
+def _bad_chart_payload(extra_charts: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Thesis JSON whose one mandate points at one mixed-units chart.
+    Caller can pass `extra_charts` to add good ones alongside."""
+    charts: list[dict[str, Any]] = [
+        {
+            "id": "chart_rd_snapshot",
+            "section_id": "business",
+            "claim": "R&D commitment is high",
+            "chart_type": "column",
+            "title": "R&D snapshot",
+            "category_labels": ["R&D"],
+            "series": [
+                {
+                    "name": "Value",
+                    "value_fact_ids": ["rd_expense_ttm", "rd_as_pct_rev_ttm"],
+                }
+            ],
+        }
+    ]
+    if extra_charts:
+        charts.extend(extra_charts)
+    return {
+        "language": "en",
+        "central_argument": "x",
+        "key_takeaways": [],
+        "valuation_stance": "x",
+        "canonical_figures": [],
+        "mandates": [
+            {
+                "section_id": "business",
+                "covers": "x",
+                "does_not_cover": "y",
+                "chart_ids": [c["id"] for c in charts],
+                "relevant_fact_ids": ["rev_ttm"],
+            }
+        ],
+        "charts": charts,
+    }
+
+
+def test_synthesize_drops_unrepairable_chart_after_retries_exhaust() -> None:
+    """When the LLM still emits the mixed-unit chart after its retry
+    attempt, the server-side fallback drops the chart + cleans the
+    mandate's chart_ids reference and returns a clean thesis. The run
+    completes with N-1 charts instead of failing the whole stage."""
+    bad = _bad_chart_payload()
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        return bad  # never recovers
+
+    client = LLMSynthesizerClient(_call)
+    thesis = client.synthesize(
+        SynthesizerRequest(
+            raw_prompt="x",
+            language=Language.EN,
+            bundle=_mixed_unit_bundle(),
+            outline=_outline(),
+            template=_template(),
+        )
+    )
+    assert thesis.charts == [], "the bad chart must be dropped"
+    assert thesis.mandates[0].chart_ids == [], (
+        "the mandate's chart_ids reference must be cleaned along with the chart"
+    )
+
+
+def test_synthesize_fallback_keeps_good_charts_drops_only_bad_ones() -> None:
+    """A good chart on the same thesis must survive the fallback. Only
+    the mixed-unit chart is dropped; the unit-clean one stays."""
+    good_chart = {
+        "id": "chart_rev",
+        "section_id": "business",
+        "claim": "revenue",
+        "chart_type": "line",
+        "title": "Revenue",
+        "category_labels": ["TTM"],
+        "series": [{"name": "Revenue", "value_fact_ids": ["rev_ttm"]}],
+    }
+    bad = _bad_chart_payload(extra_charts=[good_chart])
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        return bad
+
+    client = LLMSynthesizerClient(_call)
+    thesis = client.synthesize(
+        SynthesizerRequest(
+            raw_prompt="x",
+            language=Language.EN,
+            bundle=_mixed_unit_bundle(),
+            outline=_outline(),
+            template=_template(),
+        )
+    )
+    assert [c.id for c in thesis.charts] == ["chart_rev"]
+    assert thesis.mandates[0].chart_ids == ["chart_rev"]
+
+
+def test_synthesize_fallback_does_not_swallow_non_chart_errors() -> None:
+    """If the residual complaints include anything besides chart
+    problems (e.g. a canonical_figure pointing at a phantom fact), the
+    fallback declines and the original RuntimeError propagates. We do
+    not want to mask validation failures the LLM still owns."""
+    payload = {
+        "language": "en",
+        "central_argument": "x",
+        "key_takeaways": [],
+        "valuation_stance": "x",
+        # Phantom canonical_figure — chart-fallback cannot fix this:
+        "canonical_figures": [{"fact_id": "phantom_id_does_not_exist", "display": "?"}],
+        "mandates": [
+            {
+                "section_id": "business",
+                "covers": "x",
+                "does_not_cover": "y",
+                "chart_ids": [],
+                "relevant_fact_ids": [],
+            }
+        ],
+        "charts": [],
+    }
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        return payload
+
+    client = LLMSynthesizerClient(_call)
+    with pytest.raises(RuntimeError, match="canonical_figures"):
+        client.synthesize(
+            SynthesizerRequest(
+                raw_prompt="x",
+                language=Language.EN,
+                bundle=_mixed_unit_bundle(),
+                outline=_outline(),
+                template=_template(),
+            )
+        )
+
+
+def test_synthesize_prompt_documents_unit_consistency_rule() -> None:
+    """The system prompt must spell out the one-unit-per-series rule
+    so the LLM avoids the trap before the validator fires. Without
+    this, the model keeps mixing units (USD with percent) because no
+    other Rules bullet says it can't."""
+    # Normalize whitespace so the assertion doesn't break when the
+    # formatter re-flows the line. The rule's *concept* is the test
+    # surface; the exact wording can drift.
+    import re
+
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    collapsed = re.sub(r"\s+", " ", SYNTHESIZE_SYSTEM_PROMPT.lower())
+    assert "value_fact_id" in collapsed
+    assert "share the same unit" in collapsed or "share one unit" in collapsed
