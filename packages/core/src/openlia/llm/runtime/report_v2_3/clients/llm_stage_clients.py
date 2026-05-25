@@ -187,7 +187,8 @@ Output an Outline JSON object:
       "data_needs": [
         {
           "description": "<one-line note on what RESEARCH should fetch>",
-          "expected_fact_ids": ["rev_ttm", "rev_growth_yoy"]
+          "expected_fact_ids": ["rev_ttm", "rev_growth_yoy"],
+          "source_class": "quantitative"
         }
       ]
     },
@@ -206,6 +207,24 @@ Rules:
   Each `data_needs[*].expected_fact_ids` is a list of stable identifier
   strings RESEARCH will fetch and bind to the BundleFact map. Use
   snake_case ids like `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
+- Tag every `data_needs[*]` with a `source_class`. RESEARCH uses the
+  tag to route the need to the right tool — set it honestly so the
+  right source is selected:
+    * `quantitative` — reported financial line items (revenue, margins,
+      cash flow, leverage), market data (price, volume, returns), peer
+      multiples, valuation inputs. Anything that lives in a structured
+      data provider's response.
+    * `narrative` — anything that requires reading current sources:
+      regulatory status / investigations, management commentary,
+      product launches, catalysts and pipeline, competitive moves,
+      M&A, analyst notes, qualitative positioning. If the need is for
+      a recent event or an opinion, it is narrative.
+    * `either` — facts that could be served by either source class
+      (company description, segment mix, business model summary).
+- Split a need rather than tagging `either` when half is quantitative
+  and half narrative: a fact like "China revenue mix" is `quantitative`;
+  a fact like "China export-control exposure" is `narrative`. Two
+  separate entries beats one mixed tag.
 - `valuation_plan.methods` lists the valuation methods COMPUTE should
   run. Choose from `dcf`, `comps`, `sensitivity` based on what the
   template's sections actually need (e.g. include `dcf` only when a
