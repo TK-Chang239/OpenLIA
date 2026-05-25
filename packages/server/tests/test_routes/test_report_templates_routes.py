@@ -186,23 +186,20 @@ def test_v23_parse_requires_auth(client) -> None:
     assert r.status_code in (401, 403)
 
 
-def test_v23_builtins_returns_five_templates(client, user_factory, login_as) -> None:
+def test_v23_builtins_returns_three_templates(client, user_factory, login_as) -> None:
     """Settings pill renders these as flat siblings of user uploads. The
-    five report_type built-ins must all surface."""
+    three report_type built-ins mirror v2.2's mode triad (Stock
+    Initiation / Stock Update / Sector Research)."""
     login_as(user_factory())
     r = client.get("/report-templates/v23/builtins")
     assert r.status_code == 200, r.text
     items = r.json()["items"]
     report_types = [it["report_type"] for it in items]
-    assert sorted(report_types) == sorted(
-        [
-            "initiation",
-            "update",
-            "sector_research",
-            "morning_brief",
-            "earnings_review",
-        ]
-    )
+    assert sorted(report_types) == sorted(["initiation", "update", "sector_research"])
+    names = {it["report_type"]: it["template_spec"]["name"] for it in items}
+    assert names["initiation"] == "Stock Initiation"
+    assert names["update"] == "Stock Update"
+    assert names["sector_research"] == "Sector Research"
     # Each carries a fully-shaped TemplateSpec dict the frontend can
     # render without an extra fetch.
     for it in items:

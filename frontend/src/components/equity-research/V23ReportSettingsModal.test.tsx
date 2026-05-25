@@ -14,7 +14,7 @@ const BUILTINS = [
     report_type: "initiation" as const,
     template_spec: {
       template_id: "initiation_default",
-      name: "Initiation (default)",
+      name: "Stock Initiation",
       shape_description: "Full initiation.",
       ticker_anchored: true,
       sections: [
@@ -23,14 +23,14 @@ const BUILTINS = [
     },
   },
   {
-    report_type: "morning_brief" as const,
+    report_type: "sector_research" as const,
     template_spec: {
-      template_id: "morning_brief_default",
-      name: "Morning Brief (default)",
-      shape_description: "Pre-market brief.",
-      ticker_anchored: true,
+      template_id: "sector_research_default",
+      name: "Sector Research",
+      shape_description: "Sector primer.",
+      ticker_anchored: false,
       sections: [
-        { id: "overnight", title: "Overnight", intent: "x", methodology_hints: [] },
+        { id: "primer", title: "Primer", intent: "x", methodology_hints: [] },
       ],
     },
   },
@@ -93,9 +93,9 @@ describe("V23ReportSettingsModal", () => {
       />,
     );
     await waitFor(() =>
-      expect(screen.getByText("Initiation (default)")).toBeInTheDocument(),
+      expect(screen.getByText("Stock Initiation")).toBeInTheDocument(),
     );
-    expect(screen.getByText("Morning Brief (default)")).toBeInTheDocument();
+    expect(screen.getByText("Sector Research")).toBeInTheDocument();
     expect(screen.getByText("My Custom Template")).toBeInTheDocument();
   });
 
@@ -112,13 +112,13 @@ describe("V23ReportSettingsModal", () => {
         onClose={vi.fn()}
       />,
     );
-    await waitFor(() => screen.getByText("Morning Brief (default)"));
+    await waitFor(() => screen.getByText("Sector Research"));
     fireEvent.click(
-      screen.getByTestId("er-v2-3-settings-builtin-morning_brief"),
+      screen.getByTestId("er-v2-3-settings-builtin-sector_research"),
     );
     expect(onSelectionChange).toHaveBeenCalledWith({
       templateId: null,
-      reportType: "morning_brief",
+      reportType: "sector_research",
     });
   });
 
@@ -158,7 +158,7 @@ describe("V23ReportSettingsModal", () => {
         onClose={vi.fn()}
       />,
     );
-    await waitFor(() => screen.getByText("Initiation (default)"));
+    await waitFor(() => screen.getByText("Stock Initiation"));
     fireEvent.click(screen.getByTestId("er-v2-3-settings-length-elaborative"));
     expect(onLengthChange).toHaveBeenCalledWith("elaborative");
   });
@@ -177,7 +177,7 @@ describe("V23ReportSettingsModal", () => {
         onClose={onClose}
       />,
     );
-    await waitFor(() => screen.getByText("Initiation (default)"));
+    await waitFor(() => screen.getByText("Stock Initiation"));
     fireEvent.click(screen.getByTestId("er-v2-3-settings-upload"));
     expect(onUploadClick).toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
@@ -241,7 +241,7 @@ describe("V23ReportSettingsModal", () => {
     render(
       <V23ReportSettingsModal
         open
-        selection={{ templateId: null, reportType: "morning_brief" }}
+        selection={{ templateId: null, reportType: "sector_research" }}
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
@@ -249,8 +249,8 @@ describe("V23ReportSettingsModal", () => {
         onClose={vi.fn()}
       />,
     );
-    await waitFor(() => screen.getByText("Morning Brief (default)"));
-    const row = screen.getByTestId("er-v2-3-settings-builtin-morning_brief");
+    await waitFor(() => screen.getByText("Sector Research"));
+    const row = screen.getByTestId("er-v2-3-settings-builtin-sector_research");
     expect(row).toHaveAttribute("aria-checked", "true");
     const other = screen.getByTestId("er-v2-3-settings-builtin-initiation");
     expect(other).toHaveAttribute("aria-checked", "false");

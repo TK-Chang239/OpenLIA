@@ -47,8 +47,6 @@ const REPORT_TYPE_TITLE: Record<string, string> = {
   initiation: "Stock Initiation Report",
   update: "Stock Update Report",
   sector_research: "Sector Research Report",
-  morning_brief: "Morning Brief",
-  earnings_review: "Earnings Review",
 };
 
 const CHART_TYPE_MAP: Record<V23ChartType, string> = {
@@ -58,6 +56,8 @@ const CHART_TYPE_MAP: Record<V23ChartType, string> = {
   area: "area_chart",
   pie: "pie_chart",
   scatter: "scatter_plot",
+  heatmap: "heatmap",
+  table: "table",
 };
 
 const FIG_RE = /\{\{FIG:([a-zA-Z0-9_]+)\}\}/g;

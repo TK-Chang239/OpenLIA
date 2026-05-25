@@ -158,9 +158,7 @@ def test_suspend_then_answer_completes_run(v2_3_client) -> None:
 
 def test_get_run_returns_persisted_state(v2_3_client) -> None:
     app, client = v2_3_client
-    _install_factory(
-        app, FakeClarifierClient(result=ClarifyProceed(assumptions=["x"]))
-    )
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])))
 
     start = client.post("/api/departments/equity-research/v2.3/runs", json=_start_payload())
     run_id = start.json()["run_id"]
@@ -196,9 +194,7 @@ def test_answer_returns_404_for_unknown_run_id(v2_3_client) -> None:
 def test_answer_returns_409_when_run_is_not_waiting(v2_3_client) -> None:
     """A completed run cannot be `answer`ed — resume() requires WAITING_ON_USER."""
     app, client = v2_3_client
-    _install_factory(
-        app, FakeClarifierClient(result=ClarifyProceed(assumptions=["x"]))
-    )
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])))
 
     start = client.post("/api/departments/equity-research/v2.3/runs", json=_start_payload())
     run_id = start.json()["run_id"]
@@ -222,9 +218,7 @@ def test_v23_run_uses_user_uploaded_template_end_to_end(v2_3_client) -> None:
     the user's template (proves the upload-then-launch wiring end-to-end).
     """
     app, client = v2_3_client
-    _install_factory(
-        app, FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"]))
-    )
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"])))
 
     # 1. Parse markdown via the v2.3 endpoint.
     parse_resp = client.post(
@@ -290,15 +284,59 @@ def test_v23_run_uses_user_uploaded_template_end_to_end(v2_3_client) -> None:
     ]
 
 
+def test_v23_built_in_initiation_resolves_to_initiation_default(v2_3_client) -> None:
+    """report_type=initiation + template_id=None should land state.template
+    on the Stock Initiation built-in."""
+    _assert_builtin_resolves(v2_3_client, "initiation", "initiation_default", "Stock Initiation")
+
+
+def test_v23_built_in_update_resolves_to_update_default(v2_3_client) -> None:
+    _assert_builtin_resolves(v2_3_client, "update", "update_default", "Stock Update")
+
+
+def test_v23_built_in_sector_research_resolves_to_sector_research_default(
+    v2_3_client,
+) -> None:
+    _assert_builtin_resolves(
+        v2_3_client, "sector_research", "sector_research_default", "Sector Research"
+    )
+
+
+def _assert_builtin_resolves(
+    v2_3_client, report_type: str, expected_template_id: str, expected_name: str
+) -> None:
+    """Helper: start a run with the given report_type and no template_id,
+    then load the persisted ReportState and confirm state.template binds
+    to the matching built-in."""
+    app, client = v2_3_client
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed(assumptions=["x"])))
+    payload = {**_start_payload(), "report_type": report_type}
+    # Sector research is thematic, no ticker required.
+    if report_type == "sector_research":
+        payload["tickers"] = []
+    resp = client.post("/api/departments/equity-research/v2.3/runs", json=payload)
+    assert resp.status_code == 200, resp.text
+    run_id = resp.json()["run_id"]
+
+    from openlia_server.db import session as session_mod
+    from openlia_server.services.v2_3_state_store import SqlStateStore
+
+    with session_mod.SessionLocal() as s:
+        persisted = SqlStateStore(s).load(run_id)
+    assert persisted.template.template_id == expected_template_id
+    assert persisted.template.name == expected_name
+    # template_id (the user-template-row column) stays None because the
+    # run selected a built-in.
+    assert persisted.template_id is None
+
+
 def test_v23_run_returns_404_for_other_users_template(v2_3_client) -> None:
     """The cross-owner integration seam: a template_id that exists but
     belongs to a different user must surface as 404 at the route layer
     (no existence leak). Guards against accidental drop of `user_id`
     plumbing in `_resolve_template`."""
     app, client = v2_3_client
-    _install_factory(
-        app, FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"]))
-    )
+    _install_factory(app, FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"])))
 
     # Seed a second user and a template owned by them.
     from openlia_server.db import session as session_mod

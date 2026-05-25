@@ -175,12 +175,7 @@ export async function parseMarkdownV23(
 }
 
 export interface V23BuiltinTemplate {
-  report_type:
-    | "initiation"
-    | "update"
-    | "sector_research"
-    | "morning_brief"
-    | "earnings_review";
+  report_type: "initiation" | "update" | "sector_research";
   template_spec: TemplateSpec;
 }
 

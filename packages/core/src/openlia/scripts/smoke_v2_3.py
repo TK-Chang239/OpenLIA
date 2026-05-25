@@ -377,7 +377,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--prompt", required=True, help="The raw user prompt.")
     p.add_argument(
         "--report-type",
-        choices=["initiation", "update", "morning_brief", "earnings_review"],
+        choices=["initiation", "update", "sector_research"],
         default="initiation",
     )
     p.add_argument("--language", choices=["en", "zh-TW"], default="en")

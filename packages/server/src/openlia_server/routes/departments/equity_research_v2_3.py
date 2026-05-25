@@ -77,9 +77,9 @@ class StartPayload(BaseModel):
     length: ReportLength = ReportLength.NORMAL
     # Optional custom-template selector. When null, the run uses the
     # built-in template for `report_type` (one of: initiation, update,
-    # sector_research, morning_brief, earnings_review). When set, must
-    # be a UUID from the report_templates table; the planner pulls the
-    # template's section plan in place of the built-in default.
+    # sector_research). When set, must be a UUID from the
+    # report_templates table; the planner pulls the template's section
+    # plan in place of the built-in default.
     template_id: str | None = None
     # Optional when the caller uses the single-textarea composer; in
     # that case CLARIFY extracts the subject ticker from `raw_prompt`
