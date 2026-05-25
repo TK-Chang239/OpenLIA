@@ -55,7 +55,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.slots import LLM_V23_SLOTS, V23Slot
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from openlia.llm.types import ResolvedModel
+from openlia.llm.types import ReasoningEffort, ResolvedModel
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -87,6 +87,9 @@ class StartPayload(BaseModel):
     # PLAN. Non-empty when the caller already pinned a subject (the
     # v2.2 two-field composer path).
     tickers: list[str] = Field(default_factory=list)
+    # User-selected extended-thinking effort (3-state pill: off / medium /
+    # high). ``None`` = off; only PLAN + SYNTHESIZE stages apply it.
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class AnswerPayload(BaseModel):
@@ -275,8 +278,14 @@ def build_equity_research_v2_3_router(
         tags=["equity-research-v2.3"],
     )
 
-    def _factory(request: Request, db: DBSession, user: User) -> V23RunnerFactory:
-        per_user = _per_user_factory(db, user)
+    def _factory(
+        request: Request,
+        db: DBSession,
+        user: User,
+        *,
+        reasoning_effort: ReasoningEffort | None = None,
+    ) -> V23RunnerFactory:
+        per_user = _per_user_factory(db, user, reasoning_effort=reasoning_effort)
         if per_user is not None:
             return per_user
         env_factory = getattr(request.app.state, "v2_3_runner_factory", None)
@@ -293,7 +302,7 @@ def build_equity_research_v2_3_router(
     ) -> RunStateOut:
         state = svc.start_run(
             db=db,
-            runner_factory=_factory(request, db, user),
+            runner_factory=_factory(request, db, user, reasoning_effort=payload.reasoning_effort),
             user_id=user.id,
             raw_prompt=payload.raw_prompt,
             language=payload.language,
@@ -301,6 +310,7 @@ def build_equity_research_v2_3_router(
             length=payload.length,
             template_id=payload.template_id,
             tickers=payload.tickers,
+            reasoning_effort=payload.reasoning_effort,
         )
         return RunStateOut.from_state(state)
 
@@ -312,10 +322,11 @@ def build_equity_research_v2_3_router(
         db: DBSession = Depends(session_dep),
         user: User = require_auth,
     ) -> RunStateOut:
+        persisted_effort = _read_persisted_reasoning_effort(db, run_id)
         try:
             state = svc.answer_run(
                 db=db,
-                runner_factory=_factory(request, db, user),
+                runner_factory=_factory(request, db, user, reasoning_effort=persisted_effort),
                 user_id=user.id,
                 run_id=run_id,
                 answers=ClarifyAnswers(answers=payload.answers),
@@ -563,13 +574,50 @@ def _project_payload(state: ReportState) -> RunPayloadOut:
     )
 
 
-def _per_user_factory(db: DBSession, user: User) -> V23RunnerFactory | None:
+def _read_persisted_reasoning_effort(db: DBSession, run_id: str) -> ReasoningEffort | None:
+    """Look up the reasoning_effort persisted at start_run time so the
+    answer / resume path rebuilds the factory with the same setting.
+
+    Returns ``None`` on any miss (row absent, blob malformed, value
+    unknown) so the resume call falls back to legacy non-reasoning
+    behaviour rather than 500-ing. Pre-feature runs naturally fall here.
+    """
+    import json
+
+    from openlia_server.db.models.er_v2_3_run_state import ErV23RunState
+
+    row = db.get(ErV23RunState, run_id)
+    if row is None:
+        return None
+    try:
+        blob = json.loads(row.state_json)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    raw = blob.get("reasoning_effort") if isinstance(blob, dict) else None
+    if raw is None:
+        return None
+    try:
+        return ReasoningEffort(raw)
+    except ValueError:
+        return None
+
+
+def _per_user_factory(
+    db: DBSession,
+    user: User,
+    *,
+    reasoning_effort: ReasoningEffort | None = None,
+) -> V23RunnerFactory | None:
     """Resolve the caller's saved v2.3 model assignments and build a runner
     factory bound to them. Returns None when no clarify assignment exists
     so the route can fall back to the env-driven factory.
 
     Any assigned model id that does not resolve raises 422 — silently
     NoOp'ing a stage the user asked to enable would surprise them.
+
+    ``reasoning_effort`` is forwarded to the wiring layer; when set, PLAN
+    and SYNTHESIZE clients are built with the directive and a grown
+    ``max_tokens`` ceiling (see ``v2_3_wiring._REASONING_STAGES``).
     """
     mapping = model_assignments_svc.get_assignments(db, user_id=user.id)
     if "clarify" not in mapping:
@@ -598,7 +646,11 @@ def _per_user_factory(db: DBSession, user: User) -> V23RunnerFactory | None:
             },
         )
     eodhd_key = os.getenv("EODHD_API_KEY")
-    return build_v2_3_runner_factory_from_models(models_by_slot=resolved, eodhd_api_key=eodhd_key)
+    return build_v2_3_runner_factory_from_models(
+        models_by_slot=resolved,
+        eodhd_api_key=eodhd_key,
+        reasoning_effort=reasoning_effort,
+    )
 
 
 def _to_resolved_model(row: ResolvedModelRow) -> ResolvedModel:
