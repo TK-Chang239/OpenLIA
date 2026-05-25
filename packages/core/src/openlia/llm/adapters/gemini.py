@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import AsyncIterator
 
@@ -22,11 +23,30 @@ from openlia.llm.types import (
     LLMResponse,
     Message,
     ModelInfo,
+    ReasoningEffort,
     ServerToolEvent,
     TestResult,
 )
 
 _BASE_URL = "https://generativelanguage.googleapis.com"
+
+# Gemini models that accept `generationConfig.thinkingConfig.thinkingBudget`.
+# Gemini 2.5+ supports thinking (flash and pro variants). Earlier models
+# (1.5, 2.0) reject the field. The v2.3 wiring also gates by stage; the
+# guard here keeps the adapter safe from non-v2.3 callers.
+_THINKING_MODELS_RE = re.compile(r"gemini-([2-9]\.[5-9]|[3-9])")
+
+
+def _supports_thinking(model: str) -> bool:
+    return bool(_THINKING_MODELS_RE.search(model.lower()))
+
+
+# Effort -> thinkingBudget tokens. Mirrors v2_3_wiring _REASONING_OVERHEAD;
+# replaced from observed thoughtsTokenCount in the sized-from-data pass.
+_REASONING_BUDGET_BY_EFFORT: dict[ReasoningEffort, int] = {
+    ReasoningEffort.MEDIUM: 8192,
+    ReasoningEffort.HIGH: 32768,
+}
 
 # Gemini's native Grounding with Google Search tool. Documented at
 # https://ai.google.dev/gemini-api/docs/grounding. Activated by adding
@@ -170,6 +190,10 @@ class GeminiAdapter(LLMProvider):
             payload["tools"] = gemini_tools
         if request.tool_choice is not None:
             payload["toolConfig"] = request.tool_choice
+        if request.reasoning_effort is not None and _supports_thinking(self.model):
+            payload["generationConfig"]["thinkingConfig"] = {
+                "thinkingBudget": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
+            }
 
         path = f"/v1beta/models/{self.model}:generateContent"
 
@@ -217,6 +241,7 @@ class GeminiAdapter(LLMProvider):
             finish_reason=candidate.get("finishReason", "STOP"),
             input_tokens=int(usage.get("promptTokenCount", 0)),
             output_tokens=int(usage.get("candidatesTokenCount", 0)),
+            reasoning_output_tokens=int(usage.get("thoughtsTokenCount", 0)),
             citations=citations,
             server_tool_failures=failures,
         )
@@ -240,6 +265,10 @@ class GeminiAdapter(LLMProvider):
             payload["tools"] = gemini_tools
         if request.tool_choice is not None:
             payload["toolConfig"] = request.tool_choice
+        if request.reasoning_effort is not None and _supports_thinking(self.model):
+            payload["generationConfig"]["thinkingConfig"] = {
+                "thinkingBudget": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
+            }
 
         path = f"/v1beta/models/{self.model}:streamGenerateContent"
         params = {**self._query(), "alt": "sse"}

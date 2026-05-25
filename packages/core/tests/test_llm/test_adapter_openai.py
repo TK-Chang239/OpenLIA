@@ -240,6 +240,147 @@ async def test_generate_surfaces_cached_input_tokens() -> None:
     assert resp.cached_input_tokens == 47_500
 
 
+async def test_generate_sends_reasoning_effort_when_set_on_reasoning_model() -> None:
+    """gpt-5 / o-series accept `reasoning_effort` on Chat Completions.
+    When LLMRequest.reasoning_effort is set the adapter must surface it.
+    Non-reasoning models reject the field, so this is guarded by
+    _is_reasoning_model — covered separately below."""
+    from openlia.llm.types import ReasoningEffort
+
+    adapter = _adapter(model="gpt-5.4")
+    captured: dict = {}
+
+    def _capture(request):  # respx Route callback
+        captured.update(json.loads(request.content))
+        from httpx import Response
+
+        return Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"role": "assistant", "content": "ok"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert captured.get("reasoning_effort") == "high"
+
+
+async def test_generate_omits_reasoning_effort_when_none() -> None:
+    """Default request (reasoning_effort=None) must NOT send the field —
+    OpenAI applies the model default and adding the key would override."""
+    adapter = _adapter(model="gpt-5.4")
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        from httpx import Response
+
+        return Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert "reasoning_effort" not in captured
+
+
+async def test_generate_omits_reasoning_effort_on_non_reasoning_model() -> None:
+    """Non-reasoning models (e.g. gpt-4o) reject the reasoning_effort field
+    with a 400. The guard around _is_reasoning_model must drop it even
+    when the caller passed one."""
+    from openlia.llm.types import ReasoningEffort
+
+    adapter = _adapter(model="gpt-4o")
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        from httpx import Response
+
+        return Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            },
+        )
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert "reasoning_effort" not in captured
+
+
+async def test_generate_surfaces_reasoning_output_tokens_from_usage() -> None:
+    """The reasoning-token count lives under
+    `usage.completion_tokens_details.reasoning_tokens` on reasoning models.
+    Must surface as LLMResponse.reasoning_output_tokens for downstream
+    sized-from-data ceiling work."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+                ],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 500,
+                    "completion_tokens_details": {"reasoning_tokens": 420},
+                },
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.output_tokens == 500
+    assert resp.reasoning_output_tokens == 420
+
+
+async def test_generate_defaults_reasoning_output_tokens_to_zero_when_absent() -> None:
+    """Non-reasoning models don't report completion_tokens_details. Field
+    must default to 0 so consumers can always read it."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/chat/completions").respond(
+            200,
+            json={
+                "choices": [
+                    {"message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 5, "completion_tokens": 2},
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.reasoning_output_tokens == 0
+
+
 async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> None:
     """When the provider response does not report cache details, the field
     falls back to 0 so downstream consumers can always read it."""

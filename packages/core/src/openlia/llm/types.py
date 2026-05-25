@@ -12,6 +12,30 @@ class Capability(StrEnum):
     WEB_SEARCH = "web_search"
 
 
+class ReasoningEffort(StrEnum):
+    """User-selected effort level for extended-thinking / reasoning models.
+
+    The frontend exposes a 3-state pill (off / medium / high) on the report
+    settings modal. ``off`` is represented by leaving ``LLMRequest.reasoning_effort``
+    as ``None``; the explicit enum members map to provider config as:
+
+    - OpenAI gpt-5 / o-series: ``reasoning_effort: "medium" | "high"``
+      (Chat Completions ``reasoning_effort`` field; Responses API
+      ``reasoning.effort``).
+    - Anthropic Claude 4.x: ``thinking={"type":"enabled","budget_tokens": N}``
+      with N drawn from the v2.3 wiring's ``_REASONING_OVERHEAD`` table.
+    - Gemini 2.x: ``thinking_config={"thinking_budget": N}``.
+
+    Adapters whose models do not support thinking ignore the field
+    silently. Setting this raises the effective ``max_tokens`` ceiling
+    because reasoning tokens count against the same budget on every
+    provider — see ``v2_3_wiring._REASONING_OVERHEAD``.
+    """
+
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
 @dataclass(frozen=True)
 class Capabilities:
     streaming: bool = True
@@ -89,6 +113,11 @@ class LLMRequest:
     # OpenAI have no equivalent so the runtime enforces softly via
     # the dispatcher's per-run counter. `None` means no cap.
     web_search_max_uses: int | None = None
+    # User-selected reasoning effort. ``None`` = thinking off. Adapters
+    # for models that don't support thinking ignore the field. Callers
+    # that set this must also grow ``max_tokens`` to absorb the thinking
+    # budget — reasoning tokens count against the same ceiling.
+    reasoning_effort: ReasoningEffort | None = None
 
 
 @dataclass(frozen=True)
@@ -173,6 +202,13 @@ class LLMResponse:
     # events. Cost-aware callers should treat this as already-billed at the
     # cache-read price, not the full input price.
     cached_input_tokens: int = 0
+    # Portion of output_tokens spent on extended-thinking / reasoning that
+    # was NOT emitted as visible text. 0 when the model is not a reasoning
+    # model, when thinking was off, or when the provider does not report
+    # the breakdown. Used by the v2 stage factory's `llm_usage` log line
+    # so the sized-from-data ceiling pass can size for visible-output and
+    # reasoning headroom independently.
+    reasoning_output_tokens: int = 0
     tool_calls: list[ToolCall] = field(default_factory=list)
     # Source references collected from native tool results (kind="tool")
     # and web search results (kind="web"). Empty tuple for adapters that

@@ -405,6 +405,130 @@ async def test_generate_segments_citations_via_grounding_supports() -> None:
     assert ("https://b", 11, 20) in segmented
 
 
+# ---------- Reasoning / thinking budget ----------
+
+
+async def test_generate_emits_thinking_config_on_supported_model() -> None:
+    """Gemini 2.5+ accepts `generationConfig.thinkingConfig.thinkingBudget`.
+    Earlier models reject the field; adapter guards by model name."""
+    from openlia.llm.types import ReasoningEffort
+
+    adapter = _adapter(model="gemini-3-flash")
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert captured["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 32768}
+
+
+async def test_generate_thinking_budget_medium_uses_8192() -> None:
+    from openlia.llm.types import ReasoningEffort
+
+    adapter = _adapter(model="gemini-2.5-pro")
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.MEDIUM,
+            )
+        )
+    assert captured["generationConfig"]["thinkingConfig"] == {"thinkingBudget": 8192}
+
+
+async def test_generate_omits_thinking_config_when_effort_none() -> None:
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert "thinkingConfig" not in captured["generationConfig"]
+
+
+async def test_generate_omits_thinking_config_on_unsupported_model() -> None:
+    """Gemini 1.5 and 2.0 reject thinkingConfig; adapter must drop it."""
+    from openlia.llm.types import ReasoningEffort
+
+    adapter = _adapter(model="gemini-1.5-pro")
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        return _gemini_ok("ok")
+
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent"
+        ).mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert "thinkingConfig" not in captured["generationConfig"]
+
+
+async def test_generate_surfaces_thoughts_token_count() -> None:
+    """Gemini reports thinking-only tokens at
+    `usageMetadata.thoughtsTokenCount`. Adapter surfaces them on
+    LLMResponse.reasoning_output_tokens."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).respond(
+            200,
+            json={
+                "candidates": [{"content": {"parts": [{"text": "ok"}]}, "finishReason": "STOP"}],
+                "usageMetadata": {
+                    "promptTokenCount": 10,
+                    "candidatesTokenCount": 30,
+                    "thoughtsTokenCount": 240,
+                },
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.reasoning_output_tokens == 240
+
+
+async def test_generate_defaults_reasoning_output_tokens_to_zero_when_absent() -> None:
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent"
+        ).mock(side_effect=lambda r: _gemini_ok("ok"))
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.reasoning_output_tokens == 0
+
+
 # ---------- Unified streaming: synthetic ServerToolEvent ----------
 
 
