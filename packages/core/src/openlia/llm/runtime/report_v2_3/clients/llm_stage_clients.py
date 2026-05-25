@@ -133,17 +133,35 @@ def _call_with_repair(
             max_retries + 1,
             last_errors[0] if last_errors else "<none>",
         )
+        # When the previous response coerced to an empty dict (the
+        # SyncJsonLlmClient fallback when the LLM either truncated mid-
+        # emission or returned non-JSON prose), surface that as the
+        # primary signal — the LLM otherwise sees only a list of "field
+        # required" errors and keeps repeating the same truncated
+        # emission. Telling it the response was empty/truncated points
+        # it at the actual root cause.
+        empty_response = not last_raw
+        if empty_response:
+            instruction = (
+                "Your previous response was empty or non-JSON — likely "
+                "truncated mid-emission or refused. Re-emit the FULL "
+                "JSON object matching the schema. If the thesis is too "
+                "long, drop optional fields (charts, extra mandates) "
+                "before truncating again. Output JSON only, no prose."
+            )
+        else:
+            instruction = (
+                "Your previous JSON output failed validation. Re-emit "
+                "the FULL corrected JSON object addressing the errors "
+                "above. Keep every part of your previous output that "
+                "was valid — only change what the errors flag. Output "
+                "JSON only, no prose."
+            )
         repair_user = {
             "original_request": user,
             "your_previous_output": last_raw,
             "validation_errors": last_errors,
-            "instruction": (
-                "Your previous JSON output failed validation. Re-emit the "
-                "FULL corrected JSON object addressing the errors above. "
-                "Keep every part of your previous output that was valid — "
-                "only change what the errors flag. Output JSON only, no "
-                "prose."
-            ),
+            "instruction": instruction,
         }
         raw = json_call(system=system, user=repair_user)
         parsed, last_errors = _try(raw)
