@@ -131,7 +131,14 @@ _STAGE_DEFAULTS: dict[str, tuple[int, float]] = {
     # max_tokens, temperature
     "PLAN": (2048, 0.3),
     "COMPUTE": (1024, 0.2),
-    "SYNTHESIZE": (4096, 0.3),
+    # SYNTHESIZE emits the whole thesis in one call — mandates (one per
+    # outline section), canonical_figures, charts (with series + fact
+    # ids), plus central_argument/key_takeaways/valuation_stance prose.
+    # On a 6-section initiation with a ~35KB bundle the 4096 ceiling
+    # truncated the response, the JSON client coerced the empty trail
+    # to ``{}``, and the repair loop kept hitting the same wall. 16384
+    # tracks RESEARCH's budget for the same "one large emit" reason.
+    "SYNTHESIZE": (16384, 0.3),
     "WRITE": (4096, 0.4),
     "VERIFY": (2048, 0.2),
 }
@@ -249,16 +256,20 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
 
 _STAGE_DEFAULTS_PER_USER: dict[str, tuple[int, float]] = {
     # Mirrors _STAGE_DEFAULTS but includes CLARIFY (env path keeps its own
-    # block for backwards compat). RESEARCH carries the largest output
-    # budget because the LLM emits the full facts array at the end of its
-    # tool-use loop — multi-ticker initiation runs routinely produce
-    # 8k+ tokens of JSON. WRITE is also bumped so per-section bodies
-    # have room to render footnote-cited prose.
+    # block for backwards compat). RESEARCH and SYNTHESIZE carry the
+    # largest output budgets because both emit one large JSON in a
+    # single call — RESEARCH for the facts array at the end of its
+    # tool-use loop, SYNTHESIZE for the whole thesis (mandates +
+    # canonical_figures + charts + prose). Under-budgeting SYNTHESIZE
+    # truncates the response, the JSON client coerces the trail to
+    # ``{}``, and the repair loop has no useful signal to fix it.
+    # WRITE is also bumped so per-section bodies have room to render
+    # footnote-cited prose.
     "clarify": (1024, 0.2),
     "plan": (2048, 0.3),
     "research": (16384, 0.3),
     "compute": (1024, 0.2),
-    "synthesize": (4096, 0.3),
+    "synthesize": (16384, 0.3),
     "write": (8192, 0.4),
     "verify": (2048, 0.2),
 }

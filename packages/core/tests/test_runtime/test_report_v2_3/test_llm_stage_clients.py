@@ -1322,6 +1322,77 @@ def test_synthesize_fallback_does_not_swallow_non_chart_errors() -> None:
         )
 
 
+def test_repair_loop_flags_empty_response_with_specific_instruction() -> None:
+    """When the previous LLM emission was empty/truncated (the JSON
+    client coerces to ``{}``), the retry must tell the model the
+    response was empty — not just feed back the schema's "field
+    required" list, which is the same regardless of whether the model
+    truncated or genuinely tried."""
+    captured: list[dict[str, Any]] = []
+    sequence: list[dict[str, Any]] = [{}, {}]  # both attempts return empty
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        captured.append({"system": system, "user": user})
+        return sequence.pop(0)
+
+    client = LLMSynthesizerClient(_call)
+    with pytest.raises(RuntimeError, match="malformed JSON"):
+        client.synthesize(
+            SynthesizerRequest(
+                raw_prompt="x",
+                language=Language.EN,
+                bundle=_bundle(),
+                outline=_outline(),
+                template=_template(),
+            )
+        )
+
+    # The second call is the repair prompt — it must specifically flag
+    # the empty/truncated response so the LLM has a useful signal.
+    assert len(captured) == 2
+    repair_user = captured[1]["user"]
+    assert "empty" in repair_user["instruction"].lower()
+    assert "truncated" in repair_user["instruction"].lower()
+
+
+def test_repair_loop_keeps_generic_instruction_for_partial_validation_errors() -> None:
+    """When the previous response had valid JSON shape but failed only
+    schema validation (not empty), the retry uses the generic
+    instruction — we don't want to mis-label a real-but-flawed
+    response as 'empty'."""
+    partial = {
+        "language": "en",
+        "central_argument": "x",
+        "key_takeaways": [],
+        "valuation_stance": "x",
+        "canonical_figures": [],
+        # Missing `mandates` + `charts` — schema fails but the response
+        # was not empty/truncated.
+    }
+    captured: list[dict[str, Any]] = []
+
+    def _call(*, system: str, user: Any) -> dict[str, Any]:
+        captured.append({"system": system, "user": user})
+        return partial
+
+    client = LLMSynthesizerClient(_call)
+    with pytest.raises(RuntimeError, match="malformed JSON"):
+        client.synthesize(
+            SynthesizerRequest(
+                raw_prompt="x",
+                language=Language.EN,
+                bundle=_bundle(),
+                outline=_outline(),
+                template=_template(),
+            )
+        )
+
+    repair_user = captured[1]["user"]
+    instruction = repair_user["instruction"].lower()
+    assert "empty" not in instruction
+    assert "failed validation" in instruction
+
+
 def test_synthesize_prompt_documents_unit_consistency_rule() -> None:
     """The system prompt must spell out the one-unit-per-series rule
     so the LLM avoids the trap before the validator fires. Without
