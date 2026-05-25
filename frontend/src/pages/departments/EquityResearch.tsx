@@ -54,6 +54,7 @@ import { ReportProgressIndicator } from "../../components/equity-research/Report
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
 import { V23Composer } from "../../components/equity-research/V23Composer";
 import { V23EngineModelsPicker } from "../../components/equity-research/V23EngineModelsPicker";
+import { V23TemplateUploadModal } from "../../components/equity-research/V23TemplateUploadModal";
 import type { AssignmentsResponse } from "../../api/er-v2-3-models";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import {
@@ -242,6 +243,7 @@ export default function EquityResearch(): JSX.Element {
       /* localStorage disabled */
     }
   }, [frameworkTemplateId]);
+  const [v23UploadOpen, setV23UploadOpen] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string | null>(null);
   const [subject, setSubject] = useState<string>("");
@@ -1089,6 +1091,18 @@ export default function EquityResearch(): JSX.Element {
         {useV23 ? (
           <div className="flex flex-1 min-h-0 flex-col">
             <div className="flex items-center justify-end gap-2 px-4 pt-3">
+              <FrameworkTemplatePicker
+                selectedId={frameworkTemplateId}
+                onChange={setFrameworkTemplateId}
+              />
+              <button
+                type="button"
+                onClick={() => setV23UploadOpen(true)}
+                data-testid="er-v2-3-template-upload-open"
+                className="inline-flex items-center gap-[6px] rounded-sm border border-[--color-border-subtle] bg-[--color-bg-base] px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
+              >
+                Upload v2.3 template
+              </button>
               <V23EngineModelsPicker onAssignmentsChange={setV23Assignments} />
               <button
                 type="button"
@@ -1107,8 +1121,21 @@ export default function EquityResearch(): JSX.Element {
               assignments={v23Assignments}
               mode={config.report_mode}
               length={config.report_length}
+              templateId={
+                frameworkTemplateId && frameworkTemplateId !== "__default__"
+                  ? frameworkTemplateId
+                  : null
+              }
               firstName={firstName(user?.display_name)}
               onModeClick={() => setSettingsOpen(true)}
+            />
+            <V23TemplateUploadModal
+              open={v23UploadOpen}
+              onClose={() => setV23UploadOpen(false)}
+              onSaved={(id) => {
+                setFrameworkTemplateId(id);
+                setV23UploadOpen(false);
+              }}
             />
           </div>
         ) : !sessionId ? (

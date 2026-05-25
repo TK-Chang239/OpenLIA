@@ -111,6 +111,12 @@ interface Props {
    *  report_type on submit so the engine respects the user's choice. */
   mode: ReportMode;
   length: ReportLength;
+  /** Selected custom-template id from the page-level
+   *  FrameworkTemplatePicker, or null when the user has the built-in
+   *  default selected. Threaded into streamV23Run as `template_id` so
+   *  the engine resolves the user's chosen template instead of falling
+   *  back to the report_type built-in. */
+  templateId?: string | null;
   /** User's display name for the welcome greeting. */
   firstName: string;
   /** Open the Report Settings modal — wired by the page. */
@@ -125,6 +131,7 @@ export function V23Composer({
   assignments = null,
   mode,
   length,
+  templateId = null,
   firstName,
   onModeClick,
 }: Props): JSX.Element {
@@ -410,6 +417,7 @@ export function V23Composer({
         raw_prompt: promptText,
         report_type: MODE_TO_V23_TYPE[mode],
         length: LENGTH_TO_V23[length],
+        template_id: templateId,
       },
       {
         onEvent: handleStreamEvent,
