@@ -152,10 +152,16 @@ def _call_with_repair(
         last_raw = raw
 
     fragment = json.dumps(last_raw, default=str)[:400]
-    raise RuntimeError(
+    exc = RuntimeError(
         f"{stage} LLM returned malformed JSON after {max_retries + 1} attempts: "
         f"{last_errors}; head={fragment!r}"
     )
+    # Attach the final raw payload + complaints so callers (today: the
+    # synthesizer's chart-fallback path) can attempt a deterministic
+    # last-resort recovery before propagating the error.
+    exc.last_raw = last_raw  # type: ignore[attr-defined]
+    exc.last_errors = last_errors  # type: ignore[attr-defined]
+    raise exc
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +450,12 @@ Rules:
   chart_id you list on a mandate must also appear as a chart in
   ``charts``; if a section shouldn't have a chart, leave ``chart_ids``
   as ``[]``.
+- Every ``value_fact_id`` inside one ``series`` MUST share the same
+  unit (USD with USD, percent with percent, x with x). Mixing units in
+  one series is a category error — the y-axis can only carry one scale,
+  and a $50B bar plotted next to a 14% bar makes the percent invisible.
+  If you need both, emit two charts (or two series on one chart) rather
+  than mixing.
 - ``canonical_figures[].fact_id`` MUST exist in the bundle and the
   ``display`` string MUST be the final rendering in the report's
   language (e.g. ``$60.9B``, ``14.2%``).
@@ -640,15 +652,82 @@ class LLMSynthesizerClient(SynthesizerClient):
         # refs miss real fact_ids — this is what was causing reports to
         # ship with zero charts (the LLM invented chart_rev_2022 style
         # ids and the silent-strip in the stage dropped the whole chart).
-        return _call_with_repair(
-            json_call=self._call,
-            system=SYNTHESIZE_SYSTEM_PROMPT,
-            user=_synthesize_payload(request),
-            adapter=_THESIS_ADAPTER,
-            stage="SYNTHESIZE",
-            sanitiser=_sanitise_synthesize_raw,
-            post_validator=lambda thesis: _thesis_bundle_complaints(thesis, request.bundle),
-        )
+        try:
+            return _call_with_repair(
+                json_call=self._call,
+                system=SYNTHESIZE_SYSTEM_PROMPT,
+                user=_synthesize_payload(request),
+                adapter=_THESIS_ADAPTER,
+                stage="SYNTHESIZE",
+                sanitiser=_sanitise_synthesize_raw,
+                post_validator=lambda thesis: _thesis_bundle_complaints(thesis, request.bundle),
+            )
+        except RuntimeError as exc:
+            # Last-ditch: when the LLM's repair attempts fail and the
+            # *only* remaining problems are chart-spec issues (mixed
+            # units, missing fact refs), drop those charts and clean any
+            # mandate references that pointed at them. Charts are
+            # non-load-bearing; a report with N-1 charts beats one that
+            # crashes. Anything non-chart (bad canonical_figure, phantom
+            # mandate-fact ref) still raises.
+            recovered = _try_chart_fallback(exc, request.bundle)
+            if recovered is not None:
+                return recovered
+            raise
+
+
+def _try_chart_fallback(exc: RuntimeError, bundle: Any) -> ReportThesis | None:
+    """Attempt one-pass deterministic recovery for chart-only failures.
+
+    Returns a cleaned ``ReportThesis`` when every remaining complaint
+    after dropping bad charts is gone, else None (caller re-raises).
+    """
+    last_raw = getattr(exc, "last_raw", None)
+    if not isinstance(last_raw, dict):
+        return None
+    cleaned_raw = _sanitise_synthesize_raw(dict(last_raw))
+    try:
+        thesis = _THESIS_ADAPTER.validate_python(cleaned_raw)
+    except ValidationError:
+        # The last LLM output failed schema validation, not just our
+        # cross-reference checks. Schema fixes need the LLM, not us.
+        return None
+    bad_chart_ids = _bad_chart_ids(thesis, bundle)
+    if not bad_chart_ids:
+        return None
+    surviving_charts = [c for c in thesis.charts if c.id not in bad_chart_ids]
+    cleaned_mandates = [
+        m.model_copy(update={"chart_ids": [cid for cid in m.chart_ids if cid not in bad_chart_ids]})
+        for m in thesis.mandates
+    ]
+    cleaned = thesis.model_copy(update={"charts": surviving_charts, "mandates": cleaned_mandates})
+    residual = _thesis_bundle_complaints(cleaned, bundle)
+    if residual:
+        return None
+    log.warning(
+        "SYNTHESIZE: recovered via chart-fallback. Dropped %d chart(s): %s",
+        len(bad_chart_ids),
+        sorted(bad_chart_ids),
+    )
+    return cleaned
+
+
+def _bad_chart_ids(thesis: ReportThesis, bundle: Any) -> set[str]:
+    """Identify charts that fail the same checks ``_thesis_bundle_complaints``
+    flags. Returns the set of chart_ids to drop."""
+    fact_ids = set(bundle.facts.keys())
+    bad: set[str] = set()
+    for chart in thesis.charts:
+        missing = chart.referenced_fact_ids() - fact_ids
+        if missing:
+            bad.add(chart.id)
+            continue
+        for series in chart.series:
+            units = {bundle.facts[fid].unit or "" for fid in series.value_fact_ids}
+            if len(units) > 1:
+                bad.add(chart.id)
+                break
+    return bad
 
 
 # ---------------------------------------------------------------------------
