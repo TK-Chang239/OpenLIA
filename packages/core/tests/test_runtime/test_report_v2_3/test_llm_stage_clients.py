@@ -1074,3 +1074,63 @@ def test_v23_prompts_use_positive_phrasing_for_content_prescriptions():
     ):
         for phrase in forbidden_phrases:
             assert phrase not in prompt, f"{prompt_name}_SYSTEM_PROMPT still contains {phrase!r}"
+
+
+def test_synthesize_sanitiser_keeps_heatmap_and_table_chart_types() -> None:
+    """The post-Phase-3 widening lets the LLM emit `heatmap` and `table`
+    chart types. The pre-validation sanitiser must keep them instead of
+    treating them as invented placeholders to drop."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _sanitise_synthesize_raw,
+    )
+
+    raw = {
+        "charts": [
+            {
+                "id": "c_heat",
+                "section_id": "valuation",
+                "claim": "x",
+                "chart_type": "heatmap",
+                "title": "Sensitivity",
+                "category_labels": ["g=2%", "g=3%"],
+                "series": [{"name": "wacc=9%", "value_fact_ids": ["a", "b"]}],
+            },
+            {
+                "id": "c_table",
+                "section_id": "peers",
+                "claim": "y",
+                "chart_type": "table",
+                "title": "Peer snapshot",
+                "category_labels": ["NVDA", "AMD"],
+                "series": [{"name": "EV/EBITDA", "value_fact_ids": ["nv", "amd"]}],
+            },
+            {
+                "id": "c_bogus",
+                "section_id": "valuation",
+                "claim": "z",
+                "chart_type": "candlestick",
+                "title": "OHLC",
+                "category_labels": ["d1"],
+                "series": [{"name": "px", "value_fact_ids": ["p"]}],
+            },
+        ],
+        "mandates": [],
+        "canonical_figures": [],
+    }
+    cleaned = _sanitise_synthesize_raw(raw)
+    surviving_types = [c["chart_type"] for c in cleaned["charts"]]
+    assert surviving_types == ["heatmap", "table"]
+
+
+def test_synthesize_prompt_advertises_widened_chart_type_enum() -> None:
+    """The system prompt must list the eight legal chart types — without
+    them, the LLM will keep emitting only the original six even when
+    `heatmap`/`table` is the natural fit."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    for value in ("heatmap", "table"):
+        assert f'"{value}"' in SYNTHESIZE_SYSTEM_PROMPT, (
+            f"SYNTHESIZE_SYSTEM_PROMPT missing {value!r} in chart_type enum"
+        )
