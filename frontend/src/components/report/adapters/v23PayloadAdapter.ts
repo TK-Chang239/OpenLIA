@@ -5,24 +5,24 @@
  * an opaque prose string with `[^N]` footnote markers and `{{FIG:id}}`
  * chart placeholders, plus a separate list of ChartSpecs. The legacy
  * `ReportRenderer` (used by v1 + v2.2) wants typed blocks (text, chart,
- * key_finding, metric_cards, …) and a citations list addressed by id.
+ * …) and a citations list addressed by id.
  *
  * This adapter bridges the two so v2.3 reports render through the same
  * branded chrome — ReportCover, TableOfContents, BlockRenderer, the
  * native chart components, and the CitationsRail.
  *
- * The adapter doesn't only translate; it also *synthesises* the richer
- * block types the v2.3 payload doesn't carry explicitly:
+ * The adapter also derives the cover hero from `thesis`:
+ *   - `tldr` from `key_takeaways`
+ *   - `key_metrics` from `canonical_figures`
+ *   - `consensus_rating` / `consensus_upside_pct` parsed from
+ *     `valuation_stance`
  *
- *   - `key_finding` blocks lifted from `thesis.key_takeaways`
- *   - a top-of-report `metric_cards` block built from canonical figures
- *   - a `rating_badge` block parsed from `valuation_stance`
- *   - consensus_rating / consensus_upside_pct on the cover, parsed from
- *     valuation_stance so the cover hero matches v2.2's verdict block
- *
- * These blocks are prepended to the FIRST section so the reader sees the
- * "headline" view (takeaways + key metrics + rating) before the body
- * prose, mirroring how the v2.2 helpers position them.
+ * Earlier revisions of this adapter also prepended `metric_cards` +
+ * `key_finding` + `rating_badge` blocks to the first section. Those
+ * duplicated the cover's `key_metrics`, `tldr`, and consensus block,
+ * so readers saw "Key data" / "Key takeaways" twice. The adapter now
+ * relies on the cover for that headline view and renders the section
+ * body unadorned.
  */
 import type {
   Citation,
@@ -95,22 +95,10 @@ export function adaptV23PayloadToSchema(payload: V23RunPayload): ReportSchema {
   const ratingFromStance = parseRating(payload.thesis.valuation_stance);
   const upsidePct = parseUpsidePct(payload.thesis.valuation_stance);
 
-  const sections: ReportSection[] = payload.sections.map((s, idx) => {
+  const sections: ReportSection[] = payload.sections.map((s) => {
     const rawBody = payload.section_bodies[s.id] ?? "";
     const text = stripFiguresAndNormaliseMarkers(rawBody);
     const blocks: ReportBlock[] = [];
-
-    // Prepend headline blocks to the FIRST section: takeaways as
-    // key_finding callouts, a metric_cards grid, and a rating_badge.
-    // The cover already shows tldr/key_metrics/tagline, but the section
-    // body is where readers spend time — surfacing these inline makes
-    // the report feel scannable rather than burying everything in prose.
-    if (idx === 0) {
-      for (const block of headlineBlocks(payload, keyMetrics, ratingFromStance)) {
-        blocks.push(block);
-      }
-    }
-
     if (text.trim().length > 0) {
       blocks.push({ type: "text", content: text });
     }
@@ -198,38 +186,6 @@ function buildRail(
     quick_stats: quickStats,
     sparkline: null,
   };
-}
-
-/** Build the "above the fold" blocks prepended to the first section.
- *  Order: rating badge -> key metrics grid -> takeaway callouts. */
-function headlineBlocks(
-  payload: V23RunPayload,
-  keyMetrics: Metric[],
-  rating: string | null,
-): ReportBlock[] {
-  const blocks: ReportBlock[] = [];
-
-  if (rating !== null) {
-    blocks.push({ type: "rating_badge", rating } as unknown as ReportBlock);
-  }
-
-  if (keyMetrics.length > 0) {
-    blocks.push({
-      type: "metric_cards",
-      metrics: keyMetrics,
-    } as unknown as ReportBlock);
-  }
-
-  // Cap takeaways at 5; longer lists drown the reader.
-  const takeaways = payload.thesis.key_takeaways.slice(0, 5);
-  for (const takeaway of takeaways) {
-    blocks.push({
-      type: "key_finding",
-      content: takeaway,
-    } as unknown as ReportBlock);
-  }
-
-  return blocks;
 }
 
 function buildKeyMetrics(payload: V23RunPayload): Metric[] {
