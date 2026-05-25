@@ -25,6 +25,7 @@ from ..schemas import (
     ValuationInputs,
     ValuationMethod,
 )
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -36,6 +37,7 @@ class ComputeRequest:
     language: Language
     bundle: ResearchBundle
     outline: Outline
+    template: TemplateSpec
     clarify_result: ClarifyResult | None = None
 
 

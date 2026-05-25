@@ -24,11 +24,16 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ReportType,
     ResearchBundle,
 )
+from openlia.llm.runtime.report_v2_3.templates import TemplateSpec, get_builtin
 from openlia.llm.types import Message, ToolCall
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+def _template() -> TemplateSpec:
+    return get_builtin(ReportType.INITIATION)
 
 
 def _outline() -> Outline:
@@ -57,6 +62,7 @@ def _request() -> ResearchRequest:
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
         outline=_outline(),
+        template=_template(),
         clarify_result=ClarifyProceed(assumptions=["audience: PM"]),
     )
 

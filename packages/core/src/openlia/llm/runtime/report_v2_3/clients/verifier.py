@@ -25,6 +25,7 @@ from ..schemas import (
     VerifyResult,
     WrittenSection,
 )
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -34,6 +35,7 @@ class VerifierRequest:
     thesis: ReportThesis
     bundle: ResearchBundle
     sections: list[WrittenSection]
+    template: TemplateSpec
 
 
 class VerifierClient(Protocol):
