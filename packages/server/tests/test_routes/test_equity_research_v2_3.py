@@ -209,3 +209,82 @@ def test_answer_returns_409_when_run_is_not_waiting(v2_3_client) -> None:
     )
     assert resp.status_code == 409
     assert resp.json()["detail"]["code"] == "invalid_run_state"
+
+
+# ---------------------------------------------------------------------------
+# Task 4 (Phase 1.5): upload-then-launch end-to-end
+# ---------------------------------------------------------------------------
+
+
+def test_v23_run_uses_user_uploaded_template_end_to_end(v2_3_client) -> None:
+    """Parse markdown -> save as a report_templates row -> launch a run
+    with that template_id -> confirm the persisted ReportState carries
+    the user's template (proves the upload-then-launch wiring end-to-end).
+    """
+    app, client = v2_3_client
+    _install_factory(
+        app, FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"]))
+    )
+
+    # 1. Parse markdown via the v2.3 endpoint.
+    parse_resp = client.post(
+        "/api/report-templates/v23/parse",
+        json={
+            "markdown": (
+                "<!-- openlia\nname: My initiation template\n-->\n"
+                "# Overview\nWhat the company does.\n\n"
+                "# Recommendation\nFinal stance.\n"
+            ),
+            "name": "My initiation template",
+        },
+    )
+    assert parse_resp.status_code == 200, parse_resp.text
+    parse_body = parse_resp.json()
+    assert parse_body["validation_errors"] == []
+    spec = parse_body["template_spec"]
+
+    # 2. Save via the existing CRUD endpoint.
+    save_resp = client.post(
+        "/api/report-templates",
+        json={
+            "name": "My initiation template",
+            "template_spec": spec,
+            "source_markdown": None,
+        },
+    )
+    assert save_resp.status_code == 201, save_resp.text
+    template_row_id = save_resp.json()["id"]
+
+    # 3. Launch a v2.3 run with that template_id.
+    run_resp = client.post(
+        "/api/departments/equity-research/v2.3/runs",
+        json={**_start_payload(), "template_id": template_row_id},
+    )
+    assert run_resp.status_code == 200, run_resp.text
+    started = run_resp.json()
+    run_id = started["run_id"]
+    # The route's RunStateOut exposes template_id; round-trip proves the
+    # selector reached the runner.
+    assert started["template_id"] == template_row_id
+
+    # 4. Fetch the run state via GET and confirm the same.
+    state_resp = client.get(f"/api/departments/equity-research/v2.3/runs/{run_id}")
+    assert state_resp.status_code == 200, state_resp.text
+    assert state_resp.json()["template_id"] == template_row_id
+
+    # 5. Load the persisted ReportState from the DB and confirm
+    # `state.template` carries the user's uploaded template — not the
+    # built-in for `initiation`. This is the load-bearing assertion: the
+    # service layer resolved the row, validated it as a v2.3 TemplateSpec,
+    # and bound it to `state.template`.
+    from openlia.llm.runtime.report_v2_3.persistence import StateStore  # noqa: F401
+    from openlia_server.db import session as session_mod
+    from openlia_server.services.v2_3_state_store import SqlStateStore
+
+    with session_mod.SessionLocal() as s:
+        persisted = SqlStateStore(s).load(run_id)
+    assert persisted.template.name == "My initiation template"
+    assert [sec.id for sec in persisted.template.sections] == [
+        "overview",
+        "recommendation",
+    ]
