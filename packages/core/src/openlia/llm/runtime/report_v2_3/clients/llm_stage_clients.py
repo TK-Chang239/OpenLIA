@@ -419,61 +419,10 @@ Rules:
   language (e.g. ``$60.9B``, ``14.2%``).
 - Output JSON only.
 
-Chart-selection guide — pick the form that fits the data, not the
-form that's easiest to fill:
-
-- ``line``: time-series of ONE metric across >= 4 periods. Use this for
-  revenue trajectory, price history, margin trend over years. If the
-  bundle carries only 2-3 periods, do NOT make a line — write the
-  comparison in prose and skip the chart.
-- ``area``: same shape as line but when you want to emphasise the
-  cumulative magnitude (e.g. stacked revenue mix over time). Avoid
-  single-series area; line conveys the same trend cleaner.
-- ``column`` (vertical bars): cross-sectional comparison of 3-10
-  categories of the SAME metric (revenue by segment, employees by
-  region, capex by year-bucket). Each category must be meaningfully
-  comparable — apples-to-apples.
-- ``bar`` (horizontal): use when category labels are long (full peer
-  names, country names). Same data shape as column otherwise.
-- ``pie``: composition / share-of-total ONLY, where the parts sum to
-  a meaningful whole (revenue mix by segment, geographic split). Cap
-  at 5-7 slices. Never use pie for trends, comparisons across time,
-  or unrelated quantities.
-- ``scatter``: relationship between TWO numeric variables across many
-  entities (peer P/E vs. growth, ROIC vs. leverage). Minimum ~5
-  points; fewer than that and the relationship isn't visible.
-
-Anti-patterns — do NOT do these (they are the most common bad chart
-choices we see):
-
-- Two-bar column / bar charts (e.g. 52-week low vs. high; this-year vs.
-  last-year revenue). Two data points is a sentence, not a chart.
-  Write it in prose and cite the facts.
-- One-point line / area / column (chart with a single data point is
-  meaningless — just cite the number).
-- Pie chart of unrelated metrics (e.g. "revenue + EBITDA + FCF" in
-  one pie — they don't sum to anything).
-- Range / endpoint charts (52-week range, target-price range): we
-  don't have a range chart type. Either show the full time series as
-  a line (if you have it) or omit the chart and quote the endpoints.
-- Charts whose ``claim`` is generic ("shows financial performance",
-  "displays valuation metrics"). If you cannot write a one-sentence,
-  non-obvious insight the chart proves, the chart isn't earning its
-  page space — drop it.
-- Mixing units inside one series. Every fact in
-  ``series.value_fact_ids`` MUST share the same ``unit`` value (look
-  at ``bundle.facts[fact_id].unit``). A series cannot plot
-  ``USD_millions`` next to ``USD`` next to ``percent`` — the y-axis
-  becomes meaningless and one bar dwarfs the rest. Example of the
-  bug we're trying to avoid: plotting DCF enterprise value
-  (``USD_millions``, ~30,000) next to per-share comps targets
-  (``USD``, ~$3,000) on the same column chart — one bar reads as a
-  trillion, the rest as flat. If your candidate facts span units,
-  EITHER convert/derive new facts in a single unit (e.g. compute
-  per-share equivalents for everything) OR omit the chart.
-
-If the bundle doesn't support a section's chart well, leave that
-``mandates[].chart_ids`` empty rather than forcing a weak chart.
+For each chart you choose, pick the form that fits the data. The
+VISUALIZE stage downstream will drop any chart whose data shape does
+not render cleanly, so prefer the simplest form that supports the
+claim.
 """.strip()
 
 
