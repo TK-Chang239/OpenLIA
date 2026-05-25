@@ -19,10 +19,10 @@ export interface ErConfig {
   report_mode: ReportMode;
   report_length: ReportLength;
   // User-selected extended-thinking effort, shared across all report modes.
-  // Persisted on the saved config so the choice survives reload; the
-  // composer reads this at run dispatch time and sends `reasoning_effort`
-  // to the v2.3 stream endpoint. Default "off".
-  report_reasoning_effort: ReportReasoningEffort;
+  // Optional on the wire because the server-side ErUserConfig persistence
+  // is a follow-up; until then the field round-trips as React state on the
+  // active modal session. Consumers should treat ``undefined`` as ``"off"``.
+  report_reasoning_effort?: ReportReasoningEffort;
   sections_by_mode: Record<ReportMode, string[]>;
   custom_sections_by_mode: Record<ReportMode, CustomSection[]>;
   selected_template_id_by_mode: Record<ReportMode, TemplateSelection>;
