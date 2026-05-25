@@ -186,6 +186,93 @@ def test_v23_parse_requires_auth(client) -> None:
     assert r.status_code in (401, 403)
 
 
+def test_v23_builtins_returns_three_templates(client, user_factory, login_as) -> None:
+    """Settings pill renders these as flat siblings of user uploads. The
+    three report_type built-ins mirror v2.2's mode triad (Stock
+    Initiation / Stock Update / Sector Research)."""
+    login_as(user_factory())
+    r = client.get("/report-templates/v23/builtins")
+    assert r.status_code == 200, r.text
+    items = r.json()["items"]
+    report_types = [it["report_type"] for it in items]
+    assert sorted(report_types) == sorted(["initiation", "update", "sector_research"])
+    names = {it["report_type"]: it["template_spec"]["name"] for it in items}
+    assert names["initiation"] == "Stock Initiation"
+    assert names["update"] == "Stock Update"
+    assert names["sector_research"] == "Sector Research"
+    # Each carries a fully-shaped TemplateSpec dict the frontend can
+    # render without an extra fetch.
+    for it in items:
+        spec = it["template_spec"]
+        assert spec["name"]
+        assert spec["sections"]
+        assert "shape_description" in spec
+        assert "ticker_anchored" in spec
+
+
+def test_v23_builtins_requires_auth(client) -> None:
+    r = client.get("/report-templates/v23/builtins")
+    assert r.status_code in (401, 403)
+
+
+def test_v23_validate_accepts_well_formed_spec(client, user_factory, login_as) -> None:
+    """The /v23/validate path is the JSON-upload sibling of /v23/parse:
+    user supplies a TemplateSpec-shaped dict, server confirms it satisfies
+    the engine's schema."""
+    login_as(user_factory())
+    spec = {
+        "template_id": "user_initiation_abcd1234",
+        "name": "User Initiation",
+        "shape_description": "Custom initiation shape.",
+        "ticker_anchored": True,
+        "sections": [
+            {
+                "id": "overview",
+                "title": "Overview",
+                "intent": "Set up the company.",
+                "methodology_hints": [],
+            },
+        ],
+    }
+    r = client.post(
+        "/report-templates/v23/validate",
+        json={"template_spec": spec},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["validation_errors"] == []
+    assert body["template_spec"]["name"] == "User Initiation"
+
+
+def test_v23_validate_surfaces_pydantic_errors_inline(client, user_factory, login_as) -> None:
+    """Bad JSON shape returns 200 with validation_errors populated so the
+    upload UI can render them next to the file picker rather than as an
+    HTTP error."""
+    login_as(user_factory())
+    bad = {
+        "template_id": "Bad ID!",  # fails slug regex
+        "name": "X",
+        "shape_description": "x",
+        "sections": [],  # min_length=1
+    }
+    r = client.post(
+        "/report-templates/v23/validate",
+        json={"template_spec": bad},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["validation_errors"]
+    assert body["template_spec"] == {}
+
+
+def test_v23_validate_requires_auth(client) -> None:
+    r = client.post(
+        "/report-templates/v23/validate",
+        json={"template_spec": {}},
+    )
+    assert r.status_code in (401, 403)
+
+
 def test_delete_template_removes_row(client, user_factory, login_as) -> None:
     login_as(user_factory())
     tid = client.post(

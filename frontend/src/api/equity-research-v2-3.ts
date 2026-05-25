@@ -25,9 +25,7 @@ export type V23Language = "en" | "zh-TW";
 export type V23ReportType =
   | "initiation"
   | "update"
-  | "sector_research"
-  | "morning_brief"
-  | "earnings_review";
+  | "sector_research";
 
 export type V23ReportLength = "concise" | "normal" | "elaborative";
 
@@ -186,7 +184,9 @@ export type V23ChartType =
   | "line"
   | "area"
   | "pie"
-  | "scatter";
+  | "scatter"
+  | "heatmap"
+  | "table";
 
 export interface V23BundleSeriesPoint {
   period: string;
