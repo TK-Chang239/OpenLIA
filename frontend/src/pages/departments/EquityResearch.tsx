@@ -61,6 +61,7 @@ import { V23Composer } from "../../components/equity-research/V23Composer";
 import { V23EngineModelsPicker } from "../../components/equity-research/V23EngineModelsPicker";
 import { V23TemplateUploadModal } from "../../components/equity-research/V23TemplateUploadModal";
 import type { AssignmentsResponse } from "../../api/er-v2-3-models";
+import { v23ReportTypeToPillMode } from "../../lib/equity-research/v23-pill-mode";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
 import {
   useReportStream,
@@ -326,6 +327,10 @@ export default function EquityResearch(): JSX.Element {
       /* ignore */
     }
   }, []);
+  // The pill chrome reads a v2.2 ReportMode label; v2.3's launch payload
+  // uses V23ReportType. v23-pill-mode.ts bridges the two so the pill stays
+  // a truthful preview of what's about to launch.
+  const v23PillMode = v23ReportTypeToPillMode(v23Selection.reportType);
   const [v23Length, setV23LengthState] = useState<V23PillLength>(() => {
     if (typeof window === "undefined") return "normal";
     try {
@@ -1166,7 +1171,7 @@ export default function EquityResearch(): JSX.Element {
               onOpenReport={onV23OpenReport}
               onSelectPastRun={onV23SelectPastRun}
               assignments={v23Assignments}
-              mode={config.report_mode}
+              mode={v23PillMode}
               length={v23Length === "concise" ? "concise" : v23Length === "elaborative" ? "elaborative" : "normal"}
               reportType={v23Selection.reportType}
               templateId={v23Selection.templateId}
