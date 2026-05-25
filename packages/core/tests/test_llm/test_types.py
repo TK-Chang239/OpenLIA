@@ -123,3 +123,48 @@ def test_resolved_model_shape() -> None:
     )
     assert rm.model_ref == "gpt-5.4"
     assert rm.model_id == "m1"
+
+
+def test_reasoning_effort_enum_values() -> None:
+    from openlia.llm.types import ReasoningEffort
+
+    assert ReasoningEffort.MEDIUM.value == "medium"
+    assert ReasoningEffort.HIGH.value == "high"
+    assert ReasoningEffort("high") is ReasoningEffort.HIGH
+
+
+def test_llm_request_reasoning_effort_defaults_to_none() -> None:
+    from openlia.llm.types import LLMRequest, Message
+
+    req = LLMRequest(messages=[Message(role="user", content="hi")])
+    assert req.reasoning_effort is None
+
+
+def test_llm_request_accepts_reasoning_effort() -> None:
+    from openlia.llm.types import LLMRequest, Message, ReasoningEffort
+
+    req = LLMRequest(
+        messages=[Message(role="user", content="hi")],
+        reasoning_effort=ReasoningEffort.HIGH,
+    )
+    assert req.reasoning_effort is ReasoningEffort.HIGH
+
+
+def test_llm_response_reasoning_output_tokens_defaults_to_zero() -> None:
+    from openlia.llm.types import LLMResponse
+
+    resp = LLMResponse(text="ok", finish_reason="stop", input_tokens=1, output_tokens=1)
+    assert resp.reasoning_output_tokens == 0
+
+
+def test_llm_response_carries_reasoning_output_tokens_when_set() -> None:
+    from openlia.llm.types import LLMResponse
+
+    resp = LLMResponse(
+        text="ok",
+        finish_reason="stop",
+        input_tokens=10,
+        output_tokens=50,
+        reasoning_output_tokens=40,
+    )
+    assert resp.reasoning_output_tokens == 40

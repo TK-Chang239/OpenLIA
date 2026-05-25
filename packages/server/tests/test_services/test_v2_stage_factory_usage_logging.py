@@ -47,6 +47,7 @@ def _response(
     input_tokens: int = 120,
     output_tokens: int = 42,
     cached_input_tokens: int = 0,
+    reasoning_output_tokens: int = 0,
 ) -> LLMResponse:
     return LLMResponse(
         text=text,
@@ -54,6 +55,7 @@ def _response(
         input_tokens=input_tokens,
         output_tokens=output_tokens,
         cached_input_tokens=cached_input_tokens,
+        reasoning_output_tokens=reasoning_output_tokens,
     )
 
 
@@ -164,3 +166,81 @@ def test_tool_client_marks_truncated_on_length(caplog: pytest.LogCaptureFixture)
     assert len(usage_lines) == 1
     assert "truncated=True" in usage_lines[0].getMessage()
     assert usage_lines[0].levelno == logging.WARNING
+
+
+# ---------------------------------------------------------------------------
+# Reasoning effort plumbing + telemetry
+# ---------------------------------------------------------------------------
+
+
+def test_json_client_forwards_reasoning_effort_to_request() -> None:
+    """When constructed with a reasoning_effort, the value must appear on
+    the LLMRequest the provider receives. v2_3_wiring relies on this to
+    deliver per-stage reasoning to the adapter layer."""
+    from openlia.llm.types import ReasoningEffort
+
+    provider = _FakeProvider(_response())
+    client = SyncJsonLlmClient(
+        provider,
+        max_tokens=16_384,
+        stage="plan",
+        reasoning_effort=ReasoningEffort.HIGH,
+    )
+    client.call(system="sys", user={"k": "v"})
+    assert provider.last_request is not None
+    assert provider.last_request.reasoning_effort is ReasoningEffort.HIGH
+
+
+def test_json_client_defaults_reasoning_effort_to_none() -> None:
+    """Default construction (no reasoning_effort) must send None so the
+    adapter does not emit the provider-specific thinking block."""
+    provider = _FakeProvider(_response())
+    client = SyncJsonLlmClient(provider, max_tokens=2048, stage="plan")
+    client.call(system="sys", user={"k": "v"})
+    assert provider.last_request is not None
+    assert provider.last_request.reasoning_effort is None
+
+
+def test_tool_client_forwards_reasoning_effort_to_request() -> None:
+    from openlia.llm.types import ReasoningEffort
+
+    provider = _FakeProvider(_response())
+    client = SyncToolLlmClient(
+        provider,
+        max_tokens=16_384,
+        stage="research",
+        reasoning_effort=ReasoningEffort.MEDIUM,
+    )
+    client.send(system="sys", messages=[Message(role="user", content="hi")], tools=[])
+    assert provider.last_request is not None
+    assert provider.last_request.reasoning_effort is ReasoningEffort.MEDIUM
+
+
+def test_log_line_carries_reasoning_out(caplog: pytest.LogCaptureFixture) -> None:
+    """The usage log surfaces the reasoning-token portion of the output
+    separately from visible-text tokens so the sized-from-data pass can
+    size visible-output and thinking headroom independently."""
+    provider = _FakeProvider(_response(output_tokens=1200, reasoning_output_tokens=900))
+    client = SyncJsonLlmClient(provider, max_tokens=16_384, stage="synthesize")
+
+    with caplog.at_level(logging.INFO, logger="openlia_server.services.v2_stage_factory"):
+        client.call(system="sys", user={"k": "v"})
+
+    msg = next(r.getMessage() for r in caplog.records if "llm_usage" in r.getMessage())
+    assert "out=1200" in msg
+    assert "reasoning_out=900" in msg
+
+
+def test_log_line_reasoning_out_zero_when_not_reported(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Most calls have no thinking — the log still carries reasoning_out=0
+    so a fixed grep / parser does not need to special-case absence."""
+    provider = _FakeProvider(_response(output_tokens=42))  # default reasoning_output_tokens=0
+    client = SyncJsonLlmClient(provider, max_tokens=2048, stage="plan")
+
+    with caplog.at_level(logging.INFO, logger="openlia_server.services.v2_stage_factory"):
+        client.call(system="sys", user={"k": "v"})
+
+    msg = next(r.getMessage() for r in caplog.records if "llm_usage" in r.getMessage())
+    assert "reasoning_out=0" in msg

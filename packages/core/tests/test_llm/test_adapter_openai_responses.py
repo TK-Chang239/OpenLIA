@@ -673,6 +673,81 @@ async def test_generate_defaults_cached_input_tokens_to_zero_when_absent() -> No
     assert resp.cached_input_tokens == 0
 
 
+async def test_generate_sends_reasoning_effort_as_nested_object() -> None:
+    """Responses API takes reasoning as `{"effort": "<value>"}`, not the
+    flat `reasoning_effort` field used by Chat Completions."""
+    from openlia.llm.types import ReasoningEffort
+
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                reasoning_effort=ReasoningEffort.HIGH,
+            )
+        )
+    assert captured.get("reasoning") == {"effort": "high"}
+
+
+async def test_generate_omits_reasoning_block_when_effort_none() -> None:
+    """Default (reasoning_effort=None) must NOT emit the reasoning block —
+    sending it against a non-reasoning model returns 400."""
+    adapter = _adapter()
+    captured: dict = {}
+
+    def _capture(request):
+        captured.update(json.loads(request.content))
+        return _ok_response(_assistant_ok())
+
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(side_effect=_capture)
+        await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert "reasoning" not in captured
+
+
+async def test_generate_surfaces_reasoning_output_tokens_from_usage() -> None:
+    """Responses API exposes reasoning-token count at
+    `usage.output_tokens_details.reasoning_tokens`. Must surface as
+    LLMResponse.reasoning_output_tokens for the sized-from-data pass."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").respond(
+            200,
+            json={
+                "id": "resp_test",
+                "status": "completed",
+                "output": _assistant_ok(),
+                "usage": {
+                    "input_tokens": 100,
+                    "output_tokens": 800,
+                    "output_tokens_details": {"reasoning_tokens": 650},
+                },
+            },
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.output_tokens == 800
+    assert resp.reasoning_output_tokens == 650
+
+
+async def test_generate_defaults_reasoning_output_tokens_to_zero_when_absent() -> None:
+    """When the response omits output_tokens_details, the field defaults
+    to 0 so consumers can always read it."""
+    adapter = _adapter()
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(
+            side_effect=lambda r: _ok_response(_assistant_ok())
+        )
+        resp = await adapter.generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+    assert resp.reasoning_output_tokens == 0
+
+
 async def test_multi_turn_cache_hit_rate_at_least_fifty_percent_from_turn_two() -> None:
     """Replay-style assertion: across a 3-turn report-style run where the
     provider auto-caches the static prefix, cumulative cached_input_tokens

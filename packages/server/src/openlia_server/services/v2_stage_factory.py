@@ -36,6 +36,7 @@ from openlia.llm.runtime.report_v2_3.clients.llm_researcher import ToolTurnRespo
 from openlia.llm.types import (
     LLMRequest,
     Message,
+    ReasoningEffort,
     ResolvedModel,
     ResponseFormat,
     ToolSchema,
@@ -79,15 +80,24 @@ def _log_llm_usage(
     This is greppable from production logs (``grep llm_usage | grep
     stage=plan``) and parseable by a small awk/Python script — adding a
     JSON encoder here would buy nothing and complicates the on-call
-    eyeball read."""
+    eyeball read.
+
+    ``reasoning_out`` is the portion of ``output_tokens`` spent on
+    extended-thinking that was NOT emitted as visible text. 0 when
+    thinking was off or the provider does not break it out (e.g.
+    Anthropic rolls thinking into output_tokens). Lets the sized-from-
+    data ceiling pass size visible-output and reasoning headroom
+    independently."""
     truncated = _is_truncated(response.finish_reason)
     log_method = log.warning if truncated else log.info
     log_method(
-        "llm_usage stage=%s model=%s in=%d out=%d max=%d cached=%d truncated=%s finish=%s",
+        "llm_usage stage=%s model=%s in=%d out=%d reasoning_out=%d max=%d "
+        "cached=%d truncated=%s finish=%s",
         stage,
         model,
         response.input_tokens,
         response.output_tokens,
+        getattr(response, "reasoning_output_tokens", 0),
         max_tokens,
         response.cached_input_tokens,
         truncated,
@@ -115,6 +125,7 @@ class SyncJsonLlmClient:
         max_tokens: int = 4096,
         temperature: float = 0.2,
         stage: str = "unknown",
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> None:
         self._provider = provider
         self._max_tokens = max_tokens
@@ -124,6 +135,11 @@ class SyncJsonLlmClient:
         # grepping for ``stage=plan`` shouldn't care which path built the
         # client.
         self._stage = stage.lower()
+        # Caller (v2_3_wiring) sets this only on the PLAN + SYNTHESIZE
+        # stages and is responsible for growing max_tokens to cover the
+        # thinking budget — adapter-side guards drop the field when the
+        # model does not support thinking.
+        self._reasoning_effort = reasoning_effort
 
     _JSON_DIRECTIVE = (
         "\n\nReturn ONLY a single JSON object. No prose, no markdown fences,"
@@ -144,6 +160,7 @@ class SyncJsonLlmClient:
             response_format=ResponseFormat(kind="json_object"),
             max_tokens=self._max_tokens,
             temperature=self._temperature,
+            reasoning_effort=self._reasoning_effort,
         )
 
         response = _run_sync(self._provider.generate(request))
@@ -200,12 +217,14 @@ class SyncToolLlmClient:
         temperature: float = 0.3,
         native_tools: tuple[str, ...] = (),
         stage: str = "research",
+        reasoning_effort: ReasoningEffort | None = None,
     ) -> None:
         self._provider = provider
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._native_tools = native_tools
         self._stage = stage.lower()
+        self._reasoning_effort = reasoning_effort
 
     def send(
         self,
@@ -221,6 +240,7 @@ class SyncToolLlmClient:
             native_tools=self._native_tools,
             max_tokens=self._max_tokens,
             temperature=self._temperature,
+            reasoning_effort=self._reasoning_effort,
         )
         response = _run_sync(self._provider.generate(request))
         _log_llm_usage(
