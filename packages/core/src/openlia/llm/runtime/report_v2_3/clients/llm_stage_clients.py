@@ -178,7 +178,7 @@ Inputs you receive:
 
 Output an Outline JSON object:
 {
-  "tickers": ["NVDA"],
+  "tickers": ["<TICKER>"],
   "report_type": "initiation",
   "sections": [
     {
@@ -281,9 +281,9 @@ DCF (``method = "dcf"``):
 
 Comps (``method = "comps"``):
 {
-  "subject_ticker": "NVDA",
+  "subject_ticker": "<TICKER>",
   "peers": [
-    {"ticker": "AVGO", "metric_fact_ids": {"ev_ebitda": "peer_avgo_ev_ebitda"}}
+    {"ticker": "<PEER_TICKER>", "metric_fact_ids": {"ev_ebitda": "peer_ev_ebitda"}}
   ],
   "multiples": ["ev_ebitda"],
   "subject_metric_fact_ids": {"ev_ebitda": "subject_ebitda_ttm"}
