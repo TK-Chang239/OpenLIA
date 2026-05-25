@@ -1175,6 +1175,7 @@ export default function EquityResearch(): JSX.Element {
               length={v23Length === "concise" ? "concise" : v23Length === "elaborative" ? "elaborative" : "normal"}
               reportType={v23Selection.reportType}
               templateId={v23Selection.templateId}
+              reasoningEffort={config.report_reasoning_effort ?? "off"}
               firstName={firstName(user?.display_name)}
               onModeClick={() => setSettingsOpen(true)}
             />

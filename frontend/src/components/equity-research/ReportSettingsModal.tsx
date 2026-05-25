@@ -10,6 +10,7 @@ import {
   type ErTemplate,
   type ReportLength,
   type ReportMode,
+  type ReportReasoningEffort,
   WEB_SEARCH_BUDGET_DEFAULTS,
 } from "../../api/equity-research";
 import { useCurrentUser } from "../../auth/useCurrentUser";
@@ -31,6 +32,11 @@ const LENGTH_KEY: Record<ReportLength, string> = {
   concise: "equity_research.length_concise",
   normal: "equity_research.length_normal",
   elaborative: "equity_research.length_elaborative",
+};
+const REASONING_KEY: Record<ReportReasoningEffort, string> = {
+  off: "equity_research.reasoning_off",
+  medium: "equity_research.reasoning_medium",
+  high: "equity_research.reasoning_high",
 };
 
 interface Props {
@@ -106,6 +112,9 @@ export function ReportSettingsModal({
   const { t } = useTranslation();
   const [mode, setMode] = useState<ReportMode>(config.report_mode);
   const [length, setLength] = useState<ReportLength>(config.report_length);
+  const [reasoningEffort, setReasoningEffort] = useState<ReportReasoningEffort>(
+    config.report_reasoning_effort ?? "off",
+  );
   const [sections, setSections] = useState(config.sections_by_mode);
   const [customs, setCustoms] = useState(config.custom_sections_by_mode);
   const [pendingCustom, setPendingCustom] = useState<CustomSection | null>(null);
@@ -130,6 +139,7 @@ export function ReportSettingsModal({
     if (!open) return;
     setMode(config.report_mode);
     setLength(config.report_length);
+    setReasoningEffort(config.report_reasoning_effort ?? "off");
     setSections(config.sections_by_mode);
     setCustoms(config.custom_sections_by_mode);
     setPendingCustom(null);
@@ -175,6 +185,7 @@ export function ReportSettingsModal({
     await onSave({
       report_mode: mode,
       report_length: length,
+      report_reasoning_effort: reasoningEffort,
       sections_by_mode: sections,
       custom_sections_by_mode: customs,
       selected_template_id_by_mode: selectedTemplateByMode,
@@ -197,6 +208,9 @@ export function ReportSettingsModal({
   }));
   const lengthOptions = (Object.keys(LENGTH_KEY) as ReportLength[]).map(
     (v) => ({ value: v, label: t(LENGTH_KEY[v]) }),
+  );
+  const reasoningOptions = (Object.keys(REASONING_KEY) as ReportReasoningEffort[]).map(
+    (v) => ({ value: v, label: t(REASONING_KEY[v]) }),
   );
 
   return (
@@ -241,6 +255,24 @@ export function ReportSettingsModal({
                 options={lengthOptions}
                 onChange={setLength}
               />
+            </section>
+
+            <section
+              className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
+              data-testid="er-reasoning-effort"
+            >
+              <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+                {t("equity_research.settings.section_reasoning_effort")}
+              </span>
+              <Segmented
+                ariaLabel={t("equity_research.settings.section_reasoning_effort")}
+                value={reasoningEffort}
+                options={reasoningOptions}
+                onChange={setReasoningEffort}
+              />
+              <p className="mt-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
+                {t("equity_research.settings.reasoning_help")}
+              </p>
             </section>
 
             <TemplatePickerSection

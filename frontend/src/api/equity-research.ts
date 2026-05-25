@@ -2,6 +2,10 @@ import { fetchJson } from "./client";
 
 export type ReportMode = "stock_initiation" | "stock_update" | "sector_research";
 export type ReportLength = "concise" | "normal" | "elaborative";
+// 3-state UI pill on the report settings modal. "off" = thinking disabled
+// (the server reads this as None / null). "medium" / "high" map to the
+// per-provider thinking budget in the v2.3 wiring layer.
+export type ReportReasoningEffort = "off" | "medium" | "high";
 export type TemplateOwnerScope = "global" | "user";
 export type TemplateSelection = "default" | string;
 
@@ -14,6 +18,11 @@ export interface CustomSection {
 export interface ErConfig {
   report_mode: ReportMode;
   report_length: ReportLength;
+  // User-selected extended-thinking effort, shared across all report modes.
+  // Persisted on the saved config so the choice survives reload; the
+  // composer reads this at run dispatch time and sends `reasoning_effort`
+  // to the v2.3 stream endpoint. Default "off".
+  report_reasoning_effort: ReportReasoningEffort;
   sections_by_mode: Record<ReportMode, string[]>;
   custom_sections_by_mode: Record<ReportMode, CustomSection[]>;
   selected_template_id_by_mode: Record<ReportMode, TemplateSelection>;
@@ -25,6 +34,7 @@ export interface ErConfig {
 export interface ErConfigPatch {
   report_mode?: ReportMode;
   report_length?: ReportLength;
+  report_reasoning_effort?: ReportReasoningEffort;
   sections_by_mode?: Partial<Record<ReportMode, string[]>>;
   custom_sections_by_mode?: Partial<Record<ReportMode, CustomSection[]>>;
   selected_template_id_by_mode?: Partial<Record<ReportMode, TemplateSelection>>;
@@ -47,6 +57,7 @@ export const WEB_SEARCH_BUDGET_DEFAULTS: Record<ReportMode, number> = {
 export const ER_CONFIG_DEFAULTS: ErConfig = {
   report_mode: "stock_initiation",
   report_length: "normal",
+  report_reasoning_effort: "off",
   sections_by_mode: {
     stock_initiation: [],
     stock_update: [],
