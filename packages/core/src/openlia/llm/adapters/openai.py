@@ -113,6 +113,11 @@ class OpenAIAdapter(LLMProvider):
         }
         if _is_reasoning_model(self.model):
             payload["max_completion_tokens"] = request.max_tokens
+            # gpt-5 / o-series accept `reasoning_effort` on Chat Completions.
+            # When unset OpenAI applies the model default (medium for the
+            # o-series). Non-reasoning models reject the field, so guard.
+            if request.reasoning_effort is not None:
+                payload["reasoning_effort"] = request.reasoning_effort.value
         else:
             payload["max_tokens"] = request.max_tokens
             payload["temperature"] = request.temperature
@@ -169,12 +174,16 @@ class OpenAIAdapter(LLMProvider):
         ]
         usage = body.get("usage") or {}
         cached_tokens = int((usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0))
+        reasoning_tokens = int(
+            (usage.get("completion_tokens_details") or {}).get("reasoning_tokens", 0)
+        )
         return LLMResponse(
             text=message.get("content") or "",
             finish_reason=choice.get("finish_reason", "stop"),
             input_tokens=int(usage.get("prompt_tokens", 0)),
             output_tokens=int(usage.get("completion_tokens", 0)),
             cached_input_tokens=cached_tokens,
+            reasoning_output_tokens=reasoning_tokens,
             tool_calls=tool_calls,
         )
 
@@ -186,6 +195,8 @@ class OpenAIAdapter(LLMProvider):
         }
         if _is_reasoning_model(self.model):
             payload["max_completion_tokens"] = request.max_tokens
+            if request.reasoning_effort is not None:
+                payload["reasoning_effort"] = request.reasoning_effort.value
         else:
             payload["max_tokens"] = request.max_tokens
             payload["temperature"] = request.temperature
