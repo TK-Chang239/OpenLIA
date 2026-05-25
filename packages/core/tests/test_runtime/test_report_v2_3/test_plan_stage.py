@@ -326,7 +326,5 @@ def test_plan_strips_extra_sections_emitted_by_llm():
 
     assert len(state.outline.sections) == 1
     assert state.outline.sections[0].id == "only"
-    only_ids = [
-        fid for n in state.outline.sections[0].data_needs for fid in n.expected_fact_ids
-    ]
+    only_ids = [fid for n in state.outline.sections[0].data_needs for fid in n.expected_fact_ids]
     assert only_ids == ["x"]

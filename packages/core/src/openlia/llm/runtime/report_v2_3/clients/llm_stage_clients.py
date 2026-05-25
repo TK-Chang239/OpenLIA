@@ -178,7 +178,7 @@ Inputs you receive:
 
 Output an Outline JSON object:
 {
-  "tickers": ["NVDA"],
+  "tickers": ["<TICKER>"],
   "report_type": "initiation",
   "sections": [
     {
@@ -281,9 +281,9 @@ DCF (``method = "dcf"``):
 
 Comps (``method = "comps"``):
 {
-  "subject_ticker": "NVDA",
+  "subject_ticker": "<TICKER>",
   "peers": [
-    {"ticker": "AVGO", "metric_fact_ids": {"ev_ebitda": "peer_avgo_ev_ebitda"}}
+    {"ticker": "<PEER_TICKER>", "metric_fact_ids": {"ev_ebitda": "peer_ev_ebitda"}}
   ],
   "multiples": ["ev_ebitda"],
   "subject_metric_fact_ids": {"ev_ebitda": "subject_ebitda_ttm"}
@@ -300,7 +300,7 @@ Sensitivity (``method = "sensitivity"``):
 
 Rules:
 
-- All fact ids MUST exist in the supplied bundle. Don't invent ids.
+- All fact ids MUST exist in the supplied bundle.
 - For DCF, ``revenue_growth_path`` and ``margin_path`` MUST be the
   same length (one entry per projected year).
 - For Sensitivity, ``row_driver`` and ``col_driver`` MUST be different.
@@ -359,7 +359,7 @@ Output is a single JSON ReportThesis matching:
 
 {
   "language": "en",
-  "central_argument": "ONE SHORT SENTENCE — max 20 words. Hard cap.",
+  "central_argument": "ONE SHORT SENTENCE — the report's hero line.",
   "key_takeaways": ["short bullet", "another short bullet"],
   "valuation_stance": "A 1-2 sentence stance: long/short/hold and why.",
   "valuation_plan": {"methods": ["dcf"]},
@@ -392,9 +392,7 @@ Output is a single JSON ReportThesis matching:
 
 Rules:
 
-- ``central_argument`` is the cover hero — keep it to ONE sentence,
-  ≤ 20 words, no clauses chained with "but"/"however" that bury the
-  punchline. The longer "why" belongs in ``valuation_stance``.
+- ``central_argument`` is the cover hero — keep it to one sentence. Lead with the takeaway.
 - ``language`` MUST equal the request's language.
 - ``valuation_plan.methods`` MUST mirror the outline's plan unless
   research shows a method is impossible (e.g. no peers found).
@@ -408,74 +406,24 @@ Rules:
   include every fact the chart uses.
 - ``charts[].chart_type`` MUST be one of EXACTLY these values:
   ``"column"``, ``"bar"``, ``"line"``, ``"area"``, ``"pie"``,
-  ``"scatter"``. Do NOT invent other values (no ``"text"``,
-  ``"table"``, ``"heatmap"``, etc. — if the data wouldn't plot as one
-  of the six, omit the chart). Each ChartSpec needs at least one
-  series with at least one fact_id; if you can't satisfy that, drop
+  ``"scatter"``. Pick the value from that enum that fits the data;
+  if the data wouldn't plot as one of the six, omit the chart instead
+  of inventing a new chart_type. Each ChartSpec needs at least one
+  series with at least one fact_id; when you can't satisfy that, omit
   the chart rather than emit a placeholder.
-- ``mandates[].chart_ids`` is a strict subset of ``charts[].id``. NEVER
-  name a chart in a mandate that you didn't also define in ``charts``;
-  if a section shouldn't have a chart, leave ``chart_ids`` as ``[]``.
+- ``mandates[].chart_ids`` is a strict subset of ``charts[].id``. Every
+  chart_id you list on a mandate must also appear as a chart in
+  ``charts``; if a section shouldn't have a chart, leave ``chart_ids``
+  as ``[]``.
 - ``canonical_figures[].fact_id`` MUST exist in the bundle and the
   ``display`` string MUST be the final rendering in the report's
   language (e.g. ``$60.9B``, ``14.2%``).
 - Output JSON only.
 
-Chart-selection guide — pick the form that fits the data, not the
-form that's easiest to fill:
-
-- ``line``: time-series of ONE metric across >= 4 periods. Use this for
-  revenue trajectory, price history, margin trend over years. If the
-  bundle carries only 2-3 periods, do NOT make a line — write the
-  comparison in prose and skip the chart.
-- ``area``: same shape as line but when you want to emphasise the
-  cumulative magnitude (e.g. stacked revenue mix over time). Avoid
-  single-series area; line conveys the same trend cleaner.
-- ``column`` (vertical bars): cross-sectional comparison of 3-10
-  categories of the SAME metric (revenue by segment, employees by
-  region, capex by year-bucket). Each category must be meaningfully
-  comparable — apples-to-apples.
-- ``bar`` (horizontal): use when category labels are long (full peer
-  names, country names). Same data shape as column otherwise.
-- ``pie``: composition / share-of-total ONLY, where the parts sum to
-  a meaningful whole (revenue mix by segment, geographic split). Cap
-  at 5-7 slices. Never use pie for trends, comparisons across time,
-  or unrelated quantities.
-- ``scatter``: relationship between TWO numeric variables across many
-  entities (peer P/E vs. growth, ROIC vs. leverage). Minimum ~5
-  points; fewer than that and the relationship isn't visible.
-
-Anti-patterns — do NOT do these (they are the most common bad chart
-choices we see):
-
-- Two-bar column / bar charts (e.g. 52-week low vs. high; this-year vs.
-  last-year revenue). Two data points is a sentence, not a chart.
-  Write it in prose and cite the facts.
-- One-point line / area / column (chart with a single data point is
-  meaningless — just cite the number).
-- Pie chart of unrelated metrics (e.g. "revenue + EBITDA + FCF" in
-  one pie — they don't sum to anything).
-- Range / endpoint charts (52-week range, target-price range): we
-  don't have a range chart type. Either show the full time series as
-  a line (if you have it) or omit the chart and quote the endpoints.
-- Charts whose ``claim`` is generic ("shows financial performance",
-  "displays valuation metrics"). If you cannot write a one-sentence,
-  non-obvious insight the chart proves, the chart isn't earning its
-  page space — drop it.
-- Mixing units inside one series. Every fact in
-  ``series.value_fact_ids`` MUST share the same ``unit`` value (look
-  at ``bundle.facts[fact_id].unit``). A series cannot plot
-  ``USD_millions`` next to ``USD`` next to ``percent`` — the y-axis
-  becomes meaningless and one bar dwarfs the rest. Example of the
-  bug we're trying to avoid: plotting DCF enterprise value
-  (``USD_millions``, ~30,000) next to per-share comps targets
-  (``USD``, ~$3,000) on the same column chart — one bar reads as a
-  trillion, the rest as flat. If your candidate facts span units,
-  EITHER convert/derive new facts in a single unit (e.g. compute
-  per-share equivalents for everything) OR omit the chart.
-
-If the bundle doesn't support a section's chart well, leave that
-``mandates[].chart_ids`` empty rather than forcing a weak chart.
+For each chart you choose, pick the form that fits the data. The
+VISUALIZE stage downstream will drop any chart whose data shape does
+not render cleanly, so prefer the simplest form that supports the
+claim.
 """.strip()
 
 
@@ -690,20 +638,14 @@ Output is a single JSON WrittenSection:
 {
   "section_id": "business",
   "title": "Business overview",
-  "body": "NVIDIA's Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
+  "body": "<COMPANY>'s Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
 }
 
-Length budget — match the requested ``length``:
-
-- ``concise``:     ~150-250 words. One tight paragraph or two short ones.
-                   Surface only the load-bearing facts; skip nuance.
-- ``normal``:      ~300-500 words. 2-3 paragraphs. Headline + supporting
-                   detail + a forward-looking note.
-- ``elaborative``: ~600-900 words. 3-5 paragraphs. Add second-order
-                   detail, counterpoints, and quantified context.
-
-Length is a target band, not a hard ceiling. Don't pad to reach it; if
-the bundle only supports a shorter section, write the shorter section.
+Length — match the requested ``length``: ``concise`` is short and
+surface-only; ``normal`` is the default depth; ``elaborative`` adds
+second-order detail and counterpoints. Let the bundle's evidence set
+the ceiling — if it only supports a shorter section, write the shorter
+section.
 
 Number grammar — every number in the body comes from one of three markers.
 The engine resolves all three to {{CITE:<id>}} before VERIFY runs, so the
@@ -751,8 +693,8 @@ Marker rendering notes:
   superscript footnote, e.g. "{{CITE:revenue_ttm}}" becomes
   "$451.4B [^7]". Write the surrounding prose around the marker as if
   it were already a noun phrase carrying the number — leave currency
-  symbols, units, and the numeric value to the engine so you don't end
-  up with "$$451.4B [^7]" or stray decorations.
+  symbols, units, and the numeric value to the engine, which renders
+  the formatted value with the proper currency, unit, and footnote.
 - For ``{{CITE:fact_id}}``, the fact_id should appear in
   ``relevant_facts``. Use real ids from that map.
 - ``{{FIG:chart_id}}`` references a chart by id from ``assigned_charts``.
@@ -775,7 +717,8 @@ Rewrite path:
 
 - When ``prior_attempt`` and ``critique`` are present, treat the
   critique as the rewrite brief. Keep what worked; fix what the
-  critique flags. Don't expand scope.
+  critique flags. Keep the rewrite focused on the issues the critique
+  raises.
 
 Output JSON only.
 """.strip()

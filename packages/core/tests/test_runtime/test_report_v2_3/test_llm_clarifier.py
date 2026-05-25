@@ -91,21 +91,13 @@ def test_malformed_response_raises_runtime_error_with_head() -> None:
         LLMClarifierClient(fake).clarify(_request())
 
 
-def test_needs_input_with_too_many_questions_rejected() -> None:
-    """MAX_CLARIFY_QUESTIONS is enforced by the schema; the client must
-    surface that as a clear failure, not silently truncate."""
-    questions = [
-        {
-            "id": f"q{i}",
-            "question": "?",
-            "why_blocking": "x",
-            "default": "y",
-        }
-        for i in range(4)
-    ]
-    fake = _RecordingCall({"outcome": "needs_input", "questions": questions})
-    with pytest.raises(RuntimeError, match=r"malformed JSON for ClarifyResult"):
-        LLMClarifierClient(fake).clarify(_request())
+def test_clarifier_prompt_no_longer_caps_question_count() -> None:
+    """The CLARIFY prompt no longer dictates an arbitrary cap on
+    question count (deleted in Phase 2). The LLM judges how many
+    questions are genuinely needed."""
+    # The exact phrasing that referenced the cap should be gone.
+    assert "cap at 3" not in SYSTEM_PROMPT.lower()
+    assert "MAX_CLARIFY_QUESTIONS" not in SYSTEM_PROMPT
 
 
 def test_clarifier_prompt_includes_template_shape_description() -> None:
@@ -141,3 +133,10 @@ def test_question_missing_required_field_rejected() -> None:
     )
     with pytest.raises(RuntimeError, match=r"malformed JSON for ClarifyResult"):
         LLMClarifierClient(fake).clarify(_request())
+
+
+def test_clarifier_prompt_no_longer_uses_nvda_as_example() -> None:
+    """The CLARIFY prompt should use sector-neutral placeholders so the
+    LLM is not biased toward US semiconductor tickers."""
+    assert "NVDA" not in SYSTEM_PROMPT
+    assert "Nvidia" not in SYSTEM_PROMPT

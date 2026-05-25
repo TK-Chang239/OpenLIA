@@ -13,9 +13,9 @@ plain function fake.
 Prompt + JSON-shape contract:
 - The system prompt asks for ONE of two top-level shapes — `proceed` or
   `needs_input` — discriminated by ``outcome``.
-- Up to `MAX_CLARIFY_QUESTIONS` (3) questions in `needs_input`; the prompt
-  documents the bar for asking (would a wrong default misdirect the
-  pipeline?) so the gate stays cheap.
+- `needs_input` carries however many questions the LLM judges genuinely
+  necessary; the prompt documents the bar for asking (would a wrong
+  default misdirect the pipeline?) so the gate stays cheap.
 - Pydantic validates the shape on the way in; bad JSON is wrapped in a
   RuntimeError that names the offending fragment so failures are
   debuggable.
@@ -32,7 +32,6 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from ..schemas import (
-    MAX_CLARIFY_QUESTIONS,
     ClarifyNeedsInput,
     ClarifyProceed,
     ClarifyResult,
@@ -49,7 +48,7 @@ JsonCall = Callable[..., dict[str, Any]]
 _CLARIFY_RESULT_ADAPTER: TypeAdapter[ClarifyResult] = TypeAdapter(ClarifyResult)
 
 
-SYSTEM_PROMPT = f"""You are the CLARIFY stage of an equity-research report
+SYSTEM_PROMPT = """You are the CLARIFY stage of an equity-research report
 pipeline. You receive the user's free-form request, any tickers the
 caller already pinned, and a short description of the template the
 report will follow.
@@ -57,12 +56,12 @@ report will follow.
 You have two jobs:
 
 (1) IDENTIFY THE SUBJECT. The user may type the ticker outright
-    ("Initiation on NVDA"), name the company instead ("Update on
-    Nvidia's data-center business"), describe a sector ("the lithium
+    ("Initiation on <TICKER>"), name the company instead ("Update on
+    <COMPANY>'s data-center business"), describe a sector ("the lithium
     miners"), or describe a theme ("AI infrastructure margins this
     cycle"). Extract every ticker the request implies into
     `inferred_tickers`. Use the exchange-suffix form the pipeline
-    expects (e.g. "NVDA", "AAPL", "TSM" — bare US tickers; for
+    expects (e.g. <TICKER> — bare US tickers; for
     non-US names use the EODHD form like "0700.HK", "005930.KS").
     If the request is genuinely topic-only and no specific tickers
     are implied, return `inferred_tickers: []` AND ask via
@@ -70,39 +69,37 @@ You have two jobs:
     to — most v2.3 stages assume at least one subject ticker.
 
 (2) DECIDE WHETHER TO ASK ANYTHING ELSE. If the prompt + template
-    are coherent enough to write a good report from, proceed. Don't
-    invent hypothetical "nice to know" questions. Ask only when a
-    one-line answer would change which report you'd write.
+    are coherent enough to write a good report from, proceed. Ask
+    only when a one-line answer would change which report you'd write.
 
 If the caller already pinned `tickers` (non-empty), trust them and
 mirror them into `inferred_tickers` verbatim — they came from the
 user's explicit input upstream.
 
-If you do ask, cap at {MAX_CLARIFY_QUESTIONS} and only ask what you
-actually need.
+If you do ask, only ask what you actually need.
 
 Return EXACTLY one JSON object matching ONE of these shapes:
 
 Proceed (the typical case — subject identified, nothing else needs clarifying):
-{{
+{
   "outcome": "proceed",
-  "inferred_tickers": ["NVDA"],
+  "inferred_tickers": ["<TICKER>"],
   "assumptions": ["concrete assumption 1", "concrete assumption 2"]
-}}
+}
 
 NeedsInput (when a question genuinely blocks a good report —
 including the case where you couldn't identify the subject ticker):
-{{
+{
   "outcome": "needs_input",
   "questions": [
-    {{
+    {
       "id": "ticker",
       "question": "Which ticker should this report cover?",
       "why_blocking": "Pipeline needs a subject ticker to fetch data and run valuation.",
       "default": "SPY"
-    }}
+    }
   ]
-}}
+}
 
 Rules:
 - "outcome" MUST be "proceed" or "needs_input" (exact strings).
