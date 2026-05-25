@@ -43,6 +43,15 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     VerifyResult,
     WrittenSection,
 )
+from openlia.llm.runtime.report_v2_3.templates import (
+    SectionSpec,
+    TemplateSpec,
+    get_builtin,
+)
+
+
+def _template() -> TemplateSpec:
+    return get_builtin(ReportType.INITIATION)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -156,6 +165,7 @@ def test_plan_validates_outline_and_passes_user_payload() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=_template(),
             clarify_result=ClarifyProceed(assumptions=["audience: PM"]),
         )
     )
@@ -179,6 +189,7 @@ def test_plan_wraps_validation_errors_with_fragment() -> None:
                 language=Language.EN,
                 report_type=ReportType.INITIATION,
                 tickers=["NVDA"],
+                template=_template(),
             )
         )
 
@@ -215,6 +226,7 @@ def test_plan_repairs_after_one_validation_failure() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=_template(),
         )
     )
     assert isinstance(outline, Outline)
@@ -726,9 +738,55 @@ def test_all_clients_call_json_with_system_and_user_keywords() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=_template(),
         )
     )
     # First-call shape check is enough to confirm the keyword contract.
     assert {"system", "user"} <= captured[0].keys()
     assert isinstance(captured[0]["system"], str)
     assert isinstance(captured[0]["user"], dict)
+
+
+# ---------------------------------------------------------------------------
+# PLAN — template-driven prompt (Task 6 of Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def test_plan_system_prompt_no_longer_dictates_section_count():
+    """The '4-8 sections is the usual band' guidance must be gone —
+    section count is now the template's job, not a prompt opinion."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    assert "4-8" not in PLAN_SYSTEM_PROMPT
+    assert "usual band" not in PLAN_SYSTEM_PROMPT
+
+
+def test_plan_payload_includes_template_sections():
+    """The PLAN request payload sent to the LLM must include the
+    template's section list so the LLM knows what to fill in."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _planner_payload,
+    )
+    from openlia.llm.runtime.report_v2_3.clients.planner import PlannerRequest
+
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="alpha", title="Alpha", intent="A."),
+            SectionSpec(id="beta", title="Beta", intent="B."),
+        ],
+    )
+    req = PlannerRequest(
+        raw_prompt="initiate",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+        template=template,
+    )
+    payload = _planner_payload(req)
+    assert "template" in payload
+    assert [s["id"] for s in payload["template"]["sections"]] == ["alpha", "beta"]

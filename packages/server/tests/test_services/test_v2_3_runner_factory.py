@@ -54,9 +54,28 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     WrittenSection,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from openlia.llm.runtime.report_v2_3.templates import get_builtin
+from openlia.llm.runtime.report_v2_3.templates import (
+    SectionSpec,
+    TemplateSpec,
+    get_builtin,
+)
 from openlia_server.services.v2_3_run_service import start_run
 from openlia_server.services.v2_3_runner_factory import make_v2_3_runner_factory
+
+
+def _template_with_sections(*section_ids: str) -> TemplateSpec:
+    """Build a minimal template whose section ids match the planner's
+    fake outline, so the strict coercer in PlanStage rebuilds an outline
+    with the same ids the test cares about."""
+    return TemplateSpec(
+        template_id="t_test",
+        name="Test template",
+        shape_description="Test template with caller-specified sections.",
+        sections=[
+            SectionSpec(id=sid, title=sid.title(), intent=f"{sid} intent.")
+            for sid in section_ids
+        ],
+    )
 
 
 def _seed_state() -> ReportState:
@@ -177,7 +196,9 @@ def test_factory_synthesize_strips_phantom_fact_refs() -> None:
 def test_factory_with_planner_populates_outline() -> None:
     """Planner wired alone: outline must land on state.outline. Bundle/
     outline pre-seeding from `_seed_state` is overwritten by the real
-    planner — that's the contract."""
+    planner — that's the contract. The strict coercer rebuilds the
+    section list from the template, so the seed template here matches
+    the section ids the fake planner emits."""
     fresh_outline = Outline(
         tickers=["NVDA"],
         report_type=ReportType.INITIATION,
@@ -192,9 +213,13 @@ def test_factory_with_planner_populates_outline() -> None:
         planner_client=fake_planner,
     )
 
-    state = factory().start(_seed_state())
+    seed = _seed_state()
+    seed.template = _template_with_sections("thesis", "risks")
+    state = factory().start(seed)
     assert state.status == RunStatus.COMPLETE
-    assert state.outline is fresh_outline
+    # Coercion rebuilds outline.sections from the template — identity is
+    # no longer preserved, but the section ids match (template + planner
+    # agree on this run).
     assert [s.id for s in state.outline.sections] == ["thesis", "risks"]
     assert len(fake_planner.calls) == 1
     request = fake_planner.calls[0]
@@ -223,11 +248,16 @@ def test_factory_planner_output_flows_to_synthesizer() -> None:
         synthesizer_client=fake_synth,
     )
 
-    state = factory().start(_seed_state())
+    seed = _seed_state()
+    seed.template = _template_with_sections("overview")
+    state = factory().start(seed)
     assert state.status == RunStatus.COMPLETE
-    # The synthesizer must have been called with the outline PLAN produced,
-    # not the one pre-seeded by `_seed_state`.
-    assert fake_synth.calls[0].outline is fresh_outline
+    # The synthesizer must have been called with the outline PLAN produced
+    # (after coercion), not the one pre-seeded by `_seed_state`. Identity
+    # is no longer preserved through coercion, so compare on content.
+    synth_outline = fake_synth.calls[0].outline
+    assert [s.id for s in synth_outline.sections] == ["overview"]
+    assert synth_outline is state.outline
 
 
 def test_factory_with_writer_populates_sections() -> None:
@@ -345,7 +375,9 @@ def test_factory_with_compute_adds_dcf_facts_to_bundle() -> None:
         synthesizer_client=FakeSynthesizerClient(responder=_record_synth),
     )
 
-    state = factory().start(_seed_state())
+    seed = _seed_state()
+    seed.template = _template_with_sections("overview")
+    state = factory().start(seed)
     assert state.status == RunStatus.COMPLETE
     # DCF facts must be in the final bundle.
     assert "dcf_fair_value" in state.bundle.facts
@@ -499,6 +531,8 @@ def test_all_eight_stages_compose_end_to_end() -> None:
     )
 
     # Fresh state — no pre-seeding. Every stage owns its slice.
+    # Template section ids match the planned_outline ids so the strict
+    # coercer in PlanStage keeps the same shape end to end.
     state = ReportState(
         run_id="r-end-to-end",
         user_id="u",
@@ -506,14 +540,16 @@ def test_all_eight_stages_compose_end_to_end() -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
-        template=get_builtin(ReportType.INITIATION),
+        template=_template_with_sections("overview", "financials"),
     )
 
     state = factory().start(state)
 
     assert state.status == RunStatus.COMPLETE
     assert state.retry_count == 0
-    assert state.outline is planned_outline
+    # Coercion creates a new outline; assert content matches rather than
+    # identity to the pre-coerced planner output.
+    assert [s.id for s in state.outline.sections] == ["overview", "financials"]
     # Bundle = RESEARCH output plus COMPUTE-added DCF facts.
     assert "rev_ttm" in state.bundle.facts  # from RESEARCH
     assert "dcf_fair_value" in state.bundle.facts  # added by COMPUTE
