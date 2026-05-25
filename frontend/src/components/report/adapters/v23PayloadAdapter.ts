@@ -151,6 +151,7 @@ function buildMetaStats(payload: V23RunPayload, citations: Citation[]): MetaStat
   // a 1-paragraph note still reads as "1 min" not "0".
   const estReadMinutes = Math.max(1, Math.round(wordCount / 250));
   const webSearchQueries = citations.filter((c) => /https?:\/\//.test(c.title ?? "")).length;
+  const nc = payload.narrative_coverage;
   return {
     sections_count: payload.sections.length,
     sources_count: citations.length,
@@ -158,6 +159,8 @@ function buildMetaStats(payload: V23RunPayload, citations: Citation[]): MetaStat
     web_search_queries: webSearchQueries > 0 ? webSearchQueries : null,
     tokens_used: null,
     model_id: null,
+    narrative_coverage_label: nc ? `${nc.satisfied}/${nc.total}` : null,
+    narrative_coverage_pct: nc ? nc.pct : null,
   };
 }
 
