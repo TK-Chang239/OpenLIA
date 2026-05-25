@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 from openlia.llm.runtime.report_v2_3.clients.planner import (
     FakePlannerClient,
     PlannerRequest,
@@ -37,13 +36,13 @@ def _overview_financials_template() -> TemplateSpec:
     )
 
 
-def _state() -> ReportState:
+def _state(*, report_type: ReportType = ReportType.INITIATION) -> ReportState:
     s = ReportState(
         run_id="r",
         user_id="u",
         raw_prompt="initiate on NVDA",
         language=Language.EN,
-        report_type=ReportType.INITIATION,
+        report_type=report_type,
         tickers=["NVDA"],
         template=_overview_financials_template(),
     )
@@ -136,20 +135,39 @@ def test_data_needs_specificity_carried_through() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Validation errors
+# Run-scope coercion — engine overrides whatever the LLM emitted
 # ---------------------------------------------------------------------------
+#
+# `tickers` and `report_type` are decided at run-start; the LLM doesn't
+# get to widen scope. The PLAN_SYSTEM_PROMPT's worked-example includes
+# literal values for shape clarity, and a model under load happily
+# lifts them (which is how this surfaced — every `update` run on a
+# previously-`initiation`-only deployment errored out). PlanStage now
+# coerces both fields from state so PLAN's correctness no longer
+# depends on prompt compliance.
 
 
-def test_outline_with_mismatched_tickers_raises() -> None:
+def test_outline_tickers_are_coerced_from_state_when_llm_widens_scope() -> None:
+    """LLM returned an outline scoped to AAPL but the run was for NVDA —
+    coerce to state.tickers rather than raise. Defense-in-depth against
+    the planner copying the example or hallucinating peers into the
+    ticker list."""
     bad = _outline(tickers=["AAPL"])
-    with pytest.raises(RuntimeError, match="tickers"):
-        PlanStage(FakePlannerClient(result=bad)).run(_state(), _ctx())
+    state = PlanStage(FakePlannerClient(result=bad)).run(_state(), _ctx())
+    assert state.outline is not None
+    assert state.outline.tickers == ["NVDA"]
 
 
-def test_outline_with_mismatched_report_type_raises() -> None:
-    bad = _outline(report_type=ReportType.UPDATE)
-    with pytest.raises(RuntimeError, match="report_type"):
-        PlanStage(FakePlannerClient(result=bad)).run(_state(), _ctx())
+def test_outline_report_type_is_coerced_from_state() -> None:
+    """LLM returned an `initiation` outline (the example value) on a
+    run launched as `update` — coerce to state.report_type. This is
+    the exact failure mode users hit when running the first non-
+    `initiation` report after PR #165 anchored the prompt example."""
+    state = _state(report_type=ReportType.UPDATE)
+    bad = _outline(report_type=ReportType.INITIATION)
+    out_state = PlanStage(FakePlannerClient(result=bad)).run(state, _ctx())
+    assert out_state.outline is not None
+    assert out_state.outline.report_type == ReportType.UPDATE
 
 
 # Note: tests asserting "outline with no sections raises" and "outline
