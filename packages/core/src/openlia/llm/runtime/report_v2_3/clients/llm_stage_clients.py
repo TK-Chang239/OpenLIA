@@ -406,11 +406,17 @@ Rules:
   include every fact the chart uses.
 - ``charts[].chart_type`` MUST be one of EXACTLY these values:
   ``"column"``, ``"bar"``, ``"line"``, ``"area"``, ``"pie"``,
-  ``"scatter"``. Pick the value from that enum that fits the data;
-  if the data wouldn't plot as one of the six, omit the chart instead
-  of inventing a new chart_type. Each ChartSpec needs at least one
-  series with at least one fact_id; when you can't satisfy that, omit
-  the chart rather than emit a placeholder.
+  ``"scatter"``, ``"heatmap"``, ``"table"``. Pick the value from that
+  enum that fits the data; if the data wouldn't plot as one of the
+  eight, omit the chart instead of inventing a new chart_type. Each
+  ChartSpec needs at least one series with at least one fact_id; when
+  you can't satisfy that, omit the chart rather than emit a placeholder.
+  Picking guidance: pick ``"heatmap"`` when the figure is a 2-D grid
+  of numbers (e.g. a sensitivity matrix where series are rows and
+  category_labels are columns). Pick ``"table"`` when the comparison
+  reads more naturally as a numeric grid than a plot (e.g. a small
+  peer-comp panel or a key-metric snapshot); the data view will be
+  emitted as a native Word table without an accompanying image.
 - ``mandates[].chart_ids`` is a strict subset of ``charts[].id``. Every
   chart_id you list on a mandate must also appear as a chart in
   ``charts``; if a section shouldn't have a chart, leave ``chart_ids``
@@ -451,7 +457,9 @@ def _synthesize_payload(request: SynthesizerRequest) -> dict[str, Any]:
 # Mirrors ``ChartType`` in schemas.py — duplicated here so the SYNTHESIZE
 # pre-validation pass can sanitise charts without importing the enum and
 # coupling the prompt to schema internals.
-_VALID_CHART_TYPES = frozenset({"column", "bar", "line", "area", "pie", "scatter"})
+_VALID_CHART_TYPES = frozenset(
+    {"column", "bar", "line", "area", "pie", "scatter", "heatmap", "table"}
+)
 
 
 def _sanitise_synthesize_raw(raw: dict[str, Any]) -> dict[str, Any]:
@@ -460,7 +468,7 @@ def _sanitise_synthesize_raw(raw: dict[str, Any]) -> dict[str, Any]:
 
     Specifically:
     - Charts with a ``chart_type`` outside the engine's enum are dropped
-      (the LLM occasionally invents "text" / "table" / "heatmap").
+      (the LLM occasionally invents "text" / "bubble" / "candlestick").
     - Mandate ``chart_ids`` that no longer point at a real chart (because
       we dropped the chart above, OR because the LLM hallucinated the
       id) are stripped from the mandate. The section then renders

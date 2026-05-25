@@ -214,3 +214,60 @@ def test_chart_png_multi_series_bar() -> None:
     )
     png = try_render_chart_png(chart, bundle)
     assert png is not None
+
+
+def test_chart_png_returns_none_for_table_type() -> None:
+    """TABLE charts intentionally skip the PNG so the caller emits just the
+    native docx data-table — a matplotlib raster of the same numbers would
+    duplicate the figure."""
+    bundle = _bundle_with_scalars()
+    chart = _chart(ChartType.TABLE, series_layout="one_fact_per_category")
+    assert try_render_chart_png(chart, bundle) is None
+
+
+def test_chart_png_heatmap_renders_grid_from_multiple_series() -> None:
+    """HEATMAP shape: rows = series, cols = categories. The renderer feeds
+    each series's values as one row into ``imshow``."""
+    bundle = ResearchBundle(
+        tickers=["NVDA"],
+        facts={
+            "w1c1": BundleFact(id="w1c1", label="w1c1", value=1.0, source=_src()),
+            "w1c2": BundleFact(id="w1c2", label="w1c2", value=2.0, source=_src()),
+            "w2c1": BundleFact(id="w2c1", label="w2c1", value=3.0, source=_src()),
+            "w2c2": BundleFact(id="w2c2", label="w2c2", value=4.0, source=_src()),
+        },
+    )
+    chart = ChartSpec(
+        id="heat",
+        section_id="valuation",
+        claim="Sensitivity grid",
+        chart_type=ChartType.HEATMAP,
+        title="DCF sensitivity",
+        category_labels=["g=2%", "g=3%"],
+        series=[
+            ChartSeries(name="wacc=9%", value_fact_ids=["w1c1", "w1c2"]),
+            ChartSeries(name="wacc=10%", value_fact_ids=["w2c1", "w2c2"]),
+        ],
+    )
+    png = try_render_chart_png(chart, bundle)
+    assert png is not None
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_chart_png_heatmap_returns_none_on_data_shape_mismatch() -> None:
+    """A heatmap whose series values don't line up with categories falls
+    back to the data-table view rather than producing a malformed grid."""
+    bundle = ResearchBundle(
+        tickers=["NVDA"],
+        facts={"a": BundleFact(id="a", label="A", value=1.0, source=_src())},
+    )
+    chart = ChartSpec(
+        id="heat_bad",
+        section_id="valuation",
+        claim="x",
+        chart_type=ChartType.HEATMAP,
+        title="t",
+        category_labels=["c1", "c2"],
+        series=[ChartSeries(name="row", value_fact_ids=["a"])],
+    )
+    assert try_render_chart_png(chart, bundle) is None
