@@ -73,6 +73,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -88,6 +90,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -108,6 +112,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={onSelectionChange}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -131,6 +137,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={onSelectionChange}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -154,6 +162,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={onLengthChange}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -161,6 +171,53 @@ describe("V23ReportSettingsModal", () => {
     await waitFor(() => screen.getByText("Stock Initiation"));
     fireEvent.click(screen.getByTestId("er-v2-3-settings-length-elaborative"));
     expect(onLengthChange).toHaveBeenCalledWith("elaborative");
+  });
+
+  test("renders the reasoning pill with Off / Medium / High and the current value checked", async () => {
+    render(
+      <V23ReportSettingsModal
+        open
+        selection={defaultSelection()}
+        length="normal"
+        onSelectionChange={vi.fn()}
+        onLengthChange={vi.fn()}
+        reasoningEffort="medium"
+        onReasoningEffortChange={vi.fn()}
+        onUploadClick={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => screen.getByText("Stock Initiation"));
+    expect(screen.getByTestId("er-v2-3-settings-reasoning-off")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("er-v2-3-settings-reasoning-medium"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("er-v2-3-settings-reasoning-high")).toBeInTheDocument();
+    expect(
+      screen
+        .getByTestId("er-v2-3-settings-reasoning-medium")
+        .getAttribute("aria-checked"),
+    ).toBe("true");
+  });
+
+  test("clicking a reasoning option fires onReasoningEffortChange", async () => {
+    const onReasoningEffortChange = vi.fn();
+    render(
+      <V23ReportSettingsModal
+        open
+        selection={defaultSelection()}
+        length="normal"
+        onSelectionChange={vi.fn()}
+        onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={onReasoningEffortChange}
+        onUploadClick={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => screen.getByText("Stock Initiation"));
+    fireEvent.click(screen.getByTestId("er-v2-3-settings-reasoning-high"));
+    expect(onReasoningEffortChange).toHaveBeenCalledWith("high");
   });
 
   test("clicking upload fires onUploadClick without closing", async () => {
@@ -173,6 +230,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={onUploadClick}
         onClose={onClose}
       />,
@@ -191,6 +250,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
         refreshKey={0}
@@ -205,6 +266,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
         refreshKey={1}
@@ -226,6 +289,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,
@@ -245,6 +310,8 @@ describe("V23ReportSettingsModal", () => {
         length="normal"
         onSelectionChange={vi.fn()}
         onLengthChange={vi.fn()}
+        reasoningEffort="off"
+        onReasoningEffortChange={vi.fn()}
         onUploadClick={vi.fn()}
         onClose={vi.fn()}
       />,

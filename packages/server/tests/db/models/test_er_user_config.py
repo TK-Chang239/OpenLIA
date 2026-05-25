@@ -103,3 +103,42 @@ def test_er_user_config_report_length_check_constraint(create_tables, db_session
     )
     with pytest.raises(IntegrityError):
         db_session.commit()
+
+
+def test_er_user_config_reasoning_effort_column_nullable(create_tables, db_session):
+    """Column accepts NULL (the default for rows written before the
+    migration) and the three pill values."""
+    db_session.add(User(id="u1", email="u1@example.com", display_name="u1"))
+    db_session.commit()
+    db_session.add(
+        ErUserConfig(
+            id="c1",
+            user_id="u1",
+            report_mode="stock_initiation",
+            report_length="normal",
+            sections_by_mode={},
+            custom_sections_by_mode={},
+            report_reasoning_effort=None,
+        )
+    )
+    db_session.commit()
+    row = db_session.query(ErUserConfig).filter(ErUserConfig.user_id == "u1").one()
+    assert row.report_reasoning_effort is None
+
+
+def test_er_user_config_reasoning_effort_check_constraint(create_tables, db_session):
+    db_session.add(User(id="u1", email="u1@example.com", display_name="u1"))
+    db_session.commit()
+    db_session.add(
+        ErUserConfig(
+            id="c1",
+            user_id="u1",
+            report_mode="stock_initiation",
+            report_length="normal",
+            sections_by_mode={},
+            custom_sections_by_mode={},
+            report_reasoning_effort="extreme",
+        )
+    )
+    with pytest.raises(IntegrityError):
+        db_session.commit()

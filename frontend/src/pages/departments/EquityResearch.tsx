@@ -351,6 +351,51 @@ export default function EquityResearch(): JSX.Element {
       /* ignore */
     }
   }, []);
+  // Extended-thinking effort for the v2.3 engine. Source of truth lives
+  // server-side on ErUserConfig.report_reasoning_effort; the local state
+  // mirrors it for instant pill response. The first paint reads
+  // localStorage so the pill renders the user's prior choice before the
+  // /config GET resolves; the effect below then reconciles with the
+  // server value once it arrives.
+  const [v23ReasoningEffort, setV23ReasoningEffortState] = useState<
+    "off" | "medium" | "high"
+  >(() => {
+    if (typeof window === "undefined") return "off";
+    try {
+      const raw = window.localStorage.getItem("er.v23.reasoning_effort");
+      if (raw === "off" || raw === "medium" || raw === "high") return raw;
+    } catch {
+      /* fall through */
+    }
+    return "off";
+  });
+  useEffect(() => {
+    const fromServer = config.report_reasoning_effort;
+    if (fromServer === "off" || fromServer === "medium" || fromServer === "high") {
+      setV23ReasoningEffortState(fromServer);
+      try {
+        window.localStorage.setItem("er.v23.reasoning_effort", fromServer);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [config.report_reasoning_effort]);
+  const setV23ReasoningEffort = useCallback(
+    (next: "off" | "medium" | "high") => {
+      setV23ReasoningEffortState(next);
+      try {
+        window.localStorage.setItem("er.v23.reasoning_effort", next);
+      } catch {
+        /* ignore */
+      }
+      // Persist to the server. Failures are non-fatal — the local state
+      // and localStorage already reflect the user's pick.
+      void patch({ report_reasoning_effort: next }).catch(() => {
+        /* ignore */
+      });
+    },
+    [patch],
+  );
   // Bump after a successful upload so the settings modal refetches.
   const [v23TemplatesRefreshKey, setV23TemplatesRefreshKey] = useState(0);
 
@@ -1175,6 +1220,7 @@ export default function EquityResearch(): JSX.Element {
               length={v23Length === "concise" ? "concise" : v23Length === "elaborative" ? "elaborative" : "normal"}
               reportType={v23Selection.reportType}
               templateId={v23Selection.templateId}
+              reasoningEffort={v23ReasoningEffort}
               firstName={firstName(user?.display_name)}
               onModeClick={() => setSettingsOpen(true)}
             />
@@ -1555,8 +1601,10 @@ export default function EquityResearch(): JSX.Element {
           open={settingsOpen}
           selection={v23Selection}
           length={v23Length}
+          reasoningEffort={v23ReasoningEffort}
           onSelectionChange={setV23Selection}
           onLengthChange={setV23Length}
+          onReasoningEffortChange={setV23ReasoningEffort}
           onUploadClick={() => {
             setSettingsOpen(false);
             setV23UploadOpen(true);

@@ -156,3 +156,34 @@ def test_put_config_rejects_unknown_mode_in_budget_map(company_client, auth_user
     )
     assert r.status_code == 400
     assert "unknown" in r.json()["detail"].lower()
+
+
+# ---------- report_reasoning_effort (v2.3 extended thinking) ----------
+
+
+def test_get_config_includes_reasoning_effort_default_off(company_client, auth_user):
+    r = company_client.get("/departments/equity-research/config")
+    assert r.status_code == 200
+    assert r.json()["report_reasoning_effort"] == "off"
+
+
+def test_put_config_persists_reasoning_effort_and_roundtrips(company_client, auth_user):
+    company_client.get("/departments/equity-research/config")
+    r = company_client.put(
+        "/departments/equity-research/config",
+        json={"report_reasoning_effort": "high"},
+    )
+    assert r.status_code == 200
+    assert r.json()["report_reasoning_effort"] == "high"
+    body = company_client.get("/departments/equity-research/config").json()
+    assert body["report_reasoning_effort"] == "high"
+
+
+def test_put_config_rejects_invalid_reasoning_effort(company_client, auth_user):
+    company_client.get("/departments/equity-research/config")
+    r = company_client.put(
+        "/departments/equity-research/config",
+        json={"report_reasoning_effort": "extreme"},
+    )
+    assert r.status_code == 400
+    assert "reasoning_effort" in r.json()["detail"].lower()

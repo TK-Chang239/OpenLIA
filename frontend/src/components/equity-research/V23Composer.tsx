@@ -110,6 +110,11 @@ interface Props {
    *  streamV23Run as `template_id` so the engine resolves the user's
    *  template instead of falling back to the report_type built-in. */
   templateId?: string | null;
+  /** User-selected reasoning effort from the settings modal. "off"
+   *  sends null to the server (thinking disabled); "medium" / "high"
+   *  forward verbatim. PLAN + SYNTHESIZE are the only stages that
+   *  apply the directive server-side. */
+  reasoningEffort?: "off" | "medium" | "high";
   /** User's display name for the welcome greeting. */
   firstName: string;
   /** Open the Report Settings modal — wired by the page. */
@@ -126,6 +131,7 @@ export function V23Composer({
   length,
   reportType,
   templateId = null,
+  reasoningEffort = "off",
   firstName,
   onModeClick,
 }: Props): JSX.Element {
@@ -412,6 +418,7 @@ export function V23Composer({
         report_type: reportType,
         length: LENGTH_TO_V23[length],
         template_id: templateId,
+        reasoning_effort: reasoningEffort === "off" ? null : reasoningEffort,
       },
       {
         onEvent: handleStreamEvent,
