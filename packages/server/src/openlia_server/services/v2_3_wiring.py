@@ -447,6 +447,32 @@ _EODHD_DROP_SECTIONS = frozenset(
     }
 )
 
+# Fields inside the `General` section to drop. These are either prose
+# (stale company narrative, exec bios) or contact metadata that has no
+# business shaping research output. Dropping them serves two ends:
+#
+#  - Token cost: `Description` + `Officers` together routinely add
+#    2-5k tokens per fundamentals call, with zero load-bearing value
+#    for an equity-research report.
+#  - Behavioral: the prose is point-in-time and reads to the model as
+#    "narrative coverage already supplied", which causes the researcher
+#    to skip web_search for genuinely-current qualitative needs
+#    (regulatory status, catalysts, management commentary). Removing
+#    the false-sufficiency signal is the load-bearing reason to drop
+#    them, even with the source_class routing from PR 2 in place.
+_EODHD_GENERAL_DROP_FIELDS = frozenset(
+    {
+        "Description",
+        "Officers",
+        "Address",
+        "AddressData",
+        "Phone",
+        "WebURL",
+        "LogoURL",
+        "InternationalDomestic",
+    }
+)
+
 
 def _trim_eodhd_fundamentals(payload: dict[str, Any]) -> dict[str, Any]:
     """Strip EODHD fundamentals down to what an equity-research report
@@ -466,6 +492,9 @@ def _trim_eodhd_fundamentals(payload: dict[str, Any]) -> dict[str, Any]:
     for key, value in payload.items():
         if key in _EODHD_DROP_SECTIONS:
             continue
+        if key == "General" and isinstance(value, dict):
+            trimmed[key] = _trim_general(value)
+            continue
         if key == "SplitsDividends" and isinstance(value, dict):
             trimmed[key] = _trim_splits_dividends(value)
             continue
@@ -477,6 +506,12 @@ def _trim_eodhd_fundamentals(payload: dict[str, Any]) -> dict[str, Any]:
             continue
         trimmed[key] = value
     return trimmed
+
+
+def _trim_general(section: dict[str, Any]) -> dict[str, Any]:
+    """Drop prose + contact fields from `General`; keep structured
+    metadata (sector/industry/country/employees/IPO date)."""
+    return {k: v for k, v in section.items() if k not in _EODHD_GENERAL_DROP_FIELDS}
 
 
 def _trim_splits_dividends(section: dict[str, Any]) -> dict[str, Any]:
