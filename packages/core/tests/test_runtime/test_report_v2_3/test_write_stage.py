@@ -35,6 +35,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.stages import StageContext, WriteStage
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _src() -> DataProviderSource:
@@ -120,6 +121,7 @@ def _state(*, with_chart: bool = True) -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     s.bundle = _bundle()
     s.outline = _outline()
@@ -385,6 +387,26 @@ def test_write_stage_mints_estimate_marker_into_estimate_fact():
     assert isinstance(minted.source, EstimateSource)
     assert minted.source.basis == "thesis-led margin expansion"
     assert minted.source.stage == "write"
+
+
+def test_write_stage_passes_template_into_writer_request():
+    """WriteStage must thread state.template into each WriterRequest so
+    the writer payload can surface per-section intent."""
+    state = _state()
+    captured: list[WriterRequest] = []
+
+    def responder(req: WriterRequest) -> WrittenSection:
+        captured.append(req)
+        return WrittenSection(
+            section_id=req.section_mandate.section_id,
+            title=req.section_mandate.section_id.title(),
+            body="ok",
+        )
+
+    stage = WriteStage(FakeWriterClient(responder=responder))
+    stage.run(state, _ctx())
+
+    assert all(req.template is state.template for req in captured)
 
 
 def test_write_stage_fails_loud_on_unknown_derive_input():

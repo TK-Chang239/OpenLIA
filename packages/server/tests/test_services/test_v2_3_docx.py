@@ -35,6 +35,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 from openlia.llm.runtime.report_v2_3.stages import StageContext
 from openlia.llm.runtime.report_v2_3.stages.assemble import AssembleStage
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 from openlia_server.services.v2_3_docx import render_docx
 
 
@@ -114,6 +115,7 @@ def _state_ready_to_render() -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     s.bundle = _bundle()
     s.outline = Outline(

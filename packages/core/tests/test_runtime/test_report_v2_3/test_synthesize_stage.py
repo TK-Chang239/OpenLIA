@@ -27,6 +27,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 )
 from openlia.llm.runtime.report_v2_3.stages import StageContext, SynthesizeStage
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _src() -> DataProviderSource:
@@ -67,6 +68,7 @@ def _state(*, language: Language = Language.EN) -> ReportState:
         language=language,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
     s.bundle = _bundle()
     s.outline = _outline()
@@ -131,6 +133,20 @@ def test_happy_path_writes_thesis_to_state() -> None:
     assert request.language == Language.EN
     assert request.bundle is state.bundle
     assert request.outline is state.outline
+
+
+def test_stage_threads_state_template_into_request() -> None:
+    """SynthesizeStage must pass state.template into the request so the
+    synthesizer payload can surface per-section intents."""
+    client = FakeSynthesizerClient(result=_thesis())
+    stage = SynthesizeStage(client)
+    state = _state()
+    expected_template = state.template
+
+    stage.run(state, _ctx())
+
+    assert len(client.calls) == 1
+    assert client.calls[0].template is expected_template
 
 
 # ---------------------------------------------------------------------------

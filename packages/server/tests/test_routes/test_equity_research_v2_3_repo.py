@@ -189,6 +189,7 @@ def test_docx_download_works_for_completed_run(v2_3_client) -> None:
         WrittenSection,
     )
     from openlia.llm.runtime.report_v2_3.state import ReportState
+    from openlia.llm.runtime.report_v2_3.templates import get_builtin
     from openlia_server.services.v2_3_state_store import SqlStateStore
 
     app, _ = v2_3_client
@@ -206,6 +207,7 @@ def test_docx_download_works_for_completed_run(v2_3_client) -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
         status=RunStatus.COMPLETE,
     )
     state.outline = Outline(
@@ -288,6 +290,7 @@ def test_payload_returns_structured_view_for_completed_run(v2_3_client) -> None:
         WrittenSection,
     )
     from openlia.llm.runtime.report_v2_3.state import ReportState
+    from openlia.llm.runtime.report_v2_3.templates import get_builtin
     from openlia_server.services.v2_3_state_store import SqlStateStore
 
     app, _ = v2_3_client
@@ -305,6 +308,7 @@ def test_payload_returns_structured_view_for_completed_run(v2_3_client) -> None:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
         status=RunStatus.COMPLETE,
     )
     state.outline = Outline(

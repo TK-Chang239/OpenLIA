@@ -32,6 +32,7 @@ from .schemas import (
     WrittenSection,
 )
 from .slots import V23Slot
+from .templates import TemplateSpec
 
 
 def _now() -> datetime:
@@ -58,6 +59,11 @@ class ReportState(BaseModel):
     raw_prompt: str
     language: Language
     report_type: ReportType
+    # Structural source of truth for this run — section list, intents,
+    # methodology hints. The wiring layer supplies it from
+    # `get_builtin(report_type)` when no user template is selected.
+    # Required, no default: every run carries a template.
+    template: TemplateSpec
     length: ReportLength = ReportLength.NORMAL
     # Optional reference to a user-uploaded report template (UUID from
     # the report_templates table). When set, the planner uses the

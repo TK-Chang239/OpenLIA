@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..schemas import ClarifyResult, Language, ReportType
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -26,6 +27,7 @@ class ClarifierRequest:
     language: Language
     report_type: ReportType
     tickers: list[str]
+    template: TemplateSpec
 
 
 class ClarifierClient(Protocol):

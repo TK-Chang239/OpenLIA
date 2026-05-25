@@ -72,6 +72,7 @@ class ComputeStage(Stage):
                 language=state.language,
                 bundle=bundle,
                 outline=outline,
+                template=state.template,
                 clarify_result=state.clarify_result,
             )
             # Per-method tolerance: an LLM that produces malformed inputs

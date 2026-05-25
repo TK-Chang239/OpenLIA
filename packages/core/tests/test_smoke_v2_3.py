@@ -99,6 +99,7 @@ def test_clarifier_proceeds_on_clear_prompt() -> None:
         Language,
         ReportType,
     )
+    from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
     clarifier = _build_real_clarifier()
     result = clarifier.clarify(
@@ -110,6 +111,7 @@ def test_clarifier_proceeds_on_clear_prompt() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=get_builtin(ReportType.INITIATION),
         )
     )
     assert isinstance(result, ClarifyProceed), (

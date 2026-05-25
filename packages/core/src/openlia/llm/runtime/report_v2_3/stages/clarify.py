@@ -45,6 +45,7 @@ class ClarifyStage(Stage):
                 language=state.language,
                 report_type=state.report_type,
                 tickers=list(state.tickers),
+                template=state.template,
             )
         )
 

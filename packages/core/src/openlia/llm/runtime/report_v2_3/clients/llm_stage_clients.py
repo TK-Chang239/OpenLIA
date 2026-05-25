@@ -163,43 +163,53 @@ def _call_with_repair(
 # ---------------------------------------------------------------------------
 
 
-PLAN_SYSTEM_PROMPT = """You are the PLAN stage of an equity-research report
-pipeline. Convert the user's prompt + CLARIFY assumptions into a
-section-by-section Outline that tells RESEARCH exactly what evidence to
-gather.
+PLAN_SYSTEM_PROMPT = """
+You are the PLAN stage of the v2.3 equity-research engine. The user
+template supplies the section structure; your job is to fill each
+section with the data_needs RESEARCH should fetch and to select the
+valuation methods COMPUTE should run.
 
-Output is a single JSON object matching this Outline shape:
+Inputs you receive:
+- raw_prompt: the user's request.
+- template.sections: the ordered list of sections the report must
+  contain. Each section carries an `id`, `title`, `intent`, and
+  optional `methodology_hints`.
+- clarify_result: the assumptions resolved at CLARIFY.
 
+Output an Outline JSON object:
 {
   "tickers": ["NVDA"],
   "report_type": "initiation",
   "sections": [
     {
-      "id": "business",
-      "title": "Business overview",
-      "section_type": "qualitative",
+      "id": "<copy from template.sections[i].id>",
+      "title": "<copy from template.sections[i].title>",
       "data_needs": [
         {
-          "description": "products, end markets, revenue mix",
-          "expected_fact_ids": ["rev_mix_segments", "geo_mix"]
+          "description": "<one-line note on what RESEARCH should fetch>",
+          "expected_fact_ids": ["rev_ttm", "rev_growth_yoy"]
         }
       ]
-    }
+    },
+    ...
   ],
-  "valuation_plan": {"methods": ["dcf", "comps"]}
+  "valuation_plan": {
+    "methods": ["dcf", "comps"]
+  }
 }
 
 Rules:
-
-- Pick the smallest set of sections that covers what a PM needs to
-  decide on the request. 4-8 is the usual band.
-- Every section needs at least one data_need that names what to fetch.
-- `expected_fact_ids` are stable handles RESEARCH will try to satisfy
-  with that exact id. Match the snake_case naming the rest of the
-  pipeline uses.
-- `valuation_plan.methods` is the list COMPUTE will execute. Use
-  ["dcf"] for initiation, [] for morning_brief / earnings_review,
-  ["dcf", "comps"] when peers are visible.
+- Produce one section per template.sections entry, in the same order,
+  with the same `id` and `title`. The engine's coercer will fix drift,
+  so be conservative — copy the structure verbatim.
+- For each section, populate `data_needs` with one or more entries.
+  Each `data_needs[*].expected_fact_ids` is a list of stable identifier
+  strings RESEARCH will fetch and bind to the BundleFact map. Use
+  snake_case ids like `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
+- `valuation_plan.methods` lists the valuation methods COMPUTE should
+  run. Choose from `dcf`, `comps`, `sensitivity` based on what the
+  template's sections actually need (e.g. include `dcf` only when a
+  section's intent calls for an intrinsic valuation).
 - Output JSON only. No prose, no markdown fences.
 """.strip()
 
@@ -213,6 +223,20 @@ def _planner_payload(request: PlannerRequest) -> dict[str, Any]:
         "clarify_result": (
             request.clarify_result.model_dump() if request.clarify_result is not None else None
         ),
+        "template": {
+            "template_id": request.template.template_id,
+            "name": request.template.name,
+            "shape_description": request.template.shape_description,
+            "sections": [
+                {
+                    "id": s.id,
+                    "title": s.title,
+                    "intent": s.intent,
+                    "methodology_hints": list(s.methodology_hints),
+                }
+                for s in request.template.sections
+            ],
+        },
     }
 
 
@@ -375,6 +399,10 @@ Rules:
 - ``valuation_plan.methods`` MUST mirror the outline's plan unless
   research shows a method is impossible (e.g. no peers found).
 - Every ``mandates[].section_id`` MUST match an outline section.
+- Each outline section carries a ``template_intent`` field capturing what
+  the user's template asked the section to accomplish; ground each
+  mandate's ``covers`` text in that intent so writers know exactly what
+  the user wanted from this section.
 - Every ``charts[].section_id`` MUST match a mandate; chart fact ids
   MUST be in the bundle; the section's ``relevant_fact_ids`` MUST
   include every fact the chart uses.
@@ -452,10 +480,19 @@ If the bundle doesn't support a section's chart well, leave that
 
 
 def _synthesize_payload(request: SynthesizerRequest) -> dict[str, Any]:
+    # Enrich each outline section with the matching template section's
+    # `intent` so the synthesizer can ground each mandate's `covers`
+    # text in the user's stated intent rather than the LLM's reading of
+    # the section title alone. The enrichment lives inline next to the
+    # section dict so the LLM reads the two together.
+    intents_by_id: dict[str, str] = {s.id: s.intent for s in request.template.sections}
+    outline_payload = request.outline.model_dump(mode="json")
+    for section in outline_payload.get("sections", []):
+        section["template_intent"] = intents_by_id.get(section.get("id", ""), "")
     return {
         "raw_prompt": request.raw_prompt,
         "language": request.language.value,
-        "outline": request.outline.model_dump(mode="json"),
+        "outline": outline_payload,
         "bundle": request.bundle.model_dump(mode="json"),
         "clarify_result": (
             request.clarify_result.model_dump() if request.clarify_result is not None else None
@@ -644,6 +681,10 @@ WRITE_SYSTEM_PROMPT = """You are the WRITE stage of an equity-research
 report pipeline. Produce the body of ONE section. The section's mandate
 + the report-wide thesis are your contract — stay inside both.
 
+A ``section_intent`` field is provided alongside the mandate — it is the
+user template's authoritative description of what this section should
+accomplish. Let it shape the prose's framing and emphasis.
+
 Output is a single JSON WrittenSection:
 
 {
@@ -748,11 +789,14 @@ def _write_payload(request: WriterRequest) -> dict[str, Any]:
     # them FIRST. The section-specific bits (mandate, facts, charts,
     # retry context) come last so they form the cache-miss tail. Result:
     # roughly one section's worth of input billed, not six.
+    intent_by_id: dict[str, str] = {s.id: s.intent for s in request.template.sections}
+    section_intent = intent_by_id.get(request.section_mandate.section_id, "")
     return {
         "language": request.language.value,
         "length": request.length.value,
         "thesis": request.thesis.model_dump(mode="json"),
         "section_mandate": request.section_mandate.model_dump(mode="json"),
+        "section_intent": section_intent,
         "relevant_facts": {
             fid: f.model_dump(mode="json") for fid, f in request.relevant_facts.items()
         },

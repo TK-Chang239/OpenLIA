@@ -29,6 +29,7 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ReportType,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
@@ -90,6 +91,7 @@ def start_run(
         length=length,
         template_id=template_id,
         tickers=tickers,
+        template=get_builtin(report_type),
     )
     runner = runner_factory()
     state = runner.start(state, observer=observer)
