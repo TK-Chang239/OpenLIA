@@ -190,7 +190,7 @@ How you work:
       "label": "Revenue (TTM)",
       "value": 60900000000,
       "unit": "USD",
-      "ticker": "NVDA",
+      "ticker": "<TICKER>",
       "evidence_id": "tc_abc123"
     },
     {
@@ -198,7 +198,7 @@ How you work:
       "label": "Revenue CAGR (5y)",
       "value": 0.42,
       "unit": "percent",
-      "ticker": "NVDA",
+      "ticker": "<TICKER>",
       "computed_from": ["rev_fy2024", "rev_fy2019"],
       "method": "CAGR(rev_fy2019 -> rev_fy2024, 5y)"
     }

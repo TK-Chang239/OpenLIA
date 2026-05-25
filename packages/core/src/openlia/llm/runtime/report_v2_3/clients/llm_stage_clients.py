@@ -638,7 +638,7 @@ Output is a single JSON WrittenSection:
 {
   "section_id": "business",
   "title": "Business overview",
-  "body": "NVIDIA's Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
+  "body": "<COMPANY>'s Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
 }
 
 Length — match the requested ``length``: ``concise`` is short and

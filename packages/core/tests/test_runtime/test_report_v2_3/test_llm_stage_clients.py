@@ -249,6 +249,33 @@ def test_plan_system_prompt_no_longer_uses_nvda_as_example() -> None:
     assert "NVDA" not in PLAN_SYSTEM_PROMPT
 
 
+def test_compute_and_write_prompts_use_neutral_examples() -> None:
+    """COMPUTE_SYSTEM_PROMPT (Comps example) and WRITE_SYSTEM_PROMPT
+    (body example) must use neutral placeholders, not specific tickers
+    or company names. Closes the coverage gap surfaced by Phase 2's
+    cross-cutting review."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        COMPUTE_SYSTEM_PROMPT,
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    assert "NVDA" not in COMPUTE_SYSTEM_PROMPT
+    assert "AVGO" not in COMPUTE_SYSTEM_PROMPT
+    assert "NVDA" not in WRITE_SYSTEM_PROMPT
+    assert "NVIDIA" not in WRITE_SYSTEM_PROMPT
+
+
+def test_research_prompt_uses_neutral_ticker_example() -> None:
+    """The RESEARCH SYSTEM_PROMPT's worked-example JSON must use a
+    neutral placeholder ticker, matching the Phase 2 convention applied
+    to CLARIFY/PLAN/COMPUTE."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "NVDA" not in RESEARCH_SYSTEM_PROMPT
+
+
 # ---------------------------------------------------------------------------
 # COMPUTE — method-dispatched validation
 # ---------------------------------------------------------------------------
