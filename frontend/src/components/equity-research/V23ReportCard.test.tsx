@@ -42,6 +42,7 @@ const PAYLOAD: V23RunPayload = {
   ],
   figure_labels: { fig_rev: 1 },
   bundle_facts: {},
+  narrative_coverage: null,
 };
 
 describe("V23ReportCard", () => {

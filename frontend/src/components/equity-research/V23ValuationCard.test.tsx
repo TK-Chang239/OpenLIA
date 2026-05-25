@@ -27,6 +27,7 @@ function payloadWith(facts: Record<string, V23BundleFact>): V23RunPayload {
     charts: [],
     figure_labels: {},
     bundle_facts: facts,
+    narrative_coverage: null,
   };
 }
 

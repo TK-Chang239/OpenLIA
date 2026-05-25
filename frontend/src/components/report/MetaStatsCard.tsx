@@ -24,6 +24,14 @@ export function MetaStatsCard({ stats }: MetaStatsCardProps) {
   if (stats.web_search_queries != null && stats.web_search_queries > 0) {
     rows.push({ label: 'Web searches', value: String(stats.web_search_queries) });
   }
+  if (stats.narrative_coverage_label) {
+    const pct = stats.narrative_coverage_pct;
+    const suffix = pct != null ? ` (${Math.round(pct * 100)}%)` : '';
+    rows.push({
+      label: 'Narrative coverage',
+      value: `${stats.narrative_coverage_label}${suffix}`,
+    });
+  }
   if (stats.tokens_used != null && stats.tokens_used > 0) {
     rows.push({ label: 'Tokens', value: formatTokens(stats.tokens_used) });
   }

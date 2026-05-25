@@ -595,8 +595,29 @@ class VerifyIssue(BaseModel):
     detail: str
 
 
+class NarrativeCoverage(BaseModel):
+    """How well the bundle satisfies the planner's narrative needs.
+
+    A narrative ``data_need`` is "satisfied" when at least one of its
+    ``expected_fact_ids`` exists in the bundle with a ``WebSource``
+    provenance. This is a *signal*, not a gate — the runner does not
+    fail on low coverage; the value is surfaced to the cover so a
+    reader can see whether the engine actually pulled in current web
+    evidence for the qualitative needs the planner identified.
+
+    ``total`` is the count of narrative needs across the whole outline.
+    When the planner emits no narrative needs, this block is omitted
+    from ``VerifyResult`` (the value is N/A, not zero).
+    """
+
+    total: int = Field(..., ge=0)
+    satisfied: int = Field(..., ge=0)
+    pct: float = Field(..., ge=0.0, le=1.0)
+
+
 class VerifyResult(BaseModel):
     issues: list[VerifyIssue] = Field(default_factory=list)
+    narrative_coverage: NarrativeCoverage | None = None
 
     @property
     def must_rewrite(self) -> bool:
