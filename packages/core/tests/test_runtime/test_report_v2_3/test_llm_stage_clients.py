@@ -763,6 +763,58 @@ def test_plan_system_prompt_no_longer_dictates_section_count():
     assert "usual band" not in PLAN_SYSTEM_PROMPT
 
 
+def test_plan_prompt_shape_round_trips_through_llm_planner_client():
+    """Guard against the silent-drop bug: the prompt's example JSON
+    shape must survive Pydantic validation with fact_ids intact. If
+    the prompt teaches one shape and the schema expects another, real
+    LLM output loses fact_ids — Pydantic's default 'ignore extras'
+    behavior drops them quietly."""
+    # The literal JSON the prompt instructs the LLM to emit.
+    llm_emitted_json = {
+        "tickers": ["NVDA"],
+        "report_type": "initiation",
+        "sections": [
+            {
+                "id": "overview",
+                "title": "Overview",
+                "data_needs": [
+                    {
+                        "description": "Recent revenue and segment mix",
+                        "expected_fact_ids": ["rev_ttm", "segment_mix"],
+                    }
+                ],
+            }
+        ],
+        "valuation_plan": {"methods": ["dcf"]},
+    }
+    call, _ = _capturing_call(llm_emitted_json)
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="overview", title="Overview", intent="A."),
+        ],
+    )
+    client = LLMPlannerClient(call)
+    outline = client.plan(
+        PlannerRequest(
+            raw_prompt="initiate",
+            language=Language.EN,
+            report_type=ReportType.INITIATION,
+            tickers=["NVDA"],
+            template=template,
+        )
+    )
+
+    assert len(outline.sections) == 1
+    section = outline.sections[0]
+    assert section.id == "overview"
+    assert len(section.data_needs) == 1
+    assert section.data_needs[0].expected_fact_ids == ["rev_ttm", "segment_mix"]
+    assert section.data_needs[0].description == "Recent revenue and segment mix"
+
+
 def test_plan_payload_includes_template_sections():
     """The PLAN request payload sent to the LLM must include the
     template's section list so the LLM knows what to fill in."""
