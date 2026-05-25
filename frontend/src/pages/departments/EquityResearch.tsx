@@ -351,6 +351,32 @@ export default function EquityResearch(): JSX.Element {
       /* ignore */
     }
   }, []);
+  // Extended-thinking effort for the v2.3 engine. Persisted to localStorage
+  // so the user's pick survives a reload without needing the server-side
+  // ErUserConfig persistence (deferred follow-up). Default "off".
+  const [v23ReasoningEffort, setV23ReasoningEffortState] = useState<
+    "off" | "medium" | "high"
+  >(() => {
+    if (typeof window === "undefined") return "off";
+    try {
+      const raw = window.localStorage.getItem("er.v23.reasoning_effort");
+      if (raw === "off" || raw === "medium" || raw === "high") return raw;
+    } catch {
+      /* fall through */
+    }
+    return "off";
+  });
+  const setV23ReasoningEffort = useCallback(
+    (next: "off" | "medium" | "high") => {
+      setV23ReasoningEffortState(next);
+      try {
+        window.localStorage.setItem("er.v23.reasoning_effort", next);
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
   // Bump after a successful upload so the settings modal refetches.
   const [v23TemplatesRefreshKey, setV23TemplatesRefreshKey] = useState(0);
 
@@ -1175,7 +1201,7 @@ export default function EquityResearch(): JSX.Element {
               length={v23Length === "concise" ? "concise" : v23Length === "elaborative" ? "elaborative" : "normal"}
               reportType={v23Selection.reportType}
               templateId={v23Selection.templateId}
-              reasoningEffort={config.report_reasoning_effort ?? "off"}
+              reasoningEffort={v23ReasoningEffort}
               firstName={firstName(user?.display_name)}
               onModeClick={() => setSettingsOpen(true)}
             />
@@ -1556,8 +1582,10 @@ export default function EquityResearch(): JSX.Element {
           open={settingsOpen}
           selection={v23Selection}
           length={v23Length}
+          reasoningEffort={v23ReasoningEffort}
           onSelectionChange={setV23Selection}
           onLengthChange={setV23Length}
+          onReasoningEffortChange={setV23ReasoningEffort}
           onUploadClick={() => {
             setSettingsOpen(false);
             setV23UploadOpen(true);

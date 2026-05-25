@@ -24,6 +24,9 @@ import {
 
 export type V23ReportType = V23BuiltinTemplate["report_type"];
 export type V23ReportLength = "concise" | "normal" | "elaborative";
+// 3-state UI value. "off" maps to null on the wire; "medium" / "high"
+// forward verbatim to the v2.3 stream endpoint.
+export type V23ReasoningEffort = "off" | "medium" | "high";
 
 export interface V23SettingsSelection {
   /** The user-uploaded template's row id, or null when a built-in is
@@ -40,8 +43,10 @@ export interface V23ReportSettingsModalProps {
   open: boolean;
   selection: V23SettingsSelection;
   length: V23ReportLength;
+  reasoningEffort: V23ReasoningEffort;
   onSelectionChange: (next: V23SettingsSelection) => void;
   onLengthChange: (next: V23ReportLength) => void;
+  onReasoningEffortChange: (next: V23ReasoningEffort) => void;
   onUploadClick: () => void;
   onClose: () => void;
   /** Bump this to force the template list to refetch — used by the
@@ -56,12 +61,20 @@ const LENGTH_LABELS: Record<V23ReportLength, string> = {
   elaborative: "Elaborative",
 };
 
+const REASONING_LABELS: Record<V23ReasoningEffort, string> = {
+  off: "Off",
+  medium: "Medium",
+  high: "High",
+};
+
 export function V23ReportSettingsModal({
   open,
   selection,
   length,
+  reasoningEffort,
   onSelectionChange,
   onLengthChange,
+  onReasoningEffortChange,
   onUploadClick,
   onClose,
   refreshKey = 0,
@@ -192,6 +205,47 @@ export function V23ReportSettingsModal({
                 );
               })}
             </div>
+          </section>
+
+          <section
+            className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
+            data-testid="er-v2-3-settings-reasoning"
+          >
+            <span className="mb-[10px] block font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
+              Reasoning
+            </span>
+            <div
+              role="radiogroup"
+              aria-label="Reasoning effort"
+              className="flex gap-[2px] rounded-lg border border-[--color-border-subtle] bg-[--color-bg-base] p-[3px]"
+            >
+              {(Object.keys(REASONING_LABELS) as V23ReasoningEffort[]).map((r) => {
+                const active = r === reasoningEffort;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => onReasoningEffortChange(r)}
+                    data-testid={`er-v2-3-settings-reasoning-${r}`}
+                    className={[
+                      "flex-1 rounded-md px-[10px] py-2 text-center font-display text-[12.5px] transition-colors",
+                      active
+                        ? "bg-[--color-bg-elevated] font-medium text-[--color-text-primary] shadow-[0_1px_2px_rgba(13,13,11,0.06)]"
+                        : "text-[--color-text-secondary] hover:text-[--color-text-primary]",
+                    ].join(" ")}
+                  >
+                    {REASONING_LABELS[r]}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
+              Extended thinking applies to the planning and synthesis stages only. Off
+              is fastest; Medium adds deliberation for trickier reports; High burns
+              more tokens and time for the deepest analysis.
+            </p>
           </section>
 
           <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
