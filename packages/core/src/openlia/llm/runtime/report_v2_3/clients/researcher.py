@@ -33,6 +33,10 @@ class ResearchRequest:
     report_type: ReportType
     tickers: list[str]
     outline: Outline
+    # Phase 1 pass-through: carried for symmetry across all stage Requests.
+    # RESEARCH consumes outline.sections[*].data_needs, which PLAN populates
+    # against the template — so template intent already shapes RESEARCH
+    # indirectly. A future phase may surface template hints directly.
     template: TemplateSpec
     clarify_result: ClarifyResult | None = None
 

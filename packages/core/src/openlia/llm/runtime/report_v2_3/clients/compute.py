@@ -37,6 +37,9 @@ class ComputeRequest:
     language: Language
     bundle: ResearchBundle
     outline: Outline
+    # Phase 1 pass-through: carried for symmetry across all stage Requests.
+    # COMPUTE works from outline.valuation_plan, which PLAN derives from the
+    # template — so template content already shapes COMPUTE indirectly.
     template: TemplateSpec
     clarify_result: ClarifyResult | None = None
 
