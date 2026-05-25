@@ -200,6 +200,10 @@ Output an Outline JSON object:
 }
 
 Rules:
+- `tickers` and `report_type` are decided by the engine from the run's
+  inputs. The example below shows literal values for shape clarity,
+  but anything you put there is overwritten — copy them through if
+  you like, but don't expand or rewrite them.
 - Produce one section per template.sections entry, in the same order,
   with the same `id` and `title`. The engine's coercer will fix drift,
   so be conservative — copy the structure verbatim.

@@ -4,16 +4,22 @@ Each `OutlineSection.data_needs` becomes RESEARCH's targeted work queue,
 so the value of this stage is in the *specificity* of those needs:
 "gross margin trend, last 8 quarters" beats "financial detail."
 
-Validation here keeps cross-stage state aligned: the planner cannot
-silently widen the scope (different tickers, different report type) or
-return an empty outline that would leave RESEARCH with no work to do.
-
 Outline *structure* (section list, ids, titles, order) belongs to the
 user template, not the LLM. `_coerce_outline_to_template` rebuilds the
 section list from `state.template` after the planner returns, so even
 if the LLM drops, reorders, or invents a section, the template's
-structure is restored. The LLM's authoring role shrinks to fact_ids and
-the valuation plan.
+structure is restored.
+
+Outline *run scope* (tickers, report_type) belongs to the run, not the
+LLM either. PlanStage.run overwrites both fields from `state` after the
+planner returns — the LLM cannot widen the ticker list or change the
+report type, and PLAN's correctness does not depend on the planner
+copying those fields verbatim from the prompt's worked-example (a
+model under load will lift the example's literal `"initiation"` even
+when the run is for an `update`).
+
+The LLM's authoring role shrinks to data_needs, fact_ids, and the
+valuation plan.
 """
 
 from __future__ import annotations
@@ -43,21 +49,24 @@ class PlanStage(Stage):
         )
         outline = self._client.plan(request)
         outline = _coerce_outline_to_template(outline, state.template)
-        self._validate_outline(outline, state)
+        # Engine owns run scope — the LLM's value for these fields is
+        # ignored. The prompt's worked-example includes literal values
+        # for shape clarity, which a model under load happily lifts
+        # verbatim (e.g. emitting report_type="initiation" on an
+        # `update` run because the example shows it). Coercing here
+        # decouples PLAN's correctness from prompt compliance.
+        outline = outline.model_copy(
+            update={
+                "tickers": list(state.tickers),
+                "report_type": state.report_type,
+            }
+        )
+        self._validate_outline(outline)
         state.outline = outline
         return state
 
     @staticmethod
-    def _validate_outline(outline: Outline, state: ReportState) -> None:
-        if outline.tickers != state.tickers:
-            raise RuntimeError(
-                f"Outline tickers {outline.tickers} do not match run tickers {state.tickers}."
-            )
-        if outline.report_type != state.report_type:
-            raise RuntimeError(
-                f"Outline report_type {outline.report_type} does not match run "
-                f"report_type {state.report_type}."
-            )
+    def _validate_outline(outline: Outline) -> None:
         if not outline.sections:
             raise RuntimeError("Outline has no sections — PLAN must emit at least one.")
 
@@ -78,17 +87,13 @@ def _coerce_outline_to_template(outline: Outline, template: TemplateSpec) -> Out
     the LLM dropped come back with an empty data_needs list — RESEARCH
     still fires but with no targeted hint.
     """
-    llm_section_by_id: dict[str, OutlineSection] = {
-        s.id: s for s in outline.sections
-    }
+    llm_section_by_id: dict[str, OutlineSection] = {s.id: s for s in outline.sections}
     coerced_sections = [
         OutlineSection(
             id=spec.id,
             title=spec.title,
             section_type=(
-                llm_section_by_id[spec.id].section_type
-                if spec.id in llm_section_by_id
-                else None
+                llm_section_by_id[spec.id].section_type if spec.id in llm_section_by_id else None
             ),
             data_needs=list(llm_section_by_id[spec.id].data_needs)
             if spec.id in llm_section_by_id
