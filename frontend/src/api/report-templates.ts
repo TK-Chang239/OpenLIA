@@ -185,8 +185,3 @@ export async function saveReportTemplate(input: {
   });
 }
 
-export async function ingestTemplateFile(
-  file: File,
-): Promise<{ markdown: string }> {
-  return ingestTemplateDocument(file);
-}
