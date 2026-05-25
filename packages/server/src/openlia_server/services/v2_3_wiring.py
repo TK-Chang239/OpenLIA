@@ -127,17 +127,30 @@ def build_v2_3_runner_factory_from_env() -> V23RunnerFactory | None:
 # ---------------------------------------------------------------------------
 
 
+# PLACEHOLDER ceilings — these are truncation guards, not budgets. The
+# model writes what it writes; if output runs past `max_tokens`, the
+# response is cut off mid-emission and downstream parsing fails (the
+# SyncJsonLlmClient coerces the unparseable tail to ``{}``, which the
+# repair loop has no useful signal to fix). The correct value is
+# `observed_output_max * ~1.75` per stage, where `observed_output_max`
+# comes from real runs — see the `llm_usage` log line emitted on every
+# call. Until that observation pass runs, these are interim numbers
+# generous enough to clear known truncation points; the follow-up PR
+# replaces every literal here from logged usage.
+#
+# NOTE: extended-thinking models charge thinking tokens against the
+# same ceiling. If/when a stage enables reasoning, the ceiling must
+# grow to cover `thinking_budget + expected_output + margin`, not just
+# the visible answer — under-sizing then truncates *inside* the
+# thinking pass and produces the same ``head='{}'`` symptom with no
+# visible output bytes.
 _STAGE_DEFAULTS: dict[str, tuple[int, float]] = {
     # max_tokens, temperature
-    "PLAN": (2048, 0.3),
+    # PLAN bumped 2048 -> 8192 (interim): production hit truncation at
+    # 2048 with `head='{}'`. 8192 = ~4x the observed truncation point,
+    # mirrors per-user WRITE.
+    "PLAN": (8192, 0.3),
     "COMPUTE": (1024, 0.2),
-    # SYNTHESIZE emits the whole thesis in one call — mandates (one per
-    # outline section), canonical_figures, charts (with series + fact
-    # ids), plus central_argument/key_takeaways/valuation_stance prose.
-    # On a 6-section initiation with a ~35KB bundle the 4096 ceiling
-    # truncated the response, the JSON client coerced the empty trail
-    # to ``{}``, and the repair loop kept hitting the same wall. 16384
-    # tracks RESEARCH's budget for the same "one large emit" reason.
     "SYNTHESIZE": (16384, 0.3),
     "WRITE": (4096, 0.4),
     "VERIFY": (2048, 0.2),
@@ -259,19 +272,13 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
 # ---------------------------------------------------------------------------
 
 
+# PLACEHOLDER ceilings — see the header comment on _STAGE_DEFAULTS for
+# the framing. Same caveat about extended-thinking models applies.
 _STAGE_DEFAULTS_PER_USER: dict[str, tuple[int, float]] = {
-    # Mirrors _STAGE_DEFAULTS but includes CLARIFY (env path keeps its own
-    # block for backwards compat). RESEARCH and SYNTHESIZE carry the
-    # largest output budgets because both emit one large JSON in a
-    # single call — RESEARCH for the facts array at the end of its
-    # tool-use loop, SYNTHESIZE for the whole thesis (mandates +
-    # canonical_figures + charts + prose). Under-budgeting SYNTHESIZE
-    # truncates the response, the JSON client coerces the trail to
-    # ``{}``, and the repair loop has no useful signal to fix it.
-    # WRITE is also bumped so per-section bodies have room to render
-    # footnote-cited prose.
     "clarify": (1024, 0.2),
-    "plan": (2048, 0.3),
+    # PLAN bumped 2048 -> 8192 (interim): production hit truncation at
+    # 2048 with `head='{}'`. 8192 = ~4x the observed truncation point.
+    "plan": (8192, 0.3),
     "research": (16384, 0.3),
     "compute": (1024, 0.2),
     "synthesize": (16384, 0.3),
