@@ -378,6 +378,7 @@ def test_synthesize_returns_thesis() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(thesis, ReportThesis)
@@ -467,6 +468,7 @@ def test_synthesize_repairs_chart_with_mixed_units() -> None:
             language=Language.EN,
             bundle=bundle,
             outline=_outline(),
+            template=_template(),
         )
     )
     assert thesis.charts == []
@@ -542,6 +544,7 @@ def test_synthesize_repairs_chart_with_phantom_fact_id() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert len(thesis.charts) == 1
@@ -589,8 +592,75 @@ def test_synthesize_rejects_chart_for_unknown_section() -> None:
                 language=Language.EN,
                 bundle=_bundle(),
                 outline=_outline(),
+                template=_template(),
             )
         )
+
+
+def test_synthesize_payload_includes_template_section_intents():
+    """The synthesizer payload must surface each template section's
+    intent so the LLM can write mandate.covers text grounded in the
+    user's intent."""
+    import json
+
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _synthesize_payload,
+    )
+    from openlia.llm.runtime.report_v2_3.clients.synthesizer import (
+        SynthesizerRequest,
+    )
+    from openlia.llm.runtime.report_v2_3.schemas import (
+        Language,
+        Outline,
+        OutlineSection,
+        ReportType,
+        ResearchBundle,
+        ValuationPlan,
+    )
+    from openlia.llm.runtime.report_v2_3.templates import (
+        SectionSpec,
+        TemplateSpec,
+    )
+
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="alpha", title="Alpha", intent="UNIQUE_ALPHA_INTENT"),
+            SectionSpec(id="beta", title="Beta", intent="UNIQUE_BETA_INTENT"),
+        ],
+    )
+    request = SynthesizerRequest(
+        raw_prompt="initiate",
+        language=Language.EN,
+        bundle=ResearchBundle(tickers=["NVDA"], facts={}),
+        outline=Outline(
+            tickers=["NVDA"],
+            report_type=ReportType.INITIATION,
+            sections=[
+                OutlineSection(id="alpha", title="Alpha"),
+                OutlineSection(id="beta", title="Beta"),
+            ],
+            valuation_plan=ValuationPlan(),
+        ),
+        template=template,
+    )
+    payload = _synthesize_payload(request)
+
+    serialized = json.dumps(payload)
+    assert "UNIQUE_ALPHA_INTENT" in serialized
+    assert "UNIQUE_BETA_INTENT" in serialized
+
+
+def test_synthesize_system_prompt_references_template_intent():
+    """The SYNTHESIZE_SYSTEM_PROMPT must instruct the LLM to use the
+    template's section intent when authoring mandate.covers."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    assert "template" in SYNTHESIZE_SYSTEM_PROMPT.lower()
 
 
 # ---------------------------------------------------------------------------

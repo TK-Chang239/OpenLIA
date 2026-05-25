@@ -41,6 +41,7 @@ class SynthesizeStage(Stage):
             language=state.language,
             bundle=bundle,
             outline=outline,
+            template=state.template,
             clarify_result=state.clarify_result,
         )
         thesis = self._client.synthesize(request)

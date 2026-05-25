@@ -135,6 +135,20 @@ def test_happy_path_writes_thesis_to_state() -> None:
     assert request.outline is state.outline
 
 
+def test_stage_threads_state_template_into_request() -> None:
+    """SynthesizeStage must pass state.template into the request so the
+    synthesizer payload can surface per-section intents."""
+    client = FakeSynthesizerClient(result=_thesis())
+    stage = SynthesizeStage(client)
+    state = _state()
+    expected_template = state.template
+
+    stage.run(state, _ctx())
+
+    assert len(client.calls) == 1
+    assert client.calls[0].template is expected_template
+
+
 # ---------------------------------------------------------------------------
 # Precondition errors
 # ---------------------------------------------------------------------------
