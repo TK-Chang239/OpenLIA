@@ -1000,3 +1000,18 @@ def test_synthesize_prompt_no_longer_dictates_chart_selection():
 
     assert "Chart-selection guide" not in SYNTHESIZE_SYSTEM_PROMPT
     assert "Anti-patterns" not in SYNTHESIZE_SYSTEM_PROMPT
+
+
+def test_write_prompt_no_longer_dictates_per_length_word_budgets():
+    """The hardcoded word bands per ReportLength enum value were an
+    engine opinion — the enum's semantic name (concise/normal/
+    elaborative) conveys intent without a numeric table. Deleted in
+    Phase 2."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    for band in ("150-250", "300-500", "600-900"):
+        assert band not in WRITE_SYSTEM_PROMPT, (
+            f"WRITE_SYSTEM_PROMPT still contains word band {band!r}"
+        )

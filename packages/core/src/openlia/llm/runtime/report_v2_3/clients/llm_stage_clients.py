@@ -640,17 +640,11 @@ Output is a single JSON WrittenSection:
   "body": "NVIDIA's Data Center revenue reached {{CITE:rev_dc_fy25}}, a ..."
 }
 
-Length budget — match the requested ``length``:
-
-- ``concise``:     ~150-250 words. One tight paragraph or two short ones.
-                   Surface only the load-bearing facts; skip nuance.
-- ``normal``:      ~300-500 words. 2-3 paragraphs. Headline + supporting
-                   detail + a forward-looking note.
-- ``elaborative``: ~600-900 words. 3-5 paragraphs. Add second-order
-                   detail, counterpoints, and quantified context.
-
-Length is a target band, not a hard ceiling. Don't pad to reach it; if
-the bundle only supports a shorter section, write the shorter section.
+Length — match the requested ``length``: ``concise`` is short and
+surface-only; ``normal`` is the default depth; ``elaborative`` adds
+second-order detail and counterpoints. Let the bundle's evidence set
+the ceiling — if it only supports a shorter section, write the shorter
+section.
 
 Number grammar — every number in the body comes from one of three markers.
 The engine resolves all three to {{CITE:<id>}} before VERIFY runs, so the
