@@ -52,6 +52,9 @@ class ErUserConfig(Base, TimestampMixin):
     web_search_budgets_by_mode: Mapped[dict | None] = mapped_column(
         JSON, nullable=True, default=None
     )
+    report_reasoning_effort: Mapped[str | None] = mapped_column(
+        String(16), nullable=True, default=None
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -61,6 +64,11 @@ class ErUserConfig(Base, TimestampMixin):
         CheckConstraint(
             "report_length IN ('concise','normal','elaborative')",
             name="ck_er_user_configs_report_length",
+        ),
+        CheckConstraint(
+            "report_reasoning_effort IS NULL OR "
+            "report_reasoning_effort IN ('off','medium','high')",
+            name="ck_er_user_configs_reasoning_effort",
         ),
         Index("ix_er_user_configs_user_id", "user_id"),
     )
