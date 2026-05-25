@@ -83,8 +83,14 @@ class SourceType(StrEnum):
 
 
 class ChartType(StrEnum):
-    """Supported by python-docx high-level chart API. Candlestick/dual-axis
-    require a direct OOXML path and are out of scope for first cut."""
+    """Supported chart shapes the SYNTHESIZE LLM can pick from. Six are
+    rendered as matplotlib PNGs embedded via ``add_picture`` (column / bar
+    / line / area / pie / scatter); ``heatmap`` is rendered as a
+    matplotlib ``imshow`` grid for sensitivity-style data; ``table`` skips
+    the picture entirely and lets the native docx data-table — which
+    already accompanies every chart — carry the figure on its own.
+    Candlestick/dual-axis still require a direct OOXML path and are out
+    of scope."""
 
     COLUMN = "column"
     BAR = "bar"
@@ -92,6 +98,8 @@ class ChartType(StrEnum):
     AREA = "area"
     PIE = "pie"
     SCATTER = "scatter"
+    HEATMAP = "heatmap"
+    TABLE = "table"
 
 
 class ValuationMethod(StrEnum):
@@ -181,9 +189,7 @@ class EstimateSource(BaseModel):
     stage: Literal["synthesize", "write"]
 
 
-Provenance = (
-    DataProviderSource | WebSource | FilingSource | ComputedSource | EstimateSource
-)
+Provenance = DataProviderSource | WebSource | FilingSource | ComputedSource | EstimateSource
 
 
 # ---------------------------------------------------------------------------
@@ -529,9 +535,7 @@ FIG_RE = re.compile(r"\{\{FIG:([a-zA-Z0-9_]+)\}\}")
 #   input_fact_ids_csv is a comma-separated list of bundle fact_ids the
 #     method consumes.
 #   new_fact_id becomes the BundleFact.id of the resulting ComputedSource fact.
-DERIVE_RE = re.compile(
-    r"\{\{DERIVE:([a-z_]+)\|([a-zA-Z0-9_,]+)\|([a-zA-Z0-9_]+)\}\}"
-)
+DERIVE_RE = re.compile(r"\{\{DERIVE:([a-z_]+)\|([a-zA-Z0-9_,]+)\|([a-zA-Z0-9_]+)\}\}")
 
 # ESTIMATE: {{ESTIMATE:<new_fact_id>|<value>|<unit>|<basis>}}
 #   new_fact_id becomes the BundleFact.id of the resulting EstimateSource fact.

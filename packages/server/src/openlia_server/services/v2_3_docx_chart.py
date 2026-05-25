@@ -33,8 +33,14 @@ from openlia.llm.runtime.report_v2_3.schemas import (
 def try_render_chart_png(chart: ChartSpec, bundle: ResearchBundle) -> bytes | None:
     """Return PNG bytes for the chart, or None if rendering is impossible.
 
-    Callers fall back to a data table when this returns None.
+    Callers fall back to a data table when this returns None. ``TABLE``
+    charts always return None — the native docx data-table the caller
+    emits alongside every chart is the intended rendering and a duplicate
+    matplotlib raster would just take up page space.
     """
+    if chart.chart_type == ChartType.TABLE:
+        return None
+
     try:
         import matplotlib
 
@@ -59,7 +65,7 @@ def try_render_chart_png(chart: ChartSpec, bundle: ResearchBundle) -> bytes | No
             ax.set_xlabel(chart.x_axis_label)
         if chart.y_axis_label:
             ax.set_ylabel(chart.y_axis_label)
-        if len(series_values) > 1 and chart.chart_type != ChartType.PIE:
+        if len(series_values) > 1 and chart.chart_type not in (ChartType.PIE, ChartType.HEATMAP):
             ax.legend([name for name, _vals in series_values])
         fig.tight_layout()
         buf = io.BytesIO()
@@ -159,6 +165,10 @@ def _draw(
         ax.set_xticklabels(categories)
         return
 
+    if ct == ChartType.HEATMAP:
+        _draw_heatmap(ax, categories, series)
+        return
+
     # COLUMN (vertical bars) and BAR (horizontal) — group multiple series.
     if ct == ChartType.BAR:
         _grouped_bar(ax, categories, series, horizontal=True)
@@ -167,6 +177,44 @@ def _draw(
     # Default to vertical column bars for COLUMN or anything we didn't
     # special-case above.
     _grouped_bar(ax, categories, series, horizontal=False)
+
+
+def _draw_heatmap(
+    ax: Any,
+    categories: list[str],
+    series: list[tuple[str, list[float]]],
+) -> None:
+    import numpy as np
+
+    row_labels = [name for name, _vals in series]
+    grid = np.array([vals for _name, vals in series], dtype=float)
+    im = ax.imshow(grid, aspect="auto", cmap="RdYlGn")
+    ax.figure.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+
+    ax.set_xticks(np.arange(len(categories)))
+    ax.set_xticklabels(categories, rotation=20, ha="right")
+    ax.set_yticks(np.arange(len(row_labels)))
+    ax.set_yticklabels(row_labels)
+
+    for i in range(grid.shape[0]):
+        for j in range(grid.shape[1]):
+            ax.text(
+                j,
+                i,
+                _fmt_cell(grid[i, j]),
+                ha="center",
+                va="center",
+                fontsize=8,
+                color="black",
+            )
+
+
+def _fmt_cell(value: float) -> str:
+    if abs(value) >= 1000:
+        return f"{value:,.0f}"
+    if abs(value) >= 1:
+        return f"{value:,.2f}"
+    return f"{value:.3f}"
 
 
 def _grouped_bar(
