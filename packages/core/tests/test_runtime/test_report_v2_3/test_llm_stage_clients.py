@@ -975,3 +975,15 @@ def test_plan_payload_includes_template_sections():
     payload = _planner_payload(req)
     assert "template" in payload
     assert [s["id"] for s in payload["template"]["sections"]] == ["alpha", "beta"]
+
+
+def test_synthesize_prompt_no_longer_caps_central_argument_to_20_words():
+    """The 20-word hard cap on central_argument was an engine opinion
+    not a methodology guarantee — deleted in Phase 2."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    assert "20 words" not in SYNTHESIZE_SYSTEM_PROMPT
+    assert "20-word" not in SYNTHESIZE_SYSTEM_PROMPT
+    assert "Hard cap" not in SYNTHESIZE_SYSTEM_PROMPT
