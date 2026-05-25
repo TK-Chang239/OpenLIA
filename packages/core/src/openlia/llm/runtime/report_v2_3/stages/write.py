@@ -87,6 +87,7 @@ class WriteStage(Stage):
             request = WriterRequest(
                 section_mandate=mandate,
                 thesis=thesis,
+                template=state.template,
                 language=state.language,
                 length=state.length,
                 relevant_facts=relevant_facts,

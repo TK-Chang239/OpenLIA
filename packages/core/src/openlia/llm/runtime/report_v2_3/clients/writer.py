@@ -25,6 +25,7 @@ from ..schemas import (
     VerifyIssue,
     WrittenSection,
 )
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -35,10 +36,16 @@ class WriterRequest:
     bundle and thesis charts — the writer should never see facts or charts
     outside its mandate, and the placeholder validators at the stage layer
     enforce that what comes back stays inside the slice.
+
+    `template` carries the full user template so the payload builder can
+    surface the matching section's `intent` to the writer LLM, grounding
+    prose framing in the user's stated intent rather than the LLM's
+    reading of the section title.
     """
 
     section_mandate: SectionMandate
     thesis: ReportThesis
+    template: TemplateSpec
     language: Language
     relevant_facts: dict[str, BundleFact]
     assigned_charts: list[ChartSpec]

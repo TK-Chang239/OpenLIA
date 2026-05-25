@@ -681,6 +681,10 @@ WRITE_SYSTEM_PROMPT = """You are the WRITE stage of an equity-research
 report pipeline. Produce the body of ONE section. The section's mandate
 + the report-wide thesis are your contract — stay inside both.
 
+A ``section_intent`` field is provided alongside the mandate — it is the
+user template's authoritative description of what this section should
+accomplish. Let it shape the prose's framing and emphasis.
+
 Output is a single JSON WrittenSection:
 
 {
@@ -785,11 +789,14 @@ def _write_payload(request: WriterRequest) -> dict[str, Any]:
     # them FIRST. The section-specific bits (mandate, facts, charts,
     # retry context) come last so they form the cache-miss tail. Result:
     # roughly one section's worth of input billed, not six.
+    intent_by_id: dict[str, str] = {s.id: s.intent for s in request.template.sections}
+    section_intent = intent_by_id.get(request.section_mandate.section_id, "")
     return {
         "language": request.language.value,
         "length": request.length.value,
         "thesis": request.thesis.model_dump(mode="json"),
         "section_mandate": request.section_mandate.model_dump(mode="json"),
+        "section_intent": section_intent,
         "relevant_facts": {
             fid: f.model_dump(mode="json") for fid, f in request.relevant_facts.items()
         },
