@@ -214,16 +214,16 @@ Rules:
 - `evidence_id` MUST be one of the EXACT strings you have already seen
   this run: either an id from a `tool` message (those look like
   `tc_abc123` / `call_xyz789` — the provider's call id), or one of the
-  `web_1`, `web_2`, … ids assigned to web_search results. NEVER invent
-  an evidence_id from scratch (e.g. `turn1view0`, `obs_3`, `result_a`
-  are NOT valid). If you can't trace a fact to one of those exact
-  strings, you don't have evidence for it — omit the fact.
+  `web_1`, `web_2`, … ids assigned to web_search results. Emit a fact
+  only when you can trace its `evidence_id` to one of those exact
+  strings; otherwise omit the fact.
 - `computed_from` entries MUST reference fact ids you also emit IN THE
-  SAME `facts` array. Don't reference imagined inputs (e.g.
-  `gross_profit_history_proxy` doesn't exist unless you emit a fact
-  with that id). If you need an intermediate to compute a derived fact,
-  EITHER emit that intermediate as its own fact first OR compute the
-  final fact directly from an evidence_id-backed source.
+  SAME `facts` array. Each id you list under `computed_from` must be
+  the id of another fact in this batch (e.g. `gross_profit_history_proxy`
+  is valid only when you also emit a fact with that id). When you
+  need an intermediate to compute a derived fact, EITHER emit that
+  intermediate as its own fact first OR compute the final fact directly
+  from an evidence_id-backed source.
 - Each `value` is a single atomic data point: a number, a date, a
   ticker, or a short label (twelve words or fewer). For multi-period
   data of ONE METRIC, use a time-series object
@@ -231,14 +231,13 @@ Rules:
   `point.value` MUST be a plain JSON number — not a string, not a
   nested object, not a units-bearing literal like `"$60.9B"`. Put any
   unit on the series via the `unit` field instead.
-- ONE FACT = ONE METRIC. Never emit a fact whose value is an entire
-  income statement, balance sheet, or multi-metric dump. If you want
-  three years of revenue, gross profit, and EBITDA, emit THREE facts
-  (revenue_ts, gross_profit_ts, ebitda_ts), each a time-series of
-  ONE metric. Names like `historical_income_statement` are wrong —
-  break them apart into one fact per line item.
-  Save narrative prose for SYNTHESIZE / WRITE — RESEARCH facts stay
-  compact so the downstream stages can compose freely.
+- ONE FACT = ONE METRIC. Each fact's value covers a single metric.
+  If you want three years of revenue, gross profit, and EBITDA, emit
+  THREE facts (revenue_ts, gross_profit_ts, ebitda_ts), each a
+  time-series of ONE metric. Names like `historical_income_statement`
+  indicate a packed dump — break them apart into one fact per line
+  item. Save narrative prose for SYNTHESIZE / WRITE — RESEARCH facts
+  stay compact so the downstream stages can compose freely.
 - Fact ids are stable handles — choose short, snake_case strings.
 - Emit a fact only when a tool call returned the data. Skip facts
   with no tool-call backing so WRITE can flag the gap.

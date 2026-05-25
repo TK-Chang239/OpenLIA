@@ -69,9 +69,8 @@ You have two jobs:
     to — most v2.3 stages assume at least one subject ticker.
 
 (2) DECIDE WHETHER TO ASK ANYTHING ELSE. If the prompt + template
-    are coherent enough to write a good report from, proceed. Don't
-    invent hypothetical "nice to know" questions. Ask only when a
-    one-line answer would change which report you'd write.
+    are coherent enough to write a good report from, proceed. Ask
+    only when a one-line answer would change which report you'd write.
 
 If the caller already pinned `tickers` (non-empty), trust them and
 mirror them into `inferred_tickers` verbatim — they came from the

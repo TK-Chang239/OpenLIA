@@ -300,7 +300,7 @@ Sensitivity (``method = "sensitivity"``):
 
 Rules:
 
-- All fact ids MUST exist in the supplied bundle. Don't invent ids.
+- All fact ids MUST exist in the supplied bundle.
 - For DCF, ``revenue_growth_path`` and ``margin_path`` MUST be the
   same length (one entry per projected year).
 - For Sensitivity, ``row_driver`` and ``col_driver`` MUST be different.
@@ -406,14 +406,15 @@ Rules:
   include every fact the chart uses.
 - ``charts[].chart_type`` MUST be one of EXACTLY these values:
   ``"column"``, ``"bar"``, ``"line"``, ``"area"``, ``"pie"``,
-  ``"scatter"``. Do NOT invent other values (no ``"text"``,
-  ``"table"``, ``"heatmap"``, etc. — if the data wouldn't plot as one
-  of the six, omit the chart). Each ChartSpec needs at least one
-  series with at least one fact_id; if you can't satisfy that, drop
+  ``"scatter"``. Pick the value from that enum that fits the data;
+  if the data wouldn't plot as one of the six, omit the chart instead
+  of inventing a new chart_type. Each ChartSpec needs at least one
+  series with at least one fact_id; when you can't satisfy that, omit
   the chart rather than emit a placeholder.
-- ``mandates[].chart_ids`` is a strict subset of ``charts[].id``. NEVER
-  name a chart in a mandate that you didn't also define in ``charts``;
-  if a section shouldn't have a chart, leave ``chart_ids`` as ``[]``.
+- ``mandates[].chart_ids`` is a strict subset of ``charts[].id``. Every
+  chart_id you list on a mandate must also appear as a chart in
+  ``charts``; if a section shouldn't have a chart, leave ``chart_ids``
+  as ``[]``.
 - ``canonical_figures[].fact_id`` MUST exist in the bundle and the
   ``display`` string MUST be the final rendering in the report's
   language (e.g. ``$60.9B``, ``14.2%``).
@@ -692,8 +693,8 @@ Marker rendering notes:
   superscript footnote, e.g. "{{CITE:revenue_ttm}}" becomes
   "$451.4B [^7]". Write the surrounding prose around the marker as if
   it were already a noun phrase carrying the number — leave currency
-  symbols, units, and the numeric value to the engine so you don't end
-  up with "$$451.4B [^7]" or stray decorations.
+  symbols, units, and the numeric value to the engine, which renders
+  the formatted value with the proper currency, unit, and footnote.
 - For ``{{CITE:fact_id}}``, the fact_id should appear in
   ``relevant_facts``. Use real ids from that map.
 - ``{{FIG:chart_id}}`` references a chart by id from ``assigned_charts``.
@@ -716,7 +717,8 @@ Rewrite path:
 
 - When ``prior_attempt`` and ``critique`` are present, treat the
   critique as the rewrite brief. Keep what worked; fix what the
-  critique flags. Don't expand scope.
+  critique flags. Keep the rewrite focused on the issues the critique
+  raises.
 
 Output JSON only.
 """.strip()
