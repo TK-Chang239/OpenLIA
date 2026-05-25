@@ -29,6 +29,10 @@ export type V23ReportType =
 
 export type V23ReportLength = "concise" | "normal" | "elaborative";
 
+// Server-side enum is `ReasoningEffort` with members MEDIUM and HIGH;
+// "off" is represented by sending `null` (or omitting the field).
+export type V23ReasoningEffort = "medium" | "high";
+
 export type V23RunStatus =
   | "running"
   | "waiting_on_user"
@@ -93,6 +97,11 @@ export interface V23StartRunPayload {
    *  path. The two-field v2.2-style composer (still used by the
    *  initial chat-follow-up shim) supplies tickers explicitly. */
   tickers?: string[];
+  /** Extended-thinking effort. Omit (or pass null) for thinking off.
+   *  The v2.3 wiring layer applies the directive only to PLAN +
+   *  SYNTHESIZE stages and grows their `max_tokens` ceiling to absorb
+   *  the thinking budget. */
+  reasoning_effort?: V23ReasoningEffort | null;
 }
 
 export function startV23Run(payload: V23StartRunPayload): Promise<V23RunState> {

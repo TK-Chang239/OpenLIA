@@ -31,6 +31,7 @@ vi.mock("../../api/equity-research", async () => {
 const baseConfig: ErConfig = {
   report_mode: "stock_initiation",
   report_length: "normal",
+  report_reasoning_effort: "off",
   sections_by_mode: {
     stock_initiation: ["company_overview", "industry_overview"],
     stock_update: ["investment_thesis", "event_analysis"],
@@ -127,6 +128,62 @@ describe("ReportSettingsModal", () => {
     fireEvent.click(screen.getByRole("button", { name: /save settings/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalled());
     expect(onSave.mock.calls[0][0].report_length).toBe("elaborative");
+  });
+
+  it("renders the reasoning effort pill with three options and Off selected by default", () => {
+    render(
+      <ReportSettingsModal
+        open
+        config={baseConfig}
+        onClose={() => {}}
+        onSave={async () => {}}
+      />,
+    );
+    const section = screen.getByTestId("er-reasoning-effort");
+    expect(section).toBeTruthy();
+    // The three reasoning labels exist on the page (radios inside the pill).
+    expect(screen.getByRole("radio", { name: "Off" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Medium" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "High" })).toBeTruthy();
+    // Default: baseConfig has report_reasoning_effort="off" → Off is checked.
+    expect(
+      (screen.getByRole("radio", { name: "Off" }) as HTMLElement).getAttribute(
+        "aria-checked",
+      ),
+    ).toBe("true");
+  });
+
+  it("selecting High and saving patches report_reasoning_effort", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ReportSettingsModal
+        open
+        config={baseConfig}
+        onClose={() => {}}
+        onSave={onSave}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "High" }));
+    fireEvent.click(screen.getByRole("button", { name: /save settings/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].report_reasoning_effort).toBe("high");
+  });
+
+  it("hydrates the initial value from config when reopened", () => {
+    const config = { ...baseConfig, report_reasoning_effort: "medium" as const };
+    render(
+      <ReportSettingsModal
+        open
+        config={config}
+        onClose={() => {}}
+        onSave={async () => {}}
+      />,
+    );
+    expect(
+      (screen.getByRole("radio", { name: "Medium" }) as HTMLElement).getAttribute(
+        "aria-checked",
+      ),
+    ).toBe("true");
   });
 
   it("renders empty budget inputs with framework defaults as placeholders", () => {
