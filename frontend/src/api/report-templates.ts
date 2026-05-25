@@ -174,6 +174,27 @@ export async function parseMarkdownV23(
   });
 }
 
+export interface V23BuiltinTemplate {
+  report_type: "initiation" | "update" | "sector_research";
+  template_spec: TemplateSpec;
+}
+
+export async function fetchV23Builtins(): Promise<V23BuiltinTemplate[]> {
+  const r = await fetchJson<{ items: V23BuiltinTemplate[] }>(
+    `${BASE}/v23/builtins`,
+  );
+  return r.items;
+}
+
+export async function validateV23TemplateJson(
+  spec: Record<string, unknown>,
+): Promise<V23ParseResponse> {
+  return fetchJson<V23ParseResponse>(`${BASE}/v23/validate`, {
+    method: "POST",
+    json: { template_spec: spec },
+  });
+}
+
 export async function saveReportTemplate(input: {
   name: string;
   template_spec: TemplateSpec;

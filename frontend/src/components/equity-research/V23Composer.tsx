@@ -40,18 +40,6 @@ import { V23ReportCard } from "./V23ReportCard";
 import { V23StageStrip } from "./V23StageStrip";
 import { WelcomeStage } from "./WelcomeStage";
 
-// Legacy v2.2 "mode" -> built-in v2.3 template id. Modes are being
-// retired in favour of first-class templates (where morning_brief,
-// earnings_review, and user-uploaded custom templates are peers of the
-// stock_* templates). Until the Report Settings modal learns about the
-// full v2.3 template list, the v2.2 mode the user picked maps to the
-// closest built-in template.
-const MODE_TO_V23_TYPE: Record<ReportMode, V23ReportType> = {
-  stock_initiation: "initiation",
-  stock_update: "update",
-  sector_research: "sector_research",
-};
-
 const LENGTH_TO_V23: Record<ReportLength, V23ReportLength> = {
   concise: "concise",
   normal: "normal",
@@ -107,15 +95,20 @@ interface Props {
    *  the run button disabled with a generic prompt. */
   assignments?: AssignmentsResponse | null;
   /** v2.2 ReportMode + ReportLength threaded through to the shared
-   *  WelcomeStage/ErComposer chrome. The composer maps mode -> v2.3
-   *  report_type on submit so the engine respects the user's choice. */
+   *  WelcomeStage/ErComposer chrome. v2.3 launch payload derives
+   *  report_type from `reportType` below, not from `mode` — the
+   *  composer keeps both so the chrome shared with v2.2 still renders
+   *  a coherent pill label. */
   mode: ReportMode;
   length: ReportLength;
-  /** Selected custom-template id from the page-level
-   *  FrameworkTemplatePicker, or null when the user has the built-in
-   *  default selected. Threaded into streamV23Run as `template_id` so
-   *  the engine resolves the user's chosen template instead of falling
-   *  back to the report_type built-in. */
+  /** v2.3 ReportType for the launch payload. Owned by the page via
+   *  the V23ReportSettingsModal selection (built-in → that built-in;
+   *  user template → "initiation" default). */
+  reportType: V23ReportType;
+  /** Selected custom-template id from the page-level settings pill,
+   *  or null when the user picked a built-in. Threaded into
+   *  streamV23Run as `template_id` so the engine resolves the user's
+   *  template instead of falling back to the report_type built-in. */
   templateId?: string | null;
   /** User's display name for the welcome greeting. */
   firstName: string;
@@ -131,6 +124,7 @@ export function V23Composer({
   assignments = null,
   mode,
   length,
+  reportType,
   templateId = null,
   firstName,
   onModeClick,
@@ -415,7 +409,7 @@ export function V23Composer({
     streamRef.current = streamV23Run(
       {
         raw_prompt: promptText,
-        report_type: MODE_TO_V23_TYPE[mode],
+        report_type: reportType,
         length: LENGTH_TO_V23[length],
         template_id: templateId,
       },

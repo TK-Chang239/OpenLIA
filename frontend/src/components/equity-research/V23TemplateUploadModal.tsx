@@ -1,29 +1,44 @@
 /**
- * V23TemplateUploadModal — overlay that converts a pasted markdown
- * template into a v2.3 TemplateSpec and persists it to the
- * /api/report-templates collection.
+ * V23TemplateUploadModal — overlay that turns a v2.3 template (pasted
+ * markdown OR an uploaded .md / .json / .docx file) into a TemplateSpec
+ * and persists it via /api/report-templates.
  *
- * Flow: user pastes markdown -> Parse hits POST /v23/parse -> preview
- * lists the parsed sections -> Save hits POST /api/report-templates ->
- * onSaved fires with the new row id so the caller can auto-select it
- * in the FrameworkTemplatePicker.
+ * Pipelines per source:
+ *   - markdown / .md / .markdown / .txt: text -> POST /v23/parse
+ *   - .docx: POST /ingest -> markdown -> POST /v23/parse
+ *   - .json: parse client-side -> POST /v23/validate
  *
- * Validation errors come back inline from the parse endpoint as a list
- * of strings and render below the parse button (the spec is suppressed
- * in that case so Save stays disabled).
+ * In every case the response shape is the same {template_spec,
+ * validation_errors} envelope so the preview + Save paths stay shared.
+ * Save hits POST /api/report-templates and fires onSaved with the new
+ * row id so the caller can auto-select it in the picker.
  */
-import { type JSX, useCallback, useEffect, useState } from "react";
+import { type JSX, useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  ingestTemplateDocument,
   parseMarkdownV23,
   saveReportTemplate,
   type TemplateSpec,
+  validateV23TemplateJson,
 } from "../../api/report-templates";
 
 export interface V23TemplateUploadModalProps {
   open: boolean;
   onSaved: (templateId: string) => void;
   onClose: () => void;
+}
+
+type UploadKind = "markdown" | "json" | "docx";
+
+function detectKind(filename: string): UploadKind | null {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".md") || lower.endsWith(".markdown") || lower.endsWith(".txt")) {
+    return "markdown";
+  }
+  if (lower.endsWith(".json")) return "json";
+  if (lower.endsWith(".docx")) return "docx";
+  return null;
 }
 
 export function V23TemplateUploadModal({
@@ -37,6 +52,11 @@ export function V23TemplateUploadModal({
   const [errors, setErrors] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Original markdown (for md/docx) or stringified JSON (for json) the
+  // user supplied — stored so the row's source_markdown field still
+  // round-trips a human-readable rendering of the upload.
+  const [sourceText, setSourceText] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const dismiss = useCallback(() => {
     if (busy) return;
@@ -63,26 +83,98 @@ export function V23TemplateUploadModal({
     setParsed(null);
     setErrors([]);
     setSubmitError(null);
+    setSourceText("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [open]);
 
   if (!open) return null;
+
+  function applyEnvelope(
+    result: { template_spec: unknown; validation_errors: string[] },
+    nextSource: string,
+  ): void {
+    if (result.validation_errors.length > 0) {
+      setParsed(null);
+      setErrors(result.validation_errors);
+    } else {
+      setParsed(result.template_spec as TemplateSpec);
+      setErrors([]);
+    }
+    setSourceText(nextSource);
+  }
 
   async function handleParse() {
     setBusy(true);
     setSubmitError(null);
     try {
       const result = await parseMarkdownV23(markdown, name);
-      if (result.validation_errors.length > 0) {
-        setParsed(null);
-        setErrors(result.validation_errors);
-      } else {
-        setParsed(result.template_spec as TemplateSpec);
-        setErrors([]);
-      }
+      applyEnvelope(result, markdown);
     } catch (e) {
       setParsed(null);
       setErrors([]);
       setSubmitError(e instanceof Error ? e.message : "failed to parse");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleFile(file: File): Promise<void> {
+    const kind = detectKind(file.name);
+    if (kind === null) {
+      setSubmitError(
+        `Unsupported file type: ${file.name}. Use .md, .json, or .docx.`,
+      );
+      return;
+    }
+    setBusy(true);
+    setSubmitError(null);
+    setParsed(null);
+    setErrors([]);
+    try {
+      if (kind === "markdown") {
+        const text = await file.text();
+        setMarkdown(text);
+        const inferred = (name === "Untitled template" && file.name)
+          ? file.name.replace(/\.(md|markdown|txt)$/i, "")
+          : name;
+        if (inferred !== name) setName(inferred);
+        const result = await parseMarkdownV23(text, inferred);
+        applyEnvelope(result, text);
+      } else if (kind === "docx") {
+        const { markdown: md } = await ingestTemplateDocument(file);
+        setMarkdown(md);
+        const inferred = (name === "Untitled template" && file.name)
+          ? file.name.replace(/\.docx$/i, "")
+          : name;
+        if (inferred !== name) setName(inferred);
+        const result = await parseMarkdownV23(md, inferred);
+        applyEnvelope(result, md);
+      } else {
+        // JSON: parse client-side so we can surface JSON syntax errors
+        // before the round-trip; then validate against the engine
+        // schema server-side.
+        const text = await file.text();
+        let spec: Record<string, unknown>;
+        try {
+          spec = JSON.parse(text) as Record<string, unknown>;
+        } catch (e) {
+          setSubmitError(
+            `Invalid JSON in ${file.name}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+          return;
+        }
+        const inferred =
+          (name === "Untitled template" && typeof spec.name === "string"
+            ? spec.name
+            : name === "Untitled template" && file.name
+              ? file.name.replace(/\.json$/i, "")
+              : name);
+        if (inferred !== name) setName(inferred);
+        const result = await validateV23TemplateJson(spec);
+        applyEnvelope(result, text);
+      }
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "failed to read file");
     } finally {
       setBusy(false);
     }
@@ -96,7 +188,7 @@ export function V23TemplateUploadModal({
       const saved = await saveReportTemplate({
         name,
         template_spec: parsed,
-        source_markdown: markdown,
+        source_markdown: sourceText || markdown || null,
       });
       onSaved(saved.id);
     } catch (e) {
@@ -128,12 +220,13 @@ export function V23TemplateUploadModal({
             Upload v2.3 template
           </h2>
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-[--color-text-tertiary]">
-            paste markdown · parse · save
+            upload · parse · save
           </span>
         </header>
         <p className="text-[12.5px] text-[--color-text-secondary]">
-          Paste a markdown-shaped report outline. Parse converts it into a
-          v2.3 TemplateSpec; Save persists it and selects it for the next run.
+          Upload a .md, .json, or .docx template — or paste markdown
+          directly. Parse converts it into a v2.3 TemplateSpec; Save
+          persists it and selects it for the next run.
         </p>
 
         <label className="flex flex-col gap-[4px]">
@@ -151,11 +244,29 @@ export function V23TemplateUploadModal({
 
         <label className="flex flex-col gap-[4px]">
           <span className="text-[12px] text-[--color-text-primary]">
-            Markdown
+            Upload file (.md · .json · .docx)
+          </span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md,.markdown,.txt,.json,.docx,text/markdown,text/plain,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleFile(file);
+            }}
+            disabled={busy}
+            data-testid="er-v2-3-template-upload-file"
+            className="text-[12px] text-[--color-text-primary] file:mr-3 file:rounded-md file:border-0 file:bg-[--color-bg-base] file:px-3 file:py-[6px] file:font-mono file:text-[11px] file:uppercase file:tracking-[0.08em] file:text-[--color-text-secondary] hover:file:bg-[--color-surface-hover] hover:file:text-[--color-text-primary]"
+          />
+        </label>
+
+        <label className="flex flex-col gap-[4px]">
+          <span className="text-[12px] text-[--color-text-primary]">
+            Or paste markdown
           </span>
           <textarea
             aria-label="Markdown"
-            rows={12}
+            rows={10}
             value={markdown}
             onChange={(e) => setMarkdown(e.target.value)}
             data-testid="er-v2-3-template-upload-markdown"

@@ -9,7 +9,7 @@ Source: `planning/2026-05-22-report-subagent-design.md` (companion artifact
 4. `OutlineSection.section_type` links the planner to existing sector templates.
 5. `ValuationPlan` lives on `ReportThesis` (planned at synthesis, executed by COMPUTE
    if needed before WRITE).
-6. `ReportType` enum carried on `Outline` (initiation / update / morning_brief).
+6. `ReportType` enum carried on `Outline` (initiation / update / sector_research).
 7. Computed facts may reference *bundle* fact ids whose values were filled by
    COMPUTE; the validator runs after the bundle is complete.
 8. Canonical figure rendering is language-aware (caller's responsibility; the
@@ -47,13 +47,16 @@ class ReportType(StrEnum):
     Surfaced to users as a "template" — built-in templates map 1:1 to enum
     members; user-uploaded custom templates live in a separate table and are
     keyed by their own UUID rather than this enum.
+
+    Matches the v2.2 mode triad (initiation / update / sector_research).
+    Display labels in the pill carry "Stock " prefixes for the two
+    ticker-anchored types; the wire values stay short for backward
+    compatibility with already-persisted run states.
     """
 
     INITIATION = "initiation"
     UPDATE = "update"
     SECTOR_RESEARCH = "sector_research"
-    MORNING_BRIEF = "morning_brief"
-    EARNINGS_REVIEW = "earnings_review"
 
 
 class ReportLength(StrEnum):

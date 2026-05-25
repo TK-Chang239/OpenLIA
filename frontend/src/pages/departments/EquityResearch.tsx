@@ -52,6 +52,11 @@ import { ReportCard } from "../../components/equity-research/ReportCard";
 import { FailedReportCard } from "../../components/equity-research/FailedReportCard";
 import { ReportProgressIndicator } from "../../components/equity-research/ReportProgressIndicator";
 import { ReportSettingsModal } from "../../components/equity-research/ReportSettingsModal";
+import {
+  V23ReportSettingsModal,
+  type V23ReportLength as V23PillLength,
+  type V23SettingsSelection,
+} from "../../components/equity-research/V23ReportSettingsModal";
 import { V23Composer } from "../../components/equity-research/V23Composer";
 import { V23EngineModelsPicker } from "../../components/equity-research/V23EngineModelsPicker";
 import { V23TemplateUploadModal } from "../../components/equity-research/V23TemplateUploadModal";
@@ -289,6 +294,60 @@ export default function EquityResearch(): JSX.Element {
       return next;
     });
   }, []);
+
+  // v2.3 settings pill state. Selection encodes "which template is
+  // active" (null templateId = built-in for the chosen reportType;
+  // non-null templateId = a row from /api/report-templates). Length is
+  // independent of the v2.2 config.report_length so toggling engines
+  // doesn't cross-contaminate. Persisted to localStorage so the choice
+  // survives reloads.
+  const [v23Selection, setV23SelectionState] = useState<V23SettingsSelection>(
+    () => {
+      if (typeof window === "undefined") {
+        return { templateId: null, reportType: "initiation" };
+      }
+      try {
+        const raw = window.localStorage.getItem("er.v23.selection");
+        if (raw) {
+          const parsed = JSON.parse(raw) as V23SettingsSelection;
+          if (parsed && typeof parsed.reportType === "string") return parsed;
+        }
+      } catch {
+        // fall through to default
+      }
+      return { templateId: null, reportType: "initiation" };
+    },
+  );
+  const setV23Selection = useCallback((next: V23SettingsSelection) => {
+    setV23SelectionState(next);
+    try {
+      window.localStorage.setItem("er.v23.selection", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const [v23Length, setV23LengthState] = useState<V23PillLength>(() => {
+    if (typeof window === "undefined") return "normal";
+    try {
+      const raw = window.localStorage.getItem("er.v23.length");
+      if (raw === "concise" || raw === "normal" || raw === "elaborative") {
+        return raw;
+      }
+    } catch {
+      /* fall through */
+    }
+    return "normal";
+  });
+  const setV23Length = useCallback((next: V23PillLength) => {
+    setV23LengthState(next);
+    try {
+      window.localStorage.setItem("er.v23.length", next);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  // Bump after a successful upload so the settings modal refetches.
+  const [v23TemplatesRefreshKey, setV23TemplatesRefreshKey] = useState(0);
 
   const [engineV2Enabled, setEngineV2EnabledState] = useState<boolean>(() => {
     try {
@@ -1091,18 +1150,6 @@ export default function EquityResearch(): JSX.Element {
         {useV23 ? (
           <div className="flex flex-1 min-h-0 flex-col">
             <div className="flex items-center justify-end gap-2 px-4 pt-3">
-              <FrameworkTemplatePicker
-                selectedId={frameworkTemplateId}
-                onChange={setFrameworkTemplateId}
-              />
-              <button
-                type="button"
-                onClick={() => setV23UploadOpen(true)}
-                data-testid="er-v2-3-template-upload-open"
-                className="inline-flex items-center gap-[6px] rounded-sm border border-[--color-border-subtle] bg-[--color-bg-base] px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
-              >
-                Upload v2.3 template
-              </button>
               <V23EngineModelsPicker onAssignmentsChange={setV23Assignments} />
               <button
                 type="button"
@@ -1120,12 +1167,9 @@ export default function EquityResearch(): JSX.Element {
               onSelectPastRun={onV23SelectPastRun}
               assignments={v23Assignments}
               mode={config.report_mode}
-              length={config.report_length}
-              templateId={
-                frameworkTemplateId && frameworkTemplateId !== "__default__"
-                  ? frameworkTemplateId
-                  : null
-              }
+              length={v23Length === "concise" ? "concise" : v23Length === "elaborative" ? "elaborative" : "normal"}
+              reportType={v23Selection.reportType}
+              templateId={v23Selection.templateId}
               firstName={firstName(user?.display_name)}
               onModeClick={() => setSettingsOpen(true)}
             />
@@ -1133,7 +1177,8 @@ export default function EquityResearch(): JSX.Element {
               open={v23UploadOpen}
               onClose={() => setV23UploadOpen(false)}
               onSaved={(id) => {
-                setFrameworkTemplateId(id);
+                setV23Selection({ templateId: id, reportType: "initiation" });
+                setV23TemplatesRefreshKey((k) => k + 1);
                 setV23UploadOpen(false);
               }}
             />
@@ -1500,18 +1545,34 @@ export default function EquityResearch(): JSX.Element {
         />
       ) : null}
 
-      <ReportSettingsModal
-        open={settingsOpen}
-        config={config}
-        forceCacheRefresh={forceCacheRefresh}
-        onForceCacheRefreshChange={setForceCacheRefresh}
-        engineV2Enabled={engineV2Enabled}
-        onEngineV2EnabledChange={setEngineV2Enabled}
-        onClose={() => setSettingsOpen(false)}
-        onSave={async (p) => {
-          await patch(p);
-        }}
-      />
+      {useV23 ? (
+        <V23ReportSettingsModal
+          open={settingsOpen}
+          selection={v23Selection}
+          length={v23Length}
+          onSelectionChange={setV23Selection}
+          onLengthChange={setV23Length}
+          onUploadClick={() => {
+            setSettingsOpen(false);
+            setV23UploadOpen(true);
+          }}
+          onClose={() => setSettingsOpen(false)}
+          refreshKey={v23TemplatesRefreshKey}
+        />
+      ) : (
+        <ReportSettingsModal
+          open={settingsOpen}
+          config={config}
+          forceCacheRefresh={forceCacheRefresh}
+          onForceCacheRefreshChange={setForceCacheRefresh}
+          engineV2Enabled={engineV2Enabled}
+          onEngineV2EnabledChange={setEngineV2Enabled}
+          onClose={() => setSettingsOpen(false)}
+          onSave={async (p) => {
+            await patch(p);
+          }}
+        />
+      )}
 
       {!useV23 && v2Stream.state.status === "paused" && v2Stream.state.pausedOutput &&
        v2Stream.state.runId ? (

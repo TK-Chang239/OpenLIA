@@ -38,12 +38,6 @@ def test_builtin_initiation_has_valuation_section():
     assert "valuation" in section_ids
 
 
-def test_builtin_morning_brief_is_concise():
-    t = get_builtin(ReportType.MORNING_BRIEF)
-    assert len(t.sections) <= 3  # brief by name
-    assert t.default_length is not None  # caller can rely on a default
-
-
 def test_builtin_template_ids_are_unique():
     ids = [t.template_id for t in BUILTIN_TEMPLATES.values()]
     assert len(ids) == len(set(ids))
@@ -61,20 +55,22 @@ def test_sector_research_builtin_is_not_ticker_anchored():
 
 
 def test_other_builtins_remain_ticker_anchored():
-    """INITIATION / UPDATE / EARNINGS_REVIEW / MORNING_BRIEF stay
-    ticker-anchored. Phase 3 flipped only SECTOR_RESEARCH; the others
-    are inherently single-name (or can be specialized via template
-    upload later)."""
+    """INITIATION and UPDATE stay ticker-anchored — they are inherently
+    single-name. Only SECTOR_RESEARCH is thematic."""
     from openlia.llm.runtime.report_v2_3.schemas import ReportType
     from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
-    for rt in (
-        ReportType.INITIATION,
-        ReportType.UPDATE,
-        ReportType.EARNINGS_REVIEW,
-        ReportType.MORNING_BRIEF,
-    ):
+    for rt in (ReportType.INITIATION, ReportType.UPDATE):
         assert get_builtin(rt).ticker_anchored is True
+
+
+def test_builtin_names_match_v2_2_mode_labels():
+    """The pill renders built-ins as flat siblings of user uploads. The
+    three default names must mirror the v2.2 mode labels so the user
+    sees consistent terminology across engines."""
+    assert get_builtin(ReportType.INITIATION).name == "Stock Initiation"
+    assert get_builtin(ReportType.UPDATE).name == "Stock Update"
+    assert get_builtin(ReportType.SECTOR_RESEARCH).name == "Sector Research"
 
 
 def test_sector_research_shape_description_signals_no_specific_company():
