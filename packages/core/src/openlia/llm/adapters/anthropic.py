@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import AsyncIterator
 
@@ -25,11 +26,33 @@ from openlia.llm.types import (
     LLMResponse,
     Message,
     ModelInfo,
+    ReasoningEffort,
     ServerToolCall,
     ServerToolEvent,
     TestResult,
     ToolCall,
 )
+
+# Models that accept the `thinking={"type":"enabled","budget_tokens":N}`
+# directive. Sending the directive to any other model returns 400, so we
+# guard at the adapter — the v2.3 wiring layer also gates on stage
+# (PLAN + SYNTHESIZE only), but the guard here keeps the adapter usable
+# from non-v2.3 callers without relying on caller discipline.
+_THINKING_MODELS_RE = re.compile(r"claude-(opus|sonnet|haiku)-4|claude-3-7-sonnet")
+
+
+def _supports_thinking(model: str) -> bool:
+    return bool(_THINKING_MODELS_RE.search(model.lower()))
+
+
+# Effort -> budget_tokens for the Anthropic thinking directive. These are
+# placeholders mirroring the v2.3 _REASONING_OVERHEAD table; the eventual
+# sized-from-data pass will replace them once we see real reasoning_tokens
+# in production logs.
+_REASONING_BUDGET_BY_EFFORT: dict[ReasoningEffort, int] = {
+    ReasoningEffort.MEDIUM: 8192,
+    ReasoningEffort.HIGH: 32768,
+}
 
 # Anthropic's native server-side web search tool. Documented at
 # https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
@@ -234,6 +257,17 @@ class AnthropicAdapter(LLMProvider):
             payload["tools"] = anthropic_tools
         if request.tool_choice is not None:
             payload["tool_choice"] = request.tool_choice
+        # Extended thinking: only emit on models that support it (non-
+        # supporting models return 400). Anthropic *requires* temperature=1.0
+        # when thinking is enabled and *requires* max_tokens > budget_tokens
+        # — the v2_3 wiring grows max_tokens to base+overhead so the
+        # inequality holds.
+        if request.reasoning_effort is not None and _supports_thinking(self.model):
+            payload["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
+            }
+            payload["temperature"] = 1.0
 
         async def _post() -> dict:
             async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
@@ -286,6 +320,12 @@ class AnthropicAdapter(LLMProvider):
         anthropic_tools = _build_anthropic_tools(request)
         if anthropic_tools is not None:
             payload["tools"] = anthropic_tools
+        if request.reasoning_effort is not None and _supports_thinking(self.model):
+            payload["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": _REASONING_BUDGET_BY_EFFORT[request.reasoning_effort],
+            }
+            payload["temperature"] = 1.0
 
         async with make_client(base_url=_BASE_URL, headers=self._headers()) as client:
             try:
