@@ -28,6 +28,24 @@ if (typeof (globalThis as { EventSource?: unknown }).EventSource === "undefined"
   (globalThis as { EventSource?: unknown }).EventSource = NoopEventSource;
 }
 
+// jsdom's File/Blob lacks the .text() async helper that browsers ship.
+// Components that handle file uploads (V23TemplateUploadModal, etc.)
+// rely on it; polyfill via FileReader so tests can pass File instances
+// without each one mocking the prototype.
+const _blobProto = globalThis.Blob?.prototype as
+  | (Blob & { text?: () => Promise<string> })
+  | undefined;
+if (_blobProto && typeof _blobProto.text !== "function") {
+  _blobProto.text = function text(this: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(this);
+    });
+  };
+}
+
 // Wizard step components persist non-secret form fields to sessionStorage
 // so back/forward navigation does not lose user input. Tests render those
 // components multiple times in the same process — clear sessionStorage

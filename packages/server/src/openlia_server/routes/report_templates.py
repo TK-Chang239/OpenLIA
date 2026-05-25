@@ -11,6 +11,7 @@ from openlia.llm.runtime.report_v2.template_v2.conversion_prompt import (
     build_conversion_prompt,
 )
 from openlia.llm.runtime.report_v2_3.templates import TemplateSpec as V23TemplateSpec
+from openlia.llm.runtime.report_v2_3.templates.builtins import BUILTIN_TEMPLATES
 from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
@@ -81,6 +82,19 @@ class V23ParseIn(BaseModel):
 class V23ParseOut(BaseModel):
     template_spec: dict[str, Any]
     validation_errors: list[str]
+
+
+class V23ValidateIn(BaseModel):
+    template_spec: dict[str, Any]
+
+
+class V23BuiltinOut(BaseModel):
+    report_type: str
+    template_spec: dict[str, Any]
+
+
+class V23BuiltinListOut(BaseModel):
+    items: list[V23BuiltinOut]
 
 
 def build_report_templates_router(
@@ -216,6 +230,44 @@ def build_report_templates_router(
             template_spec=spec,
         )
 
+    @router.get("/v23/builtins", response_model=V23BuiltinListOut)
+    def v23_builtins(_user: User = require_auth) -> V23BuiltinListOut:
+        """Return the five built-in v2.3 TemplateSpecs paired with their
+        ReportType key. The pill renders these as flat siblings of the
+        user's uploaded templates so morning_brief / earnings_review are
+        first-class instead of hidden behind v2.2's three-mode UI."""
+        items = [
+            V23BuiltinOut(
+                report_type=rt.value,
+                template_spec=spec.model_dump(mode="json"),
+            )
+            for rt, spec in BUILTIN_TEMPLATES.items()
+        ]
+        return V23BuiltinListOut(items=items)
+
+    @router.post("/v23/validate", response_model=V23ParseOut)
+    def v23_validate(
+        payload: V23ValidateIn,
+        _user: User = require_auth,
+    ) -> V23ParseOut:
+        """Validate a pre-built v2.3 TemplateSpec dict (e.g. uploaded .json)
+        without going through the markdown parse path. Same envelope as
+        /v23/parse so the upload UI can render errors inline."""
+        errors: list[str] = []
+        try:
+            spec = V23TemplateSpec.model_validate(payload.template_spec)
+        except ValidationError as err:
+            return V23ParseOut(
+                template_spec={},
+                validation_errors=[
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in err.errors()
+                ],
+            )
+        return V23ParseOut(
+            template_spec=spec.model_dump(mode="json"),
+            validation_errors=errors,
+        )
+
     @router.post("/v23/parse", response_model=V23ParseOut)
     def v23_parse(
         payload: V23ParseIn,
@@ -235,10 +287,7 @@ def build_report_templates_router(
         try:
             V23TemplateSpec.model_validate(spec_dict)
         except ValidationError as err:
-            errors = [
-                f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
-                for e in err.errors()
-            ]
+            errors = [f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}" for e in err.errors()]
         return V23ParseOut(template_spec=spec_dict, validation_errors=errors)
 
     @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
