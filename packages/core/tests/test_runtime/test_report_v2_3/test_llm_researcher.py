@@ -448,6 +448,69 @@ def test_empty_final_turn_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Thematic runs — planner asks for nothing, researcher returns nothing
+# ---------------------------------------------------------------------------
+
+
+def _thematic_outline() -> Outline:
+    """Outline whose sections have no data_needs — thematic by design."""
+    return Outline(
+        tickers=[],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(id="overview", title="Overview", data_needs=[]),
+            OutlineSection(id="themes", title="Themes", data_needs=[]),
+        ],
+    )
+
+
+def _thematic_request() -> ResearchRequest:
+    return ResearchRequest(
+        raw_prompt="give me a thematic read on AI infra",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=[],
+        outline=_thematic_outline(),
+        template=_template(),
+        clarify_result=ClarifyProceed(assumptions=["audience: PM"]),
+    )
+
+
+def test_researcher_accepts_empty_bundle_when_planner_asked_for_nothing() -> None:
+    """RESEARCH should not raise when the planner emitted zero data_needs —
+    the run is thematic by design, the bundle is legitimately empty."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps({"facts": []}),
+                tool_calls=(),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_thematic_request())
+    assert isinstance(bundle, ResearchBundle)
+    assert bundle.tickers == []
+    assert bundle.facts == {}
+
+
+def test_researcher_still_raises_when_planner_asked_but_got_nothing() -> None:
+    """When the planner emitted data_needs but the researcher returned zero
+    facts, that's a genuine failure — RESEARCH still raises."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps({"facts": []}),
+                tool_calls=(),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no `facts` array|no usable facts"):
+        researcher.research(_request())
+
+
+# ---------------------------------------------------------------------------
 # Construction guards
 # ---------------------------------------------------------------------------
 
