@@ -399,6 +399,10 @@ Rules:
 - ``valuation_plan.methods`` MUST mirror the outline's plan unless
   research shows a method is impossible (e.g. no peers found).
 - Every ``mandates[].section_id`` MUST match an outline section.
+- Each outline section carries a ``template_intent`` field capturing what
+  the user's template asked the section to accomplish; ground each
+  mandate's ``covers`` text in that intent so writers know exactly what
+  the user wanted from this section.
 - Every ``charts[].section_id`` MUST match a mandate; chart fact ids
   MUST be in the bundle; the section's ``relevant_fact_ids`` MUST
   include every fact the chart uses.
@@ -476,10 +480,19 @@ If the bundle doesn't support a section's chart well, leave that
 
 
 def _synthesize_payload(request: SynthesizerRequest) -> dict[str, Any]:
+    # Enrich each outline section with the matching template section's
+    # `intent` so the synthesizer can ground each mandate's `covers`
+    # text in the user's stated intent rather than the LLM's reading of
+    # the section title alone. The enrichment lives inline next to the
+    # section dict so the LLM reads the two together.
+    intents_by_id: dict[str, str] = {s.id: s.intent for s in request.template.sections}
+    outline_payload = request.outline.model_dump(mode="json")
+    for section in outline_payload.get("sections", []):
+        section["template_intent"] = intents_by_id.get(section.get("id", ""), "")
     return {
         "raw_prompt": request.raw_prompt,
         "language": request.language.value,
-        "outline": request.outline.model_dump(mode="json"),
+        "outline": outline_payload,
         "bundle": request.bundle.model_dump(mode="json"),
         "clarify_result": (
             request.clarify_result.model_dump() if request.clarify_result is not None else None
