@@ -1,9 +1,10 @@
 """Built-in TemplateSpec instances — one per ReportType.
 
 These replace the per-``ReportType`` paragraph that previously lived in
-``clients/llm_clarifier.py::_BUILTIN_TEMPLATE_SHAPES``. The structures
-here are deliberately small starting shapes — Phase 1.5 will let users
-upload their own templates with different section layouts.
+``clients/llm_clarifier.py::_BUILTIN_TEMPLATE_SHAPES``. The three
+defaults mirror v2.2's mode triad (Stock Initiation / Stock Update /
+Sector Research) so the pill's "Built-ins" group stays consistent
+across engines. User-uploaded templates are first-class peers.
 
 Adding a new ``ReportType`` requires adding an entry here; the
 ``test_every_report_type_has_a_builtin`` test guards that.
@@ -16,7 +17,7 @@ from .spec import SectionSpec, TemplateSpec
 
 _INITIATION = TemplateSpec(
     template_id="initiation_default",
-    name="Initiation (default)",
+    name="Stock Initiation",
     shape_description=(
         "Comprehensive initiation: business overview, financial profile, "
         "competitive position, valuation (DCF + comps), risks, and "
@@ -79,7 +80,7 @@ _INITIATION = TemplateSpec(
 
 _UPDATE = TemplateSpec(
     template_id="update_default",
-    name="Update (default)",
+    name="Stock Update",
     shape_description=(
         "Targeted update: what changed since last coverage, what it means "
         "for the financial trajectory, and whether the view shifts. "
@@ -117,7 +118,7 @@ _UPDATE = TemplateSpec(
 
 _SECTOR_RESEARCH = TemplateSpec(
     template_id="sector_research_default",
-    name="Sector Research (default)",
+    name="Sector Research",
     shape_description=(
         "Sector-level note: industry primer, the drivers shaping "
         "fundamentals, the competitive landscape and the cross-cutting "
@@ -146,8 +147,7 @@ _SECTOR_RESEARCH = TemplateSpec(
             id="competitive_landscape",
             title="Competitive Landscape",
             intent=(
-                "Map the major players, share dynamics, and emerging "
-                "challengers worth watching."
+                "Map the major players, share dynamics, and emerging challengers worth watching."
             ),
         ),
         SectionSpec(
@@ -161,79 +161,10 @@ _SECTOR_RESEARCH = TemplateSpec(
     ],
 )
 
-_MORNING_BRIEF = TemplateSpec(
-    template_id="morning_brief_default",
-    name="Morning Brief (default)",
-    shape_description=(
-        "Short pre-market brief covering the overnight signals that "
-        "should reshape today's watchlist. Headline-style, scannable."
-    ),
-    default_length=ReportLength.CONCISE,
-    sections=[
-        SectionSpec(
-            id="overnight",
-            title="Overnight",
-            intent=(
-                "Summarize the load-bearing overnight moves — macro, "
-                "single-stock catalysts, cross-asset signals."
-            ),
-        ),
-        SectionSpec(
-            id="watchlist",
-            title="Watchlist",
-            intent=(
-                "Surface 3-5 names worth a closer look today and the "
-                "specific reason each one is on the list."
-            ),
-        ),
-    ],
-)
-
-_EARNINGS_REVIEW = TemplateSpec(
-    template_id="earnings_review_default",
-    name="Earnings Review (default)",
-    shape_description=(
-        "Post-print analysis: what the quarter said, what it means for "
-        "the model, and how the outlook shifts. Written same-day for "
-        "someone who saw the press release but not the call."
-    ),
-    default_length=ReportLength.NORMAL,
-    sections=[
-        SectionSpec(
-            id="quarter_highlights",
-            title="Quarter Highlights",
-            intent=(
-                "Headline the prints that matter — revenue, margins, "
-                "guidance, segment mix surprises — vs. consensus and "
-                "the prior quarter."
-            ),
-        ),
-        SectionSpec(
-            id="financial_detail",
-            title="Financial Detail",
-            intent=(
-                "Walk the financial line items the print moved most. "
-                "Quantify the YoY / QoQ deltas and the implied trajectory."
-            ),
-        ),
-        SectionSpec(
-            id="outlook",
-            title="Outlook",
-            intent=(
-                "Re-state the forward view: where guidance lands vs. the "
-                "Street and what would change the view in the next two "
-                "quarters."
-            ),
-        ),
-    ],
-)
-
 BUILTIN_TEMPLATES: dict[ReportType, TemplateSpec] = {
     ReportType.INITIATION: _INITIATION,
     ReportType.UPDATE: _UPDATE,
     ReportType.SECTOR_RESEARCH: _SECTOR_RESEARCH,
-    ReportType.MORNING_BRIEF: _MORNING_BRIEF,
-    ReportType.EARNINGS_REVIEW: _EARNINGS_REVIEW,
 }
 
 

@@ -147,7 +147,7 @@ def test_outline_with_mismatched_tickers_raises() -> None:
 
 
 def test_outline_with_mismatched_report_type_raises() -> None:
-    bad = _outline(report_type=ReportType.MORNING_BRIEF)
+    bad = _outline(report_type=ReportType.UPDATE)
     with pytest.raises(RuntimeError, match="report_type"):
         PlanStage(FakePlannerClient(result=bad)).run(_state(), _ctx())
 

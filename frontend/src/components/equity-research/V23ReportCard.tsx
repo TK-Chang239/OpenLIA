@@ -19,8 +19,6 @@ const REPORT_TYPE_LABEL: Record<V23ReportType, string> = {
   initiation: "Stock Initiation Report",
   update: "Stock Update Report",
   sector_research: "Sector Research Report",
-  morning_brief: "Morning Brief",
-  earnings_review: "Earnings Review",
 };
 
 interface Props {
