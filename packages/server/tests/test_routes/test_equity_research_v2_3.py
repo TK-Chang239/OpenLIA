@@ -288,3 +288,62 @@ def test_v23_run_uses_user_uploaded_template_end_to_end(v2_3_client) -> None:
         "overview",
         "recommendation",
     ]
+
+
+def test_v23_run_returns_404_for_other_users_template(v2_3_client) -> None:
+    """The cross-owner integration seam: a template_id that exists but
+    belongs to a different user must surface as 404 at the route layer
+    (no existence leak). Guards against accidental drop of `user_id`
+    plumbing in `_resolve_template`."""
+    app, client = v2_3_client
+    _install_factory(
+        app, FakeClarifierClient(result=ClarifyProceed(assumptions=["audience: PM"]))
+    )
+
+    # Seed a second user and a template owned by them.
+    from openlia_server.db import session as session_mod
+    from openlia_server.db.models.auth import User
+    from openlia_server.db.models.report_templates import ReportTemplate
+
+    with session_mod.SessionLocal() as s:
+        s.add(
+            User(
+                id="other-user",
+                email="other@openlia.local",
+                display_name="Other",
+                is_admin=False,
+                is_disabled=False,
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+        )
+        s.add(
+            ReportTemplate(
+                id="other-template-uuid",
+                user_id="other-user",
+                name="Other user's template",
+                template_spec_json={
+                    "template_id": "other_template_abcd1234",
+                    "name": "Other user's template",
+                    "shape_description": "Owned by another user.",
+                    "ticker_anchored": True,
+                    "sections": [
+                        {
+                            "id": "primer",
+                            "title": "Primer",
+                            "intent": "Set up.",
+                            "methodology_hints": [],
+                        }
+                    ],
+                },
+            )
+        )
+        s.commit()
+
+    # The default "local" user tries to launch a run pointing at the
+    # other user's template. Route-level _resolve_template must reject.
+    run_resp = client.post(
+        "/api/departments/equity-research/v2.3/runs",
+        json={**_start_payload(), "template_id": "other-template-uuid"},
+    )
+    assert run_resp.status_code == 404, run_resp.text

@@ -52,6 +52,19 @@ export function V23TemplateUploadModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, dismiss]);
 
+  // Reset state every time the modal is reopened so prior markdown,
+  // parsed preview, and error messages do not bleed into a fresh
+  // session. The component stays mounted (returns null when !open),
+  // so without this useState's initialisers never re-run.
+  useEffect(() => {
+    if (!open) return;
+    setMarkdown("");
+    setName("Untitled template");
+    setParsed(null);
+    setErrors([]);
+    setSubmitError(null);
+  }, [open]);
+
   if (!open) return null;
 
   async function handleParse() {
