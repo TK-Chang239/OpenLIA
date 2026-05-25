@@ -47,3 +47,42 @@ def test_builtin_morning_brief_is_concise():
 def test_builtin_template_ids_are_unique():
     ids = [t.template_id for t in BUILTIN_TEMPLATES.values()]
     assert len(ids) == len(set(ids))
+
+
+def test_sector_research_builtin_is_not_ticker_anchored():
+    """Sector-level reports do not require a subject ticker — the
+    'sector' IS the subject. Flipped in Phase 3 to demonstrate the
+    ticker_anchored flag end-to-end."""
+    from openlia.llm.runtime.report_v2_3.schemas import ReportType
+    from openlia.llm.runtime.report_v2_3.templates import get_builtin
+
+    t = get_builtin(ReportType.SECTOR_RESEARCH)
+    assert t.ticker_anchored is False
+
+
+def test_other_builtins_remain_ticker_anchored():
+    """INITIATION / UPDATE / EARNINGS_REVIEW / MORNING_BRIEF stay
+    ticker-anchored. Phase 3 flipped only SECTOR_RESEARCH; the others
+    are inherently single-name (or can be specialized via template
+    upload later)."""
+    from openlia.llm.runtime.report_v2_3.schemas import ReportType
+    from openlia.llm.runtime.report_v2_3.templates import get_builtin
+
+    for rt in (
+        ReportType.INITIATION,
+        ReportType.UPDATE,
+        ReportType.EARNINGS_REVIEW,
+        ReportType.MORNING_BRIEF,
+    ):
+        assert get_builtin(rt).ticker_anchored is True
+
+
+def test_sector_research_shape_description_signals_no_specific_company():
+    """The shape_description text should signal sector-level, not
+    company-specific, so the clarifier prompt doesn't bias toward
+    asking for a ticker."""
+    from openlia.llm.runtime.report_v2_3.schemas import ReportType
+    from openlia.llm.runtime.report_v2_3.templates import get_builtin
+
+    desc = get_builtin(ReportType.SECTOR_RESEARCH).shape_description.lower()
+    assert "sector" in desc
