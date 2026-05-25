@@ -157,28 +157,35 @@ How you work:
    Each data_need is a piece of evidence WRITE will cite — your job is
    to fetch it.
 
-2. Call tools to collect evidence. You can call multiple tools per
-   turn. Re-call tools as needed. Each tool call result is labeled
-   with `evidence_id` — that's the handle you use later to cite it.
+2. Every `data_need` carries a `source_class`. The planner has already
+   decided which tool family fits — your job is to honor it:
 
-   Two kinds of evidence sources are available:
+   - `source_class: quantitative` — satisfy with data tools
+     (``get_fundamentals``, ``get_historical_prices``,
+     ``get_company_news``). These return numbers + provider ids
+     (``tc_abc123``).
+   - `source_class: narrative` — satisfy with ``web_search``.
+     Web-search results arrive with stable ids of the form ``web_1``,
+     ``web_2``, ``web_3`` … in the order they were retrieved across
+     the run. Use those exact strings as ``evidence_id`` for any fact
+     derived from a web hit, and quote a short verbatim snippet so
+     VERIFY can value-match.
+   - `source_class: either` — pick whichever tool family fits the
+     specific fact. Default to data tools for anything reported in
+     financial statements; default to web_search for anything that
+     could have changed in the last few weeks.
 
-   - Data tools (``get_fundamentals``, ``get_historical_prices``,
-     ``get_company_news``) — call these for hard financial / market
-     numbers. Each call returns an ``evidence_id`` (e.g. ``tc_abc123``).
-   - Native ``web_search`` — when you need narrative, qualitative, or
-     recent context that the data tools don't cover (regulatory action,
-     management commentary, product launches, analyst notes, sector
-     reads), use web search. Web-search results arrive with stable ids
-     of the form ``web_1``, ``web_2``, ``web_3`` … in the order they
-     were retrieved across the run. Use those exact strings as
-     ``evidence_id`` when you turn a web fact into a Fact entry. Quote
-     a short verbatim snippet — VERIFY uses it to value-match.
+3. Call tools. You can call multiple per turn and re-call as needed.
+   Each tool call result is labeled with `evidence_id` — that's the
+   handle you use later to cite it. Drop a need only if every source
+   class permitted for it returned nothing — and prefer reporting back
+   a smaller fact than silently omitting one.
 
-   Prefer using BOTH kinds together: data tools for the quantitative
-   spine, web_search for the narrative that contextualises the numbers.
+   Fundamentals are point-in-time as of the fetch date — structured
+   numbers only, no narrative, no news, no regulatory status. Treat
+   the EODHD payload as financial data, not as company context.
 
-3. When you have enough evidence to cover the outline, STOP calling
+4. When you have enough evidence to cover the outline, STOP calling
    tools. On your final turn emit exactly one JSON object — no prose,
    no markdown fences — matching this shape:
 
@@ -390,14 +397,10 @@ class LLMResearcherClient(ResearcherClient):
         # researcher legitimately has nothing to fetch. An empty `facts`
         # list is then a valid result, not a failure. A malformed shape
         # (non-list, missing key) is always a protocol violation.
-        planner_asked_for_facts = any(
-            section.data_needs for section in request.outline.sections
-        )
+        planner_asked_for_facts = any(section.data_needs for section in request.outline.sections)
         raw_facts = parsed.get("facts")
         if not isinstance(raw_facts, list):
-            raise RuntimeError(
-                f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}"
-            )
+            raise RuntimeError(f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}")
         if not raw_facts and planner_asked_for_facts:
             raise RuntimeError(
                 f"RESEARCH LLM returned an empty `facts` array but the "
@@ -488,6 +491,7 @@ def _initial_user_text(request: ResearchRequest) -> str:
                     {
                         "description": dn.description,
                         "expected_fact_ids": list(dn.expected_fact_ids),
+                        "source_class": dn.source_class,
                     }
                     for dn in section.data_needs
                 ],

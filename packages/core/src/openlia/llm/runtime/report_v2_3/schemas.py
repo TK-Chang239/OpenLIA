@@ -448,11 +448,31 @@ class ClarifyAnswers(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+SourceClass = Literal["quantitative", "narrative", "either"]
+
+
 class DataNeed(BaseModel):
-    """PLAN emits these; they become RESEARCH's targeted work queue."""
+    """PLAN emits these; they become RESEARCH's targeted work queue.
+
+    ``source_class`` tells RESEARCH which tool family fits this need so
+    the model doesn't have to make that judgment from prose:
+
+      - ``quantitative`` — reported financial line items, market data,
+        peer multiples. Satisfy with data tools (EODHD-backed).
+      - ``narrative`` — regulatory status, management commentary, recent
+        catalysts, competitive moves, product launches, qualitative
+        positioning. Satisfy with ``web_search``.
+      - ``either`` — could be served by either source class (e.g.
+        company description, segment mix). Use whichever tool fits.
+
+    Default is ``either`` so persisted runs from before the field
+    existed remain valid; planners are expected to upgrade to a more
+    specific class.
+    """
 
     description: str  # "gross margin trend, last 8 quarters"
     expected_fact_ids: list[str] = Field(default_factory=list)
+    source_class: SourceClass = "either"
 
 
 class OutlineSection(BaseModel):

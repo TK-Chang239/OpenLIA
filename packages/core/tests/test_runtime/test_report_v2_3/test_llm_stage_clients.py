@@ -249,6 +249,19 @@ def test_plan_system_prompt_no_longer_uses_nvda_as_example() -> None:
     assert "NVDA" not in PLAN_SYSTEM_PROMPT
 
 
+def test_plan_prompt_documents_three_source_classes() -> None:
+    """PLAN must tell the model how to set source_class on every need;
+    the three legal values must all appear and the example must include
+    the field so the JSON shape is unambiguous."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    assert '"source_class"' in PLAN_SYSTEM_PROMPT
+    for cls in ("`quantitative`", "`narrative`", "`either`"):
+        assert cls in PLAN_SYSTEM_PROMPT
+
+
 def test_compute_and_write_prompts_use_neutral_examples() -> None:
     """COMPUTE_SYSTEM_PROMPT (Comps example) and WRITE_SYSTEM_PROMPT
     (body example) must use neutral placeholders, not specific tickers
