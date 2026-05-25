@@ -681,6 +681,7 @@ def test_write_returns_section() -> None:
         WriterRequest(
             section_mandate=_thesis().mandates[0],
             thesis=_thesis(),
+            template=_template(),
             language=Language.EN,
             relevant_facts={"rev_ttm": _bundle().facts["rev_ttm"]},
             assigned_charts=[],
@@ -723,6 +724,7 @@ def test_write_forwards_prior_attempt_and_critique_on_retry() -> None:
         WriterRequest(
             section_mandate=_thesis().mandates[0],
             thesis=_thesis(),
+            template=_template(),
             language=Language.EN,
             relevant_facts={"rev_ttm": _bundle().facts["rev_ttm"]},
             assigned_charts=[],
@@ -733,6 +735,51 @@ def test_write_forwards_prior_attempt_and_critique_on_retry() -> None:
     user = captured[0]["user"]
     assert user["prior_attempt"]["body"] == "Old draft."
     assert user["critique"][0]["kind"] == IssueKind.VALUE_MISMATCH
+
+
+def test_write_payload_includes_template_section_intent():
+    """The writer payload must surface the matching template section's
+    intent so the LLM knows the user's intent for this section."""
+    import json
+
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _write_payload,
+    )
+
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="business", title="Business", intent="UNIQUE_BUSINESS_INTENT"),
+            SectionSpec(id="other", title="Other", intent="UNIQUE_OTHER_INTENT"),
+        ],
+    )
+    request = WriterRequest(
+        section_mandate=_thesis().mandates[0],  # section_id = "business"
+        thesis=_thesis(),
+        template=template,
+        language=Language.EN,
+        relevant_facts={"rev_ttm": _bundle().facts["rev_ttm"]},
+        assigned_charts=[],
+    )
+    payload = _write_payload(request)
+
+    assert payload["section_intent"] == "UNIQUE_BUSINESS_INTENT"
+    serialized = json.dumps(payload)
+    assert "UNIQUE_BUSINESS_INTENT" in serialized
+    # The non-matching section's intent should not bleed in.
+    assert "UNIQUE_OTHER_INTENT" not in serialized
+
+
+def test_write_system_prompt_references_section_intent():
+    """The WRITE_SYSTEM_PROMPT must instruct the writer to consume the
+    template section's intent when shaping prose."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    assert "intent" in WRITE_SYSTEM_PROMPT.lower()
 
 
 # ---------------------------------------------------------------------------
