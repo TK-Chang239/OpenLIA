@@ -46,6 +46,55 @@ log = logging.getLogger(__name__)
 _FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```$", re.DOTALL)
 
 
+# Adapter-vocab for "response hit max_tokens." Each adapter passes the
+# provider's native finish-reason through verbatim, and the vocab differs:
+# OpenAI / OpenAI-compat / OpenRouter / Ollama use "length"; Anthropic uses
+# "max_tokens"; Gemini uses upper-case "MAX_TOKENS"; the OpenAI Responses
+# adapter surfaces the response status, which becomes "incomplete" when
+# `max_output_tokens` is hit. We lower-case before comparing so casing
+# differences don't matter. "incomplete" is broader than max-tokens alone
+# but specific enough for diagnostic logging — when the operator sizes
+# from these logs, the field is paired with `out` and `max` so a false
+# positive (incomplete-but-not-from-tokens) is visible at a glance.
+_TRUNCATION_FINISH_REASONS = frozenset({"length", "max_tokens", "incomplete"})
+
+
+def _is_truncated(finish_reason: str) -> bool:
+    return finish_reason.lower() in _TRUNCATION_FINISH_REASONS
+
+
+def _log_llm_usage(
+    *,
+    stage: str,
+    model: str,
+    response: Any,
+    max_tokens: int,
+) -> None:
+    """Emit one structured line per LLM call so a later PR can size
+    ``max_tokens`` per stage from observed ``output_tokens``, instead of
+    guessing. WARNING on truncation so it surfaces under default log
+    filtering; INFO otherwise.
+
+    Field grammar: ``key=value`` pairs separated by spaces, no quoting.
+    This is greppable from production logs (``grep llm_usage | grep
+    stage=plan``) and parseable by a small awk/Python script — adding a
+    JSON encoder here would buy nothing and complicates the on-call
+    eyeball read."""
+    truncated = _is_truncated(response.finish_reason)
+    log_method = log.warning if truncated else log.info
+    log_method(
+        "llm_usage stage=%s model=%s in=%d out=%d max=%d cached=%d truncated=%s finish=%s",
+        stage,
+        model,
+        response.input_tokens,
+        response.output_tokens,
+        max_tokens,
+        response.cached_input_tokens,
+        truncated,
+        response.finish_reason,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Sync JSON LLM client — wraps async LLMProvider for the v2 stages.
 # ---------------------------------------------------------------------------
@@ -65,10 +114,16 @@ class SyncJsonLlmClient:
         *,
         max_tokens: int = 4096,
         temperature: float = 0.2,
+        stage: str = "unknown",
     ) -> None:
         self._provider = provider
         self._max_tokens = max_tokens
         self._temperature = temperature
+        # Lower-cased so the env path (UPPER stage names) and the per-user
+        # path (lower stage names) emit the same log values — operators
+        # grepping for ``stage=plan`` shouldn't care which path built the
+        # client.
+        self._stage = stage.lower()
 
     _JSON_DIRECTIVE = (
         "\n\nReturn ONLY a single JSON object. No prose, no markdown fences,"
@@ -92,6 +147,12 @@ class SyncJsonLlmClient:
         )
 
         response = _run_sync(self._provider.generate(request))
+        _log_llm_usage(
+            stage=self._stage,
+            model=getattr(self._provider, "model", "unknown"),
+            response=response,
+            max_tokens=self._max_tokens,
+        )
         text = (response.text or "").strip()
         text = _strip_fence(text)
 
@@ -138,11 +199,13 @@ class SyncToolLlmClient:
         max_tokens: int = 4096,
         temperature: float = 0.3,
         native_tools: tuple[str, ...] = (),
+        stage: str = "research",
     ) -> None:
         self._provider = provider
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._native_tools = native_tools
+        self._stage = stage.lower()
 
     def send(
         self,
@@ -160,6 +223,12 @@ class SyncToolLlmClient:
             temperature=self._temperature,
         )
         response = _run_sync(self._provider.generate(request))
+        _log_llm_usage(
+            stage=self._stage,
+            model=getattr(self._provider, "model", "unknown"),
+            response=response,
+            max_tokens=self._max_tokens,
+        )
         return ToolTurnResponse(
             text=response.text or "",
             tool_calls=tuple(response.tool_calls),
@@ -345,7 +414,7 @@ def build_runner_v2(*, models_by_slot: dict[str, ResolvedModel]) -> RunnerV2:
         slot: _build_provider_from_resolved(rm) for slot, rm in models_by_slot.items()
     }
     llm_by_slot: dict[str, SyncJsonLlmClient] = {
-        slot: SyncJsonLlmClient(p) for slot, p in providers.items()
+        slot: SyncJsonLlmClient(p, stage=slot) for slot, p in providers.items()
     }
 
     drafter_llm = llm_by_slot[V2Slot.SECTION_DRAFTER.value]

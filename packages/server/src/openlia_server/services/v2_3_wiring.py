@@ -177,7 +177,9 @@ def _build_json_stage_client(
             max_output_tokens=max_tokens,
         ),
     )
-    json_client = SyncJsonLlmClient(provider, max_tokens=max_tokens, temperature=temperature)
+    json_client = SyncJsonLlmClient(
+        provider, max_tokens=max_tokens, temperature=temperature, stage=stage
+    )
     return ctor(json_client.call)
 
 
@@ -200,7 +202,9 @@ def _build_clarifier(*, api_key: str, model: str, base_url: str | None) -> LLMCl
             max_output_tokens=max_tokens,
         ),
     )
-    json_client = SyncJsonLlmClient(provider, max_tokens=max_tokens, temperature=temperature)
+    json_client = SyncJsonLlmClient(
+        provider, max_tokens=max_tokens, temperature=temperature, stage="clarify"
+    )
     return LLMClarifierClient(json_client.call)
 
 
@@ -241,6 +245,7 @@ def _build_researcher(*, api_key: str, base_url: str | None) -> ResearcherClient
         max_tokens=max_tokens,
         temperature=temperature,
         native_tools=("web_search",),
+        stage="research",
     )
     tools = _build_eodhd_tool_set(eodhd_key)
     return LLMResearcherClient(tool_client, tools, max_turns=max_turns)
@@ -364,6 +369,7 @@ def build_v2_3_runner_factory_from_models(
             max_tokens=max_tokens,
             temperature=temperature,
             native_tools=("web_search",) if web_search_native else (),
+            stage="research",
         )
         tools = _build_eodhd_tool_set(eodhd_api_key)
         researcher = LLMResearcherClient(tool_client, tools, max_turns=research_max_turns)
@@ -403,7 +409,9 @@ def _build_json_client_from_resolved(
             max_output_tokens=max_tokens,
         ),
     )
-    json_client = SyncJsonLlmClient(provider, max_tokens=max_tokens, temperature=temperature)
+    json_client = SyncJsonLlmClient(
+        provider, max_tokens=max_tokens, temperature=temperature, stage=stage
+    )
     return ctor(json_client.call)
 
 
