@@ -48,7 +48,7 @@ JsonCall = Callable[..., dict[str, Any]]
 _CLARIFY_RESULT_ADAPTER: TypeAdapter[ClarifyResult] = TypeAdapter(ClarifyResult)
 
 
-SYSTEM_PROMPT = f"""You are the CLARIFY stage of an equity-research report
+SYSTEM_PROMPT = """You are the CLARIFY stage of an equity-research report
 pipeline. You receive the user's free-form request, any tickers the
 caller already pinned, and a short description of the template the
 report will follow.
@@ -81,25 +81,25 @@ If you do ask, only ask what you actually need.
 Return EXACTLY one JSON object matching ONE of these shapes:
 
 Proceed (the typical case — subject identified, nothing else needs clarifying):
-{{
+{
   "outcome": "proceed",
   "inferred_tickers": ["<TICKER>"],
   "assumptions": ["concrete assumption 1", "concrete assumption 2"]
-}}
+}
 
 NeedsInput (when a question genuinely blocks a good report —
 including the case where you couldn't identify the subject ticker):
-{{
+{
   "outcome": "needs_input",
   "questions": [
-    {{
+    {
       "id": "ticker",
       "question": "Which ticker should this report cover?",
       "why_blocking": "Pipeline needs a subject ticker to fetch data and run valuation.",
       "default": "SPY"
-    }}
+    }
   ]
-}}
+}
 
 Rules:
 - "outcome" MUST be "proceed" or "needs_input" (exact strings).

@@ -16,7 +16,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import pytest
-
 from openlia.llm.runtime.report_v2_3.clients.verifier import FakeVerifierClient
 from openlia.llm.runtime.report_v2_3.clients.writer import FakeWriterClient, WriterRequest
 from openlia.llm.runtime.report_v2_3.schemas import (
