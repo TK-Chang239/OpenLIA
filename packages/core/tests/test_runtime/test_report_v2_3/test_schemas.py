@@ -491,9 +491,7 @@ def test_estimate_re_matches_four_pipe_separated_fields():
         "projection from margin-expansion thesis}} of upside."
     )
     matches = ESTIMATE_RE.findall(body)
-    assert matches == [
-        ("upside_pct", "0.10", "percent", "projection from margin-expansion thesis")
-    ]
+    assert matches == [("upside_pct", "0.10", "percent", "projection from margin-expansion thesis")]
 
 
 def test_estimate_re_accepts_empty_unit():
@@ -520,9 +518,7 @@ def test_estimate_re_basis_tolerates_single_close_brace():
     inside the rationale) must not terminate the match — only '}}' does."""
     body = "{{ESTIMATE:x|0.1|percent|projection from sensitivity grid {wacc=9%}}}"
     matches = ESTIMATE_RE.findall(body)
-    assert matches == [
-        ("x", "0.1", "percent", "projection from sensitivity grid {wacc=9%}")
-    ]
+    assert matches == [("x", "0.1", "percent", "projection from sensitivity grid {wacc=9%}")]
 
 
 # ---------------------------------------------------------------------------

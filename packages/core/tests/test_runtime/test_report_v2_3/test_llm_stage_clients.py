@@ -53,6 +53,7 @@ from openlia.llm.runtime.report_v2_3.templates import (
 def _template() -> TemplateSpec:
     return get_builtin(ReportType.INITIATION)
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -1045,6 +1046,4 @@ def test_v23_prompts_use_positive_phrasing_for_content_prescriptions():
         ("VERIFY", VERIFY_SYSTEM_PROMPT),
     ):
         for phrase in forbidden_phrases:
-            assert phrase not in prompt, (
-                f"{prompt_name}_SYSTEM_PROMPT still contains {phrase!r}"
-            )
+            assert phrase not in prompt, f"{prompt_name}_SYSTEM_PROMPT still contains {phrase!r}"

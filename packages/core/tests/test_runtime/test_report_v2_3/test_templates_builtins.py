@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from openlia.llm.runtime.report_v2_3.schemas import ReportType
 from openlia.llm.runtime.report_v2_3.templates import (
     BUILTIN_TEMPLATES,
