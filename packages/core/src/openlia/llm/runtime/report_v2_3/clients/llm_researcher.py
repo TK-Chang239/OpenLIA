@@ -386,8 +386,19 @@ class LLMResearcherClient(ResearcherClient):
             raise RuntimeError(
                 f"RESEARCH LLM final body was not a JSON object: head={text[:200]!r}"
             )
+        # Thematic runs: when the planner emitted no data_needs, the
+        # researcher legitimately has nothing to fetch. An empty `facts`
+        # list is then a valid result, not a failure. A malformed shape
+        # (non-list, missing key) is always a protocol violation.
+        planner_asked_for_facts = any(
+            section.data_needs for section in request.outline.sections
+        )
         raw_facts = parsed.get("facts")
-        if not isinstance(raw_facts, list) or not raw_facts:
+        if not isinstance(raw_facts, list):
+            raise RuntimeError(
+                f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}"
+            )
+        if not raw_facts and planner_asked_for_facts:
             raise RuntimeError(f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}")
 
         bundle = ResearchBundle.model_construct(tickers=list(request.tickers), facts={})
@@ -439,7 +450,7 @@ class LLMResearcherClient(ResearcherClient):
                 del bundle.facts[fid]
                 skipped += 1
 
-        if not bundle.facts:
+        if not bundle.facts and planner_asked_for_facts:
             raise RuntimeError(
                 f"RESEARCH produced no usable facts (skipped {skipped} of "
                 f"{len(raw_facts)} — every fact had a broken evidence_id, "
