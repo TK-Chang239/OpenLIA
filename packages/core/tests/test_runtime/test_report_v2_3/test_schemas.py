@@ -523,3 +523,40 @@ def test_estimate_re_basis_tolerates_single_close_brace():
     assert matches == [
         ("x", "0.1", "percent", "projection from sensitivity grid {wacc=9%}")
     ]
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 deletion pins — MAX_CLARIFY_QUESTIONS cap removed
+# ---------------------------------------------------------------------------
+
+
+def test_max_clarify_questions_cap_no_longer_exists():
+    """The arbitrary 3-question cap on ClarifyNeedsInput has been
+    removed (Phase 2 deletion). Clarifier should ask as many genuinely
+    necessary questions as it judges; this is not an engine opinion."""
+    from openlia.llm.runtime.report_v2_3.schemas import (
+        ClarifyNeedsInput,
+        ClarifyQuestion,
+    )
+
+    # Build a ClarifyNeedsInput with 5 questions (more than the old cap)
+    questions = [
+        ClarifyQuestion(
+            id=f"q{i}",
+            question=f"Q{i}?",
+            why_blocking="x",
+            default="y",
+        )
+        for i in range(5)
+    ]
+    # Must not raise — the cap is gone
+    needs = ClarifyNeedsInput(questions=questions)
+    assert len(needs.questions) == 5
+
+
+def test_max_clarify_questions_symbol_not_importable_from_schemas():
+    """MAX_CLARIFY_QUESTIONS was deleted; importing it should fail."""
+    with pytest.raises(ImportError):
+        from openlia.llm.runtime.report_v2_3.schemas import (  # noqa: F401
+            MAX_CLARIFY_QUESTIONS,
+        )

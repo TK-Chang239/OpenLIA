@@ -389,9 +389,6 @@ def dcf_result_to_facts(result: DCFResult, inputs: DCFInputs) -> list[BundleFact
 # ---------------------------------------------------------------------------
 
 
-MAX_CLARIFY_QUESTIONS = 3
-
-
 class ClarifyQuestion(BaseModel):
     id: str
     question: str
@@ -422,7 +419,7 @@ class ClarifyNeedsInput(BaseModel):
     """Prompt has blocking ambiguity. Suspend and ask."""
 
     outcome: Literal["needs_input"] = "needs_input"
-    questions: list[ClarifyQuestion] = Field(..., min_length=1, max_length=MAX_CLARIFY_QUESTIONS)
+    questions: list[ClarifyQuestion] = Field(..., min_length=1)
 
 
 ClarifyResult = ClarifyProceed | ClarifyNeedsInput

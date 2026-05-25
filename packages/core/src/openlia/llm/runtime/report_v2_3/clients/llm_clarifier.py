@@ -13,9 +13,9 @@ plain function fake.
 Prompt + JSON-shape contract:
 - The system prompt asks for ONE of two top-level shapes — `proceed` or
   `needs_input` — discriminated by ``outcome``.
-- Up to `MAX_CLARIFY_QUESTIONS` (3) questions in `needs_input`; the prompt
-  documents the bar for asking (would a wrong default misdirect the
-  pipeline?) so the gate stays cheap.
+- `needs_input` carries however many questions the LLM judges genuinely
+  necessary; the prompt documents the bar for asking (would a wrong
+  default misdirect the pipeline?) so the gate stays cheap.
 - Pydantic validates the shape on the way in; bad JSON is wrapped in a
   RuntimeError that names the offending fragment so failures are
   debuggable.
@@ -32,7 +32,6 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from ..schemas import (
-    MAX_CLARIFY_QUESTIONS,
     ClarifyNeedsInput,
     ClarifyProceed,
     ClarifyResult,
@@ -78,8 +77,7 @@ If the caller already pinned `tickers` (non-empty), trust them and
 mirror them into `inferred_tickers` verbatim — they came from the
 user's explicit input upstream.
 
-If you do ask, cap at {MAX_CLARIFY_QUESTIONS} and only ask what you
-actually need.
+If you do ask, only ask what you actually need.
 
 Return EXACTLY one JSON object matching ONE of these shapes:
 
