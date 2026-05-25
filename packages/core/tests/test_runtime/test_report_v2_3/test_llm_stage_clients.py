@@ -262,6 +262,7 @@ def test_compute_dcf_returns_dcf_inputs() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(result, DCFInputs)
@@ -286,6 +287,7 @@ def test_compute_comps_returns_comps_inputs() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(result, CompsInputs)
@@ -317,6 +319,7 @@ def test_compute_sensitivity_returns_sensitivity_inputs() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(result, SensitivityInputs)
@@ -343,6 +346,7 @@ def test_compute_dcf_rejects_misaligned_paths() -> None:
                 language=Language.EN,
                 bundle=_bundle(),
                 outline=_outline(),
+                template=_template(),
             )
         )
 
@@ -798,6 +802,7 @@ def test_verify_returns_empty_when_clean() -> None:
             thesis=_thesis(),
             bundle=_bundle(),
             sections=[],
+            template=_template(),
         )
     )
     assert isinstance(result, VerifyResult)
@@ -825,6 +830,7 @@ def test_verify_must_rewrite_when_high_severity() -> None:
             thesis=_thesis(),
             bundle=_bundle(),
             sections=[],
+            template=_template(),
         )
     )
     assert result.must_rewrite is True

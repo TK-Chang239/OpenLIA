@@ -77,6 +77,7 @@ class VerifyStage(Stage):
             thesis=thesis,
             bundle=bundle,
             sections=list(state.sections),
+            template=state.template,
         )
         from_llm = self._client.verify(request)
 

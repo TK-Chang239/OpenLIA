@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..schemas import ClarifyResult, Language, Outline, ReportType, ResearchBundle
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -32,6 +33,7 @@ class ResearchRequest:
     report_type: ReportType
     tickers: list[str]
     outline: Outline
+    template: TemplateSpec
     clarify_result: ClarifyResult | None = None
 
 

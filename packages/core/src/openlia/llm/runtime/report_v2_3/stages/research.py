@@ -35,6 +35,7 @@ class ResearchStage(Stage):
             report_type=state.report_type,
             tickers=list(state.tickers),
             outline=outline,
+            template=state.template,
             clarify_result=state.clarify_result,
         )
         bundle = self._client.research(request)
