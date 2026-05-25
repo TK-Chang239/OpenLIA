@@ -284,6 +284,13 @@ class OpenAIResponsesAdapter(LLMProvider):
             payload["tools"] = tools
         if request.tool_choice is not None:
             payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
+        # Responses API takes reasoning as a nested object. The model
+        # silently ignores it when not a reasoning model, but only when
+        # absent — sending `{"effort": "high"}` against gpt-4o returns
+        # 400. Caller is responsible for guarding by model when needed
+        # (v2_3_wiring scopes this to PLAN + SYNTHESIZE on gpt-5.4).
+        if request.reasoning_effort is not None:
+            payload["reasoning"] = {"effort": request.reasoning_effort.value}
 
         async def _post() -> dict:
             async with make_client(base_url=self._base_url, headers=self._headers()) as client:
@@ -310,12 +317,16 @@ class OpenAIResponsesAdapter(LLMProvider):
         ) = _parse_responses_output(body.get("output", []))
         usage = body.get("usage") or {}
         cached_tokens = int((usage.get("input_tokens_details") or {}).get("cached_tokens", 0))
+        reasoning_tokens = int(
+            (usage.get("output_tokens_details") or {}).get("reasoning_tokens", 0)
+        )
         return LLMResponse(
             text="".join(text_parts),
             finish_reason=body.get("status", "completed"),
             input_tokens=int(usage.get("input_tokens", 0)),
             output_tokens=int(usage.get("output_tokens", 0)),
             cached_input_tokens=cached_tokens,
+            reasoning_output_tokens=reasoning_tokens,
             tool_calls=tool_calls,
             citations=citations,
             server_tool_calls=server_tool_calls,
@@ -348,6 +359,8 @@ class OpenAIResponsesAdapter(LLMProvider):
             payload["tools"] = tools
         if request.tool_choice is not None:
             payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
+        if request.reasoning_effort is not None:
+            payload["reasoning"] = {"effort": request.reasoning_effort.value}
 
         async with make_client(base_url=self._base_url, headers=self._headers()) as client:
             try:
