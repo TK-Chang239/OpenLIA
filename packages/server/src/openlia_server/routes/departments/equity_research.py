@@ -58,6 +58,7 @@ class ErConfigPatch(BaseModel):
     # Phase 5f: per-mode web search budget override. Absent modes fall
     # back to the framework default at the runtime layer.
     web_search_budgets_by_mode: dict[str, int] | None = None
+    report_reasoning_effort: str | None = None
 
 
 class TemplatePatch(BaseModel):
@@ -94,6 +95,7 @@ def _serialize(cfg) -> dict:
         },
         "selected_template_id_by_mode": dict(cfg.selected_template_id_by_mode),
         "web_search_budgets_by_mode": dict(cfg.web_search_budgets_by_mode),
+        "report_reasoning_effort": cfg.report_reasoning_effort,
     }
 
 
@@ -158,6 +160,7 @@ def build_equity_research_router(
                 ),
                 selected_template_id_by_mode=patch.selected_template_id_by_mode,
                 web_search_budgets_by_mode=patch.web_search_budgets_by_mode,
+                report_reasoning_effort=patch.report_reasoning_effort,  # type: ignore[arg-type]
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
