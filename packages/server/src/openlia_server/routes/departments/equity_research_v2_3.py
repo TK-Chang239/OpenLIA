@@ -207,6 +207,16 @@ class PayloadThesis(BaseModel):
     canonical_figures: list[PayloadCanonicalFigure]
 
 
+class PayloadNarrativeCoverage(BaseModel):
+    """Soft signal surfaced on the cover: how many of the planner's
+    narrative ``data_needs`` actually landed a web-sourced fact. Null
+    when the planner emitted no narrative needs (N/A, not zero)."""
+
+    total: int
+    satisfied: int
+    pct: float
+
+
 class RunPayloadOut(BaseModel):
     """JSON shape consumed by ``<V23ReportView>`` in the frontend.
 
@@ -240,6 +250,7 @@ class RunPayloadOut(BaseModel):
     charts: list[PayloadChartSpec]
     figure_labels: dict[str, int]
     bundle_facts: dict[str, PayloadBundleFact]
+    narrative_coverage: PayloadNarrativeCoverage | None = None
 
 
 def _engine_unavailable() -> HTTPException:
@@ -539,6 +550,16 @@ def _project_payload(state: ReportState) -> RunPayloadOut:
         charts=charts_payload,
         figure_labels=dict(state.resolved.figure_labels),
         bundle_facts=bundle_facts,
+        narrative_coverage=(
+            PayloadNarrativeCoverage(
+                total=state.verify_result.narrative_coverage.total,
+                satisfied=state.verify_result.narrative_coverage.satisfied,
+                pct=state.verify_result.narrative_coverage.pct,
+            )
+            if state.verify_result is not None
+            and state.verify_result.narrative_coverage is not None
+            else None
+        ),
     )
 
 

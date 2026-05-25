@@ -225,6 +225,11 @@ export interface MetaStats {
   tokens_used?: number | null;
   web_search_queries?: number | null;
   est_read_minutes: number;
+  /** v2.3 only. Soft signal: "satisfied/total" of narrative data_needs
+   *  that landed at least one web-sourced fact. Null when the planner
+   *  emitted no narrative needs. */
+  narrative_coverage_label?: string | null;
+  narrative_coverage_pct?: number | null;
 }
 
 // v2.2 engine payloads. Present only on reports produced by the v2.2

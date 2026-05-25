@@ -35,10 +35,13 @@ from ..schemas import (
     FIG_RE,
     IssueKind,
     IssueSeverity,
+    NarrativeCoverage,
+    Outline,
     ReportThesis,
     ResearchBundle,
     VerifyIssue,
     VerifyResult,
+    WebSource,
     WrittenSection,
 )
 from ..slots import V23Slot
@@ -48,9 +51,7 @@ from .base import Stage, StageContext
 # A digit-bearing token: optional leading $, then digits with optional
 # decimal / thousands-comma, then optional magnitude or unit suffix.
 # Examples matched: $60.9B, 1,200, 25%, 15x, 200, 18.5, 60.9, $1.2M.
-_NUMERIC_TOKEN_RE = re.compile(
-    r"-?\$?\d[\d,]*(?:\.\d+)?(?:[%xX]|[KkMmBbTt](?=\b|$))?"
-)
+_NUMERIC_TOKEN_RE = re.compile(r"-?\$?\d[\d,]*(?:\.\d+)?(?:[%xX]|[KkMmBbTt](?=\b|$))?")
 
 # Token-level exempt patterns.
 _YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
@@ -81,7 +82,13 @@ class VerifyStage(Stage):
         )
         from_llm = self._client.verify(request)
 
-        state.verify_result = VerifyResult(issues=[*deterministic, *from_llm.issues])
+        narrative_coverage = (
+            _narrative_coverage(state.outline, bundle) if state.outline is not None else None
+        )
+        state.verify_result = VerifyResult(
+            issues=[*deterministic, *from_llm.issues],
+            narrative_coverage=narrative_coverage,
+        )
         return state
 
     @staticmethod
@@ -167,6 +174,33 @@ def _check_uncited_numbers(sections: list[WrittenSection]) -> list[VerifyIssue]:
                 )
             )
     return issues
+
+
+def _narrative_coverage(outline: Outline, bundle: ResearchBundle) -> NarrativeCoverage | None:
+    """Count narrative needs and how many landed at least one web-sourced
+    fact. Returns None when the planner emitted no narrative needs — the
+    metric is N/A rather than zero in that case.
+
+    A need is "satisfied" iff at least one of its ``expected_fact_ids``
+    appears in ``bundle.facts`` with ``WebSource`` provenance. Computed
+    or estimate facts that derived from a web-sourced fact do not count
+    here on purpose — this metric measures whether the engine actually
+    pulled in current web evidence for qualitative needs, not whether
+    those facts later spawned derivations.
+    """
+    web_fact_ids = {fid for fid, fact in bundle.facts.items() if isinstance(fact.source, WebSource)}
+    total = 0
+    satisfied = 0
+    for section in outline.sections:
+        for need in section.data_needs:
+            if need.source_class != "narrative":
+                continue
+            total += 1
+            if any(fid in web_fact_ids for fid in need.expected_fact_ids):
+                satisfied += 1
+    if total == 0:
+        return None
+    return NarrativeCoverage(total=total, satisfied=satisfied, pct=satisfied / total)
 
 
 def _is_exempt(token: str, body: str, start: int, end: int) -> bool:

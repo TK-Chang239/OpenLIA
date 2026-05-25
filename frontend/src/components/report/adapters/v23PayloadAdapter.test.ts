@@ -34,6 +34,7 @@ function basePayload(): V23RunPayload {
       rev_ttm: { id: "rev_ttm", label: "Revenue (TTM)", value: 60_900_000_000, unit: "USD", ticker: "NVDA" },
       gross_margin_ttm: { id: "gross_margin_ttm", label: "Gross margin (TTM)", value: 0.742, unit: "percent", ticker: "NVDA" },
     },
+    narrative_coverage: null,
   };
 }
 
@@ -62,5 +63,29 @@ describe("adaptV23PayloadToSchema — duplication regression", () => {
       const types = section.blocks.map((b) => (b as { type: string }).type);
       expect(types).toEqual(["text"]);
     }
+  });
+});
+
+describe("adaptV23PayloadToSchema — narrative coverage signal", () => {
+  it("leaves the narrative_coverage_* meta_stats fields null when the payload omits the signal", () => {
+    const schema = adaptV23PayloadToSchema(basePayload());
+    expect(schema.meta_stats?.narrative_coverage_label).toBeNull();
+    expect(schema.meta_stats?.narrative_coverage_pct).toBeNull();
+  });
+
+  it("surfaces the signal as 'satisfied/total' + pct when present", () => {
+    const payload = basePayload();
+    payload.narrative_coverage = { total: 4, satisfied: 3, pct: 0.75 };
+    const schema = adaptV23PayloadToSchema(payload);
+    expect(schema.meta_stats?.narrative_coverage_label).toBe("3/4");
+    expect(schema.meta_stats?.narrative_coverage_pct).toBe(0.75);
+  });
+
+  it("surfaces 0/N when no narrative needs were satisfied", () => {
+    const payload = basePayload();
+    payload.narrative_coverage = { total: 4, satisfied: 0, pct: 0 };
+    const schema = adaptV23PayloadToSchema(payload);
+    expect(schema.meta_stats?.narrative_coverage_label).toBe("0/4");
+    expect(schema.meta_stats?.narrative_coverage_pct).toBe(0);
   });
 });
