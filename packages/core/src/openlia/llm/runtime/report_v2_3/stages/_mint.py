@@ -24,6 +24,7 @@ from ..schemas import (
     DERIVE_RE,
     ESTIMATE_RE,
     BundleFact,
+    ComputedSource,
     EstimateSource,
     ResearchBundle,
     SectionMandate,
@@ -80,9 +81,32 @@ def mint_inline_facts(
                 f"one marker — pick distinct ids."
             )
         if new_id in bundle.facts:
+            existing = bundle.facts[new_id]
+            if _derive_matches_existing(existing, method_name, input_ids):
+                # Documented dedup-on-identity: an upstream stage (RESEARCH,
+                # COMPUTE, or an earlier WRITE mandate) already minted the
+                # exact same fact. Reuse silently rather than raise — the
+                # writer's intended math is identical, and forcing a unique
+                # id here would scatter duplicate values across the bundle
+                # under near-identical names. The CITE marker still
+                # resolves; `new_facts` stays empty for this marker so the
+                # WriteStage `state.bundle.add` loop does not try to insert
+                # a duplicate.
+                log.info(
+                    "DERIVE dedup: new_id %r already minted identically "
+                    "upstream (section %r). Reusing the existing fact.",
+                    new_id,
+                    mandate.section_id,
+                )
+                seen_markers[new_id] = m.group(0)
+                return f"{{{{CITE:{new_id}}}}}"
             raise MintError(
                 f"DERIVE: new_id '{new_id}' collides with an existing bundle fact "
-                f"(section '{mandate.section_id}'). Pick a unique id."
+                f"in section '{mandate.section_id}' that was minted differently "
+                f"(your call: {method_name}({','.join(input_ids)}); existing source: "
+                f"{type(existing.source).__name__}"
+                f"{_describe_computed(existing.source)}). Pick a unique id, or use "
+                f"{{{{CITE:{new_id}}}}} to reference the existing fact instead of deriving."
             )
         try:
             fact = DERIVATION_REGISTRY[method_name](
@@ -92,8 +116,7 @@ def mint_inline_facts(
             )
         except DerivationError as exc:
             raise MintError(
-                f"DERIVE: {method_name} failed in section "
-                f"'{mandate.section_id}': {exc}"
+                f"DERIVE: {method_name} failed in section '{mandate.section_id}': {exc}"
             ) from exc
         new_facts.append(fact)
         seen_markers[new_id] = raw
@@ -115,9 +138,24 @@ def mint_inline_facts(
                 f"one marker — pick distinct ids."
             )
         if new_id in bundle.facts:
+            existing = bundle.facts[new_id]
+            if _estimate_matches_existing(existing, value, unit or None, basis.strip()):
+                # Same docstring contract as DERIVE dedup: an earlier
+                # stage (SYNTHESIZE or an earlier WRITE mandate) already
+                # minted this exact estimate. Reuse instead of raising.
+                log.info(
+                    "ESTIMATE dedup: new_id %r already minted identically "
+                    "upstream (section %r). Reusing the existing fact.",
+                    new_id,
+                    mandate.section_id,
+                )
+                seen_markers[new_id] = m.group(0)
+                return f"{{{{CITE:{new_id}}}}}"
             raise MintError(
                 f"ESTIMATE: new_id '{new_id}' collides with an existing bundle "
-                f"fact (section '{mandate.section_id}'). Pick a unique id."
+                f"fact in section '{mandate.section_id}' that was minted differently. "
+                f"Pick a unique id, or use {{{{CITE:{new_id}}}}} to reference the "
+                f"existing fact instead of re-estimating."
             )
         fact = BundleFact(
             id=new_id,
@@ -142,3 +180,48 @@ def mint_inline_facts(
 def _label_from_id(fact_id: str) -> str:
     """fact_id 'rev_growth_yoy' -> 'Rev Growth Yoy'. Cheap, deterministic."""
     return fact_id.replace("_", " ").title()
+
+
+def _derive_matches_existing(existing: BundleFact, method: str, input_ids: list[str]) -> bool:
+    """True iff the existing fact was minted by an identical DERIVE call.
+
+    Identity is method-equality plus order-preserving input list equality.
+    Order matters semantically — `growth_rate(rev_fy25, rev_fy24)` and
+    `growth_rate(rev_fy24, rev_fy25)` produce different numbers — so we
+    compare lists, not sets. The value itself isn't compared: when method
+    + inputs match, the derivation is deterministic and the value is
+    guaranteed to agree.
+    """
+    source = existing.source
+    if not isinstance(source, ComputedSource):
+        return False
+    return source.method == method and list(source.derived_from) == list(input_ids)
+
+
+def _estimate_matches_existing(
+    existing: BundleFact,
+    value: float,
+    unit: str | None,
+    basis: str,
+) -> bool:
+    """True iff the existing fact is an identical EstimateSource entry.
+
+    Value, unit, and basis must all match. Estimates are explicit
+    judgment, so any divergence (different number, different unit,
+    different rationale) means the writer disagrees with the prior
+    estimate — which is a real conflict the runner must surface, not
+    silently dedup.
+    """
+    source = existing.source
+    if not isinstance(source, EstimateSource):
+        return False
+    return existing.value == value and (existing.unit or None) == unit and source.basis == basis
+
+
+def _describe_computed(source: object) -> str:
+    """Tail fragment for the DERIVE collision error message — exposes
+    the existing fact's method + inputs when it is a ComputedSource so
+    the writer (or a future repair tier) can see exactly what differs."""
+    if isinstance(source, ComputedSource):
+        return f", method={source.method!r}, derived_from={list(source.derived_from)}"
+    return ""
