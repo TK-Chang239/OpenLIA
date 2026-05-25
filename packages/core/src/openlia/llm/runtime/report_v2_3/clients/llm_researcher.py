@@ -399,7 +399,10 @@ class LLMResearcherClient(ResearcherClient):
                 f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}"
             )
         if not raw_facts and planner_asked_for_facts:
-            raise RuntimeError(f"RESEARCH LLM final body had no `facts` array: head={text[:200]!r}")
+            raise RuntimeError(
+                f"RESEARCH LLM returned an empty `facts` array but the "
+                f"planner requested facts: head={text[:200]!r}"
+            )
 
         bundle = ResearchBundle.model_construct(tickers=list(request.tickers), facts={})
         skipped = 0

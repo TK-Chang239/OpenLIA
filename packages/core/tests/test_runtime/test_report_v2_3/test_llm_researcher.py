@@ -506,7 +506,10 @@ def test_researcher_still_raises_when_planner_asked_but_got_nothing() -> None:
         ]
     )
     researcher = LLMResearcherClient(llm, _tools())
-    with pytest.raises(RuntimeError, match="no `facts` array|no usable facts"):
+    with pytest.raises(
+        RuntimeError,
+        match=r"no `facts` array|empty `facts` array|no usable facts",
+    ):
         researcher.research(_request())
 
 

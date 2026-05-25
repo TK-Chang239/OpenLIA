@@ -74,8 +74,8 @@ class ClarifyStage(Stage):
         When the suspend was caused by a missing ticker (questions with
         id == "ticker" or ids ending in "_ticker"), the resolved value is
         also copied onto `state.tickers` so PLAN/RESEARCH have a subject
-        — otherwise the run would resume into a stage that asserts
-        `state.tickers` is non-empty.
+        — otherwise a ticker-anchored run would resume into PLAN with
+        no subject.
         """
         if state.clarify_answers is None:
             raise RuntimeError("_finalize_after_resume called without answers.")

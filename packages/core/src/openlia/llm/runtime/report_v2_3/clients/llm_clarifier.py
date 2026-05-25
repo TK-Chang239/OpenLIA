@@ -111,8 +111,7 @@ including the case where you couldn't identify the subject ticker):
 Rules:
 - "outcome" MUST be "proceed" or "needs_input" (exact strings).
 - `inferred_tickers` is REQUIRED in the `proceed` shape, even if
-  empty (which should only happen on `needs_input`). Symbols only —
-  no descriptions, no exchange names.
+  empty. Symbols only — no descriptions, no exchange names.
 - Every question MUST include `id`, `question`, `why_blocking`, `default`.
   When the missing piece is the subject ticker, use id "ticker" so
   the runner knows to copy the answer into the run's ticker list.
