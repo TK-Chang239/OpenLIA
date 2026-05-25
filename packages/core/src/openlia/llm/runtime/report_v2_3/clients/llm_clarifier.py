@@ -56,12 +56,12 @@ report will follow.
 You have two jobs:
 
 (1) IDENTIFY THE SUBJECT. The user may type the ticker outright
-    ("Initiation on NVDA"), name the company instead ("Update on
-    Nvidia's data-center business"), describe a sector ("the lithium
+    ("Initiation on <TICKER>"), name the company instead ("Update on
+    <COMPANY>'s data-center business"), describe a sector ("the lithium
     miners"), or describe a theme ("AI infrastructure margins this
     cycle"). Extract every ticker the request implies into
     `inferred_tickers`. Use the exchange-suffix form the pipeline
-    expects (e.g. "NVDA", "AAPL", "TSM" — bare US tickers; for
+    expects (e.g. <TICKER> — bare US tickers; for
     non-US names use the EODHD form like "0700.HK", "005930.KS").
     If the request is genuinely topic-only and no specific tickers
     are implied, return `inferred_tickers: []` AND ask via
@@ -84,7 +84,7 @@ Return EXACTLY one JSON object matching ONE of these shapes:
 Proceed (the typical case — subject identified, nothing else needs clarifying):
 {{
   "outcome": "proceed",
-  "inferred_tickers": ["NVDA"],
+  "inferred_tickers": ["<TICKER>"],
   "assumptions": ["concrete assumption 1", "concrete assumption 2"]
 }}
 

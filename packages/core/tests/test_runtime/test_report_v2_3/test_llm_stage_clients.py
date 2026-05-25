@@ -238,6 +238,16 @@ def test_plan_repairs_after_one_validation_failure() -> None:
     assert repair_user["your_previous_output"] == bad
 
 
+def test_plan_system_prompt_no_longer_uses_nvda_as_example() -> None:
+    """PLAN_SYSTEM_PROMPT's JSON example should use a neutral
+    placeholder ticker, not NVDA."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    assert "NVDA" not in PLAN_SYSTEM_PROMPT
+
+
 # ---------------------------------------------------------------------------
 # COMPUTE — method-dispatched validation
 # ---------------------------------------------------------------------------

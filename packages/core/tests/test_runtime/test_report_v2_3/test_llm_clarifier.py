@@ -133,3 +133,10 @@ def test_question_missing_required_field_rejected() -> None:
     )
     with pytest.raises(RuntimeError, match=r"malformed JSON for ClarifyResult"):
         LLMClarifierClient(fake).clarify(_request())
+
+
+def test_clarifier_prompt_no_longer_uses_nvda_as_example() -> None:
+    """The CLARIFY prompt should use sector-neutral placeholders so the
+    LLM is not biased toward US semiconductor tickers."""
+    assert "NVDA" not in SYSTEM_PROMPT
+    assert "Nvidia" not in SYSTEM_PROMPT
