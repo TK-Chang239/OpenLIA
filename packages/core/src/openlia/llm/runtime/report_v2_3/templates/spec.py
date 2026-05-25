@@ -46,10 +46,12 @@ class TemplateSpec(BaseModel):
     includes what kind of report the user is asking for. Keep it short
     (one paragraph, ~3 sentences).
 
-    ``ticker_anchored`` (Phase 3 will start using this) signals whether
-    the report requires a subject ticker; macro / thematic templates
-    flip it false. ``default_length`` is a soft default the runner may
-    apply when the request does not specify a length.
+    ``ticker_anchored`` signals whether the report requires a subject
+    ticker. CLARIFY reads this flag — when false, it skips the
+    forced-ticker question for topic-only prompts. Macro / thematic /
+    sector-level templates flip it false. ``default_length`` is a soft
+    default the runner may apply when the request does not specify a
+    length.
     """
 
     template_id: str = Field(..., min_length=1, pattern=r"^[a-z0-9_]+$")
