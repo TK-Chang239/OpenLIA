@@ -1015,3 +1015,36 @@ def test_write_prompt_no_longer_dictates_per_length_word_budgets():
         assert band not in WRITE_SYSTEM_PROMPT, (
             f"WRITE_SYSTEM_PROMPT still contains word band {band!r}"
         )
+
+
+def test_v23_prompts_use_positive_phrasing_for_content_prescriptions():
+    """Per the `feedback_positive_prompts` convention, content-level
+    instructions in v2.3 prompts should be phrased positively. Schema-
+    level enum constraints ("chart_type MUST be one of ...") stay as
+    accurate API contract statements; this test targets the content-
+    prescriptive negatives from the audit."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+        SYNTHESIZE_SYSTEM_PROMPT,
+        VERIFY_SYSTEM_PROMPT,
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    # Sentinel phrases the audit flagged as content prescriptions —
+    # none should survive.
+    forbidden_phrases = [
+        "do NOT prepend",
+        "Never invent a fact_id",
+        "don't expand scope",
+        "Don't expand scope",
+    ]
+    for prompt_name, prompt in (
+        ("PLAN", PLAN_SYSTEM_PROMPT),
+        ("SYNTHESIZE", SYNTHESIZE_SYSTEM_PROMPT),
+        ("WRITE", WRITE_SYSTEM_PROMPT),
+        ("VERIFY", VERIFY_SYSTEM_PROMPT),
+    ):
+        for phrase in forbidden_phrases:
+            assert phrase not in prompt, (
+                f"{prompt_name}_SYSTEM_PROMPT still contains {phrase!r}"
+            )
