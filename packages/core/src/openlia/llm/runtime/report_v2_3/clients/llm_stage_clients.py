@@ -163,43 +163,47 @@ def _call_with_repair(
 # ---------------------------------------------------------------------------
 
 
-PLAN_SYSTEM_PROMPT = """You are the PLAN stage of an equity-research report
-pipeline. Convert the user's prompt + CLARIFY assumptions into a
-section-by-section Outline that tells RESEARCH exactly what evidence to
-gather.
+PLAN_SYSTEM_PROMPT = """
+You are the PLAN stage of the v2.3 equity-research engine. The user
+template supplies the section structure; your job is to fill each
+section with the fact_ids RESEARCH should fetch and to select the
+valuation methods COMPUTE should run.
 
-Output is a single JSON object matching this Outline shape:
+Inputs you receive:
+- raw_prompt: the user's request.
+- template.sections: the ordered list of sections the report must
+  contain. Each section carries an `id`, `title`, `intent`, and
+  optional `methodology_hints`.
+- clarify_result: the assumptions resolved at CLARIFY.
 
+Output an Outline JSON object:
 {
   "tickers": ["NVDA"],
   "report_type": "initiation",
   "sections": [
     {
-      "id": "business",
-      "title": "Business overview",
-      "section_type": "qualitative",
-      "data_needs": [
-        {
-          "description": "products, end markets, revenue mix",
-          "expected_fact_ids": ["rev_mix_segments", "geo_mix"]
-        }
-      ]
-    }
+      "id": "<copy from template.sections[i].id>",
+      "title": "<copy from template.sections[i].title>",
+      "expected_fact_ids": ["rev_ttm", "rev_growth_yoy", ...]
+    },
+    ...
   ],
-  "valuation_plan": {"methods": ["dcf", "comps"]}
+  "valuation_plan": {
+    "methods": ["dcf", "comps"]
+  }
 }
 
 Rules:
-
-- Pick the smallest set of sections that covers what a PM needs to
-  decide on the request. 4-8 is the usual band.
-- Every section needs at least one data_need that names what to fetch.
-- `expected_fact_ids` are stable handles RESEARCH will try to satisfy
-  with that exact id. Match the snake_case naming the rest of the
-  pipeline uses.
-- `valuation_plan.methods` is the list COMPUTE will execute. Use
-  ["dcf"] for initiation, [] for morning_brief / earnings_review,
-  ["dcf", "comps"] when peers are visible.
+- Produce one section per template.sections entry, in the same order,
+  with the same `id` and `title`. The engine's coercer will fix drift,
+  so be conservative — copy the structure verbatim.
+- Populate `expected_fact_ids` with stable identifier strings RESEARCH
+  will fetch and bind to the BundleFact map. Use snake_case ids like
+  `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
+- `valuation_plan.methods` lists the valuation methods COMPUTE should
+  run. Choose from `dcf`, `comps`, `sensitivity` based on what the
+  template's sections actually need (e.g. include `dcf` only when a
+  section's intent calls for an intrinsic valuation).
 - Output JSON only. No prose, no markdown fences.
 """.strip()
 
@@ -213,6 +217,20 @@ def _planner_payload(request: PlannerRequest) -> dict[str, Any]:
         "clarify_result": (
             request.clarify_result.model_dump() if request.clarify_result is not None else None
         ),
+        "template": {
+            "template_id": request.template.template_id,
+            "name": request.template.name,
+            "shape_description": request.template.shape_description,
+            "sections": [
+                {
+                    "id": s.id,
+                    "title": s.title,
+                    "intent": s.intent,
+                    "methodology_hints": list(s.methodology_hints),
+                }
+                for s in request.template.sections
+            ],
+        },
     }
 
 
