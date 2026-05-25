@@ -140,6 +140,52 @@ def test_parse_routes_synthesis_and_meta_via_frontmatter(client, user_factory, l
     assert tiers["self_audit"] == "meta"
 
 
+def test_v23_parse_returns_valid_template_spec(client, user_factory, login_as) -> None:
+    login_as(user_factory())
+    md = (
+        "<!-- openlia\nname: Lithium primer\nticker_anchored: false\n-->\n"
+        "# Industry primer\nSet up the sector.\n\n"
+        "# Drivers\nName the drivers.\n"
+    )
+    r = client.post(
+        "/report-templates/v23/parse",
+        json={"markdown": md, "name": "Untitled"},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["validation_errors"] == []
+    spec = payload["template_spec"]
+    assert spec["name"] == "Lithium primer"
+    assert spec["ticker_anchored"] is False
+    assert [s["id"] for s in spec["sections"]] == ["industry_primer", "drivers"]
+
+
+def test_v23_parse_surfaces_compile_errors_as_validation_errors(
+    client, user_factory, login_as
+) -> None:
+    """When the markdown produces a TemplateSpec that fails Pydantic
+    validation (e.g. zero sections), the endpoint returns 200 with
+    `validation_errors` populated — the UI can show them inline rather
+    than rendering a 4xx error."""
+    login_as(user_factory())
+    r = client.post(
+        "/report-templates/v23/parse",
+        json={"markdown": "Just prose, no headings.", "name": "Empty"},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["validation_errors"]
+    assert "at least one section" in payload["validation_errors"][0].lower()
+
+
+def test_v23_parse_requires_auth(client) -> None:
+    r = client.post(
+        "/report-templates/v23/parse",
+        json={"markdown": "# H1\nbody", "name": "X"},
+    )
+    assert r.status_code in (401, 403)
+
+
 def test_delete_template_removes_row(client, user_factory, login_as) -> None:
     login_as(user_factory())
     tid = client.post(
