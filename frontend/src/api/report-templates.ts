@@ -117,3 +117,71 @@ export async function parseTemplateMarkdown(
     json: { markdown, name },
   });
 }
+
+// ---------------------------------------------------------------------------
+// v2.3 typed surface (Phase 1.5)
+//
+// The v2.3 parse endpoint returns a strongly-typed TemplateSpec dict that
+// matches the engine's `openlia.llm.runtime.report_v2_3.templates.TemplateSpec`
+// pydantic model. Validation errors come back inline as a list of strings so
+// the upload modal can render them next to the parsed structure rather than
+// as an HTTP error.
+// ---------------------------------------------------------------------------
+
+export interface SectionSpec {
+  id: string;
+  title: string;
+  intent: string;
+  methodology_hints: string[];
+}
+
+export interface TemplateSpec {
+  template_id: string;
+  name: string;
+  shape_description: string;
+  ticker_anchored: boolean;
+  default_length?: "concise" | "normal" | "elaborative" | null;
+  sections: SectionSpec[];
+}
+
+export interface ReportTemplateSummary {
+  id: string;
+  name: string;
+  template_spec: TemplateSpec;
+  source_markdown: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface V23ParseResponse {
+  template_spec: TemplateSpec | Record<string, never>;
+  validation_errors: string[];
+}
+
+export async function getReportTemplate(
+  id: string,
+): Promise<ReportTemplateSummary> {
+  return fetchJson<ReportTemplateSummary>(`${BASE}/${id}`);
+}
+
+export async function parseMarkdownV23(
+  markdown: string,
+  name: string,
+): Promise<V23ParseResponse> {
+  return fetchJson<V23ParseResponse>(`${BASE}/v23/parse`, {
+    method: "POST",
+    json: { markdown, name },
+  });
+}
+
+export async function saveReportTemplate(input: {
+  name: string;
+  template_spec: TemplateSpec;
+  source_markdown: string | null;
+}): Promise<ReportTemplateSummary> {
+  return fetchJson<ReportTemplateSummary>(BASE, {
+    method: "POST",
+    json: input,
+  });
+}
+

@@ -589,3 +589,142 @@ def test_run_state_carries_builtin_template_for_each_report_type(db_session) -> 
             tickers=["NVDA"],
         )
         assert state.template == get_builtin(rt), f"Wrong template for {rt}"
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.5 Task 3 — template_id resolves to a user's stored TemplateSpec
+# ---------------------------------------------------------------------------
+
+
+def _make_factory_for_template_tests():
+    return make_v2_3_runner_factory(
+        FakeClarifierClient(result=ClarifyProceed(assumptions=["x"]))
+    )
+
+
+def test_start_run_uses_user_template_when_template_id_provided(db_session) -> None:
+    """When `template_id` references a user's row in `report_templates`,
+    `start_run` loads that template and uses it as state.template
+    instead of the report_type built-in."""
+    from openlia_server.db.models.report_templates import ReportTemplate
+
+    custom_spec = {
+        "template_id": "user_custom_xyz",
+        "name": "User Custom",
+        "shape_description": "User-supplied template for testing.",
+        "ticker_anchored": True,
+        "sections": [
+            {"id": "alpha", "title": "Alpha", "intent": "A.", "methodology_hints": []},
+        ],
+    }
+    row = ReportTemplate(
+        id="row-uuid-123",
+        user_id="u-1",
+        name="User Custom",
+        template_spec_json=custom_spec,
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    state = start_run(
+        db=db_session,
+        runner_factory=_make_factory_for_template_tests(),
+        user_id="u-1",
+        raw_prompt="initiate on something",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        length=ReportLength.NORMAL,
+        tickers=["NVDA"],
+        template_id="row-uuid-123",
+    )
+    assert state.template.name == "User Custom"
+    assert state.template.template_id == "user_custom_xyz"
+
+
+def test_start_run_falls_back_to_builtin_when_template_id_absent(db_session) -> None:
+    """Existing behavior — `template_id` omitted -> get_builtin(report_type)."""
+    state = start_run(
+        db=db_session,
+        runner_factory=_make_factory_for_template_tests(),
+        user_id="u-1",
+        raw_prompt="initiate on something",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        length=ReportLength.NORMAL,
+        tickers=["NVDA"],
+        template_id=None,
+    )
+    assert state.template == get_builtin(ReportType.INITIATION)
+
+
+def test_start_run_rejects_template_id_not_owned_by_user(db_session) -> None:
+    """A user must not be able to load another user's template via
+    template_id. 404 is the right response (don't leak existence)."""
+    import pytest as _pytest
+    from fastapi import HTTPException
+
+    from openlia_server.db.models.report_templates import ReportTemplate
+
+    row = ReportTemplate(
+        id="other-row",
+        user_id="u-2",
+        name="Other",
+        template_spec_json={
+            "template_id": "x",
+            "name": "x",
+            "shape_description": "x",
+            "ticker_anchored": True,
+            "sections": [
+                {"id": "a", "title": "A", "intent": "A.", "methodology_hints": []},
+            ],
+        },
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    with _pytest.raises(HTTPException) as exc:
+        start_run(
+            db=db_session,
+            runner_factory=_make_factory_for_template_tests(),
+            user_id="u-1",
+            raw_prompt="x",
+            language=Language.EN,
+            report_type=ReportType.INITIATION,
+            length=ReportLength.NORMAL,
+            tickers=["NVDA"],
+            template_id="other-row",
+        )
+    assert exc.value.status_code == 404
+
+
+def test_start_run_raises_422_when_stored_spec_is_invalid_v23_shape(db_session) -> None:
+    """When the stored row's JSON does not validate as a v2.3 TemplateSpec
+    (e.g. it's a v2-shaped row), surface a 422 with the validation
+    errors so the user knows to re-upload via the v2.3 flow."""
+    import pytest as _pytest
+    from fastapi import HTTPException
+
+    from openlia_server.db.models.report_templates import ReportTemplate
+
+    row = ReportTemplate(
+        id="legacy-v2",
+        user_id="u-1",
+        name="Legacy v2",
+        template_spec_json={"body_sections": [], "voice": "neutral"},  # v2 shape
+    )
+    db_session.add(row)
+    db_session.commit()
+
+    with _pytest.raises(HTTPException) as exc:
+        start_run(
+            db=db_session,
+            runner_factory=_make_factory_for_template_tests(),
+            user_id="u-1",
+            raw_prompt="x",
+            language=Language.EN,
+            report_type=ReportType.INITIATION,
+            length=ReportLength.NORMAL,
+            tickers=["NVDA"],
+            template_id="legacy-v2",
+        )
+    assert exc.value.status_code == 422

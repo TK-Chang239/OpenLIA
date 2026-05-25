@@ -20,6 +20,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
+from fastapi import HTTPException
 from openlia.llm.runtime.report_v2_3.events import RunnerEvent
 from openlia.llm.runtime.report_v2_3.persistence import StateNotFoundError
 from openlia.llm.runtime.report_v2_3.schemas import (
@@ -29,11 +30,13 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     ReportType,
 )
 from openlia.llm.runtime.report_v2_3.state import ReportState
-from openlia.llm.runtime.report_v2_3.templates import get_builtin
+from openlia.llm.runtime.report_v2_3.templates import TemplateSpec, get_builtin
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.er_v2_3_run_state import ErV23RunState
+from openlia_server.db.models.report_templates import ReportTemplate
 
 from .v2_3_runner_factory import V23RunnerFactory
 from .v2_3_state_store import SqlStateStore
@@ -61,6 +64,43 @@ class RunSummary:
     updated_at: datetime
 
 
+def _resolve_template(
+    db: DBSession,
+    user_id: str,
+    report_type: ReportType,
+    template_id: str | None,
+) -> TemplateSpec:
+    """Return the TemplateSpec for this run.
+
+    - ``template_id is None`` -> built-in for the ``report_type``
+    - ``template_id`` set -> load from ``report_templates``, owner-scoped,
+      validate as a v2.3 ``TemplateSpec``. 404 if not owned by the caller
+      (don't leak existence); 422 if the stored JSON does not validate
+      (e.g. a legacy v2 shape).
+    """
+    if template_id is None:
+        return get_builtin(report_type)
+    row = db.get(ReportTemplate, template_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="template not found")
+    try:
+        return TemplateSpec.model_validate(row.template_spec_json)
+    except ValidationError as err:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": (
+                    f"Template {template_id} is not a valid v2.3 TemplateSpec. "
+                    "Re-upload via the v2.3 template flow."
+                ),
+                "errors": [
+                    f"{'.'.join(str(p) for p in e['loc'])}: {e['msg']}"
+                    for e in err.errors()
+                ],
+            },
+        ) from err
+
+
 def start_run(
     *,
     db: DBSession,
@@ -82,6 +122,7 @@ def start_run(
     runner; the route layer typically passes a callback that pushes to
     a queue consumed by the SSE generator.
     """
+    template = _resolve_template(db, user_id, report_type, template_id)
     state = ReportState(
         run_id=str(uuid.uuid4()),
         user_id=user_id,
@@ -91,7 +132,7 @@ def start_run(
         length=length,
         template_id=template_id,
         tickers=tickers,
-        template=get_builtin(report_type),
+        template=template,
     )
     runner = runner_factory()
     state = runner.start(state, observer=observer)
