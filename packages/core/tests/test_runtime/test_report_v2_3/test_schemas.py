@@ -141,11 +141,6 @@ def test_research_bundle_add_rejects_duplicate_ids() -> None:
         bundle.add(BundleFact(id="x", label="X again", value=2.0, source=_data_source()))
 
 
-def test_research_bundle_requires_at_least_one_ticker() -> None:
-    with pytest.raises(ValidationError):
-        ResearchBundle(tickers=[])
-
-
 # ---------------------------------------------------------------------------
 # Valuation inputs / outputs
 # ---------------------------------------------------------------------------
@@ -556,3 +551,32 @@ def test_max_clarify_questions_symbol_not_importable_from_schemas():
         from openlia.llm.runtime.report_v2_3.schemas import (  # noqa: F401
             MAX_CLARIFY_QUESTIONS,
         )
+
+
+def test_outline_accepts_empty_tickers():
+    """Phase 3 relaxes Outline.tickers min_length from 1 to 0 so that
+    non-ticker-anchored reports (sector primers, macro themes) can
+    flow through the pipeline."""
+    from openlia.llm.runtime.report_v2_3.schemas import (
+        Outline,
+        OutlineSection,
+        ReportType,
+        ValuationPlan,
+    )
+
+    outline = Outline(
+        tickers=[],
+        report_type=ReportType.SECTOR_RESEARCH,
+        sections=[OutlineSection(id="primer", title="Primer")],
+        valuation_plan=ValuationPlan(),
+    )
+    assert outline.tickers == []
+
+
+def test_research_bundle_accepts_empty_tickers():
+    """Phase 3 relaxes ResearchBundle.tickers min_length from 1 to 0
+    so non-ticker-anchored runs produce valid bundles."""
+    from openlia.llm.runtime.report_v2_3.schemas import ResearchBundle
+
+    bundle = ResearchBundle(tickers=[], facts={})
+    assert bundle.tickers == []

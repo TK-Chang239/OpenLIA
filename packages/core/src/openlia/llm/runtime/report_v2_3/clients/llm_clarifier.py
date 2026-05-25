@@ -64,9 +64,16 @@ You have two jobs:
     expects (e.g. <TICKER> — bare US tickers; for
     non-US names use the EODHD form like "0700.HK", "005930.KS").
     If the request is genuinely topic-only and no specific tickers
-    are implied, return `inferred_tickers: []` AND ask via
-    `needs_input` what name/ticker the user wants the report anchored
-    to — most v2.3 stages assume at least one subject ticker.
+    are implied, return `inferred_tickers: []`. Then check
+    `template.ticker_anchored`:
+
+    - When `ticker_anchored` is true (the report is about a specific
+      name — initiation, update, earnings review), ask via
+      `needs_input` what name/ticker the user wants the report
+      anchored to.
+    - When `ticker_anchored` is false (the report is about a sector,
+      theme, or macro setup), proceed without asking — the template
+      expects no specific subject ticker.
 
 (2) DECIDE WHETHER TO ASK ANYTHING ELSE. If the prompt + template
     are coherent enough to write a good report from, proceed. Ask
@@ -104,8 +111,7 @@ including the case where you couldn't identify the subject ticker):
 Rules:
 - "outcome" MUST be "proceed" or "needs_input" (exact strings).
 - `inferred_tickers` is REQUIRED in the `proceed` shape, even if
-  empty (which should only happen on `needs_input`). Symbols only —
-  no descriptions, no exchange names.
+  empty. Symbols only — no descriptions, no exchange names.
 - Every question MUST include `id`, `question`, `why_blocking`, `default`.
   When the missing piece is the subject ticker, use id "ticker" so
   the runner knows to copy the answer into the run's ticker list.
@@ -125,6 +131,7 @@ def _to_user_payload(request: ClarifierRequest) -> dict[str, Any]:
         "template": {
             "id": request.report_type.value,
             "shape": request.template.shape_description,
+            "ticker_anchored": request.template.ticker_anchored,
         },
     }
 

@@ -74,8 +74,11 @@ class ReportState(BaseModel):
     # Subject tickers. Allowed to start empty when the run was kicked
     # off through the single-textarea composer; CLARIFY then extracts
     # them from `raw_prompt` and copies `inferred_tickers` here before
-    # PLAN. Stages downstream of CLARIFY may continue to assume this
-    # is non-empty.
+    # PLAN. For `ticker_anchored=True` templates CLARIFY guarantees this
+    # is non-empty before PLAN; for `ticker_anchored=False` templates
+    # (sector primers, macro themes) this stays empty through every
+    # stage and downstream code validates equality against `outline.tickers`
+    # rather than non-emptiness.
     tickers: list[str] = Field(default_factory=list)
     model_assignments: dict[V23Slot, str] = Field(
         default_factory=dict,

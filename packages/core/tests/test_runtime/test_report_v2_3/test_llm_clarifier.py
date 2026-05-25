@@ -140,3 +140,84 @@ def test_clarifier_prompt_no_longer_uses_nvda_as_example() -> None:
     LLM is not biased toward US semiconductor tickers."""
     assert "NVDA" not in SYSTEM_PROMPT
     assert "Nvidia" not in SYSTEM_PROMPT
+
+
+def test_clarifier_user_payload_includes_ticker_anchored_flag():
+    """The clarifier user payload must include the template's
+    ticker_anchored flag so the LLM can decide whether to force a
+    ticker question for topic-only prompts."""
+    from openlia.llm.runtime.report_v2_3.clients.clarifier import ClarifierRequest
+    from openlia.llm.runtime.report_v2_3.clients.llm_clarifier import (
+        _to_user_payload,
+    )
+    from openlia.llm.runtime.report_v2_3.schemas import Language, ReportType
+    from openlia.llm.runtime.report_v2_3.templates import (
+        SectionSpec,
+        TemplateSpec,
+    )
+
+    template = TemplateSpec(
+        template_id="custom_sector",
+        name="Custom sector",
+        shape_description="Sector primer.",
+        ticker_anchored=False,
+        sections=[SectionSpec(id="a", title="A", intent="A.")],
+    )
+    request = ClarifierRequest(
+        raw_prompt="lithium miners 2026 outlook",
+        language=Language.EN,
+        report_type=ReportType.SECTOR_RESEARCH,
+        tickers=[],
+        template=template,
+    )
+    payload = _to_user_payload(request)
+    assert payload["template"]["ticker_anchored"] is False
+
+
+def test_clarifier_user_payload_passes_true_when_template_is_anchored():
+    """Mirror of the above — ticker_anchored=True must also reach the
+    payload, since the conditional rule reads it both ways."""
+    from openlia.llm.runtime.report_v2_3.clients.clarifier import ClarifierRequest
+    from openlia.llm.runtime.report_v2_3.clients.llm_clarifier import (
+        _to_user_payload,
+    )
+    from openlia.llm.runtime.report_v2_3.schemas import Language, ReportType
+    from openlia.llm.runtime.report_v2_3.templates import (
+        SectionSpec,
+        TemplateSpec,
+    )
+
+    template = TemplateSpec(
+        template_id="custom_initiation",
+        name="Custom initiation",
+        shape_description="Initiation on a specific name.",
+        ticker_anchored=True,
+        sections=[SectionSpec(id="a", title="A", intent="A.")],
+    )
+    request = ClarifierRequest(
+        raw_prompt="Initiation on a name",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=[],
+        template=template,
+    )
+    payload = _to_user_payload(request)
+    assert payload["template"]["ticker_anchored"] is True
+
+
+def test_clarifier_prompt_references_ticker_anchored_flag():
+    """The CLARIFIER prompt must communicate the conditional rule
+    clearly. Phase 3 makes the forced-ticker question conditional
+    rather than universal."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_clarifier import (
+        SYSTEM_PROMPT,
+    )
+
+    # The prompt should reference the ticker_anchored flag explicitly,
+    # so future readers can trace why the forced-ticker question is
+    # conditional.
+    assert "ticker_anchored" in SYSTEM_PROMPT
+    # The old unconditional forced-ticker claim should be gone —
+    # "most v2.3 stages assume at least one subject ticker" was the
+    # rationale for the universal rule.
+    assert "most v2.3 stages assume" not in SYSTEM_PROMPT

@@ -123,6 +123,7 @@ _SECTOR_RESEARCH = TemplateSpec(
         "fundamentals, the competitive landscape and the cross-cutting "
         "themes that matter for stock selection."
     ),
+    ticker_anchored=False,
     default_length=ReportLength.ELABORATIVE,
     sections=[
         SectionSpec(
