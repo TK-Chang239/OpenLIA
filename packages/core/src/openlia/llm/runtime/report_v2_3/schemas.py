@@ -226,7 +226,7 @@ class BundleFact(BaseModel):
 class ResearchBundle(BaseModel):
     """Output of RESEARCH (+ COMPUTE). Every fact carries provenance already."""
 
-    tickers: list[str] = Field(..., min_length=1)
+    tickers: list[str] = Field(..., min_length=0)
     facts: dict[str, BundleFact] = Field(default_factory=dict)
 
     def add(self, fact: BundleFact) -> None:
@@ -465,7 +465,7 @@ class Outline(BaseModel):
     onto the thesis so writers and ASSEMBLE see one consistent record.
     """
 
-    tickers: list[str] = Field(..., min_length=1)
+    tickers: list[str] = Field(..., min_length=0)
     report_type: ReportType
     sections: list[OutlineSection]
     valuation_plan: ValuationPlan = Field(default_factory=ValuationPlan)
