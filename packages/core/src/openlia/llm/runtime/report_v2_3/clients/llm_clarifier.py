@@ -120,51 +120,14 @@ Rules:
 """.strip()
 
 
-# One-line shape sketch per built-in template. Fed to the LLM as
-# `template.shape` so it knows what kind of report it's clarifying for
-# (a morning_brief needs vastly different questions than an
-# initiation). Kept short — the planner generates the actual section
-# list later; CLARIFY only needs to know the report's character.
-_BUILTIN_TEMPLATE_SHAPES: dict[str, str] = {
-    "initiation": (
-        "Comprehensive initiation: business overview, financial profile, "
-        "competitive position, valuation (DCF + comps), risks, recommendation. "
-        "Long-form, written for someone who has not covered the name before."
-    ),
-    "update": (
-        "Targeted update on a name already covered: what changed since last "
-        "look, updated financials, refreshed valuation, revised stance. "
-        "Assumes prior context."
-    ),
-    "sector_research": (
-        "Sector / thematic deep-dive: industry dynamics, key players, "
-        "winners and losers, top picks. Comps and cross-company comparison "
-        "are central."
-    ),
-    "morning_brief": (
-        "Short morning note: headline news, market read, immediate "
-        "implications. Concise — bullet-density over prose."
-    ),
-    "earnings_review": (
-        "Earnings print review: beat/miss vs consensus, segment trends, "
-        "guidance, key questions answered/raised. Anchored to the most "
-        "recent quarter."
-    ),
-}
-
-
 def _to_user_payload(request: ClarifierRequest) -> dict[str, Any]:
-    shape = _BUILTIN_TEMPLATE_SHAPES.get(
-        request.report_type.value,
-        "Unspecified template — treat as a general equity-research report.",
-    )
     return {
         "raw_prompt": request.raw_prompt,
         "language": request.language.value,
         "tickers": request.tickers,
         "template": {
             "id": request.report_type.value,
-            "shape": shape,
+            "shape": request.template.shape_description,
         },
     }
 
@@ -180,6 +143,13 @@ class LLMClarifierClient(ClarifierClient):
 
     def __init__(self, json_call: JsonCall) -> None:
         self._json_call = json_call
+
+    @staticmethod
+    def _build_user_prompt(request: ClarifierRequest) -> str:
+        """Serialize the user-side payload as the JSON string the LLM
+        sees. Exposed so tests (and any future telemetry) can assert
+        the prompt contains the template's shape_description."""
+        return json.dumps(_to_user_payload(request), ensure_ascii=False, indent=2)
 
     def clarify(self, request: ClarifierRequest) -> ClarifyResult:
         # Time + log every LLM call so we can verify CLARIFY actually

@@ -20,6 +20,7 @@ from ..schemas import (
     ReportThesis,
     ResearchBundle,
 )
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -30,12 +31,16 @@ class SynthesizerRequest:
     (audience, horizon, report type) shape the thesis — the synthesizer must
     not invent them from scratch. The bundle and outline are the structural
     inputs; `language` controls the language the thesis must be written in.
+    `template` carries the per-section `intent` strings so the synthesizer
+    can ground each mandate's `covers` text in the user's stated intent
+    rather than the LLM's interpretation of the outline.
     """
 
     raw_prompt: str
     language: Language
     bundle: ResearchBundle
     outline: Outline
+    template: TemplateSpec
     clarify_result: ClarifyResult | None = None
 
 

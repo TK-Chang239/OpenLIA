@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..schemas import ClarifyResult, Language, Outline, ReportType
+from ..templates import TemplateSpec
 
 
 @dataclass(slots=True)
@@ -27,6 +28,7 @@ class PlannerRequest:
     language: Language
     report_type: ReportType
     tickers: list[str]
+    template: TemplateSpec
     clarify_result: ClarifyResult | None = None
 
 

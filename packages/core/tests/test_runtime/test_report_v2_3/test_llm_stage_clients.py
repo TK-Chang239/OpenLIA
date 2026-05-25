@@ -43,6 +43,15 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     VerifyResult,
     WrittenSection,
 )
+from openlia.llm.runtime.report_v2_3.templates import (
+    SectionSpec,
+    TemplateSpec,
+    get_builtin,
+)
+
+
+def _template() -> TemplateSpec:
+    return get_builtin(ReportType.INITIATION)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -156,6 +165,7 @@ def test_plan_validates_outline_and_passes_user_payload() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=_template(),
             clarify_result=ClarifyProceed(assumptions=["audience: PM"]),
         )
     )
@@ -179,6 +189,7 @@ def test_plan_wraps_validation_errors_with_fragment() -> None:
                 language=Language.EN,
                 report_type=ReportType.INITIATION,
                 tickers=["NVDA"],
+                template=_template(),
             )
         )
 
@@ -215,6 +226,7 @@ def test_plan_repairs_after_one_validation_failure() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=_template(),
         )
     )
     assert isinstance(outline, Outline)
@@ -250,6 +262,7 @@ def test_compute_dcf_returns_dcf_inputs() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(result, DCFInputs)
@@ -274,6 +287,7 @@ def test_compute_comps_returns_comps_inputs() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(result, CompsInputs)
@@ -305,6 +319,7 @@ def test_compute_sensitivity_returns_sensitivity_inputs() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(result, SensitivityInputs)
@@ -331,6 +346,7 @@ def test_compute_dcf_rejects_misaligned_paths() -> None:
                 language=Language.EN,
                 bundle=_bundle(),
                 outline=_outline(),
+                template=_template(),
             )
         )
 
@@ -366,6 +382,7 @@ def test_synthesize_returns_thesis() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert isinstance(thesis, ReportThesis)
@@ -455,6 +472,7 @@ def test_synthesize_repairs_chart_with_mixed_units() -> None:
             language=Language.EN,
             bundle=bundle,
             outline=_outline(),
+            template=_template(),
         )
     )
     assert thesis.charts == []
@@ -530,6 +548,7 @@ def test_synthesize_repairs_chart_with_phantom_fact_id() -> None:
             language=Language.EN,
             bundle=_bundle(),
             outline=_outline(),
+            template=_template(),
         )
     )
     assert len(thesis.charts) == 1
@@ -577,8 +596,75 @@ def test_synthesize_rejects_chart_for_unknown_section() -> None:
                 language=Language.EN,
                 bundle=_bundle(),
                 outline=_outline(),
+                template=_template(),
             )
         )
+
+
+def test_synthesize_payload_includes_template_section_intents():
+    """The synthesizer payload must surface each template section's
+    intent so the LLM can write mandate.covers text grounded in the
+    user's intent."""
+    import json
+
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _synthesize_payload,
+    )
+    from openlia.llm.runtime.report_v2_3.clients.synthesizer import (
+        SynthesizerRequest,
+    )
+    from openlia.llm.runtime.report_v2_3.schemas import (
+        Language,
+        Outline,
+        OutlineSection,
+        ReportType,
+        ResearchBundle,
+        ValuationPlan,
+    )
+    from openlia.llm.runtime.report_v2_3.templates import (
+        SectionSpec,
+        TemplateSpec,
+    )
+
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="alpha", title="Alpha", intent="UNIQUE_ALPHA_INTENT"),
+            SectionSpec(id="beta", title="Beta", intent="UNIQUE_BETA_INTENT"),
+        ],
+    )
+    request = SynthesizerRequest(
+        raw_prompt="initiate",
+        language=Language.EN,
+        bundle=ResearchBundle(tickers=["NVDA"], facts={}),
+        outline=Outline(
+            tickers=["NVDA"],
+            report_type=ReportType.INITIATION,
+            sections=[
+                OutlineSection(id="alpha", title="Alpha"),
+                OutlineSection(id="beta", title="Beta"),
+            ],
+            valuation_plan=ValuationPlan(),
+        ),
+        template=template,
+    )
+    payload = _synthesize_payload(request)
+
+    serialized = json.dumps(payload)
+    assert "UNIQUE_ALPHA_INTENT" in serialized
+    assert "UNIQUE_BETA_INTENT" in serialized
+
+
+def test_synthesize_system_prompt_references_template_intent():
+    """The SYNTHESIZE_SYSTEM_PROMPT must instruct the LLM to use the
+    template's section intent when authoring mandate.covers."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        SYNTHESIZE_SYSTEM_PROMPT,
+    )
+
+    assert "template" in SYNTHESIZE_SYSTEM_PROMPT.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +685,7 @@ def test_write_returns_section() -> None:
         WriterRequest(
             section_mandate=_thesis().mandates[0],
             thesis=_thesis(),
+            template=_template(),
             language=Language.EN,
             relevant_facts={"rev_ttm": _bundle().facts["rev_ttm"]},
             assigned_charts=[],
@@ -641,6 +728,7 @@ def test_write_forwards_prior_attempt_and_critique_on_retry() -> None:
         WriterRequest(
             section_mandate=_thesis().mandates[0],
             thesis=_thesis(),
+            template=_template(),
             language=Language.EN,
             relevant_facts={"rev_ttm": _bundle().facts["rev_ttm"]},
             assigned_charts=[],
@@ -651,6 +739,51 @@ def test_write_forwards_prior_attempt_and_critique_on_retry() -> None:
     user = captured[0]["user"]
     assert user["prior_attempt"]["body"] == "Old draft."
     assert user["critique"][0]["kind"] == IssueKind.VALUE_MISMATCH
+
+
+def test_write_payload_includes_template_section_intent():
+    """The writer payload must surface the matching template section's
+    intent so the LLM knows the user's intent for this section."""
+    import json
+
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _write_payload,
+    )
+
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="business", title="Business", intent="UNIQUE_BUSINESS_INTENT"),
+            SectionSpec(id="other", title="Other", intent="UNIQUE_OTHER_INTENT"),
+        ],
+    )
+    request = WriterRequest(
+        section_mandate=_thesis().mandates[0],  # section_id = "business"
+        thesis=_thesis(),
+        template=template,
+        language=Language.EN,
+        relevant_facts={"rev_ttm": _bundle().facts["rev_ttm"]},
+        assigned_charts=[],
+    )
+    payload = _write_payload(request)
+
+    assert payload["section_intent"] == "UNIQUE_BUSINESS_INTENT"
+    serialized = json.dumps(payload)
+    assert "UNIQUE_BUSINESS_INTENT" in serialized
+    # The non-matching section's intent should not bleed in.
+    assert "UNIQUE_OTHER_INTENT" not in serialized
+
+
+def test_write_system_prompt_references_section_intent():
+    """The WRITE_SYSTEM_PROMPT must instruct the writer to consume the
+    template section's intent when shaping prose."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    assert "intent" in WRITE_SYSTEM_PROMPT.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -669,6 +802,7 @@ def test_verify_returns_empty_when_clean() -> None:
             thesis=_thesis(),
             bundle=_bundle(),
             sections=[],
+            template=_template(),
         )
     )
     assert isinstance(result, VerifyResult)
@@ -696,6 +830,7 @@ def test_verify_must_rewrite_when_high_severity() -> None:
             thesis=_thesis(),
             bundle=_bundle(),
             sections=[],
+            template=_template(),
         )
     )
     assert result.must_rewrite is True
@@ -726,9 +861,107 @@ def test_all_clients_call_json_with_system_and_user_keywords() -> None:
             language=Language.EN,
             report_type=ReportType.INITIATION,
             tickers=["NVDA"],
+            template=_template(),
         )
     )
     # First-call shape check is enough to confirm the keyword contract.
     assert {"system", "user"} <= captured[0].keys()
     assert isinstance(captured[0]["system"], str)
     assert isinstance(captured[0]["user"], dict)
+
+
+# ---------------------------------------------------------------------------
+# PLAN — template-driven prompt (Task 6 of Phase 1)
+# ---------------------------------------------------------------------------
+
+
+def test_plan_system_prompt_no_longer_dictates_section_count():
+    """The '4-8 sections is the usual band' guidance must be gone —
+    section count is now the template's job, not a prompt opinion."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    assert "4-8" not in PLAN_SYSTEM_PROMPT
+    assert "usual band" not in PLAN_SYSTEM_PROMPT
+
+
+def test_plan_prompt_shape_round_trips_through_llm_planner_client():
+    """Guard against the silent-drop bug: the prompt's example JSON
+    shape must survive Pydantic validation with fact_ids intact. If
+    the prompt teaches one shape and the schema expects another, real
+    LLM output loses fact_ids — Pydantic's default 'ignore extras'
+    behavior drops them quietly."""
+    # The literal JSON the prompt instructs the LLM to emit.
+    llm_emitted_json = {
+        "tickers": ["NVDA"],
+        "report_type": "initiation",
+        "sections": [
+            {
+                "id": "overview",
+                "title": "Overview",
+                "data_needs": [
+                    {
+                        "description": "Recent revenue and segment mix",
+                        "expected_fact_ids": ["rev_ttm", "segment_mix"],
+                    }
+                ],
+            }
+        ],
+        "valuation_plan": {"methods": ["dcf"]},
+    }
+    call, _ = _capturing_call(llm_emitted_json)
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="overview", title="Overview", intent="A."),
+        ],
+    )
+    client = LLMPlannerClient(call)
+    outline = client.plan(
+        PlannerRequest(
+            raw_prompt="initiate",
+            language=Language.EN,
+            report_type=ReportType.INITIATION,
+            tickers=["NVDA"],
+            template=template,
+        )
+    )
+
+    assert len(outline.sections) == 1
+    section = outline.sections[0]
+    assert section.id == "overview"
+    assert len(section.data_needs) == 1
+    assert section.data_needs[0].expected_fact_ids == ["rev_ttm", "segment_mix"]
+    assert section.data_needs[0].description == "Recent revenue and segment mix"
+
+
+def test_plan_payload_includes_template_sections():
+    """The PLAN request payload sent to the LLM must include the
+    template's section list so the LLM knows what to fill in."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        _planner_payload,
+    )
+    from openlia.llm.runtime.report_v2_3.clients.planner import PlannerRequest
+
+    template = TemplateSpec(
+        template_id="t",
+        name="T",
+        shape_description="...",
+        sections=[
+            SectionSpec(id="alpha", title="Alpha", intent="A."),
+            SectionSpec(id="beta", title="Beta", intent="B."),
+        ],
+    )
+    req = PlannerRequest(
+        raw_prompt="initiate",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+        template=template,
+    )
+    payload = _planner_payload(req)
+    assert "template" in payload
+    assert [s["id"] for s in payload["template"]["sections"]] == ["alpha", "beta"]

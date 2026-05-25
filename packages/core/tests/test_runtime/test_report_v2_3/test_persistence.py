@@ -9,6 +9,7 @@ from openlia.llm.runtime.report_v2_3.persistence import (
 )
 from openlia.llm.runtime.report_v2_3.schemas import Language, ReportType
 from openlia.llm.runtime.report_v2_3.state import ReportState
+from openlia.llm.runtime.report_v2_3.templates import get_builtin
 
 
 def _state(run_id: str = "r-1") -> ReportState:
@@ -19,6 +20,7 @@ def _state(run_id: str = "r-1") -> ReportState:
         language=Language.EN,
         report_type=ReportType.INITIATION,
         tickers=["NVDA"],
+        template=get_builtin(ReportType.INITIATION),
     )
 
 
