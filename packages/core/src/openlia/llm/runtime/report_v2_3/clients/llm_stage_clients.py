@@ -166,7 +166,7 @@ def _call_with_repair(
 PLAN_SYSTEM_PROMPT = """
 You are the PLAN stage of the v2.3 equity-research engine. The user
 template supplies the section structure; your job is to fill each
-section with the fact_ids RESEARCH should fetch and to select the
+section with the data_needs RESEARCH should fetch and to select the
 valuation methods COMPUTE should run.
 
 Inputs you receive:
@@ -184,7 +184,12 @@ Output an Outline JSON object:
     {
       "id": "<copy from template.sections[i].id>",
       "title": "<copy from template.sections[i].title>",
-      "expected_fact_ids": ["rev_ttm", "rev_growth_yoy", ...]
+      "data_needs": [
+        {
+          "description": "<one-line note on what RESEARCH should fetch>",
+          "expected_fact_ids": ["rev_ttm", "rev_growth_yoy"]
+        }
+      ]
     },
     ...
   ],
@@ -197,9 +202,10 @@ Rules:
 - Produce one section per template.sections entry, in the same order,
   with the same `id` and `title`. The engine's coercer will fix drift,
   so be conservative — copy the structure verbatim.
-- Populate `expected_fact_ids` with stable identifier strings RESEARCH
-  will fetch and bind to the BundleFact map. Use snake_case ids like
-  `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
+- For each section, populate `data_needs` with one or more entries.
+  Each `data_needs[*].expected_fact_ids` is a list of stable identifier
+  strings RESEARCH will fetch and bind to the BundleFact map. Use
+  snake_case ids like `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
 - `valuation_plan.methods` lists the valuation methods COMPUTE should
   run. Choose from `dcf`, `comps`, `sensitivity` based on what the
   template's sections actually need (e.g. include `dcf` only when a
