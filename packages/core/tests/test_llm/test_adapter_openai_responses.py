@@ -699,6 +699,51 @@ async def test_generate_logs_web_search_outcome(caplog: pytest.LogCaptureFixture
     assert fail_lines and "rate_limited" in fail_lines[0] and "blocked query" in fail_lines[0]
 
 
+async def test_generate_logs_plural_queries_search(caplog: pytest.LogCaptureFixture) -> None:
+    """gpt-5.4 ``web_search_preview`` sends batch searches in
+    ``action.queries`` (plural list of strings), not ``action.query``.
+    The adapter must surface the actual queries in the log; the
+    earlier code read ``query`` and logged ``query=''`` for every
+    batch, which made real-run logs lie about what the model
+    searched for."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "queries": [
+                    "Eaton 2025 annual report segment revenue 10-k",
+                    "Eaton competitors Schneider Electric ABB peer comparison",
+                ],
+            },
+        }
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("INFO", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+
+    msgs = [r.message for r in caplog.records]
+    lines = [m for m in msgs if "action=search" in m and "queries=" in m]
+    assert lines
+    assert "Eaton 2025 annual report" in lines[0]
+    assert "Schneider Electric" in lines[0]
+
+    # The empty-query WARNING must NOT fire when queries is populated —
+    # otherwise every batch search would emit a false-positive diagnostic.
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert not any("empty query" in m for m in warns)
+
+
 async def test_generate_warns_on_empty_query_search(caplog: pytest.LogCaptureFixture) -> None:
     """An empty-query ``search`` action is the smoking gun for a model
     bypassing real search and falling back to ``open_page`` on
@@ -731,7 +776,7 @@ async def test_generate_warns_on_empty_query_search(caplog: pytest.LogCaptureFix
         )
 
     warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
-    assert any("empty query on search action" in m for m in warns)
+    assert any("empty query AND empty queries" in m for m in warns)
     assert any("raw action keys=" in m for m in warns)
 
 

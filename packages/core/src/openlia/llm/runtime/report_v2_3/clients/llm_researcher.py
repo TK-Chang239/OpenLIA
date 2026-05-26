@@ -167,13 +167,15 @@ How you work:
      ``get_company_news``). These return numbers + provider ids
      (``tc_abc123``).
    - `source_class: narrative` — satisfy with ``web_search``. For any
-     fact derived from a web hit, set ``evidence_id`` to the ``web_N``
-     id of the result you used, taken from the most recent "Web
-     search results so far" system note. You cannot cite a web source
-     you did not retrieve this run: a ``web_N`` id exists only after
-     a real search returns it, and raw URLs are NOT accepted as
-     evidence_ids. Quote a short verbatim snippet so VERIFY can
-     value-match.
+     fact derived from a web hit, set ``evidence_id`` to EITHER the
+     ``web_N`` id of the result you used (from the most recent "Web
+     search results so far" system note) OR the exact URL of the
+     result, verbatim and including the scheme. Both forms resolve
+     through the same runtime map — pick whichever the model has
+     in context. You cannot cite a web source you did not retrieve
+     this run: a URL or ``web_N`` you did not actually fetch will
+     not resolve and the fact will be dropped. Quote a short
+     verbatim snippet so VERIFY can value-match.
    - `source_class: either` — pick whichever tool family fits the
      specific fact. Default to data tools for anything reported in
      financial statements; default to web_search for anything that
@@ -262,16 +264,20 @@ Rules:
   that returned the number) OR both `computed_from` (list of other
   fact ids in this batch) AND `method` (one-line description).
 - `evidence_id` MUST be a real reference the runtime can resolve.
-  Two forms are accepted:
+  Three forms are accepted:
     (a) A tool-call id from a prior `tool` message (looks like
         `tc_abc123` / `call_xyz789` — the provider's call id).
     (b) A `web_N` id from a "Web search results so far" system note
         this run.
-  Do NOT emit a raw URL as an evidence_id. A URL is something you
-  can reconstruct from memory; a `web_N` id is something only a real
-  search produces, so `web_N` is the only accepted web handle. If
-  you cannot point a fact's evidence_id at one of these two forms,
-  omit the fact.
+    (c) The exact URL of a web result you retrieved this run —
+        verbatim, including the scheme. The runtime resolves the URL
+        through the same `web_N` map you see in the system note;
+        URLs you did NOT retrieve will not resolve and the fact will
+        be dropped. Do not invent or paraphrase URLs.
+  OpenAI's own internal step labels (e.g. `turn0search0`,
+  `turn1view2`) are NOT valid evidence_ids — those are private to
+  the search agent and the runtime cannot resolve them. Use one of
+  the three forms above. If you cannot, omit the fact.
 - `computed_from` entries MUST reference fact ids you also emit IN THE
   SAME `facts` array. Each id you list under `computed_from` must be
   the id of another fact in this batch (e.g. `gross_profit_history_proxy`
@@ -412,11 +418,18 @@ class LLMResearcherClient(ResearcherClient):
         """Convert provider-native URL citations into evidence_id-addressable
         WebSource provenance entries.
 
-        OpenAI's native web_search inlines url_citation annotations on the
-        response text. We assign each unique URL a stable id of the form
-        ``web_1``, ``web_2`` …, in first-seen order across the entire run.
-        The system prompt tells the LLM those exact strings are valid
-        ``evidence_id`` values for facts derived from web hits.
+        OpenAI's native web_search inlines url_citation annotations and
+        emits ``web_search_call`` items whose ``action`` blocks expose
+        the URLs the model retrieved. We assign each unique URL a stable
+        id of the form ``web_1``, ``web_2`` …, in first-seen order across
+        the entire run, and we ALSO key the same Provenance entry by the
+        URL itself (and by the URL with toggled trailing slash). This is
+        what lets the model cite a web result by ``web_N`` OR by the
+        verbatim URL — both forms resolve to the same WebSource. URL
+        aliasing is safe because the ``evidence`` dict is populated
+        exclusively from URLs the adapter extracted from a real
+        ``web_search_call.action`` payload — there is no path for a
+        fabricated URL to land here without an actual search returning it.
         """
         for cite in citations:
             url = cite.url
@@ -426,13 +439,20 @@ class LLMResearcherClient(ResearcherClient):
                 continue
             web_id = f"web_{len(url_to_id) + 1}"
             url_to_id[url] = web_id
-            evidence[web_id] = WebSource(
+            source = WebSource(
                 url=url,
                 title=cite.title,
                 publisher=cite.source,
                 snippet=cite.snippet or (cite.title or url),
                 retrieved_at=datetime.now(UTC),
             )
+            evidence[web_id] = source
+            # URL aliases: model may cite by the literal URL it
+            # retrieved. Toggle the trailing slash so LLMs that
+            # normalize either way still resolve.
+            evidence[url] = source
+            alt = url.rstrip("/") if url.endswith("/") else url + "/"
+            evidence[alt] = source
 
     def _execute_tool_call(self, call: ToolCall) -> tuple[Message, Provenance | None]:
         tool = self._tools.get(call.name)
@@ -611,8 +631,10 @@ def _format_web_search_note(url_to_id: dict[str, str]) -> str:
         by_pub = ", ".join(f"{host}={n}" for host, n in hist.items())
         lines.append(f"By publisher: {by_pub}")
     lines.append(
-        "Cite a web fact only with one of the `web_N` ids above. Raw "
-        "URLs are not accepted as `evidence_id`."
+        "Cite a web fact with either a `web_N` id above or the exact "
+        "URL — both resolve through the same map. URLs not in this "
+        "list will not resolve. OpenAI internal step labels "
+        "(`turn0search0`, `turn1view2`, etc.) are not accepted."
     )
     return "\n".join(lines)
 
@@ -690,7 +712,7 @@ def _build_fact(
         if evidence_id not in evidence:
             raise RuntimeError(
                 f"Fact {fid!r}: evidence_id {evidence_id!r} does not match any "
-                f"tool call or web_N id (raw URLs are not accepted)."
+                f"tool call, web_N id, or URL the runtime harvested this run."
             )
         source = evidence[evidence_id]
     elif computed_from:

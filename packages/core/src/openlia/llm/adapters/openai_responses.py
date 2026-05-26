@@ -175,6 +175,18 @@ def _action_urls(action: dict) -> list[str]:
                 u = src.get("url")
                 if isinstance(u, str):
                     candidates.append(u)
+        # gpt-5.4 sends batch searches as ``queries: [str, ...]`` — no
+        # nested sources observed yet, but defensively walk for them in
+        # case OpenAI starts surfacing per-query result URLs at that
+        # nesting depth; today this loop is a no-op when ``queries`` is
+        # a flat list of strings.
+        for q in action.get("queries") or []:
+            if isinstance(q, dict):
+                for src in q.get("sources") or []:
+                    if isinstance(src, dict) and src.get("type") == "url":
+                        u = src.get("url")
+                        if isinstance(u, str):
+                            candidates.append(u)
     elif action_type in ("open_page", "find_in_page"):
         u = action.get("url")
         if isinstance(u, str):
@@ -242,6 +254,12 @@ def _parse_responses_output(
         elif itype == "web_search_call":
             action = item.get("action") or {}
             query = str(action.get("query", ""))
+            queries_raw = action.get("queries")
+            queries: list[str] = (
+                [str(q) for q in queries_raw if isinstance(q, str)]
+                if isinstance(queries_raw, list)
+                else []
+            )
             action_type = str(action.get("type", "search"))
             page_url = str(action.get("url", ""))
             pattern = str(action.get("pattern", ""))
@@ -250,14 +268,15 @@ def _parse_responses_output(
                 err = item.get("error") or {}
                 error_code = str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
                 log.warning(
-                    "openai web_search FAILED: action=%s query=%r error=%s",
+                    "openai web_search FAILED: action=%s query=%r queries=%r error=%s",
                     action_type,
                     query,
+                    queries,
                     error_code,
                 )
                 failures.append(
                     FailedSearch(
-                        query=query,
+                        query=query or (queries[0] if queries else ""),
                         error_kind="server_error",
                         error_message=error_code,
                         turn_idx=0,
@@ -266,20 +285,27 @@ def _parse_responses_output(
             else:
                 urls = _action_urls(action)
                 if action_type == "search":
-                    log.info(
-                        "openai web_search ok: action=search query=%r urls=%d",
-                        query,
-                        len(urls),
-                    )
-                    # An empty-query search is the smoking gun for a model
-                    # that is bypassing real search and falling back to
-                    # open_page on training-set URLs. Dump the raw action
-                    # so we can confirm whether the query field name is
-                    # right or the model genuinely issued no query.
-                    if not query.strip():
+                    # gpt-5.4 Responses sends batch searches in
+                    # ``action.queries`` (plural list). Older single-shot
+                    # callers use ``action.query`` (singular string).
+                    # Show whichever is populated; the empty-query
+                    # diagnostic only fires when BOTH are empty.
+                    if queries:
+                        log.info(
+                            "openai web_search ok: action=search queries=%s urls=%d",
+                            queries,
+                            len(urls),
+                        )
+                    else:
+                        log.info(
+                            "openai web_search ok: action=search query=%r urls=%d",
+                            query,
+                            len(urls),
+                        )
+                    if not query.strip() and not queries:
                         log.warning(
-                            "openai web_search: empty query on search action; "
-                            "raw action keys=%s payload=%s",
+                            "openai web_search: empty query AND empty queries on search "
+                            "action; raw action keys=%s payload=%s",
                             sorted(action.keys()),
                             json.dumps(action, default=str)[:500],
                         )

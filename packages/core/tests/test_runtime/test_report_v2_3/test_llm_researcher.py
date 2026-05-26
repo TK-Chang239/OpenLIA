@@ -650,10 +650,15 @@ def _web_cite(url: str, title: str = "T", snippet: str = "S") -> Citation:
     return Citation(id="c1", kind="web", url=url, title=title, snippet=snippet, source="Test")
 
 
-def test_url_form_evidence_id_is_rejected() -> None:
-    """Raw URLs are reconstructable from pretraining — only ``web_N`` is
-    accepted as a web evidence_id. A fact citing the URL form is dropped
-    even when the URL was harvested from a real citation."""
+def test_url_form_evidence_id_resolves_via_harvested_map() -> None:
+    """When the model cites a web fact by the verbatim URL it
+    retrieved this run, the runtime must resolve the URL through the
+    same map that backs ``web_N``. This is necessary because gpt-5.4's
+    ``web_search_preview`` is intra-turn agentic — all the web actions
+    happen inside one LLM response, and the model writes its final
+    JSON in the same response, so it never sees the ``web_N`` mapping
+    we inject between turns. The URL form is the model's only
+    grounded handle when the search and the final JSON share a turn."""
     url = "https://example.com/article"
     llm = FakeToolLLMClient(
         turns=[
@@ -672,6 +677,68 @@ def test_url_form_evidence_id_is_rejected() -> None:
                 ),
                 tool_calls=(),
                 citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+    fact = bundle.facts["qual_pos"]
+    assert isinstance(fact.source, WebSource)
+    assert fact.source.url == url
+
+
+def test_url_form_with_toggled_trailing_slash_resolves() -> None:
+    """LLMs commonly normalize trailing punctuation on URLs. The
+    runtime must resolve both ``https://x/a`` and ``https://x/a/``
+    when only one form was harvested."""
+    canonical = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "qual",
+                                "label": "Qualitative",
+                                "value": "x",
+                                # Trailing slash added by the model.
+                                "evidence_id": canonical + "/",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(canonical),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+    assert isinstance(bundle.facts["qual"].source, WebSource)
+
+
+def test_url_not_in_harvest_map_drops_fact() -> None:
+    """A URL the model never actually fetched this run cannot resolve.
+    This is the load-bearing safety check that makes URL acceptance
+    safe — the harvest map is populated exclusively from real
+    ``web_search_call.action`` payloads, so a fabricated URL fails
+    to resolve and the fact drops."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "halluc",
+                                "label": "Hallucinated",
+                                "value": "x",
+                                "evidence_id": "https://no-such-source.example/never-fetched",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite("https://example.com/real"),),
             ),
         ]
     )
@@ -736,6 +803,36 @@ def test_unknown_web_n_id_drops_fact() -> None:
         researcher.research(_request())
 
 
+def test_openai_internal_step_id_drops_fact() -> None:
+    """gpt-5.4's ``web_search_preview`` agent labels its own internal
+    actions with strings like ``turn0search0``, ``turn1view2``. Those
+    are private to the search agent and the runtime cannot resolve
+    them — they should drop the fact loudly, not silently masquerade
+    as a valid handle."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "segment_mix",
+                                "label": "Segment mix",
+                                "value": "AI infra dominant",
+                                "evidence_id": "turn1view2",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite("https://example.com/real"),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no usable facts"):
+        researcher.research(_request())
+
+
 def test_system_text_carries_web_n_mapping_after_harvest() -> None:
     """The cumulative ``web_N → URL`` mapping must live in the per-turn
     system text — that way it cannot scroll out under later tool turns
@@ -762,7 +859,13 @@ def test_system_text_carries_web_n_mapping_after_harvest() -> None:
     assert "(newest last):" in llm.systems[1]
     assert "web_1" in llm.systems[1]
     assert url in llm.systems[1]
-    assert "Raw URLs are not accepted" in llm.systems[1]
+    # The note must say plainly that BOTH web_N and the exact URL
+    # resolve, and call out the failure mode for OpenAI internal
+    # step labels so a model that picks them up from context knows
+    # to switch.
+    assert "either a `web_N` id" in llm.systems[1]
+    assert "the exact URL" in llm.systems[1]
+    assert "turn0search0" in llm.systems[1]
     assert "By publisher: example.com=1" in llm.systems[1]
 
 
@@ -823,16 +926,37 @@ def test_system_text_carries_mapping_on_every_turn_after_harvest() -> None:
     assert "web_1" in llm.systems[2]
 
 
-def test_research_prompt_forbids_url_as_evidence_id() -> None:
-    """The prompt must say plainly that URLs are not accepted — removing
-    the forgeable shortcut so the model cannot reach a WebSource handle
-    without an actual search returning it."""
+def test_research_prompt_accepts_url_as_evidence_id_when_resolvable() -> None:
+    """gpt-5.4 ``web_search_preview`` is intra-turn agentic — the model
+    has the URL it just retrieved in its own context but never sees the
+    ``web_N`` we mint, because we harvest URLs and the model writes its
+    final JSON in the same response. Banning URLs outright (the prior
+    rule) forced the model to fall back to OpenAI's private step
+    labels (``turn0search0``), which the runtime cannot resolve. The
+    prompt now states that URL is an accepted form, with the load-
+    bearing qualifier that the runtime resolves only URLs it actually
+    harvested this run."""
     from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
         SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
     )
 
-    assert "Do NOT emit a raw URL as an evidence_id" in RESEARCH_SYSTEM_PROMPT
-    assert "web_N` is the only accepted web handle" in RESEARCH_SYSTEM_PROMPT
+    assert "Three forms are accepted" in RESEARCH_SYSTEM_PROMPT
+    assert "The exact URL of a web result you retrieved this run" in RESEARCH_SYSTEM_PROMPT
+    assert "URLs you did NOT retrieve will not resolve" in RESEARCH_SYSTEM_PROMPT
+
+
+def test_research_prompt_rejects_openai_internal_step_labels() -> None:
+    """The prompt must call out OpenAI's private step labels
+    (``turn0search0``, ``turn1view2``) as invalid evidence_ids so the
+    model is steered toward ``web_N`` / URL instead of falling back to
+    its agentic-mode internal convention."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "turn0search0" in RESEARCH_SYSTEM_PROMPT
+    assert "turn1view2" in RESEARCH_SYSTEM_PROMPT
+    assert "NOT valid evidence_ids" in RESEARCH_SYSTEM_PROMPT
 
 
 def test_research_prompt_binds_fact_id_to_expected_fact_ids() -> None:
