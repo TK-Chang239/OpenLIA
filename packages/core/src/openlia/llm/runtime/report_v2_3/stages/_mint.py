@@ -115,9 +115,29 @@ def mint_inline_facts(
                 label=_label_from_id(new_id),
             )
         except DerivationError as exc:
-            raise MintError(
-                f"DERIVE: {method_name} failed in section '{mandate.section_id}': {exc}"
-            ) from exc
+            # Soft-fail: the writer LLM emitted a derive whose inputs the
+            # registered method cannot run on — most commonly a ratio
+            # against a non-scalar fact (BundleSeries for a segment
+            # breakdown or a time-series), or a divide-by-zero. Failing
+            # the whole stage over one bad marker drops the entire
+            # report; instead, fall back to a CITE on the first input
+            # and let the section ship. The input was already confirmed
+            # present in the bundle on the existence check above, so
+            # the fallback CITE is guaranteed to resolve. VERIFY's
+            # deterministic uncited-number check still picks up
+            # anything the writer's prose left dangling.
+            fallback_id = input_ids[0]
+            log.warning(
+                "DERIVE soft-fail: %s on inputs %s in section %r — "
+                "falling back to {{CITE:%s}}. Cause: %s",
+                method_name,
+                list(input_ids),
+                mandate.section_id,
+                fallback_id,
+                exc,
+            )
+            seen_markers[new_id] = raw
+            return f"{{{{CITE:{fallback_id}}}}}"
         new_facts.append(fact)
         seen_markers[new_id] = raw
         return f"{{{{CITE:{new_id}}}}}"
