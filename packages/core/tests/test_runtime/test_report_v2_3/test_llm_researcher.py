@@ -756,11 +756,14 @@ def test_system_text_carries_web_n_mapping_after_harvest() -> None:
     # header instead.
     assert "(newest last):" not in llm.systems[0]
     # Turn 2 system text must carry the harvested mapping AND the
-    # explicit reminder that raw URLs are not accepted.
+    # explicit reminder that raw URLs are not accepted AND the
+    # publisher histogram (step 5 of the narrative-search procedure
+    # needs a concrete dominance signal to read).
     assert "(newest last):" in llm.systems[1]
     assert "web_1" in llm.systems[1]
     assert url in llm.systems[1]
     assert "Raw URLs are not accepted" in llm.systems[1]
+    assert "By publisher: example.com=1" in llm.systems[1]
 
 
 def test_system_text_carries_mapping_on_every_turn_after_harvest() -> None:
@@ -842,6 +845,124 @@ def test_research_prompt_binds_fact_id_to_expected_fact_ids() -> None:
 
     assert "expected_fact_ids" in RESEARCH_SYSTEM_PROMPT
     assert "verbatim" in RESEARCH_SYSTEM_PROMPT
+
+
+def test_research_prompt_teaches_claim_classification_before_search() -> None:
+    """The narrative-search guidance must teach a reasoning procedure
+    that operates on the structure of the claim (so it transfers to
+    tickers, sectors, and source landscapes the prompt never enumerated)
+    instead of listing approved publishers. The five-step procedure —
+    classify, locate authority, check interested party, triangulate,
+    steer by results — must be present verbatim enough that a refactor
+    that quietly drops a step is caught here."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "CLAIM TYPE" in RESEARCH_SYSTEM_PROMPT
+    assert "WHERE AUTHORITY LIVES" in RESEARCH_SYSTEM_PROMPT
+    assert "INTERESTED PARTY" in RESEARCH_SYSTEM_PROMPT
+    assert "TRIANGULATE" in RESEARCH_SYSTEM_PROMPT
+    assert "STEER THE NEXT QUERY BY YOUR RESULTS" in RESEARCH_SYSTEM_PROMPT
+
+
+def test_research_prompt_carries_interested_party_caveat() -> None:
+    """The single most load-bearing line for source diversity: the
+    subject company is authoritative for what it SAID, but the
+    weakest source for whether a claim is true. Dropping this line
+    reverts to a publisher-list prompt that does not transfer."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    # Phrase wraps across a line break; assert each fragment separately.
+    assert "authoritative for" in RESEARCH_SYSTEM_PROMPT
+    assert "what management SAID" in RESEARCH_SYSTEM_PROMPT
+    assert "weakest source" in RESEARCH_SYSTEM_PROMPT
+    assert "no stake in the answer" in RESEARCH_SYSTEM_PROMPT
+
+
+def test_research_prompt_includes_one_worked_trace_not_a_menu() -> None:
+    """The procedure is taught with exactly one worked example so the
+    model generalizes the SHAPE of the reasoning instead of interpolating
+    from a menu of canned examples. Guards against future PRs that
+    'helpfully' add more examples and dilute the lever."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "Worked example" in RESEARCH_SYSTEM_PROMPT
+    assert "antitrust exposure" in RESEARCH_SYSTEM_PROMPT
+    # Exactly one worked example — anyone adding a second should think
+    # about whether the procedure is still being taught or just enumerated.
+    assert RESEARCH_SYSTEM_PROMPT.count("Worked example") == 1
+
+
+def test_research_prompt_requires_classification_to_be_written() -> None:
+    """The reasoning is load-bearing only if the model writes it down.
+    Without a visibility requirement the procedure becomes optional
+    inner-monologue the runtime cannot audit. The prompt must require
+    the model to surface the claim type, the target source, and the
+    interested-party check in the assistant text of the search turn."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "in the assistant text" in RESEARCH_SYSTEM_PROMPT
+    assert "claim type" in RESEARCH_SYSTEM_PROMPT
+    assert "interested party" in RESEARCH_SYSTEM_PROMPT
+
+
+def test_research_prompt_does_not_enumerate_publishers() -> None:
+    """A publisher list goes stale, is always incomplete, and does not
+    transfer to foreign issuers or macro claims. The procedure replaces
+    the list entirely — this test guards against a regression that
+    re-adds 'Bloomberg / Reuters / WSJ / FT' style enumerations."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    for outlet in ("Bloomberg", "Reuters", "Wall Street Journal", "Financial Times"):
+        assert outlet not in RESEARCH_SYSTEM_PROMPT, (
+            f"prompt should not enumerate {outlet} — teach the procedure, not the destinations"
+        )
+
+
+def test_web_search_note_renders_per_publisher_count() -> None:
+    """Step 5 of the procedure ('steer the next query by your results')
+    needs a concrete signal to read — a feeling about dominance is not
+    something the model can act on. The mapping note must include a
+    `By publisher: host=count` line whenever any URL has been
+    harvested, grouped by registrable host and sorted by URL count."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        _format_web_search_note,
+    )
+
+    url_to_id = {
+        "https://investor.rocketlab.com/news/a": "web_1",
+        "https://investor.rocketlab.com/news/b": "web_2",
+        "https://www.rocketlab.com/about/c": "web_3",
+        "https://www.sec.gov/Archives/edgar/data/d": "web_4",
+    }
+    note = _format_web_search_note(url_to_id)
+    # All three rocketlab subdomains collapse to the registrable host,
+    # so the dominance signal is unambiguous: 3 vs 1.
+    assert "By publisher: " in note
+    assert "rocketlab.com=" in note or "investor.rocketlab.com=" in note
+    assert "sec.gov=1" in note
+
+
+def test_web_search_note_omits_publisher_line_when_empty() -> None:
+    """No URLs harvested → no histogram line. The mapping note's primary
+    job is still to enumerate `web_N` ids; the publisher line is a
+    helper for diversity steering and should not appear when there is
+    nothing to steer."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        _format_web_search_note,
+    )
+
+    note = _format_web_search_note({})
+    assert "By publisher" not in note
 
 
 def test_research_logs_per_turn_tool_and_citation_counts(

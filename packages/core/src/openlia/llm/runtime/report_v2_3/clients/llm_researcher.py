@@ -185,11 +185,43 @@ How you work:
    class permitted for it returned nothing — and prefer reporting back
    a smaller fact than silently omitting one.
 
-   Each `narrative` data_need typically warrants its own
-   ``web_search`` call with a distinct query phrased for that
-   specific need. Vary your queries across publishers — one search
-   returns at most one source family, and the coverage check counts
-   a need as satisfied only when a fact bound to one of its
+   For each `narrative` data_need, reason about the claim before
+   you search:
+
+   1. CLAIM TYPE — is this a reported fact, a current status, a
+      regulatory or legal matter, an evaluative or contested
+      judgment, or a forward-looking expectation?
+   2. WHERE AUTHORITY LIVES — the most primary source that can
+      settle a claim of THIS kind beats commentary about it: a
+      filing, a regulator's release, a court docket, a transcript.
+   3. INTERESTED PARTY — the subject company is authoritative for
+      what management SAID, but it is the weakest source for
+      whether a claim is true or how risky it is. For anything
+      evaluative or contested, you need at least one source with
+      no stake in the answer.
+   4. TRIANGULATE — when the claim is contested, look for the
+      strongest opposing view on purpose, not just confirmation.
+   5. STEER THE NEXT QUERY BY YOUR RESULTS — the "Web search
+      results so far" system note lists harvested URLs and a
+      per-publisher count. If your hits converge on one publisher
+      or one framing, that is the signal to change angle — query
+      the regulator, the counterparty, or the document type, not
+      a reworded version of the same search.
+
+   Write one or two sentences in the assistant text of the turn
+   where you issue the ``web_search``, naming the claim type, the
+   source you are targeting, and whether that source is an
+   interested party. This is how the runtime audits whether the
+   reasoning ran.
+
+   Worked example — data_need ``antitrust exposure``:
+   This is a regulatory-status claim. The regulator's release or
+   the court docket is the primary source; the subject company's
+   statement counts only as "how it characterizes the matter," so
+   corroborate with an independent wire. Query the regulator and
+   the event — not "<Company> antitrust."
+
+   Coverage is counted only when a fact bound to one of a need's
    `expected_fact_ids` carries web provenance.
 
    Fundamentals are point-in-time as of the fetch date — structured
@@ -563,10 +595,21 @@ def _system_text(url_to_id: dict[str, str]) -> str:
 
 
 def _format_web_search_note(url_to_id: dict[str, str]) -> str:
-    """Render the running ``web_N`` index for the system text."""
+    """Render the running ``web_N`` index for the system text.
+
+    Includes a per-publisher histogram line so the model can apply
+    step 5 of the narrative-search procedure (steer the next query by
+    your results). A model that sees ``By publisher: rocketlab.com=8``
+    has a concrete signal — not just a feeling — that its evidence
+    pool is single-source and the next search should change angle.
+    """
     lines = ["Web search results so far (newest last):"]
     for url, web_id in url_to_id.items():
         lines.append(f"- {web_id}: {url}")
+    hist = _publisher_histogram(url_to_id)
+    if hist:
+        by_pub = ", ".join(f"{host}={n}" for host, n in hist.items())
+        lines.append(f"By publisher: {by_pub}")
     lines.append(
         "Cite a web fact only with one of the `web_N` ids above. Raw "
         "URLs are not accepted as `evidence_id`."
