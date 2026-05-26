@@ -744,6 +744,45 @@ async def test_generate_logs_plural_queries_search(caplog: pytest.LogCaptureFixt
     assert not any("empty query" in m for m in warns)
 
 
+async def test_generate_warns_on_unknown_output_item_type(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The adapter is forward-compatible — unknown item types must not
+    crash the parser — but a silent drop hides shape changes we care
+    about (e.g. OpenAI surfacing search-result URLs under a new item
+    type instead of ``web_search_call.action.sources``). A WARNING
+    line per unknown type gives us ground truth on what the API is
+    actually returning, so a missing-URL symptom no longer requires
+    re-running with a network sniffer to diagnose."""
+    output = [
+        {
+            "type": "web_search_result",  # hypothetical future shape
+            "id": "wsr_1",
+            "results": [{"url": "https://example.com/a", "title": "A"}],
+        },
+        {
+            "role": "assistant",
+            "type": "message",
+            "content": [{"type": "output_text", "text": "ok"}],
+        },
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("WARNING", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        resp = await _adapter().generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+
+    # Parser still produces a usable response — the unknown item is
+    # surfaced via the log, not by failing the call.
+    assert resp.text == "ok"
+
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert any("unknown output item" in m for m in warns)
+    assert any("web_search_result" in m for m in warns)
+    assert any("keys=" in m for m in warns)
+
+
 async def test_generate_warns_on_empty_query_search(caplog: pytest.LogCaptureFixture) -> None:
     """An empty-query ``search`` action is the smoking gun for a model
     bypassing real search and falling back to ``open_page`` on

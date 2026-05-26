@@ -355,8 +355,23 @@ def _parse_responses_output(
                             source="OpenAI Web Search",
                         )
                     )
-        # Unknown item types ignored — forward-compatible with future
-        # OpenAI Responses additions.
+        else:
+            # Forward-compatible: we don't fail on unknown item types,
+            # but we surface them so a real-run log will reveal any
+            # payload shape we're not parsing. If OpenAI starts
+            # exposing search-result URLs under a new item type
+            # (instead of nested under ``web_search_call.action``),
+            # the missing-URL symptom would otherwise be invisible.
+            try:
+                preview = json.dumps(item, default=str)[:500]
+            except (TypeError, ValueError):
+                preview = repr(item)[:500]
+            log.warning(
+                "openai responses: unknown output item type=%r keys=%s preview=%s",
+                itype,
+                sorted(item.keys()) if isinstance(item, dict) else [],
+                preview,
+            )
     return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
 
 
