@@ -150,6 +150,40 @@ def _to_responses_input(messages: list[Message]) -> list[dict]:
     return items
 
 
+def _action_urls(action: dict) -> list[str]:
+    """Extract every URL referenced by a ``web_search_call.action`` block.
+
+    The OpenAI Responses API exposes three action shapes (see
+    ``openai-python``: ``ResponseFunctionWebSearch.Action``):
+        - ``{type:"search", sources:[{type:"url", url}], ...}``
+        - ``{type:"open_page", url}``
+        - ``{type:"find_in_page", url}``
+    All three carry URLs the model actually saw. We dedupe in-order and
+    skip blanks so the caller can mint one Citation per unique URL.
+    """
+    urls: list[str] = []
+    seen: set[str] = set()
+    action_type = action.get("type")
+    candidates: list[str] = []
+    if action_type == "search":
+        for src in action.get("sources") or []:
+            if isinstance(src, dict) and src.get("type") == "url":
+                u = src.get("url")
+                if isinstance(u, str):
+                    candidates.append(u)
+    elif action_type in ("open_page", "find_in_page"):
+        u = action.get("url")
+        if isinstance(u, str):
+            candidates.append(u)
+    for u in candidates:
+        u = u.strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        urls.append(u)
+    return urls
+
+
 def _parse_responses_output(
     output: list[dict],
 ) -> tuple[
@@ -224,6 +258,28 @@ def _parse_responses_output(
                         turn_idx=0,
                     )
                 )
+                # Extract the URLs the model actually saw during this
+                # web_search call. The `url_citation` annotation path
+                # (above) only fires when the model writes narrative
+                # text — JSON-only outputs produce zero annotations
+                # even when search ran. The action object is the
+                # authoritative source of which URLs were involved:
+                #   - search:       action.sources[*].url
+                #   - open_page:    action.url
+                #   - find_in_page: action.url
+                # We emit one Citation per unique URL so downstream
+                # callers (e.g. v2.3 _harvest_web_citations) can build
+                # a web_N index regardless of output shape.
+                for action_url in _action_urls(action):
+                    cit_counter += 1
+                    citations.append(
+                        Citation(
+                            id=f"c{cit_counter}",
+                            kind="web",
+                            url=action_url,
+                            source="OpenAI Web Search",
+                        )
+                    )
         # Unknown item types ignored — forward-compatible with future
         # OpenAI Responses additions.
     return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
