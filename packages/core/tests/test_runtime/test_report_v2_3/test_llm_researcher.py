@@ -926,6 +926,28 @@ def test_system_text_carries_mapping_on_every_turn_after_harvest() -> None:
     assert "web_1" in llm.systems[2]
 
 
+def test_research_prompt_requires_open_before_cite() -> None:
+    """The model was issuing well-targeted batch searches and then
+    citing URLs it had only seen in the ranked results — pulling the
+    canonical paths from training memory without actually fetching
+    them. The runtime drops every such URL via the ``url_to_id``
+    membership check; the cost is ~10+ dropped facts per report. The
+    prompt must spell out that ``search`` returns candidates, not
+    evidence — only ``open_page`` (and ``find_in_page`` against an
+    opened page) produces a citable URL."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    # The clause wraps across a line break in the prompt; assert
+    # the load-bearing halves separately.
+    assert "search alone is not" in RESEARCH_SYSTEM_PROMPT
+    assert "evidence" in RESEARCH_SYSTEM_PROMPT
+    assert "open_page" in RESEARCH_SYSTEM_PROMPT
+    assert "find_in_page" in RESEARCH_SYSTEM_PROMPT
+    assert "ranked search result list are not citable" in RESEARCH_SYSTEM_PROMPT
+
+
 def test_research_prompt_accepts_url_as_evidence_id_when_resolvable() -> None:
     """gpt-5.4 ``web_search_preview`` is intra-turn agentic — the model
     has the URL it just retrieved in its own context but never sees the

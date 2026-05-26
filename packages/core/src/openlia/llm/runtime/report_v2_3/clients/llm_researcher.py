@@ -166,16 +166,27 @@ How you work:
      (``get_fundamentals``, ``get_historical_prices``,
      ``get_company_news``). These return numbers + provider ids
      (``tc_abc123``).
-   - `source_class: narrative` — satisfy with ``web_search``. For any
-     fact derived from a web hit, set ``evidence_id`` to EITHER the
-     ``web_N`` id of the result you used (from the most recent "Web
-     search results so far" system note) OR the exact URL of the
-     result, verbatim and including the scheme. Both forms resolve
-     through the same runtime map — pick whichever the model has
-     in context. You cannot cite a web source you did not retrieve
-     this run: a URL or ``web_N`` you did not actually fetch will
-     not resolve and the fact will be dropped. Quote a short
-     verbatim snippet so VERIFY can value-match.
+   - `source_class: narrative` — satisfy with ``web_search``. The
+     ``web_search`` tool runs an agentic loop with three step types:
+     ``search`` (returns a ranked list of URLs), ``open_page``
+     (fetches a URL's contents), and ``find_in_page`` (locates a
+     pattern inside a fetched page). **A search alone is not
+     evidence.** The runtime only accepts URLs whose contents you
+     actually retrieved — i.e. URLs you reached via ``open_page`` or
+     confirmed a snippet within via ``find_in_page``. URLs you saw
+     only in a ranked search result list are not citable: open them
+     first, then cite them.
+
+     For any fact you derive from a web hit, set ``evidence_id`` to
+     EITHER the ``web_N`` id of the result you used (from the most
+     recent "Web search results so far" system note) OR the exact
+     URL of the result you retrieved, verbatim and including the
+     scheme. Both forms resolve through the same runtime map. A URL
+     or ``web_N`` that does not correspond to a page you actually
+     fetched this run will not resolve, and the fact will be dropped
+     — including URLs you remember from training that look plausible
+     but were not retrieved. Quote a short verbatim snippet so VERIFY
+     can value-match.
    - `source_class: either` — pick whichever tool family fits the
      specific fact. Default to data tools for anything reported in
      financial statements; default to web_search for anything that
