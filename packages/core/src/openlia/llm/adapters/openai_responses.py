@@ -13,6 +13,7 @@ parameterized so the same class serves both providers once xAI lands.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 
@@ -55,6 +56,9 @@ _DEFAULT_BASE_URL = "https://api.openai.com"
 # The internal name we advertise stays "web_search" (Capabilities.web_search_native,
 # request.native_tools); only the wire-level type sent to OpenAI changes.
 _WEB_SEARCH_NATIVE_TYPE = "web_search_preview"
+
+
+log = logging.getLogger(__name__)
 
 
 def _normalize_tool_choice(tc: object) -> object:
@@ -238,10 +242,17 @@ def _parse_responses_output(
         elif itype == "web_search_call":
             action = item.get("action") or {}
             query = str(action.get("query", ""))
+            action_type = str(action.get("type", "search"))
             status = item.get("status", "completed")
             if status == "failed":
                 err = item.get("error") or {}
                 error_code = str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
+                log.warning(
+                    "openai web_search FAILED: action=%s query=%r error=%s",
+                    action_type,
+                    query,
+                    error_code,
+                )
                 failures.append(
                     FailedSearch(
                         query=query,
@@ -251,6 +262,13 @@ def _parse_responses_output(
                     )
                 )
             else:
+                urls = _action_urls(action)
+                log.info(
+                    "openai web_search ok: action=%s query=%r urls=%d",
+                    action_type,
+                    query,
+                    len(urls),
+                )
                 server_tool_calls.append(
                     ServerToolCall(
                         name="web_search",
@@ -270,7 +288,7 @@ def _parse_responses_output(
                 # We emit one Citation per unique URL so downstream
                 # callers (e.g. v2.3 _harvest_web_citations) can build
                 # a web_N index regardless of output shape.
-                for action_url in _action_urls(action):
+                for action_url in urls:
                     cit_counter += 1
                     citations.append(
                         Citation(
