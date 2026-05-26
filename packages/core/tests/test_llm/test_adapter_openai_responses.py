@@ -628,11 +628,12 @@ async def test_generate_detects_failed_web_search_call() -> None:
 
 
 async def test_generate_logs_web_search_outcome(caplog: pytest.LogCaptureFixture) -> None:
-    """Every web_search_call must emit a structured log line — successful
-    calls log query + URL count, failed calls log the error code. Without
-    these the only signal of web_search activity is the downstream
-    citation count, which obscures whether the model called search at all
-    or whether the call returned zero URLs."""
+    """Every web_search_call must emit a structured log line that
+    surfaces the fields that are actually meaningful for THAT action
+    type — query+urls for ``search``, url for ``open_page``, url+pattern
+    for ``find_in_page``. The previous one-size-fits-all log line wrote
+    ``query=''`` for open_page / find_in_page entries and was actively
+    misleading when diagnosing real runs."""
     output = [
         {
             "type": "web_search_call",
@@ -650,6 +651,25 @@ async def test_generate_logs_web_search_outcome(caplog: pytest.LogCaptureFixture
         {
             "type": "web_search_call",
             "id": "ws_2",
+            "status": "completed",
+            "action": {
+                "type": "open_page",
+                "url": "https://eaton.com/about",
+            },
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_3",
+            "status": "completed",
+            "action": {
+                "type": "find_in_page",
+                "url": "https://eaton.com/about",
+                "pattern": "antitrust",
+            },
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_4",
             "status": "failed",
             "action": {"query": "blocked query"},
             "error": {"code": "rate_limited"},
@@ -668,10 +688,51 @@ async def test_generate_logs_web_search_outcome(caplog: pytest.LogCaptureFixture
         )
 
     msgs = [r.message for r in caplog.records]
-    ok = [m for m in msgs if "openai web_search ok" in m]
-    fail = [m for m in msgs if "openai web_search FAILED" in m]
-    assert ok and "urls=2" in ok[0] and "rocket lab" in ok[0]
-    assert fail and "rate_limited" in fail[0] and "blocked query" in fail[0]
+    search_lines = [m for m in msgs if "action=search" in m and "urls=" in m]
+    open_lines = [m for m in msgs if "action=open_page" in m and "url=" in m]
+    find_lines = [m for m in msgs if "action=find_in_page" in m and "pattern=" in m]
+    fail_lines = [m for m in msgs if "openai web_search FAILED" in m]
+
+    assert search_lines and "rocket lab" in search_lines[0] and "urls=2" in search_lines[0]
+    assert open_lines and "eaton.com/about" in open_lines[0]
+    assert find_lines and "antitrust" in find_lines[0] and "eaton.com/about" in find_lines[0]
+    assert fail_lines and "rate_limited" in fail_lines[0] and "blocked query" in fail_lines[0]
+
+
+async def test_generate_warns_on_empty_query_search(caplog: pytest.LogCaptureFixture) -> None:
+    """An empty-query ``search`` action is the smoking gun for a model
+    bypassing real search and falling back to ``open_page`` on
+    training-set URLs. The adapter must dump the raw action shape at
+    WARNING level so a real-run log lets us tell apart 'model issued
+    empty query' from 'we're reading the wrong field name' — without
+    needing to re-run the report."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "",
+                "sources": [],
+            },
+        }
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("WARNING", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert any("empty query on search action" in m for m in warns)
+    assert any("raw action keys=" in m for m in warns)
 
 
 # ---------- Unified streaming: real Responses SSE ----------

@@ -243,6 +243,8 @@ def _parse_responses_output(
             action = item.get("action") or {}
             query = str(action.get("query", ""))
             action_type = str(action.get("type", "search"))
+            page_url = str(action.get("url", ""))
+            pattern = str(action.get("pattern", ""))
             status = item.get("status", "completed")
             if status == "failed":
                 err = item.get("error") or {}
@@ -263,12 +265,41 @@ def _parse_responses_output(
                 )
             else:
                 urls = _action_urls(action)
-                log.info(
-                    "openai web_search ok: action=%s query=%r urls=%d",
-                    action_type,
-                    query,
-                    len(urls),
-                )
+                if action_type == "search":
+                    log.info(
+                        "openai web_search ok: action=search query=%r urls=%d",
+                        query,
+                        len(urls),
+                    )
+                    # An empty-query search is the smoking gun for a model
+                    # that is bypassing real search and falling back to
+                    # open_page on training-set URLs. Dump the raw action
+                    # so we can confirm whether the query field name is
+                    # right or the model genuinely issued no query.
+                    if not query.strip():
+                        log.warning(
+                            "openai web_search: empty query on search action; "
+                            "raw action keys=%s payload=%s",
+                            sorted(action.keys()),
+                            json.dumps(action, default=str)[:500],
+                        )
+                elif action_type == "open_page":
+                    log.info(
+                        "openai web_search ok: action=open_page url=%r",
+                        page_url,
+                    )
+                elif action_type == "find_in_page":
+                    log.info(
+                        "openai web_search ok: action=find_in_page url=%r pattern=%r",
+                        page_url,
+                        pattern,
+                    )
+                else:
+                    log.info(
+                        "openai web_search ok: action=%s urls=%d",
+                        action_type,
+                        len(urls),
+                    )
                 server_tool_calls.append(
                     ServerToolCall(
                         name="web_search",
