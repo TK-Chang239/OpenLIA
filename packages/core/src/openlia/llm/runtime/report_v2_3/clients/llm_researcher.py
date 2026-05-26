@@ -119,6 +119,7 @@ class FakeToolLLMClient:
         self._responder = responder
         self._next = 0
         self.calls: list[list[Message]] = []
+        self.systems: list[str] = []
 
     def send(
         self,
@@ -128,6 +129,7 @@ class FakeToolLLMClient:
         tools: list[ToolSchema],
     ) -> ToolTurnResponse:
         self.calls.append(list(messages))
+        self.systems.append(system)
         if self._responder is not None:
             return self._responder(list(messages))
         assert self._turns is not None
@@ -164,12 +166,14 @@ How you work:
      (``get_fundamentals``, ``get_historical_prices``,
      ``get_company_news``). These return numbers + provider ids
      (``tc_abc123``).
-   - `source_class: narrative` — satisfy with ``web_search``.
-     Web-search results arrive with stable ids of the form ``web_1``,
-     ``web_2``, ``web_3`` … in the order they were retrieved across
-     the run. Use those exact strings as ``evidence_id`` for any fact
-     derived from a web hit, and quote a short verbatim snippet so
-     VERIFY can value-match.
+   - `source_class: narrative` — satisfy with ``web_search``. For any
+     fact derived from a web hit, set ``evidence_id`` to the ``web_N``
+     id of the result you used, taken from the most recent "Web
+     search results so far" system note. You cannot cite a web source
+     you did not retrieve this run: a ``web_N`` id exists only after
+     a real search returns it, and raw URLs are NOT accepted as
+     evidence_ids. Quote a short verbatim snippet so VERIFY can
+     value-match.
    - `source_class: either` — pick whichever tool family fits the
      specific fact. Default to data tools for anything reported in
      financial statements; default to web_search for anything that
@@ -180,6 +184,13 @@ How you work:
    handle you use later to cite it. Drop a need only if every source
    class permitted for it returned nothing — and prefer reporting back
    a smaller fact than silently omitting one.
+
+   Each `narrative` data_need typically warrants its own
+   ``web_search`` call with a distinct query phrased for that
+   specific need. Vary your queries across publishers — one search
+   returns at most one source family, and the coverage check counts
+   a need as satisfied only when a fact bound to one of its
+   `expected_fact_ids` carries web provenance.
 
    Fundamentals are point-in-time as of the fetch date — structured
    numbers only, no narrative, no news, no regulatory status. Treat
@@ -218,12 +229,17 @@ Rules:
 - Every fact MUST have either `evidence_id` (pointing at a tool call
   that returned the number) OR both `computed_from` (list of other
   fact ids in this batch) AND `method` (one-line description).
-- `evidence_id` MUST be one of the EXACT strings you have already seen
-  this run: either an id from a `tool` message (those look like
-  `tc_abc123` / `call_xyz789` — the provider's call id), or one of the
-  `web_1`, `web_2`, … ids assigned to web_search results. Emit a fact
-  only when you can trace its `evidence_id` to one of those exact
-  strings; otherwise omit the fact.
+- `evidence_id` MUST be a real reference the runtime can resolve.
+  Two forms are accepted:
+    (a) A tool-call id from a prior `tool` message (looks like
+        `tc_abc123` / `call_xyz789` — the provider's call id).
+    (b) A `web_N` id from a "Web search results so far" system note
+        this run.
+  Do NOT emit a raw URL as an evidence_id. A URL is something you
+  can reconstruct from memory; a `web_N` id is something only a real
+  search produces, so `web_N` is the only accepted web handle. If
+  you cannot point a fact's evidence_id at one of these two forms,
+  omit the fact.
 - `computed_from` entries MUST reference fact ids you also emit IN THE
   SAME `facts` array. Each id you list under `computed_from` must be
   the id of another fact in this batch (e.g. `gross_profit_history_proxy`
@@ -245,7 +261,13 @@ Rules:
   indicate a packed dump — break them apart into one fact per line
   item. Save narrative prose for SYNTHESIZE / WRITE — RESEARCH facts
   stay compact so the downstream stages can compose freely.
-- Fact ids are stable handles — choose short, snake_case strings.
+- When a `data_need` lists `expected_fact_ids`, use one of those
+  ids verbatim as the fact's `id`. The downstream coverage check
+  matches on exactly those strings, so a fact that satisfies the
+  need but carries a different id will not register. Only invent a
+  new fact id (short, snake_case) when the planner left
+  `expected_fact_ids` empty or when you must emit an intermediate
+  rung for `computed_from`.
 - Emit a fact only when a tool call returned the data. Skip facts
   with no tool-call backing so WRITE can flag the gap.
 - Every fact must trace to a tool call (or to other facts in this
@@ -288,7 +310,7 @@ class LLMResearcherClient(ResearcherClient):
 
         for turn in range(self._max_turns):
             response = self._llm.send(
-                system=SYSTEM_PROMPT,
+                system=_system_text(web_url_to_id),
                 messages=messages,
                 tools=self._tool_schemas,
             )
@@ -313,6 +335,12 @@ class LLMResearcherClient(ResearcherClient):
                 raise RuntimeError(
                     f"RESEARCH LLM emitted neither tool_calls nor text on turn {turn + 1}."
                 )
+            log.info(
+                "v2.3 RESEARCH finished: turns=%d web_urls=%d evidence=%d",
+                turn + 1,
+                len(web_url_to_id),
+                len(evidence),
+            )
             return self._finalize(text, evidence, request)
 
         raise RuntimeError(
@@ -480,6 +508,33 @@ def _descriptor_to_schema(descriptor: ToolDescriptor) -> ToolSchema:
     )
 
 
+def _system_text(url_to_id: dict[str, str]) -> str:
+    """Compose the per-turn system text, folding in the live web_N mapping.
+
+    The model needs to see the cumulative ``web_N → URL`` table to know
+    which ``web_N`` ids are claimable. We inject it into the system text
+    (not the message history) so it stays pinned at the top of every
+    turn after first harvest and can't scroll out under later tool
+    roundtrips. The mapping is the ONLY way the model learns valid
+    ``web_N`` ids — raw URLs are not accepted as evidence_ids.
+    """
+    if not url_to_id:
+        return SYSTEM_PROMPT
+    return f"{SYSTEM_PROMPT}\n\n{_format_web_search_note(url_to_id)}"
+
+
+def _format_web_search_note(url_to_id: dict[str, str]) -> str:
+    """Render the running ``web_N`` index for the system text."""
+    lines = ["Web search results so far (newest last):"]
+    for url, web_id in url_to_id.items():
+        lines.append(f"- {web_id}: {url}")
+    lines.append(
+        "Cite a web fact only with one of the `web_N` ids above. Raw "
+        "URLs are not accepted as `evidence_id`."
+    )
+    return "\n".join(lines)
+
+
 def _initial_user_text(request: ResearchRequest) -> str:
     sections: list[dict[str, Any]] = []
     for section in request.outline.sections:
@@ -532,7 +587,10 @@ def _strip_fence(text: str) -> str:
     return cleaned.strip()
 
 
-def _build_fact(entry: dict[str, Any], evidence: dict[str, Provenance]) -> BundleFact:
+def _build_fact(
+    entry: dict[str, Any],
+    evidence: dict[str, Provenance],
+) -> BundleFact:
     fid = _require_str(entry, "id")
     label = _require_str(entry, "label")
     value = _coerce_value(entry.get("value"), fid)
@@ -549,7 +607,8 @@ def _build_fact(entry: dict[str, Any], evidence: dict[str, Provenance]) -> Bundl
             raise RuntimeError(f"Fact {fid!r}: evidence_id must be a string, got {evidence_id!r}.")
         if evidence_id not in evidence:
             raise RuntimeError(
-                f"Fact {fid!r}: evidence_id {evidence_id!r} does not match any tool call."
+                f"Fact {fid!r}: evidence_id {evidence_id!r} does not match any "
+                f"tool call or web_N id (raw URLs are not accepted)."
             )
         source = evidence[evidence_id]
     elif computed_from:

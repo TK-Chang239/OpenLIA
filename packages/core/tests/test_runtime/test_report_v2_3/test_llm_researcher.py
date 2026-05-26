@@ -23,9 +23,10 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     OutlineSection,
     ReportType,
     ResearchBundle,
+    WebSource,
 )
 from openlia.llm.runtime.report_v2_3.templates import TemplateSpec, get_builtin
-from openlia.llm.types import Message, ToolCall
+from openlia.llm.types import Citation, Message, ToolCall
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -638,3 +639,243 @@ def test_tool_execution_error_reaches_model_as_tool_message() -> None:
     # failure as a tool message — confirmed via the error propagation path.
     with pytest.raises(RuntimeError):
         researcher.research(_request())
+
+
+# ---------------------------------------------------------------------------
+# Native web_search citation resolution
+# ---------------------------------------------------------------------------
+
+
+def _web_cite(url: str, title: str = "T", snippet: str = "S") -> Citation:
+    return Citation(id="c1", kind="web", url=url, title=title, snippet=snippet, source="Test")
+
+
+def test_url_form_evidence_id_is_rejected() -> None:
+    """Raw URLs are reconstructable from pretraining — only ``web_N`` is
+    accepted as a web evidence_id. A fact citing the URL form is dropped
+    even when the URL was harvested from a real citation."""
+    url = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "qual_pos",
+                                "label": "Qualitative positioning",
+                                "value": "AI infra leader",
+                                "evidence_id": url,
+                            }
+                        ]
+                    }
+                ),
+                tool_calls=(),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no usable facts"):
+        researcher.research(_request())
+
+
+def test_web_evidence_id_resolves_by_web_n() -> None:
+    """LLM cites by `web_1` — resolves to the canonical WebSource."""
+    url = "https://example.com/news"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "catalyst",
+                                "label": "Recent catalyst",
+                                "value": "new GPU launch",
+                                "evidence_id": "web_1",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+    fact = bundle.facts["catalyst"]
+    assert isinstance(fact.source, WebSource)
+    assert fact.source.url == url
+
+
+def test_unknown_web_n_id_drops_fact() -> None:
+    """A `web_N` id the model invented out of thin air (no real search this
+    run) cannot be resolved and the fact is dropped."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "halluc",
+                                "label": "Hallucinated",
+                                "value": "x",
+                                "evidence_id": "web_7",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite("https://example.com/real"),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no usable facts"):
+        researcher.research(_request())
+
+
+def test_system_text_carries_web_n_mapping_after_harvest() -> None:
+    """The cumulative ``web_N → URL`` mapping must live in the per-turn
+    system text — that way it cannot scroll out under later tool turns
+    and the model always sees the current claimable web_N ids."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(
+        responder=_two_turn_web_responder(url),
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+
+    assert {"rev_ttm", "qual"} <= set(bundle.facts)
+    assert isinstance(bundle.facts["qual"].source, WebSource)
+
+    # Turn 1 has no mapping yet (no prior harvest). The phrase "Web
+    # search results so far" appears in the SYSTEM_PROMPT itself
+    # (referring to the note), so we match on the unique rendered note
+    # header instead.
+    assert "(newest last):" not in llm.systems[0]
+    # Turn 2 system text must carry the harvested mapping AND the
+    # explicit reminder that raw URLs are not accepted.
+    assert "(newest last):" in llm.systems[1]
+    assert "web_1" in llm.systems[1]
+    assert url in llm.systems[1]
+    assert "Raw URLs are not accepted" in llm.systems[1]
+
+
+def test_system_text_carries_mapping_on_every_turn_after_harvest() -> None:
+    """Mapping must reappear on EVERY turn after first harvest — not just
+    the immediate next turn. This guards against a regression where the
+    note scrolls out under many subsequent tool roundtrips."""
+    url = "https://example.com/foo"
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        n = sum(1 for m in messages if m.role == "assistant")
+        if n == 0:
+            # Turn 1: harvest a web citation alongside a function tool call.
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(id="tc_1", name="get_fundamentals", arguments={"ticker": "NVDA"}),
+                ),
+                citations=(_web_cite(url),),
+            )
+        if n == 1:
+            # Turn 2: another function tool call, no new citations.
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(id="tc_2", name="get_fundamentals", arguments={"ticker": "NVDA"}),
+                ),
+            )
+        # Turn 3: final JSON citing both the function call and the web hit.
+        return ToolTurnResponse(
+            text=json.dumps(
+                {
+                    "facts": [
+                        {
+                            "id": "rev_ttm",
+                            "label": "Revenue (TTM)",
+                            "value": 60_900_000_000,
+                            "evidence_id": "tc_1",
+                        },
+                        {
+                            "id": "qual",
+                            "label": "Qualitative",
+                            "value": "x",
+                            "evidence_id": "web_1",
+                        },
+                    ]
+                }
+            ),
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+
+    assert "qual" in bundle.facts
+    # Mapping pinned at turn 2 AND turn 3 — system text is the carrier.
+    assert "web_1" in llm.systems[1]
+    assert "web_1" in llm.systems[2]
+
+
+def test_research_prompt_forbids_url_as_evidence_id() -> None:
+    """The prompt must say plainly that URLs are not accepted — removing
+    the forgeable shortcut so the model cannot reach a WebSource handle
+    without an actual search returning it."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "Do NOT emit a raw URL as an evidence_id" in RESEARCH_SYSTEM_PROMPT
+    assert "web_N` is the only accepted web handle" in RESEARCH_SYSTEM_PROMPT
+
+
+def test_research_prompt_binds_fact_id_to_expected_fact_ids() -> None:
+    """Coverage check matches on the planner's `expected_fact_ids`, so the
+    prompt must instruct the model to use those ids verbatim — otherwise
+    narrative coverage stays at 0/N even when web evidence flows."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    assert "expected_fact_ids" in RESEARCH_SYSTEM_PROMPT
+    assert "verbatim" in RESEARCH_SYSTEM_PROMPT
+
+
+def _two_turn_web_responder(url: str):
+    """Helper: turn 1 makes a function tool call AND returns a web citation;
+    turn 2 emits final JSON citing both."""
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        if not any(m.role == "assistant" for m in messages):
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(id="tc_1", name="get_fundamentals", arguments={"ticker": "NVDA"}),
+                ),
+                citations=(_web_cite(url),),
+            )
+        return ToolTurnResponse(
+            text=json.dumps(
+                {
+                    "facts": [
+                        {
+                            "id": "rev_ttm",
+                            "label": "Revenue (TTM)",
+                            "value": 60_900_000_000,
+                            "evidence_id": "tc_1",
+                        },
+                        {
+                            "id": "qual",
+                            "label": "Qualitative",
+                            "value": "x",
+                            "evidence_id": "web_1",
+                        },
+                    ]
+                }
+            ),
+        )
+
+    return responder
