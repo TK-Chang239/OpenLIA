@@ -1058,6 +1058,22 @@ def test_write_prompt_no_longer_dictates_per_length_word_budgets():
         )
 
 
+def test_write_prompt_warns_derive_inputs_must_be_scalar():
+    """``DERIVE`` calls ``_scalar`` on every input — a fact whose value
+    is a ``BundleSeries`` (time-series or segment breakdown) hard-fails
+    the stage. The prompt must steer the writer away from that pattern
+    instead of relying on the mint step's soft-fail to clean up: the
+    soft-fail substitutes a CITE on the first input, which is correct
+    but not what the writer intended."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    assert "DERIVE inputs MUST be facts whose ``value`` is a scalar number" in WRITE_SYSTEM_PROMPT
+    assert "time-series" in WRITE_SYSTEM_PROMPT
+    assert "segment breakdown" in WRITE_SYSTEM_PROMPT
+
+
 def test_v23_prompts_use_positive_phrasing_for_content_prescriptions():
     """Per the `feedback_positive_prompts` convention, content-level
     instructions in v2.3 prompts should be phrased positively. Schema-

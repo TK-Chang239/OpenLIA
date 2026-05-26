@@ -791,6 +791,11 @@ you write will reject any digit-bearing token outside these markers.
    Methods available: growth_rate, yoy_delta, ratio.
    The engine runs the math, mints a ComputedSource fact at <new_fact_id>,
    and rewrites your marker to {{CITE:<new_fact_id>}}.
+   DERIVE inputs MUST be facts whose ``value`` is a scalar number. If a
+   relevant fact's value is a time-series (``points: [...]``) or a
+   segment breakdown, you cannot DERIVE on it — reference it with
+   ``{{CITE:fact_id}}`` and write any comparison in prose, or DERIVE
+   from a separate scalar fact the bundle already carries.
 
 3. State an estimate when the number is analyst judgment with no
    underlying calculation — projections, scenario calls, view-driven
