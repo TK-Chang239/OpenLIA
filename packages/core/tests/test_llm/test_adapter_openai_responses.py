@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 import respx
 from openlia.llm.adapters.openai_responses import OpenAIResponsesAdapter
 from openlia.llm.types import (
@@ -624,6 +625,53 @@ async def test_generate_detects_failed_web_search_call() -> None:
     f = resp.server_tool_failures[0]
     assert f.query == "blocked query"
     assert f.error_kind in {"server_error", "unknown"}
+
+
+async def test_generate_logs_web_search_outcome(caplog: pytest.LogCaptureFixture) -> None:
+    """Every web_search_call must emit a structured log line — successful
+    calls log query + URL count, failed calls log the error code. Without
+    these the only signal of web_search activity is the downstream
+    citation count, which obscures whether the model called search at all
+    or whether the call returned zero URLs."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "rocket lab Q1 2026 earnings",
+                "sources": [
+                    {"type": "url", "url": "https://example.com/a"},
+                    {"type": "url", "url": "https://example.com/b"},
+                ],
+            },
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_2",
+            "status": "failed",
+            "action": {"query": "blocked query"},
+            "error": {"code": "rate_limited"},
+        },
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("INFO", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+
+    msgs = [r.message for r in caplog.records]
+    ok = [m for m in msgs if "openai web_search ok" in m]
+    fail = [m for m in msgs if "openai web_search FAILED" in m]
+    assert ok and "urls=2" in ok[0] and "rocket lab" in ok[0]
+    assert fail and "rate_limited" in fail[0] and "blocked query" in fail[0]
 
 
 # ---------- Unified streaming: real Responses SSE ----------

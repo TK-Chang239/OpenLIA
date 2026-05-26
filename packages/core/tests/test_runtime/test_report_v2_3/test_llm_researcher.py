@@ -844,6 +844,65 @@ def test_research_prompt_binds_fact_id_to_expected_fact_ids() -> None:
     assert "verbatim" in RESEARCH_SYSTEM_PROMPT
 
 
+def test_research_logs_per_turn_tool_and_citation_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each turn must emit a structured log line summarizing tool_calls,
+    citations, and the cumulative web_urls count. Without these signals
+    the only visible failure mode is "narrative coverage 0/N at finalize"
+    — which doesn't tell you whether web_search ran at all."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(responder=_two_turn_web_responder(url))
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request())
+
+    turn_lines = [r.message for r in caplog.records if "v2.3 RESEARCH turn=" in r.message]
+    assert len(turn_lines) == 2
+    assert "tool_calls=1" in turn_lines[0]
+    assert "citations=1" in turn_lines[0]
+    assert "new_web_urls=1" in turn_lines[0]
+    # Turn 2 emits the final JSON — no tool calls, no new citations.
+    assert "tool_calls=0" in turn_lines[1]
+    assert "new_web_urls=0" in turn_lines[1]
+
+
+def test_research_logs_tool_call_outcome_per_call(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each function tool call must log its outcome (ok|error) and id so
+    a failed tool roundtrip surfaces in the log instead of disappearing
+    behind a downstream fact-resolution warning."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(responder=_two_turn_web_responder(url))
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request())
+
+    tool_lines = [r.message for r in caplog.records if "v2.3 RESEARCH tool=" in r.message]
+    assert len(tool_lines) == 1
+    assert "tool=get_fundamentals" in tool_lines[0]
+    assert "status=ok" in tool_lines[0]
+
+
+def test_research_finished_log_includes_publisher_histogram(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The end-of-run summary must report a per-publisher URL count so
+    source-breadth regressions ("all 30 URLs from rocketlab.com") are
+    visible without re-reading every line."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(responder=_two_turn_web_responder(url))
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request())
+
+    finished = [r.message for r in caplog.records if "RESEARCH finished" in r.message]
+    assert len(finished) == 1
+    assert "publishers=" in finished[0]
+    assert "example.com" in finished[0]
+
+
 def _two_turn_web_responder(url: str):
     """Helper: turn 1 makes a function tool call AND returns a web citation;
     turn 2 emits final JSON citing both."""

@@ -314,7 +314,18 @@ class LLMResearcherClient(ResearcherClient):
                 messages=messages,
                 tools=self._tool_schemas,
             )
+            prior_urls = len(web_url_to_id)
             self._harvest_web_citations(response.citations, evidence, web_url_to_id)
+            new_urls = len(web_url_to_id) - prior_urls
+            log.info(
+                "v2.3 RESEARCH turn=%d tool_calls=%d citations=%d new_web_urls=%d "
+                "web_urls_total=%d",
+                turn + 1,
+                len(response.tool_calls),
+                len(response.citations),
+                new_urls,
+                len(web_url_to_id),
+            )
             if response.tool_calls:
                 messages.append(
                     Message(
@@ -325,6 +336,13 @@ class LLMResearcherClient(ResearcherClient):
                 )
                 for call in response.tool_calls:
                     result_msg, provenance = self._execute_tool_call(call)
+                    status = "ok" if provenance is not None else "error"
+                    log.info(
+                        "v2.3 RESEARCH tool=%s status=%s call_id=%s",
+                        call.name,
+                        status,
+                        call.id,
+                    )
                     messages.append(result_msg)
                     if provenance is not None:
                         evidence[call.id] = provenance
@@ -336,10 +354,11 @@ class LLMResearcherClient(ResearcherClient):
                     f"RESEARCH LLM emitted neither tool_calls nor text on turn {turn + 1}."
                 )
             log.info(
-                "v2.3 RESEARCH finished: turns=%d web_urls=%d evidence=%d",
+                "v2.3 RESEARCH finished: turns=%d web_urls=%d evidence=%d publishers=%s",
                 turn + 1,
                 len(web_url_to_id),
                 len(evidence),
+                _publisher_histogram(web_url_to_id),
             )
             return self._finalize(text, evidence, request)
 
@@ -506,6 +525,26 @@ def _descriptor_to_schema(descriptor: ToolDescriptor) -> ToolSchema:
         description=descriptor.description,
         parameters=dict(descriptor.parameters),
     )
+
+
+def _publisher_histogram(url_to_id: dict[str, str]) -> dict[str, int]:
+    """Count harvested URLs per registrable host so the run summary log
+    surfaces source breadth. Same publisher dominating the bundle is a
+    visible signal that web_search queries are not diverse."""
+    from urllib.parse import urlparse
+
+    hist: dict[str, int] = {}
+    for url in url_to_id:
+        try:
+            host = (urlparse(url).hostname or "").lower()
+        except ValueError:
+            host = ""
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            host = "<no-host>"
+        hist[host] = hist.get(host, 0) + 1
+    return dict(sorted(hist.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def _system_text(url_to_id: dict[str, str]) -> str:
