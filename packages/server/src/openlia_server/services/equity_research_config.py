@@ -16,6 +16,13 @@ from openlia_server.db.models.departments import ErTemplate, ErUserConfig
 
 ReportMode = Literal["stock_initiation", "stock_update", "sector_research"]
 ReportLength = Literal["concise", "normal", "elaborative"]
+# Three-state extended-thinking effort. ``"off"`` skips reasoning
+# entirely (fastest, cheapest); ``"medium"`` is the default; ``"high"``
+# is for the deepest reports. Note: OpenAI gpt-5.x can skip
+# `web_search_preview` tool calls when reasoning is off — users who
+# want web coverage should pick medium or high. The runtime treats
+# ``"off"`` as "no reasoning directive sent" rather than an explicit
+# zero budget.
 ReportReasoningEffort = Literal["off", "medium", "high"]
 
 _VALID_MODES: tuple[ReportMode, ...] = (
@@ -25,6 +32,18 @@ _VALID_MODES: tuple[ReportMode, ...] = (
 )
 _VALID_LENGTHS: tuple[ReportLength, ...] = ("concise", "normal", "elaborative")
 _VALID_REASONING: tuple[ReportReasoningEffort, ...] = ("off", "medium", "high")
+
+
+def _coerce_reasoning_effort(raw: object) -> ReportReasoningEffort:
+    """Normalize any persisted reasoning value to the current vocabulary.
+    NULL / unknown values default to ``"medium"`` so a missing-or-broken
+    row materialises in the working state; ``"off"``, ``"medium"``, and
+    ``"high"`` round-trip unchanged."""
+    if raw == "off":
+        return "off"
+    if raw == "high":
+        return "high"
+    return "medium"
 
 
 @dataclass(frozen=True)
@@ -44,10 +63,11 @@ class ErConfigDTO:
     # Per-mode override for the LLM web-search budget. Modes absent from
     # this map use the framework's `web_search_budget_default`. Phase 5f.
     web_search_budgets_by_mode: dict[ReportMode, int] = field(default_factory=dict)
-    # Extended-thinking pill on the report settings modal. NULL in the
-    # row materialises here as "off"; the wiring layer treats "off" as
-    # "no reasoning_effort directive sent to the LLM".
-    report_reasoning_effort: ReportReasoningEffort = "off"
+    # Extended-thinking pill on the report settings modal. NULL rows
+    # materialise here as "medium" — the working default. "off" is a
+    # valid user-selectable state for fast / cheap runs, even though
+    # OpenAI gpt-5.x may then skip `web_search_preview` tool calls.
+    report_reasoning_effort: ReportReasoningEffort = "medium"
 
 
 @dataclass(frozen=True)
@@ -117,10 +137,7 @@ def _row_to_dto(row: ErUserConfig) -> ErConfigDTO:
         if mode_key in _VALID_MODES and isinstance(v, int) and not isinstance(v, bool) and v > 0:
             budgets_by_mode[mode_key] = v  # type: ignore[index]
 
-    raw_reasoning = row.report_reasoning_effort
-    reasoning: ReportReasoningEffort = (
-        raw_reasoning if raw_reasoning in _VALID_REASONING else "off"  # type: ignore[assignment]
-    )
+    reasoning = _coerce_reasoning_effort(row.report_reasoning_effort)
 
     return ErConfigDTO(
         report_mode=row.report_mode,  # type: ignore[arg-type]
@@ -180,13 +197,8 @@ class EquityResearchConfigService:
             raise ValueError(f"unknown mode {report_mode!r}")
         if report_length is not None and report_length not in _VALID_LENGTHS:
             raise ValueError(f"invalid report_length {report_length!r}")
-        if (
-            report_reasoning_effort is not None
-            and report_reasoning_effort not in _VALID_REASONING
-        ):
-            raise ValueError(
-                f"invalid report_reasoning_effort {report_reasoning_effort!r}"
-            )
+        if report_reasoning_effort is not None and report_reasoning_effort not in _VALID_REASONING:
+            raise ValueError(f"invalid report_reasoning_effort {report_reasoning_effort!r}")
 
         if sections_by_mode is not None:
             for mode_key, ids in sections_by_mode.items():

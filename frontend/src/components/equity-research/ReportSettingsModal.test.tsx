@@ -31,7 +31,7 @@ vi.mock("../../api/equity-research", async () => {
 const baseConfig: ErConfig = {
   report_mode: "stock_initiation",
   report_length: "normal",
-  report_reasoning_effort: "off",
+  report_reasoning_effort: "medium",
   sections_by_mode: {
     stock_initiation: ["company_overview", "industry_overview"],
     stock_update: ["investment_thesis", "event_analysis"],
@@ -130,7 +130,7 @@ describe("ReportSettingsModal", () => {
     expect(onSave.mock.calls[0][0].report_length).toBe("elaborative");
   });
 
-  it("renders the reasoning effort pill with three options and Off selected by default", () => {
+  it("renders the reasoning effort pill with Off / Medium / High and the current value checked", () => {
     render(
       <ReportSettingsModal
         open
@@ -141,13 +141,12 @@ describe("ReportSettingsModal", () => {
     );
     const section = screen.getByTestId("er-reasoning-effort");
     expect(section).toBeTruthy();
-    // The three reasoning labels exist on the page (radios inside the pill).
     expect(screen.getByRole("radio", { name: "Off" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "Medium" })).toBeTruthy();
     expect(screen.getByRole("radio", { name: "High" })).toBeTruthy();
-    // Default: baseConfig has report_reasoning_effort="off" → Off is checked.
+    // baseConfig has report_reasoning_effort="medium" → Medium is checked.
     expect(
-      (screen.getByRole("radio", { name: "Off" }) as HTMLElement).getAttribute(
+      (screen.getByRole("radio", { name: "Medium" }) as HTMLElement).getAttribute(
         "aria-checked",
       ),
     ).toBe("true");

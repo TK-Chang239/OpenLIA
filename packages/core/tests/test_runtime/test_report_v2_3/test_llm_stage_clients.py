@@ -314,6 +314,46 @@ def test_plan_prompt_example_shows_a_layered_need_with_both_lanes_populated() ->
     )
 
 
+def test_plan_prompt_classifies_on_record_vs_interpretation_axis() -> None:
+    """The lane-routing axis must be record-vs-interpretation, not
+    quantitative-vs-qualitative. The latter caused PLAN to over-tag
+    segment / geography mix (matters of record served by EODHD) as
+    web-lane because the labels sounded "narrative." The former
+    aligns the axis with epistemic certainty, which maps cleanly to
+    which tool can serve the fact."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    text = PLAN_SYSTEM_PROMPT.lower()
+    assert "matter of record" in text
+    assert "matter of interpretation" in text
+    # The old axis must not survive — leaving "qualitative" /
+    # "quantitative" in the lane-routing prose lets the model fall
+    # back to the wrong heuristic.
+    routing_block = PLAN_SYSTEM_PROMPT.split("Each `data_need`")[-1].split("Use snake_case ids")[0]
+    assert "qualitative" not in routing_block.lower()
+    assert "quantitative" not in routing_block.lower()
+
+
+def test_plan_prompt_warns_against_routing_via_eodhd_news_headlines() -> None:
+    """The prior PLAN guidance leaned on EODHD news headlines as a
+    data-lane signal for narrative themes. Under the record /
+    interpretation axis a headline points at an event but does not
+    synthesize it — the prompt must say so explicitly so PLAN stops
+    flagging interpretation ids as data-served just because a news
+    feed mentions the topic."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    assert "news headline" in PLAN_SYSTEM_PROMPT.lower()
+    assert (
+        "does not synthesize" in PLAN_SYSTEM_PROMPT.lower()
+        or "not synthesize what" in PLAN_SYSTEM_PROMPT.lower()
+    )
+
+
 def test_compute_and_write_prompts_use_neutral_examples() -> None:
     """COMPUTE_SYSTEM_PROMPT (Comps example) and WRITE_SYSTEM_PROMPT
     (body example) must use neutral placeholders, not specific tickers
