@@ -360,14 +360,14 @@ export default function EquityResearch(): JSX.Element {
   const [v23ReasoningEffort, setV23ReasoningEffortState] = useState<
     "off" | "medium" | "high"
   >(() => {
-    if (typeof window === "undefined") return "off";
+    if (typeof window === "undefined") return "medium";
     try {
       const raw = window.localStorage.getItem("er.v23.reasoning_effort");
       if (raw === "off" || raw === "medium" || raw === "high") return raw;
     } catch {
       /* fall through */
     }
-    return "off";
+    return "medium";
   });
   useEffect(() => {
     const fromServer = config.report_reasoning_effort;
@@ -383,6 +383,7 @@ export default function EquityResearch(): JSX.Element {
   const setV23ReasoningEffort = useCallback(
     (next: "off" | "medium" | "high") => {
       setV23ReasoningEffortState(next);
+
       try {
         window.localStorage.setItem("er.v23.reasoning_effort", next);
       } catch {

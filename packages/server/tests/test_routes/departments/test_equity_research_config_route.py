@@ -161,10 +161,13 @@ def test_put_config_rejects_unknown_mode_in_budget_map(company_client, auth_user
 # ---------- report_reasoning_effort (v2.3 extended thinking) ----------
 
 
-def test_get_config_includes_reasoning_effort_default_off(company_client, auth_user):
+def test_get_config_includes_reasoning_effort_default_medium(company_client, auth_user):
+    """The default reasoning value flowing out of the API is 'medium' —
+    the UI no longer offers 'off', and the runtime needs reasoning on
+    for OpenAI gpt-5.x to invoke web_search as a real tool call."""
     r = company_client.get("/departments/equity-research/config")
     assert r.status_code == 200
-    assert r.json()["report_reasoning_effort"] == "off"
+    assert r.json()["report_reasoning_effort"] == "medium"
 
 
 def test_put_config_persists_reasoning_effort_and_roundtrips(company_client, auth_user):

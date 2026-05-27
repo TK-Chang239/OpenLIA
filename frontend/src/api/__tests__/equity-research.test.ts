@@ -17,7 +17,7 @@ describe("equity-research api", () => {
     const body: ErConfig = {
       report_mode: "stock_initiation",
       report_length: "normal",
-      report_reasoning_effort: "off",
+      report_reasoning_effort: "medium",
       sections_by_mode: {
         stock_initiation: [],
         stock_update: [],

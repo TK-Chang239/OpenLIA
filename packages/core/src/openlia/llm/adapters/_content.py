@@ -87,7 +87,45 @@ def _wrap_inline_text(filename: str | None, body: str) -> str:
 
 def render_anthropic_messages(messages: list[Message]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
+    # Anthropic packs all tool_result blocks from one assistant turn into
+    # a single follow-up user message — we coalesce consecutive
+    # role="tool" messages here.
+    pending_tool_results: list[dict[str, Any]] = []
+
+    def flush_tool_results() -> None:
+        if pending_tool_results:
+            out.append({"role": "user", "content": list(pending_tool_results)})
+            pending_tool_results.clear()
+
     for m in messages:
+        if m.role == "tool":
+            pending_tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": m.tool_call_id,
+                    "content": m.content,
+                }
+            )
+            continue
+
+        flush_tool_results()
+
+        if m.role == "assistant" and m.tool_calls:
+            content_blocks: list[dict[str, Any]] = []
+            if m.content:
+                content_blocks.append({"type": "text", "text": m.content})
+            for tc in m.tool_calls:
+                content_blocks.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.arguments or {},
+                    }
+                )
+            out.append({"role": "assistant", "content": content_blocks})
+            continue
+
         blocks = tuple(getattr(m, "content_blocks", ()) or ())
         if m.role != "user" or not blocks:
             out.append({"role": m.role, "content": m.content})
@@ -124,6 +162,8 @@ def render_anthropic_messages(messages: list[Message]) -> list[dict[str, Any]]:
                     }
                 )
         out.append({"role": m.role, "content": parts})
+
+    flush_tool_results()
     return out
 
 

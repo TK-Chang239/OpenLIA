@@ -13,6 +13,7 @@ parameterized so the same class serves both providers once xAI lands.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from collections.abc import AsyncIterator
 
@@ -55,6 +56,9 @@ _DEFAULT_BASE_URL = "https://api.openai.com"
 # The internal name we advertise stays "web_search" (Capabilities.web_search_native,
 # request.native_tools); only the wire-level type sent to OpenAI changes.
 _WEB_SEARCH_NATIVE_TYPE = "web_search_preview"
+
+
+log = logging.getLogger(__name__)
 
 
 def _normalize_tool_choice(tc: object) -> object:
@@ -150,6 +154,52 @@ def _to_responses_input(messages: list[Message]) -> list[dict]:
     return items
 
 
+def _action_urls(action: dict) -> list[str]:
+    """Extract every URL referenced by a ``web_search_call.action`` block.
+
+    The OpenAI Responses API exposes three action shapes (see
+    ``openai-python``: ``ResponseFunctionWebSearch.Action``):
+        - ``{type:"search", sources:[{type:"url", url}], ...}``
+        - ``{type:"open_page", url}``
+        - ``{type:"find_in_page", url}``
+    All three carry URLs the model actually saw. We dedupe in-order and
+    skip blanks so the caller can mint one Citation per unique URL.
+    """
+    urls: list[str] = []
+    seen: set[str] = set()
+    action_type = action.get("type")
+    candidates: list[str] = []
+    if action_type == "search":
+        for src in action.get("sources") or []:
+            if isinstance(src, dict) and src.get("type") == "url":
+                u = src.get("url")
+                if isinstance(u, str):
+                    candidates.append(u)
+        # gpt-5.4 sends batch searches as ``queries: [str, ...]`` — no
+        # nested sources observed yet, but defensively walk for them in
+        # case OpenAI starts surfacing per-query result URLs at that
+        # nesting depth; today this loop is a no-op when ``queries`` is
+        # a flat list of strings.
+        for q in action.get("queries") or []:
+            if isinstance(q, dict):
+                for src in q.get("sources") or []:
+                    if isinstance(src, dict) and src.get("type") == "url":
+                        u = src.get("url")
+                        if isinstance(u, str):
+                            candidates.append(u)
+    elif action_type in ("open_page", "find_in_page"):
+        u = action.get("url")
+        if isinstance(u, str):
+            candidates.append(u)
+    for u in candidates:
+        u = u.strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        urls.append(u)
+    return urls
+
+
 def _parse_responses_output(
     output: list[dict],
 ) -> tuple[
@@ -204,19 +254,78 @@ def _parse_responses_output(
         elif itype == "web_search_call":
             action = item.get("action") or {}
             query = str(action.get("query", ""))
+            queries_raw = action.get("queries")
+            queries: list[str] = (
+                [str(q) for q in queries_raw if isinstance(q, str)]
+                if isinstance(queries_raw, list)
+                else []
+            )
+            action_type = str(action.get("type", "search"))
+            page_url = str(action.get("url", ""))
+            pattern = str(action.get("pattern", ""))
             status = item.get("status", "completed")
             if status == "failed":
                 err = item.get("error") or {}
                 error_code = str(err.get("code", "failed")) if isinstance(err, dict) else "failed"
+                log.warning(
+                    "openai web_search FAILED: action=%s query=%r queries=%r error=%s",
+                    action_type,
+                    query,
+                    queries,
+                    error_code,
+                )
                 failures.append(
                     FailedSearch(
-                        query=query,
+                        query=query or (queries[0] if queries else ""),
                         error_kind="server_error",
                         error_message=error_code,
                         turn_idx=0,
                     )
                 )
             else:
+                urls = _action_urls(action)
+                if action_type == "search":
+                    # gpt-5.4 Responses sends batch searches in
+                    # ``action.queries`` (plural list). Older single-shot
+                    # callers use ``action.query`` (singular string).
+                    # Show whichever is populated; the empty-query
+                    # diagnostic only fires when BOTH are empty.
+                    if queries:
+                        log.info(
+                            "openai web_search ok: action=search queries=%s urls=%d",
+                            queries,
+                            len(urls),
+                        )
+                    else:
+                        log.info(
+                            "openai web_search ok: action=search query=%r urls=%d",
+                            query,
+                            len(urls),
+                        )
+                    if not query.strip() and not queries:
+                        log.warning(
+                            "openai web_search: empty query AND empty queries on search "
+                            "action; raw action keys=%s payload=%s",
+                            sorted(action.keys()),
+                            json.dumps(action, default=str)[:500],
+                        )
+                elif action_type == "open_page":
+                    log.info(
+                        "openai web_search ok: action=open_page url=%r",
+                        page_url,
+                    )
+                elif action_type == "find_in_page":
+                    log.info(
+                        "openai web_search ok: action=find_in_page url=%r pattern=%r",
+                        page_url,
+                        pattern,
+                    )
+                else:
+                    log.info(
+                        "openai web_search ok: action=%s urls=%d",
+                        action_type,
+                        len(urls),
+                    )
                 server_tool_calls.append(
                     ServerToolCall(
                         name="web_search",
@@ -224,8 +333,45 @@ def _parse_responses_output(
                         turn_idx=0,
                     )
                 )
-        # Unknown item types ignored — forward-compatible with future
-        # OpenAI Responses additions.
+                # Extract the URLs the model actually saw during this
+                # web_search call. The `url_citation` annotation path
+                # (above) only fires when the model writes narrative
+                # text — JSON-only outputs produce zero annotations
+                # even when search ran. The action object is the
+                # authoritative source of which URLs were involved:
+                #   - search:       action.sources[*].url
+                #   - open_page:    action.url
+                #   - find_in_page: action.url
+                # We emit one Citation per unique URL so downstream
+                # callers (e.g. v2.3 _harvest_web_citations) can build
+                # a web_N index regardless of output shape.
+                for action_url in urls:
+                    cit_counter += 1
+                    citations.append(
+                        Citation(
+                            id=f"c{cit_counter}",
+                            kind="web",
+                            url=action_url,
+                            source="OpenAI Web Search",
+                        )
+                    )
+        else:
+            # Forward-compatible: we don't fail on unknown item types,
+            # but we surface them so a real-run log will reveal any
+            # payload shape we're not parsing. If OpenAI starts
+            # exposing search-result URLs under a new item type
+            # (instead of nested under ``web_search_call.action``),
+            # the missing-URL symptom would otherwise be invisible.
+            try:
+                preview = json.dumps(item, default=str)[:500]
+            except (TypeError, ValueError):
+                preview = repr(item)[:500]
+            log.warning(
+                "openai responses: unknown output item type=%r keys=%s preview=%s",
+                itype,
+                sorted(item.keys()) if isinstance(item, dict) else [],
+                preview,
+            )
     return text_parts, tool_calls, tuple(server_tool_calls), tuple(citations), tuple(failures)
 
 
@@ -282,6 +428,12 @@ class OpenAIResponsesAdapter(LLMProvider):
         tools = _build_responses_tools(request)
         if tools is not None:
             payload["tools"] = tools
+        log.info(
+            "openai_responses outbound: model=%s tool_types=%s native_tools=%s",
+            self.model,
+            [t.get("type") for t in (tools or [])],
+            list(request.native_tools),
+        )
         if request.tool_choice is not None:
             payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
         # Responses API takes reasoning as a nested object. The model
@@ -357,6 +509,12 @@ class OpenAIResponsesAdapter(LLMProvider):
         tools = _build_responses_tools(request)
         if tools is not None:
             payload["tools"] = tools
+        log.info(
+            "openai_responses outbound (stream): model=%s tool_types=%s native_tools=%s",
+            self.model,
+            [t.get("type") for t in (tools or [])],
+            list(request.native_tools),
+        )
         if request.tool_choice is not None:
             payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
         if request.reasoning_effort is not None:

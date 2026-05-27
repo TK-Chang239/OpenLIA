@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 import respx
 from openlia.llm.adapters.openai_responses import OpenAIResponsesAdapter
 from openlia.llm.types import (
@@ -459,6 +460,147 @@ async def test_generate_parses_url_citation_annotations() -> None:
     assert all(c.source == "OpenAI Web Search" for c in resp.citations)
 
 
+async def test_generate_extracts_urls_from_web_search_action_sources() -> None:
+    """When the model's output is structured JSON (or anything without
+    narrative spans), the API emits zero ``url_citation`` annotations
+    but still records the URLs it visited under
+    ``web_search_call.action.sources``. The adapter must mint a
+    Citation per unique URL from that field, otherwise downstream
+    ``_harvest_web_citations`` sees nothing and the model's JSON-quoted
+    URLs get rejected as if they were hallucinated.
+    """
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_01",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "QBTS Q1 2026 earnings",
+                "sources": [
+                    {"type": "url", "url": "https://www.sec.gov/Archives/edgar/qbts.htm"},
+                    {"type": "url", "url": "https://www.nasdaq.com/articles/dwave-qbts"},
+                    # Duplicate of the first — adapter should dedupe.
+                    {"type": "url", "url": "https://www.sec.gov/Archives/edgar/qbts.htm"},
+                ],
+            },
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": '{"facts": []}'}],
+        },
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        resp = await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    urls = [c.url for c in resp.citations]
+    assert urls == [
+        "https://www.sec.gov/Archives/edgar/qbts.htm",
+        "https://www.nasdaq.com/articles/dwave-qbts",
+    ]
+    assert all(c.kind == "web" for c in resp.citations)
+    assert all(c.source == "OpenAI Web Search" for c in resp.citations)
+
+
+async def test_generate_extracts_url_from_open_page_action() -> None:
+    """``action.type == "open_page"`` carries a single URL the model
+    actually opened — also a real visit signal."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_02",
+            "status": "completed",
+            "action": {
+                "type": "open_page",
+                "url": "https://www.sec.gov/cgi-bin/browse-edgar?CIK=1907982",
+            },
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": '{"facts": []}'}],
+        },
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        resp = await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    assert [c.url for c in resp.citations] == [
+        "https://www.sec.gov/cgi-bin/browse-edgar?CIK=1907982"
+    ]
+
+
+async def test_generate_extracts_url_from_find_in_page_action() -> None:
+    """``action.type == "find_in_page"`` also reports the page URL."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_03",
+            "status": "completed",
+            "action": {
+                "type": "find_in_page",
+                "pattern": "guidance",
+                "url": "https://ir.dwavesys.com/q1-2026",
+            },
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": '{"facts": []}'}],
+        },
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        resp = await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    assert [c.url for c in resp.citations] == ["https://ir.dwavesys.com/q1-2026"]
+
+
+async def test_generate_failed_web_search_emits_no_action_url_citations() -> None:
+    """A failed web_search must NOT emit citations from its action — the
+    URLs may be partial/garbled and the model didn't actually use them."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_04",
+            "status": "failed",
+            "action": {
+                "type": "search",
+                "query": "q",
+                "sources": [{"type": "url", "url": "https://example.com/blocked"}],
+            },
+        },
+        {
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": "x"}],
+        },
+    ]
+    with respx.mock() as mock:
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        resp = await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+    assert resp.citations == ()
+
+
 async def test_generate_detects_failed_web_search_call() -> None:
     """A `web_search_call` with `status: "failed"` produces a
     FailedSearch on server_tool_failures. The runtime's I-a rescue
@@ -483,6 +625,198 @@ async def test_generate_detects_failed_web_search_call() -> None:
     f = resp.server_tool_failures[0]
     assert f.query == "blocked query"
     assert f.error_kind in {"server_error", "unknown"}
+
+
+async def test_generate_logs_web_search_outcome(caplog: pytest.LogCaptureFixture) -> None:
+    """Every web_search_call must emit a structured log line that
+    surfaces the fields that are actually meaningful for THAT action
+    type — query+urls for ``search``, url for ``open_page``, url+pattern
+    for ``find_in_page``. The previous one-size-fits-all log line wrote
+    ``query=''`` for open_page / find_in_page entries and was actively
+    misleading when diagnosing real runs."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "rocket lab Q1 2026 earnings",
+                "sources": [
+                    {"type": "url", "url": "https://example.com/a"},
+                    {"type": "url", "url": "https://example.com/b"},
+                ],
+            },
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_2",
+            "status": "completed",
+            "action": {
+                "type": "open_page",
+                "url": "https://eaton.com/about",
+            },
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_3",
+            "status": "completed",
+            "action": {
+                "type": "find_in_page",
+                "url": "https://eaton.com/about",
+                "pattern": "antitrust",
+            },
+        },
+        {
+            "type": "web_search_call",
+            "id": "ws_4",
+            "status": "failed",
+            "action": {"query": "blocked query"},
+            "error": {"code": "rate_limited"},
+        },
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("INFO", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+
+    msgs = [r.message for r in caplog.records]
+    search_lines = [m for m in msgs if "action=search" in m and "urls=" in m]
+    open_lines = [m for m in msgs if "action=open_page" in m and "url=" in m]
+    find_lines = [m for m in msgs if "action=find_in_page" in m and "pattern=" in m]
+    fail_lines = [m for m in msgs if "openai web_search FAILED" in m]
+
+    assert search_lines and "rocket lab" in search_lines[0] and "urls=2" in search_lines[0]
+    assert open_lines and "eaton.com/about" in open_lines[0]
+    assert find_lines and "antitrust" in find_lines[0] and "eaton.com/about" in find_lines[0]
+    assert fail_lines and "rate_limited" in fail_lines[0] and "blocked query" in fail_lines[0]
+
+
+async def test_generate_logs_plural_queries_search(caplog: pytest.LogCaptureFixture) -> None:
+    """gpt-5.4 ``web_search_preview`` sends batch searches in
+    ``action.queries`` (plural list of strings), not ``action.query``.
+    The adapter must surface the actual queries in the log; the
+    earlier code read ``query`` and logged ``query=''`` for every
+    batch, which made real-run logs lie about what the model
+    searched for."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "queries": [
+                    "Eaton 2025 annual report segment revenue 10-k",
+                    "Eaton competitors Schneider Electric ABB peer comparison",
+                ],
+            },
+        }
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("INFO", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+
+    msgs = [r.message for r in caplog.records]
+    lines = [m for m in msgs if "action=search" in m and "queries=" in m]
+    assert lines
+    assert "Eaton 2025 annual report" in lines[0]
+    assert "Schneider Electric" in lines[0]
+
+    # The empty-query WARNING must NOT fire when queries is populated —
+    # otherwise every batch search would emit a false-positive diagnostic.
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert not any("empty query" in m for m in warns)
+
+
+async def test_generate_warns_on_unknown_output_item_type(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The adapter is forward-compatible — unknown item types must not
+    crash the parser — but a silent drop hides shape changes we care
+    about (e.g. OpenAI surfacing search-result URLs under a new item
+    type instead of ``web_search_call.action.sources``). A WARNING
+    line per unknown type gives us ground truth on what the API is
+    actually returning, so a missing-URL symptom no longer requires
+    re-running with a network sniffer to diagnose."""
+    output = [
+        {
+            "type": "web_search_result",  # hypothetical future shape
+            "id": "wsr_1",
+            "results": [{"url": "https://example.com/a", "title": "A"}],
+        },
+        {
+            "role": "assistant",
+            "type": "message",
+            "content": [{"type": "output_text", "text": "ok"}],
+        },
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("WARNING", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        resp = await _adapter().generate(LLMRequest(messages=[Message(role="user", content="hi")]))
+
+    # Parser still produces a usable response — the unknown item is
+    # surfaced via the log, not by failing the call.
+    assert resp.text == "ok"
+
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert any("unknown output item" in m for m in warns)
+    assert any("web_search_result" in m for m in warns)
+    assert any("keys=" in m for m in warns)
+
+
+async def test_generate_warns_on_empty_query_search(caplog: pytest.LogCaptureFixture) -> None:
+    """An empty-query ``search`` action is the smoking gun for a model
+    bypassing real search and falling back to ``open_page`` on
+    training-set URLs. The adapter must dump the raw action shape at
+    WARNING level so a real-run log lets us tell apart 'model issued
+    empty query' from 'we're reading the wrong field name' — without
+    needing to re-run the report."""
+    output = [
+        {
+            "type": "web_search_call",
+            "id": "ws_1",
+            "status": "completed",
+            "action": {
+                "type": "search",
+                "query": "",
+                "sources": [],
+            },
+        }
+    ]
+    with (
+        respx.mock() as mock,
+        caplog.at_level("WARNING", logger="openlia.llm.adapters.openai_responses"),
+    ):
+        mock.post("https://api.openai.com/v1/responses").mock(return_value=_ok_response(output))
+        await _adapter().generate(
+            LLMRequest(
+                messages=[Message(role="user", content="hi")],
+                native_tools=("web_search",),
+            )
+        )
+
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert any("empty query AND empty queries" in m for m in warns)
+    assert any("raw action keys=" in m for m in warns)
 
 
 # ---------- Unified streaming: real Responses SSE ----------

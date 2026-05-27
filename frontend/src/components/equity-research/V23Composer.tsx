@@ -111,9 +111,9 @@ interface Props {
    *  template instead of falling back to the report_type built-in. */
   templateId?: string | null;
   /** User-selected reasoning effort from the settings modal. "off"
-   *  sends null to the server (thinking disabled); "medium" / "high"
-   *  forward verbatim. PLAN + SYNTHESIZE are the only stages that
-   *  apply the directive server-side. */
+   *  skips reasoning entirely (OpenAI gpt-5.x may then skip web_search
+   *  tool calls); medium/high propagate to PLAN, SYNTHESIZE, and
+   *  RESEARCH server-side. */
   reasoningEffort?: "off" | "medium" | "high";
   /** User's display name for the welcome greeting. */
   firstName: string;
@@ -131,7 +131,7 @@ export function V23Composer({
   length,
   reportType,
   templateId = null,
-  reasoningEffort = "off",
+  reasoningEffort = "medium",
   firstName,
   onModeClick,
 }: Props): JSX.Element {
@@ -418,6 +418,9 @@ export function V23Composer({
         report_type: reportType,
         length: LENGTH_TO_V23[length],
         template_id: templateId,
+        // Wire enum has MEDIUM / HIGH only; "off" maps to null (no
+        // reasoning directive sent). Sending the literal "off" string
+        // would 422 against the ReasoningEffort Pydantic validator.
         reasoning_effort: reasoningEffort === "off" ? null : reasoningEffort,
       },
       {

@@ -166,26 +166,47 @@ describe("adaptV23PayloadToSchema — chart_type=table", () => {
 });
 
 
-describe("adaptV23PayloadToSchema — narrative coverage signal", () => {
-  it("leaves the narrative_coverage_* meta_stats fields null when the payload omits the signal", () => {
+describe("adaptV23PayloadToSchema — lane coverage signals", () => {
+  it("leaves every coverage field null when the payload carries no lane signals", () => {
     const schema = adaptV23PayloadToSchema(basePayload());
+    expect(schema.meta_stats?.data_coverage_label).toBeNull();
+    expect(schema.meta_stats?.data_coverage_pct).toBeNull();
+    expect(schema.meta_stats?.web_coverage_label).toBeNull();
+    expect(schema.meta_stats?.web_coverage_pct).toBeNull();
     expect(schema.meta_stats?.narrative_coverage_label).toBeNull();
     expect(schema.meta_stats?.narrative_coverage_pct).toBeNull();
   });
 
-  it("surfaces the signal as 'satisfied/total' + pct when present", () => {
+  it("surfaces data + web lanes independently when both are present", () => {
     const payload = basePayload();
-    payload.narrative_coverage = { total: 4, satisfied: 3, pct: 0.75 };
+    payload.data_coverage = { total: 5, satisfied: 5, pct: 1 };
+    payload.web_coverage = { total: 4, satisfied: 3, pct: 0.75 };
     const schema = adaptV23PayloadToSchema(payload);
-    expect(schema.meta_stats?.narrative_coverage_label).toBe("3/4");
-    expect(schema.meta_stats?.narrative_coverage_pct).toBe(0.75);
+    expect(schema.meta_stats?.data_coverage_label).toBe("5/5");
+    expect(schema.meta_stats?.data_coverage_pct).toBe(1);
+    expect(schema.meta_stats?.web_coverage_label).toBe("3/4");
+    expect(schema.meta_stats?.web_coverage_pct).toBe(0.75);
   });
 
-  it("surfaces 0/N when no narrative needs were satisfied", () => {
+  it("mirrors the web lane into the legacy narrative_coverage fields", () => {
     const payload = basePayload();
-    payload.narrative_coverage = { total: 4, satisfied: 0, pct: 0 };
+    payload.data_coverage = { total: 5, satisfied: 5, pct: 1 };
+    payload.web_coverage = { total: 4, satisfied: 0, pct: 0 };
     const schema = adaptV23PayloadToSchema(payload);
     expect(schema.meta_stats?.narrative_coverage_label).toBe("0/4");
     expect(schema.meta_stats?.narrative_coverage_pct).toBe(0);
+  });
+
+  it("falls back to narrative_coverage when only the legacy field is present", () => {
+    const payload = basePayload();
+    payload.narrative_coverage = { total: 4, satisfied: 3, pct: 0.75 };
+    const schema = adaptV23PayloadToSchema(payload);
+    // The new web-lane fields pick up the legacy value so the renderer
+    // can drive the new chip even from a legacy payload.
+    expect(schema.meta_stats?.web_coverage_label).toBe("3/4");
+    expect(schema.meta_stats?.web_coverage_pct).toBe(0.75);
+    // The deprecated mirror still populates.
+    expect(schema.meta_stats?.narrative_coverage_label).toBe("3/4");
+    expect(schema.meta_stats?.narrative_coverage_pct).toBe(0.75);
   });
 });

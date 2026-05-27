@@ -23,9 +23,10 @@ from openlia.llm.runtime.report_v2_3.schemas import (
     OutlineSection,
     ReportType,
     ResearchBundle,
+    WebSource,
 )
 from openlia.llm.runtime.report_v2_3.templates import TemplateSpec, get_builtin
-from openlia.llm.types import Message, ToolCall
+from openlia.llm.types import Citation, Message, ToolCall
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -541,10 +542,21 @@ def test_fake_rejects_both_or_neither() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
+# ---------------------------------------------------------------------------
+# RESEARCH dual-lane prompt + payload (TDD red-tests)
+#
+# The dominant zero-web-calls failure mode is the researcher satisfying a
+# narrative need from get_company_news (EODHD) instead of web_search.
+# The fix moves routing from the prose-driven source_class trichotomy to
+# explicit data_fact_ids / web_fact_ids lanes — the prompt and the
+# initial user payload must both speak the new contract.
+# ---------------------------------------------------------------------------
+
+
+def test_initial_user_payload_emits_data_and_web_fact_id_lists_per_need() -> None:
     """The researcher's first user message must surface each data_need's
-    `source_class` so the model can route quantitative-vs-narrative
-    without guessing from the description."""
+    data_fact_ids and web_fact_ids as separate lists so the model can
+    route every id structurally instead of inferring lanes from prose."""
     from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
         _initial_user_text,
     )
@@ -558,19 +570,18 @@ def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
                 title="Overview",
                 data_needs=[
                     DataNeed(
-                        description="revenue, last 5 fiscal years",
-                        expected_fact_ids=["rev_fy_hist"],
-                        source_class="quantitative",
+                        description="layered theme",
+                        data_fact_ids=["headlines"],
+                        web_fact_ids=["framing"],
                     ),
                     DataNeed(
-                        description="recent regulatory investigations",
-                        expected_fact_ids=["regulatory_investigations"],
-                        source_class="narrative",
+                        description="pure financials",
+                        data_fact_ids=["rev_ttm"],
                     ),
                     DataNeed(
-                        description="business model summary",
-                        expected_fact_ids=["business_model"],
-                    ),  # default 'either'
+                        description="pure narrative",
+                        web_fact_ids=["analyst_pt_range"],
+                    ),
                 ],
             )
         ],
@@ -585,25 +596,23 @@ def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
         clarify_result=None,
     )
 
-    payload = json.loads(_initial_user_text(request))
+    raw = _initial_user_text(request)
+    # The user turn may carry a search-budget anchor above the JSON;
+    # parse from the first '{' so the tests of payload shape are
+    # independent of the anchor wording.
+    payload = json.loads(raw[raw.index("{") :])
     needs = payload["sections"][0]["data_needs"]
-    assert [n["source_class"] for n in needs] == ["quantitative", "narrative", "either"]
-
-
-def test_research_prompt_routes_by_source_class_not_by_model_judgment() -> None:
-    """The RESEARCH prompt must explicitly route by `source_class` and
-    drop the prior `Prefer using BOTH kinds together` hedge that let the
-    model talk itself out of web_search."""
-    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
-        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
-    )
-
-    assert "source_class" in RESEARCH_SYSTEM_PROMPT
-    for cls in ("quantitative", "narrative", "either"):
-        assert cls in RESEARCH_SYSTEM_PROMPT
-    # The old hedge text must not survive — its presence reverts the
-    # whole intervention to a soft preference.
-    assert "Prefer using BOTH kinds together" not in RESEARCH_SYSTEM_PROMPT
+    assert needs[0]["data_fact_ids"] == ["headlines"]
+    assert needs[0]["web_fact_ids"] == ["framing"]
+    assert needs[1]["data_fact_ids"] == ["rev_ttm"]
+    assert needs[1]["web_fact_ids"] == []
+    assert needs[2]["data_fact_ids"] == []
+    assert needs[2]["web_fact_ids"] == ["analyst_pt_range"]
+    # The old wire fields must not leak through — the planner and
+    # researcher must speak the same vocabulary.
+    for n in needs:
+        assert "source_class" not in n
+        assert "expected_fact_ids" not in n
 
 
 def test_tool_execution_error_reaches_model_as_tool_message() -> None:
@@ -638,3 +647,704 @@ def test_tool_execution_error_reaches_model_as_tool_message() -> None:
     # failure as a tool message — confirmed via the error propagation path.
     with pytest.raises(RuntimeError):
         researcher.research(_request())
+
+
+# ---------------------------------------------------------------------------
+# Native web_search citation resolution
+# ---------------------------------------------------------------------------
+
+
+def _web_cite(url: str, title: str = "T", snippet: str = "S") -> Citation:
+    return Citation(id="c1", kind="web", url=url, title=title, snippet=snippet, source="Test")
+
+
+def test_url_form_evidence_id_resolves_via_harvested_map() -> None:
+    """When the model cites a web fact by the verbatim URL it
+    retrieved this run, the runtime must resolve the URL through the
+    same map that backs ``web_N``. This is necessary because gpt-5.4's
+    ``web_search_preview`` is intra-turn agentic — all the web actions
+    happen inside one LLM response, and the model writes its final
+    JSON in the same response, so it never sees the ``web_N`` mapping
+    we inject between turns. The URL form is the model's only
+    grounded handle when the search and the final JSON share a turn."""
+    url = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "qual_pos",
+                                "label": "Qualitative positioning",
+                                "value": "AI infra leader",
+                                "evidence_id": url,
+                            }
+                        ]
+                    }
+                ),
+                tool_calls=(),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+    fact = bundle.facts["qual_pos"]
+    assert isinstance(fact.source, WebSource)
+    assert fact.source.url == url
+
+
+def test_url_form_with_toggled_trailing_slash_resolves() -> None:
+    """LLMs commonly normalize trailing punctuation on URLs. The
+    runtime must resolve both ``https://x/a`` and ``https://x/a/``
+    when only one form was harvested."""
+    canonical = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "qual",
+                                "label": "Qualitative",
+                                "value": "x",
+                                # Trailing slash added by the model.
+                                "evidence_id": canonical + "/",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(canonical),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+    assert isinstance(bundle.facts["qual"].source, WebSource)
+
+
+def test_url_not_in_harvest_map_drops_fact() -> None:
+    """A URL the model never actually fetched this run cannot resolve.
+    This is the load-bearing safety check that makes URL acceptance
+    safe — the harvest map is populated exclusively from real
+    ``web_search_call.action`` payloads, so a fabricated URL fails
+    to resolve and the fact drops."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "halluc",
+                                "label": "Hallucinated",
+                                "value": "x",
+                                "evidence_id": "https://no-such-source.example/never-fetched",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite("https://example.com/real"),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no usable facts"):
+        researcher.research(_request())
+
+
+def test_web_evidence_id_resolves_by_web_n() -> None:
+    """LLM cites by `web_1` — resolves to the canonical WebSource."""
+    url = "https://example.com/news"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "catalyst",
+                                "label": "Recent catalyst",
+                                "value": "new GPU launch",
+                                "evidence_id": "web_1",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+    fact = bundle.facts["catalyst"]
+    assert isinstance(fact.source, WebSource)
+    assert fact.source.url == url
+
+
+def test_unknown_web_n_id_drops_fact() -> None:
+    """A `web_N` id the model invented out of thin air (no real search this
+    run) cannot be resolved and the fact is dropped."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "halluc",
+                                "label": "Hallucinated",
+                                "value": "x",
+                                "evidence_id": "web_7",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite("https://example.com/real"),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no usable facts"):
+        researcher.research(_request())
+
+
+def test_openai_internal_step_id_drops_fact() -> None:
+    """gpt-5.4's ``web_search_preview`` agent labels its own internal
+    actions with strings like ``turn0search0``, ``turn1view2``. Those
+    are private to the search agent and the runtime cannot resolve
+    them — they should drop the fact loudly, not silently masquerade
+    as a valid handle."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "segment_mix",
+                                "label": "Segment mix",
+                                "value": "AI infra dominant",
+                                "evidence_id": "turn1view2",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite("https://example.com/real"),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="no usable facts"):
+        researcher.research(_request())
+
+
+def test_system_text_carries_web_n_mapping_after_harvest() -> None:
+    """The cumulative ``web_N → URL`` mapping must live in the per-turn
+    system text — that way it cannot scroll out under later tool turns
+    and the model always sees the current claimable web_N ids."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(
+        responder=_two_turn_web_responder(url),
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+
+    assert {"rev_ttm", "qual"} <= set(bundle.facts)
+    assert isinstance(bundle.facts["qual"].source, WebSource)
+
+    # Turn 1 has no mapping yet (no prior harvest). The phrase "Web
+    # search results so far" appears in the SYSTEM_PROMPT itself
+    # (referring to the note), so we match on the unique rendered note
+    # header instead.
+    assert "(newest last):" not in llm.systems[0]
+    # Turn 2 system text must carry the harvested mapping AND the
+    # explicit reminder that raw URLs are not accepted AND the
+    # publisher histogram (step 5 of the narrative-search procedure
+    # needs a concrete dominance signal to read).
+    assert "(newest last):" in llm.systems[1]
+    assert "web_1" in llm.systems[1]
+    assert url in llm.systems[1]
+    # The note must say plainly that BOTH web_N and the exact URL
+    # resolve, and call out the failure mode for OpenAI internal
+    # step labels so a model that picks them up from context knows
+    # to switch.
+    assert "either a `web_N` id" in llm.systems[1]
+    assert "the exact URL" in llm.systems[1]
+    assert "turn0search0" in llm.systems[1]
+    assert "By publisher: example.com=1" in llm.systems[1]
+
+
+def test_system_text_carries_mapping_on_every_turn_after_harvest() -> None:
+    """Mapping must reappear on EVERY turn after first harvest — not just
+    the immediate next turn. This guards against a regression where the
+    note scrolls out under many subsequent tool roundtrips."""
+    url = "https://example.com/foo"
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        n = sum(1 for m in messages if m.role == "assistant")
+        if n == 0:
+            # Turn 1: harvest a web citation alongside a function tool call.
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(id="tc_1", name="get_fundamentals", arguments={"ticker": "NVDA"}),
+                ),
+                citations=(_web_cite(url),),
+            )
+        if n == 1:
+            # Turn 2: another function tool call, no new citations.
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(id="tc_2", name="get_fundamentals", arguments={"ticker": "NVDA"}),
+                ),
+            )
+        # Turn 3: final JSON citing both the function call and the web hit.
+        return ToolTurnResponse(
+            text=json.dumps(
+                {
+                    "facts": [
+                        {
+                            "id": "rev_ttm",
+                            "label": "Revenue (TTM)",
+                            "value": 60_900_000_000,
+                            "evidence_id": "tc_1",
+                        },
+                        {
+                            "id": "qual",
+                            "label": "Qualitative",
+                            "value": "x",
+                            "evidence_id": "web_1",
+                        },
+                    ]
+                }
+            ),
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request())
+
+    assert "qual" in bundle.facts
+    # Mapping pinned at turn 2 AND turn 3 — system text is the carrier.
+    assert "web_1" in llm.systems[1]
+    assert "web_1" in llm.systems[2]
+
+
+def test_research_prompt_does_not_enumerate_publishers() -> None:
+    """A publisher list goes stale, is always incomplete, and does not
+    transfer to foreign issuers or macro claims. The procedure replaces
+    the list entirely — this test guards against a regression that
+    re-adds 'Bloomberg / Reuters / WSJ / FT' style enumerations."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
+    )
+
+    for outlet in ("Bloomberg", "Reuters", "Wall Street Journal", "Financial Times"):
+        assert outlet not in RESEARCH_SYSTEM_PROMPT, (
+            f"prompt should not enumerate {outlet} — teach the procedure, not the destinations"
+        )
+
+
+def test_web_search_note_renders_per_publisher_count() -> None:
+    """Step 5 of the procedure ('steer the next query by your results')
+    needs a concrete signal to read — a feeling about dominance is not
+    something the model can act on. The mapping note must include a
+    `By publisher: host=count` line whenever any URL has been
+    harvested, grouped by registrable host and sorted by URL count."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        _format_web_search_note,
+    )
+
+    url_to_id = {
+        "https://investor.rocketlab.com/news/a": "web_1",
+        "https://investor.rocketlab.com/news/b": "web_2",
+        "https://www.rocketlab.com/about/c": "web_3",
+        "https://www.sec.gov/Archives/edgar/data/d": "web_4",
+    }
+    note = _format_web_search_note(url_to_id)
+    # All three rocketlab subdomains collapse to the registrable host,
+    # so the dominance signal is unambiguous: 3 vs 1.
+    assert "By publisher: " in note
+    assert "rocketlab.com=" in note or "investor.rocketlab.com=" in note
+    assert "sec.gov=1" in note
+
+
+def test_web_search_note_omits_publisher_line_when_empty() -> None:
+    """No URLs harvested → no histogram line. The mapping note's primary
+    job is still to enumerate `web_N` ids; the publisher line is a
+    helper for diversity steering and should not appear when there is
+    nothing to steer."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        _format_web_search_note,
+    )
+
+    note = _format_web_search_note({})
+    assert "By publisher" not in note
+
+
+def test_research_logs_per_turn_tool_and_citation_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each turn must emit a structured log line summarizing tool_calls,
+    citations, and the cumulative web_urls count. Without these signals
+    the only visible failure mode is "narrative coverage 0/N at finalize"
+    — which doesn't tell you whether web_search ran at all."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(responder=_two_turn_web_responder(url))
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request())
+
+    turn_lines = [r.message for r in caplog.records if "v2.3 RESEARCH turn=" in r.message]
+    assert len(turn_lines) == 2
+    assert "tool_calls=1" in turn_lines[0]
+    assert "citations=1" in turn_lines[0]
+    assert "new_web_urls=1" in turn_lines[0]
+    # Turn 2 emits the final JSON — no tool calls, no new citations.
+    assert "tool_calls=0" in turn_lines[1]
+    assert "new_web_urls=0" in turn_lines[1]
+
+
+def test_research_logs_tool_call_outcome_per_call(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each function tool call must log its outcome (ok|error) and id so
+    a failed tool roundtrip surfaces in the log instead of disappearing
+    behind a downstream fact-resolution warning."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(responder=_two_turn_web_responder(url))
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request())
+
+    tool_lines = [r.message for r in caplog.records if "v2.3 RESEARCH tool=" in r.message]
+    assert len(tool_lines) == 1
+    assert "tool=get_fundamentals" in tool_lines[0]
+    assert "status=ok" in tool_lines[0]
+
+
+def test_research_finished_log_includes_publisher_histogram(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The end-of-run summary must report a per-publisher URL count so
+    source-breadth regressions ("all 30 URLs from rocketlab.com") are
+    visible without re-reading every line."""
+    url = "https://example.com/foo"
+    llm = FakeToolLLMClient(responder=_two_turn_web_responder(url))
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request())
+
+    finished = [r.message for r in caplog.records if "RESEARCH finished" in r.message]
+    assert len(finished) == 1
+    assert "publishers=" in finished[0]
+    assert "example.com" in finished[0]
+
+
+def _two_turn_web_responder(url: str):
+    """Helper: turn 1 makes a function tool call AND returns a web citation;
+    turn 2 emits final JSON citing both."""
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        if not any(m.role == "assistant" for m in messages):
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(id="tc_1", name="get_fundamentals", arguments={"ticker": "NVDA"}),
+                ),
+                citations=(_web_cite(url),),
+            )
+        return ToolTurnResponse(
+            text=json.dumps(
+                {
+                    "facts": [
+                        {
+                            "id": "rev_ttm",
+                            "label": "Revenue (TTM)",
+                            "value": 60_900_000_000,
+                            "evidence_id": "tc_1",
+                        },
+                        {
+                            "id": "qual",
+                            "label": "Qualitative",
+                            "value": "x",
+                            "evidence_id": "web_1",
+                        },
+                    ]
+                }
+            ),
+        )
+
+    return responder
+
+
+# ---------------------------------------------------------------------------
+# Web coverage gate at finalize
+# ---------------------------------------------------------------------------
+
+
+def _outline_with_strict_web(web_ids: list[str]) -> Outline:
+    """Outline whose section has one need with strict-web ids only.
+    `data_fact_ids` is empty for that need, so every id in `web_ids` is
+    strictly web-lane and the coverage gate applies."""
+    return Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="narrative-only need",
+                        web_fact_ids=list(web_ids),
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def _request_with_outline(outline: Outline) -> ResearchRequest:
+    return ResearchRequest(
+        raw_prompt="initiate on NVDA",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+        outline=outline,
+        template=_template(),
+        clarify_result=ClarifyProceed(assumptions=[]),
+    )
+
+
+def test_web_coverage_gate_passes_when_strict_web_ids_satisfied() -> None:
+    """When every strict-web fact id in the outline is backed by a
+    WebSource in the bundle, the gate is silent and the bundle is
+    returned. This is the happy path for any narrative-only need."""
+    url = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "framing",
+                                "label": "Framing",
+                                "value": "x",
+                                "evidence_id": "web_1",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+    assert "framing" in bundle.facts
+    assert isinstance(bundle.facts["framing"].source, WebSource)
+
+
+def test_web_coverage_gate_skips_either_lane_ids() -> None:
+    """Ids in BOTH `data_fact_ids` and `web_fact_ids` for the same need
+    are "either" — RESEARCH has discretion. The gate must not trip when
+    such an id is satisfied by a data-lane source only, otherwise the
+    legacy `source_class='either'` migration shape would fail every
+    rehydrated run."""
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="either-lane fact",
+                        data_fact_ids=["rev_ttm"],
+                        web_fact_ids=["rev_ttm"],
+                    ),
+                ],
+            )
+        ],
+    )
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            ),
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "rev_ttm",
+                                "label": "Revenue (TTM)",
+                                "value": 1.0,
+                                "evidence_id": "tc_1",
+                            }
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request_with_outline(outline))
+    assert isinstance(bundle.facts["rev_ttm"].source, DataProviderSource)
+
+
+def test_web_coverage_gate_no_op_when_no_strict_web_ids() -> None:
+    """An outline with no `web_fact_ids` anywhere must not trip the
+    gate — purely quantitative reports legitimately have nothing to
+    enforce. Skipping this no-op case would break every data-only
+    fixture in the suite."""
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="pure data",
+                        data_fact_ids=["rev_ttm"],
+                    ),
+                ],
+            )
+        ],
+    )
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            ),
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "rev_ttm",
+                                "label": "Revenue (TTM)",
+                                "value": 1.0,
+                                "evidence_id": "tc_1",
+                            }
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request_with_outline(outline))
+    assert "rev_ttm" in bundle.facts
+
+
+def test_web_coverage_gate_logs_coverage_breakdown(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Coverage stats must surface in logs even when the gate passes,
+    so the per-run web-lane satisfaction rate is observable without
+    re-deriving it from the bundle."""
+    url = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "framing",
+                                "label": "Framing",
+                                "value": "x",
+                                "evidence_id": "web_1",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+    coverage_lines = [r.message for r in caplog.records if "web coverage:" in r.message]
+    assert len(coverage_lines) == 1
+    assert "strict=1" in coverage_lines[0]
+    assert "covered=1" in coverage_lines[0]
+    assert "missing=0" in coverage_lines[0]
+
+
+def test_no_usable_facts_error_includes_category_histogram_and_samples() -> None:
+    """When every fact in a non-empty bundle is rejected, the error must
+    surface a reason histogram and the first rejected fact ids/reasons.
+    Without this the operator sees 'skipped N of N' and has no signal
+    on whether the model is citing fabricated web_N ids, missing
+    evidence, dangling computed-from, etc."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "rev_ttm",
+                                "label": "Revenue TTM",
+                                "value": 1.0,
+                                "evidence_id": "web_999",  # not in ledger
+                            },
+                            {
+                                "id": "eps_ttm",
+                                "label": "EPS TTM",
+                                "value": 1.0,
+                                "evidence_id": "tc_fake",  # not in ledger
+                            },
+                            {
+                                "id": "no_anchors",
+                                "label": "Nothing",
+                                "value": 1.0,
+                                # no evidence_id, no computed_from
+                            },
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError) as exc:
+        researcher.research(_request())
+    msg = str(exc.value)
+    assert "skipped 3 of 3" in msg
+    assert "evidence_id_not_in_ledger=2" in msg
+    assert "missing_evidence_and_computed_from=1" in msg
+    assert "First rejections:" in msg
+    assert "'rev_ttm'" in msg
+    assert "web_999" in msg
+    # Ledger summary surfaces so we can tell whether the model never
+    # had anything to cite vs cited the wrong handles.
+    assert "web_N=0" in msg
+    assert "tool_call_ids=0" in msg

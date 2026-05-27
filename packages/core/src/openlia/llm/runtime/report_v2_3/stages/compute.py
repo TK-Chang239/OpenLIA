@@ -29,6 +29,7 @@ from ..clients.compute import ComputeClient, ComputeRequest
 from ..schemas import (
     BundleFact,
     CompsInputs,
+    ComputedSource,
     DCFInputs,
     Outline,
     ResearchBundle,
@@ -112,9 +113,49 @@ class ComputeStage(Stage):
                 )
             new_by_id[fact.id] = fact
 
+        # Prune computed facts whose derived_from references ids the
+        # research bundle didn't gather (RKLB-style: COMPUTE proposes peer
+        # multiples like MNTS_ev_revenue_ttm but RESEARCH never fetched
+        # peer facts). Trim missing refs; drop the fact entirely if the
+        # ComputedSource.derived_from list ends up empty (it requires
+        # min_length=1).
+        existing_ids = set(bundle.facts) | set(new_by_id)
+        pruned: dict[str, BundleFact] = {}
+        for fid, fact in new_by_id.items():
+            if not isinstance(fact.source, ComputedSource):
+                pruned[fid] = fact
+                continue
+            kept = [d for d in fact.source.derived_from if d in existing_ids]
+            if not kept:
+                log.warning(
+                    "COMPUTE: dropping fact %r — derived_from references missing facts %s.",
+                    fid,
+                    sorted(set(fact.source.derived_from)),
+                )
+                continue
+            if kept != list(fact.source.derived_from):
+                missing = sorted(set(fact.source.derived_from) - set(kept))
+                log.warning(
+                    "COMPUTE: trimming derived_from on %r — missing facts: %s",
+                    fid,
+                    missing,
+                )
+                fact = BundleFact(
+                    id=fact.id,
+                    label=fact.label,
+                    value=fact.value,
+                    unit=fact.unit,
+                    ticker=fact.ticker,
+                    source=ComputedSource(
+                        method=fact.source.method,
+                        derived_from=kept,
+                    ),
+                )
+            pruned[fid] = fact
+
         state.bundle = ResearchBundle(
             tickers=bundle.tickers,
-            facts={**bundle.facts, **new_by_id},
+            facts={**bundle.facts, **pruned},
         )
         return state
 

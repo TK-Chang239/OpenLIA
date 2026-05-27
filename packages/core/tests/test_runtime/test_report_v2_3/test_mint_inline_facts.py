@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 import pytest
 from openlia.llm.runtime.report_v2_3.schemas import (
     BundleFact,
+    BundleSeries,
+    BundleSeriesPoint,
     ComputedSource,
     DataProviderSource,
     EstimateSource,
@@ -311,3 +313,102 @@ def test_cross_marker_id_collision_raises():
     with pytest.raises(MintError) as exc:
         mint_inline_facts(body, bundle, _mandate())
     assert "shared_id" in str(exc.value)
+
+
+# ---------------------------------------------------------------------------
+# Soft-fail on DerivationError — non-scalar inputs and divide-by-zero
+# ---------------------------------------------------------------------------
+
+
+def _segment_bundle() -> ResearchBundle:
+    """A bundle where one fact is a BundleSeries — the shape RESEARCH
+    emits when a model overloads the time-series schema to carry a
+    one-period segment breakdown."""
+    return ResearchBundle(
+        tickers=["ETN"],
+        facts={
+            "rev_total_2025": BundleFact(
+                id="rev_total_2025",
+                label="Revenue 2025",
+                value=24_000.0,
+                source=_src(),
+            ),
+            "revenue_mix_by_segment_latest": BundleFact(
+                id="revenue_mix_by_segment_latest",
+                label="Revenue Mix by Segment",
+                value=BundleSeries(
+                    points=[
+                        BundleSeriesPoint(period="2025_Electrical_Americas", value=0.48),
+                        BundleSeriesPoint(period="2025_Aerospace", value=0.15),
+                    ],
+                    unit="percent",
+                ),
+                source=_src(),
+            ),
+        },
+    )
+
+
+def test_derive_against_bundle_series_soft_fails_to_cite_on_first_input(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A writer LLM that asks for a ratio against a segment-breakdown
+    fact would otherwise crash the whole WRITE stage. The mint step
+    must catch the underlying DerivationError, log it for diagnosis,
+    and rewrite the marker as a CITE on the first input so the section
+    still ships. VERIFY's deterministic uncited-number check is the
+    second-line safety net for anything left dangling in the prose."""
+    bundle = _segment_bundle()
+    mandate = SectionMandate(
+        section_id="overview",
+        covers="overview",
+        does_not_cover="",
+        chart_ids=[],
+        relevant_fact_ids=["revenue_mix_by_segment_latest", "rev_total_2025"],
+    )
+    body = (
+        "Electrical Americas contributed "
+        "{{DERIVE:ratio|revenue_mix_by_segment_latest,rev_total_2025|electrical_share}} "
+        "of revenue."
+    )
+    with caplog.at_level("WARNING", logger="openlia.llm.runtime.report_v2_3.stages._mint"):
+        new_body, new_facts = mint_inline_facts(body, bundle, mandate)
+
+    # The marker is replaced by a CITE on the first input, not on the
+    # never-minted new_id. No new fact is emitted.
+    assert "{{CITE:revenue_mix_by_segment_latest}}" in new_body
+    assert "{{CITE:electrical_share}}" not in new_body
+    assert "{{DERIVE:" not in new_body
+    assert new_facts == []
+
+    # The soft-fail is logged with the section, method, and underlying cause.
+    warns = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert any("DERIVE soft-fail" in m for m in warns)
+    assert any("overview" in m for m in warns)
+    assert any("revenue_mix_by_segment_latest" in m for m in warns)
+
+
+def test_derive_divide_by_zero_soft_fails_same_way() -> None:
+    """Divide-by-zero raises DerivationError just like non-scalar input;
+    the soft-fail path must catch both equivalently so the same
+    failure mode does not crash the stage."""
+    bundle = ResearchBundle(
+        tickers=["NVDA"],
+        facts={
+            "rev_fy25": BundleFact(id="rev_fy25", label="Revenue FY25", value=125.0, source=_src()),
+            "rev_fy24": BundleFact(id="rev_fy24", label="Revenue FY24", value=0.0, source=_src()),
+        },
+    )
+    mandate = SectionMandate(
+        section_id="financials",
+        covers="financials",
+        does_not_cover="",
+        chart_ids=[],
+        relevant_fact_ids=["rev_fy25", "rev_fy24"],
+    )
+    body = "Revenue grew {{DERIVE:growth_rate|rev_fy25,rev_fy24|rev_growth_yoy}} YoY."
+
+    new_body, new_facts = mint_inline_facts(body, bundle, mandate)
+    assert "{{CITE:rev_fy25}}" in new_body
+    assert "{{DERIVE:" not in new_body
+    assert new_facts == []

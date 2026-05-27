@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -119,6 +120,7 @@ class FakeToolLLMClient:
         self._responder = responder
         self._next = 0
         self.calls: list[list[Message]] = []
+        self.systems: list[str] = []
 
     def send(
         self,
@@ -128,6 +130,7 @@ class FakeToolLLMClient:
         tools: list[ToolSchema],
     ) -> ToolTurnResponse:
         self.calls.append(list(messages))
+        self.systems.append(system)
         if self._responder is not None:
             return self._responder(list(messages))
         assert self._turns is not None
@@ -146,50 +149,33 @@ class FakeToolLLMClient:
 # ---------------------------------------------------------------------------
 
 
-SYSTEM_PROMPT = """You are the RESEARCH stage of an equity-research report
-pipeline. Your job: gather the facts the rest of the pipeline will use
-to write the report, and emit them as a single JSON object on your
-last turn.
+SYSTEM_PROMPT = """\
+You are the RESEARCH stage of an equity-research report pipeline.
+Read the outline, fetch facts, emit one JSON object on your last turn.
 
-How you work:
+For every fact, decide what KIND of claim it is:
 
-1. Read the user's outline, especially each section's `data_needs`.
-   Each data_need is a piece of evidence WRITE will cite — your job is
-   to fetch it.
+- Matter of record — exactly one correct value, lives in a filing or
+  a market feed. Use the EODHD data tools (`get_fundamentals`,
+  `get_historical_prices`, `get_company_news`). Each tool call result
+  arrives with an `evidence_id` (e.g. `tc_abc123`) — cite that.
+- Matter of interpretation — synthesis, opinion, framing, causal
+  claim, forward-looking expectation. Use `web_search`. Each new URL
+  the search returns is registered as `web_1`, `web_2`, … in a system
+  note. Cite by that `web_N` id.
 
-2. Every `data_need` carries a `source_class`. The planner has already
-   decided which tool family fits — your job is to honor it:
+Cite every fact. Either:
+- `evidence_id`: a tool-call id (`tc_…`) or a `web_N` id from a real
+  search this run, or
+- `computed_from`: list of other fact ids in this same batch, plus
+  `method`: a one-line description of how you derived the value.
 
-   - `source_class: quantitative` — satisfy with data tools
-     (``get_fundamentals``, ``get_historical_prices``,
-     ``get_company_news``). These return numbers + provider ids
-     (``tc_abc123``).
-   - `source_class: narrative` — satisfy with ``web_search``.
-     Web-search results arrive with stable ids of the form ``web_1``,
-     ``web_2``, ``web_3`` … in the order they were retrieved across
-     the run. Use those exact strings as ``evidence_id`` for any fact
-     derived from a web hit, and quote a short verbatim snippet so
-     VERIFY can value-match.
-   - `source_class: either` — pick whichever tool family fits the
-     specific fact. Default to data tools for anything reported in
-     financial statements; default to web_search for anything that
-     could have changed in the last few weeks.
+If you cannot find evidence for a listed fact id after looking, omit
+it — don't fabricate a source.
 
-3. Call tools. You can call multiple per turn and re-call as needed.
-   Each tool call result is labeled with `evidence_id` — that's the
-   handle you use later to cite it. Drop a need only if every source
-   class permitted for it returned nothing — and prefer reporting back
-   a smaller fact than silently omitting one.
+Output one JSON object on your final turn — no prose, no markdown
+fences — matching this shape:
 
-   Fundamentals are point-in-time as of the fetch date — structured
-   numbers only, no narrative, no news, no regulatory status. Treat
-   the EODHD payload as financial data, not as company context.
-
-4. When you have enough evidence to cover the outline, STOP calling
-   tools. On your final turn emit exactly one JSON object — no prose,
-   no markdown fences — matching this shape:
-
-```
 {
   "facts": [
     {
@@ -211,45 +197,6 @@ How you work:
     }
   ]
 }
-```
-
-Rules:
-
-- Every fact MUST have either `evidence_id` (pointing at a tool call
-  that returned the number) OR both `computed_from` (list of other
-  fact ids in this batch) AND `method` (one-line description).
-- `evidence_id` MUST be one of the EXACT strings you have already seen
-  this run: either an id from a `tool` message (those look like
-  `tc_abc123` / `call_xyz789` — the provider's call id), or one of the
-  `web_1`, `web_2`, … ids assigned to web_search results. Emit a fact
-  only when you can trace its `evidence_id` to one of those exact
-  strings; otherwise omit the fact.
-- `computed_from` entries MUST reference fact ids you also emit IN THE
-  SAME `facts` array. Each id you list under `computed_from` must be
-  the id of another fact in this batch (e.g. `gross_profit_history_proxy`
-  is valid only when you also emit a fact with that id). When you
-  need an intermediate to compute a derived fact, EITHER emit that
-  intermediate as its own fact first OR compute the final fact directly
-  from an evidence_id-backed source.
-- Each `value` is a single atomic data point: a number, a date, a
-  ticker, or a short label (twelve words or fewer). For multi-period
-  data of ONE METRIC, use a time-series object
-  `{"points": [{"period": "2025-Q4", "value": 60.9}, ...], "unit": "USD_billions"}`.
-  `point.value` MUST be a plain JSON number — not a string, not a
-  nested object, not a units-bearing literal like `"$60.9B"`. Put any
-  unit on the series via the `unit` field instead.
-- ONE FACT = ONE METRIC. Each fact's value covers a single metric.
-  If you want three years of revenue, gross profit, and EBITDA, emit
-  THREE facts (revenue_ts, gross_profit_ts, ebitda_ts), each a
-  time-series of ONE metric. Names like `historical_income_statement`
-  indicate a packed dump — break them apart into one fact per line
-  item. Save narrative prose for SYNTHESIZE / WRITE — RESEARCH facts
-  stay compact so the downstream stages can compose freely.
-- Fact ids are stable handles — choose short, snake_case strings.
-- Emit a fact only when a tool call returned the data. Skip facts
-  with no tool-call backing so WRITE can flag the gap.
-- Every fact must trace to a tool call (or to other facts in this
-  batch via `computed_from` + `method`).
 """.strip()
 
 
@@ -288,11 +235,22 @@ class LLMResearcherClient(ResearcherClient):
 
         for turn in range(self._max_turns):
             response = self._llm.send(
-                system=SYSTEM_PROMPT,
+                system=_system_text(web_url_to_id),
                 messages=messages,
                 tools=self._tool_schemas,
             )
+            prior_urls = len(web_url_to_id)
             self._harvest_web_citations(response.citations, evidence, web_url_to_id)
+            new_urls = len(web_url_to_id) - prior_urls
+            log.info(
+                "v2.3 RESEARCH turn=%d tool_calls=%d citations=%d new_web_urls=%d "
+                "web_urls_total=%d",
+                turn + 1,
+                len(response.tool_calls),
+                len(response.citations),
+                new_urls,
+                len(web_url_to_id),
+            )
             if response.tool_calls:
                 messages.append(
                     Message(
@@ -303,6 +261,13 @@ class LLMResearcherClient(ResearcherClient):
                 )
                 for call in response.tool_calls:
                     result_msg, provenance = self._execute_tool_call(call)
+                    status = "ok" if provenance is not None else "error"
+                    log.info(
+                        "v2.3 RESEARCH tool=%s status=%s call_id=%s",
+                        call.name,
+                        status,
+                        call.id,
+                    )
                     messages.append(result_msg)
                     if provenance is not None:
                         evidence[call.id] = provenance
@@ -313,6 +278,13 @@ class LLMResearcherClient(ResearcherClient):
                 raise RuntimeError(
                     f"RESEARCH LLM emitted neither tool_calls nor text on turn {turn + 1}."
                 )
+            log.info(
+                "v2.3 RESEARCH finished: turns=%d web_urls=%d evidence=%d publishers=%s",
+                turn + 1,
+                len(web_url_to_id),
+                len(evidence),
+                _publisher_histogram(web_url_to_id),
+            )
             return self._finalize(text, evidence, request)
 
         raise RuntimeError(
@@ -333,11 +305,18 @@ class LLMResearcherClient(ResearcherClient):
         """Convert provider-native URL citations into evidence_id-addressable
         WebSource provenance entries.
 
-        OpenAI's native web_search inlines url_citation annotations on the
-        response text. We assign each unique URL a stable id of the form
-        ``web_1``, ``web_2`` …, in first-seen order across the entire run.
-        The system prompt tells the LLM those exact strings are valid
-        ``evidence_id`` values for facts derived from web hits.
+        OpenAI's native web_search inlines url_citation annotations and
+        emits ``web_search_call`` items whose ``action`` blocks expose
+        the URLs the model retrieved. We assign each unique URL a stable
+        id of the form ``web_1``, ``web_2`` …, in first-seen order across
+        the entire run, and we ALSO key the same Provenance entry by the
+        URL itself (and by the URL with toggled trailing slash). This is
+        what lets the model cite a web result by ``web_N`` OR by the
+        verbatim URL — both forms resolve to the same WebSource. URL
+        aliasing is safe because the ``evidence`` dict is populated
+        exclusively from URLs the adapter extracted from a real
+        ``web_search_call.action`` payload — there is no path for a
+        fabricated URL to land here without an actual search returning it.
         """
         for cite in citations:
             url = cite.url
@@ -347,13 +326,20 @@ class LLMResearcherClient(ResearcherClient):
                 continue
             web_id = f"web_{len(url_to_id) + 1}"
             url_to_id[url] = web_id
-            evidence[web_id] = WebSource(
+            source = WebSource(
                 url=url,
                 title=cite.title,
                 publisher=cite.source,
                 snippet=cite.snippet or (cite.title or url),
                 retrieved_at=datetime.now(UTC),
             )
+            evidence[web_id] = source
+            # URL aliases: model may cite by the literal URL it
+            # retrieved. Toggle the trailing slash so LLMs that
+            # normalize either way still resolve.
+            evidence[url] = source
+            alt = url.rstrip("/") if url.endswith("/") else url + "/"
+            evidence[alt] = source
 
     def _execute_tool_call(self, call: ToolCall) -> tuple[Message, Provenance | None]:
         tool = self._tools.get(call.name)
@@ -409,9 +395,12 @@ class LLMResearcherClient(ResearcherClient):
 
         bundle = ResearchBundle.model_construct(tickers=list(request.tickers), facts={})
         skipped = 0
+        rejections: list[tuple[str, str]] = []
         for entry in raw_facts:
             if not isinstance(entry, dict):
-                log.warning("RESEARCH: skipping non-object fact entry: %r", entry)
+                msg = "non-object fact entry"
+                log.warning("RESEARCH: skipping %s: %r", msg, entry)
+                rejections.append(("<non-object>", f"{msg}: {entry!r}"[:200]))
                 skipped += 1
                 continue
             try:
@@ -422,10 +411,12 @@ class LLMResearcherClient(ResearcherClient):
                     entry.get("id"),
                     exc,
                 )
+                rejections.append((str(entry.get("id")), str(exc)))
                 skipped += 1
                 continue
             if fact.id in bundle.facts:
                 log.warning("RESEARCH: skipping duplicate fact id %r.", fact.id)
+                rejections.append((fact.id, "duplicate fact id"))
                 skipped += 1
                 continue
             bundle.facts[fact.id] = fact
@@ -453,15 +444,17 @@ class LLMResearcherClient(ResearcherClient):
                     fid,
                     sorted(missing),
                 )
+                rejections.append((fid, f"dangling computed_from: missing {sorted(missing)}"))
                 del bundle.facts[fid]
                 skipped += 1
 
         if not bundle.facts and planner_asked_for_facts:
             raise RuntimeError(
-                f"RESEARCH produced no usable facts (skipped {skipped} of "
-                f"{len(raw_facts)} — every fact had a broken evidence_id, "
-                f"missing field, unsupported value type, or dangling computed-from)."
+                _no_usable_facts_message(skipped, len(raw_facts), rejections, evidence)
             )
+
+        _enforce_web_coverage_gate(bundle, request)
+
         # Re-validate the cleaned bundle through Pydantic so downstream
         # stages (COMPUTE re-hydrates from JSON) see the same shape we do.
         return ResearchBundle.model_validate(bundle.model_dump())
@@ -472,12 +465,159 @@ class LLMResearcherClient(ResearcherClient):
 # ---------------------------------------------------------------------------
 
 
+def _no_usable_facts_message(
+    skipped: int,
+    total: int,
+    rejections: list[tuple[str, str]],
+    evidence: dict[str, Provenance],
+) -> str:
+    """Compose a diagnostic error when every fact in a non-empty bundle
+    was rejected. The bare "skipped N of N" message gives no traction
+    for debugging — we surface a category histogram and a few raw
+    samples so the next failing run tells you whether the model is
+    citing internal step labels, fabricating URLs, leaning on
+    `computed_from` with broken refs, or something else."""
+    categories: dict[str, int] = {}
+    for _fid, reason in rejections:
+        key = _classify_reason(reason)
+        categories[key] = categories.get(key, 0) + 1
+    cat_line = ", ".join(f"{k}={v}" for k, v in sorted(categories.items(), key=lambda kv: -kv[1]))
+    sample_lines: list[str] = []
+    for fid, reason in rejections[:8]:
+        sample_lines.append(f"  - {fid!r}: {reason[:220]}")
+    samples = "\n".join(sample_lines)
+    web_n = sum(1 for k in evidence if isinstance(k, str) and k.startswith("web_"))
+    tc_n = sum(1 for k in evidence if isinstance(k, str) and k.startswith(("tc_", "call_")))
+    return (
+        f"RESEARCH produced no usable facts (skipped {skipped} of {total}). "
+        f"Evidence ledger held web_N={web_n}, tool_call_ids={tc_n}, "
+        f"total_keys={len(evidence)} when finalize ran. "
+        f"Reason breakdown: {cat_line or '<none>'}.\n"
+        f"First rejections:\n{samples or '  <none>'}"
+    )
+
+
+_REASON_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("does not match any", "evidence_id_not_in_ledger"),
+    ("must specify either", "missing_evidence_and_computed_from"),
+    ("evidence_id must be a string", "evidence_id_wrong_type"),
+    ("computed_from must be a list", "computed_from_wrong_shape"),
+    ("computed_from requires a non-empty", "computed_from_missing_method"),
+    ("unsupported value type", "unsupported_value_type"),
+    ("missing required string field", "missing_required_field"),
+    ("dangling computed_from", "dangling_derivation"),
+    ("duplicate fact id", "duplicate_id"),
+    ("non-object fact entry", "non_object_entry"),
+    ("time-series", "bad_time_series"),
+)
+
+
+def _classify_reason(reason: str) -> str:
+    for needle, label in _REASON_PATTERNS:
+        if needle in reason:
+            return label
+    return "other"
+
+
 def _descriptor_to_schema(descriptor: ToolDescriptor) -> ToolSchema:
     return ToolSchema(
         name=descriptor.name,
         description=descriptor.description,
         parameters=dict(descriptor.parameters),
     )
+
+
+def _strict_web_ids(request: ResearchRequest) -> set[str]:
+    """Ids PLAN listed in some need's ``web_fact_ids`` and not in that
+    same need's ``data_fact_ids``. Both the initial-prompt search-budget
+    anchor and the finalize-time coverage gate must agree on this set,
+    or the model would be told to chase a number the gate doesn't
+    enforce."""
+    strict: set[str] = set()
+    for section in request.outline.sections:
+        for need in section.data_needs:
+            data_set = set(need.data_fact_ids)
+            for fid in need.web_fact_ids:
+                if fid not in data_set:
+                    strict.add(fid)
+    return strict
+
+
+def _enforce_web_coverage_gate(bundle: ResearchBundle, request: ResearchRequest) -> None:
+    """Log web-lane coverage as a soft signal. Does not reject the
+    bundle — the relaxed RESEARCH contract lets the bundle through and
+    lets downstream stages flag gaps via their own checks."""
+    strict_web_ids = _strict_web_ids(request)
+    if not strict_web_ids:
+        return
+    web_covered = {fid for fid, fact in bundle.facts.items() if isinstance(fact.source, WebSource)}
+    missing = strict_web_ids - web_covered
+    log.info(
+        "v2.3 RESEARCH web coverage: strict=%d covered=%d missing=%d",
+        len(strict_web_ids),
+        len(strict_web_ids & web_covered),
+        len(missing),
+    )
+
+
+def _publisher_histogram(url_to_id: dict[str, str]) -> dict[str, int]:
+    """Count harvested URLs per registrable host so the run summary log
+    surfaces source breadth. Same publisher dominating the bundle is a
+    visible signal that web_search queries are not diverse."""
+    from urllib.parse import urlparse
+
+    hist: dict[str, int] = {}
+    for url in url_to_id:
+        try:
+            host = (urlparse(url).hostname or "").lower()
+        except ValueError:
+            host = ""
+        if host.startswith("www."):
+            host = host[4:]
+        if not host:
+            host = "<no-host>"
+        hist[host] = hist.get(host, 0) + 1
+    return dict(sorted(hist.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+def _system_text(url_to_id: dict[str, str]) -> str:
+    """Compose the per-turn system text, folding in the live web_N mapping.
+
+    The model needs to see the cumulative ``web_N → URL`` table to know
+    which ``web_N`` ids are claimable. We inject it into the system text
+    (not the message history) so it stays pinned at the top of every
+    turn after first harvest and can't scroll out under later tool
+    roundtrips. The mapping is the ONLY way the model learns valid
+    ``web_N`` ids — raw URLs are not accepted as evidence_ids.
+    """
+    if not url_to_id:
+        return SYSTEM_PROMPT
+    return f"{SYSTEM_PROMPT}\n\n{_format_web_search_note(url_to_id)}"
+
+
+def _format_web_search_note(url_to_id: dict[str, str]) -> str:
+    """Render the running ``web_N`` index for the system text.
+
+    Includes a per-publisher histogram line so the model can apply
+    step 5 of the narrative-search procedure (steer the next query by
+    your results). A model that sees ``By publisher: rocketlab.com=8``
+    has a concrete signal — not just a feeling — that its evidence
+    pool is single-source and the next search should change angle.
+    """
+    lines = ["Web search results so far (newest last):"]
+    for url, web_id in url_to_id.items():
+        lines.append(f"- {web_id}: {url}")
+    hist = _publisher_histogram(url_to_id)
+    if hist:
+        by_pub = ", ".join(f"{host}={n}" for host, n in hist.items())
+        lines.append(f"By publisher: {by_pub}")
+    lines.append(
+        "Cite a web fact with either a `web_N` id above or the exact "
+        "URL — both resolve through the same map. URLs not in this "
+        "list will not resolve. OpenAI internal step labels "
+        "(`turn0search0`, `turn1view2`, etc.) are not accepted."
+    )
+    return "\n".join(lines)
 
 
 def _initial_user_text(request: ResearchRequest) -> str:
@@ -490,8 +630,8 @@ def _initial_user_text(request: ResearchRequest) -> str:
                 "data_needs": [
                     {
                         "description": dn.description,
-                        "expected_fact_ids": list(dn.expected_fact_ids),
-                        "source_class": dn.source_class,
+                        "data_fact_ids": list(dn.data_fact_ids),
+                        "web_fact_ids": list(dn.web_fact_ids),
                     }
                     for dn in section.data_needs
                 ],
@@ -507,12 +647,30 @@ def _initial_user_text(request: ResearchRequest) -> str:
     return json.dumps(payload, default=str)
 
 
+_FENCE_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
+
+
 def _parse_final_json(text: str) -> Any:
+    """Extract the final JSON object from the model's last turn.
+
+    Tolerant of Claude-style prose-then-fenced-JSON output: tries direct
+    parse, then any ```json ... ``` block, then a first-`{` to last-`}`
+    substring, in that order."""
     stripped = _strip_fence(text)
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
         pass
+
+    # Last fenced block wins — if the model wrote a draft block then a
+    # revised one, the revision should be the one we honor.
+    fence_matches = _FENCE_BLOCK_RE.findall(text)
+    for body in reversed(fence_matches):
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            continue
+
     first = stripped.find("{")
     last = stripped.rfind("}")
     if first != -1 and last > first:
@@ -520,7 +678,9 @@ def _parse_final_json(text: str) -> Any:
             return json.loads(stripped[first : last + 1])
         except json.JSONDecodeError:
             pass
-    raise RuntimeError(f"RESEARCH LLM final body was not valid JSON: head={text[:200]!r}")
+    raise RuntimeError(
+        f"RESEARCH LLM final body was not valid JSON: head={text[:200]!r} tail={text[-200:]!r}"
+    )
 
 
 def _strip_fence(text: str) -> str:
@@ -532,7 +692,10 @@ def _strip_fence(text: str) -> str:
     return cleaned.strip()
 
 
-def _build_fact(entry: dict[str, Any], evidence: dict[str, Provenance]) -> BundleFact:
+def _build_fact(
+    entry: dict[str, Any],
+    evidence: dict[str, Provenance],
+) -> BundleFact:
     fid = _require_str(entry, "id")
     label = _require_str(entry, "label")
     value = _coerce_value(entry.get("value"), fid)
@@ -549,7 +712,8 @@ def _build_fact(entry: dict[str, Any], evidence: dict[str, Provenance]) -> Bundl
             raise RuntimeError(f"Fact {fid!r}: evidence_id must be a string, got {evidence_id!r}.")
         if evidence_id not in evidence:
             raise RuntimeError(
-                f"Fact {fid!r}: evidence_id {evidence_id!r} does not match any tool call."
+                f"Fact {fid!r}: evidence_id {evidence_id!r} does not match any "
+                f"tool call, web_N id, or URL the runtime harvested this run."
             )
         source = evidence[evidence_id]
     elif computed_from:
