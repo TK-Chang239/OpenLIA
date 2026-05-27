@@ -428,6 +428,12 @@ class OpenAIResponsesAdapter(LLMProvider):
         tools = _build_responses_tools(request)
         if tools is not None:
             payload["tools"] = tools
+        log.info(
+            "openai_responses outbound: model=%s tool_types=%s native_tools=%s",
+            self.model,
+            [t.get("type") for t in (tools or [])],
+            list(request.native_tools),
+        )
         if request.tool_choice is not None:
             payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
         # Responses API takes reasoning as a nested object. The model
@@ -503,6 +509,12 @@ class OpenAIResponsesAdapter(LLMProvider):
         tools = _build_responses_tools(request)
         if tools is not None:
             payload["tools"] = tools
+        log.info(
+            "openai_responses outbound (stream): model=%s tool_types=%s native_tools=%s",
+            self.model,
+            [t.get("type") for t in (tools or [])],
+            list(request.native_tools),
+        )
         if request.tool_choice is not None:
             payload["tool_choice"] = _normalize_tool_choice(request.tool_choice)
         if request.reasoning_effort is not None:

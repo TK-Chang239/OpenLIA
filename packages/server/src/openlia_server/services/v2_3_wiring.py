@@ -548,7 +548,8 @@ _EODHD_DROP_SECTIONS = frozenset(
 #    to skip web_search for genuinely-current qualitative needs
 #    (regulatory status, catalysts, management commentary). Removing
 #    the false-sufficiency signal is the load-bearing reason to drop
-#    them, even with the source_class routing from PR 2 in place.
+#    them, even with the dual-lane data_fact_ids / web_fact_ids
+#    routing in place.
 _EODHD_GENERAL_DROP_FIELDS = frozenset(
     {
         "Description",
