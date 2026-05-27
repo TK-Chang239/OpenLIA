@@ -210,9 +210,19 @@ Output an Outline JSON object:
       "title": "<copy from template.sections[i].title>",
       "data_needs": [
         {
-          "description": "<one-line note on what RESEARCH should fetch>",
-          "expected_fact_ids": ["rev_ttm", "rev_growth_yoy"],
-          "source_class": "quantitative"
+          "description": "Multi-period revenue and gross-margin trajectory",
+          "data_fact_ids": ["rev_fy_hist", "gross_margin_fy_hist"],
+          "web_fact_ids": []
+        },
+        {
+          "description": "Recent contract awards and customer program activity",
+          "data_fact_ids": ["recent_contract_headlines"],
+          "web_fact_ids": ["contract_award_details", "customer_program_breakdown"]
+        },
+        {
+          "description": "Sell-side analyst price targets and ratings",
+          "data_fact_ids": [],
+          "web_fact_ids": ["analyst_pt_range", "analyst_rating_distribution"]
         }
       ]
     },
@@ -225,34 +235,33 @@ Output an Outline JSON object:
 
 Rules:
 - `tickers` and `report_type` are decided by the engine from the run's
-  inputs. The example below shows literal values for shape clarity,
-  but anything you put there is overwritten — copy them through if
-  you like, but don't expand or rewrite them.
+  inputs. The example shows literal values for shape clarity, but
+  anything you put there is overwritten — copy them through if you
+  like, but don't expand or rewrite them.
 - Produce one section per template.sections entry, in the same order,
   with the same `id` and `title`. The engine's coercer will fix drift,
   so be conservative — copy the structure verbatim.
-- For each section, populate `data_needs` with one or more entries.
-  Each `data_needs[*].expected_fact_ids` is a list of stable identifier
-  strings RESEARCH will fetch and bind to the BundleFact map. Use
-  snake_case ids like `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
-- Tag every `data_needs[*]` with a `source_class`. RESEARCH uses the
-  tag to route the need to the right tool — set it honestly so the
-  right source is selected:
-    * `quantitative` — reported financial line items (revenue, margins,
-      cash flow, leverage), market data (price, volume, returns), peer
-      multiples, valuation inputs. Anything that lives in a structured
-      data provider's response.
-    * `narrative` — anything that requires reading current sources:
-      regulatory status / investigations, management commentary,
-      product launches, catalysts and pipeline, competitive moves,
-      M&A, analyst notes, qualitative positioning. If the need is for
-      a recent event or an opinion, it is narrative.
-    * `either` — facts that could be served by either source class
-      (company description, segment mix, business model summary).
-- Split a need rather than tagging `either` when half is quantitative
-  and half narrative: a fact like "China revenue mix" is `quantitative`;
-  a fact like "China export-control exposure" is `narrative`. Two
-  separate entries beats one mixed tag.
+- Each `data_need` carries two lane-specific id lists. Every need MUST
+  populate at least one of them — a need with both lists empty is a
+  no-op and will be rejected:
+    * `data_fact_ids` — facts a structured data provider can serve.
+      EODHD covers reported financial line items (revenue, margins,
+      cash flow, leverage), market data (price, volume, returns),
+      peer multiples, valuation inputs, AND same-day company news
+      headlines with sentiment.
+    * `web_fact_ids` — facts only the open web serves via
+      `web_search`. Analyst commentary and price targets, contract
+      specifics and customer/program details, regulatory framing and
+      docket items, qualitative competitive positioning, deep
+      current-event context.
+- Many narrative themes need BOTH lanes. The EODHD news feed delivers
+  the headline and sentiment same-day, while `web_search` fills in
+  framing, depth, and primary-source backing. When a theme has both a
+  recency signal and a "what does it mean" layer, populate both lanes
+  with ids that capture each side rather than picking one.
+- Use snake_case ids like `rev_ttm`, `gross_margin_fy25`, or
+  `analyst_pt_range`. Pick ids that read naturally so RESEARCH can
+  bind them verbatim and downstream coverage scoring matches.
 - `valuation_plan.methods` lists the valuation methods COMPUTE should
   run. Choose from `dcf`, `comps`, `sensitivity` based on what the
   template's sections actually need (e.g. include `dcf` only when a

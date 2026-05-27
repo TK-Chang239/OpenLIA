@@ -268,33 +268,96 @@ def test_outline_carries_report_type() -> None:
     assert outline.report_type == ReportType.INITIATION
 
 
-def test_data_need_source_class_defaults_to_either() -> None:
-    """Backward compat: persisted runs that pre-date the field round-trip
-    through Pydantic with `source_class="either"` so RESEARCH still has
-    a tag to read."""
-    need = DataNeed(description="business model summary")
-    assert need.source_class == "either"
+# ---------------------------------------------------------------------------
+# Dual-lane DataNeed (TDD red-tests for the data/web lane refactor)
+#
+# Goal: replace the source_class trichotomy + single expected_fact_ids list
+# with two explicit per-lane lists (data_fact_ids, web_fact_ids) so RESEARCH
+# routing is structural, not prose-driven, and the verify metric can score
+# each lane independently.
+# ---------------------------------------------------------------------------
 
 
-def test_data_need_accepts_three_source_classes() -> None:
-    for cls in ("quantitative", "narrative", "either"):
-        need = DataNeed(description="x", source_class=cls)
-        assert need.source_class == cls
+def test_data_need_carries_data_and_web_fact_id_lists() -> None:
+    need = DataNeed(
+        description="recent contract awards and program activity",
+        data_fact_ids=["recent_contract_headlines"],
+        web_fact_ids=["contract_award_details", "customer_program_breakdown"],
+    )
+    assert need.data_fact_ids == ["recent_contract_headlines"]
+    assert need.web_fact_ids == ["contract_award_details", "customer_program_breakdown"]
 
 
-def test_data_need_rejects_unknown_source_class() -> None:
+def test_data_need_rejects_both_lanes_empty() -> None:
+    """A need with empty data_fact_ids AND empty web_fact_ids has no
+    work queue for RESEARCH. Reject at schema time so the planner
+    cannot emit a no-op need that pads the outline."""
     with pytest.raises(ValidationError):
-        DataNeed(description="x", source_class="qualitative")  # type: ignore[arg-type]
+        DataNeed(description="nothing to fetch")
 
 
-def test_data_need_source_class_round_trips_through_model_dump() -> None:
-    """OutlineSection.data_needs serialises to JSON in state_json; the
-    field must round-trip so a paused run rehydrates with its tags."""
-    need = DataNeed(description="x", source_class="narrative")
+def test_data_need_allows_single_lane_only() -> None:
+    """data-only needs (financial line items) and web-only needs
+    (analyst commentary) are both first-class."""
+    data_only = DataNeed(description="rev TTM", data_fact_ids=["rev_ttm"])
+    web_only = DataNeed(description="analyst PTs", web_fact_ids=["analyst_pt_range"])
+    assert data_only.data_fact_ids == ["rev_ttm"] and data_only.web_fact_ids == []
+    assert web_only.web_fact_ids == ["analyst_pt_range"] and web_only.data_fact_ids == []
+
+
+def test_data_need_legacy_source_class_quantitative_maps_to_data_lane() -> None:
+    """Old persisted run_state rows must still deserialize. The
+    pre-refactor shape was `source_class: quantitative` +
+    `expected_fact_ids: [...]` — that maps to data_fact_ids."""
+    legacy = {
+        "description": "revenue history",
+        "expected_fact_ids": ["rev_fy_hist", "gross_margin_fy_hist"],
+        "source_class": "quantitative",
+    }
+    need = DataNeed.model_validate(legacy)
+    assert need.data_fact_ids == ["rev_fy_hist", "gross_margin_fy_hist"]
+    assert need.web_fact_ids == []
+
+
+def test_data_need_legacy_source_class_narrative_maps_to_web_lane() -> None:
+    legacy = {
+        "description": "regulatory investigations",
+        "expected_fact_ids": ["reg_inv"],
+        "source_class": "narrative",
+    }
+    need = DataNeed.model_validate(legacy)
+    assert need.data_fact_ids == []
+    assert need.web_fact_ids == ["reg_inv"]
+
+
+def test_data_need_legacy_source_class_either_populates_both_lanes() -> None:
+    """`either` was 'pick whichever fits'. Under the new schema we
+    preserve that intent by emitting the id into BOTH lanes — the
+    research stage then satisfies either side."""
+    legacy = {
+        "description": "business model summary",
+        "expected_fact_ids": ["business_model"],
+        "source_class": "either",
+    }
+    need = DataNeed.model_validate(legacy)
+    assert need.data_fact_ids == ["business_model"]
+    assert need.web_fact_ids == ["business_model"]
+
+
+def test_data_need_dual_lane_round_trips_through_model_dump() -> None:
+    """state_json serialization for paused runs must preserve the
+    dual-lane shape — the new fields are the persisted contract."""
+    need = DataNeed(
+        description="layered theme",
+        data_fact_ids=["headline"],
+        web_fact_ids=["framing"],
+    )
     dumped = need.model_dump()
-    assert dumped["source_class"] == "narrative"
+    assert dumped["data_fact_ids"] == ["headline"]
+    assert dumped["web_fact_ids"] == ["framing"]
     rebuilt = DataNeed.model_validate(dumped)
-    assert rebuilt.source_class == "narrative"
+    assert rebuilt.data_fact_ids == ["headline"]
+    assert rebuilt.web_fact_ids == ["framing"]
 
 
 # ---------------------------------------------------------------------------

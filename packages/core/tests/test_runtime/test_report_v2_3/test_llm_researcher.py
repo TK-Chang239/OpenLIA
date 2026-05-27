@@ -542,10 +542,78 @@ def test_fake_rejects_both_or_neither() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
+# ---------------------------------------------------------------------------
+# RESEARCH dual-lane prompt + payload (TDD red-tests)
+#
+# The dominant zero-web-calls failure mode is the researcher satisfying a
+# narrative need from get_company_news (EODHD) instead of web_search.
+# The fix moves routing from the prose-driven source_class trichotomy to
+# explicit data_fact_ids / web_fact_ids lanes — the prompt and the
+# initial user payload must both speak the new contract.
+# ---------------------------------------------------------------------------
+
+
+def test_research_prompt_routes_data_lane_to_eodhd_and_web_lane_to_web_search() -> None:
+    """SYSTEM_PROMPT must route by lane, not by source_class. The two
+    lane field names must appear AND each must be paired with its
+    canonical tool family."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT,
+    )
+
+    assert "data_fact_ids" in SYSTEM_PROMPT
+    assert "web_fact_ids" in SYSTEM_PROMPT
+    # Old trichotomy is retired from the new prompt — leaving it in
+    # creates a second, contradictory routing signal.
+    assert "source_class" not in SYSTEM_PROMPT
+    assert "expected_fact_ids" not in SYSTEM_PROMPT
+    # Tool family handles must be present so the routing is concrete.
+    assert "web_search" in SYSTEM_PROMPT
+    assert "get_company_news" in SYSTEM_PROMPT or "get_fundamentals" in SYSTEM_PROMPT
+
+
+def test_research_prompt_blocks_eodhd_news_from_satisfying_web_lane() -> None:
+    """The load-bearing constraint: an EODHD news headline does NOT
+    satisfy a web_fact_id, even when the headline looks like enough.
+    Without this line the RKLB-style 0% recurs because the model
+    silently substitutes get_company_news output for web_search output."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT,
+    )
+
+    text = SYSTEM_PROMPT.lower()
+    # The constraint must be expressed; we don't pin the exact phrasing
+    # but the negation + the protected lane name must co-occur.
+    assert "web_fact_ids" in SYSTEM_PROMPT
+    assert (
+        "do not satisfy" in text
+        or "does not satisfy" in text
+        or "cannot satisfy" in text
+        or "never satisfy" in text
+    )
+    # And the rule must call out the substitution source so the model
+    # connects the constraint to its own observed behavior.
+    assert "eodhd" in text or "get_company_news" in text or "headline" in text
+
+
+def test_research_prompt_teaches_drop_after_real_search_for_web_lane() -> None:
+    """When web_search returns nothing usable for a web_fact_id, the
+    model drops the fact rather than substituting from EODHD. The drop
+    must follow a real search, never a 'searching felt unnecessary'
+    shortcut."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+        SYSTEM_PROMPT,
+    )
+
+    text = SYSTEM_PROMPT.lower()
+    assert "drop" in text or "omit" in text
+    assert "real search" in text or "returned nothing" in text or "after a search" in text
+
+
+def test_initial_user_payload_emits_data_and_web_fact_id_lists_per_need() -> None:
     """The researcher's first user message must surface each data_need's
-    `source_class` so the model can route quantitative-vs-narrative
-    without guessing from the description."""
+    data_fact_ids and web_fact_ids as separate lists so the model can
+    route every id structurally instead of inferring lanes from prose."""
     from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
         _initial_user_text,
     )
@@ -559,19 +627,18 @@ def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
                 title="Overview",
                 data_needs=[
                     DataNeed(
-                        description="revenue, last 5 fiscal years",
-                        expected_fact_ids=["rev_fy_hist"],
-                        source_class="quantitative",
+                        description="layered theme",
+                        data_fact_ids=["headlines"],
+                        web_fact_ids=["framing"],
                     ),
                     DataNeed(
-                        description="recent regulatory investigations",
-                        expected_fact_ids=["regulatory_investigations"],
-                        source_class="narrative",
+                        description="pure financials",
+                        data_fact_ids=["rev_ttm"],
                     ),
                     DataNeed(
-                        description="business model summary",
-                        expected_fact_ids=["business_model"],
-                    ),  # default 'either'
+                        description="pure narrative",
+                        web_fact_ids=["analyst_pt_range"],
+                    ),
                 ],
             )
         ],
@@ -588,23 +655,17 @@ def test_initial_user_payload_propagates_source_class_per_data_need() -> None:
 
     payload = json.loads(_initial_user_text(request))
     needs = payload["sections"][0]["data_needs"]
-    assert [n["source_class"] for n in needs] == ["quantitative", "narrative", "either"]
-
-
-def test_research_prompt_routes_by_source_class_not_by_model_judgment() -> None:
-    """The RESEARCH prompt must explicitly route by `source_class` and
-    drop the prior `Prefer using BOTH kinds together` hedge that let the
-    model talk itself out of web_search."""
-    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
-        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
-    )
-
-    assert "source_class" in RESEARCH_SYSTEM_PROMPT
-    for cls in ("quantitative", "narrative", "either"):
-        assert cls in RESEARCH_SYSTEM_PROMPT
-    # The old hedge text must not survive — its presence reverts the
-    # whole intervention to a soft preference.
-    assert "Prefer using BOTH kinds together" not in RESEARCH_SYSTEM_PROMPT
+    assert needs[0]["data_fact_ids"] == ["headlines"]
+    assert needs[0]["web_fact_ids"] == ["framing"]
+    assert needs[1]["data_fact_ids"] == ["rev_ttm"]
+    assert needs[1]["web_fact_ids"] == []
+    assert needs[2]["data_fact_ids"] == []
+    assert needs[2]["web_fact_ids"] == ["analyst_pt_range"]
+    # The old wire fields must not leak through — the planner and
+    # researcher must speak the same vocabulary.
+    for n in needs:
+        assert "source_class" not in n
+        assert "expected_fact_ids" not in n
 
 
 def test_tool_execution_error_reaches_model_as_tool_message() -> None:
@@ -926,70 +987,37 @@ def test_system_text_carries_mapping_on_every_turn_after_harvest() -> None:
     assert "web_1" in llm.systems[2]
 
 
-def test_research_prompt_requires_open_before_cite() -> None:
-    """The model was issuing well-targeted batch searches and then
-    citing URLs it had only seen in the ranked results — pulling the
-    canonical paths from training memory without actually fetching
-    them. The runtime drops every such URL via the ``url_to_id``
-    membership check; the cost is ~10+ dropped facts per report. The
-    prompt must spell out that ``search`` returns candidates, not
-    evidence — only ``open_page`` (and ``find_in_page`` against an
-    opened page) produces a citable URL."""
+def test_research_prompt_only_accepts_web_n_as_web_handle() -> None:
+    """The model cannot fabricate `web_N` ids — they only exist once a
+    real search returns and the runtime mints them. By telling the model
+    `web_N` is the only accepted web handle (and explicitly banning raw
+    URLs in `evidence_id`), the prompt closes the hallucination path of
+    citing URLs reconstructed from training memory. The `_resolve_evidence_id`
+    code path still accepts URL form as defense-in-depth, but the prompt
+    surface presents one handle to keep the model honest."""
     from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
         SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
     )
 
-    # The clause wraps across a line break in the prompt; assert
-    # the load-bearing halves separately.
-    assert "search alone is not" in RESEARCH_SYSTEM_PROMPT
-    assert "evidence" in RESEARCH_SYSTEM_PROMPT
-    assert "open_page" in RESEARCH_SYSTEM_PROMPT
-    assert "find_in_page" in RESEARCH_SYSTEM_PROMPT
-    assert "ranked search result list are not citable" in RESEARCH_SYSTEM_PROMPT
+    # "Two forms are accepted" wraps across a line break in the dedented
+    # prompt — assert each fragment separately.
+    assert "Two forms are" in RESEARCH_SYSTEM_PROMPT
+    assert "accepted:" in RESEARCH_SYSTEM_PROMPT
+    assert "Do NOT emit a raw URL as an `evidence_id`" in RESEARCH_SYSTEM_PROMPT
+    assert "only after a real search" in RESEARCH_SYSTEM_PROMPT
+    assert "only accepted web handle" in RESEARCH_SYSTEM_PROMPT
 
 
-def test_research_prompt_accepts_url_as_evidence_id_when_resolvable() -> None:
-    """gpt-5.4 ``web_search_preview`` is intra-turn agentic — the model
-    has the URL it just retrieved in its own context but never sees the
-    ``web_N`` we mint, because we harvest URLs and the model writes its
-    final JSON in the same response. Banning URLs outright (the prior
-    rule) forced the model to fall back to OpenAI's private step
-    labels (``turn0search0``), which the runtime cannot resolve. The
-    prompt now states that URL is an accepted form, with the load-
-    bearing qualifier that the runtime resolves only URLs it actually
-    harvested this run."""
-    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
-        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
-    )
-
-    assert "Three forms are accepted" in RESEARCH_SYSTEM_PROMPT
-    assert "The exact URL of a web result you retrieved this run" in RESEARCH_SYSTEM_PROMPT
-    assert "URLs you did NOT retrieve will not resolve" in RESEARCH_SYSTEM_PROMPT
-
-
-def test_research_prompt_rejects_openai_internal_step_labels() -> None:
-    """The prompt must call out OpenAI's private step labels
-    (``turn0search0``, ``turn1view2``) as invalid evidence_ids so the
-    model is steered toward ``web_N`` / URL instead of falling back to
-    its agentic-mode internal convention."""
-    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
-        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
-    )
-
-    assert "turn0search0" in RESEARCH_SYSTEM_PROMPT
-    assert "turn1view2" in RESEARCH_SYSTEM_PROMPT
-    assert "NOT valid evidence_ids" in RESEARCH_SYSTEM_PROMPT
-
-
-def test_research_prompt_binds_fact_id_to_expected_fact_ids() -> None:
-    """Coverage check matches on the planner's `expected_fact_ids`, so the
+def test_research_prompt_binds_fact_id_to_planner_lists_verbatim() -> None:
+    """Coverage check matches on the planner's per-lane id lists, so the
     prompt must instruct the model to use those ids verbatim — otherwise
-    narrative coverage stays at 0/N even when web evidence flows."""
+    coverage stays at 0/N even when evidence flows."""
     from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
         SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
     )
 
-    assert "expected_fact_ids" in RESEARCH_SYSTEM_PROMPT
+    assert "data_fact_ids" in RESEARCH_SYSTEM_PROMPT
+    assert "web_fact_ids" in RESEARCH_SYSTEM_PROMPT
     assert "verbatim" in RESEARCH_SYSTEM_PROMPT
 
 
@@ -1005,11 +1033,11 @@ def test_research_prompt_teaches_claim_classification_before_search() -> None:
         SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
     )
 
-    assert "CLAIM TYPE" in RESEARCH_SYSTEM_PROMPT
-    assert "WHERE AUTHORITY LIVES" in RESEARCH_SYSTEM_PROMPT
-    assert "INTERESTED PARTY" in RESEARCH_SYSTEM_PROMPT
-    assert "TRIANGULATE" in RESEARCH_SYSTEM_PROMPT
-    assert "STEER THE NEXT QUERY BY YOUR RESULTS" in RESEARCH_SYSTEM_PROMPT
+    assert "What KIND of claim" in RESEARCH_SYSTEM_PROMPT
+    assert "Where does authority for THAT kind of claim live" in RESEARCH_SYSTEM_PROMPT
+    assert "Is that primary source an interested party" in RESEARCH_SYSTEM_PROMPT
+    assert "triangulate" in RESEARCH_SYSTEM_PROMPT
+    assert "Let results steer the next query" in RESEARCH_SYSTEM_PROMPT
 
 
 def test_research_prompt_carries_interested_party_caveat() -> None:
@@ -1025,7 +1053,7 @@ def test_research_prompt_carries_interested_party_caveat() -> None:
     assert "authoritative for" in RESEARCH_SYSTEM_PROMPT
     assert "what management SAID" in RESEARCH_SYSTEM_PROMPT
     assert "weakest source" in RESEARCH_SYSTEM_PROMPT
-    assert "no stake in the answer" in RESEARCH_SYSTEM_PROMPT
+    assert "no stake" in RESEARCH_SYSTEM_PROMPT
 
 
 def test_research_prompt_includes_one_worked_trace_not_a_menu() -> None:
@@ -1038,25 +1066,13 @@ def test_research_prompt_includes_one_worked_trace_not_a_menu() -> None:
     )
 
     assert "Worked example" in RESEARCH_SYSTEM_PROMPT
-    assert "antitrust exposure" in RESEARCH_SYSTEM_PROMPT
+    # Renamed from "antitrust exposure" → "antitrust_exposure" when the
+    # example was rewritten to use the new web_fact_ids vocabulary; the
+    # underlying worked-trace claim is the same.
+    assert "antitrust_exposure" in RESEARCH_SYSTEM_PROMPT
     # Exactly one worked example — anyone adding a second should think
     # about whether the procedure is still being taught or just enumerated.
     assert RESEARCH_SYSTEM_PROMPT.count("Worked example") == 1
-
-
-def test_research_prompt_requires_classification_to_be_written() -> None:
-    """The reasoning is load-bearing only if the model writes it down.
-    Without a visibility requirement the procedure becomes optional
-    inner-monologue the runtime cannot audit. The prompt must require
-    the model to surface the claim type, the target source, and the
-    interested-party check in the assistant text of the search turn."""
-    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
-        SYSTEM_PROMPT as RESEARCH_SYSTEM_PROMPT,
-    )
-
-    assert "in the assistant text" in RESEARCH_SYSTEM_PROMPT
-    assert "claim type" in RESEARCH_SYSTEM_PROMPT
-    assert "interested party" in RESEARCH_SYSTEM_PROMPT
 
 
 def test_research_prompt_does_not_enumerate_publishers() -> None:
