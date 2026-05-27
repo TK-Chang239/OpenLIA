@@ -32,16 +32,19 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openlia.llm.runtime.report_v2_3.schemas import ReportType
 from openlia.llm.runtime.report_v2_3.templates.builtins import get_builtin
 from openlia.llm.runtime.report_v3 import (
+    CancelToken,
     CapabilityError,
+    EventBroker,
     Language,
     ReportLength,
     RunRequest,
     RunResult,
     TemplateSpec,
+    is_finish_sentinel,
 )
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
@@ -192,6 +195,56 @@ def _engine_enabled() -> bool:
     return os.environ.get(_ENV_FLAG, "").strip().lower() == _ENABLED_VALUE
 
 
+def _streaming_state(request: Request) -> tuple[EventBroker, dict[str, CancelToken]]:
+    """Pull the v3 broker + cancel registry off ``app.state``.
+
+    These are initialized once during app startup (see
+    ``openlia_server.app``). Routes that need streaming pull them at
+    call time so a startup-time race doesn't leave them stale.
+    """
+    broker = getattr(request.app.state, "v3_event_broker", None)
+    registry = getattr(request.app.state, "v3_cancel_registry", None)
+    if broker is None or registry is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "v3 streaming infrastructure not initialised. The app "
+                "must run with the v3 broker wired on app.state."
+            ),
+        )
+    return broker, registry
+
+
+async def _sse_stream(
+    broker: EventBroker,
+    report_id: str,
+    terminal_snapshot: dict[str, Any] | None,
+):
+    """Async generator yielding SSE-framed events for one run.
+
+    - When the run already finished before the subscriber connected,
+      yields a single ``run.snapshot`` event with the persisted
+      status and closes.
+    - Otherwise, yields the live event stream until the broker
+      finishes the run.
+    """
+    if terminal_snapshot is not None:
+        yield _sse_frame("run.snapshot", terminal_snapshot)
+        return
+
+    async with broker.subscribe(report_id) as queue:
+        while True:
+            item = await queue.get()
+            if is_finish_sentinel(item):
+                break
+            yield _sse_frame(item.type, item.payload)
+
+
+def _sse_frame(event_type: str, payload: dict[str, Any]) -> str:
+    """SSE wire format: ``event: <name>\\ndata: <json>\\n\\n``."""
+    return f"event: {event_type}\ndata: {json.dumps(payload, default=str)}\n\n"
+
+
 # ---------------------------------------------------------------------------
 # Router
 # ---------------------------------------------------------------------------
@@ -282,6 +335,115 @@ def build_equity_research_v3_router(
             svc.delete_run(db=db, user_id=user.id, report_id=report_id)
         except svc.ReportNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.post("/runs/start")
+    def start_run_async(
+        payload: StartV3Payload,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, str]:
+        """Non-blocking POST: returns {report_id} immediately.
+
+        The engine runs in a background task; the client connects to
+        ``GET /v3/runs/{report_id}/events`` (SSE) to receive
+        progress + the final state. Use the blocking ``POST /runs``
+        instead when you don't want streaming.
+        """
+        if not _engine_enabled():
+            raise _engine_disabled()
+        broker, cancel_registry = _streaming_state(request)
+
+        template: TemplateSpec = get_builtin(payload.report_type)
+        run_request = RunRequest(
+            subject=payload.subject,
+            template=template,
+            language=payload.language,
+            length=payload.length,
+            provider_kind=payload.provider_kind,
+            model=payload.model,
+        )
+        try:
+            handle = svc.start_run_async(
+                db=db,
+                user_id=user.id,
+                request=run_request,
+                session_factory=db_session_factory,
+                broker=broker,
+                cancel_registry=cancel_registry,
+            )
+        except CapabilityError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"report_id": handle.report_id}
+
+    @router.get("/runs/{report_id}/events")
+    async def stream_events(
+        report_id: str,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> StreamingResponse:
+        """Server-Sent Events stream for one run.
+
+        Yields one event per progress signal (tool.called,
+        tool.completed, section.written, chart.emitted, etc.). The
+        stream closes after the terminal event (run.completed,
+        run.failed, or run.cancelled).
+
+        Reconnects don't replay missed events — connect early via
+        the report_id returned by ``POST /runs/start``. If the run
+        already finished before the subscribe lands, the endpoint
+        emits a single ``run.snapshot`` event with the current
+        terminal status and closes immediately.
+        """
+        if not _engine_enabled():
+            raise _engine_disabled()
+        # Authorise + 404 here using the request session before
+        # opening the long-lived stream.
+        try:
+            row, _, _, _ = svc.get_run(db=db, user_id=user.id, report_id=report_id)
+        except svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        terminal_snapshot = None
+        if row.status in ("completed", "failed"):
+            terminal_snapshot = {
+                "status": row.status,
+                "error_message": row.error_message,
+            }
+
+        broker, _ = _streaming_state(request)
+        return StreamingResponse(
+            _sse_stream(broker, report_id, terminal_snapshot),
+            media_type="text/event-stream",
+            headers={"X-Accel-Buffering": "no", "Cache-Control": "no-cache"},
+        )
+
+    @router.post("/runs/{report_id}/cancel")
+    def cancel_run(
+        report_id: str,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, bool]:
+        """Flip the cancel flag for a running v3 run.
+
+        Cooperative — the runner exits at the next safe point (turn
+        boundary). 404 if the run isn't owned by the caller; returns
+        ``{cancelled: False}`` if the run already finished and no
+        token is registered (which is fine — caller's intent is
+        satisfied).
+        """
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            svc.get_run(db=db, user_id=user.id, report_id=report_id)
+        except svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        _, cancel_registry = _streaming_state(request)
+        cancelled = svc.cancel_run(
+            cancel_registry=cancel_registry, report_id=report_id
+        )
+        return {"cancelled": cancelled}
 
     @router.get("/runs/{report_id}/html", response_class=HTMLResponse)
     def get_html(
