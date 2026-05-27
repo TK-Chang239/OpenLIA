@@ -215,9 +215,9 @@ Output an Outline JSON object:
           "web_fact_ids": []
         },
         {
-          "description": "Recent contract awards and customer program activity",
-          "data_fact_ids": ["recent_contract_headlines"],
-          "web_fact_ids": ["contract_award_details", "customer_program_breakdown"]
+          "description": "Q3 reported results plus management's read on demand",
+          "data_fact_ids": ["rev_q3", "gross_margin_q3", "eps_q3"],
+          "web_fact_ids": ["mgmt_commentary_on_demand", "earnings_call_key_messages"]
         },
         {
           "description": "Sell-side analyst price targets and ratings",
@@ -243,22 +243,32 @@ Rules:
   so be conservative — copy the structure verbatim.
 - Each `data_need` carries two lane-specific id lists. Every need MUST
   populate at least one of them — a need with both lists empty is a
-  no-op and will be rejected:
-    * `data_fact_ids` — facts a structured data provider can serve.
-      EODHD covers reported financial line items (revenue, margins,
-      cash flow, leverage), market data (price, volume, returns),
-      peer multiples, valuation inputs, AND same-day company news
-      headlines with sentiment.
-    * `web_fact_ids` — facts only the open web serves via
-      `web_search`. Analyst commentary and price targets, contract
-      specifics and customer/program details, regulatory framing and
-      docket items, qualitative competitive positioning, deep
-      current-event context.
-- Many narrative themes need BOTH lanes. The EODHD news feed delivers
-  the headline and sentiment same-day, while `web_search` fills in
-  framing, depth, and primary-source backing. When a theme has both a
-  recency signal and a "what does it mean" layer, populate both lanes
-  with ids that capture each side rather than picking one.
+  no-op and will be rejected. Classify each fact id on a
+  record-vs-interpretation axis — NOT on whether it's a number or a
+  word:
+    * Matter of record — exactly one correct value, lives in a
+      filing or a market feed. Reported revenue, EPS, shares
+      outstanding, closing price, declared dividend, segment and
+      geography revenue mix from filings, peer multiples computed
+      from prices and financials. If two analysts disagree on it,
+      one of them is simply wrong. → put the id in `data_fact_ids`.
+      EODHD serves these.
+    * Matter of interpretation — synthesis, opinion, framing, or
+      causal claim. Why the stock moved, what management signaled,
+      what the Street expects (analyst ratings, price-target
+      consensus, bull/bear theses), whether the quarter was "good",
+      contract / program execution implications, regulatory framing,
+      competitive positioning. Two competent analysts can disagree
+      and both be defensible. → put the id in `web_fact_ids`.
+      `web_search` against primary sources and commentary serves
+      these.
+- Same theme can carry both kinds of facts. Q3 results have a record
+  side (rev, EPS, margin) AND an interpretation side (what
+  management signaled on the call, how the Street is reading
+  guidance). Populate both lanes with ids that capture each side.
+  Do NOT route an id to `data_fact_ids` because EODHD ships news
+  headlines on the topic — a news headline points at an event, it
+  does not synthesize what the event means.
 - Use snake_case ids like `rev_ttm`, `gross_margin_fy25`, or
   `analyst_pt_range`. Pick ids that read naturally so RESEARCH can
   bind them verbatim and downstream coverage scoring matches.

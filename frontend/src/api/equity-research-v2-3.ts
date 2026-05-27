@@ -29,9 +29,11 @@ export type V23ReportType =
 
 export type V23ReportLength = "concise" | "normal" | "elaborative";
 
-// Server-side enum is `ReasoningEffort` with members MEDIUM and HIGH;
-// "off" is represented by sending `null` (or omitting the field).
-export type V23ReasoningEffort = "medium" | "high";
+// Server-side enum is `ReasoningEffort` with members OFF, MEDIUM, HIGH.
+// "off" skips reasoning entirely (fastest); OpenAI gpt-5.x may then
+// skip web_search tool calls — users who want web coverage should pick
+// medium or high.
+export type V23ReasoningEffort = "off" | "medium" | "high";
 
 export type V23RunStatus =
   | "running"

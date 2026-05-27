@@ -60,6 +60,22 @@ log = logging.getLogger(__name__)
 
 
 MAX_RESEARCH_TURNS = 12
+MAX_COVERAGE_RETRIES = 2
+
+
+class _CoverageGateError(RuntimeError):
+    """Raised inside `_finalize` when the bundle leaves strict web_fact_ids
+    uncovered. Carries the missing ids so the outer loop can re-prompt the
+    model with a precise list instead of a generic 'try again' nudge."""
+
+    def __init__(self, missing: set[str], total: int) -> None:
+        super().__init__(
+            f"RESEARCH bundle missing web-lane coverage: "
+            f"{len(missing)} of {total} strict web_fact_ids "
+            f"unaddressed by web_search evidence: {sorted(missing)}"
+        )
+        self.missing = set(missing)
+        self.total = total
 
 
 # ---------------------------------------------------------------------------
@@ -327,6 +343,7 @@ class LLMResearcherClient(ResearcherClient):
         evidence: dict[str, Provenance] = {}
         web_url_to_id: dict[str, str] = {}
         messages: list[Message] = [Message(role="user", content=_initial_user_text(request))]
+        coverage_retries = MAX_COVERAGE_RETRIES
 
         for turn in range(self._max_turns):
             response = self._llm.send(
@@ -380,7 +397,21 @@ class LLMResearcherClient(ResearcherClient):
                 len(evidence),
                 _publisher_histogram(web_url_to_id),
             )
-            return self._finalize(text, evidence, request)
+            try:
+                return self._finalize(text, evidence, request)
+            except _CoverageGateError as exc:
+                if coverage_retries <= 0:
+                    raise
+                coverage_retries -= 1
+                log.info(
+                    "v2.3 RESEARCH coverage retry: missing=%d/%d remaining=%d",
+                    len(exc.missing),
+                    exc.total,
+                    coverage_retries,
+                )
+                messages.append(Message(role="assistant", content=text))
+                messages.append(Message(role="user", content=_coverage_retry_text(exc.missing)))
+                continue
 
         raise RuntimeError(
             f"RESEARCH LLM did not emit a final bundle within "
@@ -490,9 +521,12 @@ class LLMResearcherClient(ResearcherClient):
 
         bundle = ResearchBundle.model_construct(tickers=list(request.tickers), facts={})
         skipped = 0
+        rejections: list[tuple[str, str]] = []
         for entry in raw_facts:
             if not isinstance(entry, dict):
-                log.warning("RESEARCH: skipping non-object fact entry: %r", entry)
+                msg = "non-object fact entry"
+                log.warning("RESEARCH: skipping %s: %r", msg, entry)
+                rejections.append(("<non-object>", f"{msg}: {entry!r}"[:200]))
                 skipped += 1
                 continue
             try:
@@ -503,10 +537,12 @@ class LLMResearcherClient(ResearcherClient):
                     entry.get("id"),
                     exc,
                 )
+                rejections.append((str(entry.get("id")), str(exc)))
                 skipped += 1
                 continue
             if fact.id in bundle.facts:
                 log.warning("RESEARCH: skipping duplicate fact id %r.", fact.id)
+                rejections.append((fact.id, "duplicate fact id"))
                 skipped += 1
                 continue
             bundle.facts[fact.id] = fact
@@ -534,15 +570,19 @@ class LLMResearcherClient(ResearcherClient):
                     fid,
                     sorted(missing),
                 )
+                rejections.append(
+                    (fid, f"dangling computed_from: missing {sorted(missing)}")
+                )
                 del bundle.facts[fid]
                 skipped += 1
 
         if not bundle.facts and planner_asked_for_facts:
             raise RuntimeError(
-                f"RESEARCH produced no usable facts (skipped {skipped} of "
-                f"{len(raw_facts)} — every fact had a broken evidence_id, "
-                f"missing field, unsupported value type, or dangling computed-from)."
+                _no_usable_facts_message(skipped, len(raw_facts), rejections, evidence)
             )
+
+        _enforce_web_coverage_gate(bundle, request)
+
         # Re-validate the cleaned bundle through Pydantic so downstream
         # stages (COMPUTE re-hydrates from JSON) see the same shape we do.
         return ResearchBundle.model_validate(bundle.model_dump())
@@ -553,12 +593,105 @@ class LLMResearcherClient(ResearcherClient):
 # ---------------------------------------------------------------------------
 
 
+def _no_usable_facts_message(
+    skipped: int,
+    total: int,
+    rejections: list[tuple[str, str]],
+    evidence: dict[str, Provenance],
+) -> str:
+    """Compose a diagnostic error when every fact in a non-empty bundle
+    was rejected. The bare "skipped N of N" message gives no traction
+    for debugging — we surface a category histogram and a few raw
+    samples so the next failing run tells you whether the model is
+    citing internal step labels, fabricating URLs, leaning on
+    `computed_from` with broken refs, or something else."""
+    categories: dict[str, int] = {}
+    for _fid, reason in rejections:
+        key = _classify_reason(reason)
+        categories[key] = categories.get(key, 0) + 1
+    cat_line = ", ".join(f"{k}={v}" for k, v in sorted(categories.items(), key=lambda kv: -kv[1]))
+    sample_lines: list[str] = []
+    for fid, reason in rejections[:8]:
+        sample_lines.append(f"  - {fid!r}: {reason[:220]}")
+    samples = "\n".join(sample_lines)
+    web_n = sum(1 for k in evidence if isinstance(k, str) and k.startswith("web_"))
+    tc_n = sum(1 for k in evidence if isinstance(k, str) and k.startswith(("tc_", "call_")))
+    return (
+        f"RESEARCH produced no usable facts (skipped {skipped} of {total}). "
+        f"Evidence ledger held web_N={web_n}, tool_call_ids={tc_n}, "
+        f"total_keys={len(evidence)} when finalize ran. "
+        f"Reason breakdown: {cat_line or '<none>'}.\n"
+        f"First rejections:\n{samples or '  <none>'}"
+    )
+
+
+_REASON_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("does not match any", "evidence_id_not_in_ledger"),
+    ("must specify either", "missing_evidence_and_computed_from"),
+    ("evidence_id must be a string", "evidence_id_wrong_type"),
+    ("computed_from must be a list", "computed_from_wrong_shape"),
+    ("computed_from requires a non-empty", "computed_from_missing_method"),
+    ("unsupported value type", "unsupported_value_type"),
+    ("missing required string field", "missing_required_field"),
+    ("dangling computed_from", "dangling_derivation"),
+    ("duplicate fact id", "duplicate_id"),
+    ("non-object fact entry", "non_object_entry"),
+    ("time-series", "bad_time_series"),
+)
+
+
+def _classify_reason(reason: str) -> str:
+    for needle, label in _REASON_PATTERNS:
+        if needle in reason:
+            return label
+    return "other"
+
+
 def _descriptor_to_schema(descriptor: ToolDescriptor) -> ToolSchema:
     return ToolSchema(
         name=descriptor.name,
         description=descriptor.description,
         parameters=dict(descriptor.parameters),
     )
+
+
+def _strict_web_ids(request: ResearchRequest) -> set[str]:
+    """Ids PLAN listed in some need's ``web_fact_ids`` and not in that
+    same need's ``data_fact_ids``. Both the initial-prompt search-budget
+    anchor and the finalize-time coverage gate must agree on this set,
+    or the model would be told to chase a number the gate doesn't
+    enforce."""
+    strict: set[str] = set()
+    for section in request.outline.sections:
+        for need in section.data_needs:
+            data_set = set(need.data_fact_ids)
+            for fid in need.web_fact_ids:
+                if fid not in data_set:
+                    strict.add(fid)
+    return strict
+
+
+def _enforce_web_coverage_gate(bundle: ResearchBundle, request: ResearchRequest) -> None:
+    """Reject the bundle if PLAN tagged any id as strictly web-lane and the
+    bundle doesn't back it with a WebSource.
+
+    Without this gate the loop terminates the moment the model emits a
+    final JSON, even when every web_fact_ids id was ignored — which is
+    exactly the failure mode the dual-lane PLAN was meant to prevent.
+    """
+    strict_web_ids = _strict_web_ids(request)
+    if not strict_web_ids:
+        return
+    web_covered = {fid for fid, fact in bundle.facts.items() if isinstance(fact.source, WebSource)}
+    missing = strict_web_ids - web_covered
+    log.info(
+        "v2.3 RESEARCH web coverage: strict=%d covered=%d missing=%d",
+        len(strict_web_ids),
+        len(strict_web_ids & web_covered),
+        len(missing),
+    )
+    if missing:
+        raise _CoverageGateError(missing, len(strict_web_ids))
 
 
 def _publisher_histogram(url_to_id: dict[str, str]) -> dict[str, int]:
@@ -621,6 +754,25 @@ def _format_web_search_note(url_to_id: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
+def _coverage_retry_text(missing: set[str]) -> str:
+    """Compose the corrective user turn appended after a coverage-gate
+    failure. Names the exact ids the bundle did not back with web_search
+    evidence and tells the model what it must do next."""
+    listed = "\n".join(f"  - {fid}" for fid in sorted(missing))
+    return (
+        f"Coverage check FAILED. Your last JSON did not back these "
+        f"{len(missing)} strict web_fact_ids with web_search evidence:\n"
+        f"{listed}\n\n"
+        f"These ids live in the web lane. EODHD tools cannot satisfy "
+        f"them. Call `web_search` now — one query per orthogonal angle, "
+        f"not per id — then emit a NEW final JSON object. Each missing "
+        f"id either gets a fact with a `web_N` `evidence_id` from a real "
+        f"search hit, or is omitted (an omission is honest; a "
+        f"data-lane substitute is not). Do not finalize again until you "
+        f"have called `web_search` for these ids."
+    )
+
+
 def _initial_user_text(request: ResearchRequest) -> str:
     sections: list[dict[str, Any]] = []
     for section in request.outline.sections:
@@ -645,7 +797,37 @@ def _initial_user_text(request: ResearchRequest) -> str:
         "tickers": list(request.tickers),
         "sections": sections,
     }
-    return json.dumps(payload, default=str)
+    body = json.dumps(payload, default=str)
+    anchor = _search_budget_anchor(request)
+    if anchor:
+        return f"{anchor}\n\n{body}"
+    return body
+
+
+def _search_budget_anchor(request: ResearchRequest) -> str:
+    """Anchor the model's search count to the outline's strict-web load.
+
+    OpenAI's ``web_search_preview`` is intra-turn agentic — search and
+    final JSON share one model response, so the runtime has no chance to
+    iterate the model toward fuller coverage. Without a concrete count
+    target the model under-searches (observed: 0-2 searches on outlines
+    with 40+ strict-web ids). A numeric anchor in the initial user turn
+    moves the median behavior up by giving the model a target to plan
+    against, not just a policy to interpret."""
+    strict = _strict_web_ids(request)
+    if not strict:
+        return ""
+    n = len(strict)
+    floor = max(1, (n + 2) // 3)
+    return (
+        f"Search budget: this outline lists {n} strict-web fact ids that "
+        f"require `web_search` evidence. Plan {floor}+ orthogonal "
+        f"`web_search` queries before emitting final JSON — single-shot "
+        f"runs that fire 0-2 searches will leave most of these uncovered "
+        f"and fail the coverage check. Each query should target a "
+        f"different angle (the document, the counterparty, the regulator, "
+        f"the event), not paraphrases of the same search."
+    )
 
 
 def _parse_final_json(text: str) -> Any:
@@ -809,6 +991,7 @@ def _require_str(entry: dict[str, Any], key: str) -> str:
 
 
 __all__ = [
+    "MAX_COVERAGE_RETRIES",
     "MAX_RESEARCH_TURNS",
     "SYSTEM_PROMPT",
     "FakeToolLLMClient",

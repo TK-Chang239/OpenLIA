@@ -6,6 +6,7 @@ import json
 
 import pytest
 from openlia.llm.runtime.report_v2_3.clients.llm_researcher import (
+    MAX_COVERAGE_RETRIES,
     FakeToolLLMClient,
     LLMResearcherClient,
     ToolTurnResponse,
@@ -653,7 +654,11 @@ def test_initial_user_payload_emits_data_and_web_fact_id_lists_per_need() -> Non
         clarify_result=None,
     )
 
-    payload = json.loads(_initial_user_text(request))
+    raw = _initial_user_text(request)
+    # The user turn may carry a search-budget anchor above the JSON;
+    # parse from the first '{' so the tests of payload shape are
+    # independent of the anchor wording.
+    payload = json.loads(raw[raw.index("{") :])
     needs = payload["sections"][0]["data_needs"]
     assert needs[0]["data_fact_ids"] == ["headlines"]
     assert needs[0]["web_fact_ids"] == ["framing"]
@@ -1221,3 +1226,683 @@ def _two_turn_web_responder(url: str):
         )
 
     return responder
+
+
+# ---------------------------------------------------------------------------
+# Web coverage gate at finalize
+# ---------------------------------------------------------------------------
+
+
+def _outline_with_strict_web(web_ids: list[str]) -> Outline:
+    """Outline whose section has one need with strict-web ids only.
+    `data_fact_ids` is empty for that need, so every id in `web_ids` is
+    strictly web-lane and the coverage gate applies."""
+    return Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="narrative-only need",
+                        web_fact_ids=list(web_ids),
+                    ),
+                ],
+            )
+        ],
+    )
+
+
+def _request_with_outline(outline: Outline) -> ResearchRequest:
+    return ResearchRequest(
+        raw_prompt="initiate on NVDA",
+        language=Language.EN,
+        report_type=ReportType.INITIATION,
+        tickers=["NVDA"],
+        outline=outline,
+        template=_template(),
+        clarify_result=ClarifyProceed(assumptions=[]),
+    )
+
+
+def test_web_coverage_gate_passes_when_strict_web_ids_satisfied() -> None:
+    """When every strict-web fact id in the outline is backed by a
+    WebSource in the bundle, the gate is silent and the bundle is
+    returned. This is the happy path for any narrative-only need."""
+    url = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "framing",
+                                "label": "Framing",
+                                "value": "x",
+                                "evidence_id": "web_1",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+    assert "framing" in bundle.facts
+    assert isinstance(bundle.facts["framing"].source, WebSource)
+
+
+def test_web_coverage_gate_rejects_when_strict_web_id_unmet() -> None:
+    """If PLAN lists an id in `web_fact_ids` only (strict-web) and the
+    model finishes without producing a fact for it backed by a
+    WebSource, finalize must raise. This is the failure mode the gate
+    exists to catch — the model silently skipping the web lane.
+
+    The model is scripted to refuse to call `web_search` across every
+    retry, so the loop exhausts its budget and the gate surfaces."""
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        last_user_idx = max((i for i, m in enumerate(messages) if m.role == "user"), default=-1)
+        post_user_tool = any(m.role == "tool" for m in messages[last_user_idx + 1 :])
+        if not post_user_tool:
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            )
+        return ToolTurnResponse(
+            text=json.dumps(
+                {
+                    "facts": [
+                        {
+                            "id": "rev_ttm",
+                            "label": "Revenue (TTM)",
+                            "value": 1.0,
+                            "evidence_id": "tc_1",
+                        }
+                    ]
+                }
+            )
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="missing web-lane coverage"):
+        researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+
+def test_web_coverage_gate_satisfying_with_data_lane_does_not_count() -> None:
+    """A fact whose id is a strict-web id but is backed by a
+    DataProviderSource does NOT satisfy the gate — lane discipline is
+    enforced by source type, not by id presence in the bundle. This
+    blocks the failure mode where the model substitutes EODHD news for
+    a web-only need.
+
+    The model repeats the same data-lane substitution across every
+    retry, so the loop drains its budget and the gate raises."""
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        last_user_idx = max((i for i, m in enumerate(messages) if m.role == "user"), default=-1)
+        post_user_tool = any(m.role == "tool" for m in messages[last_user_idx + 1 :])
+        if not post_user_tool:
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            )
+        return ToolTurnResponse(
+            text=json.dumps(
+                {
+                    "facts": [
+                        {
+                            "id": "framing",
+                            "label": "Framing",
+                            "value": "x",
+                            "evidence_id": "tc_1",
+                        }
+                    ]
+                }
+            ),
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError, match="missing web-lane coverage"):
+        researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+
+def test_web_coverage_gate_skips_either_lane_ids() -> None:
+    """Ids in BOTH `data_fact_ids` and `web_fact_ids` for the same need
+    are "either" — RESEARCH has discretion. The gate must not trip when
+    such an id is satisfied by a data-lane source only, otherwise the
+    legacy `source_class='either'` migration shape would fail every
+    rehydrated run."""
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="either-lane fact",
+                        data_fact_ids=["rev_ttm"],
+                        web_fact_ids=["rev_ttm"],
+                    ),
+                ],
+            )
+        ],
+    )
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            ),
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "rev_ttm",
+                                "label": "Revenue (TTM)",
+                                "value": 1.0,
+                                "evidence_id": "tc_1",
+                            }
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request_with_outline(outline))
+    assert isinstance(bundle.facts["rev_ttm"].source, DataProviderSource)
+
+
+def test_web_coverage_gate_no_op_when_no_strict_web_ids() -> None:
+    """An outline with no `web_fact_ids` anywhere must not trip the
+    gate — purely quantitative reports legitimately have nothing to
+    enforce. Skipping this no-op case would break every data-only
+    fixture in the suite."""
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="pure data",
+                        data_fact_ids=["rev_ttm"],
+                    ),
+                ],
+            )
+        ],
+    )
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            ),
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "rev_ttm",
+                                "label": "Revenue (TTM)",
+                                "value": 1.0,
+                                "evidence_id": "tc_1",
+                            }
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    bundle = researcher.research(_request_with_outline(outline))
+    assert "rev_ttm" in bundle.facts
+
+
+def test_web_coverage_gate_logs_coverage_breakdown(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Coverage stats must surface in logs even when the gate passes,
+    so the per-run web-lane satisfaction rate is observable without
+    re-deriving it from the bundle."""
+    url = "https://example.com/article"
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "framing",
+                                "label": "Framing",
+                                "value": "x",
+                                "evidence_id": "web_1",
+                            }
+                        ]
+                    }
+                ),
+                citations=(_web_cite(url),),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"):
+        researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+    coverage_lines = [r.message for r in caplog.records if "web coverage:" in r.message]
+    assert len(coverage_lines) == 1
+    assert "strict=1" in coverage_lines[0]
+    assert "covered=1" in coverage_lines[0]
+    assert "missing=0" in coverage_lines[0]
+
+
+# ---------------------------------------------------------------------------
+# Bounded coverage retry — re-prompt on gate failure
+# ---------------------------------------------------------------------------
+
+
+def _final_json(facts: list[dict[str, object]]) -> str:
+    return json.dumps({"facts": facts})
+
+
+def test_coverage_retry_recovers_when_model_searches_on_second_pass() -> None:
+    """First final JSON skips the web lane → gate raises → loop appends
+    a corrective user turn and re-prompts → model emits a new final JSON
+    backed by a real web hit. The bundle the researcher returns covers
+    the strict-web id and does NOT include the bad first attempt."""
+    url = "https://example.com/article"
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        corrective_count = sum(
+            1 for m in messages if m.role == "user" and "Coverage check FAILED" in (m.content or "")
+        )
+        last_user_idx = max((i for i, m in enumerate(messages) if m.role == "user"), default=-1)
+        post_user_tool = any(m.role == "tool" for m in messages[last_user_idx + 1 :])
+        if corrective_count == 0:
+            if not post_user_tool:
+                return ToolTurnResponse(
+                    text="",
+                    tool_calls=(
+                        ToolCall(
+                            id="tc_1",
+                            name="get_fundamentals",
+                            arguments={"ticker": "NVDA.US"},
+                        ),
+                    ),
+                )
+            return ToolTurnResponse(
+                text=_final_json(
+                    [
+                        {
+                            "id": "framing",
+                            "label": "Framing",
+                            "value": "from-data-not-web",
+                            "evidence_id": "tc_1",
+                        }
+                    ]
+                )
+            )
+        return ToolTurnResponse(
+            text=_final_json(
+                [
+                    {
+                        "id": "framing",
+                        "label": "Framing",
+                        "value": "from-web",
+                        "evidence_id": "web_1",
+                    }
+                ]
+            ),
+            citations=(_web_cite(url),),
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+
+    bundle = researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+    assert "framing" in bundle.facts
+    assert isinstance(bundle.facts["framing"].source, WebSource)
+    assert bundle.facts["framing"].value == "from-web"
+
+
+def test_coverage_retry_message_names_missing_ids() -> None:
+    """The corrective user turn the loop injects after a gate failure
+    must list each missing id verbatim so the model knows exactly what
+    it owes — a generic 'try again' wouldn't tell it which lane work
+    was skipped."""
+    url = "https://example.com/article"
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        corrective_count = sum(
+            1 for m in messages if m.role == "user" and "Coverage check FAILED" in (m.content or "")
+        )
+        last_user_idx = max((i for i, m in enumerate(messages) if m.role == "user"), default=-1)
+        post_user_tool = any(m.role == "tool" for m in messages[last_user_idx + 1 :])
+        if corrective_count == 0:
+            if not post_user_tool:
+                return ToolTurnResponse(
+                    text="",
+                    tool_calls=(
+                        ToolCall(
+                            id="tc_1",
+                            name="get_fundamentals",
+                            arguments={"ticker": "NVDA.US"},
+                        ),
+                    ),
+                )
+            return ToolTurnResponse(
+                text=_final_json(
+                    [
+                        {
+                            "id": "framing",
+                            "label": "Framing",
+                            "value": "no-web",
+                            "evidence_id": "tc_1",
+                        }
+                    ]
+                )
+            )
+        return ToolTurnResponse(
+            text=_final_json(
+                [
+                    {
+                        "id": "framing",
+                        "label": "Framing",
+                        "value": "ok",
+                        "evidence_id": "web_1",
+                    },
+                    {
+                        "id": "outlook",
+                        "label": "Outlook",
+                        "value": "ok",
+                        "evidence_id": "web_1",
+                    },
+                ]
+            ),
+            citations=(_web_cite(url),),
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+
+    researcher.research(_request_with_outline(_outline_with_strict_web(["framing", "outlook"])))
+
+    corrective_msgs = [
+        m
+        for call in llm.calls
+        for m in call
+        if m.role == "user" and "Coverage check FAILED" in (m.content or "")
+    ]
+    assert corrective_msgs, "expected at least one corrective user turn"
+    corrective = corrective_msgs[-1].content
+    assert "framing" in corrective
+    assert "outlook" in corrective
+    assert "web_search" in corrective
+
+
+def test_coverage_retry_exhaustion_re_raises_gate_error() -> None:
+    """When the model burns through all coverage retries still not
+    backing the strict-web ids, the gate's RuntimeError must escape so
+    the runner can fail the stage rather than ship an under-evidenced
+    bundle. Initial attempt + MAX_COVERAGE_RETRIES retries all fail.
+
+    The first assistant turn of each attempt makes a tool call to
+    produce a real `tc_1` evidence id, then the second emits a
+    data-lane fact that the gate will reject."""
+    finals_seen = 0
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        nonlocal finals_seen
+        # Count tool messages since the last user turn to know if this
+        # attempt has already fetched its data-lane evidence.
+        last_user_idx = max((i for i, m in enumerate(messages) if m.role == "user"), default=-1)
+        post_user_tool = any(m.role == "tool" for m in messages[last_user_idx + 1 :])
+        if not post_user_tool:
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            )
+        finals_seen += 1
+        return ToolTurnResponse(
+            text=_final_json(
+                [
+                    {
+                        "id": "framing",
+                        "label": "Framing",
+                        "value": "n/a",
+                        "evidence_id": "tc_1",
+                    }
+                ]
+            )
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+
+    with pytest.raises(RuntimeError, match="missing web-lane coverage"):
+        researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+    # 1 initial attempt + MAX_COVERAGE_RETRIES retries
+    assert finals_seen == 1 + MAX_COVERAGE_RETRIES
+
+
+def test_coverage_retry_logs_remaining_budget(caplog: pytest.LogCaptureFixture) -> None:
+    """Each retry must log the decrementing budget so operators can see
+    how many chances the loop burned before either recovering or
+    failing the stage."""
+
+    def responder(messages: list[Message]) -> ToolTurnResponse:
+        last_user_idx = max((i for i, m in enumerate(messages) if m.role == "user"), default=-1)
+        post_user_tool = any(m.role == "tool" for m in messages[last_user_idx + 1 :])
+        if not post_user_tool:
+            return ToolTurnResponse(
+                text="",
+                tool_calls=(
+                    ToolCall(
+                        id="tc_1",
+                        name="get_fundamentals",
+                        arguments={"ticker": "NVDA.US"},
+                    ),
+                ),
+            )
+        return ToolTurnResponse(
+            text=_final_json(
+                [
+                    {
+                        "id": "framing",
+                        "label": "Framing",
+                        "value": "x",
+                        "evidence_id": "tc_1",
+                    }
+                ]
+            )
+        )
+
+    llm = FakeToolLLMClient(responder=responder)
+    researcher = LLMResearcherClient(llm, _tools())
+
+    with (
+        caplog.at_level("INFO", logger="openlia.llm.runtime.report_v2_3.clients.llm_researcher"),
+        pytest.raises(RuntimeError),
+    ):
+        researcher.research(_request_with_outline(_outline_with_strict_web(["framing"])))
+
+    retry_lines = [r.message for r in caplog.records if "coverage retry" in r.message]
+    assert len(retry_lines) == MAX_COVERAGE_RETRIES
+    assert any(f"remaining={MAX_COVERAGE_RETRIES - 1}" in m for m in retry_lines)
+    assert any("remaining=0" in m for m in retry_lines)
+
+
+# ---------------------------------------------------------------------------
+# Search-budget anchor in the initial user turn
+# ---------------------------------------------------------------------------
+
+
+def test_initial_user_turn_anchors_search_budget_on_strict_web_count() -> None:
+    """When the outline has strict-web ids, the initial user turn must
+    name the count and a concrete `web_search` budget. Without this
+    anchor the model under-searches because nothing in the prompt tells
+    it how many calls the coverage gate expects."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import _initial_user_text
+
+    ids = [f"id_{i}" for i in range(9)]
+    request = _request_with_outline(_outline_with_strict_web(ids))
+    text = _initial_user_text(request)
+    assert text.startswith("Search budget:")
+    assert "9 strict-web fact ids" in text
+    # ceil(9 / 3) = 3
+    assert "3+" in text
+    assert "web_search" in text
+
+
+def test_initial_user_turn_omits_anchor_when_no_strict_web_ids() -> None:
+    """Pure-data outlines must not get the anchor — telling a quant-only
+    run to call `web_search` would be noise the model has to ignore."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import _initial_user_text
+
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(description="data-only", data_fact_ids=["rev_ttm"]),
+                ],
+            )
+        ],
+    )
+    request = _request_with_outline(outline)
+    text = _initial_user_text(request)
+    assert not text.startswith("Search budget:")
+    assert "Search budget" not in text
+
+
+def test_no_usable_facts_error_includes_category_histogram_and_samples() -> None:
+    """When every fact in a non-empty bundle is rejected, the error must
+    surface a reason histogram and the first rejected fact ids/reasons.
+    Without this the operator sees 'skipped N of N' and has no signal
+    on whether the model is citing fabricated web_N ids, missing
+    evidence, dangling computed-from, etc."""
+    llm = FakeToolLLMClient(
+        turns=[
+            ToolTurnResponse(
+                text=json.dumps(
+                    {
+                        "facts": [
+                            {
+                                "id": "rev_ttm",
+                                "label": "Revenue TTM",
+                                "value": 1.0,
+                                "evidence_id": "web_999",  # not in ledger
+                            },
+                            {
+                                "id": "eps_ttm",
+                                "label": "EPS TTM",
+                                "value": 1.0,
+                                "evidence_id": "tc_fake",  # not in ledger
+                            },
+                            {
+                                "id": "no_anchors",
+                                "label": "Nothing",
+                                "value": 1.0,
+                                # no evidence_id, no computed_from
+                            },
+                        ]
+                    }
+                ),
+            ),
+        ]
+    )
+    researcher = LLMResearcherClient(llm, _tools())
+    with pytest.raises(RuntimeError) as exc:
+        researcher.research(_request())
+    msg = str(exc.value)
+    assert "skipped 3 of 3" in msg
+    assert "evidence_id_not_in_ledger=2" in msg
+    assert "missing_evidence_and_computed_from=1" in msg
+    assert "First rejections:" in msg
+    assert "'rev_ttm'" in msg
+    assert "web_999" in msg
+    # Ledger summary surfaces so we can tell whether the model never
+    # had anything to cite vs cited the wrong handles.
+    assert "web_N=0" in msg
+    assert "tool_call_ids=0" in msg
+
+
+def test_initial_user_turn_anchor_counts_either_lane_ids_as_non_strict() -> None:
+    """An id listed in BOTH `data_fact_ids` and `web_fact_ids` of the
+    same need is "either" and not enforced by the gate, so it must not
+    inflate the anchor's count — otherwise the model would chase a
+    target larger than the gate's denominator."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_researcher import _initial_user_text
+
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="overview",
+                title="Overview",
+                data_needs=[
+                    DataNeed(
+                        description="either",
+                        data_fact_ids=["flex"],
+                        web_fact_ids=["flex"],
+                    ),
+                    DataNeed(
+                        description="strict web",
+                        web_fact_ids=["strict_a", "strict_b"],
+                    ),
+                ],
+            )
+        ],
+    )
+    request = _request_with_outline(outline)
+    text = _initial_user_text(request)
+    assert "2 strict-web fact ids" in text
