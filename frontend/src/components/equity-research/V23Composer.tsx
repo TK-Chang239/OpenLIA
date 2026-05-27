@@ -418,7 +418,10 @@ export function V23Composer({
         report_type: reportType,
         length: LENGTH_TO_V23[length],
         template_id: templateId,
-        reasoning_effort: reasoningEffort,
+        // Wire enum has MEDIUM / HIGH only; "off" maps to null (no
+        // reasoning directive sent). Sending the literal "off" string
+        // would 422 against the ReasoningEffort Pydantic validator.
+        reasoning_effort: reasoningEffort === "off" ? null : reasoningEffort,
       },
       {
         onEvent: handleStreamEvent,

@@ -188,95 +188,60 @@ def _call_with_repair(
 
 
 PLAN_SYSTEM_PROMPT = """
-You are the PLAN stage of the v2.3 equity-research engine. The user
-template supplies the section structure; your job is to fill each
-section with the data_needs RESEARCH should fetch and to select the
-valuation methods COMPUTE should run.
+You are the PLAN stage of the v2.3 equity-research engine. Read the
+user template and decide what facts RESEARCH should fetch for each
+section.
 
-Inputs you receive:
+Inputs:
 - raw_prompt: the user's request.
-- template.sections: the ordered list of sections the report must
-  contain. Each section carries an `id`, `title`, `intent`, and
-  optional `methodology_hints`.
-- clarify_result: the assumptions resolved at CLARIFY.
+- template.sections: ordered list with id, title, intent,
+  methodology_hints.
+- clarify_result: assumptions resolved at CLARIFY.
 
-Output an Outline JSON object:
+For every fact id you list, classify it on the matter-of-record vs
+matter-of-interpretation axis:
+
+- Matter of record — exactly one correct value, lives in a filing or
+  a market feed (reported revenue, EPS, shares outstanding, closing
+  prices, declared dividends, peer multiples). If two analysts
+  disagree, one is simply wrong. Route the id to `data_fact_ids` —
+  EODHD serves these.
+- Matter of interpretation — synthesis, opinion, framing, causal
+  claim, forward-looking expectation (why the stock moved, what
+  management signaled, analyst ratings and price targets, bull/bear
+  theses, regulatory framing, competitive positioning). Two competent
+  analysts can disagree and both be defensible. Route the id to
+  `web_fact_ids` — `web_search` against primary sources and commentary
+  serves these.
+
+The same theme can carry both kinds — Q3 results have a record side
+(rev, EPS, margin) and an interpretation side (what management
+signaled, how the Street is reading guidance). Populate both lanes
+when applicable.
+
+Output one JSON object, no prose, no fences:
 {
   "tickers": ["<TICKER>"],
   "report_type": "initiation",
   "sections": [
     {
-      "id": "<copy from template.sections[i].id>",
-      "title": "<copy from template.sections[i].title>",
+      "id": "<from template.sections[i].id>",
+      "title": "<from template.sections[i].title>",
       "data_needs": [
         {
-          "description": "Multi-period revenue and gross-margin trajectory",
-          "data_fact_ids": ["rev_fy_hist", "gross_margin_fy_hist"],
-          "web_fact_ids": []
-        },
-        {
-          "description": "Q3 reported results plus management's read on demand",
+          "description": "Q3 results plus management's read on demand",
           "data_fact_ids": ["rev_q3", "gross_margin_q3", "eps_q3"],
-          "web_fact_ids": ["mgmt_commentary_on_demand", "earnings_call_key_messages"]
-        },
-        {
-          "description": "Sell-side analyst price targets and ratings",
-          "data_fact_ids": [],
-          "web_fact_ids": ["analyst_pt_range", "analyst_rating_distribution"]
+          "web_fact_ids": ["mgmt_commentary_on_demand"]
         }
       ]
-    },
-    ...
+    }
   ],
-  "valuation_plan": {
-    "methods": ["dcf", "comps"]
-  }
+  "valuation_plan": { "methods": ["dcf", "comps"] }
 }
 
-Rules:
-- `tickers` and `report_type` are decided by the engine from the run's
-  inputs. The example shows literal values for shape clarity, but
-  anything you put there is overwritten — copy them through if you
-  like, but don't expand or rewrite them.
-- Produce one section per template.sections entry, in the same order,
-  with the same `id` and `title`. The engine's coercer will fix drift,
-  so be conservative — copy the structure verbatim.
-- Each `data_need` carries two lane-specific id lists. Every need MUST
-  populate at least one of them — a need with both lists empty is a
-  no-op and will be rejected. Classify each fact id on a
-  record-vs-interpretation axis — NOT on whether it's a number or a
-  word:
-    * Matter of record — exactly one correct value, lives in a
-      filing or a market feed. Reported revenue, EPS, shares
-      outstanding, closing price, declared dividend, segment and
-      geography revenue mix from filings, peer multiples computed
-      from prices and financials. If two analysts disagree on it,
-      one of them is simply wrong. → put the id in `data_fact_ids`.
-      EODHD serves these.
-    * Matter of interpretation — synthesis, opinion, framing, or
-      causal claim. Why the stock moved, what management signaled,
-      what the Street expects (analyst ratings, price-target
-      consensus, bull/bear theses), whether the quarter was "good",
-      contract / program execution implications, regulatory framing,
-      competitive positioning. Two competent analysts can disagree
-      and both be defensible. → put the id in `web_fact_ids`.
-      `web_search` against primary sources and commentary serves
-      these.
-- Same theme can carry both kinds of facts. Q3 results have a record
-  side (rev, EPS, margin) AND an interpretation side (what
-  management signaled on the call, how the Street is reading
-  guidance). Populate both lanes with ids that capture each side.
-  Do NOT route an id to `data_fact_ids` because EODHD ships news
-  headlines on the topic — a news headline points at an event, it
-  does not synthesize what the event means.
-- Use snake_case ids like `rev_ttm`, `gross_margin_fy25`, or
-  `analyst_pt_range`. Pick ids that read naturally so RESEARCH can
-  bind them verbatim and downstream coverage scoring matches.
-- `valuation_plan.methods` lists the valuation methods COMPUTE should
-  run. Choose from `dcf`, `comps`, `sensitivity` based on what the
-  template's sections actually need (e.g. include `dcf` only when a
-  section's intent calls for an intrinsic valuation).
-- Output JSON only. No prose, no markdown fences.
+Each data_need must populate at least one lane (an empty need is
+rejected). `valuation_plan.methods` is your choice from dcf, comps,
+sensitivity based on what the template's sections need.
 """.strip()
 
 
