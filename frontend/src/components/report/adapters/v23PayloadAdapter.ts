@@ -151,7 +151,10 @@ function buildMetaStats(payload: V23RunPayload, citations: Citation[]): MetaStat
   // a 1-paragraph note still reads as "1 min" not "0".
   const estReadMinutes = Math.max(1, Math.round(wordCount / 250));
   const webSearchQueries = citations.filter((c) => /https?:\/\//.test(c.title ?? "")).length;
-  const nc = payload.narrative_coverage;
+  // Prefer the new per-lane fields; fall back to narrative_coverage so
+  // older payloads still render the web-lane chip during the rollout.
+  const dataLane = payload.data_coverage ?? null;
+  const webLane = payload.web_coverage ?? payload.narrative_coverage ?? null;
   return {
     sections_count: payload.sections.length,
     sources_count: citations.length,
@@ -159,8 +162,15 @@ function buildMetaStats(payload: V23RunPayload, citations: Citation[]): MetaStat
     web_search_queries: webSearchQueries > 0 ? webSearchQueries : null,
     tokens_used: null,
     model_id: null,
-    narrative_coverage_label: nc ? `${nc.satisfied}/${nc.total}` : null,
-    narrative_coverage_pct: nc ? nc.pct : null,
+    data_coverage_label: dataLane ? `${dataLane.satisfied}/${dataLane.total}` : null,
+    data_coverage_pct: dataLane ? dataLane.pct : null,
+    web_coverage_label: webLane ? `${webLane.satisfied}/${webLane.total}` : null,
+    web_coverage_pct: webLane ? webLane.pct : null,
+    // Back-compat: keep the legacy field populated so any external
+    // consumer of the schema (export, tests) still sees the same
+    // narrative_coverage_* it always saw.
+    narrative_coverage_label: webLane ? `${webLane.satisfied}/${webLane.total}` : null,
+    narrative_coverage_pct: webLane ? webLane.pct : null,
   };
 }
 
