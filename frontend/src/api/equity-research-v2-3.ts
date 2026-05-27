@@ -246,11 +246,14 @@ export interface V23ThesisPayload {
   canonical_figures: V23CanonicalFigure[];
 }
 
-export interface V23NarrativeCoverage {
+export interface V23LaneCoverage {
   total: number;
   satisfied: number;
   pct: number;
 }
+
+/** @deprecated Use V23LaneCoverage. Kept as an alias while consumers migrate. */
+export type V23NarrativeCoverage = V23LaneCoverage;
 
 export interface V23RunPayload {
   run_id: string;
@@ -265,10 +268,17 @@ export interface V23RunPayload {
   charts: V23ChartSpec[];
   figure_labels: Record<string, number>;
   bundle_facts: Record<string, V23BundleFact>;
-  /** Soft signal: how many of the planner's narrative `data_needs`
-   *  landed at least one web-sourced fact. Null when the planner
-   *  emitted no narrative needs (N/A, not zero). */
-  narrative_coverage: V23NarrativeCoverage | null;
+  /** How many of the planner's `data_fact_ids` needs landed at least
+   *  one EODHD-sourced fact. Null when the outline has no data-lane
+   *  needs (N/A, not zero). */
+  data_coverage?: V23LaneCoverage | null;
+  /** How many of the planner's `web_fact_ids` needs landed at least
+   *  one web_search-sourced fact. Null when the outline has no
+   *  web-lane needs (N/A, not zero). */
+  web_coverage?: V23LaneCoverage | null;
+  /** Back-compat alias: mirrors `web_coverage`. New consumers should
+   *  read `web_coverage` directly. */
+  narrative_coverage: V23LaneCoverage | null;
 }
 
 export function getV23RunPayload(runId: string): Promise<V23RunPayload> {
