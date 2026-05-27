@@ -25,7 +25,6 @@ from openlia.llm.runtime.report_v3 import (
     ReportLength,
     Runner,
     RunRequest,
-    RunResult,
     TemplateSpec,
 )
 
@@ -175,28 +174,11 @@ def test_session_create_rejects_gpt_5_4_mini():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
-async def test_runner_returns_placeholder_result_on_capable_model():
-    runner = Runner()
-    template = get_builtin(ReportType.INITIATION)
-    result = await runner.run(
-        RunRequest(
-            subject="RKLB.US",
-            template=template,
-            language=Language.EN,
-            length=ReportLength.NORMAL,
-            provider_kind="anthropic",
-            model="claude-sonnet-4-6",
-        )
-    )
-    assert isinstance(result, RunResult)
-    assert result.status == "placeholder"
-    assert result.subject == "RKLB.US"
-    assert result.template_id == template.template_id
-    assert "Phase 0" in result.message
-    assert result.sections == []
-    assert result.charts == []
-    assert result.citations == []
+# Phase 0 runner placeholder behavior is superseded by the Phase 1
+# tool-use loop; the runner now runs an actual loop. See
+# ``test_phase_1.py`` for runner coverage. The capability-gate check
+# below stays — it remains the canonical assertion that Ollama runs
+# never proceed.
 
 
 @pytest.mark.asyncio
