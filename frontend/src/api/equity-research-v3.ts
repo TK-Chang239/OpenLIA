@@ -89,6 +89,36 @@ export interface V3StartResponse {
   result: V3RunResult;
 }
 
+export interface V3StartAsyncResponse {
+  report_id: string;
+}
+
+// Event taxonomy mirrors `packages/core/.../report_v3/events.py`.
+// Keep this in lockstep — the streaming page treats unknown event
+// types as no-ops, but typed events keep the activity feed strict.
+export type V3EventType =
+  | "run.started"
+  | "tool.called"
+  | "tool.completed"
+  | "section.written"
+  | "chart.emitted"
+  | "run.completed"
+  | "run.failed"
+  | "run.cancelled"
+  | "run.snapshot";
+
+export interface V3Event {
+  type: V3EventType;
+  payload: Record<string, unknown>;
+}
+
+export const V3_TERMINAL_EVENT_TYPES: ReadonlySet<V3EventType> = new Set([
+  "run.completed",
+  "run.failed",
+  "run.cancelled",
+  "run.snapshot",
+]);
+
 export interface V3ReportSummary {
   report_id: string;
   subject: string;
@@ -174,4 +204,46 @@ export function v3HtmlUrl(reportId: string): string {
  */
 export function v3PdfUrl(reportId: string): string {
   return `${PREFIX}/runs/${encodeURIComponent(reportId)}/pdf`;
+}
+
+// ---------------------------------------------------------------------------
+// Streaming surface
+// ---------------------------------------------------------------------------
+
+/**
+ * Fire-and-stream entrypoint. POST returns the new report_id
+ * immediately; the engine runs in a background task. Connect to
+ * ``v3EventsUrl(report_id)`` via EventSource to receive progress.
+ */
+export function startV3RunAsync(payload: V3StartPayload): Promise<V3StartAsyncResponse> {
+  return request<V3StartAsyncResponse>(`${PREFIX}/runs/start`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Flip the server-side cancel token for an in-flight run. The
+ * runner exits at the next safe point with partial work preserved
+ * and a terminal ``run.cancelled`` event lands on the stream.
+ *
+ * Returns ``{cancelled: true}`` when the token was found.
+ * ``{cancelled: false}`` is fine too — it means the run already
+ * finished and there's nothing left to cancel.
+ */
+export function cancelV3Run(reportId: string): Promise<{ cancelled: boolean }> {
+  return request<{ cancelled: boolean }>(
+    `${PREFIX}/runs/${encodeURIComponent(reportId)}/cancel`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * Build the SSE URL for a v3 run. Pass to ``new EventSource(url)``.
+ * The server keeps the connection open until the terminal event
+ * lands, then closes. Late connectors (run already done) get a
+ * single ``run.snapshot`` event before close.
+ */
+export function v3EventsUrl(reportId: string): string {
+  return `${PREFIX}/runs/${encodeURIComponent(reportId)}/events`;
 }
