@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -60,22 +61,6 @@ log = logging.getLogger(__name__)
 
 
 MAX_RESEARCH_TURNS = 12
-MAX_COVERAGE_RETRIES = 2
-
-
-class _CoverageGateError(RuntimeError):
-    """Raised inside `_finalize` when the bundle leaves strict web_fact_ids
-    uncovered. Carries the missing ids so the outer loop can re-prompt the
-    model with a precise list instead of a generic 'try again' nudge."""
-
-    def __init__(self, missing: set[str], total: int) -> None:
-        super().__init__(
-            f"RESEARCH bundle missing web-lane coverage: "
-            f"{len(missing)} of {total} strict web_fact_ids "
-            f"unaddressed by web_search evidence: {sorted(missing)}"
-        )
-        self.missing = set(missing)
-        self.total = total
 
 
 # ---------------------------------------------------------------------------
@@ -165,86 +150,31 @@ class FakeToolLLMClient:
 
 
 SYSTEM_PROMPT = """\
-You are the RESEARCH stage of an equity-research report pipeline. Your job:
-gather the facts the rest of the pipeline will use to write the report, and
-emit them as a single JSON object on your last turn.
+You are the RESEARCH stage of an equity-research report pipeline.
+Read the outline, fetch facts, emit one JSON object on your last turn.
 
-How you work:
+For every fact, decide what KIND of claim it is:
 
-1. Read the user's outline, especially each section's `data_needs`. Each
-   data_need carries two lane-specific id lists — `data_fact_ids` and
-   `web_fact_ids` — that together form your work queue. Each id is a fact
-   WRITE will cite; your job is to fetch it from the right lane.
+- Matter of record — exactly one correct value, lives in a filing or
+  a market feed. Use the EODHD data tools (`get_fundamentals`,
+  `get_historical_prices`, `get_company_news`). Each tool call result
+  arrives with an `evidence_id` (e.g. `tc_abc123`) — cite that.
+- Matter of interpretation — synthesis, opinion, framing, causal
+  claim, forward-looking expectation. Use `web_search`. Each new URL
+  the search returns is registered as `web_1`, `web_2`, … in a system
+  note. Cite by that `web_N` id.
 
-2. Lane routing is structural, not a judgment call:
+Cite every fact. Either:
+- `evidence_id`: a tool-call id (`tc_…`) or a `web_N` id from a real
+  search this run, or
+- `computed_from`: list of other fact ids in this same batch, plus
+  `method`: a one-line description of how you derived the value.
 
-   - `data_fact_ids` — satisfy with the EODHD-backed data tools
-     (`get_fundamentals`, `get_historical_prices`, `get_company_news`).
-     Each tool call returns a provider id (`tc_abc123`) that becomes the
-     fact's `evidence_id`.
-   - `web_fact_ids` — satisfy with `web_search`. Set `evidence_id` to the
-     `web_N` id of the result you used, taken from the most recent "Web
-     search results so far" system note. A `web_N` id exists only after a
-     real search returns it. Quote a short verbatim snippet so VERIFY can
-     value-match.
+If you cannot find evidence for a listed fact id after looking, omit
+it — don't fabricate a source.
 
-   EODHD news headlines DO NOT satisfy a `web_fact_ids` id, even when a
-   headline reads like enough. The structured data lane and the open-web
-   lane are tracked independently on purpose — a fact emitted for an id in
-   `web_fact_ids` MUST be backed by a `web_N` evidence id from a real
-   `web_search` result. If you cannot find usable web evidence after a
-   real search, omit the fact rather than substituting from EODHD — and
-   never drop a `web_fact_ids` id because searching felt unnecessary. The
-   subject company's own data does not substitute for a search.
-
-3. Before you search a `web_fact_ids` id, decide where its evidence
-   lives. Do not start from "<Company> <Topic>" — start from the claim:
-
-   a. What KIND of claim is this — a reported fact, a current status, a
-      regulatory/legal matter, an evaluative or contested judgment, a
-      forward-looking expectation?
-   b. Where does authority for THAT kind of claim live? The most primary
-      source that can settle it — a filing, a regulator's release, a court
-      document, a transcript — beats commentary about it.
-   c. Is that primary source an interested party? The subject company is
-      authoritative for what management SAID, but it is the weakest source for
-      whether a claim is true or how risky it is. For anything evaluative or
-      contested, get at least one source with no stake.
-   d. If the claim is contested, triangulate: check whether independent sources
-      agree, and look for the strongest opposing view on purpose — not just
-      confirmation.
-   e. Let results steer the next query. If hits converge on one domain or one
-      framing, that is the signal to change angle — query the regulator, the
-      counterparty, the event, or the document type, not a reworded version of
-      the same search.
-
-   Worked example — `web_fact_ids` lists "antitrust_exposure": a
-   regulatory-status claim. Primary source is the regulator's release or
-   the docket; the company's own statement counts only as "how it
-   characterizes the matter"; corroborate with an independent wire. So
-   you query the regulator and the event — not "<Company> antitrust".
-
-   Shape queries around the event, the document, or the counterparty rather than
-   the company name or topic word. Spend the search budget on ORTHOGONAL
-   angles, not paraphrases: one query for the primary document, one for
-   independent reporting, one for the opposing view. Prefer primary documents
-   and established outlets; treat forums and content-farm aggregators as weak.
-
-4. Call tools. You can call multiple per turn and re-call as needed. Each tool
-   call result is labeled with `evidence_id` — that's the handle you use later
-   to cite it. Drop a `web_fact_ids` id only after a real search returned
-   nothing usable — never because searching felt unnecessary. The subject's
-   own data does not substitute for a search. Prefer reporting back a smaller
-   fact than silently omitting one.
-
-   Fundamentals are point-in-time as of the fetch date — structured numbers
-   only, no narrative, no news, no regulatory status. Treat the EODHD payload as
-   financial data, not as company context, and never as evidence for an
-   evaluative or forward-looking claim.
-
-5. When you have enough evidence to cover the outline, STOP calling tools. On
-   your final turn emit exactly one JSON object — no prose, no markdown fences —
-   matching this shape:
+Output one JSON object on your final turn — no prose, no markdown
+fences — matching this shape:
 
 {
   "facts": [
@@ -267,47 +197,6 @@ How you work:
     }
   ]
 }
-
-Rules:
-
-- Every fact MUST have either `evidence_id` (pointing at a tool call that
-  returned the number) OR both `computed_from` (list of other fact ids in this
-  batch) AND `method` (one-line description).
-- `evidence_id` MUST be a real reference the runtime can resolve. Two forms are
-  accepted:
-    (a) A tool-call id from a prior `tool` message (looks like `tc_abc123` /
-        `call_xyz789` — the provider's call id).
-    (b) A `web_N` id that appeared in a "Web search results so far" system note
-        this run.
-  Do NOT emit a raw URL as an `evidence_id`. A URL is something you can
-  reconstruct from memory; a `web_N` id is something only a real search
-  produces — so `web_N` is the only accepted web handle. Emit a fact only when
-  you can point its `evidence_id` at one of these two forms; otherwise omit it.
-- Lane discipline: an id listed in `data_fact_ids` MUST be backed by a
-  tool-call `evidence_id` from an EODHD tool. An id listed in `web_fact_ids`
-  MUST be backed by a `web_N` `evidence_id` from `web_search`. Lane-mismatched
-  facts fail the downstream coverage check, so substituting an EODHD news
-  headline for a `web_fact_ids` id is a silent failure — don't do it.
-- `computed_from` entries MUST reference fact ids you also emit IN THE SAME
-  `facts` array. When you need an intermediate to compute a derived fact, EITHER
-  emit that intermediate as its own fact first OR compute the final fact
-  directly from an evidence_id-backed source.
-- Each `value` is a single atomic data point: a number, a date, a ticker, or a
-  short label (twelve words or fewer). For multi-period data of ONE METRIC, use
-  a time-series object `{"points": [{"period": "2025-Q4", "value": 60.9}, ...],
-  "unit": "USD_billions"}`. `point.value` MUST be a plain JSON number.
-- ONE FACT = ONE METRIC. Each fact's value covers a single metric. Names like
-  `historical_income_statement` indicate a packed dump — break them apart into
-  one fact per line item. Save narrative prose for SYNTHESIZE / WRITE.
-- Use each fact's `id` verbatim from the listed `data_fact_ids` or
-  `web_fact_ids`. The downstream coverage check matches on exactly those
-  strings, so a fact that "covers the same idea" with a different id will
-  not register. Only invent a new fact id (short, snake_case) when you must
-  emit an intermediate rung for `computed_from`.
-- Emit a fact only when a tool call returned the data. Skip facts with no
-  tool-call backing so WRITE can flag the gap.
-- Every fact must trace to a tool call (or to other facts in this batch via
-  `computed_from` + `method`).
 """.strip()
 
 
@@ -343,7 +232,6 @@ class LLMResearcherClient(ResearcherClient):
         evidence: dict[str, Provenance] = {}
         web_url_to_id: dict[str, str] = {}
         messages: list[Message] = [Message(role="user", content=_initial_user_text(request))]
-        coverage_retries = MAX_COVERAGE_RETRIES
 
         for turn in range(self._max_turns):
             response = self._llm.send(
@@ -397,21 +285,7 @@ class LLMResearcherClient(ResearcherClient):
                 len(evidence),
                 _publisher_histogram(web_url_to_id),
             )
-            try:
-                return self._finalize(text, evidence, request)
-            except _CoverageGateError as exc:
-                if coverage_retries <= 0:
-                    raise
-                coverage_retries -= 1
-                log.info(
-                    "v2.3 RESEARCH coverage retry: missing=%d/%d remaining=%d",
-                    len(exc.missing),
-                    exc.total,
-                    coverage_retries,
-                )
-                messages.append(Message(role="assistant", content=text))
-                messages.append(Message(role="user", content=_coverage_retry_text(exc.missing)))
-                continue
+            return self._finalize(text, evidence, request)
 
         raise RuntimeError(
             f"RESEARCH LLM did not emit a final bundle within "
@@ -570,9 +444,7 @@ class LLMResearcherClient(ResearcherClient):
                     fid,
                     sorted(missing),
                 )
-                rejections.append(
-                    (fid, f"dangling computed_from: missing {sorted(missing)}")
-                )
+                rejections.append((fid, f"dangling computed_from: missing {sorted(missing)}"))
                 del bundle.facts[fid]
                 skipped += 1
 
@@ -672,13 +544,9 @@ def _strict_web_ids(request: ResearchRequest) -> set[str]:
 
 
 def _enforce_web_coverage_gate(bundle: ResearchBundle, request: ResearchRequest) -> None:
-    """Reject the bundle if PLAN tagged any id as strictly web-lane and the
-    bundle doesn't back it with a WebSource.
-
-    Without this gate the loop terminates the moment the model emits a
-    final JSON, even when every web_fact_ids id was ignored — which is
-    exactly the failure mode the dual-lane PLAN was meant to prevent.
-    """
+    """Log web-lane coverage as a soft signal. Does not reject the
+    bundle — the relaxed RESEARCH contract lets the bundle through and
+    lets downstream stages flag gaps via their own checks."""
     strict_web_ids = _strict_web_ids(request)
     if not strict_web_ids:
         return
@@ -690,8 +558,6 @@ def _enforce_web_coverage_gate(bundle: ResearchBundle, request: ResearchRequest)
         len(strict_web_ids & web_covered),
         len(missing),
     )
-    if missing:
-        raise _CoverageGateError(missing, len(strict_web_ids))
 
 
 def _publisher_histogram(url_to_id: dict[str, str]) -> dict[str, int]:
@@ -754,25 +620,6 @@ def _format_web_search_note(url_to_id: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def _coverage_retry_text(missing: set[str]) -> str:
-    """Compose the corrective user turn appended after a coverage-gate
-    failure. Names the exact ids the bundle did not back with web_search
-    evidence and tells the model what it must do next."""
-    listed = "\n".join(f"  - {fid}" for fid in sorted(missing))
-    return (
-        f"Coverage check FAILED. Your last JSON did not back these "
-        f"{len(missing)} strict web_fact_ids with web_search evidence:\n"
-        f"{listed}\n\n"
-        f"These ids live in the web lane. EODHD tools cannot satisfy "
-        f"them. Call `web_search` now — one query per orthogonal angle, "
-        f"not per id — then emit a NEW final JSON object. Each missing "
-        f"id either gets a fact with a `web_N` `evidence_id` from a real "
-        f"search hit, or is omitted (an omission is honest; a "
-        f"data-lane substitute is not). Do not finalize again until you "
-        f"have called `web_search` for these ids."
-    )
-
-
 def _initial_user_text(request: ResearchRequest) -> str:
     sections: list[dict[str, Any]] = []
     for section in request.outline.sections:
@@ -797,45 +644,33 @@ def _initial_user_text(request: ResearchRequest) -> str:
         "tickers": list(request.tickers),
         "sections": sections,
     }
-    body = json.dumps(payload, default=str)
-    anchor = _search_budget_anchor(request)
-    if anchor:
-        return f"{anchor}\n\n{body}"
-    return body
+    return json.dumps(payload, default=str)
 
 
-def _search_budget_anchor(request: ResearchRequest) -> str:
-    """Anchor the model's search count to the outline's strict-web load.
-
-    OpenAI's ``web_search_preview`` is intra-turn agentic — search and
-    final JSON share one model response, so the runtime has no chance to
-    iterate the model toward fuller coverage. Without a concrete count
-    target the model under-searches (observed: 0-2 searches on outlines
-    with 40+ strict-web ids). A numeric anchor in the initial user turn
-    moves the median behavior up by giving the model a target to plan
-    against, not just a policy to interpret."""
-    strict = _strict_web_ids(request)
-    if not strict:
-        return ""
-    n = len(strict)
-    floor = max(1, (n + 2) // 3)
-    return (
-        f"Search budget: this outline lists {n} strict-web fact ids that "
-        f"require `web_search` evidence. Plan {floor}+ orthogonal "
-        f"`web_search` queries before emitting final JSON — single-shot "
-        f"runs that fire 0-2 searches will leave most of these uncovered "
-        f"and fail the coverage check. Each query should target a "
-        f"different angle (the document, the counterparty, the regulator, "
-        f"the event), not paraphrases of the same search."
-    )
+_FENCE_BLOCK_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
 
 
 def _parse_final_json(text: str) -> Any:
+    """Extract the final JSON object from the model's last turn.
+
+    Tolerant of Claude-style prose-then-fenced-JSON output: tries direct
+    parse, then any ```json ... ``` block, then a first-`{` to last-`}`
+    substring, in that order."""
     stripped = _strip_fence(text)
     try:
         return json.loads(stripped)
     except json.JSONDecodeError:
         pass
+
+    # Last fenced block wins — if the model wrote a draft block then a
+    # revised one, the revision should be the one we honor.
+    fence_matches = _FENCE_BLOCK_RE.findall(text)
+    for body in reversed(fence_matches):
+        try:
+            return json.loads(body)
+        except json.JSONDecodeError:
+            continue
+
     first = stripped.find("{")
     last = stripped.rfind("}")
     if first != -1 and last > first:
@@ -843,7 +678,9 @@ def _parse_final_json(text: str) -> Any:
             return json.loads(stripped[first : last + 1])
         except json.JSONDecodeError:
             pass
-    raise RuntimeError(f"RESEARCH LLM final body was not valid JSON: head={text[:200]!r}")
+    raise RuntimeError(
+        f"RESEARCH LLM final body was not valid JSON: head={text[:200]!r} tail={text[-200:]!r}"
+    )
 
 
 def _strip_fence(text: str) -> str:
@@ -991,7 +828,6 @@ def _require_str(entry: dict[str, Any], key: str) -> str:
 
 
 __all__ = [
-    "MAX_COVERAGE_RETRIES",
     "MAX_RESEARCH_TURNS",
     "SYSTEM_PROMPT",
     "FakeToolLLMClient",

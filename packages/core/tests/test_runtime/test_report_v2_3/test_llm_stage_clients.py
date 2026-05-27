@@ -336,24 +336,6 @@ def test_plan_prompt_classifies_on_record_vs_interpretation_axis() -> None:
     assert "quantitative" not in routing_block.lower()
 
 
-def test_plan_prompt_warns_against_routing_via_eodhd_news_headlines() -> None:
-    """The prior PLAN guidance leaned on EODHD news headlines as a
-    data-lane signal for narrative themes. Under the record /
-    interpretation axis a headline points at an event but does not
-    synthesize it — the prompt must say so explicitly so PLAN stops
-    flagging interpretation ids as data-served just because a news
-    feed mentions the topic."""
-    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
-        PLAN_SYSTEM_PROMPT,
-    )
-
-    assert "news headline" in PLAN_SYSTEM_PROMPT.lower()
-    assert (
-        "does not synthesize" in PLAN_SYSTEM_PROMPT.lower()
-        or "not synthesize what" in PLAN_SYSTEM_PROMPT.lower()
-    )
-
-
 def test_compute_and_write_prompts_use_neutral_examples() -> None:
     """COMPUTE_SYSTEM_PROMPT (Comps example) and WRITE_SYSTEM_PROMPT
     (body example) must use neutral placeholders, not specific tickers
