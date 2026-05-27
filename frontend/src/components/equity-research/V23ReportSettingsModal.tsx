@@ -24,8 +24,9 @@ import {
 
 export type V23ReportType = V23BuiltinTemplate["report_type"];
 export type V23ReportLength = "concise" | "normal" | "elaborative";
-// 3-state UI value. "off" maps to null on the wire; "medium" / "high"
-// forward verbatim to the v2.3 stream endpoint.
+// Three-state extended-thinking effort. "off" is fastest and cheapest
+// (though OpenAI gpt-5.x may skip web_search tool calls without
+// reasoning); "medium" is the default; "high" deepest.
 export type V23ReasoningEffort = "off" | "medium" | "high";
 
 export interface V23SettingsSelection {

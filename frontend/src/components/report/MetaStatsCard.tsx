@@ -24,7 +24,29 @@ export function MetaStatsCard({ stats }: MetaStatsCardProps) {
   if (stats.web_search_queries != null && stats.web_search_queries > 0) {
     rows.push({ label: 'Web searches', value: String(stats.web_search_queries) });
   }
-  if (stats.narrative_coverage_label) {
+  // Prefer the new per-lane chips. Fall back to the legacy
+  // narrative_coverage chip when adapters haven't been updated yet
+  // (e.g. a v2.2 report still flowing through the same renderer).
+  const hasLaneFields =
+    stats.data_coverage_label != null || stats.web_coverage_label != null;
+  if (hasLaneFields) {
+    if (stats.data_coverage_label) {
+      const pct = stats.data_coverage_pct;
+      const suffix = pct != null ? ` (${Math.round(pct * 100)}%)` : '';
+      rows.push({
+        label: 'Data coverage',
+        value: `${stats.data_coverage_label}${suffix}`,
+      });
+    }
+    if (stats.web_coverage_label) {
+      const pct = stats.web_coverage_pct;
+      const suffix = pct != null ? ` (${Math.round(pct * 100)}%)` : '';
+      rows.push({
+        label: 'Web coverage',
+        value: `${stats.web_coverage_label}${suffix}`,
+      });
+    }
+  } else if (stats.narrative_coverage_label) {
     const pct = stats.narrative_coverage_pct;
     const suffix = pct != null ? ` (${Math.round(pct * 100)}%)` : '';
     rows.push({

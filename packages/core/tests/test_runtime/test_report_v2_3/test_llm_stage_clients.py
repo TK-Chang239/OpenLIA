@@ -249,17 +249,91 @@ def test_plan_system_prompt_no_longer_uses_nvda_as_example() -> None:
     assert "NVDA" not in PLAN_SYSTEM_PROMPT
 
 
-def test_plan_prompt_documents_three_source_classes() -> None:
-    """PLAN must tell the model how to set source_class on every need;
-    the three legal values must all appear and the example must include
-    the field so the JSON shape is unambiguous."""
+# ---------------------------------------------------------------------------
+# PLAN dual-lane prompt (TDD red-tests for the data/web lane refactor)
+#
+# The planner must now emit data_fact_ids and web_fact_ids per need
+# instead of a single source_class tag, so RESEARCH routing is structural
+# and the verify metric can score lanes independently. The prompt itself
+# is the contract — these tests pin the shape the model is shown.
+# ---------------------------------------------------------------------------
+
+
+def test_plan_prompt_documents_dual_lane_fact_id_fields() -> None:
+    """PLAN's JSON contract: each data_need lists data_fact_ids and
+    web_fact_ids. The old source_class trichotomy is retired from the
+    prompt surface (the legacy validator still accepts persisted rows,
+    but the planner no longer emits it)."""
     from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
         PLAN_SYSTEM_PROMPT,
     )
 
-    assert '"source_class"' in PLAN_SYSTEM_PROMPT
-    for cls in ("`quantitative`", "`narrative`", "`either`"):
-        assert cls in PLAN_SYSTEM_PROMPT
+    assert '"data_fact_ids"' in PLAN_SYSTEM_PROMPT
+    assert '"web_fact_ids"' in PLAN_SYSTEM_PROMPT
+    # Retired surface — the planner must no longer emit these.
+    assert '"source_class"' not in PLAN_SYSTEM_PROMPT
+    assert '"expected_fact_ids"' not in PLAN_SYSTEM_PROMPT
+
+
+def test_plan_prompt_teaches_when_to_use_each_lane() -> None:
+    """The prompt must give the planner concrete routing guidance:
+    EODHD-served facts belong in data_fact_ids, web_search-served facts
+    belong in web_fact_ids, and most narrative themes belong in BOTH."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    # The canonical tool handles for each lane must appear.
+    assert "EODHD" in PLAN_SYSTEM_PROMPT
+    assert "web_search" in PLAN_SYSTEM_PROMPT
+    # The dual-lane intent must be explicit — "both lanes" is the
+    # phrasing we want the planner to internalize for layered themes.
+    assert "both" in PLAN_SYSTEM_PROMPT.lower()
+
+
+def test_plan_prompt_example_shows_a_layered_need_with_both_lanes_populated() -> None:
+    """The JSON example must include at least one data_need that
+    populates both data_fact_ids AND web_fact_ids — otherwise the
+    model treats the layered case as theoretical and defaults to a
+    single lane per need."""
+    import re
+
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    layered = re.search(
+        r'"data_fact_ids"\s*:\s*\[\s*"[^"]+"[^\]]*\][^}]*?'
+        r'"web_fact_ids"\s*:\s*\[\s*"[^"]+"',
+        PLAN_SYSTEM_PROMPT,
+        re.DOTALL,
+    )
+    assert layered, (
+        "PLAN example must contain at least one data_need with both "
+        "data_fact_ids AND web_fact_ids populated."
+    )
+
+
+def test_plan_prompt_classifies_on_record_vs_interpretation_axis() -> None:
+    """The lane-routing axis must be record-vs-interpretation, not
+    quantitative-vs-qualitative. The latter caused PLAN to over-tag
+    segment / geography mix (matters of record served by EODHD) as
+    web-lane because the labels sounded "narrative." The former
+    aligns the axis with epistemic certainty, which maps cleanly to
+    which tool can serve the fact."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        PLAN_SYSTEM_PROMPT,
+    )
+
+    text = PLAN_SYSTEM_PROMPT.lower()
+    assert "matter of record" in text
+    assert "matter of interpretation" in text
+    # The old axis must not survive — leaving "qualitative" /
+    # "quantitative" in the lane-routing prose lets the model fall
+    # back to the wrong heuristic.
+    routing_block = PLAN_SYSTEM_PROMPT.split("Each `data_need`")[-1].split("Use snake_case ids")[0]
+    assert "qualitative" not in routing_block.lower()
+    assert "quantitative" not in routing_block.lower()
 
 
 def test_compute_and_write_prompts_use_neutral_examples() -> None:
@@ -900,7 +974,7 @@ def test_all_clients_call_json_with_system_and_user_keywords() -> None:
             {
                 "id": "b",
                 "title": "B",
-                "data_needs": [{"description": "x", "expected_fact_ids": []}],
+                "data_needs": [{"description": "x", "data_fact_ids": ["x"]}],
             }
         ],
         "valuation_plan": {"methods": []},
@@ -954,7 +1028,8 @@ def test_plan_prompt_shape_round_trips_through_llm_planner_client():
                 "data_needs": [
                     {
                         "description": "Recent revenue and segment mix",
-                        "expected_fact_ids": ["rev_ttm", "segment_mix"],
+                        "data_fact_ids": ["rev_ttm", "segment_mix"],
+                        "web_fact_ids": [],
                     }
                 ],
             }
@@ -985,7 +1060,8 @@ def test_plan_prompt_shape_round_trips_through_llm_planner_client():
     section = outline.sections[0]
     assert section.id == "overview"
     assert len(section.data_needs) == 1
-    assert section.data_needs[0].expected_fact_ids == ["rev_ttm", "segment_mix"]
+    assert section.data_needs[0].data_fact_ids == ["rev_ttm", "segment_mix"]
+    assert section.data_needs[0].web_fact_ids == []
     assert section.data_needs[0].description == "Recent revenue and segment mix"
 
 
@@ -1056,6 +1132,22 @@ def test_write_prompt_no_longer_dictates_per_length_word_budgets():
         assert band not in WRITE_SYSTEM_PROMPT, (
             f"WRITE_SYSTEM_PROMPT still contains word band {band!r}"
         )
+
+
+def test_write_prompt_warns_derive_inputs_must_be_scalar():
+    """``DERIVE`` calls ``_scalar`` on every input — a fact whose value
+    is a ``BundleSeries`` (time-series or segment breakdown) hard-fails
+    the stage. The prompt must steer the writer away from that pattern
+    instead of relying on the mint step's soft-fail to clean up: the
+    soft-fail substitutes a CITE on the first input, which is correct
+    but not what the writer intended."""
+    from openlia.llm.runtime.report_v2_3.clients.llm_stage_clients import (
+        WRITE_SYSTEM_PROMPT,
+    )
+
+    assert "DERIVE inputs MUST be facts whose ``value`` is a scalar number" in WRITE_SYSTEM_PROMPT
+    assert "time-series" in WRITE_SYSTEM_PROMPT
+    assert "segment breakdown" in WRITE_SYSTEM_PROMPT
 
 
 def test_v23_prompts_use_positive_phrasing_for_content_prescriptions():

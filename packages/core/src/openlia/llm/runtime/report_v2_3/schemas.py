@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -448,31 +448,79 @@ class ClarifyAnswers(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-SourceClass = Literal["quantitative", "narrative", "either"]
-
-
 class DataNeed(BaseModel):
     """PLAN emits these; they become RESEARCH's targeted work queue.
 
-    ``source_class`` tells RESEARCH which tool family fits this need so
-    the model doesn't have to make that judgment from prose:
+    Each need carries TWO lane-specific id lists so routing is
+    structural, not prose-driven:
 
-      - ``quantitative`` — reported financial line items, market data,
-        peer multiples. Satisfy with data tools (EODHD-backed).
-      - ``narrative`` — regulatory status, management commentary, recent
-        catalysts, competitive moves, product launches, qualitative
-        positioning. Satisfy with ``web_search``.
-      - ``either`` — could be served by either source class (e.g.
-        company description, segment mix). Use whichever tool fits.
+      - ``data_fact_ids`` — facts a structured data provider serves.
+        EODHD covers reported financial line items, market data, peer
+        multiples, and same-day news headlines with sentiment.
+      - ``web_fact_ids`` — facts only the open web serves via
+        ``web_search``. Analyst commentary, contract specifics,
+        regulatory framing, qualitative current events.
 
-    Default is ``either`` so persisted runs from before the field
-    existed remain valid; planners are expected to upgrade to a more
-    specific class.
+    Many narrative themes need BOTH lanes — the EODHD news feed
+    delivers the same-day headline and sentiment, and ``web_search``
+    fills in framing, depth, and primary-source backing. A need with
+    both lists populated requires the researcher to back at least one
+    id from each lane; the verify metric scores the two independently.
+
+    Legacy persisted runs that pre-date the schema split (with
+    ``source_class`` + ``expected_fact_ids``) migrate into this shape
+    via a ``mode='before'`` validator, so paused runs still rehydrate.
     """
 
     description: str  # "gross margin trend, last 8 quarters"
-    expected_fact_ids: list[str] = Field(default_factory=list)
-    source_class: SourceClass = "either"
+    data_fact_ids: list[str] = Field(default_factory=list)
+    web_fact_ids: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_source_class(cls, data: Any) -> Any:
+        """Map the retired ``source_class`` + ``expected_fact_ids`` shape
+        into the new dual-lane fields. Old run_state rows in the DB
+        carry the legacy form; this lets them rehydrate without a
+        forced migration.
+
+        - ``quantitative`` → ids land in ``data_fact_ids``.
+        - ``narrative``   → ids land in ``web_fact_ids``.
+        - ``either``      → ids land in BOTH lanes (preserves "pick
+          whichever fits" by leaving the choice to RESEARCH).
+
+        An unknown ``source_class`` value leaves both lanes empty,
+        which the after-validator then rejects — surfaces the bad
+        legacy data loudly instead of silently.
+        """
+        if not isinstance(data, dict):
+            return data
+        if "source_class" not in data and "expected_fact_ids" not in data:
+            return data
+        ids = list(data.get("expected_fact_ids") or [])
+        source_class = data.get("source_class", "either")
+        migrated = {k: v for k, v in data.items() if k not in ("source_class", "expected_fact_ids")}
+        if source_class == "quantitative":
+            migrated.setdefault("data_fact_ids", ids)
+            migrated.setdefault("web_fact_ids", [])
+        elif source_class == "narrative":
+            migrated.setdefault("data_fact_ids", [])
+            migrated.setdefault("web_fact_ids", ids)
+        elif source_class == "either":
+            migrated.setdefault("data_fact_ids", list(ids))
+            migrated.setdefault("web_fact_ids", list(ids))
+        # Unknown source_class: leave both lanes as-supplied (likely
+        # empty), so the after-validator below catches it.
+        return migrated
+
+    @model_validator(mode="after")
+    def _require_at_least_one_lane(self) -> DataNeed:
+        if not self.data_fact_ids and not self.web_fact_ids:
+            raise ValueError(
+                "DataNeed requires at least one fact id in data_fact_ids "
+                "or web_fact_ids — a need with no work queue is a no-op."
+            )
+        return self
 
 
 class OutlineSection(BaseModel):
@@ -595,19 +643,25 @@ class VerifyIssue(BaseModel):
     detail: str
 
 
-class NarrativeCoverage(BaseModel):
-    """How well the bundle satisfies the planner's narrative needs.
+class LaneCoverage(BaseModel):
+    """How well the bundle satisfies one lane's expected fact ids.
 
-    A narrative ``data_need`` is "satisfied" when at least one of its
-    ``expected_fact_ids`` exists in the bundle with a ``WebSource``
-    provenance. This is a *signal*, not a gate — the runner does not
-    fail on low coverage; the value is surfaced to the cover so a
-    reader can see whether the engine actually pulled in current web
-    evidence for the qualitative needs the planner identified.
+    A ``DataNeed`` belongs to a lane iff its corresponding fact_id list
+    is non-empty. The need is "satisfied" for the lane iff at least one
+    of those ids appears in ``bundle.facts`` with provenance matching
+    the lane — ``DataProviderSource`` for the data lane, ``WebSource``
+    for the web lane. A fact emitted under the right id but with the
+    WRONG-lane provenance counts as UNSATISFIED — that's the silent-
+    substitution failure the metric is built to surface.
 
-    ``total`` is the count of narrative needs across the whole outline.
-    When the planner emits no narrative needs, this block is omitted
-    from ``VerifyResult`` (the value is N/A, not zero).
+    This is a *signal*, not a gate — the runner does not fail on low
+    coverage; the values are surfaced so a reader can see whether each
+    lane actually fired (EODHD for structured / sentiment, web_search
+    for analyst framing and depth).
+
+    ``total`` is the count of needs with at least one id in this lane.
+    When the planner emits no needs in this lane, the corresponding
+    field on ``VerifyResult`` is omitted (N/A, not zero).
     """
 
     total: int = Field(..., ge=0)
@@ -617,7 +671,8 @@ class NarrativeCoverage(BaseModel):
 
 class VerifyResult(BaseModel):
     issues: list[VerifyIssue] = Field(default_factory=list)
-    narrative_coverage: NarrativeCoverage | None = None
+    data_coverage: LaneCoverage | None = None
+    web_coverage: LaneCoverage | None = None
 
     @property
     def must_rewrite(self) -> bool:

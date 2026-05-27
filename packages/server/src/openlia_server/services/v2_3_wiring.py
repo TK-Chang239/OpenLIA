@@ -305,12 +305,17 @@ _REASONING_OVERHEAD: dict[ReasoningEffort, int] = {
 
 
 # Stages that get reasoning_effort applied when the user enables it.
-# Restricted to the two stages where deeper deliberation moves quality:
-# PLAN (structures the whole report; bad plan cascades into every later
-# stage) and SYNTHESIZE (cross-section reasoning over the full bundle).
+# PLAN structures the whole report (a bad plan cascades into every later
+# stage); SYNTHESIZE does cross-section reasoning over the full bundle;
+# RESEARCH needs reasoning so OpenAI's gpt-5 family invokes web_search
+# as a real server-side tool — per OpenAI's docs, "agentic search"
+# behavior requires reasoning, and "gpt-5.4 with reasoning effort set to
+# none may produce lower-quality results." Without it the model falls
+# back to pseudo-search inside its chain of thought, leaving the
+# evidence ledger empty and citations pointing at internal step labels.
 # Cheap stages (CLARIFY, COMPUTE, VERIFY) gain little, and WRITE is a
 # per-section drafter where extra latency multiplies across N sections.
-_REASONING_STAGES: frozenset[str] = frozenset({"plan", "synthesize"})
+_REASONING_STAGES: frozenset[str] = frozenset({"plan", "synthesize", "research"})
 
 
 def _resolve_stage_reasoning(
@@ -350,9 +355,9 @@ def build_v2_3_runner_factory_from_models(
     set. Missing key -> NoOp RESEARCH stage even if a model is assigned.
 
     ``reasoning_effort`` is the user-selected pill value from the
-    report request. When set, ``_REASONING_STAGES`` (PLAN + SYNTHESIZE)
-    receive the effort directive AND have their ``max_tokens`` grown
-    by ``_REASONING_OVERHEAD[effort]``. Other stages stay flat.
+    report request. When set, ``_REASONING_STAGES`` (PLAN + SYNTHESIZE +
+    RESEARCH) receive the effort directive AND have their ``max_tokens``
+    grown by ``_REASONING_OVERHEAD[effort]``. Other stages stay flat.
     """
     if "clarify" not in models_by_slot:
         raise ValueError(
@@ -407,7 +412,10 @@ def build_v2_3_runner_factory_from_models(
 
     researcher: ResearcherClient | None = None
     if "research" in models_by_slot and eodhd_api_key:
-        max_tokens, temperature = _STAGE_DEFAULTS_PER_USER["research"]
+        base_max, temperature = _STAGE_DEFAULTS_PER_USER["research"]
+        research_max, research_effort = _resolve_stage_reasoning(
+            "research", base_max, reasoning_effort
+        )
         resolved_research = models_by_slot["research"]
         # Native web_search support is provider-conditional. The resolved
         # model carries the capability from the model registry; we forward
@@ -425,22 +433,24 @@ def build_v2_3_runner_factory_from_models(
                 structured_output=True,
                 web_search_native=web_search_native,
                 max_context_tokens=128_000,
-                max_output_tokens=max_tokens,
+                max_output_tokens=research_max,
             ),
         )
         tool_client = SyncToolLlmClient(
             provider,
-            max_tokens=max_tokens,
+            max_tokens=research_max,
             temperature=temperature,
             native_tools=("web_search",) if web_search_native else (),
             stage="research",
+            reasoning_effort=research_effort,
         )
         tools = _build_eodhd_tool_set(eodhd_api_key)
         researcher = LLMResearcherClient(tool_client, tools, max_turns=research_max_turns)
         log.info(
-            "v2.3 researcher wired (model=%s, web_search_native=%s)",
+            "v2.3 researcher wired (model=%s, web_search_native=%s, reasoning=%s)",
             resolved_research.model_ref,
             web_search_native,
+            research_effort.value if research_effort is not None else "off",
         )
     elif "research" in models_by_slot:
         log.info("research model assigned but EODHD_API_KEY missing; RESEARCH will NoOp.")
@@ -548,7 +558,8 @@ _EODHD_DROP_SECTIONS = frozenset(
 #    to skip web_search for genuinely-current qualitative needs
 #    (regulatory status, catalysts, management commentary). Removing
 #    the false-sufficiency signal is the load-bearing reason to drop
-#    them, even with the source_class routing from PR 2 in place.
+#    them, even with the dual-lane data_fact_ids / web_fact_ids
+#    routing in place.
 _EODHD_GENERAL_DROP_FIELDS = frozenset(
     {
         "Description",

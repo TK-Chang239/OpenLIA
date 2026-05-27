@@ -2,9 +2,9 @@ import { fetchJson } from "./client";
 
 export type ReportMode = "stock_initiation" | "stock_update" | "sector_research";
 export type ReportLength = "concise" | "normal" | "elaborative";
-// 3-state UI pill on the report settings modal. "off" = thinking disabled
-// (the server reads this as None / null). "medium" / "high" map to the
-// per-provider thinking budget in the v2.3 wiring layer.
+// Three-state extended-thinking effort. "off" skips reasoning (fastest,
+// but OpenAI gpt-5.x may skip web_search tool calls in that mode);
+// "medium" is the default; "high" is for the deepest reports.
 export type ReportReasoningEffort = "off" | "medium" | "high";
 export type TemplateOwnerScope = "global" | "user";
 export type TemplateSelection = "default" | string;
@@ -57,7 +57,7 @@ export const WEB_SEARCH_BUDGET_DEFAULTS: Record<ReportMode, number> = {
 export const ER_CONFIG_DEFAULTS: ErConfig = {
   report_mode: "stock_initiation",
   report_length: "normal",
-  report_reasoning_effort: "off",
+  report_reasoning_effort: "medium",
   sections_by_mode: {
     stock_initiation: [],
     stock_update: [],

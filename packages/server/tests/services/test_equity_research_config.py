@@ -180,12 +180,12 @@ def test_resolve_active_exposes_web_search_budget_for_mode(db_session, user):
 # ---------- report_reasoning_effort persistence (v2.3 extended thinking) ----------
 
 
-def test_get_config_defaults_reasoning_effort_to_off(db_session, user):
-    """A fresh row materialises as 'off' so consumers can rely on a
-    non-null value; the NULL column is interpreted at the service edge."""
+def test_get_config_defaults_reasoning_effort_to_medium(db_session, user):
+    """A fresh row materialises as 'medium' — the working default. Users
+    can opt into 'off' explicitly for fast/cheap runs."""
     svc = EquityResearchConfigService(db_session)
     cfg = svc.get_config(user)
-    assert cfg.report_reasoning_effort == "off"
+    assert cfg.report_reasoning_effort == "medium"
 
 
 def test_update_config_persists_reasoning_effort(db_session, user):
@@ -206,6 +206,17 @@ def test_update_config_accepts_each_valid_reasoning_value(db_session, user):
         assert updated.report_reasoning_effort == value
 
 
+def test_update_config_persists_off_unchanged(db_session, user):
+    """'off' is a valid user-selectable state — it must round-trip
+    through the DB unchanged, not get coerced to 'medium'."""
+    svc = EquityResearchConfigService(db_session)
+    svc.get_config(user)
+    updated = svc.update_config(user, report_reasoning_effort="off")
+    assert updated.report_reasoning_effort == "off"
+    refreshed = svc.get_config(user)
+    assert refreshed.report_reasoning_effort == "off"
+
+
 def test_update_config_rejects_invalid_reasoning_effort(db_session, user):
     svc = EquityResearchConfigService(db_session)
     svc.get_config(user)
@@ -214,11 +225,11 @@ def test_update_config_rejects_invalid_reasoning_effort(db_session, user):
 
 
 def test_update_config_leaves_reasoning_effort_when_omitted(db_session, user):
-    """PATCH semantics: omitting the field must not reset it to off."""
+    """PATCH semantics: omitting the field must not reset it."""
     svc = EquityResearchConfigService(db_session)
     svc.get_config(user)
-    svc.update_config(user, report_reasoning_effort="medium")
+    svc.update_config(user, report_reasoning_effort="high")
     svc.update_config(user, report_length="concise")
     cfg = svc.get_config(user)
-    assert cfg.report_reasoning_effort == "medium"
+    assert cfg.report_reasoning_effort == "high"
     assert cfg.report_length == "concise"

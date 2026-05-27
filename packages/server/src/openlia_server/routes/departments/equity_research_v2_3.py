@@ -210,14 +210,29 @@ class PayloadThesis(BaseModel):
     canonical_figures: list[PayloadCanonicalFigure]
 
 
-class PayloadNarrativeCoverage(BaseModel):
-    """Soft signal surfaced on the cover: how many of the planner's
-    narrative ``data_needs`` actually landed a web-sourced fact. Null
-    when the planner emitted no narrative needs (N/A, not zero)."""
+class PayloadLaneCoverage(BaseModel):
+    """Soft signal surfaced on the cover for one lane: how many of the
+    planner's needs in that lane actually landed a same-lane fact.
+
+    Data lane = EODHD-sourced facts. Web lane = web_search-sourced
+    facts. Null when the outline emits no needs in this lane (N/A,
+    not zero). A fact emitted under the right id but with the WRONG-
+    lane provenance counts as UNSATISFIED on purpose — the metric is
+    built to surface silent substitution (e.g. EODHD news headline
+    masquerading as a web_search hit)."""
 
     total: int
     satisfied: int
     pct: float
+
+
+# Back-compat alias: the frontend currently consumes the
+# ``narrative_coverage`` field and renders it as a "Narrative coverage"
+# chip on the cover. The chip is populated from the web lane (which is
+# the closest equivalent of the retired narrative-coverage signal).
+# Kept as a separate symbol so a follow-up frontend change can rename
+# without churn here.
+PayloadNarrativeCoverage = PayloadLaneCoverage
 
 
 class RunPayloadOut(BaseModel):
@@ -253,6 +268,11 @@ class RunPayloadOut(BaseModel):
     charts: list[PayloadChartSpec]
     figure_labels: dict[str, int]
     bundle_facts: dict[str, PayloadBundleFact]
+    data_coverage: PayloadLaneCoverage | None = None
+    web_coverage: PayloadLaneCoverage | None = None
+    # Back-compat: mirrors web_coverage so the existing
+    # narrative-coverage chip in the frontend keeps rendering until a
+    # follow-up change adds a data-lane chip alongside it.
     narrative_coverage: PayloadNarrativeCoverage | None = None
 
 
@@ -561,16 +581,29 @@ def _project_payload(state: ReportState) -> RunPayloadOut:
         charts=charts_payload,
         figure_labels=dict(state.resolved.figure_labels),
         bundle_facts=bundle_facts,
-        narrative_coverage=(
-            PayloadNarrativeCoverage(
-                total=state.verify_result.narrative_coverage.total,
-                satisfied=state.verify_result.narrative_coverage.satisfied,
-                pct=state.verify_result.narrative_coverage.pct,
-            )
-            if state.verify_result is not None
-            and state.verify_result.narrative_coverage is not None
-            else None
+        data_coverage=_lane_coverage_payload(
+            state.verify_result.data_coverage if state.verify_result is not None else None
         ),
+        web_coverage=_lane_coverage_payload(
+            state.verify_result.web_coverage if state.verify_result is not None else None
+        ),
+        narrative_coverage=_lane_coverage_payload(
+            state.verify_result.web_coverage if state.verify_result is not None else None
+        ),
+    )
+
+
+def _lane_coverage_payload(
+    coverage: object | None,
+) -> PayloadLaneCoverage | None:
+    """Map a core ``LaneCoverage`` (or None) to the wire shape. Kept as
+    a free function so the three sites that need it stay symmetric."""
+    if coverage is None:
+        return None
+    return PayloadLaneCoverage(
+        total=coverage.total,  # type: ignore[attr-defined]
+        satisfied=coverage.satisfied,  # type: ignore[attr-defined]
+        pct=coverage.pct,  # type: ignore[attr-defined]
     )
 
 

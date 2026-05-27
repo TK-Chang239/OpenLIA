@@ -225,9 +225,15 @@ export interface MetaStats {
   tokens_used?: number | null;
   web_search_queries?: number | null;
   est_read_minutes: number;
-  /** v2.3 only. Soft signal: "satisfied/total" of narrative data_needs
-   *  that landed at least one web-sourced fact. Null when the planner
-   *  emitted no narrative needs. */
+  /** v2.3 only. "satisfied/total" of `data_fact_ids` needs (EODHD lane)
+   *  / `web_fact_ids` needs (web_search lane). Null when the outline
+   *  has no needs in that lane (N/A, not zero). */
+  data_coverage_label?: string | null;
+  data_coverage_pct?: number | null;
+  web_coverage_label?: string | null;
+  web_coverage_pct?: number | null;
+  /** @deprecated Mirrors `web_coverage_*`. Kept while older consumers
+   *  read the legacy field name. */
   narrative_coverage_label?: string | null;
   narrative_coverage_pct?: number | null;
 }

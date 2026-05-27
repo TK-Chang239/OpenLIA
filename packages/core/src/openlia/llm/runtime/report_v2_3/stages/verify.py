@@ -28,14 +28,16 @@ offending sections back to WRITE for one bounded retry.
 from __future__ import annotations
 
 import re
+from typing import Literal
 
 from ..clients.verifier import VerifierClient, VerifierRequest
 from ..schemas import (
     CITE_RE,
     FIG_RE,
+    DataProviderSource,
     IssueKind,
     IssueSeverity,
-    NarrativeCoverage,
+    LaneCoverage,
     Outline,
     ReportThesis,
     ResearchBundle,
@@ -82,12 +84,18 @@ class VerifyStage(Stage):
         )
         from_llm = self._client.verify(request)
 
-        narrative_coverage = (
-            _narrative_coverage(state.outline, bundle) if state.outline is not None else None
+        data_coverage = (
+            _lane_coverage(state.outline, bundle, lane="data")
+            if state.outline is not None
+            else None
+        )
+        web_coverage = (
+            _lane_coverage(state.outline, bundle, lane="web") if state.outline is not None else None
         )
         state.verify_result = VerifyResult(
             issues=[*deterministic, *from_llm.issues],
-            narrative_coverage=narrative_coverage,
+            data_coverage=data_coverage,
+            web_coverage=web_coverage,
         )
         return state
 
@@ -176,31 +184,49 @@ def _check_uncited_numbers(sections: list[WrittenSection]) -> list[VerifyIssue]:
     return issues
 
 
-def _narrative_coverage(outline: Outline, bundle: ResearchBundle) -> NarrativeCoverage | None:
-    """Count narrative needs and how many landed at least one web-sourced
-    fact. Returns None when the planner emitted no narrative needs — the
-    metric is N/A rather than zero in that case.
+def _lane_coverage(
+    outline: Outline,
+    bundle: ResearchBundle,
+    *,
+    lane: Literal["data", "web"],
+) -> LaneCoverage | None:
+    """Count needs in a given lane and how many landed at least one
+    expected fact id with provenance MATCHING the lane. Returns None
+    when the outline emits no needs in this lane — the metric is N/A
+    rather than zero.
 
-    A need is "satisfied" iff at least one of its ``expected_fact_ids``
-    appears in ``bundle.facts`` with ``WebSource`` provenance. Computed
-    or estimate facts that derived from a web-sourced fact do not count
-    here on purpose — this metric measures whether the engine actually
-    pulled in current web evidence for qualitative needs, not whether
-    those facts later spawned derivations.
+    - data lane → ``DataProviderSource`` (EODHD).
+    - web lane  → ``WebSource`` (open-web hit harvested from
+      ``web_search`` citations).
+
+    A need belongs to a lane iff its lane-specific id list is
+    non-empty. A need is "satisfied" iff at least one of those ids
+    exists in ``bundle.facts`` with a source instance matching the
+    lane's provenance type. An id present in the bundle with the
+    WRONG-lane provenance is NOT counted — that is the silent-
+    substitution failure the metric is built to surface (e.g. model
+    emits an id from ``web_fact_ids`` backed by EODHD news).
     """
-    web_fact_ids = {fid for fid, fact in bundle.facts.items() if isinstance(fact.source, WebSource)}
+    if lane == "data":
+        in_lane = {
+            fid for fid, fact in bundle.facts.items() if isinstance(fact.source, DataProviderSource)
+        }
+    else:
+        in_lane = {fid for fid, fact in bundle.facts.items() if isinstance(fact.source, WebSource)}
+
     total = 0
     satisfied = 0
     for section in outline.sections:
         for need in section.data_needs:
-            if need.source_class != "narrative":
+            need_ids = need.data_fact_ids if lane == "data" else need.web_fact_ids
+            if not need_ids:
                 continue
             total += 1
-            if any(fid in web_fact_ids for fid in need.expected_fact_ids):
+            if any(fid in in_lane for fid in need_ids):
                 satisfied += 1
     if total == 0:
         return None
-    return NarrativeCoverage(total=total, satisfied=satisfied, pct=satisfied / total)
+    return LaneCoverage(total=total, satisfied=satisfied, pct=satisfied / total)
 
 
 def _is_exempt(token: str, body: str, start: int, end: int) -> bool:

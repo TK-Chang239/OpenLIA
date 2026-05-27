@@ -83,14 +83,25 @@ def _outline(
             OutlineSection(
                 id="overview",
                 title="Overview",
-                data_needs=[DataNeed(description="business model summary")],
+                data_needs=[
+                    DataNeed(
+                        description="business model summary",
+                        data_fact_ids=["business_model"],
+                    )
+                ],
             ),
             OutlineSection(
                 id="financials",
                 title="Financials",
                 data_needs=[
-                    DataNeed(description="revenue, last 8 quarters"),
-                    DataNeed(description="gross margin trend, last 8 quarters"),
+                    DataNeed(
+                        description="revenue, last 8 quarters",
+                        data_fact_ids=["rev_q_hist"],
+                    ),
+                    DataNeed(
+                        description="gross margin trend, last 8 quarters",
+                        data_fact_ids=["gross_margin_q_hist"],
+                    ),
                 ],
             ),
         ],
@@ -272,14 +283,17 @@ def test_plan_preserves_llm_authored_fact_ids_per_matching_section():
                 id="alpha",
                 title="Alpha",
                 data_needs=[
-                    DataNeed(description="alpha facts", expected_fact_ids=["fact_a1", "fact_a2"]),
+                    DataNeed(
+                        description="alpha facts",
+                        data_fact_ids=["fact_a1", "fact_a2"],
+                    ),
                 ],
             ),
             OutlineSection(
                 id="beta",
                 title="Beta",
                 data_needs=[
-                    DataNeed(description="beta facts", expected_fact_ids=["fact_b1"]),
+                    DataNeed(description="beta facts", data_fact_ids=["fact_b1"]),
                 ],
             ),
         ],
@@ -290,8 +304,8 @@ def test_plan_preserves_llm_authored_fact_ids_per_matching_section():
 
     alpha = next(s for s in state.outline.sections if s.id == "alpha")
     beta = next(s for s in state.outline.sections if s.id == "beta")
-    alpha_ids = [fid for n in alpha.data_needs for fid in n.expected_fact_ids]
-    beta_ids = [fid for n in beta.data_needs for fid in n.expected_fact_ids]
+    alpha_ids = [fid for n in alpha.data_needs for fid in n.data_fact_ids]
+    beta_ids = [fid for n in beta.data_needs for fid in n.data_fact_ids]
     assert alpha_ids == ["fact_a1", "fact_a2"]
     assert beta_ids == ["fact_b1"]
 
@@ -329,12 +343,12 @@ def test_plan_strips_extra_sections_emitted_by_llm():
             OutlineSection(
                 id="only",
                 title="Only",
-                data_needs=[DataNeed(description="x", expected_fact_ids=["x"])],
+                data_needs=[DataNeed(description="x", data_fact_ids=["x"])],
             ),
             OutlineSection(
                 id="stray",
                 title="Stray",
-                data_needs=[DataNeed(description="y", expected_fact_ids=["y"])],
+                data_needs=[DataNeed(description="y", data_fact_ids=["y"])],
             ),
         ],
         valuation_plan=ValuationPlan(),
@@ -344,5 +358,5 @@ def test_plan_strips_extra_sections_emitted_by_llm():
 
     assert len(state.outline.sections) == 1
     assert state.outline.sections[0].id == "only"
-    only_ids = [fid for n in state.outline.sections[0].data_needs for fid in n.expected_fact_ids]
+    only_ids = [fid for n in state.outline.sections[0].data_needs for fid in n.data_fact_ids]
     assert only_ids == ["x"]

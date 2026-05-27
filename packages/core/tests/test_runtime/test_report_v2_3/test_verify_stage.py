@@ -305,47 +305,34 @@ def _state_with_outline(*, outline: Outline, bundle: ResearchBundle) -> ReportSt
     return s
 
 
-def test_narrative_coverage_is_none_when_no_outline() -> None:
-    """No outline → no signal. The runner's clarify/plan path always
-    populates outline before VERIFY, but the helper handles None
-    defensively so it doesn't crash older tests / paused runs."""
+def test_lane_coverage_is_none_for_both_lanes_when_no_outline() -> None:
+    """No outline → no signal in either lane. The runner's plan path
+    always populates outline before VERIFY, but the helper handles
+    None defensively so paused runs and older tests don't crash."""
     state = _state()
     state.outline = None
     stage = VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[])))
     stage.run(state, _ctx())
     assert state.verify_result is not None
-    assert state.verify_result.narrative_coverage is None
+    assert state.verify_result.data_coverage is None
+    assert state.verify_result.web_coverage is None
 
 
-def test_narrative_coverage_is_none_when_no_narrative_needs() -> None:
-    """An outline that emits only quantitative needs has no narrative
-    coverage to measure — surface as None (N/A), not 0."""
-    outline = Outline(
-        tickers=["NVDA"],
-        report_type=ReportType.INITIATION,
-        sections=[
-            OutlineSection(
-                id="financials",
-                title="Financials",
-                data_needs=[
-                    DataNeed(
-                        description="rev TTM",
-                        expected_fact_ids=["rev_ttm"],
-                        source_class="quantitative",
-                    )
-                ],
-            )
-        ],
-    )
-    state = _state_with_outline(outline=outline, bundle=_bundle())
-    VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
-    assert state.verify_result is not None
-    assert state.verify_result.narrative_coverage is None
+# ---------------------------------------------------------------------------
+# Dual-lane coverage (TDD red-tests for the data/web lane refactor)
+#
+# Replaces the single narrative_coverage signal with per-lane scoring so a
+# report can show that BOTH the structured (EODHD) and open-web lanes
+# fired. The RKLB regression — model satisfies a web-lane id with an
+# EODHD news fact — must surface as web_coverage.pct=0 even when the id
+# itself is present in the bundle.
+# ---------------------------------------------------------------------------
 
 
-def test_narrative_coverage_counts_satisfied_when_web_fact_present() -> None:
-    """A narrative need is satisfied when at least one of its
-    expected_fact_ids appears in the bundle with WebSource provenance."""
+def test_verify_result_has_separate_data_and_web_coverage_fields() -> None:
+    """VerifyResult exposes data_coverage and web_coverage in place of
+    the single narrative_coverage block. Each scores its lane
+    independently so a report can show both lanes fired."""
     outline = Outline(
         tickers=["NVDA"],
         report_type=ReportType.INITIATION,
@@ -355,14 +342,12 @@ def test_narrative_coverage_counts_satisfied_when_web_fact_present() -> None:
                 title="Risks",
                 data_needs=[
                     DataNeed(
-                        description="regulatory investigations",
-                        expected_fact_ids=["reg_inv"],
-                        source_class="narrative",
+                        description="revenue history",
+                        data_fact_ids=["rev_ttm"],
                     ),
                     DataNeed(
-                        description="catalysts",
-                        expected_fact_ids=["catalysts"],
-                        source_class="narrative",
+                        description="analyst price targets",
+                        web_fact_ids=["analyst_pt"],
                     ),
                 ],
             )
@@ -371,70 +356,24 @@ def test_narrative_coverage_counts_satisfied_when_web_fact_present() -> None:
     bundle = ResearchBundle(
         tickers=["NVDA"],
         facts={
-            "reg_inv": BundleFact(
-                id="reg_inv",
-                label="Reg investigations",
-                value="Three open investigations as of 2026-04.",
-                source=_web_src(),
-            ),
-            # `catalysts` deliberately absent — its narrative need is unsatisfied
+            "rev_ttm": BundleFact(id="rev_ttm", label="Revenue TTM", value=100.0, source=_src()),
+            # analyst_pt deliberately absent — web lane is unsatisfied
         },
     )
     state = _state_with_outline(outline=outline, bundle=bundle)
     VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
-    nc = state.verify_result.narrative_coverage  # type: ignore[union-attr]
-    assert nc is not None
-    assert nc.total == 2
-    assert nc.satisfied == 1
-    assert nc.pct == 0.5
+
+    dc = state.verify_result.data_coverage  # type: ignore[union-attr]
+    wc = state.verify_result.web_coverage  # type: ignore[union-attr]
+    assert dc is not None and dc.total == 1 and dc.satisfied == 1 and dc.pct == 1.0
+    assert wc is not None and wc.total == 1 and wc.satisfied == 0 and wc.pct == 0.0
 
 
-def test_narrative_coverage_zero_when_all_narrative_facts_lack_web_provenance() -> None:
-    """The fact exists but its source is a data provider, not a web
-    hit — that should NOT count toward narrative coverage. This is the
-    failure mode the metric is built to surface."""
+def test_layered_need_counts_once_per_lane() -> None:
+    """A single DataNeed that lists ids in BOTH lanes contributes one to
+    each lane's denominator. The need is satisfied per-lane independently."""
     outline = Outline(
-        tickers=["NVDA"],
-        report_type=ReportType.INITIATION,
-        sections=[
-            OutlineSection(
-                id="risks",
-                title="Risks",
-                data_needs=[
-                    DataNeed(
-                        description="regulatory investigations",
-                        expected_fact_ids=["reg_inv"],
-                        source_class="narrative",
-                    )
-                ],
-            )
-        ],
-    )
-    bundle = ResearchBundle(
-        tickers=["NVDA"],
-        facts={
-            "reg_inv": BundleFact(
-                id="reg_inv",
-                label="Reg investigations",
-                value=3.0,
-                source=_src(),  # DataProviderSource — not a web hit
-            ),
-        },
-    )
-    state = _state_with_outline(outline=outline, bundle=bundle)
-    VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
-    nc = state.verify_result.narrative_coverage  # type: ignore[union-attr]
-    assert nc is not None
-    assert nc.total == 1
-    assert nc.satisfied == 0
-    assert nc.pct == 0.0
-
-
-def test_narrative_coverage_ignores_either_and_quantitative_needs() -> None:
-    """Only `source_class: narrative` needs count toward the metric.
-    A `quantitative` or `either` need does not pad the denominator."""
-    outline = Outline(
-        tickers=["NVDA"],
+        tickers=["RKLB"],
         report_type=ReportType.INITIATION,
         sections=[
             OutlineSection(
@@ -442,17 +381,94 @@ def test_narrative_coverage_ignores_either_and_quantitative_needs() -> None:
                 title="Overview",
                 data_needs=[
                     DataNeed(
-                        description="rev",
-                        expected_fact_ids=["rev_ttm"],
-                        source_class="quantitative",
+                        description="recent news + framing",
+                        data_fact_ids=["news_headlines"],
+                        web_fact_ids=["news_framing"],
                     ),
+                ],
+            )
+        ],
+    )
+    bundle = ResearchBundle(
+        tickers=["RKLB"],
+        facts={
+            "news_headlines": BundleFact(
+                id="news_headlines", label="Headlines", value="..", source=_src()
+            ),
+            "news_framing": BundleFact(
+                id="news_framing", label="Framing", value="..", source=_web_src()
+            ),
+        },
+    )
+    state = _state_with_outline(outline=outline, bundle=bundle)
+    VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
+    dc = state.verify_result.data_coverage  # type: ignore[union-attr]
+    wc = state.verify_result.web_coverage  # type: ignore[union-attr]
+    assert dc.total == 1 and dc.satisfied == 1
+    assert wc.total == 1 and wc.satisfied == 1
+
+
+def test_web_lane_zero_when_id_present_but_backed_by_data_provider_source() -> None:
+    """The RKLB regression: model emits a fact with an id from
+    web_fact_ids, but the fact's source is DataProviderSource (it came
+    from get_company_news, not web_search). The web lane must score
+    this as UNSATISFIED — the entire point of the metric is to surface
+    this silent substitution."""
+    outline = Outline(
+        tickers=["RKLB"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="risks",
+                title="Risks",
+                data_needs=[
                     DataNeed(
-                        description="business model",
-                        expected_fact_ids=["bm"],
-                        source_class="either",
+                        description="analyst commentary on RKLB",
+                        web_fact_ids=["analyst_commentary"],
                     ),
+                ],
+            )
+        ],
+    )
+    bundle = ResearchBundle(
+        tickers=["RKLB"],
+        facts={
+            "analyst_commentary": BundleFact(
+                id="analyst_commentary",
+                label="Analyst commentary",
+                # The fact exists with the expected id, but source is
+                # DataProviderSource — exactly the failure mode the
+                # metric is built to catch.
+                value="Headline from EODHD news, no framing.",
+                source=_src(),
+            ),
+        },
+    )
+    state = _state_with_outline(outline=outline, bundle=bundle)
+    VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
+    wc = state.verify_result.web_coverage  # type: ignore[union-attr]
+    assert wc is not None
+    assert wc.total == 1
+    assert wc.satisfied == 0
+    assert wc.pct == 0.0
+
+
+def test_data_lane_zero_when_id_present_but_backed_by_web_source() -> None:
+    """Symmetric to the web-lane mismatch test: an id listed in
+    data_fact_ids that's only ever backed by a WebSource fails the
+    data lane. This prevents the model from declaring victory on a
+    structured need with an open-web hit."""
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="fin",
+                title="Financials",
+                data_needs=[
                     DataNeed(
-                        description="catalysts", expected_fact_ids=["cat"], source_class="narrative"
+                        description="revenue TTM (structured)",
+                        data_fact_ids=["rev_ttm"],
                     ),
                 ],
             )
@@ -461,16 +477,42 @@ def test_narrative_coverage_ignores_either_and_quantitative_needs() -> None:
     bundle = ResearchBundle(
         tickers=["NVDA"],
         facts={
-            "cat": BundleFact(id="cat", label="Catalysts", value="Q3 launch.", source=_web_src()),
+            "rev_ttm": BundleFact(
+                id="rev_ttm",
+                label="Revenue TTM",
+                value=100.0,
+                source=_web_src(),  # wrong lane
+            ),
         },
     )
     state = _state_with_outline(outline=outline, bundle=bundle)
     VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
-    nc = state.verify_result.narrative_coverage  # type: ignore[union-attr]
-    assert nc is not None
-    assert nc.total == 1  # only the one narrative need
-    assert nc.satisfied == 1
-    assert nc.pct == 1.0
+    dc = state.verify_result.data_coverage  # type: ignore[union-attr]
+    assert dc is not None and dc.total == 1 and dc.satisfied == 0 and dc.pct == 0.0
+
+
+def test_lane_coverage_is_none_when_no_needs_in_that_lane() -> None:
+    """An outline with only data_fact_ids needs reports
+    web_coverage=None (N/A), not zero. Mirrors the prior
+    narrative_coverage convention so cover-page renderers can
+    distinguish 'measured and failed' from 'nothing to measure'."""
+    outline = Outline(
+        tickers=["NVDA"],
+        report_type=ReportType.INITIATION,
+        sections=[
+            OutlineSection(
+                id="fin",
+                title="Financials",
+                data_needs=[
+                    DataNeed(description="rev", data_fact_ids=["rev_ttm"]),
+                ],
+            )
+        ],
+    )
+    state = _state_with_outline(outline=outline, bundle=_bundle())
+    VerifyStage(FakeVerifierClient(result=VerifyResult(issues=[]))).run(state, _ctx())
+    assert state.verify_result.data_coverage is not None  # type: ignore[union-attr]
+    assert state.verify_result.web_coverage is None  # type: ignore[union-attr]
 
 
 def test_verify_flags_uncited_number_through_deterministic_path() -> None:

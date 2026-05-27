@@ -113,7 +113,7 @@ export function ReportSettingsModal({
   const [mode, setMode] = useState<ReportMode>(config.report_mode);
   const [length, setLength] = useState<ReportLength>(config.report_length);
   const [reasoningEffort, setReasoningEffort] = useState<ReportReasoningEffort>(
-    config.report_reasoning_effort ?? "off",
+    config.report_reasoning_effort ?? "medium",
   );
   const [sections, setSections] = useState(config.sections_by_mode);
   const [customs, setCustoms] = useState(config.custom_sections_by_mode);
@@ -139,7 +139,7 @@ export function ReportSettingsModal({
     if (!open) return;
     setMode(config.report_mode);
     setLength(config.report_length);
-    setReasoningEffort(config.report_reasoning_effort ?? "off");
+    setReasoningEffort(config.report_reasoning_effort ?? "medium");
     setSections(config.sections_by_mode);
     setCustoms(config.custom_sections_by_mode);
     setPendingCustom(null);

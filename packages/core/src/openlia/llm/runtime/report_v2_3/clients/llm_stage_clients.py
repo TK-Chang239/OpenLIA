@@ -188,76 +188,60 @@ def _call_with_repair(
 
 
 PLAN_SYSTEM_PROMPT = """
-You are the PLAN stage of the v2.3 equity-research engine. The user
-template supplies the section structure; your job is to fill each
-section with the data_needs RESEARCH should fetch and to select the
-valuation methods COMPUTE should run.
+You are the PLAN stage of the v2.3 equity-research engine. Read the
+user template and decide what facts RESEARCH should fetch for each
+section.
 
-Inputs you receive:
+Inputs:
 - raw_prompt: the user's request.
-- template.sections: the ordered list of sections the report must
-  contain. Each section carries an `id`, `title`, `intent`, and
-  optional `methodology_hints`.
-- clarify_result: the assumptions resolved at CLARIFY.
+- template.sections: ordered list with id, title, intent,
+  methodology_hints.
+- clarify_result: assumptions resolved at CLARIFY.
 
-Output an Outline JSON object:
+For every fact id you list, classify it on the matter-of-record vs
+matter-of-interpretation axis:
+
+- Matter of record — exactly one correct value, lives in a filing or
+  a market feed (reported revenue, EPS, shares outstanding, closing
+  prices, declared dividends, peer multiples). If two analysts
+  disagree, one is simply wrong. Route the id to `data_fact_ids` —
+  EODHD serves these.
+- Matter of interpretation — synthesis, opinion, framing, causal
+  claim, forward-looking expectation (why the stock moved, what
+  management signaled, analyst ratings and price targets, bull/bear
+  theses, regulatory framing, competitive positioning). Two competent
+  analysts can disagree and both be defensible. Route the id to
+  `web_fact_ids` — `web_search` against primary sources and commentary
+  serves these.
+
+The same theme can carry both kinds — Q3 results have a record side
+(rev, EPS, margin) and an interpretation side (what management
+signaled, how the Street is reading guidance). Populate both lanes
+when applicable.
+
+Output one JSON object, no prose, no fences:
 {
   "tickers": ["<TICKER>"],
   "report_type": "initiation",
   "sections": [
     {
-      "id": "<copy from template.sections[i].id>",
-      "title": "<copy from template.sections[i].title>",
+      "id": "<from template.sections[i].id>",
+      "title": "<from template.sections[i].title>",
       "data_needs": [
         {
-          "description": "<one-line note on what RESEARCH should fetch>",
-          "expected_fact_ids": ["rev_ttm", "rev_growth_yoy"],
-          "source_class": "quantitative"
+          "description": "Q3 results plus management's read on demand",
+          "data_fact_ids": ["rev_q3", "gross_margin_q3", "eps_q3"],
+          "web_fact_ids": ["mgmt_commentary_on_demand"]
         }
       ]
-    },
-    ...
+    }
   ],
-  "valuation_plan": {
-    "methods": ["dcf", "comps"]
-  }
+  "valuation_plan": { "methods": ["dcf", "comps"] }
 }
 
-Rules:
-- `tickers` and `report_type` are decided by the engine from the run's
-  inputs. The example below shows literal values for shape clarity,
-  but anything you put there is overwritten — copy them through if
-  you like, but don't expand or rewrite them.
-- Produce one section per template.sections entry, in the same order,
-  with the same `id` and `title`. The engine's coercer will fix drift,
-  so be conservative — copy the structure verbatim.
-- For each section, populate `data_needs` with one or more entries.
-  Each `data_needs[*].expected_fact_ids` is a list of stable identifier
-  strings RESEARCH will fetch and bind to the BundleFact map. Use
-  snake_case ids like `rev_ttm`, `gross_margin_fy25`, `peer_ev_ebitda`.
-- Tag every `data_needs[*]` with a `source_class`. RESEARCH uses the
-  tag to route the need to the right tool — set it honestly so the
-  right source is selected:
-    * `quantitative` — reported financial line items (revenue, margins,
-      cash flow, leverage), market data (price, volume, returns), peer
-      multiples, valuation inputs. Anything that lives in a structured
-      data provider's response.
-    * `narrative` — anything that requires reading current sources:
-      regulatory status / investigations, management commentary,
-      product launches, catalysts and pipeline, competitive moves,
-      M&A, analyst notes, qualitative positioning. If the need is for
-      a recent event or an opinion, it is narrative.
-    * `either` — facts that could be served by either source class
-      (company description, segment mix, business model summary).
-- Split a need rather than tagging `either` when half is quantitative
-  and half narrative: a fact like "China revenue mix" is `quantitative`;
-  a fact like "China export-control exposure" is `narrative`. Two
-  separate entries beats one mixed tag.
-- `valuation_plan.methods` lists the valuation methods COMPUTE should
-  run. Choose from `dcf`, `comps`, `sensitivity` based on what the
-  template's sections actually need (e.g. include `dcf` only when a
-  section's intent calls for an intrinsic valuation).
-- Output JSON only. No prose, no markdown fences.
+Each data_need must populate at least one lane (an empty need is
+rejected). `valuation_plan.methods` is your choice from dcf, comps,
+sensitivity based on what the template's sections need.
 """.strip()
 
 
@@ -791,6 +775,11 @@ you write will reject any digit-bearing token outside these markers.
    Methods available: growth_rate, yoy_delta, ratio.
    The engine runs the math, mints a ComputedSource fact at <new_fact_id>,
    and rewrites your marker to {{CITE:<new_fact_id>}}.
+   DERIVE inputs MUST be facts whose ``value`` is a scalar number. If a
+   relevant fact's value is a time-series (``points: [...]``) or a
+   segment breakdown, you cannot DERIVE on it — reference it with
+   ``{{CITE:fact_id}}`` and write any comparison in prose, or DERIVE
+   from a separate scalar fact the bundle already carries.
 
 3. State an estimate when the number is analyst judgment with no
    underlying calculation — projections, scenario calls, view-driven
