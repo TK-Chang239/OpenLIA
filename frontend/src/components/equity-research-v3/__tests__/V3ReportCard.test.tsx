@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import type { V3ReportDetail } from "../../../api/equity-research-v3";
@@ -62,15 +62,30 @@ describe("V3ReportCard", () => {
     expect(meta).toHaveTextContent("1 source");
   });
 
-  test("Open HTML + Download PDF anchors point at the v3 export URLs", () => {
+  test("Open report falls back to opening the standalone HTML window when no FileViewerProvider is mounted", () => {
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     render(<V3ReportCard detail={BASE_DETAIL} />);
-    const html = screen.getByTestId("er-v3-report-card-open") as HTMLAnchorElement;
-    const pdf = screen.getByTestId("er-v3-report-card-pdf") as HTMLAnchorElement;
-    expect(html.getAttribute("href")).toContain(
+    const open = screen.getByTestId("er-v3-report-card-open") as HTMLButtonElement;
+    open.click();
+    expect(openSpy).toHaveBeenCalledWith(
       "/api/departments/equity-research/v3/runs/abc-123/html",
+      "_blank",
+      "noopener,noreferrer",
     );
+    openSpy.mockRestore();
+  });
+
+  test("Download PDF + Standalone anchors point at the v3 export URLs", () => {
+    render(<V3ReportCard detail={BASE_DETAIL} />);
+    const pdf = screen.getByTestId("er-v3-report-card-pdf") as HTMLAnchorElement;
+    const standalone = screen.getByTestId(
+      "er-v3-report-card-standalone",
+    ) as HTMLAnchorElement;
     expect(pdf.getAttribute("href")).toContain(
       "/api/departments/equity-research/v3/runs/abc-123/pdf",
+    );
+    expect(standalone.getAttribute("href")).toContain(
+      "/api/departments/equity-research/v3/runs/abc-123/html",
     );
   });
 

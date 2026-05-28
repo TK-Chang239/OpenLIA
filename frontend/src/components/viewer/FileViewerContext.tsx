@@ -28,7 +28,12 @@ export type FileSource =
   // v2.3 runs persist their structured payload on the er_v2_3_run_state
   // row. The viewer adapts the payload to the v1 ReportSchema and
   // renders through the shared ReportRenderer.
-  | { kind: "v23_report"; runId: string };
+  | { kind: "v23_report"; runId: string }
+  // v3 runs persist sections/charts/citations in the report_v3*
+  // tables. The viewer renders them with react-markdown — see
+  // V3ReportRenderer. The /html and /pdf routes stay as the
+  // standalone export surface (new-tab open + Word / PDF download).
+  | { kind: "v3_report"; reportId: string };
 
 export interface FileViewerTarget {
   filename: string;
