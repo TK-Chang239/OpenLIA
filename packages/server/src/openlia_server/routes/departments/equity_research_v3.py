@@ -337,7 +337,7 @@ def build_equity_research_v3_router(
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @router.post("/runs/start")
-    def start_run_async(
+    async def start_run_async(
         payload: StartV3Payload,
         request: Request,
         db: DBSession = Depends(session_dep),
@@ -349,6 +349,14 @@ def build_equity_research_v3_router(
         ``GET /v3/runs/{report_id}/events`` (SSE) to receive
         progress + the final state. Use the blocking ``POST /runs``
         instead when you don't want streaming.
+
+        Defined as ``async def`` so the handler runs on the main
+        asyncio loop — ``svc.start_run_async`` calls
+        ``asyncio.create_task`` to schedule the background runner,
+        which requires a running event loop. A sync ``def`` handler
+        would be dispatched to FastAPI's threadpool where no loop
+        is bound, and the create_task call would raise
+        ``RuntimeError: no running event loop``.
         """
         if not _engine_enabled():
             raise _engine_disabled()
