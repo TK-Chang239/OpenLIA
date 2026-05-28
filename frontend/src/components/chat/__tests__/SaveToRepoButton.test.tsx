@@ -49,4 +49,65 @@ describe("SaveToRepoButton", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/could not save/i);
     expect(screen.getByRole("button", { name: /save to repository/i })).toBeInTheDocument();
   });
+
+  it("routes to the v3 save endpoint when engine=v3", async () => {
+    (repoApi.saveV3RunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+      v3_report_id: "v3-1",
+      created_at: "2026-05-28T00:00:00Z",
+    });
+    render(
+      <SaveToRepoButton
+        reportId="v3-1"
+        engine="v3"
+        initialSaved={false}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to repository/i }));
+    await waitFor(() =>
+      expect(repoApi.saveV3RunToRepo).toHaveBeenCalledWith("v3-1"),
+    );
+    // v1 endpoint must not be called when engine=v3.
+    expect(repoApi.saveToRepo).not.toHaveBeenCalled();
+  });
+
+  it("routes to the v3 unsave endpoint when engine=v3 and already saved", async () => {
+    (repoApi.unsaveV3RunFromRepo as ReturnType<typeof vi.fn>).mockResolvedValue(
+      undefined,
+    );
+    render(
+      <SaveToRepoButton
+        reportId="v3-1"
+        engine="v3"
+        initialSaved={true}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /remove from repository/i }));
+    await waitFor(() =>
+      expect(repoApi.unsaveV3RunFromRepo).toHaveBeenCalledWith("v3-1"),
+    );
+    expect(repoApi.unsaveFromRepo).not.toHaveBeenCalled();
+  });
+
+  it("routes to the v2 save endpoint when engine=v2", async () => {
+    (repoApi.saveV2RunToRepo as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+      pipeline_run_id: "v2-1",
+      created_at: "2026-05-28T00:00:00Z",
+    });
+    render(
+      <SaveToRepoButton
+        reportId="v2-1"
+        engine="v2"
+        initialSaved={false}
+        variant="viewer-header"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save to repository/i }));
+    await waitFor(() =>
+      expect(repoApi.saveV2RunToRepo).toHaveBeenCalledWith("v2-1"),
+    );
+  });
 });

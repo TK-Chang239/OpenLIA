@@ -12,6 +12,10 @@ interface Props {
   metadata: string;
   source: FileSource;
   reportId?: string;
+  /** Engine that produced the report — selects the right repo
+   *  endpoint. Defaults to "v1" for back-compat with existing v1
+   *  callers. */
+  saveEngine?: "v1" | "v2" | "v3";
   initialSaved?: boolean;
   hideSaveToRepoButton?: boolean;
   onClose: () => void;
@@ -23,6 +27,7 @@ export function ViewerHeader({
   metadata,
   source,
   reportId,
+  saveEngine = "v1",
   initialSaved = false,
   hideSaveToRepoButton = false,
   onClose,
@@ -37,7 +42,12 @@ export function ViewerHeader({
       </div>
       <div className="ml-2 flex flex-shrink-0 items-center gap-1.5">
         {reportId !== undefined && !hideSaveToRepoButton ? (
-          <SaveToRepoButton variant="viewer-header" reportId={reportId} initialSaved={initialSaved} />
+          <SaveToRepoButton
+            variant="viewer-header"
+            reportId={reportId}
+            engine={saveEngine}
+            initialSaved={initialSaved}
+          />
         ) : null}
         {source.kind === "report" ? (
           <ReportDownloadButton reportId={source.reportId} />
