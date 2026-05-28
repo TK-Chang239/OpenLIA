@@ -55,6 +55,17 @@ class RepoV3SavedListOut(BaseModel):
 
 class RepoRowOut(BaseModel):
     id: str
+    # Which engine wrote the report. v1 is the legacy report stack;
+    # v3 is the new equity-research engine. Frontend branches on
+    # this to open the right side-viewer source kind and choose the
+    # correct delete path. Defaults to "v1" so older callers keep
+    # working.
+    engine: str = "v1"
+    # Id of the target row in its engine's namespace. For v1 this is
+    # ``reports.id``; for v3 this is ``report_v3.id``. Field is
+    # named ``report_id`` for back-compat with the v1 frontend code
+    # that already reads ``row.report_id``; new callers should
+    # branch on ``engine`` to know which table to deref against.
     report_id: str
     department: str
     title: str
@@ -150,13 +161,14 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
 
         out_rows = [
             RepoRowOut(
-                id=r.item.id,
-                report_id=r.report.id,
-                department=r.report.department,
-                title=r.report.title,
-                filename=f"{r.report.title}.pdf",
-                generated_at=r.report.created_at,
-                saved_at=r.item.created_at,
+                id=r.id,
+                engine=r.engine,
+                report_id=r.target_id,
+                department=r.department,
+                title=r.title,
+                filename=r.filename,
+                generated_at=r.generated_at,
+                saved_at=r.saved_at,
             )
             for r in repo_rows
         ]

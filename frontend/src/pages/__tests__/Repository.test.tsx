@@ -45,7 +45,10 @@ const listRepoItemsFiltered = vi.fn();
 const fetchRepoFacets = vi.fn();
 const saveToRepo = vi.fn();
 const unsaveFromRepo = vi.fn();
+const saveV3RunToRepo = vi.fn();
+const unsaveV3RunFromRepo = vi.fn();
 const deleteReport = vi.fn();
+const deleteV3Run = vi.fn();
 
 vi.mock("../../api/repo", async () => {
   return {
@@ -53,12 +56,18 @@ vi.mock("../../api/repo", async () => {
     fetchRepoFacets: (...a: unknown[]) => fetchRepoFacets(...a),
     saveToRepo: (...a: unknown[]) => saveToRepo(...a),
     unsaveFromRepo: (...a: unknown[]) => unsaveFromRepo(...a),
+    saveV3RunToRepo: (...a: unknown[]) => saveV3RunToRepo(...a),
+    unsaveV3RunFromRepo: (...a: unknown[]) => unsaveV3RunFromRepo(...a),
   };
 });
 
 vi.mock("../../api/reports", () => ({
   reportPdfUrl: (id: string) => `/api/reports/${id}/export/pdf`,
   deleteReport: (...a: unknown[]) => deleteReport(...a),
+}));
+
+vi.mock("../../api/equity-research-v3", () => ({
+  deleteV3Run: (...a: unknown[]) => deleteV3Run(...a),
 }));
 
 import Repository from "../Repository";
@@ -84,10 +93,25 @@ function renderPage(initial: string = "/repository") {
 // post-retention "Delete" path with an explicitly old row.
 const SAMPLE_ROW = {
   id: "i1",
+  engine: "v1" as const,
   report_id: "r1",
   department: "equity_research",
   title: "AAPL",
   filename: "AAPL.pdf",
+  generated_at: new Date(Date.now() - 86_400_000).toISOString(),
+  saved_at: new Date(Date.now() - 3_600_000).toISOString(),
+};
+
+const SAMPLE_V3_ROW = {
+  id: "i2",
+  engine: "v3" as const,
+  // For v3 rows, report_id holds the report_v3.id (server uses the same
+  // field name on the wire for back-compat). Branch on `engine` to know
+  // which table to deref against.
+  report_id: "v3-abc",
+  department: "equity_research",
+  title: "RKLB.US",
+  filename: "RKLB.US_initiation_default_2026-05-28.pdf",
   generated_at: new Date(Date.now() - 86_400_000).toISOString(),
   saved_at: new Date(Date.now() - 3_600_000).toISOString(),
 };
@@ -282,5 +306,47 @@ describe("Repository page", () => {
     await waitFor(() => {
       expect(screen.getByText(/Report deleted permanently/i)).toBeInTheDocument();
     });
+  });
+
+  // ----- v3 fanout (PR10) -----
+
+  it("opens a v3 row via the v3_report file source (not the v1 report path)", async () => {
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_V3_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    renderPage();
+    const row = await screen.findByText(SAMPLE_V3_ROW.filename);
+    fireEvent.click(row);
+    // FileViewer surfaces the filename in its header — confirms the
+    // viewer opened and is hydrated with the v3 row's filename.
+    await waitFor(() => {
+      const viewer = screen.getByTestId("file-viewer");
+      expect(viewer).toHaveTextContent(SAMPLE_V3_ROW.filename);
+    });
+  });
+
+  it("removes a v3 row via unsaveV3RunFromRepo, not the v1 unsave", async () => {
+    listRepoItemsFiltered.mockReset();
+    listRepoItemsFiltered.mockResolvedValue({
+      items: [SAMPLE_V3_ROW],
+      page: 1,
+      page_size: 50,
+      has_more: false,
+    });
+    unsaveV3RunFromRepo.mockResolvedValueOnce(undefined);
+    renderPage();
+    const removeBtn = await screen.findByRole("button", {
+      name: new RegExp(`Remove ${SAMPLE_V3_ROW.filename}`),
+    });
+    fireEvent.click(removeBtn);
+    fireEvent.click(screen.getByRole("button", { name: /^Remove$/ }));
+    await waitFor(() => {
+      expect(unsaveV3RunFromRepo).toHaveBeenCalledWith(SAMPLE_V3_ROW.report_id);
+    });
+    expect(unsaveFromRepo).not.toHaveBeenCalled();
   });
 });

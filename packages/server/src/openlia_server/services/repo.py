@@ -35,11 +35,29 @@ VALID_SORTS: frozenset[str] = frozenset(
     }
 )
 
+Engine = Literal["v1", "v2", "v3"]
+
 
 @dataclass(frozen=True)
 class RepoRow:
-    item: RepoItem
-    report: Report
+    """Flat, engine-agnostic shape returned by ``list_items_filtered``.
+
+    ``engine`` distinguishes which source table the row was joined
+    from. ``target_id`` is the id within that engine's namespace (v1:
+    ``reports.id``; v2: ``pipeline_runs.id``; v3: ``report_v3.id``).
+    The route layer maps this directly to ``RepoRowOut``; the frontend
+    branches on ``engine`` to choose the right FileViewer source +
+    delete path.
+    """
+
+    id: str  # repo_items.id
+    engine: Engine
+    target_id: str
+    department: str
+    title: str
+    filename: str
+    generated_at: datetime
+    saved_at: datetime
 
 
 def save_to_repo(db: Session, *, user_id: str, report_id: str) -> RepoItem:
@@ -218,6 +236,9 @@ def _end_of_day_utc(d: date) -> datetime:
     return datetime.combine(d, time.max, tzinfo=UTC)
 
 
+_V3_DEPARTMENT = "equity_research"
+
+
 def list_items_filtered(
     db: Session,
     *,
@@ -232,6 +253,20 @@ def list_items_filtered(
     page: int = 1,
     page_size: int = 50,
 ) -> list[RepoRow]:
+    """Fan out to every engine's source table, merge into one ordered
+    list of ``RepoRow``, then slice for pagination.
+
+    Each engine's helper applies the filters it can express server-
+    side (department + date ranges + ``q`` text search). The merge
+    step sorts the unified set by the chosen sort key and slices for
+    pagination, which means pagination is O(total saved rows). That's
+    fine in practice — a user with thousands of saves is rare and the
+    queries are well-indexed. Move to a UNION-driven offset/limit if
+    that ever stops being true.
+
+    v2.2 pipeline runs are still skipped here pending a follow-up;
+    they remain visible via ``GET /api/repo/v2-runs``.
+    """
     if sort not in VALID_SORTS:
         raise ValueError(f"invalid sort: {sort!r}")
     if page < 1:
@@ -239,6 +274,63 @@ def list_items_filtered(
     if page_size < 1 or page_size > 200:
         raise ValueError("page_size must be in [1, 200]")
 
+    rows: list[RepoRow] = []
+    # Department filter is engine-agnostic: skip an engine's fanout
+    # when the filter narrows to departments that engine never owns.
+    department_filter = departments or None
+    if department_filter is None or any(
+        d == _V3_DEPARTMENT or _is_v1_department(d) for d in department_filter
+    ):
+        # v1 owns all department slugs; let its query do the filter.
+        rows.extend(
+            _list_v1_rows(
+                db,
+                user_id=user_id,
+                q=q,
+                departments=department_filter,
+                generated_from=generated_from,
+                generated_to=generated_to,
+                saved_from=saved_from,
+                saved_to=saved_to,
+            )
+        )
+    if department_filter is None or _V3_DEPARTMENT in department_filter:
+        rows.extend(
+            _list_v3_rows(
+                db,
+                user_id=user_id,
+                q=q,
+                generated_from=generated_from,
+                generated_to=generated_to,
+                saved_from=saved_from,
+                saved_to=saved_to,
+            )
+        )
+
+    rows = _sort_rows(rows, sort)
+    offset = (page - 1) * page_size
+    return rows[offset : offset + page_size]
+
+
+def _is_v1_department(slug: str) -> bool:
+    """v1 reports cover every department the legacy stack supports.
+    Today that's effectively any slug — kept as a function to make the
+    intent explicit at the call-site and to leave room for future
+    per-engine department namespaces."""
+    return True
+
+
+def _list_v1_rows(
+    db: Session,
+    *,
+    user_id: str,
+    q: str | None,
+    departments: list[str] | None,
+    generated_from: date | None,
+    generated_to: date | None,
+    saved_from: date | None,
+    saved_to: date | None,
+) -> list[RepoRow]:
     stmt = (
         select(RepoItem, Report)
         .join(Report, RepoItem.report_id == Report.id)
@@ -257,35 +349,116 @@ def list_items_filtered(
     if saved_to:
         stmt = stmt.where(RepoItem.created_at <= _end_of_day_utc(saved_to))
 
+    out: list[RepoRow] = []
+    for item, report in db.execute(stmt).all():
+        out.append(
+            RepoRow(
+                id=item.id,
+                engine="v1",
+                target_id=report.id,
+                department=report.department,
+                title=report.title,
+                filename=f"{report.title}.pdf",
+                generated_at=report.created_at,
+                saved_at=item.created_at,
+            )
+        )
+    return out
+
+
+def _list_v3_rows(
+    db: Session,
+    *,
+    user_id: str,
+    q: str | None,
+    generated_from: date | None,
+    generated_to: date | None,
+    saved_from: date | None,
+    saved_to: date | None,
+) -> list[RepoRow]:
+    stmt = (
+        select(RepoItem, ReportV3)
+        .join(ReportV3, RepoItem.v3_report_id == ReportV3.id)
+        .where(RepoItem.user_id == user_id)
+    )
+    if q:
+        stmt = stmt.where(func.lower(ReportV3.subject).like(f"%{q.lower()}%"))
+    if generated_from:
+        stmt = stmt.where(ReportV3.created_at >= _start_of_day_utc(generated_from))
+    if generated_to:
+        stmt = stmt.where(ReportV3.created_at <= _end_of_day_utc(generated_to))
+    if saved_from:
+        stmt = stmt.where(RepoItem.created_at >= _start_of_day_utc(saved_from))
+    if saved_to:
+        stmt = stmt.where(RepoItem.created_at <= _end_of_day_utc(saved_to))
+
+    out: list[RepoRow] = []
+    for item, report in db.execute(stmt).all():
+        when = report.completed_at or report.created_at
+        date_str = when.strftime("%Y-%m-%d") if when is not None else "undated"
+        filename = f"{report.subject}_{report.template_id}_{date_str}.pdf"
+        out.append(
+            RepoRow(
+                id=item.id,
+                engine="v3",
+                target_id=report.id,
+                department=_V3_DEPARTMENT,
+                title=report.subject,
+                filename=filename,
+                generated_at=report.created_at,
+                saved_at=item.created_at,
+            )
+        )
+    return out
+
+
+def _sort_rows(rows: list[RepoRow], sort: SortKey) -> list[RepoRow]:
     if sort == "saved_desc":
-        stmt = stmt.order_by(RepoItem.created_at.desc(), RepoItem.id.asc())
-    elif sort == "saved_asc":
-        stmt = stmt.order_by(RepoItem.created_at.asc(), RepoItem.id.asc())
-    elif sort == "generated_desc":
-        stmt = stmt.order_by(Report.created_at.desc(), RepoItem.id.asc())
-    elif sort == "generated_asc":
-        stmt = stmt.order_by(Report.created_at.asc(), RepoItem.id.asc())
-    elif sort == "department_asc":
-        stmt = stmt.order_by(Report.department.asc(), Report.title.asc())
-    elif sort == "filename_asc":
-        stmt = stmt.order_by(Report.title.asc())
-
-    offset = (page - 1) * page_size
-    stmt = stmt.offset(offset).limit(page_size)
-
-    rows = db.execute(stmt).all()
-    return [RepoRow(item=item, report=report) for item, report in rows]
+        return sorted(rows, key=lambda r: (r.saved_at, r.id), reverse=True)
+    if sort == "saved_asc":
+        return sorted(rows, key=lambda r: (r.saved_at, r.id))
+    if sort == "generated_desc":
+        return sorted(rows, key=lambda r: (r.generated_at, r.id), reverse=True)
+    if sort == "generated_asc":
+        return sorted(rows, key=lambda r: (r.generated_at, r.id))
+    if sort == "department_asc":
+        return sorted(rows, key=lambda r: (r.department, r.title))
+    if sort == "filename_asc":
+        # Binary sort to match the SQL ORDER BY semantics the existing
+        # tests assert against (uppercase ASCII sorts before lowercase).
+        return sorted(rows, key=lambda r: r.title)
+    return rows
 
 
 def facets(db: Session, *, user_id: str) -> dict:
-    stmt = (
+    """Aggregate saved-item counts per department across all engines.
+
+    v1: groups on ``Report.department`` (covers every non-equity slug
+    plus older v1 equity-research rows). v3: every saved row counts
+    as one ``equity_research`` entry. v2 still pending.
+    """
+    counts: dict[str, int] = {}
+
+    v1_stmt = (
         select(Report.department, func.count(RepoItem.id))
         .join(Report, RepoItem.report_id == Report.id)
         .where(RepoItem.user_id == user_id, Report.expired_at.is_(None))
         .group_by(Report.department)
-        .order_by(Report.department.asc())
     )
-    rows = db.execute(stmt).all()
-    departments = [{"slug": dep, "count": int(count)} for dep, count in rows]
+    for dep, count in db.execute(v1_stmt).all():
+        counts[dep] = counts.get(dep, 0) + int(count)
+
+    v3_stmt = (
+        select(func.count(RepoItem.id))
+        .join(ReportV3, RepoItem.v3_report_id == ReportV3.id)
+        .where(RepoItem.user_id == user_id)
+    )
+    v3_count = int(db.execute(v3_stmt).scalar() or 0)
+    if v3_count:
+        counts[_V3_DEPARTMENT] = counts.get(_V3_DEPARTMENT, 0) + v3_count
+
+    departments = [
+        {"slug": dep, "count": counts[dep]} for dep in sorted(counts.keys())
+    ]
     total = sum(d["count"] for d in departments)
     return {"departments": departments, "total": total}
