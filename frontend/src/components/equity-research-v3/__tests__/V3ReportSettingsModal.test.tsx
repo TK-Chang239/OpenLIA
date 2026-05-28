@@ -10,6 +10,7 @@ const DEFAULT_VALUE: V3SettingsValue = {
   reportType: "initiation",
   length: "normal",
   language: "en",
+  reasoningEffort: "medium",
 };
 
 describe("V3ReportSettingsModal", () => {
@@ -47,6 +48,7 @@ describe("V3ReportSettingsModal", () => {
       reportType: "update",
       length: "concise",
       language: "en",
+      reasoningEffort: "medium",
     });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -70,7 +72,30 @@ describe("V3ReportSettingsModal", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  test("renders Coming Soon placeholders for reasoning effort and template", () => {
+  test("renders the reasoning-effort segmented control and emits the chosen effort on Save", () => {
+    const onSave = vi.fn();
+    render(
+      <V3ReportSettingsModal
+        open
+        value={DEFAULT_VALUE}
+        onClose={() => undefined}
+        onSave={onSave}
+      />,
+    );
+
+    expect(screen.getByTestId("er-v3-reasoning-effort")).toBeInTheDocument();
+    // Medium is the active state on first render.
+    expect(screen.getByRole("radio", { name: "Medium" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "High" }));
+    fireEvent.click(screen.getByTestId("er-v3-settings-save"));
+    expect(onSave.mock.calls[0][0].reasoningEffort).toBe("high");
+  });
+
+  test("renders Coming Soon placeholder for template (reasoning effort is now live)", () => {
     render(
       <V3ReportSettingsModal
         open
@@ -80,8 +105,8 @@ describe("V3ReportSettingsModal", () => {
       />,
     );
     expect(
-      screen.getByTestId("er-v3-settings-coming-soon-reasoning-effort"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("er-v3-settings-coming-soon-reasoning-effort"),
+    ).toBeNull();
     expect(
       screen.getByTestId("er-v3-settings-coming-soon-template"),
     ).toBeInTheDocument();

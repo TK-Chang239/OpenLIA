@@ -54,6 +54,7 @@ const DEFAULT_SETTINGS: V3SettingsValue = {
   reportType: "initiation",
   length: "normal",
   language: "en",
+  reasoningEffort: "medium",
 };
 
 function loadSettings(): V3SettingsValue {
@@ -66,6 +67,8 @@ function loadSettings(): V3SettingsValue {
       reportType: parsed.reportType ?? DEFAULT_SETTINGS.reportType,
       length: parsed.length ?? DEFAULT_SETTINGS.length,
       language: parsed.language ?? DEFAULT_SETTINGS.language,
+      reasoningEffort:
+        parsed.reasoningEffort ?? DEFAULT_SETTINGS.reasoningEffort,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -189,6 +192,11 @@ export default function EquityResearchV3(): JSX.Element {
           report_type: settings.reportType,
           provider_kind: model.provider_kind,
           model: model.model,
+          // Wire enum is "medium" | "high" only; off → null so the
+          // server's ReasoningEffort field stays None and the
+          // adapter skips the reasoning param entirely.
+          reasoning_effort:
+            settings.reasoningEffort === "off" ? null : settings.reasoningEffort,
         };
         const response = await startV3RunAsync(body);
         setActiveReportId(response.report_id);
@@ -202,7 +210,13 @@ export default function EquityResearchV3(): JSX.Element {
         }
       }
     },
-    [model, settings.language, settings.length, settings.reportType],
+    [
+      model,
+      settings.language,
+      settings.length,
+      settings.reasoningEffort,
+      settings.reportType,
+    ],
   );
 
   const handleStop = useCallback(() => {
