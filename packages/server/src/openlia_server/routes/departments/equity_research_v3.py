@@ -168,6 +168,10 @@ class ReportSummaryOut(BaseModel):
     status: str
     created_at: datetime
     completed_at: datetime | None
+    # User-selected extended-thinking knob at dispatch time, or null
+    # when reasoning was off. PR12 follow-up: lets the chat-thread
+    # chips show what was used even after a page reload.
+    reasoning_effort: str | None = None
 
 
 class SectionOut(BaseModel):
@@ -302,6 +306,7 @@ def _summary(row: ReportV3) -> ReportSummaryOut:
         status=row.status,
         created_at=row.created_at,
         completed_at=row.completed_at,
+        reasoning_effort=row.reasoning_effort,
     )
 
 

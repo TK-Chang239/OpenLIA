@@ -78,6 +78,11 @@ class ReportV3(Base):
     # Nullable so older rows (and runs where the model skipped set_cover)
     # render with the bare cover. PR9.
     cover_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # User-selected extended-thinking knob ("medium" | "high") at
+    # dispatch time, or NULL when reasoning was off. Kept on the row
+    # so the chat-thread chips can show what was used on page reload
+    # (the runtime is otherwise stateless about it). PR12 follow-up.
+    reasoning_effort: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3"),
