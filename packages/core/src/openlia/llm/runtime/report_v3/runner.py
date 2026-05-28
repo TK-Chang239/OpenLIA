@@ -187,6 +187,7 @@ class Runner:
                 system=system_prompt,
                 tools=tool_schemas,
                 native_tools=catalog.native_tools,
+                reasoning_effort=request.reasoning_effort,
             )
 
             ingest_web_citations(response.citations, ledger)

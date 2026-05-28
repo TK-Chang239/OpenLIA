@@ -28,7 +28,7 @@ from openlia.llm.runtime.report_v3 import (
 from openlia.llm.runtime.report_v3.tools.output_tools import build_output_tools
 from openlia.llm.runtime.report_v3.tools.valuation_tools import build_valuation_tools
 from openlia.llm.runtime.report_v3.tools.web_search import ingest_web_citations
-from openlia.llm.types import Citation
+from openlia.llm.types import Citation, ReasoningEffort
 
 from ._fakes import FakeLLMProvider, script_text, script_tool_calls
 
@@ -420,3 +420,69 @@ async def test_runner_returns_structured_error_for_unknown_tool():
         if m.role == "tool" and "Unknown tool" in m.content
     ]
     assert error_msgs, "Expected the unknown-tool error to be replayed back to the model"
+
+
+@pytest.mark.asyncio
+async def test_runner_threads_reasoning_effort_to_every_turn():
+    """RunRequest.reasoning_effort propagates to every LLMRequest the
+    adapter sees, and the max_tokens ceiling grows to absorb the
+    thinking budget. v3 has no stage notion — reasoning applies on
+    every turn or not at all."""
+    template = get_builtin(ReportType.INITIATION)
+    section_ids = [s.id for s in template.sections]
+
+    script = []
+    for sid in section_ids:
+        script.append(
+            script_tool_calls(
+                ("write_section", {"section_id": sid, "markdown": f"{sid} body."}),
+            )
+        )
+    script.append(script_tool_calls(("finalize", {})))
+
+    runner, session, fake = _runner_with_fake(script)
+    req = RunRequest(
+        subject="RKLB.US",
+        template=template,
+        language=Language.EN,
+        length=ReportLength.NORMAL,
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        reasoning_effort=ReasoningEffort.MEDIUM,
+    )
+    result = await runner.run(req, session=session)
+    assert result.status == "completed"
+
+    base_max = session.capabilities.max_output_tokens
+    # MEDIUM overhead per session._REASONING_OVERHEAD
+    expected_max = base_max + 8192
+    assert len(fake.captured_requests) >= 1
+    for captured in fake.captured_requests:
+        assert captured.reasoning_effort == ReasoningEffort.MEDIUM
+        assert captured.max_tokens == expected_max
+
+
+@pytest.mark.asyncio
+async def test_runner_default_reasoning_effort_none_leaves_max_tokens_untouched():
+    """Default reasoning_effort=None: no reasoning param on the wire,
+    max_tokens equals the model's capability ceiling exactly. Verifies
+    the off-mode path doesn't accidentally bump the ceiling."""
+    template = get_builtin(ReportType.INITIATION)
+    section_ids = [s.id for s in template.sections]
+
+    script = []
+    for sid in section_ids:
+        script.append(
+            script_tool_calls(
+                ("write_section", {"section_id": sid, "markdown": f"{sid} body."}),
+            )
+        )
+    script.append(script_tool_calls(("finalize", {})))
+
+    runner, session, fake = _runner_with_fake(script)
+    result = await runner.run(_request(), session=session)
+    assert result.status == "completed"
+    base_max = session.capabilities.max_output_tokens
+    for captured in fake.captured_requests:
+        assert captured.reasoning_effort is None
+        assert captured.max_tokens == base_max
