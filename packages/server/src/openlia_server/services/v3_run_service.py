@@ -136,26 +136,18 @@ def get_run(
     user_id: str,
     report_id: str,
 ) -> tuple[ReportV3, list[ReportV3Section], list[ReportV3Chart], list[ReportV3Citation]]:
-    """Return the report row + its sections (ordered) + charts + citations.
+    """Return the report row + its LATEST section/chart versions + citations.
 
-    Raises ``ReportNotFoundError`` if the row is missing or owned by a
-    different user.
+    Revisions append new section/chart rows at incremented versions
+    (PR4). The detail view always shows the latest snapshot — old
+    versions remain in the DB for audit but are filtered out here.
+
+    Raises ``ReportNotFoundError`` if the row is missing or owned by
+    a different user.
     """
     row = _load_report(db=db, user_id=user_id, report_id=report_id)
-    sections = list(
-        db.scalars(
-            select(ReportV3Section)
-            .where(ReportV3Section.report_id == report_id)
-            .order_by(ReportV3Section.section_index)
-        )
-    )
-    charts = list(
-        db.scalars(
-            select(ReportV3Chart)
-            .where(ReportV3Chart.report_id == report_id)
-            .order_by(ReportV3Chart.id)
-        )
-    )
+    sections = _latest_sections(db, report_id)
+    charts = _latest_charts(db, report_id)
     citations = list(
         db.scalars(
             select(ReportV3Citation)
@@ -164,6 +156,36 @@ def get_run(
         )
     )
     return row, sections, charts, citations
+
+
+def _latest_sections(db: DBSession, report_id: str) -> list[ReportV3Section]:
+    """One row per section_id at its highest version, sorted by
+    section_index for renderer-friendly ordering."""
+    rows = list(
+        db.scalars(
+            select(ReportV3Section).where(ReportV3Section.report_id == report_id)
+        )
+    )
+    latest: dict[str, ReportV3Section] = {}
+    for row in rows:
+        current = latest.get(row.section_id)
+        if current is None or row.version > current.version:
+            latest[row.section_id] = row
+    return sorted(latest.values(), key=lambda r: r.section_index)
+
+
+def _latest_charts(db: DBSession, report_id: str) -> list[ReportV3Chart]:
+    rows = list(
+        db.scalars(
+            select(ReportV3Chart).where(ReportV3Chart.report_id == report_id)
+        )
+    )
+    latest: dict[str, ReportV3Chart] = {}
+    for row in rows:
+        current = latest.get(row.chart_id)
+        if current is None or row.version > current.version:
+            latest[row.chart_id] = row
+    return sorted(latest.values(), key=lambda r: r.id)
 
 
 def list_runs(
