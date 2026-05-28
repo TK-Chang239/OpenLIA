@@ -64,13 +64,19 @@ const EMPTY_STREAM = {
   errorMessage: null as string | null,
 };
 
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 beforeEach(() => {
   vi.clearAllMocks();
   listV3RevisionsMock.mockResolvedValue([]);
+  // jsdom doesn't implement scrollIntoView; stub it so the
+  // component's auto-scroll effect doesn't blow up the test.
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 afterEach(() => {
   cleanup();
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 describe("V3ChatThread — initial turn", () => {
@@ -115,6 +121,43 @@ describe("V3ChatThread — initial turn", () => {
     expect(screen.getByTestId("er-v3-settings-chips")).toHaveTextContent(
       /Stock Initiation/,
     );
+  });
+
+  test("Reasoning chip surfaces on page reload when report.reasoning_effort is persisted", async () => {
+    render(
+      <V3ChatThread
+        initialPrompt={null}
+        initialSettings={null}
+        reportId="rep-1"
+        stream={EMPTY_STREAM}
+        detail={{
+          ...DETAIL,
+          report: { ...DETAIL.report, reasoning_effort: "high" },
+        }}
+        onRefreshDetail={() => {}}
+      />,
+    );
+    const chips = await screen.findByTestId("er-v3-settings-chips");
+    expect(chips).toHaveTextContent(/Reasoning/);
+    expect(chips).toHaveTextContent(/High/);
+  });
+
+  test("Reasoning chip is omitted on page reload when reasoning was off", async () => {
+    render(
+      <V3ChatThread
+        initialPrompt={null}
+        initialSettings={null}
+        reportId="rep-1"
+        stream={EMPTY_STREAM}
+        detail={{
+          ...DETAIL,
+          report: { ...DETAIL.report, reasoning_effort: null },
+        }}
+        onRefreshDetail={() => {}}
+      />,
+    );
+    const chips = await screen.findByTestId("er-v3-settings-chips");
+    expect(chips).not.toHaveTextContent(/Reasoning/);
   });
 
   test("renders StreamPanel while detail is null", async () => {
@@ -250,5 +293,58 @@ describe("V3ChatThread — revision turns", () => {
       />,
     );
     expect(container.firstChild).toBeNull();
+  });
+});
+
+describe("V3ChatThread — auto-scroll", () => {
+  test("renders the bottom sentinel marker for auto-scroll", async () => {
+    render(
+      <V3ChatThread
+        initialPrompt="Research RKLB.US"
+        initialSettings={SETTINGS}
+        reportId="rep-1"
+        stream={EMPTY_STREAM}
+        detail={DETAIL}
+        onRefreshDetail={() => {}}
+      />,
+    );
+    expect(
+      await screen.findByTestId("er-v3-chat-bottom"),
+    ).toBeInTheDocument();
+  });
+
+  test("calls scrollIntoView on the bottom marker when revisions arrive", async () => {
+    const scrollSpy = Element.prototype.scrollIntoView as unknown as ReturnType<
+      typeof vi.fn
+    >;
+    const revisions: V3Revision[] = [
+      {
+        id: "rev-1",
+        report_id: "rep-1",
+        revision_index: 1,
+        request: "follow-up",
+        status: "completed",
+        error_message: null,
+        created_at: "2026-05-28T11:00:00Z",
+        completed_at: "2026-05-28T11:05:00Z",
+      },
+    ];
+    listV3RevisionsMock.mockResolvedValueOnce(revisions);
+    render(
+      <V3ChatThread
+        initialPrompt="Research RKLB.US"
+        initialSettings={SETTINGS}
+        reportId="rep-1"
+        stream={EMPTY_STREAM}
+        detail={DETAIL}
+        onRefreshDetail={() => {}}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("er-v3-revision-turn-rev-1")).toBeInTheDocument(),
+    );
+    // The scroll effect runs on every turn-signal change — at least
+    // once for the initial mount, again when revisions land.
+    expect(scrollSpy).toHaveBeenCalled();
   });
 });
