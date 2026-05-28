@@ -607,6 +607,42 @@ def build_equity_research_v3_router(
             },
         )
 
+    @router.get("/runs/{report_id}/docx")
+    def get_docx(
+        report_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        """Native .docx download — no Playwright dependency.
+
+        Builds the Word document from the persisted section /
+        chart / citation rows via python-docx. Charts render via
+        matplotlib (the same path the HTML / PDF surface uses);
+        when matplotlib is unavailable or a chart's data is
+        mis-shaped, the renderer emits a labelled placeholder so
+        the export never silently drops content.
+        """
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            docx_bytes = render_svc.render_docx(
+                db=db, user_id=user.id, report_id=report_id
+            )
+        except svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(
+            content=docx_bytes,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "wordprocessingml.document"
+            ),
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="v3-report-{report_id}.docx"'
+                ),
+            },
+        )
+
     # ------------------------------------------------------------------
     # Templates CRUD — PR3
     #

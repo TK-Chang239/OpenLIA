@@ -406,13 +406,13 @@ export async function downloadReportBlob(
 ): Promise<DownloadResult> {
   let url: string;
   if (engine === "v3") {
-    // v3 emits PDF natively; "docx" maps to the /html route (the
-    // standalone-HTML surface browsers can Save As Word). Both flows
-    // open the same printable view server-side.
+    // v3 emits both formats natively now. PDF prints the rendered
+    // HTML through Playwright; docx is built by python-docx and
+    // has no Playwright dependency.
     url =
       format === "pdf"
         ? `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/pdf`
-        : `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/html`;
+        : `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/docx`;
   } else if (engine === "v23") {
     // v2.3 only emits docx today; PDF is browser-print from the viewer.
     url = `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(reportId)}/docx`;

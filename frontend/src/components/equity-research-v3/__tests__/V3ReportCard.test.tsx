@@ -75,14 +75,18 @@ describe("V3ReportCard", () => {
     openSpy.mockRestore();
   });
 
-  test("Download PDF + Standalone anchors point at the v3 export URLs", () => {
+  test("PDF + Word + Standalone anchors point at the v3 export URLs", () => {
     render(<V3ReportCard detail={BASE_DETAIL} />);
     const pdf = screen.getByTestId("er-v3-report-card-pdf") as HTMLAnchorElement;
+    const docx = screen.getByTestId("er-v3-report-card-docx") as HTMLAnchorElement;
     const standalone = screen.getByTestId(
       "er-v3-report-card-standalone",
     ) as HTMLAnchorElement;
     expect(pdf.getAttribute("href")).toContain(
       "/api/departments/equity-research/v3/runs/abc-123/pdf",
+    );
+    expect(docx.getAttribute("href")).toContain(
+      "/api/departments/equity-research/v3/runs/abc-123/docx",
     );
     expect(standalone.getAttribute("href")).toContain(
       "/api/departments/equity-research/v3/runs/abc-123/html",

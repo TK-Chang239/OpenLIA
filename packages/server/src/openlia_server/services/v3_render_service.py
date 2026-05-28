@@ -51,6 +51,31 @@ def render_html(
     return HtmlRender(html=assembled.html, assembled=assembled)
 
 
+def render_docx(
+    *,
+    db: DBSession,
+    user_id: str,
+    report_id: str,
+) -> bytes:
+    """Render a persisted v3 run to .docx bytes.
+
+    Uses the same source rows as ``render_html`` (sections + charts +
+    citations rolled up via ``svc.get_run``) and produces a Word file
+    via python-docx. Charts try the matplotlib-backed
+    ``report_v3.rendering.chart_renderer`` and embed a PNG; when
+    rendering fails (no matplotlib in env, unsupported chart shape)
+    the renderer falls back to a labelled placeholder paragraph.
+    """
+    from openlia_server.services.v3_docx import render_docx as _build_docx
+
+    row, sections, charts, citations = svc.get_run(
+        db=db, user_id=user_id, report_id=report_id
+    )
+    return _build_docx(
+        report=row, sections=sections, charts=charts, citations=citations
+    )
+
+
 async def render_pdf(
     *,
     db: DBSession,
