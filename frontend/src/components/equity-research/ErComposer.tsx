@@ -83,6 +83,10 @@ interface Props {
    *  and let the prompt carry the subject. */
   ticker?: string;
   onTickerChange?: (next: string) => void;
+  /** Optional override for the left half of the mode pill (same
+   *  pattern as WelcomeStage). v3 uses this to surface the active
+   *  template name in place of the report-type label. */
+  templateLabel?: string;
 }
 
 export function ErComposer({
@@ -101,6 +105,7 @@ export function ErComposer({
   disabled,
   ticker,
   onTickerChange,
+  templateLabel,
 }: Props): JSX.Element {
   const { t } = useTranslation();
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -326,7 +331,7 @@ export function ErComposer({
               className="h-1.5 w-1.5 rounded-full bg-[--color-accent-primary] shadow-[0_0_5px_rgba(212,255,0,0.6)]"
             />
             <strong className="font-medium tracking-[0.06em] text-[--color-text-primary]">
-              {t(MODE_KEY[mode])}
+              {templateLabel ?? t(MODE_KEY[mode])}
             </strong>
             <span className="text-[--color-text-tertiary]">·</span>
             <span>{t(LENGTH_KEY[length])}</span>

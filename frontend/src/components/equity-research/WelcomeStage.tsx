@@ -17,6 +17,12 @@ interface Props {
   length: ReportLength;
   onModeRowClick: () => void;
   now?: Date;
+  /** Optional override for the left half of the mode pill. When set,
+   *  takes priority over the translated ``MODE_KEY[mode]`` label.
+   *  v3 uses this to show the active template name (built-in or
+   *  user-uploaded) since v3 doesn't distinguish "report type" from
+   *  "template" — they're the same picker. */
+  templateLabel?: string;
 }
 
 export function WelcomeStage({
@@ -25,6 +31,7 @@ export function WelcomeStage({
   length,
   onModeRowClick,
   now = new Date(),
+  templateLabel,
 }: Props): JSX.Element {
   const { t } = useTranslation();
   const reduce = useReducedMotion();
@@ -98,7 +105,7 @@ export function WelcomeStage({
         <span>{t("equity_research.mode")}</span>
         <span aria-hidden="true">·</span>
         <strong className="font-medium text-[--color-text-primary]">
-          {modePillLabel[mode]}
+          {templateLabel ?? modePillLabel[mode]}
         </strong>
         <span aria-hidden="true">·</span>
         <span>{lengthPillLabel[length]}</span>
