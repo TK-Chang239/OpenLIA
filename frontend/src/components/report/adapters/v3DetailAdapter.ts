@@ -250,12 +250,11 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
   // different from the categories/series convention the other charts
   // share.
   if (blockType === "pie_chart") {
-    const segments = data
-      .filter((d): d is CategoricalPoint => isCategoricalPoint(d))
-      .map((d) => ({
-        label: String(d.label),
-        value: Number(d.value),
-      }));
+    const segments: Array<{ label: string; value: number }> = [];
+    for (const point of data) {
+      const cat = readCategorical(point);
+      if (cat && cat.value > 0) segments.push(cat);
+    }
     if (segments.length === 0) return chartPlaceholder(chart, data.length);
     return {
       type: "pie_chart",
@@ -268,10 +267,11 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
   // Scatter expects ``series[].data: [{x, y}]`` — the categorical
   // (categories + values) shape would collapse all points onto x=0.
   if (blockType === "scatter_plot") {
-    const points = data
-      .filter((d): d is XyPoint => isXyPoint(d))
-      .map((d) => ({ x: Number(d.x), y: Number(d.y) }))
-      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+    const points: Array<{ x: number; y: number }> = [];
+    for (const point of data) {
+      const xy = readXyNumeric(point);
+      if (xy) points.push(xy);
+    }
     if (points.length === 0) return chartPlaceholder(chart, data.length);
     return {
       type: "scatter_plot",
@@ -282,34 +282,98 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
   }
 
   // Bar / column / area / line: ``categories + series[].values``.
+  // Walk each point individually instead of inferring the shape from
+  // data[0] — v3 emits a permissive ChartDataPoint with both
+  // ``{label, value}`` and ``{x, y}`` slots, and the model
+  // occasionally mixes them within one chart. Per-point dispatch
+  // tolerates that. Points whose value coerces to NaN (e.g. "$100M"
+  // with units) are dropped so they don't poison the y-axis math
+  // downstream.
   const axes = (spec.axes as Record<string, string> | undefined) ?? {};
   const seriesName = axes.y ?? "Value";
-
-  if (data.length > 0 && isCategoricalPoint(data[0])) {
-    const categories = data.map((d) => String((d as CategoricalPoint).label));
-    const values = data.map((d) => Number((d as CategoricalPoint).value));
-    return {
-      type: blockType,
-      title: chart.title,
-      categories,
-      series: [{ name: seriesName, values }],
-      source_ids: sourceIds,
-    } as ChartLikeBlock;
+  const categories: string[] = [];
+  const values: number[] = [];
+  for (const point of data) {
+    const reading = readCategorical(point);
+    if (!reading) continue;
+    categories.push(reading.label);
+    values.push(reading.value);
   }
+  if (values.length === 0) return chartPlaceholder(chart, data.length);
+  return {
+    type: blockType,
+    title: chart.title,
+    categories,
+    series: [{ name: seriesName, values }],
+    source_ids: sourceIds,
+  } as ChartLikeBlock;
+}
 
-  if (data.length > 0 && isXyPoint(data[0])) {
-    const categories = data.map((d) => String((d as XyPoint).x));
-    const values = data.map((d) => Number((d as XyPoint).y));
-    return {
-      type: blockType,
-      title: chart.title,
-      categories,
-      series: [{ name: seriesName, values }],
-      source_ids: sourceIds,
-    } as ChartLikeBlock;
+/**
+ * Read a categorical/labeled point. Accepts both ``{label, value}``
+ * and the ``{x, y}`` fallback (the v3 ChartDataPoint allows both
+ * slots and the model occasionally mixes them within one chart).
+ * Returns ``null`` when the value doesn't survive numeric coercion —
+ * NaN points poison Math.min/max downstream and silently break the
+ * chart.
+ */
+function readCategorical(
+  point: unknown,
+): { label: string; value: number } | null {
+  if (!point || typeof point !== "object") return null;
+  const p = point as Record<string, unknown>;
+  const labelSource = p.label ?? p.x;
+  const valueSource = p.value ?? p.y;
+  if (labelSource == null) return null;
+  const value = toFiniteNumber(valueSource);
+  if (value == null) return null;
+  return { label: String(labelSource), value };
+}
+
+/** Read an XY point for scatter, dropping non-finite numerics. */
+function readXyNumeric(point: unknown): { x: number; y: number } | null {
+  if (!point || typeof point !== "object") return null;
+  const p = point as Record<string, unknown>;
+  const x = toFiniteNumber(p.x);
+  const y = toFiniteNumber(p.y ?? p.value);
+  if (x == null || y == null) return null;
+  return { x, y };
+}
+
+
+/**
+ * Coerce a value to a finite number. Tolerates numeric strings
+ * ("100", "1,234.5", "$1M") by stripping common unit / separator
+ * noise — the v3 ChartDataPoint schema allows string values, and the
+ * model occasionally ships them with currency / scale suffixes.
+ */
+function toFiniteNumber(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  if (trimmed === "") return null;
+  // Strip currency, percent, thousands separators, and trailing
+  // scale suffixes the model sometimes attaches (1.2B, $4.5M).
+  const m = trimmed.match(/^[-+]?\$?\s*([0-9][0-9,]*\.?[0-9]*)\s*([%KMBT])?$/i);
+  if (!m) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
   }
-
-  return chartPlaceholder(chart, data.length);
+  const base = Number(m[1].replace(/,/g, ""));
+  if (!Number.isFinite(base)) return null;
+  const suffix = (m[2] ?? "").toUpperCase();
+  const sign = trimmed.startsWith("-") ? -1 : 1;
+  const scale =
+    suffix === "K"
+      ? 1_000
+      : suffix === "M"
+        ? 1_000_000
+        : suffix === "B"
+          ? 1_000_000_000
+          : suffix === "T"
+            ? 1_000_000_000_000
+            : 1;
+  return sign * base * scale;
 }
 
 function chartPlaceholder(chart: V3ChartRow, dataLen: number): ReportBlock {
@@ -341,21 +405,3 @@ function humaniseKey(key: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-interface CategoricalPoint {
-  label: unknown;
-  value: unknown;
-}
-interface XyPoint {
-  x: unknown;
-  y: unknown;
-}
-
-function isCategoricalPoint(v: unknown): v is CategoricalPoint {
-  if (!v || typeof v !== "object") return false;
-  return "label" in v && "value" in v;
-}
-
-function isXyPoint(v: unknown): v is XyPoint {
-  if (!v || typeof v !== "object") return false;
-  return "x" in v && "y" in v;
-}

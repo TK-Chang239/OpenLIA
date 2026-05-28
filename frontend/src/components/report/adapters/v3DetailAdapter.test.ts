@@ -1,6 +1,9 @@
+import React from "react";
 import { describe, expect, test } from "vitest";
+import { render } from "@testing-library/react";
 
 import type { V3ReportDetail } from "../../../api/equity-research-v3";
+import { LineChartBlock } from "../charts/LineChartBlock";
 import { adaptV3DetailToSchema } from "./v3DetailAdapter";
 
 const DETAIL: V3ReportDetail = {
@@ -376,6 +379,269 @@ describe("adaptV3DetailToSchema — chart shape mapping", () => {
     };
     expect(table.headers.map((h) => h.key)).toEqual(["metric", "value"]);
     expect(table.rows.length).toBe(2);
+  });
+
+  test("line chart drops NaN-producing points instead of poisoning the y-axis", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:l}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "l",
+          chart_type: "line",
+          title: "Mixed",
+          spec: {
+            data: [
+              { label: "2024", value: 100 },
+              { label: "2025", value: "n/a" }, // unparseable
+              { label: "2026", value: 300 },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const block = adaptV3DetailToSchema(detail).sections[0].blocks.find(
+      (b) => b.type === "line_chart",
+    ) as unknown as { categories: string[]; series: Array<{ values: number[] }> };
+    expect(block.categories).toEqual(["2024", "2026"]);
+    expect(block.series[0].values).toEqual([100, 300]);
+  });
+
+  test("line chart coerces numeric strings with currency/scale suffixes", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:l}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "l",
+          chart_type: "line",
+          title: "Scaled",
+          spec: {
+            data: [
+              { label: "Q1", value: "$1.2M" },
+              { label: "Q2", value: "1,500" },
+              { label: "Q3", value: "2B" },
+              { label: "Q4", value: "50%" },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const block = adaptV3DetailToSchema(detail).sections[0].blocks.find(
+      (b) => b.type === "line_chart",
+    ) as unknown as { categories: string[]; series: Array<{ values: number[] }> };
+    expect(block.categories).toEqual(["Q1", "Q2", "Q3", "Q4"]);
+    expect(block.series[0].values).toEqual([
+      1_200_000,
+      1500,
+      2_000_000_000,
+      50,
+    ]);
+  });
+
+  test("line chart accepts mixed {label,value} + {x,y} within one chart", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:l}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "l",
+          chart_type: "line",
+          title: "Mixed shapes",
+          spec: {
+            data: [
+              { label: "Q1", value: 100 },
+              { x: "Q2", y: 200 }, // model accidentally switched shape
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const block = adaptV3DetailToSchema(detail).sections[0].blocks.find(
+      (b) => b.type === "line_chart",
+    ) as unknown as { categories: string[]; series: Array<{ values: number[] }> };
+    expect(block.categories).toEqual(["Q1", "Q2"]);
+    expect(block.series[0].values).toEqual([100, 200]);
+  });
+
+  test("scatter drops points where x or y won't coerce", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:sc}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "sc",
+          chart_type: "scatter",
+          title: "Sparse",
+          spec: {
+            data: [
+              { x: 1, y: 10 },
+              { x: "n/a", y: 20 },
+              { x: 3, y: 30 },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const block = adaptV3DetailToSchema(detail).sections[0].blocks.find(
+      (b) => b.type === "scatter_plot",
+    ) as unknown as { series: Array<{ data: Array<{ x: number; y: number }> }> };
+    expect(block.series[0].data).toEqual([
+      { x: 1, y: 10 },
+      { x: 3, y: 30 },
+    ]);
+  });
+
+  test("pie chart drops zero-value segments (would render as invisible slices)", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:p}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "p",
+          chart_type: "pie",
+          title: "Pie",
+          spec: {
+            data: [
+              { label: "A", value: 60 },
+              { label: "B", value: 0 },
+              { label: "C", value: 40 },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const pie = adaptV3DetailToSchema(detail).sections[0].blocks.find(
+      (b) => b.type === "pie_chart",
+    ) as unknown as { segments: Array<{ label: string; value: number }> };
+    expect(pie.segments.map((s) => s.label)).toEqual(["A", "C"]);
+  });
+
+  test("chart with all-NaN values falls back to text placeholder", () => {
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:b}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "b",
+          chart_type: "bar",
+          title: "Broken",
+          spec: {
+            data: [
+              { label: "x", value: "n/a" },
+              { label: "y", value: "tbd" },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const block = adaptV3DetailToSchema(detail).sections[0].blocks[0] as {
+      type: string;
+      content?: string;
+    };
+    expect(block.type).toBe("text");
+    expect(block.content).toContain("Broken");
+  });
+
+  test("e2e: LineChartBlock renders a polyline from adapter output (NaN-resilient)", () => {
+    // Regression: before the per-point numeric coercion, a single
+    // unparseable value (e.g. "n/a") produced a NaN in `values[]`,
+    // which then propagated through Math.min/max and silently
+    // collapsed the chart to a blank SVG.
+    const detail = makeDetail({
+      sections: [
+        {
+          section_id: "s",
+          section_index: 0,
+          title: "S",
+          markdown: "{{chart:l}}",
+          version: 1,
+        },
+      ],
+      charts: [
+        {
+          chart_id: "l",
+          chart_type: "line",
+          title: "Revenue",
+          spec: {
+            data: [
+              { label: "2024", value: "$436M" },
+              { label: "2025", value: 575_000_000 },
+              { label: "2026", value: "n/a" },
+              { label: "2027", value: "1.2B" },
+            ],
+          },
+          rendered_url: null,
+          version: 1,
+        },
+      ],
+    });
+    const block = adaptV3DetailToSchema(detail).sections[0].blocks.find(
+      (b) => b.type === "line_chart",
+    );
+    expect(block).toBeDefined();
+    // The chart block ships shape that LineChartBlock can consume.
+    const { container } = render(
+      React.createElement(LineChartBlock, block as never),
+    );
+    // Polyline only renders when there are finite y-values.
+    expect(container.querySelectorAll("polyline.series-line").length).toBe(1);
+    // Three valid points survive ("2024", "2025", "2027").
+    expect(container.querySelectorAll("circle.series-dot").length).toBe(3);
   });
 
   test("unrecognised chart_type emits a TextBlock placeholder", () => {
