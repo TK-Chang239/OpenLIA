@@ -49,6 +49,7 @@ class FakeLLMProvider(LLMProvider):
         credentials: ProviderCredentials | None = None,
         model: str = "fake-model",
         capabilities: Capabilities | None = None,
+        per_call_delay_seconds: float = 0.0,
     ) -> None:
         super().__init__(
             credentials=credentials
@@ -59,11 +60,19 @@ class FakeLLMProvider(LLMProvider):
         self.scripted_responses = list(scripted_responses or [])
         self.captured_requests = []
         self._cursor = 0
+        # Awaited before returning each canned response. Tests that
+        # need to race the runner (cancel mid-loop, deadline expiry)
+        # set this so each turn yields real time on the event loop.
+        self.per_call_delay_seconds = per_call_delay_seconds
 
     async def list_models(self) -> list[ModelInfo]:
         return [ModelInfo(id=self.model, display_name=self.model)]
 
     async def generate(self, request: LLMRequest) -> LLMResponse:
+        import asyncio as _asyncio
+
+        if self.per_call_delay_seconds:
+            await _asyncio.sleep(self.per_call_delay_seconds)
         self.captured_requests.append(request)
         if self._cursor >= len(self.scripted_responses):
             raise RuntimeError(

@@ -361,6 +361,25 @@ def _make_lifespan(
         browser_launcher = BrowserLauncher()
         app.state.browser_launcher = browser_launcher
 
+        # v3 streaming infrastructure: in-memory broker fanned out to
+        # SSE subscribers + per-run cancel-token registry. Lives for
+        # the lifetime of the process; nothing persisted here.
+        from openlia.llm.runtime.report_v3 import EventBroker
+
+        from openlia_server.services.v3_run_service import (
+            cleanup_orphaned_running_rows as _v3_cleanup,
+        )
+
+        app.state.v3_event_broker = EventBroker()
+        app.state.v3_cancel_registry = {}
+        _v3_sweep_sf = db_session_factory or _default_session_factory
+        with _v3_sweep_sf() as _v3_sweep_db:
+            _v3_swept = _v3_cleanup(db=_v3_sweep_db)
+        if _v3_swept:
+            log.info(
+                "startup sweep: marked %d orphaned v3 run(s) as failed", _v3_swept
+            )
+
         from openlia_server.routes.reports import _resolve_frontend_dist
         from openlia_server.services.render_base_url import (
             RenderBaseUrlResolver,
