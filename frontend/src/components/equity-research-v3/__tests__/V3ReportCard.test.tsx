@@ -75,22 +75,26 @@ describe("V3ReportCard", () => {
     openSpy.mockRestore();
   });
 
-  test("PDF + Word + Standalone anchors point at the v3 export URLs", () => {
+  test("Standalone anchor still points at the v3 HTML endpoint", () => {
     render(<V3ReportCard detail={BASE_DETAIL} />);
-    const pdf = screen.getByTestId("er-v3-report-card-pdf") as HTMLAnchorElement;
-    const docx = screen.getByTestId("er-v3-report-card-docx") as HTMLAnchorElement;
     const standalone = screen.getByTestId(
       "er-v3-report-card-standalone",
     ) as HTMLAnchorElement;
-    expect(pdf.getAttribute("href")).toContain(
-      "/api/departments/equity-research/v3/runs/abc-123/pdf",
-    );
-    expect(docx.getAttribute("href")).toContain(
-      "/api/departments/equity-research/v3/runs/abc-123/docx",
-    );
     expect(standalone.getAttribute("href")).toContain(
       "/api/departments/equity-research/v3/runs/abc-123/html",
     );
+  });
+
+  test("Download + Save-to-repo buttons render alongside Open report", () => {
+    render(<V3ReportCard detail={BASE_DETAIL} />);
+    // Consolidated dropdown — the inline PDF/Word buttons collapse
+    // into a single ReportDownloadButton with format options.
+    expect(
+      screen.getByTestId("er-v3-report-card-download"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("er-v3-report-card-save"),
+    ).toBeInTheDocument();
   });
 
   test('shows the "Ready" status pill by default', () => {
