@@ -72,6 +72,9 @@ from openlia_server.routes.departments.equity_research_v2_3_sse import (
 from openlia_server.routes.departments.equity_research_v2_models import (
     build_equity_research_v2_models_router,
 )
+from openlia_server.routes.departments.equity_research_v3 import (
+    build_equity_research_v3_router,
+)
 from openlia_server.routes.departments.macro_research import (
     build_macro_research_router,
 )
@@ -736,6 +739,7 @@ def create_app(
         build_equity_research_v2_3_models_router(db_session_factory=factory, mode=mode)
     )
     app.include_router(build_equity_research_v2_3_sse_router(db_session_factory=factory, mode=mode))
+    app.include_router(build_equity_research_v3_router(db_session_factory=factory, mode=mode))
     # Wire the v2.3 runner factory when an OpenAI-backed CLARIFY model is
     # configured via env (OPENAI_API_KEY + OPENLIA_V2_3_CLARIFY_MODEL). If
     # the env is incomplete the factory stays unset and the v2.3 routes
