@@ -22,20 +22,26 @@ write-path through to the DB.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from openlia.llm.runtime.report_v3 import (
+    BrokerEmitter,
+    CancelToken,
     CapabilityError,
     DataTransports,
+    EventBroker,
     LLMSession,
     Runner,
     RunRequest,
     RunResult,
 )
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session as DBSession
 
 from openlia_server.db.models.report_v3 import (
@@ -45,6 +51,13 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
     ReportV3ToolCallLog,
 )
+
+log = logging.getLogger(__name__)
+
+# Strong references to in-flight background tasks. asyncio.create_task
+# only keeps a weak reference internally, so a task can be GC'd mid-run
+# if no one holds it. We add on create and discard on completion.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 
 class ReportNotFoundError(LookupError):
@@ -172,6 +185,207 @@ def delete_run(*, db: DBSession, user_id: str, report_id: str) -> None:
     row = _load_report(db=db, user_id=user_id, report_id=report_id)
     db.delete(row)
     db.flush()
+
+
+# ---------------------------------------------------------------------------
+# Async / streaming variant
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class StartRunHandle:
+    """Lightweight handle returned by ``start_run_async``.
+
+    The route immediately returns ``report_id`` to the client; the
+    background task continues running independently. The client then
+    connects to the SSE endpoint keyed by ``report_id`` to receive
+    progress events.
+    """
+
+    report_id: str
+
+
+def start_run_async(
+    *,
+    db: DBSession,
+    user_id: str,
+    request: RunRequest,
+    session_factory: Callable[[], DBSession],
+    broker: EventBroker,
+    cancel_registry: dict[str, CancelToken],
+    runner: Runner | None = None,
+    llm_session: LLMSession | None = None,
+    transports: DataTransports | None = None,
+) -> StartRunHandle:
+    """Create the Report row, schedule the runner as a background task.
+
+    Returns immediately with the new report_id. The background task
+    publishes events through ``broker`` keyed by report_id. Cancel
+    tokens land in ``cancel_registry`` so the cancel endpoint can
+    flip them without sharing object references through HTTP.
+
+    ``session_factory`` must return a fresh DB session — the request
+    session that owns ``db`` closes when the route returns, so the
+    background task does its own write inside its own session.
+    """
+    report_id = str(uuid.uuid4())
+    created_at = datetime.now(UTC)
+
+    row = ReportV3(
+        id=report_id,
+        user_id=user_id,
+        subject=request.subject,
+        template_id=request.template.template_id,
+        language=request.language.value,
+        length=request.length.value,
+        provider_kind=request.provider_kind,
+        model=request.model,
+        status="running",
+        error_message=None,
+        created_at=created_at,
+        completed_at=None,
+    )
+    db.add(row)
+    db.flush()
+
+    cancel_token = CancelToken()
+    cancel_registry[report_id] = cancel_token
+
+    bg_runner = runner or _default_runner(transports)
+    emitter = BrokerEmitter(broker=broker, report_id=report_id)
+
+    task = asyncio.create_task(
+        _run_in_background(
+            report_id=report_id,
+            user_id=user_id,
+            request=request,
+            runner=bg_runner,
+            session=llm_session,
+            emitter=emitter,
+            cancel_token=cancel_token,
+            session_factory=session_factory,
+            broker=broker,
+            cancel_registry=cancel_registry,
+        )
+    )
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+    return StartRunHandle(report_id=report_id)
+
+
+async def _run_in_background(
+    *,
+    report_id: str,
+    user_id: str,
+    request: RunRequest,
+    runner: Runner,
+    session: LLMSession | None,
+    emitter: BrokerEmitter,
+    cancel_token: CancelToken,
+    session_factory: Callable[[], DBSession],
+    broker: EventBroker,
+    cancel_registry: dict[str, CancelToken],
+) -> None:
+    """Run the engine in a background task.
+
+    Always finishes the broker subscription (success, failure, or
+    cancel) so connected SSE consumers see a terminal event. Always
+    drops the cancel token from the registry so cancel-after-finish
+    is a no-op rather than a memory leak.
+    """
+    del user_id  # not currently used post-row-creation; reserved for audit logs
+    try:
+        try:
+            result = await runner.run(
+                request,
+                session=session,
+                emitter=emitter,
+                cancel_token=cancel_token,
+            )
+        except CapabilityError as exc:
+            _mark_failed(session_factory, report_id, str(exc))
+            return
+        except Exception as exc:
+            log.exception("v3 run %s crashed unexpectedly", report_id)
+            _mark_failed(session_factory, report_id, f"unexpected: {exc}")
+            return
+
+        _persist_background_outcome(
+            session_factory=session_factory,
+            report_id=report_id,
+            result=result,
+            runner=runner,
+        )
+    finally:
+        cancel_registry.pop(report_id, None)
+        broker.finish(report_id)
+
+
+def _mark_failed(
+    session_factory: Callable[[], DBSession],
+    report_id: str,
+    error_message: str,
+) -> None:
+    """Update the Report row to failed when the engine never returned a result."""
+    with session_factory() as bg_db:
+        row = bg_db.get(ReportV3, report_id)
+        if row is None:
+            log.warning("v3 background failure for missing report %s", report_id)
+            return
+        row.status = "failed"
+        row.error_message = error_message
+        row.completed_at = datetime.now(UTC)
+        bg_db.commit()
+
+
+def _persist_background_outcome(
+    *,
+    session_factory: Callable[[], DBSession],
+    report_id: str,
+    result: RunResult,
+    runner: Runner,
+) -> None:
+    """Persist the full outcome from a background task using a fresh session."""
+    with session_factory() as bg_db:
+        row = bg_db.get(ReportV3, report_id)
+        if row is None:
+            log.warning("v3 background outcome for missing report %s", report_id)
+            return
+        _persist_outcome(db=bg_db, report_row=row, result=result, runner=runner)
+        bg_db.commit()
+
+
+def cancel_run(*, cancel_registry: dict[str, CancelToken], report_id: str) -> bool:
+    """Flip the cancel flag for a running v3 run; return True if found."""
+    token = cancel_registry.get(report_id)
+    if token is None:
+        return False
+    token.cancel()
+    return True
+
+
+def cleanup_orphaned_running_rows(
+    *,
+    db: DBSession,
+    reason: str = "server restart — run did not complete",
+) -> int:
+    """Mark every ``status='running'`` row as 'failed' on server boot.
+
+    Background tasks die with the process; rows they left behind
+    would otherwise sit in the "running" state forever and confuse
+    the list view. Run once during app startup. Returns the count
+    of rows updated.
+    """
+    now = datetime.now(UTC)
+    stmt = (
+        update(ReportV3)
+        .where(ReportV3.status == "running")
+        .values(status="failed", error_message=reason, completed_at=now)
+    )
+    result = db.execute(stmt)
+    db.commit()
+    return result.rowcount or 0
 
 
 # ---------------------------------------------------------------------------

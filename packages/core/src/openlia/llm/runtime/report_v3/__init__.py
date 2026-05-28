@@ -6,6 +6,16 @@ main loop. Persistence and rendering land in Phase 2. See
 ``planning/2026-05-27-equity-research-v3-single-model-spec.md``.
 """
 
+from .events import (
+    BrokerEmitter,
+    CancelToken,
+    Event,
+    EventBroker,
+    EventEmitter,
+    ListEmitter,
+    NullEmitter,
+    is_finish_sentinel,
+)
 from .ledger import CitationLedger
 from .runner import DataTransports, Runner
 from .schemas import (
@@ -25,6 +35,8 @@ from .session import CapabilityError, CredentialError, LLMSession
 from .workspace import RunWorkspace, WrittenSection
 
 __all__ = [
+    "BrokerEmitter",
+    "CancelToken",
     "CapabilityError",
     "ChartDataPoint",
     "ChartSpec",
@@ -33,8 +45,13 @@ __all__ = [
     "CitationLogEntry",
     "CredentialError",
     "DataTransports",
+    "Event",
+    "EventBroker",
+    "EventEmitter",
     "LLMSession",
     "Language",
+    "ListEmitter",
+    "NullEmitter",
     "ReportLength",
     "RunRequest",
     "RunResult",
@@ -44,4 +61,5 @@ __all__ = [
     "SectionSpec",
     "TemplateSpec",
     "WrittenSection",
+    "is_finish_sentinel",
 ]
