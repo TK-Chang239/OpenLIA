@@ -47,12 +47,31 @@ export interface V3StartPayload {
   language?: V3Language;
   length?: V3ReportLength;
   report_type?: V3ReportType;
+  // When set, resolves against ``report_v3_templates`` (built-in or
+  // user upload). When omitted, the server falls back to the
+  // ``report_type`` default built-in.
+  template_id?: string | null;
   provider_kind: string;
   model: string;
   // Wire enum has "medium" | "high" only; the UI's "off" maps to
   // ``null`` (the field is dropped from the payload) and the server's
   // ReasoningEffort default leaves thinking off on the adapter side.
   reasoning_effort?: "medium" | "high" | null;
+}
+
+export interface V3TemplateSummary {
+  id: string;
+  name: string;
+  is_builtin: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface V3TemplateCreatePayload {
+  name: string;
+  markdown: string;
+  source_doc_blob?: string | null;
+  source_doc_mime?: string | null;
 }
 
 export interface V3Section {
@@ -254,4 +273,28 @@ export function cancelV3Run(reportId: string): Promise<{ cancelled: boolean }> {
  */
 export function v3EventsUrl(reportId: string): string {
   return `${PREFIX}/runs/${encodeURIComponent(reportId)}/events`;
+}
+
+// ---------------------------------------------------------------------------
+// Templates surface (PR3)
+// ---------------------------------------------------------------------------
+
+export function listV3Templates(): Promise<V3TemplateSummary[]> {
+  return request<V3TemplateSummary[]>(`${PREFIX}/templates`);
+}
+
+export function uploadV3Template(
+  payload: V3TemplateCreatePayload,
+): Promise<V3TemplateSummary> {
+  return request<V3TemplateSummary>(`${PREFIX}/templates`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteV3Template(templateId: string): Promise<void> {
+  return request<void>(
+    `${PREFIX}/templates/${encodeURIComponent(templateId)}`,
+    { method: "DELETE" },
+  );
 }

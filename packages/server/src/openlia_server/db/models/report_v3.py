@@ -30,14 +30,17 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from openlia_server.db.base import Base, UTCDateTime
@@ -177,6 +180,65 @@ class ReportV3Citation(Base):
             name="uq_report_v3_citations_report_id_source_id",
         ),
         Index("ix_report_v3_citations_report_id", "report_id"),
+    )
+
+
+class ReportV3Template(Base):
+    """v3 equity-research template — built-in or user-uploaded.
+
+    v3 owns its own template storage rather than reusing v2.3's
+    ``report_templates`` table so the two engines stay independent
+    (deletion semantics, lifecycle, eventual schema drift all live
+    on their own track). The runtime schema is reused (``TemplateSpec``
+    from v2.3 is already engine-agnostic) — only the storage and
+    discovery surface is v3-specific.
+
+    Built-in rows are seeded by the migration:
+      - ``id`` = the built-in's stable template_id
+        (``initiation_default`` etc.)
+      - ``user_id`` = NULL
+      - ``is_builtin`` = True
+      - ``deleted_at`` is never set on built-ins
+
+    User uploads:
+      - ``id`` = UUID
+      - ``user_id`` = the owner
+      - ``is_builtin`` = False
+      - ``source_markdown`` / ``source_doc_blob`` / ``source_doc_mime``
+        hold the original upload so a future re-parse / edit flow can
+        round-trip without losing fidelity
+      - ``deleted_at`` flips on owner-scoped soft-delete; the resolver
+        ignores soft-deleted rows but they linger for audit
+    """
+
+    __tablename__ = "report_v3_templates"
+
+    id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    is_builtin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Serialized ``TemplateSpec.model_dump()``. Reads go through
+    # ``TemplateSpec.model_validate`` to reconstitute the runtime object.
+    template_spec_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # Original upload artifacts — null for built-ins. Stored verbatim so
+    # the review UI can re-render the source.
+    source_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_doc_blob: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    source_doc_mime: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    # Soft-delete tombstone. Resolver and list endpoint filter on
+    # ``deleted_at IS NULL`` so soft-deleted rows are invisible to the
+    # user but available for audit / forensic recovery.
+    deleted_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_report_v3_templates"),
+        Index("ix_report_v3_templates_user_id", "user_id"),
     )
 
 
