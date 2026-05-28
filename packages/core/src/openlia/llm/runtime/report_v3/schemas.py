@@ -27,6 +27,8 @@ __all__ = [
     "ChartSpec",
     "ChartType",
     "CitationLogEntry",
+    "CoverMetric",
+    "CoverSpec",
     "Language",
     "ReportLength",
     "RunRequest",
@@ -176,11 +178,50 @@ class ReviseContext(BaseModel):
     prior_citations: list[PriorCitation] = Field(default_factory=list)
 
 
+class CoverMetric(BaseModel):
+    """One headline metric card on the report cover.
+
+    Values are strings (not floats) so the model can ship pre-formatted
+    figures with units like ``"$1.2B"``, ``"24.7%"``, or ``"3.1x"``
+    without the engine re-doing the formatting. ``change`` carries an
+    optional period-over-period delta (``"+18% YoY"`` / ``"(0.45)"``)
+    and ``tone`` lets the model nudge the renderer toward green/red
+    typography when the delta is directional.
+    """
+
+    label: str = Field(..., min_length=1)
+    value: str = Field(..., min_length=1)
+    change: str | None = None
+    tone: Literal["positive", "negative", "neutral"] | None = None
+
+
+class CoverSpec(BaseModel):
+    """Cover hero content the model emits via ``set_cover``.
+
+    All fields are optional — an unpopulated cover renders with just
+    the subject + eyebrow (template label + date) and the renderer
+    suppresses the empty rows. The model is encouraged to call
+    ``set_cover`` once near the end of the run with the headline
+    thesis, 3-5 TLDR bullets, a handful of key metrics, and the
+    investment rating; revisions can call ``set_cover`` again to
+    overwrite (last write wins).
+    """
+
+    subtitle: str | None = None
+    tagline: str | None = None
+    tldr: list[str] = Field(default_factory=list)
+    key_metrics: list[CoverMetric] = Field(default_factory=list)
+    rating: str | None = None
+    upside_pct: float | None = None
+
+
 class RunResult(BaseModel):
     """Output of a v3 run.
 
     Phase 0 returns a placeholder; subsequent phases populate
     ``sections``, ``charts``, and ``citations`` from the ledger.
+    ``cover`` is populated when the model called ``set_cover`` during
+    the run; otherwise it stays None and the cover renders bare.
     """
 
     status: RunStatus
@@ -190,3 +231,4 @@ class RunResult(BaseModel):
     sections: list[dict[str, Any]] = Field(default_factory=list)
     charts: list[ChartSpec] = Field(default_factory=list)
     citations: list[CitationLogEntry] = Field(default_factory=list)
+    cover: CoverSpec | None = None

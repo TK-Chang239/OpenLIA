@@ -33,16 +33,20 @@
 import type {
   ChartLikeBlock,
   Citation,
+  DeltaDirection,
   MetaStats,
+  Metric,
   ReportBlock,
   ReportCover,
   ReportSchema,
   ReportSection,
   TableBlock,
+  Tone,
 } from "../../../api/reports";
 import type {
   V3CitationRow,
   V3ChartRow,
+  V3CoverMetric,
   V3ReportDetail,
 } from "../../../api/equity-research-v3";
 
@@ -182,21 +186,53 @@ function rewriteCitations(
 function buildCover(detail: V3ReportDetail): ReportCover {
   const eyebrow =
     TEMPLATE_EYEBROW[detail.report.template_id] ?? "Equity Research Report";
+  const cover = detail.cover ?? null;
   return {
     eyebrow,
     title: detail.report.subject,
-    // ``subtitle`` + ``tagline`` are required strings on ReportCover.
-    // v3 doesn't have an analyst-style headline yet, so keep them
-    // empty — the cover hero renders as just the title + eyebrow.
-    subtitle: "",
-    tagline: "",
-    tldr: [],
+    // v1's ReportCover requires subtitle + tagline as strings. When
+    // the model hasn't populated them via set_cover, fall back to
+    // empty so the hero degrades to just the title + eyebrow.
+    subtitle: cover?.subtitle ?? "",
+    tagline: cover?.tagline ?? "",
+    tldr: cover?.tldr ?? [],
     tldr_label: "Highlights",
-    key_metrics: [],
+    key_metrics: (cover?.key_metrics ?? []).map(adaptCoverMetric),
     ticker: detail.report.subject || null,
-    consensus_rating: null,
-    consensus_upside_pct: null,
+    consensus_rating: cover?.rating ?? null,
+    consensus_upside_pct:
+      typeof cover?.upside_pct === "number" ? cover.upside_pct : null,
   };
+}
+
+function adaptCoverMetric(metric: V3CoverMetric): Metric {
+  const direction = toneToDirection(metric.tone);
+  const tone = toneToV1Tone(metric.tone);
+  return {
+    label: metric.label,
+    value: metric.value,
+    delta: metric.change ?? null,
+    delta_direction: direction,
+    tag: tone ? { label: "", tone } : null,
+  };
+}
+
+function toneToDirection(
+  tone: V3CoverMetric["tone"] | undefined,
+): DeltaDirection | null {
+  if (tone === "positive") return "up";
+  if (tone === "negative") return "down";
+  if (tone === "neutral") return "flat";
+  return null;
+}
+
+function toneToV1Tone(
+  tone: V3CoverMetric["tone"] | undefined,
+): Tone | null {
+  if (tone === "positive" || tone === "negative" || tone === "neutral") {
+    return tone;
+  }
+  return null;
 }
 
 function buildMetaStats(

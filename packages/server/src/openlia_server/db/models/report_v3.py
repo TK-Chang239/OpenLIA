@@ -74,6 +74,10 @@ class ReportV3(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(UTCDateTime(), nullable=True)
+    # JSON-serialised CoverSpec from the model's ``set_cover`` tool call.
+    # Nullable so older rows (and runs where the model skipped set_cover)
+    # render with the bare cover. PR9.
+    cover_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3"),

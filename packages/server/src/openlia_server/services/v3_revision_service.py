@@ -360,6 +360,14 @@ def _persist_revision_outcome(
                 )
             )
 
+        # ----- Cover: overwrite only if the revision called set_cover.
+        # The runner only puts ``result.cover`` on the result when the
+        # model called set_cover this run; otherwise it stays None and
+        # the prior cover is preserved (last write wins across runs +
+        # revisions, but a no-op revision doesn't blank the cover).
+        if result.cover is not None:
+            parent_row.cover_json = result.cover.model_dump_json()
+
         bg_db.flush()
         _recompute_display_indices(bg_db, report_id)
 

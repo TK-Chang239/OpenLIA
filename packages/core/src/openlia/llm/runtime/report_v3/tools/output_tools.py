@@ -33,17 +33,18 @@ from ...report_v2_3.research import (
     ToolResult,
 )
 from ...report_v2_3.schemas import ComputedSource
-from ..schemas import ChartSpec
+from ..schemas import ChartSpec, CoverSpec
 from ..workspace import RunWorkspace, WrittenSection
 
 CITATION_MARKER_RE = re.compile(r"\[\^([a-z0-9_]+)\]")
 
 
 def build_output_tools(*, workspace: RunWorkspace) -> list[ResearchTool]:
-    """Return write_section + emit_chart + finalize tools."""
+    """Return write_section + emit_chart + set_cover + finalize tools."""
     return [
         _build_write_section_tool(workspace),
         _build_emit_chart_tool(workspace),
+        _build_set_cover_tool(workspace),
         _build_finalize_tool(workspace),
     ]
 
@@ -252,6 +253,122 @@ def _build_emit_chart_tool(workspace: RunWorkspace) -> ResearchTool:
                     },
                 },
                 "required": ["chart_id", "chart_type", "title", "data"],
+                "additionalProperties": False,
+            },
+        ),
+        execute=_execute,
+    )
+
+
+# ---------------------------------------------------------------------------
+# set_cover
+# ---------------------------------------------------------------------------
+
+
+def _build_set_cover_tool(workspace: RunWorkspace) -> ResearchTool:
+    def _execute(args: dict[str, Any]) -> ToolResult:
+        try:
+            spec = CoverSpec.model_validate(args)
+        except ValidationError as exc:
+            raise ToolExecutionError(
+                "Invalid cover spec: "
+                f"{exc.errors(include_url=False, include_context=False)}"
+            ) from exc
+        workspace.set_cover(spec)
+        return ToolResult(
+            payload={
+                "ok": True,
+                "tldr_count": len(spec.tldr),
+                "metrics_count": len(spec.key_metrics),
+                "rating": spec.rating,
+            },
+            provenance=ComputedSource(method="set_cover", derived_from=["(workspace)"]),
+            summary="Cover populated.",
+        )
+
+    return ResearchTool(
+        descriptor=ToolDescriptor(
+            name="set_cover",
+            description=(
+                "Populate the report's cover hero with the headline "
+                "thesis, 3-5 TLDR bullets, key metric cards, and "
+                "investment rating. Call once near the end of the run "
+                "(after most sections are written, before finalize). "
+                "Last call wins if invoked more than once — useful for "
+                "revisions that want to update the rating or thesis. "
+                "All fields are optional; pass only what's confident."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "subtitle": {
+                        "type": "string",
+                        "description": (
+                            "Short analyst-style subtitle, e.g. "
+                            "'Q1 2026 update' or 'Sector deep-dive'."
+                        ),
+                    },
+                    "tagline": {
+                        "type": "string",
+                        "description": (
+                            "One-sentence headline thesis "
+                            "(max ~120 chars). Sets the tone "
+                            "of the whole report."
+                        ),
+                    },
+                    "tldr": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "3-5 bullet takeaways. Each bullet ~1 "
+                            "sentence. Drives the cover Highlights "
+                            "panel."
+                        ),
+                    },
+                    "key_metrics": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": {"type": "string"},
+                                "value": {
+                                    "type": "string",
+                                    "description": (
+                                        "Pre-formatted value with units, "
+                                        "e.g. '$1.2B', '24.7%', '3.1x'."
+                                    ),
+                                },
+                                "change": {
+                                    "type": "string",
+                                    "description": (
+                                        "Optional period-over-period "
+                                        "delta, e.g. '+18% YoY'."
+                                    ),
+                                },
+                                "tone": {
+                                    "type": "string",
+                                    "enum": ["positive", "negative", "neutral"],
+                                },
+                            },
+                            "required": ["label", "value"],
+                        },
+                        "description": "3-6 headline metric cards.",
+                    },
+                    "rating": {
+                        "type": "string",
+                        "description": (
+                            "Investment rating, e.g. 'Buy', 'Hold', "
+                            "'Overweight', 'N/A'."
+                        ),
+                    },
+                    "upside_pct": {
+                        "type": "number",
+                        "description": (
+                            "Implied upside vs. current price as a "
+                            "percentage (e.g. 18.5 for +18.5%)."
+                        ),
+                    },
+                },
                 "additionalProperties": False,
             },
         ),

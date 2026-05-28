@@ -27,7 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from .ledger import CitationLedger
-from .schemas import ChartSpec, RunResult, TemplateSpec
+from .schemas import ChartSpec, CoverSpec, RunResult, TemplateSpec
 
 
 @dataclass
@@ -64,6 +64,13 @@ class RunWorkspace:
     # reads these to know which entries need a new version row.
     sections_written_this_run: set[str] = field(default_factory=set)
     charts_written_this_run: set[str] = field(default_factory=set)
+    # Cover hero content from the model's ``set_cover`` tool call.
+    # None until the model emits one; last write wins if it calls
+    # ``set_cover`` more than once (or during a revision). The
+    # renderer surfaces this on the v1 ReportCover via the v3
+    # detail adapter.
+    cover: CoverSpec | None = None
+    cover_written_this_run: bool = False
 
     def __post_init__(self) -> None:
         if not self.section_order:
@@ -90,6 +97,14 @@ class RunWorkspace:
     def note_chart_written(self, chart_id: str) -> None:
         self.charts_written_this_run.add(chart_id)
 
+    def set_cover(self, cover: CoverSpec) -> None:
+        """Replace the workspace's cover spec. Called by the
+        ``set_cover`` tool; flips ``cover_written_this_run`` so the
+        revision persistence layer can decide whether to overwrite the
+        prior cover or keep it."""
+        self.cover = cover
+        self.cover_written_this_run = True
+
     def to_result(self, *, status: str, message: str = "") -> RunResult:
         ordered_sections = []
         for sid in self.section_order:
@@ -111,4 +126,5 @@ class RunWorkspace:
             sections=ordered_sections,
             charts=list(self.charts.values()),
             citations=self.ledger.all(),
+            cover=self.cover,
         )
