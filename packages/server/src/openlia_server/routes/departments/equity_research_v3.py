@@ -31,7 +31,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openlia.llm.runtime.report_v2_3.schemas import ReportType
 from openlia.llm.runtime.report_v2_3.templates.builtins import get_builtin
@@ -61,6 +61,7 @@ from openlia_server.db.models.report_v3 import (
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import v3_render_service as render_svc
 from openlia_server.services import v3_run_service as svc
+from openlia_server.services import v3_template_service as templates_svc
 
 _ENV_FLAG = "REPORT_ENGINE_VERSION"
 _ENABLED_VALUE = "v3"
@@ -75,9 +76,12 @@ class StartV3Payload(BaseModel):
     subject: str = Field(..., min_length=1)
     language: Language = Language.EN
     length: ReportLength = ReportLength.NORMAL
-    # Phase 0 resolves the template from the ``report_type`` built-in
-    # registry. Phase 1.5 will accept user-uploaded templates via a
-    # separate ``template_id`` field; Phase 0 keeps the surface minimal.
+    # ``template_id`` resolves against ``report_v3_templates`` (built-in
+    # or user-uploaded). When omitted, falls back to the ``report_type``
+    # default built-in. The frontend always sends one of the two; the
+    # report_type fallback exists so legacy clients and tests stay
+    # green.
+    template_id: str | None = None
     report_type: ReportType = ReportType.INITIATION
     provider_kind: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
@@ -133,6 +137,35 @@ class ReportDetailOut(BaseModel):
     sections: list[SectionOut]
     charts: list[ChartOut]
     citations: list[CitationOut]
+
+
+class TemplateOut(BaseModel):
+    """Listing/return shape for a v3 template.
+
+    Holds metadata only; the spec body is not returned to the client
+    (it's only needed at run dispatch time, where the route loads it
+    via ``resolve_template`` directly).
+    """
+
+    id: str
+    name: str
+    is_builtin: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class TemplateCreatePayload(BaseModel):
+    """Upload payload — markdown + display name.
+
+    ``source_doc_blob`` / ``source_doc_mime`` are optional and let the
+    UI round-trip the original upload (.md vs ingested .docx) so a
+    future re-parse / edit flow can show the source.
+    """
+
+    name: str = Field(..., min_length=1, max_length=256)
+    markdown: str = Field(..., min_length=1)
+    source_doc_blob: bytes | None = None
+    source_doc_mime: str | None = Field(default=None, max_length=128)
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +300,26 @@ def build_equity_research_v3_router(
         tags=["equity-research-v3"],
     )
 
+    def _resolve_template_for_run(
+        *, db: DBSession, user_id: str, payload: StartV3Payload
+    ) -> TemplateSpec:
+        """Pick the template the engine should follow.
+
+        Priority: explicit ``template_id`` (user-uploaded or built-in
+        looked up via the DB) > fallback to the ``report_type``
+        built-in resolved through the in-code registry. The in-code
+        fallback keeps legacy clients and pre-migration tests green;
+        new clients always send ``template_id``.
+        """
+        if payload.template_id:
+            try:
+                return templates_svc.resolve_template(
+                    db=db, user_id=user_id, template_id=payload.template_id
+                )
+            except templates_svc.TemplateNotFoundError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return get_builtin(payload.report_type)
+
     @router.post("/runs", response_model=StartV3Response)
     async def start_run(
         payload: StartV3Payload,
@@ -276,7 +329,9 @@ def build_equity_research_v3_router(
         if not _engine_enabled():
             raise _engine_disabled()
 
-        template: TemplateSpec = get_builtin(payload.report_type)
+        template: TemplateSpec = _resolve_template_for_run(
+            db=db, user_id=user.id, payload=payload
+        )
         run_request = RunRequest(
             subject=payload.subject,
             template=template,
@@ -368,7 +423,9 @@ def build_equity_research_v3_router(
             raise _engine_disabled()
         broker, cancel_registry = _streaming_state(request)
 
-        template: TemplateSpec = get_builtin(payload.report_type)
+        template: TemplateSpec = _resolve_template_for_run(
+            db=db, user_id=user.id, payload=payload
+        )
         run_request = RunRequest(
             subject=payload.subject,
             template=template,
@@ -515,5 +572,79 @@ def build_equity_research_v3_router(
                 ),
             },
         )
+
+    # ------------------------------------------------------------------
+    # Templates CRUD — PR3
+    #
+    # Built-ins are seeded by the ``2026-05-27_2300_report_v3_templates``
+    # migration and visible to every user. User uploads are owner-scoped
+    # and soft-deleted (the resolver filters on ``deleted_at IS NULL``).
+    # ------------------------------------------------------------------
+
+    @router.get("/templates", response_model=list[TemplateOut])
+    def list_templates(
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> list[TemplateOut]:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        rows = templates_svc.list_templates(db=db, user_id=user.id)
+        return [
+            TemplateOut(
+                id=r.id,
+                name=r.name,
+                is_builtin=r.is_builtin,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    @router.post(
+        "/templates",
+        response_model=TemplateOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def upload_template(
+        payload: TemplateCreatePayload,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> TemplateOut:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            row = templates_svc.create_template_from_markdown(
+                db=db,
+                user_id=user.id,
+                name=payload.name,
+                markdown=payload.markdown,
+                source_doc_blob=payload.source_doc_blob,
+                source_doc_mime=payload.source_doc_mime,
+            )
+        except templates_svc.TemplateValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return TemplateOut(
+            id=row.id,
+            name=row.name,
+            is_builtin=row.is_builtin,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def delete_template(
+        template_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            templates_svc.soft_delete_template(
+                db=db, user_id=user.id, template_id=template_id
+            )
+        except templates_svc.TemplateNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
