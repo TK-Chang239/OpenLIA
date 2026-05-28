@@ -450,3 +450,42 @@ async def test_run_without_set_cover_leaves_cover_json_null(
     row = db_session.get(ReportV3, outcome.report_id)
     assert row is not None
     assert row.cover_json is None
+
+
+# ---------------------------------------------------------------------------
+# reasoning_effort persistence (PR12 follow-up)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reasoning_effort_persists_on_report_row(
+    create_tables, db_session: Session
+):
+    from openlia.llm.types import ReasoningEffort
+
+    user = _make_user(db_session)
+    req = _request().model_copy(update={"reasoning_effort": ReasoningEffort.HIGH})
+    runner, session = _runner_with(_happy_path_script(req))
+    outcome = await svc.start_run(
+        db=db_session, user_id=user.id, request=req, runner=runner, session=session
+    )
+    db_session.flush()
+    row = db_session.get(ReportV3, outcome.report_id)
+    assert row is not None
+    assert row.reasoning_effort == "high"
+
+
+@pytest.mark.asyncio
+async def test_reasoning_effort_null_when_request_omits_it(
+    create_tables, db_session: Session
+):
+    user = _make_user(db_session)
+    req = _request()  # defaults to reasoning_effort=None
+    runner, session = _runner_with(_happy_path_script(req))
+    outcome = await svc.start_run(
+        db=db_session, user_id=user.id, request=req, runner=runner, session=session
+    )
+    db_session.flush()
+    row = db_session.get(ReportV3, outcome.report_id)
+    assert row is not None
+    assert row.reasoning_effort is None

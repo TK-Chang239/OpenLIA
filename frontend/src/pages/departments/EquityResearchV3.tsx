@@ -24,15 +24,19 @@ import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/_request";
 import {
-  type V3Event,
   type V3ReportDetail,
   type V3StartPayload,
   getV3Run,
+  startV3Revision,
   startV3RunAsync,
 } from "../../api/equity-research-v3";
 import { useAuth } from "../../auth/AuthContext";
 import { ErComposer } from "../../components/equity-research/ErComposer";
 import { WelcomeStage } from "../../components/equity-research/WelcomeStage";
+import {
+  V3ChatThread,
+  type ChatSettingsSnapshot,
+} from "../../components/equity-research-v3/V3ChatThread";
 import {
   V3ModelPicker,
   type V3ModelSelection,
@@ -41,8 +45,6 @@ import {
   V3ReportSettingsModal,
   type V3SettingsValue,
 } from "../../components/equity-research-v3/V3ReportSettingsModal";
-import { V3ReportCard } from "../../components/equity-research-v3/V3ReportCard";
-import { V3RevisionChat } from "../../components/equity-research-v3/V3RevisionChat";
 import { V3RunsPopover } from "../../components/equity-research-v3/V3RunsPopover";
 import { V3TemplateUploadModal } from "../../components/equity-research-v3/V3TemplateUploadModal";
 import { useV3RunStream } from "../../components/equity-research-v3/useV3RunStream";
@@ -121,6 +123,19 @@ export default function EquityResearchV3(): JSX.Element {
   // it as a chat-title equivalent. Updated when the page learns the
   // subject (either fresh dispatch or detail fetch).
   const [activeSubject, setActiveSubject] = useState<string | null>(null);
+  // Snapshot of the initial prompt + settings the user submitted.
+  // Held in memory so the first chat message renders the chips
+  // accurately even before ``detail`` arrives, and so we don't lose
+  // ``reasoning_effort`` (which isn't persisted on the row today).
+  // Cleared on new-chat; resets to null on page reload (the chat
+  // thread falls back to ``detail.report`` fields for the chips).
+  const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
+  const [initialSettings, setInitialSettings] =
+    useState<ChatSettingsSnapshot | null>(null);
+  // Revisions in flight: set true on submit so the bottom composer
+  // disables until the revision lands terminal. The chat thread
+  // polls and re-fetches detail; we flip back on the same callback.
+  const [revisionInFlight, setRevisionInFlight] = useState(false);
 
   const stream = useV3RunStream(activeReportId);
 
@@ -166,14 +181,60 @@ export default function EquityResearchV3(): JSX.Element {
   }, [activeReportId, reportIdFromUrl, setSearchParams]);
 
   const isStreaming = stream.status === "streaming";
+  // A revision can only be submitted against a completed report.
+  // While the initial run is streaming, or while a revision is in
+  // flight, the bottom composer dispatches nothing.
+  const canRevise =
+    detail !== null
+    && !isStreaming
+    && !revisionInFlight
+    && detail.report.status !== "running"
+    && detail.report.status !== "failed";
+
+  const refreshDetail = useCallback(async () => {
+    if (!activeReportId) return;
+    try {
+      const d = await getV3Run(activeReportId);
+      setDetail(d);
+      setRevisionInFlight(false);
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : String(err));
+      setRevisionInFlight(false);
+    }
+  }, [activeReportId]);
 
   const handleSubmit = useCallback(
     async (payload: { ticker: string; prompt: string }) => {
-      const subject = payload.prompt.trim();
-      if (!subject) {
+      const text = payload.prompt.trim();
+      if (!text) {
         setStartError("Tell the engine what to research.");
         return;
       }
+
+      // ----- Revision branch: there's an active completed report -----
+      if (canRevise && activeReportId) {
+        setStartError(null);
+        setPrompt("");
+        setRevisionInFlight(true);
+        try {
+          await startV3Revision(activeReportId, { request: text });
+          // V3ChatThread polls listV3Revisions and fires
+          // ``refreshDetail`` once the latest revision lands
+          // terminal; that resets ``revisionInFlight``.
+        } catch (err) {
+          setRevisionInFlight(false);
+          if (err instanceof ApiError && err.status === 409) {
+            setStartError(
+              "Another revision is already in flight. Wait for it to finish or cancel it.",
+            );
+          } else {
+            setStartError(err instanceof Error ? err.message : String(err));
+          }
+        }
+        return;
+      }
+
+      // ----- Original-run branch ------------------------------------
       if (!model) {
         setStartError("No model selected. Configure one in Settings → Models.");
         return;
@@ -181,10 +242,18 @@ export default function EquityResearchV3(): JSX.Element {
       setStartError(null);
       setDetail(null);
       setPrompt("");
-      setActiveSubject(subject);
+      setActiveSubject(text);
+      setInitialPrompt(text);
+      setInitialSettings({
+        templateName: settings.templateName,
+        length: settings.length,
+        language: settings.language,
+        reasoningEffort: settings.reasoningEffort,
+        modelLabel: model.display_name,
+      });
       try {
         const body: V3StartPayload = {
-          subject,
+          subject: text,
           language: settings.language,
           length: settings.length,
           // template_id is the single source of truth — v3 doesn't
@@ -213,11 +282,14 @@ export default function EquityResearchV3(): JSX.Element {
       }
     },
     [
+      activeReportId,
+      canRevise,
       model,
       settings.language,
       settings.length,
       settings.reasoningEffort,
       settings.templateId,
+      settings.templateName,
     ],
   );
 
@@ -229,6 +301,9 @@ export default function EquityResearchV3(): JSX.Element {
     setActiveReportId(null);
     setDetail(null);
     setActiveSubject(null);
+    setInitialPrompt(null);
+    setInitialSettings(null);
+    setRevisionInFlight(false);
     setStartError(null);
     setSearchParams(
       (prev) => {
@@ -246,6 +321,12 @@ export default function EquityResearchV3(): JSX.Element {
       setActiveReportId(runId);
       setDetail(null);
       setActiveSubject(null);
+      // Picking a run from history loads it fresh — the chips
+      // fall back to ``detail.report`` fields since we don't have
+      // the original in-memory settings snapshot.
+      setInitialPrompt(null);
+      setInitialSettings(null);
+      setRevisionInFlight(false);
       setStartError(null);
     },
     [activeReportId],
@@ -289,7 +370,13 @@ export default function EquityResearchV3(): JSX.Element {
   const isWelcome = activeReportId === null && detail === null && !isStreaming;
   const placeholder = isWelcome
     ? 'What should this report cover? (e.g., "RKLB.US — initiation, focus on launch cadence")'
-    : "Start another v3 report…";
+    : canRevise
+      ? "Ask a follow-up or describe a revision…"
+      : revisionInFlight
+        ? "Revision in flight…"
+        : isStreaming
+          ? "Run in progress…"
+          : "New report…";
 
   return (
     <div
@@ -307,45 +394,23 @@ export default function EquityResearchV3(): JSX.Element {
               templateLabel={settings.templateName}
             />
           ) : (
-            <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-6 py-6">
-              {activeReportId ? (
-                <StreamPanel
-                  reportId={activeReportId}
-                  subject={activeSubject}
-                  status={stream.status}
-                  events={stream.events}
-                  sectionsWritten={stream.sectionsWritten}
-                  chartsEmitted={stream.chartsEmitted}
-                  toolCallsInflight={stream.toolCallsInflight}
-                  terminalMessage={stream.terminalMessage}
-                  errorMessage={stream.errorMessage}
-                />
-              ) : null}
-
-              {detail ? (
-                <>
-                  <V3ReportCard
-                    detail={detail}
-                    revising={detail.report.status === "revising"}
-                  />
-                  <V3RevisionChat
-                    reportId={detail.report.report_id}
-                    parentRunning={detail.report.status === "running"}
-                    onRevisionComplete={() => {
-                      // Re-fetch the full detail so the latest
-                      // section/chart versions land in the card.
-                      void (async () => {
-                        try {
-                          const d = await getV3Run(detail.report.report_id);
-                          setDetail(d);
-                        } catch {
-                          /* surface via existing error path on next render */
-                        }
-                      })();
-                    }}
-                  />
-                </>
-              ) : null}
+            <div className="flex w-full flex-col gap-4 px-6 py-6">
+              <V3ChatThread
+                initialPrompt={initialPrompt}
+                initialSettings={initialSettings}
+                reportId={activeReportId}
+                stream={{
+                  status: stream.status,
+                  events: stream.events,
+                  sectionsWritten: stream.sectionsWritten,
+                  chartsEmitted: stream.chartsEmitted,
+                  toolCallsInflight: stream.toolCallsInflight,
+                  terminalMessage: stream.terminalMessage,
+                  errorMessage: stream.errorMessage,
+                }}
+                detail={detail}
+                onRefreshDetail={refreshDetail}
+              />
             </div>
           )}
         </div>
@@ -374,7 +439,14 @@ export default function EquityResearchV3(): JSX.Element {
         length={settings.length}
         onModeClick={() => setSettingsOpen(true)}
         modelPicker={<V3ModelPicker onChange={setModel} />}
-        disabled={model === null}
+        // Lock the composer while the initial run is mid-stream or a
+        // revision is in flight — those are the only states where
+        // we have no useful place to dispatch the typed text. A new
+        // run still requires a model selection.
+        disabled={
+          (model === null && !canRevise) || revisionInFlight
+          || (isStreaming && !canRevise)
+        }
         templateLabel={settings.templateName}
       />
 
@@ -408,152 +480,4 @@ export default function EquityResearchV3(): JSX.Element {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Live activity feed (visible while streaming + after terminal)
-// ---------------------------------------------------------------------------
-
-function StreamPanel({
-  reportId,
-  subject,
-  status,
-  events,
-  sectionsWritten,
-  chartsEmitted,
-  toolCallsInflight,
-  terminalMessage,
-  errorMessage,
-}: {
-  reportId: string;
-  subject: string | null;
-  status: string;
-  events: V3Event[];
-  sectionsWritten: number;
-  chartsEmitted: number;
-  toolCallsInflight: number;
-  terminalMessage: string | null;
-  errorMessage: string | null;
-}): JSX.Element {
-  return (
-    <section
-      data-testid="er-v3-stream-panel"
-      className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] p-4"
-    >
-      <header className="mb-3 flex items-center justify-between">
-        <div>
-          <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            Live activity {subject ? `· ${subject}` : ""}
-          </h2>
-          <p className="font-mono text-[10.5px] text-[--color-text-tertiary]">
-            {reportId}
-          </p>
-        </div>
-        <StatusBadge status={status} />
-      </header>
-
-      <dl className="mb-3 grid grid-cols-3 gap-3 text-sm">
-        <Chip label="Sections written" value={sectionsWritten} />
-        <Chip label="Charts emitted" value={chartsEmitted} />
-        <Chip label="Tool calls in flight" value={toolCallsInflight} />
-      </dl>
-
-      {terminalMessage ? (
-        <p className="mb-2 text-[12px] text-[--color-feedback-warning]">
-          {terminalMessage}
-        </p>
-      ) : null}
-      {errorMessage ? (
-        <p className="mb-2 text-[12px] text-[--color-feedback-danger]">
-          {errorMessage}
-        </p>
-      ) : null}
-
-      <ol className="max-h-72 space-y-1 overflow-y-auto font-mono text-[11px]">
-        {events.length === 0 ? (
-          <li className="text-[--color-text-tertiary]">
-            Waiting for the first event…
-          </li>
-        ) : (
-          [...events].reverse().map((e, idx) => (
-            <li
-              key={`${e.type}-${events.length - 1 - idx}`}
-              className="text-[--color-text-secondary]"
-            >
-              <span className="text-[--color-accent-on]">{e.type}</span>{" "}
-              <span className="text-[--color-text-tertiary]">
-                {summarizePayload(e)}
-              </span>
-            </li>
-          ))
-        )}
-      </ol>
-    </section>
-  );
-}
-
-function StatusBadge({ status }: { status: string }): JSX.Element {
-  const tone =
-    {
-      streaming:
-        "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-secondary]",
-      completed:
-        "border-[--color-feedback-success] bg-[rgba(80,180,80,0.08)] text-[--color-feedback-success]",
-      failed:
-        "border-[--color-feedback-danger] bg-[rgba(220,80,80,0.08)] text-[--color-feedback-danger]",
-      cancelled:
-        "border-[--color-feedback-warning] bg-[rgba(255,180,0,0.08)] text-[--color-feedback-warning]",
-      idle: "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-tertiary]",
-    }[status] ??
-    "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-tertiary]";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full border px-2 py-[2px] font-mono text-[10px] uppercase tracking-[0.08em] ${tone}`}
-    >
-      {status}
-    </span>
-  );
-}
-
-function Chip({ label, value }: { label: string; value: number }): JSX.Element {
-  return (
-    <div className="rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2">
-      <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-        {label}
-      </div>
-      <div className="text-[18px] font-semibold tabular-nums text-[--color-text-primary]">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function summarizePayload(event: V3Event): string {
-  switch (event.type) {
-    case "run.started":
-      return `${event.payload.subject} — ${event.payload.model}`;
-    case "tool.called":
-      return `turn ${event.payload.turn} → ${event.payload.tool_name}`;
-    case "tool.completed": {
-      const ok = event.payload.ok ? "ok" : "error";
-      const sid = event.payload.source_id ? ` ${event.payload.source_id}` : "";
-      return `turn ${event.payload.turn} ← ${event.payload.tool_name} (${ok})${sid}`;
-    }
-    case "section.written":
-      return `${event.payload.section_id} (${event.payload.char_count ?? "?"} chars)`;
-    case "chart.emitted":
-      return `${event.payload.chart_id} (${event.payload.chart_type})`;
-    case "run.completed":
-    case "run.failed":
-    case "run.cancelled":
-      return `${event.payload.section_count ?? 0} sections · ${event.payload.chart_count ?? 0} charts · ${event.payload.citation_count ?? 0} citations`;
-    case "run.snapshot":
-      return `prior run status: ${event.payload.status}`;
-    default:
-      return "";
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Result viewer (shown after the stream reaches a terminal event)
-// ---------------------------------------------------------------------------
 
