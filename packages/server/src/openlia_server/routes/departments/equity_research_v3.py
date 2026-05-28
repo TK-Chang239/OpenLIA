@@ -31,7 +31,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, Response
 from openlia.llm.runtime.report_v2_3.schemas import ReportType
 from openlia.llm.runtime.report_v2_3.templates.builtins import get_builtin
 from openlia.llm.runtime.report_v3 import (
@@ -54,6 +55,7 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
 )
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import v3_render_service as render_svc
 from openlia_server.services import v3_run_service as svc
 
 _ENV_FLAG = "REPORT_ENGINE_VERSION"
@@ -280,5 +282,61 @@ def build_equity_research_v3_router(
             svc.delete_run(db=db, user_id=user.id, report_id=report_id)
         except svc.ReportNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @router.get("/runs/{report_id}/html", response_class=HTMLResponse)
+    def get_html(
+        report_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> HTMLResponse:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            rendered = render_svc.render_html(
+                db=db, user_id=user.id, report_id=report_id
+            )
+        except svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return HTMLResponse(content=rendered.html)
+
+    @router.get("/runs/{report_id}/pdf")
+    async def get_pdf(
+        report_id: str,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        launcher = getattr(request.app.state, "browser_launcher", None)
+        if launcher is None:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "PDF rendering requires the BrowserLauncher to be "
+                    "wired on app.state (Playwright headless chromium). "
+                    "Use GET /html instead, or run the full server "
+                    "process where the launcher is initialised at "
+                    "startup."
+                ),
+            )
+        try:
+            pdf_bytes = await render_svc.render_pdf(
+                db=db,
+                user_id=user.id,
+                report_id=report_id,
+                browser_launcher=launcher,
+            )
+        except svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": (
+                    f'inline; filename="v3-report-{report_id}.pdf"'
+                ),
+            },
+        )
 
     return router
