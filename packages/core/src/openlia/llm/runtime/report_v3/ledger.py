@@ -83,6 +83,48 @@ class CitationLedger:
         self._entries.append(entry)
         return entry
 
+    def seed(
+        self,
+        entries: list[CitationLogEntry] | list[dict[str, Any]],
+    ) -> None:
+        """Pre-populate the ledger with prior entries (revise mode).
+
+        Accepts either ``CitationLogEntry`` objects or plain dicts
+        with ``source_id`` / ``tool_name`` / ``provenance`` keys.
+        Updates ``_counters`` so future ``append`` calls keep
+        numbering monotonically per prefix — no collisions with
+        prior source_ids.
+        """
+        for raw in entries:
+            entry = (
+                raw
+                if isinstance(raw, CitationLogEntry)
+                else CitationLogEntry.model_validate(
+                    {
+                        "source_id": raw["source_id"],
+                        "tool_name": raw["tool_name"],
+                        "arguments": raw.get("arguments", {}),
+                        "result_summary": raw.get("result_summary", ""),
+                        "provenance": raw.get("provenance", {}),
+                        "timestamp": raw.get("timestamp", datetime.now(UTC)),
+                        "input_tokens": raw.get("input_tokens", 0),
+                        "output_tokens": raw.get("output_tokens", 0),
+                        "wall_time_ms": raw.get("wall_time_ms", 0),
+                    }
+                )
+            )
+            self._entries.append(entry)
+            # Bump counters so the next auto-assigned id doesn't
+            # collide with the prior prefix_N.
+            sid = entry.source_id
+            if "_" in sid:
+                prefix, suffix = sid.rsplit("_", 1)
+                try:
+                    n = int(suffix)
+                    self._counters[prefix] = max(self._counters.get(prefix, 0), n)
+                except ValueError:
+                    pass
+
     def lookup(self, source_id: str) -> CitationLogEntry | None:
         for entry in self._entries:
             if entry.source_id == source_id:
