@@ -25,7 +25,11 @@ import {
 import { type JSX } from "react";
 
 import type { V3ReportDetail } from "../../api/equity-research-v3";
-import { v3HtmlUrl, v3PdfUrl } from "../../api/equity-research-v3";
+import {
+  v3DocxUrl,
+  v3HtmlUrl,
+  v3PdfUrl,
+} from "../../api/equity-research-v3";
 import { useFileViewerOptional } from "../viewer/FileViewerContext";
 
 interface Props {
@@ -76,6 +80,7 @@ export function V3ReportCard({
   const previewText = preview ?? deriveFallbackPreview(detail);
   const htmlHref = v3HtmlUrl(detail.report.report_id);
   const pdfHref = v3PdfUrl(detail.report.report_id);
+  const docxHref = v3DocxUrl(detail.report.report_id);
 
   const openInViewer = (trigger?: HTMLElement | null) => {
     if (!fileViewer) {
@@ -183,11 +188,20 @@ export function V3ReportCard({
           className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
         >
           <Download size={13} strokeWidth={1.7} />
-          Download PDF
+          PDF
+        </a>
+        <a
+          href={docxHref}
+          data-testid="er-v3-report-card-docx"
+          className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
+        >
+          <Download size={13} strokeWidth={1.7} />
+          Word
         </a>
         {/* Standalone-HTML window — the original "open new tab"
             behaviour, kept as a secondary action so the user can use
-            the browser's native Save As → Word / Print → PDF. */}
+            the browser's native Print → PDF if they want a custom
+            layout. */}
         <a
           href={htmlHref}
           target="_blank"
