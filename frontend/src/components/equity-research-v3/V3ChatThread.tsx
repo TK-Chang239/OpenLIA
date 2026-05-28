@@ -24,7 +24,7 @@
  * lands terminal so the card reflects the latest section versions.
  */
 import { AlertTriangle, Check, Loader2, User as UserIcon } from "lucide-react";
-import { type JSX, useCallback, useEffect, useRef, useState } from "react";
+import { type JSX, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type V3Event,
@@ -94,6 +94,12 @@ export function V3ChatThread({
   const [revisions, setRevisions] = useState<V3Revision[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastInFlightIdRef = useRef<string | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  // Tracks whether the user is currently pinned at (or near) the
+  // bottom of the scroll container. We only auto-scroll if they
+  // are — once they scroll up to re-read an earlier turn the
+  // thread leaves them alone.
+  const stickToBottomRef = useRef<boolean>(true);
 
   const refresh = useCallback(async () => {
     if (!reportId) return;
@@ -132,6 +138,59 @@ export function V3ChatThread({
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(t);
   }, [revisions, refresh]);
+
+  // Auto-scroll to the bottom marker when the thread grows. Only
+  // re-fires when a meaningful "turn" change happens (new revision
+  // appears, status of the latest changes, or the stream gains a
+  // section / chart) — not on every event-list tick — so a
+  // streaming run doesn't yank the viewport mid-read.
+  const turnSignal = useMemo(() => {
+    const detailKey = detail
+      ? `${detail.report.status}:${detail.sections.length}:${detail.charts.length}`
+      : "no-detail";
+    const revKey = (revisions ?? [])
+      .map((r) => `${r.id}:${r.status}`)
+      .join(",");
+    return `${reportId ?? "no-report"}|${stream.sectionsWritten}|${stream.chartsEmitted}|${detailKey}|${revKey}`;
+  }, [
+    reportId,
+    stream.sectionsWritten,
+    stream.chartsEmitted,
+    detail,
+    revisions,
+  ]);
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const node = bottomRef.current;
+    if (!node) return;
+    const reduce =
+      typeof window !== "undefined"
+        && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    node.scrollIntoView({
+      behavior: reduce ? "auto" : "smooth",
+      block: "end",
+    });
+  }, [turnSignal]);
+
+  // Track whether the user is still pinned to the bottom. We listen
+  // on the nearest scrollable ancestor — the page wraps the thread
+  // in a div with ``overflow-y-auto``. Tolerance accounts for sub-
+  // pixel rounding and the bottom-marker's own height.
+  useEffect(() => {
+    const node = bottomRef.current;
+    if (!node) return;
+    const scroller = findScrollableAncestor(node);
+    if (!scroller) return;
+    const onScroll = () => {
+      const distanceFromBottom =
+        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      stickToBottomRef.current = distanceFromBottom < 80;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [reportId]);
 
   const handleCancel = async (revisionId: string) => {
     try {
@@ -197,8 +256,30 @@ export function V3ChatThread({
           {error}
         </div>
       ) : null}
+
+      {/* Bottom sentinel. ``scrollIntoView`` targets this so each
+          new turn lands centered just above the composer. */}
+      <div ref={bottomRef} aria-hidden="true" data-testid="er-v3-chat-bottom" />
     </div>
   );
+}
+
+function findScrollableAncestor(start: HTMLElement): HTMLElement | null {
+  let node: HTMLElement | null = start.parentElement;
+  while (node) {
+    const style = window.getComputedStyle(node);
+    const overflowY = style.overflowY;
+    if (
+      (overflowY === "auto" || overflowY === "scroll")
+      && node.scrollHeight > node.clientHeight
+    ) {
+      return node;
+    }
+    node = node.parentElement;
+  }
+  // Fall back to the document scrolling element so the auto-scroll
+  // still works on layouts that don't bound the thread.
+  return document.scrollingElement as HTMLElement | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -519,15 +600,16 @@ function snapshotFromDetail(
 ): ChatSettingsSnapshot | null {
   if (!detail) return null;
   const r = detail.report;
-  // ``reasoning_effort`` isn't persisted on the row today — chip
-  // omitted when we can't recover it. Same for the model label
-  // (the row carries provider_kind + model strings; without the
-  // catalog we just show the model id verbatim).
+  // ``reasoning_effort`` is persisted; null means it was off at
+  // dispatch (in which case the chip omits via the empty-value
+  // filter in SettingsChips). The model label is the row's model
+  // id verbatim — without the catalog we don't have the friendly
+  // ``display_name``, but the id is at least diagnostic.
   return {
     templateName: _BUILTIN_TEMPLATE_LABELS[r.template_id] ?? r.template_id,
     length: r.length,
     language: r.language,
-    reasoningEffort: "",
+    reasoningEffort: r.reasoning_effort ?? "",
     modelLabel: "",
   };
 }

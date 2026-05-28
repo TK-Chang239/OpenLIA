@@ -155,6 +155,10 @@ export interface V3ReportSummary {
   status: string;
   created_at: string;
   completed_at: string | null;
+  /** "medium" | "high" when reasoning was on at dispatch; null
+   *  when it was off. Persisted on the row so the chat-thread
+   *  Reasoning chip survives page reload. */
+  reasoning_effort?: string | null;
 }
 
 export interface V3SectionRow {

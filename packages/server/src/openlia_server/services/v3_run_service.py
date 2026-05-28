@@ -104,6 +104,11 @@ async def start_run(
         error_message=None,
         created_at=created_at,
         completed_at=None,
+        reasoning_effort=(
+            request.reasoning_effort.value
+            if request.reasoning_effort is not None
+            else None
+        ),
     )
     db.add(row)
     db.flush()
@@ -267,6 +272,11 @@ def start_run_async(
         error_message=None,
         created_at=created_at,
         completed_at=None,
+        reasoning_effort=(
+            request.reasoning_effort.value
+            if request.reasoning_effort is not None
+            else None
+        ),
     )
     db.add(row)
     db.flush()
