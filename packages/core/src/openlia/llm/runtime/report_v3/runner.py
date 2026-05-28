@@ -85,7 +85,11 @@ class Runner:
     """
 
     max_turns: int = 60
-    max_wall_time_seconds: int = 15 * 60
+    # 30 min default: equity research with web search routinely takes
+    # 20-30 turns at 30-90s each (web search latency + long-context
+    # model latency compound). Override via env in
+    # ``v3_run_service._default_runner`` when ops needs more headroom.
+    max_wall_time_seconds: int = 30 * 60
     transports_factory: Callable[[], DataTransports] = field(
         default=lambda: _null_transports(
             "EODHD transports not wired — set EODHD_API_KEY and rebuild the runner."

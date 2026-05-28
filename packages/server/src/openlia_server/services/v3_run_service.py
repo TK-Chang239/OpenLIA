@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -401,9 +402,34 @@ def _load_report(*, db: DBSession, user_id: str, report_id: str) -> ReportV3:
 
 
 def _default_runner(transports: DataTransports | None) -> Runner:
+    """Build a Runner with env-tunable budgets.
+
+    ``REPORT_V3_MAX_WALL_TIME_SECONDS`` and ``REPORT_V3_MAX_TURNS``
+    override the dataclass defaults when set; bad values fall back to
+    the defaults rather than crashing the request. Lets ops widen the
+    cap for long-running research (e.g. elaborative reports against a
+    slower provider) without a code change.
+    """
+    kwargs: dict[str, int] = {}
+    raw_wall = os.environ.get("REPORT_V3_MAX_WALL_TIME_SECONDS", "").strip()
+    if raw_wall:
+        try:
+            value = int(raw_wall)
+            if value > 0:
+                kwargs["max_wall_time_seconds"] = value
+        except ValueError:
+            pass
+    raw_turns = os.environ.get("REPORT_V3_MAX_TURNS", "").strip()
+    if raw_turns:
+        try:
+            value = int(raw_turns)
+            if value > 0:
+                kwargs["max_turns"] = value
+        except ValueError:
+            pass
     if transports is None:
-        return Runner()
-    return Runner(transports_factory=lambda: transports)
+        return Runner(**kwargs)
+    return Runner(transports_factory=lambda: transports, **kwargs)
 
 
 def _persist_outcome(
