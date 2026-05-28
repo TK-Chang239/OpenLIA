@@ -60,6 +60,7 @@ from openlia_server.db.models.report_v3 import (
 )
 from openlia_server.middleware.auth import build_require_auth
 from openlia_server.services import v3_render_service as render_svc
+from openlia_server.services import v3_revision_service as revision_svc
 from openlia_server.services import v3_run_service as svc
 from openlia_server.services import v3_template_service as templates_svc
 
@@ -166,6 +167,33 @@ class TemplateCreatePayload(BaseModel):
     markdown: str = Field(..., min_length=1)
     source_doc_blob: bytes | None = None
     source_doc_mime: str | None = Field(default=None, max_length=128)
+
+
+class RevisionStartPayload(BaseModel):
+    """POST /v3/runs/{report_id}/revise body.
+
+    ``request`` is the free-form revision instruction the user typed
+    in chat ("rewrite the bull case to lead with EBITDA margins").
+    """
+
+    request: str = Field(..., min_length=1)
+
+
+class RevisionOut(BaseModel):
+    id: str
+    report_id: str
+    revision_index: int
+    request: str
+    status: str
+    error_message: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class RevisionStartResponse(BaseModel):
+    """Returned by ``POST /v3/runs/{report_id}/revise``."""
+
+    revision_id: str
 
 
 # ---------------------------------------------------------------------------
@@ -646,5 +674,194 @@ def build_equity_research_v3_router(
         except templates_svc.TemplateNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # ------------------------------------------------------------------
+    # Revisions — PR4
+    #
+    # Each revision is one round of "user asked for a change". The
+    # engine runs in a background task; the SSE stream lives at
+    # ``/revisions/{revision_id}/events``. Concurrency: 409 when
+    # another revision is in flight on the same report.
+    # ------------------------------------------------------------------
+
+    @router.post(
+        "/runs/{report_id}/revise",
+        response_model=RevisionStartResponse,
+    )
+    async def start_revision(
+        report_id: str,
+        payload: RevisionStartPayload,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RevisionStartResponse:
+        """Non-blocking POST: returns {revision_id} immediately.
+
+        The revision engine loads the prior report state, runs the
+        same Runner with a ReviseContext, and persists new section /
+        chart versions. Client connects to
+        ``GET /v3/revisions/{revision_id}/events`` (SSE) for progress.
+
+        Defined as ``async def`` for the same reason as
+        ``start_run_async`` — ``asyncio.create_task`` inside the
+        service requires a running event loop.
+        """
+        if not _engine_enabled():
+            raise _engine_disabled()
+        broker, cancel_registry = _streaming_state(request)
+
+        # Owner-scope + load the parent so we can build the
+        # ReviseContext and a RunRequest sized to the prior run.
+        parent = db.get(ReportV3, report_id)
+        if parent is None or parent.user_id != user.id:
+            raise HTTPException(
+                status_code=404, detail=f"v3 report {report_id!r} not found"
+            )
+        if parent.status not in ("completed", "failed"):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot revise a report in status {parent.status!r}. "
+                    f"Wait for the current run / revision to finish."
+                ),
+            )
+
+        # Re-resolve the parent's template so the revision engine has
+        # the same structural authority as the original run.
+        try:
+            template: TemplateSpec = templates_svc.resolve_template(
+                db=db, user_id=user.id, template_id=parent.template_id
+            )
+        except templates_svc.TemplateNotFoundError:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Parent report's template {parent.template_id!r} is "
+                    f"no longer available. Re-upload it or revise after "
+                    f"restoring."
+                ),
+            ) from None
+
+        run_request = RunRequest(
+            subject=parent.subject,
+            template=template,
+            language=Language(parent.language),
+            length=ReportLength(parent.length),
+            provider_kind=parent.provider_kind,
+            model=parent.model,
+            # Reasoning effort is not persisted on ReportV3 yet —
+            # revisions default to "off". A follow-up can let the
+            # client send an override per-revision.
+            reasoning_effort=None,
+        )
+        revise_ctx = revision_svc.build_revise_context_from_db(
+            db=db, report_id=report_id, revision_request=payload.request
+        )
+
+        try:
+            handle = revision_svc.start_revision_async(
+                db=db,
+                user_id=user.id,
+                report_id=report_id,
+                revision_request=payload.request,
+                request=run_request,
+                revise=revise_ctx,
+                session_factory=db_session_factory,
+                broker=broker,
+                cancel_registry=cancel_registry,
+            )
+        except revision_svc.RevisionInFlightError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except CapabilityError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return RevisionStartResponse(revision_id=handle.revision_id)
+
+    @router.get(
+        "/runs/{report_id}/revisions",
+        response_model=list[RevisionOut],
+    )
+    def list_run_revisions(
+        report_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> list[RevisionOut]:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            rows = revision_svc.list_revisions(
+                db=db, user_id=user.id, report_id=report_id
+            )
+        except svc.ReportNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return [
+            RevisionOut(
+                id=r.id,
+                report_id=r.report_id,
+                revision_index=r.revision_index,
+                request=r.request,
+                status=r.status,
+                error_message=r.error_message,
+                created_at=r.created_at,
+                completed_at=r.completed_at,
+            )
+            for r in rows
+        ]
+
+    @router.post("/revisions/{revision_id}/cancel")
+    async def cancel_revision(
+        revision_id: str,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> dict[str, bool]:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            revision_svc.get_revision(
+                db=db, user_id=user.id, revision_id=revision_id
+            )
+        except revision_svc.RevisionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        _, cancel_registry = _streaming_state(request)
+        cancelled = revision_svc.cancel_revision(
+            cancel_registry=cancel_registry, revision_id=revision_id
+        )
+        return {"cancelled": cancelled}
+
+    @router.get("/revisions/{revision_id}/events")
+    async def stream_revision_events(
+        revision_id: str,
+        request: Request,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> StreamingResponse:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            row = revision_svc.get_revision(
+                db=db, user_id=user.id, revision_id=revision_id
+            )
+        except revision_svc.RevisionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        broker, _ = _streaming_state(request)
+
+        # Late-connect: if the revision already finished, replay a
+        # single run.snapshot frame with the terminal status so the
+        # client renders the final state without waiting forever.
+        terminal_snapshot: dict[str, Any] | None = None
+        if row.status in ("completed", "failed", "cancelled"):
+            terminal_snapshot = {
+                "status": row.status,
+                "error_message": row.error_message,
+            }
+
+        return StreamingResponse(
+            _sse_stream(broker, revision_id, terminal_snapshot),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return router

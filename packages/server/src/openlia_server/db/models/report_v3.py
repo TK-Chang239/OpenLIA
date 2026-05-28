@@ -85,11 +85,22 @@ class ReportV3(Base):
 class ReportV3Section(Base):
     """One section the model wrote via ``write_section``.
 
-    ``section_index`` is the section's position in the template's
-    section list, used by the renderer for ordering. ``markdown`` is
-    stored with the raw ``[^source_id]`` and ``{{chart:id}}`` markers
-    intact — the citation rewriter (Phase 2b) resolves them at
-    render time.
+    ``section_index`` is the section's position in the rendered report
+    (template order for built-in sections, append order for sections
+    the LLM added during a revision). ``markdown`` is stored with
+    the raw ``[^source_id]`` and ``{{chart:id}}`` markers intact —
+    the citation rewriter resolves them at render time.
+
+    PR4 adds versioning. The original run inserts rows with
+    ``revision_id=NULL`` and ``version=1``. Each revision that
+    rewrites a section appends a NEW row with the next version and
+    its ``revision_id`` set; prior versions stay for audit + the
+    "Open original" toggle. The renderer reads the latest version per
+    ``section_id`` for the live view; specific versions on demand.
+
+    The old unique (report_id, section_id) constraint is gone — that
+    invariant is now (report_id, section_id, version), enforced by
+    the migration's replacement unique constraint.
     """
 
     __tablename__ = "report_v3_sections"
@@ -104,15 +115,33 @@ class ReportV3Section(Base):
     section_index: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    # Null means "original run". Set to a revisions.id for revised
+    # sections. CASCADE delete means a revision delete also wipes the
+    # section versions written by it.
+    revision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("report_v3_revisions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # 1-based monotonic version per (report_id, section_id). 1 for the
+    # original run, 2+ for revisions that touch that section.
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3_sections"),
         UniqueConstraint(
             "report_id",
             "section_id",
-            name="uq_report_v3_sections_report_id_section_id",
+            "version",
+            name="uq_report_v3_sections_report_id_section_id_version",
         ),
         Index("ix_report_v3_sections_report_id", "report_id"),
+        Index(
+            "ix_report_v3_sections_report_id_section_id_version",
+            "report_id",
+            "section_id",
+            "version",
+        ),
     )
 
 
@@ -123,6 +152,10 @@ class ReportV3Chart(Base):
     renderer reads it back via ``ChartSpec.model_validate_json``.
     ``rendered_url`` is populated by Phase 2b's chart_renderer; null
     until rendering completes.
+
+    Versioned the same way as ReportV3Section. A revision that
+    re-emits a chart appends a new row at the next version; the
+    renderer reads the latest version per ``chart_id``.
     """
 
     __tablename__ = "report_v3_charts"
@@ -138,15 +171,28 @@ class ReportV3Chart(Base):
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     spec_json: Mapped[str] = mapped_column(Text, nullable=False)
     rendered_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    revision_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("report_v3_revisions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     __table_args__ = (
         PrimaryKeyConstraint("id", name="pk_report_v3_charts"),
         UniqueConstraint(
             "report_id",
             "chart_id",
-            name="uq_report_v3_charts_report_id_chart_id",
+            "version",
+            name="uq_report_v3_charts_report_id_chart_id_version",
         ),
         Index("ix_report_v3_charts_report_id", "report_id"),
+        Index(
+            "ix_report_v3_charts_report_id_chart_id_version",
+            "report_id",
+            "chart_id",
+            "version",
+        ),
     )
 
 
@@ -277,5 +323,66 @@ class ReportV3ToolCallLog(Base):
             "ix_report_v3_tool_call_log_report_id_turn_index",
             "report_id",
             "turn_index",
+        ),
+    )
+
+
+class ReportV3Revision(Base):
+    """One user-initiated revision of a completed v3 report.
+
+    Each row models a single round of "the user asked for a change,
+    the engine ran a revise pass". The engine pre-loads the prior
+    report into the LLM's context, accepts a free-form revision
+    request, and writes new section/chart versions linked back via
+    ``ReportV3Section.revision_id`` / ``ReportV3Chart.revision_id``.
+
+    Concurrency: the route layer rejects POST /revise with HTTP 409
+    when this report already has a non-terminal revision in flight.
+    ``revision_index`` is a 1-based monotonic counter per report —
+    drives the chronological order in the chat UI and the version
+    numbers shown on revised sections.
+    """
+
+    __tablename__ = "report_v3_revisions"
+
+    id: Mapped[str] = mapped_column(String(36), nullable=False)
+    report_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("report_v3.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    revision_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Free-form revision instruction the user typed in chat — fed to
+    # the model verbatim as the user turn after the prior-report
+    # context. Holds the same role chat history would in v2.2.
+    request: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(
+        UTCDateTime(), nullable=True
+    )
+
+    __table_args__ = (
+        PrimaryKeyConstraint("id", name="pk_report_v3_revisions"),
+        UniqueConstraint(
+            "report_id",
+            "revision_index",
+            name="uq_report_v3_revisions_report_id_revision_index",
+        ),
+        Index(
+            "ix_report_v3_revisions_report_id_created_at",
+            "report_id",
+            "created_at",
+        ),
+        Index(
+            "ix_report_v3_revisions_report_id_status",
+            "report_id",
+            "status",
         ),
     )
