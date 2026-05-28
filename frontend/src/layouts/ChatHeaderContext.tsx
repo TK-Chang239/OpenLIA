@@ -7,6 +7,17 @@ import {
   type ReactNode,
 } from "react";
 
+/** Shape passed to ``ChatHeaderValue.renderPopover``. Mirrors the
+ *  default ChatHistoryPopover's props so a custom popover can be
+ *  drop-in without TopBar needing to know which engine it's for. */
+export interface ChatHeaderPopoverProps {
+  departmentId: string;
+  activeSessionId: string | null;
+  onSelect: (id: string) => void;
+  onActiveDeleted: () => void;
+  onClose: () => void;
+}
+
 export interface ChatHeaderValue {
   departmentId: string;
   activeSessionId: string | null;
@@ -18,6 +29,12 @@ export interface ChatHeaderValue {
   /** Create a fresh session and switch to it. The handler owns the
    *  ``createSession`` call so the page can keep its state in sync. */
   onCreate: () => void;
+  /** Optional override for the history popover. When set, the TopBar
+   *  renders this instead of the default ``ChatHistoryPopover`` (which
+   *  reads from /api/chat/sessions). Used by v3 equity research to
+   *  surface v3 runs in the same breadcrumb dropdown without polluting
+   *  the shared chat-sessions list. */
+  renderPopover?: (props: ChatHeaderPopoverProps) => ReactNode;
 }
 
 interface RegistryShape {
