@@ -67,19 +67,35 @@ export function TopBar({
               <ChevronDown size={12} strokeWidth={1.5} aria-hidden />
             </button>
             {popoverOpen ? (
-              <ChatHistoryPopover
-                departmentId={chatHeader.departmentId}
-                activeSessionId={chatHeader.activeSessionId}
-                onSelect={(id) => {
-                  chatHeader.onSelect(id);
-                  setPopoverOpen(false);
-                }}
-                onActiveDeleted={() => {
-                  chatHeader.onCreate();
-                  setPopoverOpen(false);
-                }}
-                onClose={() => setPopoverOpen(false)}
-              />
+              chatHeader.renderPopover ? (
+                chatHeader.renderPopover({
+                  departmentId: chatHeader.departmentId,
+                  activeSessionId: chatHeader.activeSessionId,
+                  onSelect: (id) => {
+                    chatHeader.onSelect(id);
+                    setPopoverOpen(false);
+                  },
+                  onActiveDeleted: () => {
+                    chatHeader.onCreate();
+                    setPopoverOpen(false);
+                  },
+                  onClose: () => setPopoverOpen(false),
+                })
+              ) : (
+                <ChatHistoryPopover
+                  departmentId={chatHeader.departmentId}
+                  activeSessionId={chatHeader.activeSessionId}
+                  onSelect={(id) => {
+                    chatHeader.onSelect(id);
+                    setPopoverOpen(false);
+                  }}
+                  onActiveDeleted={() => {
+                    chatHeader.onCreate();
+                    setPopoverOpen(false);
+                  }}
+                  onClose={() => setPopoverOpen(false)}
+                />
+              )
             ) : null}
           </span>
         ) : null}
