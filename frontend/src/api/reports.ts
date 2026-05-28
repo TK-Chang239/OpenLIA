@@ -397,7 +397,7 @@ export function parseFilenameFromHeader(
   return fallback;
 }
 
-export type ReportEngine = "v1" | "v2" | "v23";
+export type ReportEngine = "v1" | "v2" | "v23" | "v3";
 
 export async function downloadReportBlob(
   reportId: string,
@@ -405,7 +405,15 @@ export async function downloadReportBlob(
   engine: ReportEngine = "v1",
 ): Promise<DownloadResult> {
   let url: string;
-  if (engine === "v23") {
+  if (engine === "v3") {
+    // v3 emits PDF natively; "docx" maps to the /html route (the
+    // standalone-HTML surface browsers can Save As Word). Both flows
+    // open the same printable view server-side.
+    url =
+      format === "pdf"
+        ? `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/pdf`
+        : `/api/departments/equity-research/v3/runs/${encodeURIComponent(reportId)}/html`;
+  } else if (engine === "v23") {
     // v2.3 only emits docx today; PDF is browser-print from the viewer.
     url = `/api/departments/equity-research/v2.3/runs/${encodeURIComponent(reportId)}/docx`;
   } else if (engine === "v2") {

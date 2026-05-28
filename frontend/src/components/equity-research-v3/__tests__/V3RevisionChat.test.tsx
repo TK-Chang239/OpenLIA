@@ -88,7 +88,7 @@ describe("V3RevisionChat", () => {
 
   test("surfaces 409 conflict as a friendly error", async () => {
     vi.mocked(api.startV3Revision).mockRejectedValue(
-      new ApiError(409, "Another revision is in flight"),
+      new ApiError(409, "conflict", "Another revision is in flight"),
     );
     render(
       <V3RevisionChat reportId="rpt-1" onRevisionComplete={() => undefined} />,
