@@ -37,9 +37,10 @@ from ..report_v2_3.research.registry import (
 )
 from .events import CancelToken, EventEmitter, NullEmitter
 from .ledger import CitationLedger
-from .prompts import build_system_prompt
-from .schemas import RunRequest, RunResult
+from .prompts import build_revise_system_prompt, build_system_prompt
+from .schemas import ReviseContext, RunRequest, RunResult
 from .session import LLMSession
+from .workspace import WrittenSection
 from .tools import (
     WEB_SEARCH_TOOL_NAME,
     ToolCatalog,
@@ -103,6 +104,7 @@ class Runner:
         session: LLMSession | None = None,
         emitter: EventEmitter | None = None,
         cancel_token: CancelToken | None = None,
+        revise: ReviseContext | None = None,
     ) -> RunResult:
         """Execute a v3 run for the given request.
 
@@ -120,6 +122,13 @@ class Runner:
         tool dispatch. Cancellation is cooperative — the runner exits
         at the next safe point with status='failed' and a clear
         ``run cancelled`` message; partial sections + charts persist.
+
+        ``revise`` switches the runner into revision mode: the
+        workspace is pre-loaded with the prior sections + charts,
+        the ledger seeded with prior citations, and the system prompt
+        + initial user turn are reshaped around the user's revision
+        instruction. write_section allows section ids beyond the
+        template, and finalize accepts partial completion.
         """
         if session is None:
             session = LLMSession.create(
@@ -130,11 +139,40 @@ class Runner:
         cancel_token = cancel_token or CancelToken()
 
         ledger = CitationLedger()
+        if revise is not None:
+            ledger.seed(
+                [
+                    {
+                        "source_id": c.source_id,
+                        "tool_name": c.tool_name,
+                        "provenance": c.provenance,
+                    }
+                    for c in revise.prior_citations
+                ]
+            )
         workspace = RunWorkspace(
             template=request.template,
             ledger=ledger,
             subject=request.subject,
+            revision_mode=revise is not None,
         )
+        if revise is not None:
+            # Pre-load prior sections so the workspace can render the
+            # full report mid-revision and write_section's chart-ref
+            # validation can see prior charts. ``sections_written_this_run``
+            # stays empty so the persistence layer only versions the
+            # sections this revision actually touched.
+            for prior in revise.prior_sections:
+                workspace.sections[prior.section_id] = WrittenSection(
+                    section_id=prior.section_id,
+                    title=prior.title,
+                    markdown=prior.markdown,
+                )
+                if prior.section_id not in workspace.section_order:
+                    workspace.section_order.append(prior.section_id)
+            for chart in revise.prior_charts:
+                workspace.charts[chart.chart_id] = chart
+
         transports = self.transports_factory()
         catalog = build_catalog(
             ledger=ledger,
@@ -152,12 +190,17 @@ class Runner:
                 "language": request.language.value,
                 "provider_kind": request.provider_kind,
                 "model": request.model,
+                "mode": "revise" if revise is not None else "fresh",
             },
         )
 
-        system_prompt = build_system_prompt(request=request, catalog=catalog)
+        system_prompt = (
+            build_revise_system_prompt(request=request, catalog=catalog, revise=revise)
+            if revise is not None
+            else build_system_prompt(request=request, catalog=catalog)
+        )
         tool_schemas = _catalog_to_tool_schemas(catalog)
-        messages: list[Message] = [_initial_user_turn(request)]
+        messages: list[Message] = [_initial_user_turn(request, revise=revise)]
 
         deadline = time.monotonic() + self.max_wall_time_seconds
         tools_by_name = catalog.by_name()
@@ -245,7 +288,21 @@ class Runner:
         )
 
 
-def _initial_user_turn(request: RunRequest) -> Message:
+def _initial_user_turn(
+    request: RunRequest, *, revise: ReviseContext | None = None
+) -> Message:
+    if revise is not None:
+        return Message(
+            role="user",
+            content=(
+                f"Revise the report for {request.subject!r} per the "
+                f"instruction above. The prior report is loaded into "
+                f"context; use the tools to research, compute, or "
+                f"chart any new material, then call `write_section` "
+                f"for each section you change (and `finalize` when "
+                f"done)."
+            ),
+        )
     return Message(
         role="user",
         content=(
