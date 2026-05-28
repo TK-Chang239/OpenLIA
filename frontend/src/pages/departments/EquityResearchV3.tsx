@@ -45,6 +45,7 @@ import {
   type V3SettingsValue,
 } from "../../components/equity-research-v3/V3ReportSettingsModal";
 import { V3RunsPopover } from "../../components/equity-research-v3/V3RunsPopover";
+import { V3TemplateUploadModal } from "../../components/equity-research-v3/V3TemplateUploadModal";
 import { useV3RunStream } from "../../components/equity-research-v3/useV3RunStream";
 import { useChatHeaderRegistry } from "../../layouts/ChatHeaderContext";
 
@@ -55,6 +56,7 @@ const DEFAULT_SETTINGS: V3SettingsValue = {
   length: "normal",
   language: "en",
   reasoningEffort: "medium",
+  templateId: null,
 };
 
 function loadSettings(): V3SettingsValue {
@@ -69,6 +71,7 @@ function loadSettings(): V3SettingsValue {
       language: parsed.language ?? DEFAULT_SETTINGS.language,
       reasoningEffort:
         parsed.reasoningEffort ?? DEFAULT_SETTINGS.reasoningEffort,
+      templateId: parsed.templateId ?? DEFAULT_SETTINGS.templateId,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -115,6 +118,8 @@ export default function EquityResearchV3(): JSX.Element {
   const [settings, setSettings] = useState<V3SettingsValue>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [model, setModel] = useState<V3ModelSelection | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [templatesRefreshKey, setTemplatesRefreshKey] = useState(0);
 
   const [startError, setStartError] = useState<string | null>(null);
   const [detail, setDetail] = useState<V3ReportDetail | null>(null);
@@ -190,6 +195,10 @@ export default function EquityResearchV3(): JSX.Element {
           language: settings.language,
           length: settings.length,
           report_type: settings.reportType,
+          // When templateId is null the server falls back to the
+          // report_type built-in. Sending the field explicitly when
+          // set keeps the resolver path simple.
+          template_id: settings.templateId,
           provider_kind: model.provider_kind,
           model: model.model,
           // Wire enum is "medium" | "high" only; off → null so the
@@ -216,6 +225,7 @@ export default function EquityResearchV3(): JSX.Element {
       settings.length,
       settings.reasoningEffort,
       settings.reportType,
+      settings.templateId,
     ],
   );
 
@@ -357,6 +367,23 @@ export default function EquityResearchV3(): JSX.Element {
         value={settings}
         onClose={() => setSettingsOpen(false)}
         onSave={persistSettings}
+        onUploadClick={() => {
+          setSettingsOpen(false);
+          setUploadOpen(true);
+        }}
+        templatesRefreshKey={templatesRefreshKey}
+      />
+
+      <V3TemplateUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onSaved={(created) => {
+          // Auto-select the newly uploaded template + reopen settings
+          // so the user sees their pick land in the list.
+          persistSettings({ ...settings, templateId: created.id });
+          setTemplatesRefreshKey((k) => k + 1);
+          setSettingsOpen(true);
+        }}
       />
     </div>
   );

@@ -14,14 +14,18 @@
  * snapshot of config).
  */
 import * as Dialog from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { Trash, Upload, X } from "lucide-react";
 import { type JSX, useEffect, useState } from "react";
 
-import type {
-  V3Language,
-  V3ReasoningEffort,
-  V3ReportLength,
-  V3ReportType,
+import { ApiError } from "../../api/_request";
+import {
+  type V3Language,
+  type V3ReasoningEffort,
+  type V3ReportLength,
+  type V3ReportType,
+  type V3TemplateSummary,
+  deleteV3Template,
+  listV3Templates,
 } from "../../api/equity-research-v3";
 
 export interface V3SettingsValue {
@@ -29,6 +33,9 @@ export interface V3SettingsValue {
   length: V3ReportLength;
   language: V3Language;
   reasoningEffort: V3ReasoningEffort;
+  /** The selected template_id. Null means "use the report_type
+   *  default built-in" — the server's fallback path. */
+  templateId: string | null;
 }
 
 interface Props {
@@ -36,6 +43,12 @@ interface Props {
   value: V3SettingsValue;
   onClose: () => void;
   onSave: (next: V3SettingsValue) => void;
+  /** Bumped by the parent after a successful upload so the template
+   *  list refetches without remounting the modal. */
+  templatesRefreshKey?: number;
+  /** Fires when the user clicks "Upload template" — the parent owns
+   *  the upload modal so we don't nest dialogs. */
+  onUploadClick: () => void;
 }
 
 const REPORT_TYPE_OPTIONS: { value: V3ReportType; label: string }[] = [
@@ -118,34 +131,13 @@ function SectionHeader({ label }: { label: string }): JSX.Element {
   );
 }
 
-function ComingSoon({
-  label,
-  hint,
-}: {
-  label: string;
-  hint: string;
-}): JSX.Element {
-  return (
-    <section
-      data-testid={`er-v3-settings-coming-soon-${label.toLowerCase().replace(/\s+/g, "-")}`}
-      className="border-b border-[--color-border-subtle] px-[22px] py-[18px] opacity-60"
-    >
-      <SectionHeader label={label} />
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-[--color-border-subtle] bg-[--color-bg-base] px-3 py-2">
-        <span className="text-[12.5px] text-[--color-text-secondary]">{hint}</span>
-        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-          Coming soon
-        </span>
-      </div>
-    </section>
-  );
-}
-
 export function V3ReportSettingsModal({
   open,
   value,
   onClose,
   onSave,
+  templatesRefreshKey = 0,
+  onUploadClick,
 }: Props): JSX.Element {
   const [reportType, setReportType] = useState<V3ReportType>(value.reportType);
   const [length, setLength] = useState<V3ReportLength>(value.length);
@@ -153,6 +145,9 @@ export function V3ReportSettingsModal({
   const [reasoningEffort, setReasoningEffort] = useState<V3ReasoningEffort>(
     value.reasoningEffort,
   );
+  const [templateId, setTemplateId] = useState<string | null>(value.templateId);
+  const [templates, setTemplates] = useState<V3TemplateSummary[] | null>(null);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -160,16 +155,52 @@ export function V3ReportSettingsModal({
     setLength(value.length);
     setLanguage(value.language);
     setReasoningEffort(value.reasoningEffort);
+    setTemplateId(value.templateId);
   }, [
     open,
     value.reportType,
     value.length,
     value.language,
     value.reasoningEffort,
+    value.templateId,
   ]);
 
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setTemplatesError(null);
+    listV3Templates()
+      .then((rows) => {
+        if (!cancelled) setTemplates(rows);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 503) {
+          setTemplatesError("v3 engine disabled on the server.");
+        } else {
+          setTemplatesError(
+            err instanceof Error ? err.message : "Failed to load templates",
+          );
+        }
+        setTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, templatesRefreshKey]);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteV3Template(id);
+      setTemplates((prev) => prev?.filter((t) => t.id !== id) ?? null);
+      if (templateId === id) setTemplateId(null);
+    } catch (err) {
+      setTemplatesError(err instanceof Error ? err.message : "Delete failed");
+    }
+  };
+
   const save = () => {
-    onSave({ reportType, length, language, reasoningEffort });
+    onSave({ reportType, length, language, reasoningEffort, templateId });
     onClose();
   };
 
@@ -253,10 +284,98 @@ export function V3ReportSettingsModal({
               </p>
             </section>
 
-            <ComingSoon
-              label="Template"
-              hint="Pick a built-in template or upload your own."
-            />
+            <section
+              className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
+              data-testid="er-v3-template-picker"
+            >
+              <div className="mb-[10px] flex items-center justify-between">
+                <SectionHeader label="Template" />
+                <button
+                  type="button"
+                  onClick={onUploadClick}
+                  data-testid="er-v3-template-upload-trigger"
+                  className="inline-flex items-center gap-[6px] rounded-md border border-dashed border-[--color-border-strong] bg-transparent px-[10px] py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-solid hover:border-[--color-feedback-success] hover:text-[--color-feedback-success]"
+                >
+                  <Upload size={11} strokeWidth={2} />
+                  Upload
+                </button>
+              </div>
+              {templates === null ? (
+                <p className="text-[12px] text-[--color-text-tertiary]">
+                  Loading templates…
+                </p>
+              ) : templatesError ? (
+                <p className="text-[12px] text-[--color-feedback-danger]">
+                  {templatesError}
+                </p>
+              ) : templates.length === 0 ? (
+                <p className="text-[12px] text-[--color-text-tertiary]">
+                  No templates available.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-[4px]">
+                  <li key="__default__">
+                    <button
+                      type="button"
+                      onClick={() => setTemplateId(null)}
+                      data-testid="er-v3-template-option-default"
+                      className={[
+                        "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-[12.5px]",
+                        templateId === null
+                          ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)] text-[--color-text-primary]"
+                          : "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-secondary] hover:border-[--color-border-strong]",
+                      ].join(" ")}
+                    >
+                      <span>
+                        <span className="font-medium">Default for report type</span>
+                        <span className="ml-2 font-mono text-[10px] text-[--color-text-tertiary]">
+                          falls back to {reportType}_default
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                  {templates.map((t) => {
+                    const active = templateId === t.id;
+                    return (
+                      <li key={t.id}>
+                        <div
+                          className={[
+                            "flex items-center gap-2 rounded-md border px-3 py-2",
+                            active
+                              ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)]"
+                              : "border-[--color-border-subtle] bg-[--color-bg-base] hover:border-[--color-border-strong]",
+                          ].join(" ")}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setTemplateId(t.id)}
+                            data-testid={`er-v3-template-option-${t.id}`}
+                            className="flex min-w-0 flex-1 flex-col text-left"
+                          >
+                            <span className="truncate text-[12.5px] font-medium text-[--color-text-primary]">
+                              {t.name}
+                            </span>
+                            <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
+                              {t.is_builtin ? "built-in" : "uploaded"}
+                            </span>
+                          </button>
+                          {!t.is_builtin ? (
+                            <button
+                              type="button"
+                              aria-label={`Delete template ${t.name}`}
+                              onClick={() => handleDelete(t.id)}
+                              className="rounded p-1 text-[--color-feedback-danger] hover:bg-[--color-surface-hover]"
+                            >
+                              <Trash size={12} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
           </div>
 
           <div className="flex justify-end gap-2 rounded-b-[14px] border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[22px] py-[14px]">
