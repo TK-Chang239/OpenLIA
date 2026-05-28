@@ -19,7 +19,7 @@
  * v3-specific ``V3RunsPopover`` into the registry's ``renderPopover``
  * slot — each run row maps to its report_id.
  */
-import { type JSX, useCallback, useEffect, useMemo, useState } from "react";
+import { type JSX, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/_request";
@@ -29,8 +29,6 @@ import {
   type V3StartPayload,
   getV3Run,
   startV3RunAsync,
-  v3HtmlUrl,
-  v3PdfUrl,
 } from "../../api/equity-research-v3";
 import { useAuth } from "../../auth/AuthContext";
 import { ErComposer } from "../../components/equity-research/ErComposer";
@@ -43,6 +41,8 @@ import {
   V3ReportSettingsModal,
   type V3SettingsValue,
 } from "../../components/equity-research-v3/V3ReportSettingsModal";
+import { V3ReportCard } from "../../components/equity-research-v3/V3ReportCard";
+import { V3RevisionChat } from "../../components/equity-research-v3/V3RevisionChat";
 import { V3RunsPopover } from "../../components/equity-research-v3/V3RunsPopover";
 import { V3TemplateUploadModal } from "../../components/equity-research-v3/V3TemplateUploadModal";
 import { useV3RunStream } from "../../components/equity-research-v3/useV3RunStream";
@@ -322,7 +322,31 @@ export default function EquityResearchV3(): JSX.Element {
                 />
               ) : null}
 
-              {detail ? <ReportResult detail={detail} /> : null}
+              {detail ? (
+                <>
+                  <V3ReportCard
+                    detail={detail}
+                    revising={detail.report.status === "revising"}
+                  />
+                  <SectionPreview detail={detail} />
+                  <V3RevisionChat
+                    reportId={detail.report.report_id}
+                    parentRunning={detail.report.status === "running"}
+                    onRevisionComplete={() => {
+                      // Re-fetch the full detail so the latest
+                      // section/chart versions land in the card.
+                      void (async () => {
+                        try {
+                          const d = await getV3Run(detail.report.report_id);
+                          setDetail(d);
+                        } catch {
+                          /* surface via existing error path on next render */
+                        }
+                      })();
+                    }}
+                  />
+                </>
+              ) : null}
             </div>
           )}
         </div>
@@ -534,59 +558,31 @@ function summarizePayload(event: V3Event): string {
 // Result viewer (shown after the stream reaches a terminal event)
 // ---------------------------------------------------------------------------
 
-function ReportResult({ detail }: { detail: V3ReportDetail }): JSX.Element {
-  const htmlHref = useMemo(
-    () => v3HtmlUrl(detail.report.report_id),
-    [detail.report.report_id],
-  );
-  const pdfHref = useMemo(
-    () => v3PdfUrl(detail.report.report_id),
-    [detail.report.report_id],
-  );
-
+function SectionPreview({ detail }: { detail: V3ReportDetail }): JSX.Element {
   return (
-    <section data-testid="er-v3-result">
-      <header className="mb-4 border-b border-[--color-border-subtle] pb-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-[18px] font-semibold text-[--color-text-primary]">
-            {detail.report.subject}
-          </h2>
-          <div className="flex gap-2">
-            <a
-              href={htmlHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md border border-[--color-border-subtle] px-3 py-1 text-[11px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
-            >
-              Open HTML
-            </a>
-            <a
-              href={pdfHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-md border border-[--color-border-subtle] px-3 py-1 text-[11px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
-            >
-              Download PDF
-            </a>
-          </div>
+    <section data-testid="er-v3-section-preview" className="max-w-[640px]">
+      {detail.error_message ? (
+        <div className="mb-3 rounded-md border border-[--color-feedback-warning] bg-[rgba(255,180,0,0.06)] px-3 py-2 text-[12px] text-[--color-feedback-warning]">
+          {detail.error_message}
         </div>
-        <div className="mt-1 font-mono text-[10.5px] text-[--color-text-tertiary]">
-          Template: {detail.report.template_id} · Status: {detail.report.status} ·{" "}
-          {detail.sections.length} sections · {detail.charts.length} charts ·{" "}
-          {detail.citations.length} citations
-        </div>
-        {detail.error_message ? (
-          <div className="mt-2 text-[12px] text-[--color-feedback-warning]">
-            {detail.error_message}
-          </div>
-        ) : null}
-      </header>
+      ) : null}
 
       {detail.sections.map((s) => (
         <article key={s.section_id} className="mb-6">
-          <h3 className="mb-1 text-[15px] font-semibold text-[--color-text-primary]">
-            {s.title}
-          </h3>
+          <header className="mb-1 flex items-center gap-2">
+            <h3 className="m-0 text-[15px] font-semibold text-[--color-text-primary]">
+              {s.title}
+            </h3>
+            {s.version > 1 ? (
+              <span
+                data-testid={`er-v3-section-revised-${s.section_id}`}
+                title={`Last touched in revision v${s.version}`}
+                className="inline-flex items-center gap-[4px] rounded-full border border-[--color-border-subtle] bg-[--color-bg-elevated] px-2 py-[1px] font-mono text-[9.5px] uppercase tracking-[0.08em] text-[--color-text-secondary]"
+              >
+                Revised v{s.version}
+              </span>
+            ) : null}
+          </header>
           <pre className="whitespace-pre-wrap rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] p-3 text-[12.5px] leading-[1.55] text-[--color-text-secondary]">
             {s.markdown}
           </pre>

@@ -162,6 +162,8 @@ export interface V3SectionRow {
   section_index: number;
   title: string;
   markdown: string;
+  /** 1 = original-run content; >1 = touched by a revision. */
+  version: number;
 }
 
 export interface V3ChartRow {
@@ -170,6 +172,22 @@ export interface V3ChartRow {
   title: string;
   spec: Record<string, unknown>;
   rendered_url: string | null;
+  version: number;
+}
+
+export interface V3Revision {
+  id: string;
+  report_id: string;
+  revision_index: number;
+  request: string;
+  status: "running" | "completed" | "failed" | "cancelled";
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface V3RevisionStartResponse {
+  revision_id: string;
 }
 
 export interface V3CitationRow {
@@ -297,4 +315,45 @@ export function deleteV3Template(templateId: string): Promise<void> {
     `${PREFIX}/templates/${encodeURIComponent(templateId)}`,
     { method: "DELETE" },
   );
+}
+
+// ---------------------------------------------------------------------------
+// Revisions surface (PR4)
+// ---------------------------------------------------------------------------
+
+export function startV3Revision(
+  reportId: string,
+  payload: { request: string },
+): Promise<V3RevisionStartResponse> {
+  return request<V3RevisionStartResponse>(
+    `${PREFIX}/runs/${encodeURIComponent(reportId)}/revise`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export function listV3Revisions(reportId: string): Promise<V3Revision[]> {
+  return request<V3Revision[]>(
+    `${PREFIX}/runs/${encodeURIComponent(reportId)}/revisions`,
+  );
+}
+
+export function cancelV3Revision(
+  revisionId: string,
+): Promise<{ cancelled: boolean }> {
+  return request<{ cancelled: boolean }>(
+    `${PREFIX}/revisions/${encodeURIComponent(revisionId)}/cancel`,
+    { method: "POST" },
+  );
+}
+
+/**
+ * SSE URL for a v3 revision. Same event shape as v3 runs (the
+ * BrokerEmitter publishes against the revision_id), so
+ * ``useV3RunStream`` could be reused — but a dedicated
+ * ``useV3RevisionStream`` keeps the revision-specific terminal
+ * handling (status flip from "running" → "completed" on the parent
+ * report) cohesive.
+ */
+export function v3RevisionEventsUrl(revisionId: string): string {
+  return `${PREFIX}/revisions/${encodeURIComponent(revisionId)}/events`;
 }
