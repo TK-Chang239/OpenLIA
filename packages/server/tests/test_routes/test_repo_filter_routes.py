@@ -23,10 +23,12 @@ def test_filtered_list_returns_enriched_rows(client, user_factory, login_as, rep
     assert body["page_size"] == 50
     assert body["has_more"] is False
     assert len(body["items"]) == 2
-    # Every row carries the enriched shape.
+    # Every row carries the enriched shape (PR10: engine discriminator
+    # added for v3 polymorphic listing).
     first = body["items"][0]
     assert set(first.keys()) == {
         "id",
+        "engine",
         "report_id",
         "department",
         "title",
@@ -34,6 +36,7 @@ def test_filtered_list_returns_enriched_rows(client, user_factory, login_as, rep
         "generated_at",
         "saved_at",
     }
+    assert first["engine"] == "v1"
     assert first["filename"].endswith(".pdf")
 
 

@@ -4,6 +4,7 @@ import { RepoListItem } from "../RepoListItem";
 
 const ROW = {
   id: "i1",
+  engine: "v1" as const,
   report_id: "r1",
   department: "equity_research",
   title: "AAPL",
