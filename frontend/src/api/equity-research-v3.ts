@@ -251,6 +251,16 @@ export function v3PdfUrl(reportId: string): string {
   return `${PREFIX}/runs/${encodeURIComponent(reportId)}/pdf`;
 }
 
+/**
+ * Build the URL for the native .docx endpoint. python-docx generates
+ * a Word file from the persisted sections / charts / citations — no
+ * Playwright dependency. Anchor + a target=_blank triggers the
+ * browser's normal download flow.
+ */
+export function v3DocxUrl(reportId: string): string {
+  return `${PREFIX}/runs/${encodeURIComponent(reportId)}/docx`;
+}
+
 // ---------------------------------------------------------------------------
 // Streaming surface
 // ---------------------------------------------------------------------------
