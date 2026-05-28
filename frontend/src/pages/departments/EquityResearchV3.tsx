@@ -328,7 +328,6 @@ export default function EquityResearchV3(): JSX.Element {
                     detail={detail}
                     revising={detail.report.status === "revising"}
                   />
-                  <SectionPreview detail={detail} />
                   <V3RevisionChat
                     reportId={detail.report.report_id}
                     parentRunning={detail.report.status === "running"}
@@ -558,56 +557,3 @@ function summarizePayload(event: V3Event): string {
 // Result viewer (shown after the stream reaches a terminal event)
 // ---------------------------------------------------------------------------
 
-function SectionPreview({ detail }: { detail: V3ReportDetail }): JSX.Element {
-  return (
-    <section data-testid="er-v3-section-preview" className="max-w-[640px]">
-      {detail.error_message ? (
-        <div className="mb-3 rounded-md border border-[--color-feedback-warning] bg-[rgba(255,180,0,0.06)] px-3 py-2 text-[12px] text-[--color-feedback-warning]">
-          {detail.error_message}
-        </div>
-      ) : null}
-
-      {detail.sections.map((s) => (
-        <article key={s.section_id} className="mb-6">
-          <header className="mb-1 flex items-center gap-2">
-            <h3 className="m-0 text-[15px] font-semibold text-[--color-text-primary]">
-              {s.title}
-            </h3>
-            {s.version > 1 ? (
-              <span
-                data-testid={`er-v3-section-revised-${s.section_id}`}
-                title={`Last touched in revision v${s.version}`}
-                className="inline-flex items-center gap-[4px] rounded-full border border-[--color-border-subtle] bg-[--color-bg-elevated] px-2 py-[1px] font-mono text-[9.5px] uppercase tracking-[0.08em] text-[--color-text-secondary]"
-              >
-                Revised v{s.version}
-              </span>
-            ) : null}
-          </header>
-          <pre className="whitespace-pre-wrap rounded-md border border-[--color-border-subtle] bg-[--color-bg-base] p-3 text-[12.5px] leading-[1.55] text-[--color-text-secondary]">
-            {s.markdown}
-          </pre>
-        </article>
-      ))}
-
-      {detail.citations.length > 0 ? (
-        <section className="mt-6 border-t border-[--color-border-subtle] pt-3">
-          <h3 className="mb-2 text-[13px] font-semibold text-[--color-text-primary]">
-            Sources
-          </h3>
-          <ol className="space-y-1 text-[11.5px] text-[--color-text-secondary]">
-            {detail.citations
-              .filter((c) => c.display_index !== null)
-              .sort((a, b) => (a.display_index ?? 0) - (b.display_index ?? 0))
-              .map((c) => (
-                <li key={c.source_id}>
-                  <span className="font-medium">[{c.display_index}]</span>{" "}
-                  <code className="text-[--color-text-tertiary]">{c.source_id}</code>{" "}
-                  {c.tool_name}
-                </li>
-              ))}
-          </ol>
-        </section>
-      ) : null}
-    </section>
-  );
-}

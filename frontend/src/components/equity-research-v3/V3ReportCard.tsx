@@ -13,11 +13,20 @@
  *   - "Ready" pill flips to "Revising…" while a revision runs
  */
 import { motion, useReducedMotion } from "framer-motion";
-import { Clock, Download, FileText, Globe, Image as ImageIcon, Layers } from "lucide-react";
+import {
+  Clock,
+  Download,
+  ExternalLink,
+  FileText,
+  Globe,
+  Image as ImageIcon,
+  Layers,
+} from "lucide-react";
 import { type JSX } from "react";
 
 import type { V3ReportDetail } from "../../api/equity-research-v3";
 import { v3HtmlUrl, v3PdfUrl } from "../../api/equity-research-v3";
+import { useFileViewerOptional } from "../viewer/FileViewerContext";
 
 interface Props {
   detail: V3ReportDetail;
@@ -63,9 +72,27 @@ export function V3ReportCard({
   revising = false,
 }: Props): JSX.Element {
   const reduce = useReducedMotion();
+  const fileViewer = useFileViewerOptional();
   const previewText = preview ?? deriveFallbackPreview(detail);
   const htmlHref = v3HtmlUrl(detail.report.report_id);
   const pdfHref = v3PdfUrl(detail.report.report_id);
+
+  const openInViewer = (trigger?: HTMLElement | null) => {
+    if (!fileViewer) {
+      // No FileViewer mounted in the tree (tests, embedded contexts) —
+      // fall back to the standalone HTML window so the user is never
+      // left without a way to read the report.
+      window.open(htmlHref, "_blank", "noopener,noreferrer");
+      return;
+    }
+    fileViewer.open({
+      filename: detail.report.subject || "Equity Research Report",
+      kind: "report",
+      metadata: `v3 engine · ${detail.report.template_id}`,
+      source: { kind: "v3_report", reportId: detail.report.report_id },
+      trigger: trigger ?? null,
+    });
+  };
 
   return (
     <motion.article
@@ -98,14 +125,13 @@ export function V3ReportCard({
       {previewText ? (
         <p className="m-0 line-clamp-3 px-[18px] pb-[14px] text-[13px] leading-[1.6] text-[--color-text-secondary]">
           {previewText}{" "}
-          <a
-            href={htmlHref}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={(e) => openInViewer(e.currentTarget)}
             className="font-medium text-[--color-text-primary] hover:text-[--color-feedback-success]"
           >
             Read more
-          </a>
+          </button>
         </p>
       ) : null}
 
@@ -140,16 +166,15 @@ export function V3ReportCard({
       </div>
 
       <div className="flex items-center gap-2 border-t border-[--color-border-subtle] bg-[--color-bg-base] px-[18px] py-3">
-        <a
-          href={htmlHref}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          onClick={(e) => openInViewer(e.currentTarget)}
           data-testid="er-v3-report-card-open"
           className="inline-flex h-[30px] items-center gap-[6px] rounded-md bg-[--color-accent-primary] px-3 text-[13px] font-medium text-[--color-accent-on] transition-colors hover:bg-[--color-accent-hover]"
         >
           <FileText size={13} strokeWidth={1.7} />
           Open report
-        </a>
+        </button>
         <a
           href={pdfHref}
           target="_blank"
@@ -159,6 +184,20 @@ export function V3ReportCard({
         >
           <Download size={13} strokeWidth={1.7} />
           Download PDF
+        </a>
+        {/* Standalone-HTML window — the original "open new tab"
+            behaviour, kept as a secondary action so the user can use
+            the browser's native Save As → Word / Print → PDF. */}
+        <a
+          href={htmlHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="er-v3-report-card-standalone"
+          title="Open the printable HTML in a new tab (use the browser's Save As to grab a Word or PDF copy)"
+          className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[12px] text-[--color-text-tertiary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-secondary]"
+        >
+          <ExternalLink size={12} strokeWidth={1.7} />
+          Standalone
         </a>
       </div>
     </motion.article>

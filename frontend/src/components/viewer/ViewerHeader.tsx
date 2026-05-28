@@ -45,6 +45,8 @@ export function ViewerHeader({
           <ReportDownloadButton reportId={source.runId} engine="v2" />
         ) : source.kind === "v23_report" ? (
           <ReportDownloadButton reportId={source.runId} engine="v23" />
+        ) : source.kind === "v3_report" ? (
+          <ReportDownloadButton reportId={source.reportId} engine="v3" />
         ) : (
           <FileDownloadButton variant="viewer-header" url={sourceUrl(source)} filename={filename} />
         )}
