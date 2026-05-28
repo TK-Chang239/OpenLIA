@@ -26,5 +26,10 @@ export function sourceUrl(source: FileSource): string {
       "sourceUrl(): v23_report sources are rendered via the v2.3 payload endpoint inside StructuredReportRenderer",
     );
   }
+  if (source.kind === "v3_report") {
+    throw new Error(
+      "sourceUrl(): v3_report sources are rendered via getV3Run inside V3ReportRenderer",
+    );
+  }
   return downloadUrlForAttachment(source.attachmentId);
 }

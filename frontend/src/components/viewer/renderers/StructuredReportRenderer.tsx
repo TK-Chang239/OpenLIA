@@ -6,6 +6,7 @@ import { RendererError, RendererLoading } from "./RendererStates";
 import { type FileSource } from "../FileViewerContext";
 import { V23ReportRenderer } from "./V23ReportRenderer";
 import { V2ReportRenderer } from "./V2ReportRenderer";
+import { V3ReportRenderer } from "./V3ReportRenderer";
 
 type Status = "loading" | "ok" | "error";
 
@@ -22,6 +23,9 @@ export function StructuredReportRenderer({ source }: { source: FileSource }): JS
   }
   if (source.kind === "v23_report") {
     return <V23ReportRenderer source={source} />;
+  }
+  if (source.kind === "v3_report") {
+    return <V3ReportRenderer source={source} />;
   }
   return <V1SchemaReportRenderer source={source} />;
 }
