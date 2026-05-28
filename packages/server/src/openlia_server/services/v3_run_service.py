@@ -416,11 +416,21 @@ def cleanup_orphaned_running_rows(
 # ---------------------------------------------------------------------------
 
 
-def _load_report(*, db: DBSession, user_id: str, report_id: str) -> ReportV3:
+def get_report_row(*, db: DBSession, user_id: str, report_id: str) -> ReportV3:
+    """Return the ReportV3 row, scoped to the caller. Raises
+    ``ReportNotFoundError`` if missing or owned by a different user.
+    Lightweight alternative to ``get_run`` when only the report
+    metadata (subject / template / dates) is needed — used by the
+    /html, /pdf, /docx route filename builders without loading the
+    full section + chart + citation tree."""
     row = db.get(ReportV3, report_id)
     if row is None or row.user_id != user_id:
         raise ReportNotFoundError(f"v3 report {report_id!r} not found")
     return row
+
+
+# Back-compat alias for callers that already use the private name.
+_load_report = get_report_row
 
 
 def _default_runner(transports: DataTransports | None) -> Runner:

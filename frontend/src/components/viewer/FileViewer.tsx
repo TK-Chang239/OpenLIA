@@ -157,20 +157,24 @@ export function FileViewer(): JSX.Element | null {
             metadata={current.metadata}
             source={current.source}
             reportId={
-              current.source.kind === "report" ? current.source.reportId : undefined
+              current.source.kind === "report"
+                ? current.source.reportId
+                : current.source.kind === "v3_report"
+                  ? current.source.reportId
+                  : undefined
+            }
+            saveEngine={
+              current.source.kind === "v3_report" ? "v3" : "v1"
             }
             initialSaved={current.initialSaved}
-            // SaveToRepoButton in the viewer header is v1-only — it
-            // expects a reports.id and calls /api/repo/items. v2.2,
-            // v2.3, and v3 have their own save flows (or none yet),
+            // SaveToRepoButton supports v1 (POST /api/repo/items) and
+            // v3 (POST /api/repo/v3-runs). v2.2 and v2.3 use their own
+            // save flows on their respective cards, not the header,
             // so hide the header save button for those source kinds.
-            // The download button IS engine-aware via the
-            // ReportDownloadButton prop.
             hideSaveToRepoButton={
               current.hideSaveToRepoButton ??
               (current.source.kind === "v2_report" ||
-                current.source.kind === "v23_report" ||
-                current.source.kind === "v3_report")
+                current.source.kind === "v23_report")
             }
             onClose={close}
             closeButtonRef={closeButtonRef}

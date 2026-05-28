@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from openlia_server.db.models.content import RepoItem, Report
 from openlia_server.db.models.pipeline_runs import PipelineRun
+from openlia_server.db.models.report_v3 import ReportV3
 
 SortKey = Literal[
     "saved_desc",
@@ -132,6 +133,72 @@ def is_v2_run_saved(
             select(RepoItem.id).where(
                 RepoItem.user_id == user_id,
                 RepoItem.pipeline_run_id == pipeline_run_id,
+            )
+        ).first()
+        is not None
+    )
+
+
+# ---------------------------------------------------------------------------
+# v3 equity-research report repo support — third polymorphic target.
+# ---------------------------------------------------------------------------
+
+
+def save_v3_report_to_repo(
+    db: Session, *, user_id: str, v3_report_id: str
+) -> RepoItem:
+    """Save a v3 report to the user's repo. Idempotent."""
+    existing = db.execute(
+        select(RepoItem).where(
+            RepoItem.user_id == user_id,
+            RepoItem.v3_report_id == v3_report_id,
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return existing
+    report = db.get(ReportV3, v3_report_id)
+    if report is None or report.user_id != user_id:
+        raise LookupError(f"v3 report {v3_report_id} not found")
+    item = RepoItem(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        report_id=None,
+        pipeline_run_id=None,
+        v3_report_id=v3_report_id,
+    )
+    db.add(item)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return db.execute(
+            select(RepoItem).where(
+                RepoItem.user_id == user_id,
+                RepoItem.v3_report_id == v3_report_id,
+            )
+        ).scalar_one()
+    db.refresh(item)
+    return item
+
+
+def unsave_v3_report_from_repo(
+    db: Session, *, user_id: str, v3_report_id: str
+) -> None:
+    db.query(RepoItem).filter(
+        RepoItem.user_id == user_id,
+        RepoItem.v3_report_id == v3_report_id,
+    ).delete()
+    db.commit()
+
+
+def is_v3_report_saved(
+    db: Session, *, user_id: str, v3_report_id: str
+) -> bool:
+    return (
+        db.execute(
+            select(RepoItem.id).where(
+                RepoItem.user_id == user_id,
+                RepoItem.v3_report_id == v3_report_id,
             )
         ).first()
         is not None

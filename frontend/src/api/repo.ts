@@ -123,3 +123,27 @@ export const fetchV2RunMeta = (runId: string) =>
   fetchJson<V2RunMeta>(
     `/api/departments/equity-research/v2/runs/${encodeURIComponent(runId)}/meta`,
   );
+
+// v3 equity-research repo mirrors of the v1/v2 helpers. Polymorphic
+// pointer column ``v3_report_id`` lives in ``repo_items`` alongside
+// ``report_id`` (v1) and ``pipeline_run_id`` (v2.2); the routes keep
+// each engine's surface explicit so callers stay clear about which
+// engine wrote the artifact.
+
+export const saveV3RunToRepo = (reportId: string) =>
+  fetchJson<RepoItem>("/api/repo/v3-runs", {
+    method: "POST",
+    json: { v3_report_id: reportId },
+  });
+
+export const unsaveV3RunFromRepo = (reportId: string) =>
+  fetchJson<void>(
+    `/api/repo/v3-runs?v3_report_id=${encodeURIComponent(reportId)}`,
+    { method: "DELETE" },
+  );
+
+/** Returns the v3 report ids the current user has saved.
+ *  SavedReportsContext fetches this on mount so the V3ReportCard's
+ *  `initialSaved` prop is correct after a reload. */
+export const listSavedV3Runs = () =>
+  fetchJson<{ saved_report_ids: string[] }>("/api/repo/v3-runs");

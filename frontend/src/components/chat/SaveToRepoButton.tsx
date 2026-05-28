@@ -1,14 +1,29 @@
 import { useEffect, useState } from "react";
 import { Bookmark, BookmarkCheck, Loader2 } from "lucide-react";
-import { saveToRepo, unsaveFromRepo } from "../../api/repo";
+import {
+  saveToRepo,
+  saveV2RunToRepo,
+  saveV3RunToRepo,
+  unsaveFromRepo,
+  unsaveV2RunFromRepo,
+  unsaveV3RunFromRepo,
+} from "../../api/repo";
 import { useSavedReportsOptional } from "../repo/SavedReportsContext";
 
 export type SaveToRepoVariant = "chip" | "viewer-header";
+
+/** Which engine produced the artifact. Selects the right repo
+ *  endpoint (``/items`` for v1, ``/v2-runs`` for v2.2, ``/v3-runs``
+ *  for v3) and the right SavedReportsContext bucket. */
+export type SaveToRepoEngine = "v1" | "v2" | "v3";
 
 export interface SaveToRepoButtonProps {
   reportId: string;
   initialSaved: boolean;
   variant: SaveToRepoVariant;
+  /** Defaults to "v1" so the existing v1 ReportCard call-sites keep
+   *  working without changes. */
+  engine?: SaveToRepoEngine;
   onChange?: (saved: boolean) => void;
 }
 
@@ -18,6 +33,7 @@ export function SaveToRepoButton({
   reportId,
   initialSaved,
   variant,
+  engine = "v1",
   onChange,
 }: SaveToRepoButtonProps): JSX.Element {
   const ctx = useSavedReportsOptional();
@@ -32,7 +48,13 @@ export function SaveToRepoButton({
     setLocalSaved(initialSaved);
   }, [initialSaved]);
 
-  const saved = ctx ? ctx.isSaved(reportId) || localSaved : localSaved;
+  const ctxIsSaved =
+    engine === "v2"
+      ? ctx?.isV2Saved(reportId)
+      : engine === "v3"
+        ? ctx?.isV3Saved(reportId)
+        : ctx?.isSaved(reportId);
+  const saved = ctxIsSaved || localSaved;
 
   const ariaLabel = saved ? "Remove from repository" : "Save to repository";
 
@@ -42,15 +64,31 @@ export function SaveToRepoButton({
     setErrorMessage(null);
     try {
       if (saved) {
-        await unsaveFromRepo(reportId);
+        if (engine === "v2") {
+          await unsaveV2RunFromRepo(reportId);
+          ctx?.markV2Unsaved(reportId);
+        } else if (engine === "v3") {
+          await unsaveV3RunFromRepo(reportId);
+          ctx?.markV3Unsaved(reportId);
+        } else {
+          await unsaveFromRepo(reportId);
+          ctx?.markUnsaved(reportId);
+        }
         setLocalSaved(false);
-        ctx?.markUnsaved(reportId);
         setAnnouncement("Report removed from Repository");
         onChange?.(false);
       } else {
-        await saveToRepo(reportId);
+        if (engine === "v2") {
+          await saveV2RunToRepo(reportId);
+          ctx?.markV2Saved(reportId);
+        } else if (engine === "v3") {
+          await saveV3RunToRepo(reportId);
+          ctx?.markV3Saved(reportId);
+        } else {
+          await saveToRepo(reportId);
+          ctx?.markSaved(reportId);
+        }
         setLocalSaved(true);
-        ctx?.markSaved(reportId);
         setAnnouncement("Report saved to Repository");
         onChange?.(true);
       }

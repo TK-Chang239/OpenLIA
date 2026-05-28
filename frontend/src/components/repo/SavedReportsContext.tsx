@@ -8,7 +8,11 @@ import {
   type JSX,
   type ReactNode,
 } from "react";
-import { listRepoItems, listSavedV2Runs } from "../../api/repo";
+import {
+  listRepoItems,
+  listSavedV2Runs,
+  listSavedV3Runs,
+} from "../../api/repo";
 
 interface ContextShape {
   // v1 reports — keyed by reports.id.
@@ -21,6 +25,11 @@ interface ContextShape {
   isV2Saved: (runId: string) => boolean;
   markV2Saved: (runId: string) => void;
   markV2Unsaved: (runId: string) => void;
+  // v3 equity-research reports — keyed by report_v3.id. Same isolation
+  // rationale as v2.
+  isV3Saved: (reportId: string) => boolean;
+  markV3Saved: (reportId: string) => void;
+  markV3Unsaved: (reportId: string) => void;
 }
 
 const SavedReportsContext = createContext<ContextShape | null>(null);
@@ -28,13 +37,14 @@ const SavedReportsContext = createContext<ContextShape | null>(null);
 export function SavedReportsProvider({ children }: { children: ReactNode }): JSX.Element {
   const [savedIds, setSavedIds] = useState<Set<string>>(() => new Set());
   const [savedV2Ids, setSavedV2Ids] = useState<Set<string>>(() => new Set());
+  const [savedV3Ids, setSavedV3Ids] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
     void listRepoItems()
       .then((res) => {
         if (cancelled) return;
-        // v1 rows return report_id; v2 rows leave it null. Filter for safety.
+        // v1 rows return report_id; v2/v3 rows leave it null. Filter for safety.
         const v1Ids = res.items
           .map((i) => i.report_id)
           .filter((x): x is string => typeof x === "string" && x.length > 0);
@@ -50,6 +60,14 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
       })
       .catch(() => {
         // Endpoint is new — older deployments will 404; that's fine.
+      });
+    void listSavedV3Runs()
+      .then((res) => {
+        if (cancelled) return;
+        setSavedV3Ids(new Set(res.saved_report_ids));
+      })
+      .catch(() => {
+        // Endpoint is new (PR8) — older deployments will 404; that's fine.
       });
     return () => {
       cancelled = true;
@@ -96,6 +114,29 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
     });
   }, []);
 
+  const isV3Saved = useCallback(
+    (reportId: string) => savedV3Ids.has(reportId),
+    [savedV3Ids],
+  );
+
+  const markV3Saved = useCallback((reportId: string) => {
+    setSavedV3Ids((prev) => {
+      if (prev.has(reportId)) return prev;
+      const next = new Set(prev);
+      next.add(reportId);
+      return next;
+    });
+  }, []);
+
+  const markV3Unsaved = useCallback((reportId: string) => {
+    setSavedV3Ids((prev) => {
+      if (!prev.has(reportId)) return prev;
+      const next = new Set(prev);
+      next.delete(reportId);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<ContextShape>(
     () => ({
       isSaved,
@@ -104,8 +145,21 @@ export function SavedReportsProvider({ children }: { children: ReactNode }): JSX
       isV2Saved,
       markV2Saved,
       markV2Unsaved,
+      isV3Saved,
+      markV3Saved,
+      markV3Unsaved,
     }),
-    [isSaved, markSaved, markUnsaved, isV2Saved, markV2Saved, markV2Unsaved],
+    [
+      isSaved,
+      markSaved,
+      markUnsaved,
+      isV2Saved,
+      markV2Saved,
+      markV2Unsaved,
+      isV3Saved,
+      markV3Saved,
+      markV3Unsaved,
+    ],
   );
 
   return <SavedReportsContext.Provider value={value}>{children}</SavedReportsContext.Provider>;

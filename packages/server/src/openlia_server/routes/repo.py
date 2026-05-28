@@ -23,10 +23,15 @@ class RepoSaveV2In(BaseModel):
     pipeline_run_id: str
 
 
+class RepoSaveV3In(BaseModel):
+    v3_report_id: str
+
+
 class RepoItemOut(BaseModel):
     id: str
     report_id: str | None = None
     pipeline_run_id: str | None = None
+    v3_report_id: str | None = None
     created_at: datetime
 
 
@@ -37,6 +42,15 @@ class RepoV2SavedListOut(BaseModel):
     """
 
     saved_run_ids: list[str]
+
+
+class RepoV3SavedListOut(BaseModel):
+    """v3 mirror of RepoV2SavedListOut — the v3_report ids the user
+    has bookmarked, used for the V3ReportCard's `initialSaved` prop
+    on page load.
+    """
+
+    saved_report_ids: list[str]
 
 
 class RepoRowOut(BaseModel):
@@ -228,5 +242,47 @@ def build_repo_router(*, db_session_factory, mode: str) -> APIRouter:
         rows = svc.list_items(db, user_id=user.id)
         ids = [r.pipeline_run_id for r in rows if r.pipeline_run_id is not None]
         return RepoV2SavedListOut(saved_run_ids=ids)
+
+    # ----- v3 equity-research repo endpoints -----
+
+    @router.post(
+        "/v3-runs",
+        response_model=RepoItemOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def save_v3_ep(
+        body: RepoSaveV3In,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoItemOut:
+        try:
+            item = svc.save_v3_report_to_repo(
+                db, user_id=user.id, v3_report_id=body.v3_report_id
+            )
+        except LookupError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "v3_report_not_found", "message": str(exc)},
+            ) from exc
+        return RepoItemOut.model_validate(item, from_attributes=True)
+
+    @router.delete("/v3-runs", status_code=status.HTTP_204_NO_CONTENT)
+    def unsave_v3_ep(
+        v3_report_id: str,
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> None:
+        svc.unsave_v3_report_from_repo(
+            db, user_id=user.id, v3_report_id=v3_report_id
+        )
+
+    @router.get("/v3-runs", response_model=RepoV3SavedListOut)
+    def list_v3_saved_ep(
+        db: Session = Depends(session_dep),
+        user: User = require_auth,
+    ) -> RepoV3SavedListOut:
+        rows = svc.list_items(db, user_id=user.id)
+        ids = [r.v3_report_id for r in rows if r.v3_report_id is not None]
+        return RepoV3SavedListOut(saved_report_ids=ids)
 
     return router

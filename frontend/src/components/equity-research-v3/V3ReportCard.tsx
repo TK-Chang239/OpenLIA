@@ -15,7 +15,6 @@
 import { motion, useReducedMotion } from "framer-motion";
 import {
   Clock,
-  Download,
   ExternalLink,
   FileText,
   Globe,
@@ -25,11 +24,9 @@ import {
 import { type JSX } from "react";
 
 import type { V3ReportDetail } from "../../api/equity-research-v3";
-import {
-  v3DocxUrl,
-  v3HtmlUrl,
-  v3PdfUrl,
-} from "../../api/equity-research-v3";
+import { v3HtmlUrl } from "../../api/equity-research-v3";
+import { ReportDownloadButton } from "../report/ReportDownloadButton";
+import { SaveToRepoButton } from "../chat/SaveToRepoButton";
 import { useFileViewerOptional } from "../viewer/FileViewerContext";
 
 interface Props {
@@ -44,6 +41,10 @@ interface Props {
    *  "Ready". The page sets this while ``listV3Revisions`` shows a
    *  ``running`` revision row. */
   revising?: boolean;
+  /** Whether the report is already in the user's repository. The
+   *  Save-to-Repo button shows the ``Saved`` state on first paint
+   *  instead of flashing through ``Save``. */
+  initialSaved?: boolean;
 }
 
 function formatDate(iso: string): string {
@@ -74,13 +75,12 @@ export function V3ReportCard({
   preview,
   generatedSeconds,
   revising = false,
+  initialSaved = false,
 }: Props): JSX.Element {
   const reduce = useReducedMotion();
   const fileViewer = useFileViewerOptional();
   const previewText = preview ?? deriveFallbackPreview(detail);
   const htmlHref = v3HtmlUrl(detail.report.report_id);
-  const pdfHref = v3PdfUrl(detail.report.report_id);
-  const docxHref = v3DocxUrl(detail.report.report_id);
 
   const openInViewer = (trigger?: HTMLElement | null) => {
     if (!fileViewer) {
@@ -180,24 +180,21 @@ export function V3ReportCard({
           <FileText size={13} strokeWidth={1.7} />
           Open report
         </button>
-        <a
-          href={pdfHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="er-v3-report-card-pdf"
-          className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
-        >
-          <Download size={13} strokeWidth={1.7} />
-          PDF
-        </a>
-        <a
-          href={docxHref}
-          data-testid="er-v3-report-card-docx"
-          className="inline-flex h-[30px] items-center gap-[6px] rounded-md border border-[--color-border-subtle] bg-transparent px-3 text-[13px] text-[--color-text-secondary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-primary]"
-        >
-          <Download size={13} strokeWidth={1.7} />
-          Word
-        </a>
+        <span data-testid="er-v3-report-card-download">
+          <ReportDownloadButton
+            reportId={detail.report.report_id}
+            engine="v3"
+            variant="primary"
+          />
+        </span>
+        <span data-testid="er-v3-report-card-save">
+          <SaveToRepoButton
+            reportId={detail.report.report_id}
+            engine="v3"
+            initialSaved={initialSaved}
+            variant="viewer-header"
+          />
+        </span>
         {/* Standalone-HTML window — the original "open new tab"
             behaviour, kept as a secondary action so the user can use
             the browser's native Print → PDF if they want a custom
@@ -208,7 +205,7 @@ export function V3ReportCard({
           rel="noopener noreferrer"
           data-testid="er-v3-report-card-standalone"
           title="Open the printable HTML in a new tab (use the browser's Save As to grab a Word or PDF copy)"
-          className="inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[12px] text-[--color-text-tertiary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-secondary]"
+          className="ml-auto inline-flex h-[30px] items-center gap-[6px] rounded-md px-2 text-[12px] text-[--color-text-tertiary] transition-colors hover:bg-[--color-surface-hover] hover:text-[--color-text-secondary]"
         >
           <ExternalLink size={12} strokeWidth={1.7} />
           Standalone
