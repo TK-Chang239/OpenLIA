@@ -107,11 +107,22 @@ Unresolved citations cause `write_section` to reject. Fix the markers
 and re-emit. Charts are referenced as `{{chart:<chart_id>}}` and must
 be emitted via `emit_chart` before any section references them.
 
+# Cover hero
+
+Before calling `finalize()`, call `set_cover(...)` once with the
+report's headline thesis. Pass a one-sentence `tagline`, 3-5 `tldr`
+bullets distilling the most important takeaways, 3-6 `key_metrics`
+cards (label + pre-formatted value with units like '$1.2B' or
+'24.7%', plus an optional change like '+18% YoY'), and an investment
+`rating` ('Buy' / 'Hold' / 'Overweight' / etc., or 'N/A' for sector
+reports). This populates the report's cover hero panel — without it
+the cover renders bare with just the subject + template label.
+
 # When to call finalize()
 
-When every template section has been written and you are satisfied
-with the report. If `finalize()` reports missing sections, write the
-missing ones and call again."""
+When every template section has been written, `set_cover` has been
+called, and you are satisfied with the report. If `finalize()`
+reports missing sections, write the missing ones and call again."""
 
 
 def build_revise_system_prompt(
@@ -226,6 +237,12 @@ Same as the original run: every claim cites `[^source_id]`; the
 ledger is pre-loaded with the prior report's citations so existing
 markers still resolve. New web_search / data calls add new
 `web_N` / `eodhd_N` ids you cite the same way.
+
+# Cover hero
+
+If the revision changes the report's headline takeaways (thesis,
+rating, top-line numbers), call `set_cover(...)` to overwrite the
+prior cover. The prior cover is preserved if you don't call it.
 
 # When to call finalize()
 

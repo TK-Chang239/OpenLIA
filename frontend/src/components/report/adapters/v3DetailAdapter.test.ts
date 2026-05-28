@@ -126,6 +126,71 @@ describe("adaptV3DetailToSchema — citations + cover", () => {
     expect(schema.cover.eyebrow).toBe("Stock Initiation Report");
     expect(schema.cover.ticker).toBe("RKLB.US");
   });
+
+  test("cover falls back to empty subtitle / tagline / tldr / metrics when detail.cover is absent (PR9)", () => {
+    const schema = adaptV3DetailToSchema(DETAIL);
+    expect(schema.cover.subtitle).toBe("");
+    expect(schema.cover.tagline).toBe("");
+    expect(schema.cover.tldr).toEqual([]);
+    expect(schema.cover.key_metrics).toEqual([]);
+    expect(schema.cover.consensus_rating).toBeNull();
+  });
+
+  test("cover populates subtitle / tagline / tldr / metrics / rating from detail.cover (PR9)", () => {
+    const schema = adaptV3DetailToSchema({
+      ...DETAIL,
+      cover: {
+        subtitle: "Q1 2026 initiation",
+        tagline: "Pure-play orbital launch leader",
+        tldr: ["Backlog at $1.2B", "Neutron on track", "Margin path to 35%"],
+        key_metrics: [
+          {
+            label: "Revenue FY24",
+            value: "$436M",
+            change: "+24% YoY",
+            tone: "positive",
+          },
+          { label: "Backlog", value: "$1.2B" },
+        ],
+        rating: "Buy",
+        upside_pct: 28.5,
+      },
+    });
+    expect(schema.cover.subtitle).toBe("Q1 2026 initiation");
+    expect(schema.cover.tagline).toBe("Pure-play orbital launch leader");
+    expect(schema.cover.tldr).toEqual([
+      "Backlog at $1.2B",
+      "Neutron on track",
+      "Margin path to 35%",
+    ]);
+    expect(schema.cover.key_metrics).toHaveLength(2);
+    expect(schema.cover.key_metrics?.[0]).toMatchObject({
+      label: "Revenue FY24",
+      value: "$436M",
+      delta: "+24% YoY",
+      delta_direction: "up",
+      tag: { tone: "positive" },
+    });
+    expect(schema.cover.consensus_rating).toBe("Buy");
+    expect(schema.cover.consensus_upside_pct).toBe(28.5);
+  });
+
+  test("cover metric tone maps to direction: positive=up, negative=down, neutral=flat (PR9)", () => {
+    const schema = adaptV3DetailToSchema({
+      ...DETAIL,
+      cover: {
+        tldr: [],
+        key_metrics: [
+          { label: "A", value: "1", tone: "positive" },
+          { label: "B", value: "2", tone: "negative" },
+          { label: "C", value: "3", tone: "neutral" },
+          { label: "D", value: "4" },
+        ],
+      },
+    });
+    const directions = schema.cover.key_metrics?.map((m) => m.delta_direction);
+    expect(directions).toEqual(["up", "down", "flat", null]);
+  });
 });
 
 describe("adaptV3DetailToSchema — inline chart placement", () => {

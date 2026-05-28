@@ -197,12 +197,35 @@ export interface V3CitationRow {
   provenance: Record<string, unknown>;
 }
 
+export interface V3CoverMetric {
+  label: string;
+  value: string;
+  change?: string | null;
+  tone?: "positive" | "negative" | "neutral" | null;
+}
+
+/** Cover hero content populated by the model's set_cover tool call.
+ *  All fields are optional; null/empty fields render as the bare
+ *  cover (subject + template-derived eyebrow only). */
+export interface V3CoverSpec {
+  subtitle?: string | null;
+  tagline?: string | null;
+  tldr: string[];
+  key_metrics: V3CoverMetric[];
+  rating?: string | null;
+  upside_pct?: number | null;
+}
+
 export interface V3ReportDetail {
   report: V3ReportSummary;
   error_message: string | null;
   sections: V3SectionRow[];
   charts: V3ChartRow[];
   citations: V3CitationRow[];
+  /** Null for runs where set_cover was never called (older reports
+   *  + early v3 runs). When present, the side viewer's ReportCover
+   *  surfaces the tagline / TLDR / key_metrics / rating panel. */
+  cover?: V3CoverSpec | null;
 }
 
 // ---------------------------------------------------------------------------

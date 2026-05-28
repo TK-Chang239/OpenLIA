@@ -265,6 +265,94 @@ def test_emit_chart_rejects_invalid_chart_type():
         )
 
 
+def test_set_cover_populates_workspace_with_validated_spec():
+    workspace, _ = _fresh_workspace()
+    tools = {t.name: t for t in build_output_tools(workspace=workspace)}
+    result = tools["set_cover"].execute(
+        {
+            "subtitle": "Q1 2026 initiation",
+            "tagline": "Neutron launch cadence unlocks the next leg of revenue",
+            "tldr": [
+                "Backlog at record $1.2B",
+                "Engine 9 production ramping on schedule",
+                "Margin trajectory: 35% by 2027",
+            ],
+            "key_metrics": [
+                {
+                    "label": "Revenue FY24",
+                    "value": "$436M",
+                    "change": "+24% YoY",
+                    "tone": "positive",
+                },
+                {"label": "Backlog", "value": "$1.2B"},
+            ],
+            "rating": "Buy",
+            "upside_pct": 28.5,
+        }
+    )
+    assert result.payload["ok"] is True
+    assert result.payload["tldr_count"] == 3
+    assert result.payload["metrics_count"] == 2
+    assert result.payload["rating"] == "Buy"
+    assert workspace.cover is not None
+    assert workspace.cover.tagline.startswith("Neutron")
+    assert workspace.cover.key_metrics[0].tone == "positive"
+    assert workspace.cover_written_this_run is True
+
+
+def test_set_cover_accepts_partial_payload():
+    """Every cover field is optional — minimal payloads succeed."""
+    workspace, _ = _fresh_workspace()
+    tools = {t.name: t for t in build_output_tools(workspace=workspace)}
+    result = tools["set_cover"].execute({"tagline": "Pure-play launch provider"})
+    assert result.payload["ok"] is True
+    assert workspace.cover is not None
+    assert workspace.cover.tagline == "Pure-play launch provider"
+    assert workspace.cover.tldr == []
+    assert workspace.cover.rating is None
+
+
+def test_set_cover_last_write_wins():
+    workspace, _ = _fresh_workspace()
+    tools = {t.name: t for t in build_output_tools(workspace=workspace)}
+    tools["set_cover"].execute({"rating": "Hold"})
+    tools["set_cover"].execute({"rating": "Buy", "upside_pct": 20.0})
+    assert workspace.cover is not None
+    assert workspace.cover.rating == "Buy"
+    assert workspace.cover.upside_pct == 20.0
+
+
+def test_set_cover_rejects_invalid_metric_tone():
+    workspace, _ = _fresh_workspace()
+    tools = {t.name: t for t in build_output_tools(workspace=workspace)}
+    with pytest.raises(RuntimeError):
+        tools["set_cover"].execute(
+            {
+                "key_metrics": [
+                    {"label": "x", "value": "1", "tone": "amazing"},
+                ],
+            }
+        )
+
+
+def test_set_cover_propagates_to_run_result():
+    workspace, _ = _fresh_workspace()
+    tools = {t.name: t for t in build_output_tools(workspace=workspace)}
+    tools["set_cover"].execute(
+        {"tagline": "Best-in-class operator", "rating": "Overweight"}
+    )
+    result = workspace.to_result(status="completed")
+    assert result.cover is not None
+    assert result.cover.tagline == "Best-in-class operator"
+    assert result.cover.rating == "Overweight"
+
+
+def test_workspace_with_no_set_cover_call_leaves_result_cover_none():
+    workspace, _ = _fresh_workspace()
+    result = workspace.to_result(status="completed")
+    assert result.cover is None
+
+
 def test_finalize_reports_missing_sections_until_all_written():
     workspace, ledger = _fresh_workspace()
     ledger.append(tool_name="web_search")

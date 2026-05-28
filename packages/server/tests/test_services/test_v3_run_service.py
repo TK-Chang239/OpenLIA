@@ -372,3 +372,81 @@ async def test_citation_display_index_orders_by_first_appearance(
     by_source = {c.source_id: c for c in citations}
     assert by_source["eodhd_2"].display_index == 1
     assert by_source["eodhd_1"].display_index == 2
+
+
+# ---------------------------------------------------------------------------
+# Cover persistence (PR9)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_set_cover_persists_cover_json(create_tables, db_session: Session):
+    user = _make_user(db_session)
+    req = _request()
+    section_ids = [s.id for s in req.template.sections]
+    script = [script_tool_calls(("get_company_news", {"ticker": "RKLB.US"}))]
+    for sid in section_ids:
+        script.append(
+            script_tool_calls(
+                (
+                    "write_section",
+                    {"section_id": sid, "markdown": f"{sid} body [^eodhd_1]."},
+                )
+            )
+        )
+    script.append(
+        script_tool_calls(
+            (
+                "set_cover",
+                {
+                    "subtitle": "Q1 2026",
+                    "tagline": "Pure-play orbital launch leader",
+                    "tldr": ["Backlog at $1.2B", "Neutron on track"],
+                    "key_metrics": [
+                        {
+                            "label": "Revenue FY24",
+                            "value": "$436M",
+                            "change": "+24% YoY",
+                            "tone": "positive",
+                        }
+                    ],
+                    "rating": "Buy",
+                    "upside_pct": 28.5,
+                },
+            )
+        )
+    )
+    script.append(script_tool_calls(("finalize", {})))
+
+    runner, session = _runner_with(script)
+    outcome = await svc.start_run(
+        db=db_session, user_id=user.id, request=req, runner=runner, session=session
+    )
+    db_session.flush()
+
+    row = db_session.get(ReportV3, outcome.report_id)
+    assert row is not None
+    assert row.cover_json is not None
+    parsed = json.loads(row.cover_json)
+    assert parsed["tagline"] == "Pure-play orbital launch leader"
+    assert parsed["rating"] == "Buy"
+    assert parsed["upside_pct"] == 28.5
+    assert parsed["key_metrics"][0]["tone"] == "positive"
+
+
+@pytest.mark.asyncio
+async def test_run_without_set_cover_leaves_cover_json_null(
+    create_tables, db_session: Session
+):
+    user = _make_user(db_session)
+    req = _request()
+    # _happy_path_script never calls set_cover; cover_json should stay NULL.
+    runner, session = _runner_with(_happy_path_script(req))
+    outcome = await svc.start_run(
+        db=db_session, user_id=user.id, request=req, runner=runner, session=session
+    )
+    db_session.flush()
+
+    row = db_session.get(ReportV3, outcome.report_id)
+    assert row is not None
+    assert row.cover_json is None

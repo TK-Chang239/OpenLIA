@@ -533,6 +533,8 @@ def _persist_outcome(
             )
         )
 
+    if result.cover is not None:
+        report_row.cover_json = result.cover.model_dump_json()
     report_row.status = result.status
     report_row.error_message = result.message or None
     report_row.completed_at = datetime.now(UTC)
