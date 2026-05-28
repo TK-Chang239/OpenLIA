@@ -30,8 +30,20 @@ from ...types import (
     LLMResponse,
     Message,
     ProviderCredentials,
+    ReasoningEffort,
     ToolSchema,
 )
+
+
+# Token headroom added to ``max_tokens`` when reasoning is enabled.
+# Thinking tokens count against the same ceiling as visible output on
+# every provider, so the ceiling must absorb both. Mirrors v2.3's
+# ``_REASONING_OVERHEAD`` in v2_3_wiring.py — keep in lockstep until
+# we refactor to a shared module.
+_REASONING_OVERHEAD: dict[ReasoningEffort, int] = {
+    ReasoningEffort.MEDIUM: 8192,
+    ReasoningEffort.HIGH: 32768,
+}
 
 
 class CapabilityError(RuntimeError):
@@ -152,6 +164,7 @@ class LLMSession:
         native_tools: tuple[str, ...] = (),
         max_tokens: int | None = None,
         temperature: float = 0.4,
+        reasoning_effort: ReasoningEffort | None = None,
         extra: dict[str, Any] | None = None,
     ) -> LLMResponse:
         """Send one turn to the model. Returns text + tool_calls + citations.
@@ -159,15 +172,26 @@ class LLMSession:
         Thin wrapper around the underlying provider adapter. Pass
         ``native_tools=("web_search",)`` to let the adapter wire the
         provider's first-class web tool.
+
+        ``reasoning_effort`` enables extended thinking on the
+        underlying call. When set, the effective ``max_tokens`` grows
+        by ``_REASONING_OVERHEAD[effort]`` so the truncation guard
+        absorbs both visible output and thinking tokens — they share
+        the same ceiling on every provider. Adapters whose model
+        doesn't support thinking silently drop the field.
         """
         adapter = self._ensure_adapter()
+        effective_max = max_tokens or self.capabilities.max_output_tokens
+        if reasoning_effort is not None:
+            effective_max += _REASONING_OVERHEAD.get(reasoning_effort, 0)
         request = LLMRequest(
             messages=messages,
             system=system,
             tools=tools,
-            max_tokens=max_tokens or self.capabilities.max_output_tokens,
+            max_tokens=effective_max,
             temperature=temperature,
             native_tools=native_tools,
+            reasoning_effort=reasoning_effort,
         )
         del extra  # reserved for future per-provider overrides
         return await adapter.generate(request)

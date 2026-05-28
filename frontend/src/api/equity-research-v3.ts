@@ -29,6 +29,10 @@ export type V3Language = "en" | "zh-TW";
 export type V3ReportLength = "concise" | "normal" | "elaborative";
 export type V3ReportType = "initiation" | "update" | "sector_research";
 export type V3RunStatus = "placeholder" | "running" | "completed" | "failed";
+// Three-state extended-thinking knob. ``"off"`` is the UI-only
+// representation; the wire payload sends ``null`` for off and
+// the literal ``"medium"`` / ``"high"`` for the other two.
+export type V3ReasoningEffort = "off" | "medium" | "high";
 export type V3ChartType =
   | "line"
   | "bar"
@@ -45,6 +49,10 @@ export interface V3StartPayload {
   report_type?: V3ReportType;
   provider_kind: string;
   model: string;
+  // Wire enum has "medium" | "high" only; the UI's "off" maps to
+  // ``null`` (the field is dropped from the payload) and the server's
+  // ReasoningEffort default leaves thinking off on the adapter side.
+  reasoning_effort?: "medium" | "high" | null;
 }
 
 export interface V3Section {
