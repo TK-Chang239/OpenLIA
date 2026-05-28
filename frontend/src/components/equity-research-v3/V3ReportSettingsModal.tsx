@@ -22,20 +22,21 @@ import {
   type V3Language,
   type V3ReasoningEffort,
   type V3ReportLength,
-  type V3ReportType,
   type V3TemplateSummary,
   deleteV3Template,
   listV3Templates,
 } from "../../api/equity-research-v3";
 
 export interface V3SettingsValue {
-  reportType: V3ReportType;
   length: V3ReportLength;
   language: V3Language;
   reasoningEffort: V3ReasoningEffort;
-  /** The selected template_id. Null means "use the report_type
-   *  default built-in" — the server's fallback path. */
-  templateId: string | null;
+  /** Active template id. Built-ins use their seeded id
+   *  (``initiation_default`` etc.); user uploads use a UUID hex. */
+  templateId: string;
+  /** Cached display name so the page can render the mode pill
+   *  without re-fetching the templates list. */
+  templateName: string;
 }
 
 interface Props {
@@ -50,18 +51,6 @@ interface Props {
    *  the upload modal so we don't nest dialogs. */
   onUploadClick: () => void;
 }
-
-const REPORT_TYPE_OPTIONS: { value: V3ReportType; label: string }[] = [
-  { value: "initiation", label: "Stock Initiation" },
-  { value: "update", label: "Stock Update" },
-  { value: "sector_research", label: "Sector Research" },
-];
-
-const REPORT_TYPE_FULL_LABEL: Record<V3ReportType, string> = {
-  initiation: "Stock Initiation Report",
-  update: "Stock Update Report",
-  sector_research: "Sector Research Report",
-};
 
 const LENGTH_OPTIONS: { value: V3ReportLength; label: string }[] = [
   { value: "concise", label: "Concise" },
@@ -139,30 +128,30 @@ export function V3ReportSettingsModal({
   templatesRefreshKey = 0,
   onUploadClick,
 }: Props): JSX.Element {
-  const [reportType, setReportType] = useState<V3ReportType>(value.reportType);
   const [length, setLength] = useState<V3ReportLength>(value.length);
   const [language, setLanguage] = useState<V3Language>(value.language);
   const [reasoningEffort, setReasoningEffort] = useState<V3ReasoningEffort>(
     value.reasoningEffort,
   );
-  const [templateId, setTemplateId] = useState<string | null>(value.templateId);
+  const [templateId, setTemplateId] = useState<string>(value.templateId);
+  const [templateName, setTemplateName] = useState<string>(value.templateName);
   const [templates, setTemplates] = useState<V3TemplateSummary[] | null>(null);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setReportType(value.reportType);
     setLength(value.length);
     setLanguage(value.language);
     setReasoningEffort(value.reasoningEffort);
     setTemplateId(value.templateId);
+    setTemplateName(value.templateName);
   }, [
     open,
-    value.reportType,
     value.length,
     value.language,
     value.reasoningEffort,
     value.templateId,
+    value.templateName,
   ]);
 
   useEffect(() => {
@@ -193,14 +182,30 @@ export function V3ReportSettingsModal({
     try {
       await deleteV3Template(id);
       setTemplates((prev) => prev?.filter((t) => t.id !== id) ?? null);
-      if (templateId === id) setTemplateId(null);
+      // If the deleted row was the active selection, fall back to the
+      // first built-in (initiation_default) so the picker always has a
+      // valid selection on close.
+      if (templateId === id) {
+        const fallback = (templates ?? []).find(
+          (t) => t.is_builtin && t.id !== id,
+        );
+        if (fallback) {
+          setTemplateId(fallback.id);
+          setTemplateName(fallback.name);
+        }
+      }
     } catch (err) {
       setTemplatesError(err instanceof Error ? err.message : "Delete failed");
     }
   };
 
+  const pickTemplate = (row: V3TemplateSummary) => {
+    setTemplateId(row.id);
+    setTemplateName(row.name);
+  };
+
   const save = () => {
-    onSave({ reportType, length, language, reasoningEffort, templateId });
+    onSave({ length, language, reasoningEffort, templateId, templateName });
     onClose();
   };
 
@@ -231,19 +236,6 @@ export function V3ReportSettingsModal({
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
-              <SectionHeader label="Report type" />
-              <Segmented
-                ariaLabel="Report type"
-                value={reportType}
-                options={REPORT_TYPE_OPTIONS}
-                onChange={setReportType}
-              />
-              <p className="mt-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
-                {REPORT_TYPE_FULL_LABEL[reportType]}
-              </p>
-            </section>
-
             <section className="border-b border-[--color-border-subtle] px-[22px] py-[18px]">
               <SectionHeader label="Length" />
               <Segmented
@@ -314,26 +306,6 @@ export function V3ReportSettingsModal({
                 </p>
               ) : (
                 <ul className="flex flex-col gap-[4px]">
-                  <li key="__default__">
-                    <button
-                      type="button"
-                      onClick={() => setTemplateId(null)}
-                      data-testid="er-v3-template-option-default"
-                      className={[
-                        "flex w-full items-center justify-between rounded-md border px-3 py-2 text-left text-[12.5px]",
-                        templateId === null
-                          ? "border-[--color-accent-primary] bg-[rgba(212,255,0,0.06)] text-[--color-text-primary]"
-                          : "border-[--color-border-subtle] bg-[--color-bg-base] text-[--color-text-secondary] hover:border-[--color-border-strong]",
-                      ].join(" ")}
-                    >
-                      <span>
-                        <span className="font-medium">Default for report type</span>
-                        <span className="ml-2 font-mono text-[10px] text-[--color-text-tertiary]">
-                          falls back to {reportType}_default
-                        </span>
-                      </span>
-                    </button>
-                  </li>
                   {templates.map((t) => {
                     const active = templateId === t.id;
                     return (
@@ -348,7 +320,7 @@ export function V3ReportSettingsModal({
                         >
                           <button
                             type="button"
-                            onClick={() => setTemplateId(t.id)}
+                            onClick={() => pickTemplate(t)}
                             data-testid={`er-v3-template-option-${t.id}`}
                             className="flex min-w-0 flex-1 flex-col text-left"
                           >

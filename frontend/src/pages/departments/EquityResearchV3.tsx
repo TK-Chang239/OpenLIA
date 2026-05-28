@@ -26,7 +26,6 @@ import { ApiError } from "../../api/_request";
 import {
   type V3Event,
   type V3ReportDetail,
-  type V3ReportType,
   type V3StartPayload,
   getV3Run,
   startV3RunAsync,
@@ -52,11 +51,14 @@ import { useChatHeaderRegistry } from "../../layouts/ChatHeaderContext";
 const SETTINGS_LS_KEY = "er.v3.settings";
 
 const DEFAULT_SETTINGS: V3SettingsValue = {
-  reportType: "initiation",
   length: "normal",
   language: "en",
   reasoningEffort: "medium",
-  templateId: null,
+  // The seeded built-in for initiation reports. The picker is the
+  // only place templates change, so this default is what new users
+  // see on the WelcomeStage pill before opening settings.
+  templateId: "initiation_default",
+  templateName: "Stock Initiation",
 };
 
 function loadSettings(): V3SettingsValue {
@@ -66,12 +68,12 @@ function loadSettings(): V3SettingsValue {
     if (!raw) return DEFAULT_SETTINGS;
     const parsed = JSON.parse(raw) as Partial<V3SettingsValue>;
     return {
-      reportType: parsed.reportType ?? DEFAULT_SETTINGS.reportType,
       length: parsed.length ?? DEFAULT_SETTINGS.length,
       language: parsed.language ?? DEFAULT_SETTINGS.language,
       reasoningEffort:
         parsed.reasoningEffort ?? DEFAULT_SETTINGS.reasoningEffort,
       templateId: parsed.templateId ?? DEFAULT_SETTINGS.templateId,
+      templateName: parsed.templateName ?? DEFAULT_SETTINGS.templateName,
     };
   } catch {
     return DEFAULT_SETTINGS;
@@ -93,21 +95,12 @@ function firstName(displayName: string | null | undefined): string {
   return trimmed.split(/\s+/)[0];
 }
 
-// v2.2 ReportMode used by the shared WelcomeStage/ErComposer chrome.
-// v3 talks in V3ReportType, so we translate at the edges to keep the
-// shared chrome rendering a coherent pill label.
-function reportTypeToMode(
-  t: V3ReportType,
-): "stock_initiation" | "stock_update" | "sector_research" {
-  switch (t) {
-    case "initiation":
-      return "stock_initiation";
-    case "update":
-      return "stock_update";
-    case "sector_research":
-      return "sector_research";
-  }
-}
+// The shared WelcomeStage/ErComposer chrome still requires a
+// ``mode: ReportMode`` prop for v1/v2 callers. v3 doesn't track
+// report type as a separate concept (templates ARE the report type),
+// so the pill label comes from ``templateLabel`` and ``mode`` is set
+// to a safe constant.
+const V3_MODE_FOR_SHARED_CHROME = "stock_initiation" as const;
 
 export default function EquityResearchV3(): JSX.Element {
   const { user } = useAuth();
@@ -194,10 +187,10 @@ export default function EquityResearchV3(): JSX.Element {
           subject,
           language: settings.language,
           length: settings.length,
-          report_type: settings.reportType,
-          // When templateId is null the server falls back to the
-          // report_type built-in. Sending the field explicitly when
-          // set keeps the resolver path simple.
+          // template_id is the single source of truth — v3 doesn't
+          // ship a separate report_type concept anymore. Built-ins
+          // (initiation_default etc.) and user uploads both resolve
+          // through the same path.
           template_id: settings.templateId,
           provider_kind: model.provider_kind,
           model: model.model,
@@ -224,7 +217,6 @@ export default function EquityResearchV3(): JSX.Element {
       settings.language,
       settings.length,
       settings.reasoningEffort,
-      settings.reportType,
       settings.templateId,
     ],
   );
@@ -294,7 +286,6 @@ export default function EquityResearchV3(): JSX.Element {
     register,
   ]);
 
-  const mode = reportTypeToMode(settings.reportType);
   const isWelcome = activeReportId === null && detail === null && !isStreaming;
   const placeholder = isWelcome
     ? 'What should this report cover? (e.g., "RKLB.US — initiation, focus on launch cadence")'
@@ -310,9 +301,10 @@ export default function EquityResearchV3(): JSX.Element {
           {isWelcome ? (
             <WelcomeStage
               firstName={firstName(user?.display_name)}
-              mode={mode}
+              mode={V3_MODE_FOR_SHARED_CHROME}
               length={settings.length}
               onModeRowClick={() => setSettingsOpen(true)}
+              templateLabel={settings.templateName}
             />
           ) : (
             <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-6 py-6">
@@ -355,11 +347,12 @@ export default function EquityResearchV3(): JSX.Element {
         onStop={handleStop}
         isStreaming={isStreaming}
         placeholder={placeholder}
-        mode={mode}
+        mode={V3_MODE_FOR_SHARED_CHROME}
         length={settings.length}
         onModeClick={() => setSettingsOpen(true)}
         modelPicker={<V3ModelPicker onChange={setModel} />}
         disabled={model === null}
+        templateLabel={settings.templateName}
       />
 
       <V3ReportSettingsModal
@@ -380,7 +373,11 @@ export default function EquityResearchV3(): JSX.Element {
         onSaved={(created) => {
           // Auto-select the newly uploaded template + reopen settings
           // so the user sees their pick land in the list.
-          persistSettings({ ...settings, templateId: created.id });
+          persistSettings({
+            ...settings,
+            templateId: created.id,
+            templateName: created.name,
+          });
           setTemplatesRefreshKey((k) => k + 1);
           setSettingsOpen(true);
         }}

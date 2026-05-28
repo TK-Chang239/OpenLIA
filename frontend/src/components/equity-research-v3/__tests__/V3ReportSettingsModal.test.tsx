@@ -17,11 +17,11 @@ vi.mock("../../../api/equity-research-v3", async (importOriginal) => {
 });
 
 const DEFAULT_VALUE: V3SettingsValue = {
-  reportType: "initiation",
   length: "normal",
   language: "en",
   reasoningEffort: "medium",
-  templateId: null,
+  templateId: "initiation_default",
+  templateName: "Stock Initiation",
 };
 
 const TEMPLATES: api.V3TemplateSummary[] = [
@@ -78,17 +78,16 @@ describe("V3ReportSettingsModal", () => {
     );
     await waitFor(() => expect(api.listV3Templates).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("radio", { name: "Stock Update" }));
     fireEvent.click(screen.getByRole("radio", { name: "Concise" }));
     fireEvent.click(screen.getByTestId("er-v3-settings-save"));
 
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(onSave.mock.calls[0][0]).toEqual({
-      reportType: "update",
       length: "concise",
       language: "en",
       reasoningEffort: "medium",
-      templateId: null,
+      templateId: "initiation_default",
+      templateName: "Stock Initiation",
     });
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -157,6 +156,7 @@ describe("V3ReportSettingsModal", () => {
     fireEvent.click(screen.getByTestId("er-v3-template-option-user-template-abc"));
     fireEvent.click(screen.getByTestId("er-v3-settings-save"));
     expect(onSave.mock.calls[0][0].templateId).toBe("user-template-abc");
+    expect(onSave.mock.calls[0][0].templateName).toBe("My custom template");
   });
 
   test("clicking Upload fires onUploadClick", async () => {
