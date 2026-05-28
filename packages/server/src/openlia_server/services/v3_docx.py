@@ -32,7 +32,7 @@ from docx.opc.constants import RELATIONSHIP_TYPE
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 from markdown_it import MarkdownIt
-from openlia.llm.runtime.report_v3 import ChartSpec
+from openlia.llm.runtime.report_v3 import ChartSpec, CoverSpec
 
 from openlia_server.db.models.report_v3 import (
     ReportV3,
@@ -60,7 +60,8 @@ def render_docx(
     """Build a Word document from the persisted v3 rows."""
     doc = Document()
     _configure_styles(doc)
-    _add_cover(doc, report)
+    cover_spec = _parse_cover(report.cover_json)
+    _add_cover(doc, report, cover_spec)
 
     display_index_by_source_id = {
         c.source_id: c.display_index
@@ -101,7 +102,47 @@ def _configure_styles(doc: Document) -> None:
     font.size = Pt(11)
 
 
-def _add_cover(doc: Document, report: ReportV3) -> None:
+_TONE_COLORS: dict[str, RGBColor] = {
+    "positive": RGBColor(0x1A, 0x7F, 0x37),  # green
+    "negative": RGBColor(0xB4, 0x23, 0x18),  # red
+    "neutral": RGBColor(0x60, 0x60, 0x60),  # gray
+}
+
+
+def _parse_cover(raw: str | None) -> CoverSpec | None:
+    """Deserialise ``ReportV3.cover_json`` to a ``CoverSpec``. Returns
+    None for runs where the model never called ``set_cover`` (older
+    rows + early v3 runs) or when the stored JSON can't be parsed —
+    the cover degrades to the bare title + eyebrow path."""
+    if not raw:
+        return None
+    try:
+        return CoverSpec.model_validate_json(raw)
+    except (TypeError, ValueError):
+        log.warning("v3 cover_json failed to deserialise; rendering bare cover")
+        return None
+
+
+def _add_cover(
+    doc: Document, report: ReportV3, cover: CoverSpec | None
+) -> None:
+    """Emit the cover hero block.
+
+    Bare path (cover is None): centered title + eyebrow line, then a
+    spacer — the original behaviour. Populated path: adds an optional
+    subtitle above the title, a tagline beneath the eyebrow, a
+    rating + upside line, a Highlights bullet list, and a key metrics
+    table. Empty fields on a populated CoverSpec just skip their row
+    rather than render blank elements.
+    """
+    if cover is not None and cover.subtitle:
+        subtitle = doc.add_paragraph()
+        subtitle.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        sub_run = subtitle.add_run(cover.subtitle)
+        sub_run.font.size = Pt(10)
+        sub_run.font.color.rgb = RGBColor(0x80, 0x80, 0x80)
+        sub_run.italic = True
+
     title = doc.add_paragraph()
     title.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     run = title.add_run(report.subject)
@@ -115,7 +156,81 @@ def _add_cover(doc: Document, report: ReportV3) -> None:
     eyebrow_run.font.size = Pt(10)
     eyebrow_run.font.color.rgb = RGBColor(0x60, 0x60, 0x60)
 
+    if cover is None:
+        doc.add_paragraph()  # spacer before sections
+        return
+
+    if cover.tagline:
+        tagline = doc.add_paragraph()
+        tagline.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        tag_run = tagline.add_run(cover.tagline)
+        tag_run.italic = True
+        tag_run.font.size = Pt(13)
+        tag_run.font.color.rgb = RGBColor(0x30, 0x30, 0x30)
+
+    rating_line = _format_rating_line(cover)
+    if rating_line:
+        rating_para = doc.add_paragraph()
+        rating_para.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        rating_run = rating_para.add_run(rating_line)
+        rating_run.bold = True
+        rating_run.font.size = Pt(11)
+        rating_run.font.color.rgb = RGBColor(0x1A, 0x7F, 0x37)
+
+    if cover.tldr:
+        doc.add_paragraph()  # blank line before the Highlights heading
+        highlights = doc.add_heading("Highlights", level=3)
+        highlights.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
+        for bullet in cover.tldr:
+            para = doc.add_paragraph(style="List Bullet")
+            para.add_run(bullet)
+
+    if cover.key_metrics:
+        if not cover.tldr:
+            doc.add_paragraph()  # blank line before the metrics table
+        _add_key_metrics_table(doc, cover.key_metrics)
+
     doc.add_paragraph()  # spacer before sections
+
+
+def _format_rating_line(cover: CoverSpec) -> str:
+    """Compose a one-line rating summary, e.g.
+    ``"Buy  ·  +28.5% upside"`` or just ``"Hold"`` when no upside.
+    Returns empty when neither field is set."""
+    parts: list[str] = []
+    if cover.rating:
+        parts.append(cover.rating)
+    if cover.upside_pct is not None:
+        sign = "+" if cover.upside_pct >= 0 else ""
+        parts.append(f"{sign}{cover.upside_pct:g}% upside")
+    return "  ·  ".join(parts)
+
+
+def _add_key_metrics_table(doc: Document, metrics: list) -> None:
+    """Render the cover's headline metrics as a two-column table:
+    label on the left, value (with optional change + tone color) on
+    the right. Two columns plays well in landscape Word docs and
+    keeps every metric on its own row even with long labels."""
+    table = doc.add_table(rows=len(metrics), cols=2)
+    table.style = "Light Grid Accent 1"
+    for row_idx, metric in enumerate(metrics):
+        label_cell = table.rows[row_idx].cells[0]
+        value_cell = table.rows[row_idx].cells[1]
+        label_para = label_cell.paragraphs[0]
+        label_run = label_para.add_run(metric.label)
+        label_run.bold = True
+        label_run.font.size = Pt(10)
+
+        value_para = value_cell.paragraphs[0]
+        value_run = value_para.add_run(metric.value)
+        value_run.font.size = Pt(10)
+        if metric.change:
+            change_run = value_para.add_run(f"  {metric.change}")
+            change_run.font.size = Pt(9)
+            tone_color = _TONE_COLORS.get(metric.tone or "", None)
+            if tone_color is not None:
+                change_run.font.color.rgb = tone_color
+                change_run.bold = True
 
 
 def _format_eyebrow(report: ReportV3) -> str:

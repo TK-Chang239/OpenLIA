@@ -272,3 +272,144 @@ def test_render_docx_inline_formatting_survives_round_trip(
     # Just confirm rendering didn't crash and content lands in the doc.
     text = "\n".join(_read_paragraphs(blob))
     assert ("bold" in text or "italic" in text or "link" in text) == expected
+
+
+# ---------------------------------------------------------------------------
+# Cover hero (PR11)
+# ---------------------------------------------------------------------------
+
+
+def _report_with_cover(user_id: str, cover_json: str | None) -> ReportV3:
+    """Variant of _report that carries cover_json."""
+    now = datetime.now(UTC)
+    return ReportV3(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        subject="RKLB.US",
+        template_id="initiation_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        status="completed",
+        error_message=None,
+        created_at=now,
+        completed_at=now,
+        cover_json=cover_json,
+    )
+
+
+def test_render_docx_emits_cover_hero_when_cover_json_present(
+    create_tables, db_session: Session
+):
+    user = _user(db_session)
+    cover = json.dumps(
+        {
+            "subtitle": "Q1 2026 initiation",
+            "tagline": "Pure-play orbital launch leader",
+            "tldr": [
+                "Backlog at record $1.2B",
+                "Neutron engine ramping on schedule",
+                "Margin path to 35% by 2027",
+            ],
+            "key_metrics": [
+                {
+                    "label": "Revenue FY24",
+                    "value": "$436M",
+                    "change": "+24% YoY",
+                    "tone": "positive",
+                },
+                {"label": "Backlog", "value": "$1.2B"},
+            ],
+            "rating": "Buy",
+            "upside_pct": 28.5,
+        }
+    )
+    report = _report_with_cover(user.id, cover)
+    sections = [_section(report.id, "overview", "Overview", "Body text.")]
+    blob = render_docx(
+        report=report, sections=sections, charts=[], citations=[]
+    )
+    paragraphs = _read_paragraphs(blob)
+    text = "\n".join(paragraphs)
+    assert "Q1 2026 initiation" in text  # subtitle
+    assert "RKLB.US" in text  # title
+    assert "Pure-play orbital launch leader" in text  # tagline
+    assert "Buy" in text and "28.5% upside" in text  # rating line
+    assert "Highlights" in text  # section heading
+    assert "Backlog at record $1.2B" in text
+    assert "Margin path to 35% by 2027" in text
+    # Key metrics land in a table — not a paragraph; verify the table
+    # carries the metric labels + values + changes.
+    doc = DocxDocument(io.BytesIO(blob))
+    cells = [c.text for t in doc.tables for r in t.rows for c in r.cells]
+    cell_text = "\n".join(cells)
+    assert "Revenue FY24" in cell_text
+    assert "$436M" in cell_text
+    assert "+24% YoY" in cell_text
+    assert "Backlog" in cell_text
+    assert "$1.2B" in cell_text
+
+
+def test_render_docx_omits_cover_hero_when_cover_json_is_null(
+    create_tables, db_session: Session
+):
+    """The bare-cover path must keep its original shape (title +
+    eyebrow + spacer + sections) so older reports never regress."""
+    user = _user(db_session)
+    report = _report_with_cover(user.id, None)
+    sections = [_section(report.id, "overview", "Overview", "Body text.")]
+    blob = render_docx(
+        report=report, sections=sections, charts=[], citations=[]
+    )
+    text = "\n".join(_read_paragraphs(blob))
+    assert "RKLB.US" in text
+    assert "Highlights" not in text
+    assert "upside" not in text
+
+
+def test_render_docx_handles_partial_cover_gracefully(
+    create_tables, db_session: Session
+):
+    """Empty fields on a populated CoverSpec skip their rendering
+    rather than emit blank paragraphs / empty tables."""
+    user = _user(db_session)
+    cover = json.dumps({"tagline": "Best-in-class operator"})
+    report = _report_with_cover(user.id, cover)
+    sections = [_section(report.id, "overview", "Overview", "Body text.")]
+    blob = render_docx(
+        report=report, sections=sections, charts=[], citations=[]
+    )
+    text = "\n".join(_read_paragraphs(blob))
+    assert "Best-in-class operator" in text
+    assert "Highlights" not in text  # tldr was empty
+    # No rating line either.
+    assert "upside" not in text
+    doc = DocxDocument(io.BytesIO(blob))
+    # No key_metrics table.
+    assert len(doc.tables) == 0
+
+
+def test_render_docx_negative_upside_renders_without_sign_collision(
+    create_tables, db_session: Session
+):
+    user = _user(db_session)
+    cover = json.dumps({"rating": "Sell", "upside_pct": -12.4})
+    report = _report_with_cover(user.id, cover)
+    blob = render_docx(report=report, sections=[], charts=[], citations=[])
+    text = "\n".join(_read_paragraphs(blob))
+    assert "Sell" in text
+    assert "-12.4% upside" in text
+
+
+def test_render_docx_ignores_malformed_cover_json(
+    create_tables, db_session: Session
+):
+    """A corrupt cover_json must not crash the export — degrades to
+    the bare cover."""
+    user = _user(db_session)
+    report = _report_with_cover(user.id, "{this is not json")
+    blob = render_docx(report=report, sections=[], charts=[], citations=[])
+    text = "\n".join(_read_paragraphs(blob))
+    assert "RKLB.US" in text
+    assert "Highlights" not in text
