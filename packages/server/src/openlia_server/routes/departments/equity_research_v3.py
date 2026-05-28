@@ -115,6 +115,9 @@ class SectionOut(BaseModel):
     section_index: int
     title: str
     markdown: str
+    # 1 = written by the original run; >1 = touched by a revision.
+    # The frontend reads this to render a "Revised in vN" badge.
+    version: int = 1
 
 
 class ChartOut(BaseModel):
@@ -123,6 +126,7 @@ class ChartOut(BaseModel):
     title: str
     spec: dict[str, Any]
     rendered_url: str | None
+    version: int = 1
 
 
 class CitationOut(BaseModel):
@@ -220,6 +224,7 @@ def _section_out(row: ReportV3Section) -> SectionOut:
         section_index=row.section_index,
         title=row.title,
         markdown=row.markdown,
+        version=row.version,
     )
 
 
@@ -230,6 +235,7 @@ def _chart_out(row: ReportV3Chart) -> ChartOut:
         title=row.title,
         spec=json.loads(row.spec_json),
         rendered_url=row.rendered_url,
+        version=row.version,
     )
 
 
