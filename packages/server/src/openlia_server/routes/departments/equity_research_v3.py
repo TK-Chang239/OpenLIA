@@ -68,6 +68,66 @@ _ENV_FLAG = "REPORT_ENGINE_VERSION"
 _ENABLED_VALUE = "v3"
 
 
+# Template id -> human label shown in download filenames. Built-in
+# ids that are not in this map fall back to a Title-cased slug of the
+# id itself; user-uploaded templates carry opaque uuid ids and never
+# get a friendly label, so the slug fallback handles those too.
+_TEMPLATE_LABEL: dict[str, str] = {
+    "initiation_default": "Initiation",
+    "update_default": "Update",
+    "sector_research_default": "Sector-Research",
+}
+
+
+def _slugify_filename_component(value: str) -> str:
+    """Strip characters that confuse common filesystems / Content-
+    Disposition parsers. Spaces -> underscores; other punctuation ->
+    dashes; tickers like ``RKLB.US`` keep their dot. Runs of two or
+    more separators collapse to a single underscore so a stray
+    "Q&A / Research" becomes "Q-A_Research", not "Q-A_-_Research".
+    Lone single separators are preserved so "Sector-Research" stays
+    intact through the slugifier."""
+    import re
+
+    cleaned: list[str] = []
+    for ch in value.strip():
+        if ch.isalnum() or ch in {".", "-", "_"}:
+            cleaned.append(ch)
+        elif ch.isspace():
+            cleaned.append("_")
+        else:
+            cleaned.append("-")
+    raw = "".join(cleaned)
+    # Collapse runs of 2+ separators (mixed or repeated) into one underscore.
+    raw = re.sub(r"[-_]{2,}", "_", raw)
+    out = raw.strip("-_.")
+    return out or "report"
+
+
+def _template_label(template_id: str) -> str:
+    if template_id in _TEMPLATE_LABEL:
+        return _TEMPLATE_LABEL[template_id]
+    # Strip the ``_default`` suffix and Title-case the rest so a
+    # ``custom_deep_dive`` template yields ``Custom-Deep-Dive``.
+    base = template_id.removesuffix("_default")
+    parts = [p for p in base.replace("_", " ").replace("-", " ").split() if p]
+    return "-".join(p.capitalize() for p in parts) or "Report"
+
+
+def _build_download_filename(*, row: ReportV3, ext: str) -> str:
+    """Subject_Template_Date.ext — matches the v1 download convention.
+
+    ``ext`` should not include the leading dot. The date is the run's
+    ``completed_at`` if present, else ``created_at``, formatted as
+    YYYY-MM-DD in UTC.
+    """
+    when = row.completed_at or row.created_at
+    date_str = when.strftime("%Y-%m-%d") if when is not None else "undated"
+    subject = _slugify_filename_component(row.subject or "report")
+    template = _slugify_filename_component(_template_label(row.template_id))
+    return f"{subject}_{template}_{date_str}.{ext}"
+
+
 # ---------------------------------------------------------------------------
 # Payloads
 # ---------------------------------------------------------------------------
@@ -560,12 +620,21 @@ def build_equity_research_v3_router(
         if not _engine_enabled():
             raise _engine_disabled()
         try:
+            row = svc.get_report_row(
+                db=db, user_id=user.id, report_id=report_id
+            )
             rendered = render_svc.render_html(
                 db=db, user_id=user.id, report_id=report_id
             )
         except svc.ReportNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return HTMLResponse(content=rendered.html)
+        filename = _build_download_filename(row=row, ext="html")
+        return HTMLResponse(
+            content=rendered.html,
+            headers={
+                "Content-Disposition": f'inline; filename="{filename}"',
+            },
+        )
 
     @router.get("/runs/{report_id}/pdf")
     async def get_pdf(
@@ -589,6 +658,9 @@ def build_equity_research_v3_router(
                 ),
             )
         try:
+            row = svc.get_report_row(
+                db=db, user_id=user.id, report_id=report_id
+            )
             pdf_bytes = await render_svc.render_pdf(
                 db=db,
                 user_id=user.id,
@@ -597,13 +669,12 @@ def build_equity_research_v3_router(
             )
         except svc.ReportNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        filename = _build_download_filename(row=row, ext="pdf")
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": (
-                    f'inline; filename="v3-report-{report_id}.pdf"'
-                ),
+                "Content-Disposition": f'inline; filename="{filename}"',
             },
         )
 
@@ -625,11 +696,29 @@ def build_equity_research_v3_router(
         if not _engine_enabled():
             raise _engine_disabled()
         try:
+            row = svc.get_report_row(
+                db=db, user_id=user.id, report_id=report_id
+            )
             docx_bytes = render_svc.render_docx(
                 db=db, user_id=user.id, report_id=report_id
             )
         except svc.ReportNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            # Surface the failure usefully — without this catch the
+            # frontend gets an opaque 500 and the user sees only
+            # "Download failed" with no clue why. The full traceback
+            # already lands in the server log via logger.exception.
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "v3 docx render failed for report_id=%s", report_id
+            )
+            raise HTTPException(
+                status_code=500,
+                detail=f"v3 docx render failed: {type(exc).__name__}: {exc}",
+            ) from exc
+        filename = _build_download_filename(row=row, ext="docx")
         return Response(
             content=docx_bytes,
             media_type=(
@@ -637,9 +726,7 @@ def build_equity_research_v3_router(
                 "wordprocessingml.document"
             ),
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="v3-report-{report_id}.docx"'
-                ),
+                "Content-Disposition": f'attachment; filename="{filename}"',
             },
         )
 

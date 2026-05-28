@@ -87,3 +87,86 @@ def test_save_raises_on_missing_report(db_session):
     u = _user(db_session, "missing")
     with pytest.raises(LookupError):
         svc.save_to_repo(db_session, user_id=u.id, report_id="nonexistent")
+
+
+# ---------------------------------------------------------------------------
+# v3 polymorphic target
+# ---------------------------------------------------------------------------
+
+
+def _v3_report(db_session, user_id: str):
+    from openlia_server.db.models.report_v3 import ReportV3
+
+    r = ReportV3(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        subject="RKLB.US",
+        template_id="initiation_default",
+        language="en",
+        length="normal",
+        provider_kind="anthropic",
+        model="claude-sonnet-4-6",
+        status="completed",
+        error_message=None,
+        created_at=datetime.now(UTC),
+        completed_at=datetime.now(UTC),
+    )
+    db_session.add(r)
+    db_session.commit()
+    return r
+
+
+def test_save_v3_creates_entry(db_session):
+    u = _user(db_session, "v3-save")
+    r = _v3_report(db_session, u.id)
+    item = svc.save_v3_report_to_repo(db_session, user_id=u.id, v3_report_id=r.id)
+    assert item.id is not None
+    assert item.v3_report_id == r.id
+    assert item.report_id is None
+    assert item.pipeline_run_id is None
+
+
+def test_save_v3_is_idempotent(db_session):
+    u = _user(db_session, "v3-idem")
+    r = _v3_report(db_session, u.id)
+    a = svc.save_v3_report_to_repo(db_session, user_id=u.id, v3_report_id=r.id)
+    b = svc.save_v3_report_to_repo(db_session, user_id=u.id, v3_report_id=r.id)
+    assert a.id == b.id
+
+
+def test_unsave_v3_removes_entry(db_session):
+    u = _user(db_session, "v3-unsave")
+    r = _v3_report(db_session, u.id)
+    svc.save_v3_report_to_repo(db_session, user_id=u.id, v3_report_id=r.id)
+    svc.unsave_v3_report_from_repo(db_session, user_id=u.id, v3_report_id=r.id)
+    assert svc.is_v3_report_saved(db_session, user_id=u.id, v3_report_id=r.id) is False
+
+
+def test_save_v3_raises_on_missing_report(db_session):
+    u = _user(db_session, "v3-missing")
+    with pytest.raises(LookupError):
+        svc.save_v3_report_to_repo(db_session, user_id=u.id, v3_report_id="nope")
+
+
+def test_save_v3_raises_when_owned_by_other_user(db_session):
+    owner = _user(db_session, "v3-owner")
+    intruder = _user(db_session, "v3-intruder")
+    r = _v3_report(db_session, owner.id)
+    with pytest.raises(LookupError):
+        svc.save_v3_report_to_repo(db_session, user_id=intruder.id, v3_report_id=r.id)
+
+
+def test_v3_save_is_isolated_from_v1_save(db_session):
+    """Saving a v3 report and a v1 report in the same user's repo
+    yields two distinct rows, each pointing at the right target."""
+    u = _user(db_session, "v3-v1-mix")
+    v1 = _report(db_session, u.id)
+    v3 = _v3_report(db_session, u.id)
+    svc.save_to_repo(db_session, user_id=u.id, report_id=v1.id)
+    svc.save_v3_report_to_repo(db_session, user_id=u.id, v3_report_id=v3.id)
+    rows = svc.list_items(db_session, user_id=u.id)
+    assert len(rows) == 2
+    v1_rows = [r for r in rows if r.report_id is not None]
+    v3_rows = [r for r in rows if r.v3_report_id is not None]
+    assert len(v1_rows) == 1 and v1_rows[0].report_id == v1.id
+    assert len(v3_rows) == 1 and v3_rows[0].v3_report_id == v3.id
