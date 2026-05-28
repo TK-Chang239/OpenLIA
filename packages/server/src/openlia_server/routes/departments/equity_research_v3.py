@@ -46,6 +46,7 @@ from openlia.llm.runtime.report_v3 import (
     TemplateSpec,
     is_finish_sentinel,
 )
+from openlia.llm.types import ReasoningEffort
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DBSession
 
@@ -80,6 +81,10 @@ class StartV3Payload(BaseModel):
     report_type: ReportType = ReportType.INITIATION
     provider_kind: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
+    # Extended-thinking knob. ``None`` (or omitted) = off; "medium" /
+    # "high" enable provider-specific reasoning params. Adapters whose
+    # model doesn't support thinking ignore the field silently.
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class StartV3Response(BaseModel):
@@ -279,6 +284,7 @@ def build_equity_research_v3_router(
             length=payload.length,
             provider_kind=payload.provider_kind,
             model=payload.model,
+            reasoning_effort=payload.reasoning_effort,
         )
         try:
             outcome = await svc.start_run(
@@ -370,6 +376,7 @@ def build_equity_research_v3_router(
             length=payload.length,
             provider_kind=payload.provider_kind,
             model=payload.model,
+            reasoning_effort=payload.reasoning_effort,
         )
         try:
             handle = svc.start_run_async(

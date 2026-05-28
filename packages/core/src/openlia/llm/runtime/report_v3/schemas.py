@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from ...types import ReasoningEffort
 from ..report_v2_3.schemas import Language, ReportLength
 from ..report_v2_3.templates.spec import SectionSpec, TemplateSpec
 
@@ -113,6 +114,13 @@ class RunRequest(BaseModel):
     it. ``provider_kind`` and ``model`` resolve through the existing
     capability map at runner construction so v3 inherits the same
     provider rules as the rest of the codebase.
+
+    ``reasoning_effort`` is the user-selected extended-thinking knob.
+    ``None`` (the default) maps to "off" — no reasoning param is sent
+    to the adapter. v3 applies the chosen effort on every model turn
+    (unlike v2.3 which scopes it to specific stages) since v3 is a
+    single free-running loop with no stage notion. Adapters whose
+    model does not support thinking silently ignore the field.
     """
 
     subject: str = Field(..., min_length=1)
@@ -121,6 +129,7 @@ class RunRequest(BaseModel):
     length: ReportLength = ReportLength.NORMAL
     provider_kind: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
+    reasoning_effort: ReasoningEffort | None = None
 
 
 class RunResult(BaseModel):

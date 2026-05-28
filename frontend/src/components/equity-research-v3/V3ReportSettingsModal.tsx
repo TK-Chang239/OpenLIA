@@ -19,6 +19,7 @@ import { type JSX, useEffect, useState } from "react";
 
 import type {
   V3Language,
+  V3ReasoningEffort,
   V3ReportLength,
   V3ReportType,
 } from "../../api/equity-research-v3";
@@ -27,6 +28,7 @@ export interface V3SettingsValue {
   reportType: V3ReportType;
   length: V3ReportLength;
   language: V3Language;
+  reasoningEffort: V3ReasoningEffort;
 }
 
 interface Props {
@@ -57,6 +59,12 @@ const LENGTH_OPTIONS: { value: V3ReportLength; label: string }[] = [
 const LANGUAGE_OPTIONS: { value: V3Language; label: string }[] = [
   { value: "en", label: "English" },
   { value: "zh-TW", label: "繁體中文" },
+];
+
+const REASONING_OPTIONS: { value: V3ReasoningEffort; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
 ];
 
 interface SegmentedProps<T extends string> {
@@ -142,16 +150,26 @@ export function V3ReportSettingsModal({
   const [reportType, setReportType] = useState<V3ReportType>(value.reportType);
   const [length, setLength] = useState<V3ReportLength>(value.length);
   const [language, setLanguage] = useState<V3Language>(value.language);
+  const [reasoningEffort, setReasoningEffort] = useState<V3ReasoningEffort>(
+    value.reasoningEffort,
+  );
 
   useEffect(() => {
     if (!open) return;
     setReportType(value.reportType);
     setLength(value.length);
     setLanguage(value.language);
-  }, [open, value.reportType, value.length, value.language]);
+    setReasoningEffort(value.reasoningEffort);
+  }, [
+    open,
+    value.reportType,
+    value.length,
+    value.language,
+    value.reasoningEffort,
+  ]);
 
   const save = () => {
-    onSave({ reportType, length, language });
+    onSave({ reportType, length, language, reasoningEffort });
     onClose();
   };
 
@@ -215,10 +233,25 @@ export function V3ReportSettingsModal({
               />
             </section>
 
-            <ComingSoon
-              label="Reasoning effort"
-              hint="Off / Medium / High — extended thinking knob."
-            />
+            <section
+              className="border-b border-[--color-border-subtle] px-[22px] py-[18px]"
+              data-testid="er-v3-reasoning-effort"
+            >
+              <SectionHeader label="Reasoning effort" />
+              <Segmented
+                ariaLabel="Reasoning effort"
+                value={reasoningEffort}
+                options={REASONING_OPTIONS}
+                onChange={setReasoningEffort}
+              />
+              <p className="mt-[10px] text-[12px] leading-[1.5] text-[--color-text-secondary]">
+                Off keeps the run lean. Medium and High enable extended
+                thinking on supported models (Anthropic Claude 4.x,
+                OpenAI gpt-5 / o-series, Gemini 2.x). Higher effort
+                buys deeper synthesis at the cost of more tokens and
+                longer wall time.
+              </p>
+            </section>
 
             <ComingSoon
               label="Template"
