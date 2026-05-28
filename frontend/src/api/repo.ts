@@ -6,8 +6,25 @@ export interface RepoItem {
   created_at: string;
 }
 
+/** Which engine wrote the saved report.
+ *
+ *   - "v1" — legacy ``reports.id`` rows. Open via FileViewer
+ *     source ``{kind: "report"}``; delete via ``deleteReport``;
+ *     repo state lives in ``SavedReportsContext.isSaved``.
+ *   - "v3" — new equity-research engine (``report_v3.id``). Open
+ *     via ``{kind: "v3_report"}``; delete via ``deleteV3Run``;
+ *     repo state lives in ``SavedReportsContext.isV3Saved``.
+ *
+ *  v2.2 still lists via its own ``/repo/v2-runs`` surface; pending
+ *  fanout follow-up. */
+export type RepoEngine = "v1" | "v3";
+
 export interface RepoRow {
   id: string;
+  engine: RepoEngine;
+  /** Id of the target row in its engine's namespace. For v1 this
+   *  is reports.id; for v3 this is report_v3.id. Branch on
+   *  ``engine`` to know how to dereference it. */
   report_id: string;
   department: string;
   title: string;

@@ -3,8 +3,17 @@ import type { JSX, ReactNode } from "react";
 import { motion } from "framer-motion";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { fetchRepoFacets, saveToRepo, unsaveFromRepo, type RepoFacets, type RepoRow } from "../api/repo";
+import {
+  fetchRepoFacets,
+  saveToRepo,
+  saveV3RunToRepo,
+  unsaveFromRepo,
+  unsaveV3RunFromRepo,
+  type RepoFacets,
+  type RepoRow,
+} from "../api/repo";
 import { deleteReport } from "../api/reports";
+import { deleteV3Run } from "../api/equity-research-v3";
 import { DeleteReportDialog } from "../components/report/DeleteReportDialog";
 import { useRepoList } from "../hooks/useRepoList";
 import { useFileViewer } from "../components/viewer/FileViewerContext";
@@ -103,10 +112,27 @@ export default function Repository(): JSX.Element {
   const filtersActive = activeFilterCount > 0;
 
   const handleOpen = (row: RepoRow) => {
+    const metadata = `${departmentLabel(row.department)} · Generated ${formatDate(row.generated_at)} · Saved ${formatDate(row.saved_at)}`;
+    // The Repo page hides the FileViewer's save-to-repo button (we're
+    // already in the repo — the action would always be "remove" and
+    // the toolbar's three-dot menu carries that). Branch the source
+    // shape on engine so v3 rows render through the v3 detail
+    // renderer instead of the v1 ``ReportRenderer`` path.
+    if (row.engine === "v3") {
+      openViewer({
+        filename: row.filename,
+        kind: "report",
+        metadata,
+        source: { kind: "v3_report", reportId: row.report_id },
+        initialSaved: true,
+        hideSaveToRepoButton: true,
+      });
+      return;
+    }
     openViewer({
       filename: row.filename,
       kind: "report",
-      metadata: `${departmentLabel(row.department)} · Generated ${formatDate(row.generated_at)} · Saved ${formatDate(row.saved_at)}`,
+      metadata,
       source: { kind: "report", reportId: row.report_id },
       initialSaved: true,
       hideSaveToRepoButton: true,
@@ -143,8 +169,13 @@ export default function Repository(): JSX.Element {
     const removedIndex = list.rows.findIndex((r) => r.id === row.id);
     list.removeRow(row.id);
     try {
-      await deleteReport(row.report_id);
-      savedReports?.markUnsaved(row.report_id);
+      if (row.engine === "v3") {
+        await deleteV3Run(row.report_id);
+        savedReports?.markV3Unsaved(row.report_id);
+      } else {
+        await deleteReport(row.report_id);
+        savedReports?.markUnsaved(row.report_id);
+      }
       toast.push({
         title: t("repository.report_deleted"),
         durationMs: 3000,
@@ -166,8 +197,13 @@ export default function Repository(): JSX.Element {
     const removedIndex = list.rows.findIndex((r) => r.id === row.id);
     list.removeRow(row.id);
     try {
-      await unsaveFromRepo(row.report_id);
-      savedReports?.markUnsaved(row.report_id);
+      if (row.engine === "v3") {
+        await unsaveV3RunFromRepo(row.report_id);
+        savedReports?.markV3Unsaved(row.report_id);
+      } else {
+        await unsaveFromRepo(row.report_id);
+        savedReports?.markUnsaved(row.report_id);
+      }
       toast.push({
         title: t("repository.removed_from_repo"),
         durationMs: 4000,
@@ -175,8 +211,13 @@ export default function Repository(): JSX.Element {
           label: t("repository.undo"),
           onClick: async () => {
             try {
-              await saveToRepo(row.report_id);
-              savedReports?.markSaved(row.report_id);
+              if (row.engine === "v3") {
+                await saveV3RunToRepo(row.report_id);
+                savedReports?.markV3Saved(row.report_id);
+              } else {
+                await saveToRepo(row.report_id);
+                savedReports?.markSaved(row.report_id);
+              }
               list.restoreRow(row, removedIndex);
               toast.push({ title: t("repository.report_restored"), tone: "success", durationMs: 2000 });
             } catch {
