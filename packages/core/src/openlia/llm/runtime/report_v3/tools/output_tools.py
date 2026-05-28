@@ -54,17 +54,32 @@ def build_output_tools(*, workspace: RunWorkspace) -> list[ResearchTool]:
 
 
 def _build_write_section_tool(workspace: RunWorkspace) -> ResearchTool:
-    valid_section_ids = {s.id: s.title for s in workspace.template.sections}
+    template_section_titles = {s.id: s.title for s in workspace.template.sections}
+
+    def _resolve_title(section_id: str) -> str:
+        """Title for the persisted section. Template ids carry their
+        canonical title; revise-mode-added section ids title-case the
+        slug (``competitor_landscape`` → ``Competitor Landscape``).
+        Callers can override via the ``title`` arg if they want a
+        different display string."""
+        if section_id in template_section_titles:
+            return template_section_titles[section_id]
+        return section_id.replace("_", " ").title()
 
     def _execute(args: dict[str, Any]) -> ToolResult:
         section_id = str(args.get("section_id", "")).strip()
         markdown = args.get("markdown", "")
         if not section_id:
             raise ToolExecutionError("write_section requires `section_id`.")
-        if section_id not in valid_section_ids:
+        # In revise mode, the user-locked design allows the engine to
+        # add sections beyond the template (the template is a
+        # starting point). In original-run mode, section_id must be
+        # one of the template's ids — straying outside is rejected so
+        # the run can't render an incoherent shape.
+        if not workspace.revision_mode and section_id not in template_section_titles:
             raise ToolExecutionError(
                 f"Unknown section_id {section_id!r}. "
-                f"Valid ids: {sorted(valid_section_ids)}."
+                f"Valid ids: {sorted(template_section_titles)}."
             )
         if not isinstance(markdown, str) or not markdown.strip():
             raise ToolExecutionError(
@@ -91,9 +106,10 @@ def _build_write_section_tool(workspace: RunWorkspace) -> ResearchTool:
 
         workspace.sections[section_id] = WrittenSection(
             section_id=section_id,
-            title=valid_section_ids[section_id],
+            title=_resolve_title(section_id),
             markdown=markdown,
         )
+        workspace.note_section_written(section_id)
         return ToolResult(
             payload={
                 "ok": True,
@@ -177,6 +193,7 @@ def _build_emit_chart_tool(workspace: RunWorkspace) -> ResearchTool:
             )
 
         workspace.charts[spec.chart_id] = spec
+        workspace.note_chart_written(spec.chart_id)
         return ToolResult(
             payload={
                 "ok": True,
@@ -263,6 +280,26 @@ def _build_finalize_tool(workspace: RunWorkspace) -> ResearchTool:
                 },
                 provenance=ComputedSource(method="finalize", derived_from=["(workspace)"]),
                 summary=f"finalize blocked: {len(missing)} missing sections.",
+            )
+
+        # Revise mode: at least one section must have been touched
+        # this run — finalizing a revision that wrote nothing would
+        # produce a confusing no-op revision row + version bump.
+        if (
+            workspace.revision_mode
+            and not workspace.sections_written_this_run
+        ):
+            return ToolResult(
+                payload={
+                    "ok": False,
+                    "message": (
+                        "Revisions must write at least one section. Call "
+                        "write_section for the sections you want to revise "
+                        "(or add), then call finalize() again."
+                    ),
+                },
+                provenance=ComputedSource(method="finalize", derived_from=["(workspace)"]),
+                summary="finalize blocked: revision wrote no sections.",
             )
 
         workspace.finalized = True

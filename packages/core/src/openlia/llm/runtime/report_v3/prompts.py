@@ -10,7 +10,7 @@ Markdown footnote syntax.
 
 from __future__ import annotations
 
-from .schemas import Language, ReportLength, RunRequest
+from .schemas import Language, ReportLength, ReviseContext, RunRequest
 from .tools.registry import ToolCatalog
 
 _LANGUAGE_LABELS: dict[Language, str] = {
@@ -112,3 +112,124 @@ be emitted via `emit_chart` before any section references them.
 When every template section has been written and you are satisfied
 with the report. If `finalize()` reports missing sections, write the
 missing ones and call again."""
+
+
+def build_revise_system_prompt(
+    *,
+    request: RunRequest,
+    catalog: ToolCatalog,
+    revise: ReviseContext,
+) -> str:
+    """Compose the v3 system prompt for a revision pass.
+
+    Differences vs. the original prompt:
+      - Surfaces the prior report verbatim so the model knows exactly
+        what to change vs. preserve.
+      - States the user's revision request as the goal (instead of
+        "produce a full report").
+      - Loosens the section-id contract: revisions can rewrite any
+        existing section AND add new sections beyond the template.
+      - Loosens the finalize gate: revisions can finalize after
+        touching just one section.
+    """
+    template = request.template
+    language_label = _LANGUAGE_LABELS.get(request.language, request.language.value)
+    length_target = _LENGTH_TARGETS.get(request.length, "moderate length")
+
+    section_lines: list[str] = []
+    for spec in template.sections:
+        hints = ", ".join(spec.methodology_hints) if spec.methodology_hints else "none"
+        section_lines.append(
+            f"  - id: {spec.id}\n"
+            f"    title: {spec.title}\n"
+            f"    intent: {spec.intent}\n"
+            f"    methodology_hints: {hints}"
+        )
+    sections_block = "\n".join(section_lines)
+
+    tool_lines: list[str] = []
+    for descriptor in catalog.descriptors:
+        tool_lines.append(f"  - {descriptor.name}: {descriptor.description}")
+    tools_block = "\n".join(tool_lines)
+
+    prior_lines: list[str] = []
+    for section in revise.prior_sections:
+        prior_lines.append(f"## {section.title} (id: {section.section_id})\n\n{section.markdown}")
+    prior_block = "\n\n".join(prior_lines) if prior_lines else "(no prior sections)"
+
+    prior_chart_lines = [
+        f"  - {c.chart_id}: {c.chart_type} — {c.title}"
+        for c in revise.prior_charts
+    ]
+    prior_charts_block = (
+        "\n".join(prior_chart_lines) if prior_chart_lines else "  (none)"
+    )
+
+    return _REVISE_PROMPT_TEMPLATE.format(
+        subject=request.subject,
+        language=language_label,
+        length_target=length_target,
+        template_name=template.name,
+        shape_description=template.shape_description,
+        sections_block=sections_block,
+        tools_block=tools_block,
+        revision_request=revise.revision_request,
+        prior_block=prior_block,
+        prior_charts_block=prior_charts_block,
+    )
+
+
+_REVISE_PROMPT_TEMPLATE = """\
+You are an equity research analyst revising a report. The prior version
+of the report is shown below verbatim. The user has asked for a
+specific change — apply it precisely and leave the rest untouched
+unless your change requires updating dependent sections.
+
+# Report subject
+{subject}
+
+# Report language
+{language}
+
+# Report length target
+{length_target} (a soft target).
+
+# Template: {template_name}
+{shape_description}
+
+The base template's sections:
+
+{sections_block}
+
+You may add new sections beyond the template if the revision request
+requires it (e.g. "add a competitor analysis section"). Pick a stable
+snake-case ``section_id`` for new sections and call ``write_section``
+the same way you would for a template id.
+
+# User's revision request
+{revision_request}
+
+# Prior report (current state)
+
+{prior_block}
+
+# Prior charts (still in scope; re-emit only if data changes)
+{prior_charts_block}
+
+# Tools
+
+{tools_block}
+
+# Citation rules
+
+Same as the original run: every claim cites `[^source_id]`; the
+ledger is pre-loaded with the prior report's citations so existing
+markers still resolve. New web_search / data calls add new
+`web_N` / `eodhd_N` ids you cite the same way.
+
+# When to call finalize()
+
+After writing every section the revision touches. Unlike an original
+run, you do NOT need to re-write untouched sections — they are
+preserved automatically. Call ``finalize()`` once your changes are
+in; it accepts a partial set of revised sections."""

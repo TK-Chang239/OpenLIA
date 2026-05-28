@@ -132,6 +132,50 @@ class RunRequest(BaseModel):
     reasoning_effort: ReasoningEffort | None = None
 
 
+class PriorSection(BaseModel):
+    """Snapshot of one section as it stood before a revision started.
+
+    Fed into ``ReviseContext`` so the engine can render the prior
+    report verbatim into the model's context window. ``markdown`` is
+    the raw text with un-rewritten ``[^source_id]`` markers so the
+    ledger seeded from the same revision can still resolve them.
+    """
+
+    section_id: str
+    title: str
+    markdown: str
+
+
+class PriorCitation(BaseModel):
+    """Snapshot of one citation row from the report before a revision.
+
+    The revision engine seeds its ledger with these so prior sections'
+    ``[^source_id]`` markers still resolve and new web_search calls
+    append rather than collide.
+    """
+
+    source_id: str
+    tool_name: str
+    provenance: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReviseContext(BaseModel):
+    """Inputs that turn an ordinary v3 run into a revision pass.
+
+    The runner pre-loads the workspace with the prior sections +
+    charts so the in-flight ``RunResult`` always reflects the full
+    report (touched + untouched), seeds the ledger with prior
+    citations so existing markers resolve, and switches to revision
+    prompts. ``request`` is the free-form user instruction (e.g.
+    "rewrite the bull case to lead with EBITDA margin expansion").
+    """
+
+    revision_request: str = Field(..., min_length=1)
+    prior_sections: list[PriorSection] = Field(default_factory=list)
+    prior_charts: list[ChartSpec] = Field(default_factory=list)
+    prior_citations: list[PriorCitation] = Field(default_factory=list)
+
+
 class RunResult(BaseModel):
     """Output of a v3 run.
 
