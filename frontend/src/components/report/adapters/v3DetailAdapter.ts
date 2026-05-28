@@ -11,16 +11,18 @@
  *   - ``[^source_id]`` markers in section markdown become ``[N]``
  *     where N is the citation's ``display_index``. v1's
  *     CitationsRail wiring lights up off that style.
- *   - ``{{chart:id}}`` placeholders are dropped from the prose
- *     (charts render as their own blocks). The placeholder's
- *     position is lost — the chart block lands at the end of its
- *     section. Good enough for the typical "narrative paragraph
- *     introduces the chart" pattern; revisit if v3 prompts grow
- *     mid-paragraph chart anchors.
- *   - Each ChartSpec maps to a typed v1 ChartLikeBlock when its
- *     shape is recognised (table / bar / column / line / area /
- *     pie). Unrecognised types fall back to a TextBlock placeholder
- *     so the reader still sees the chart title and type.
+ *   - ``{{chart:id}}`` placeholders split the prose into alternating
+ *     TextBlock / ChartBlock pairs, so charts render inline at the
+ *     position the model asked for instead of trailing the section.
+ *   - Each ChartSpec maps to the shape the matching v1 chart
+ *     component reads. Bar / column / area / line take
+ *     ``categories + series[].values``; pie takes ``segments``;
+ *     scatter takes ``series[].data: [{x, y}]``. Unrecognised types
+ *     fall back to a TextBlock placeholder so the reader still sees
+ *     the chart title and type.
+ *   - Charts whose ids never appear in any section's markdown roll
+ *     into a trailing "Additional charts" section — beats dropping
+ *     them when the model emits one without a reference.
  *
  * Cover is intentionally lean: v3 doesn't have a thesis /
  * canonical_figures concept yet, so the cover surfaces subject +
@@ -64,32 +66,19 @@ const CHART_TYPE_MAP: Record<string, ChartLikeBlock["type"]> = {
 
 export function adaptV3DetailToSchema(detail: V3ReportDetail): ReportSchema {
   const displayIndexById = buildDisplayIndexMap(detail.citations);
-  const chartsBySectionId = buildChartsBySectionId(detail);
+  const chartsById = new Map(detail.charts.map((c) => [c.chart_id, c]));
+  const referencedChartIds = new Set<string>();
 
   const sections: ReportSection[] = detail.sections.map((s) => {
-    const text = rewriteMarkers(s.markdown, displayIndexById);
-    const blocks: ReportBlock[] = [];
-    if (text.trim().length > 0) {
-      blocks.push({ type: "text", content: text });
-    }
-    // Charts inferred from the markdown's {{chart:id}} placeholders
-    // land in the section that referenced them. v3 doesn't track
-    // chart-to-section ownership directly, so this placement comes
-    // from textual reference rather than a stored FK.
-    const charts = chartsBySectionId.get(s.section_id) ?? [];
-    for (const chart of charts) {
-      blocks.push(chartRowToBlock(chart));
-    }
+    const { blocks, referenced } = splitMarkdownWithCharts(
+      s.markdown,
+      chartsById,
+      displayIndexById,
+    );
+    for (const id of referenced) referencedChartIds.add(id);
     return { id: s.section_id, title: s.title, blocks };
   });
 
-  // Any chart whose id never appears in any section's markdown lands
-  // in an "Additional charts" trailing section. Beats dropping them
-  // silently when the LLM emits a chart it forgot to reference.
-  const referencedChartIds = new Set<string>();
-  for (const list of chartsBySectionId.values()) {
-    for (const c of list) referencedChartIds.add(c.chart_id);
-  }
   const unreferenced = detail.charts.filter(
     (c) => !referencedChartIds.has(c.chart_id),
   );
@@ -136,43 +125,58 @@ function buildDisplayIndexMap(citations: V3CitationRow[]): Map<string, number> {
   return out;
 }
 
-/** v3 doesn't FK charts to sections. Infer placement from
- *  ``{{chart:id}}`` references in section markdown. */
-function buildChartsBySectionId(
-  detail: V3ReportDetail,
-): Map<string, V3ChartRow[]> {
-  const byId = new Map(detail.charts.map((c) => [c.chart_id, c]));
-  const out = new Map<string, V3ChartRow[]>();
-  for (const s of detail.sections) {
-    CHART_REF_RE.lastIndex = 0;
-    const seen = new Set<string>();
-    let match: RegExpExecArray | null;
-    while ((match = CHART_REF_RE.exec(s.markdown)) !== null) {
-      const cid = match[1];
-      if (seen.has(cid)) continue;
-      seen.add(cid);
-      const chart = byId.get(cid);
-      if (!chart) continue;
-      const list = out.get(s.section_id) ?? [];
-      list.push(chart);
-      out.set(s.section_id, list);
-    }
+/**
+ * Walk the section markdown and emit alternating TextBlock /
+ * ChartBlock entries split at each ``{{chart:id}}`` marker. A chart
+ * id is consumed at most once per section so the model can't
+ * inadvertently render the same chart five times by repeating the
+ * marker. Returns the consumed chart ids so the caller can detect
+ * unreferenced charts.
+ */
+function splitMarkdownWithCharts(
+  markdown: string,
+  chartsById: Map<string, V3ChartRow>,
+  displayIndexById: Map<string, number>,
+): { blocks: ReportBlock[]; referenced: string[] } {
+  const blocks: ReportBlock[] = [];
+  const referenced: string[] = [];
+  const consumed = new Set<string>();
+
+  CHART_REF_RE.lastIndex = 0;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  const pushText = (raw: string): void => {
+    const rewritten = rewriteCitations(raw, displayIndexById).trim();
+    if (rewritten.length === 0) return;
+    blocks.push({ type: "text", content: rewritten });
+  };
+
+  while ((match = CHART_REF_RE.exec(markdown)) !== null) {
+    const before = markdown.slice(cursor, match.index);
+    pushText(before);
+    cursor = match.index + match[0].length;
+
+    const cid = match[1];
+    if (consumed.has(cid)) continue;
+    const chart = chartsById.get(cid);
+    if (!chart) continue;
+    consumed.add(cid);
+    referenced.push(cid);
+    blocks.push(chartRowToBlock(chart));
   }
-  return out;
+  pushText(markdown.slice(cursor));
+  return { blocks, referenced };
 }
 
-function rewriteMarkers(
+function rewriteCitations(
   markdown: string,
   displayIndexById: Map<string, number>,
 ): string {
-  // Drop chart placeholders — charts render as their own blocks.
-  let out = markdown.replace(CHART_REF_RE, "");
-  // [^source_id] -> [N] so v1's CitationRefs/CitationsRail wire up.
-  out = out.replace(CITATION_RE, (_match, sid) => {
+  return markdown.replace(CITATION_RE, (_match, sid) => {
     const n = displayIndexById.get(sid);
     return n ? `[${n}]` : `[${sid}]`;
   });
-  return out;
 }
 
 function buildCover(detail: V3ReportDetail): ReportCover {
@@ -231,7 +235,6 @@ function citationUrl(c: V3CitationRow): string | null {
 function chartRowToBlock(chart: V3ChartRow): ReportBlock {
   const spec = chart.spec ?? {};
   const data = (spec.data as unknown[] | undefined) ?? [];
-  const axes = (spec.axes as Record<string, string> | undefined) ?? {};
   const sourceIds = (spec.source_ids as string[] | undefined) ?? [];
 
   if (chart.chart_type === "table") {
@@ -240,18 +243,51 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
 
   const blockType = CHART_TYPE_MAP[chart.chart_type];
   if (!blockType) {
-    return {
-      type: "text",
-      content: `**Chart: ${chart.title}** (_${chart.chart_type}_ — preview unavailable)`,
-    };
+    return chartPlaceholder(chart, data.length);
   }
 
-  // Categorical layout: data items shaped as {label, value} (bar /
-  // column / area / pie / line over discrete categories).
+  // Pie expects a flat ``segments: [{label, value}]`` shape — totally
+  // different from the categories/series convention the other charts
+  // share.
+  if (blockType === "pie_chart") {
+    const segments = data
+      .filter((d): d is CategoricalPoint => isCategoricalPoint(d))
+      .map((d) => ({
+        label: String(d.label),
+        value: Number(d.value),
+      }));
+    if (segments.length === 0) return chartPlaceholder(chart, data.length);
+    return {
+      type: "pie_chart",
+      title: chart.title,
+      segments,
+      source_ids: sourceIds,
+    } as ChartLikeBlock;
+  }
+
+  // Scatter expects ``series[].data: [{x, y}]`` — the categorical
+  // (categories + values) shape would collapse all points onto x=0.
+  if (blockType === "scatter_plot") {
+    const points = data
+      .filter((d): d is XyPoint => isXyPoint(d))
+      .map((d) => ({ x: Number(d.x), y: Number(d.y) }))
+      .filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
+    if (points.length === 0) return chartPlaceholder(chart, data.length);
+    return {
+      type: "scatter_plot",
+      title: chart.title,
+      series: [{ name: chart.title, data: points }],
+      source_ids: sourceIds,
+    } as ChartLikeBlock;
+  }
+
+  // Bar / column / area / line: ``categories + series[].values``.
+  const axes = (spec.axes as Record<string, string> | undefined) ?? {};
+  const seriesName = axes.y ?? "Value";
+
   if (data.length > 0 && isCategoricalPoint(data[0])) {
     const categories = data.map((d) => String((d as CategoricalPoint).label));
     const values = data.map((d) => Number((d as CategoricalPoint).value));
-    const seriesName = axes.y ?? "Value";
     return {
       type: blockType,
       title: chart.title,
@@ -261,13 +297,9 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
     } as ChartLikeBlock;
   }
 
-  // Scatter / line layout: data items shaped as {x, y}. v1 charts
-  // accept this shape via `categories` (x-axis values) + one series
-  // (y values).
   if (data.length > 0 && isXyPoint(data[0])) {
     const categories = data.map((d) => String((d as XyPoint).x));
     const values = data.map((d) => Number((d as XyPoint).y));
-    const seriesName = axes.y ?? "Value";
     return {
       type: blockType,
       title: chart.title,
@@ -277,12 +309,14 @@ function chartRowToBlock(chart: V3ChartRow): ReportBlock {
     } as ChartLikeBlock;
   }
 
-  // Unknown shape — surface a graceful placeholder rather than
-  // crashing the renderer.
+  return chartPlaceholder(chart, data.length);
+}
+
+function chartPlaceholder(chart: V3ChartRow, dataLen: number): ReportBlock {
   return {
     type: "text",
-    content: `**Chart: ${chart.title}** (_${chart.chart_type}_, ${data.length} data point${
-      data.length === 1 ? "" : "s"
+    content: `**Chart: ${chart.title}** (_${chart.chart_type}_, ${dataLen} data point${
+      dataLen === 1 ? "" : "s"
     })`,
   };
 }
@@ -291,8 +325,6 @@ function chartRowToTableBlock(
   chart: V3ChartRow,
   data: unknown[],
 ): TableBlock {
-  // Pull headers from the first row's keys; rows pass through as-is
-  // (v1 TableBlock reads cells by header.key).
   const firstRow = (data[0] ?? {}) as Record<string, unknown>;
   const headerKeys = Object.keys(firstRow);
   return {
