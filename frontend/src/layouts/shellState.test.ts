@@ -39,4 +39,11 @@ describe("crumbsForPath", () => {
   it("falls back to Home for an unknown top-level path", () => {
     expect(crumbsForPath("/totally-unknown")).toEqual(["nav.home"]);
   });
+
+  it("maps /equity-research-v3 to the Equity Research crumb", () => {
+    expect(crumbsForPath("/equity-research-v3")).toEqual([
+      "nav.home",
+      "nav.equity_research",
+    ]);
+  });
 });
