@@ -3,15 +3,21 @@
  *
  * Visual shape mirrors the v1/v2 equity-research surface — centered
  * WelcomeStage greeting on first load, bottom-pinned ErComposer for
- * free-form prompts, a model picker pill in the page header, and the
- * Report Settings pill on the WelcomeStage row. Submission goes
- * through the SSE start endpoint (``POST /v3/runs/start``) and the
- * stream lives inside ``useV3RunStream``.
+ * free-form prompts, the model picker pill in the composer toolbar,
+ * and the Report Settings pill on the WelcomeStage row. Submission
+ * goes through the SSE start endpoint (``POST /v3/runs/start``) and
+ * the stream lives inside ``useV3RunStream``.
  *
  * v3 takes a free-form ``subject`` (per schemas.py:111 — "either a
  * ticker (RKLB.US) or a free-form topic"), so the composer is in
  * single-textarea mode. No clarify stage; whatever the user types is
  * passed straight through as the subject for the run.
+ *
+ * The page also registers with ``useChatHeaderRegistry`` so the
+ * global TopBar shows the same breadcrumb + history dropdown the
+ * v1/v2 page does. Since v3 has no chat-session model, we plug a
+ * v3-specific ``V3RunsPopover`` into the registry's ``renderPopover``
+ * slot — each run row maps to its report_id.
  */
 import { type JSX, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -19,14 +25,10 @@ import { useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/_request";
 import {
   type V3Event,
-  type V3Language,
   type V3ReportDetail,
-  type V3ReportLength,
-  type V3ReportSummary,
   type V3ReportType,
   type V3StartPayload,
   getV3Run,
-  listV3Runs,
   startV3RunAsync,
   v3HtmlUrl,
   v3PdfUrl,
@@ -38,29 +40,28 @@ import {
   V3ModelPicker,
   type V3ModelSelection,
 } from "../../components/equity-research-v3/V3ModelPicker";
-import { V3ReportSettingsModal } from "../../components/equity-research-v3/V3ReportSettingsModal";
+import {
+  V3ReportSettingsModal,
+  type V3SettingsValue,
+} from "../../components/equity-research-v3/V3ReportSettingsModal";
+import { V3RunsPopover } from "../../components/equity-research-v3/V3RunsPopover";
 import { useV3RunStream } from "../../components/equity-research-v3/useV3RunStream";
+import { useChatHeaderRegistry } from "../../layouts/ChatHeaderContext";
 
 const SETTINGS_LS_KEY = "er.v3.settings";
 
-interface PersistedSettings {
-  reportType: V3ReportType;
-  length: V3ReportLength;
-  language: V3Language;
-}
-
-const DEFAULT_SETTINGS: PersistedSettings = {
+const DEFAULT_SETTINGS: V3SettingsValue = {
   reportType: "initiation",
   length: "normal",
   language: "en",
 };
 
-function loadSettings(): PersistedSettings {
+function loadSettings(): V3SettingsValue {
   if (typeof window === "undefined") return DEFAULT_SETTINGS;
   try {
     const raw = window.localStorage.getItem(SETTINGS_LS_KEY);
     if (!raw) return DEFAULT_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<PersistedSettings>;
+    const parsed = JSON.parse(raw) as Partial<V3SettingsValue>;
     return {
       reportType: parsed.reportType ?? DEFAULT_SETTINGS.reportType,
       length: parsed.length ?? DEFAULT_SETTINGS.length,
@@ -71,7 +72,7 @@ function loadSettings(): PersistedSettings {
   }
 }
 
-function saveSettings(next: PersistedSettings): void {
+function saveSettings(next: V3SettingsValue): void {
   try {
     window.localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify(next));
   } catch {
@@ -89,7 +90,9 @@ function firstName(displayName: string | null | undefined): string {
 // v2.2 ReportMode used by the shared WelcomeStage/ErComposer chrome.
 // v3 talks in V3ReportType, so we translate at the edges to keep the
 // shared chrome rendering a coherent pill label.
-function reportTypeToMode(t: V3ReportType): "stock_initiation" | "stock_update" | "sector_research" {
+function reportTypeToMode(
+  t: V3ReportType,
+): "stock_initiation" | "stock_update" | "sector_research" {
   switch (t) {
     case "initiation":
       return "stock_initiation";
@@ -106,36 +109,24 @@ export default function EquityResearchV3(): JSX.Element {
   const reportIdFromUrl = searchParams.get("id") ?? null;
 
   const [prompt, setPrompt] = useState("");
-  const [settings, setSettings] = useState<PersistedSettings>(() => loadSettings());
+  const [settings, setSettings] = useState<V3SettingsValue>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [model, setModel] = useState<V3ModelSelection | null>(null);
 
   const [startError, setStartError] = useState<string | null>(null);
   const [detail, setDetail] = useState<V3ReportDetail | null>(null);
   const [activeReportId, setActiveReportId] = useState<string | null>(reportIdFromUrl);
-  const [recentRuns, setRecentRuns] = useState<V3ReportSummary[] | null>(null);
+  // Keep the active run's subject so the TopBar breadcrumb can render
+  // it as a chat-title equivalent. Updated when the page learns the
+  // subject (either fresh dispatch or detail fetch).
+  const [activeSubject, setActiveSubject] = useState<string | null>(null);
 
   const stream = useV3RunStream(activeReportId);
 
-  const persistSettings = useCallback((next: PersistedSettings) => {
+  const persistSettings = useCallback((next: V3SettingsValue) => {
     setSettings(next);
     saveSettings(next);
   }, []);
-
-  const refreshRecent = useCallback(async () => {
-    try {
-      const rows = await listV3Runs();
-      setRecentRuns(rows);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 503) {
-        setRecentRuns([]);
-      }
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshRecent();
-  }, [refreshRecent]);
 
   // When the stream reaches a terminal state, fetch the persisted
   // detail so the result viewer renders sections + bibliography.
@@ -143,6 +134,7 @@ export default function EquityResearchV3(): JSX.Element {
   useEffect(() => {
     if (!activeReportId) {
       setDetail(null);
+      setActiveSubject(null);
       return;
     }
     if (stream.status !== "streaming" && stream.status !== "idle") {
@@ -152,7 +144,7 @@ export default function EquityResearchV3(): JSX.Element {
           const d = await getV3Run(activeReportId);
           if (!cancelled) {
             setDetail(d);
-            refreshRecent();
+            setActiveSubject(d.report.subject);
           }
         } catch (err) {
           if (cancelled) return;
@@ -163,7 +155,7 @@ export default function EquityResearchV3(): JSX.Element {
         cancelled = true;
       };
     }
-  }, [activeReportId, refreshRecent, stream.status]);
+  }, [activeReportId, stream.status]);
 
   // Keep ?id= in the URL synced to whichever run we're watching.
   useEffect(() => {
@@ -188,6 +180,7 @@ export default function EquityResearchV3(): JSX.Element {
       setStartError(null);
       setDetail(null);
       setPrompt("");
+      setActiveSubject(subject);
       try {
         const body: V3StartPayload = {
           subject,
@@ -199,7 +192,6 @@ export default function EquityResearchV3(): JSX.Element {
         };
         const response = await startV3RunAsync(body);
         setActiveReportId(response.report_id);
-        refreshRecent();
       } catch (err) {
         if (err instanceof ApiError && err.status === 503) {
           setStartError(
@@ -210,7 +202,7 @@ export default function EquityResearchV3(): JSX.Element {
         }
       }
     },
-    [model, refreshRecent, settings.language, settings.length, settings.reportType],
+    [model, settings.language, settings.length, settings.reportType],
   );
 
   const handleStop = useCallback(() => {
@@ -220,6 +212,7 @@ export default function EquityResearchV3(): JSX.Element {
   const handleNewRun = useCallback(() => {
     setActiveReportId(null);
     setDetail(null);
+    setActiveSubject(null);
     setStartError(null);
     setSearchParams(
       (prev) => {
@@ -230,6 +223,52 @@ export default function EquityResearchV3(): JSX.Element {
       { replace: true },
     );
   }, [setSearchParams]);
+
+  const handleSelectRun = useCallback(
+    (runId: string) => {
+      if (runId === activeReportId) return;
+      setActiveReportId(runId);
+      setDetail(null);
+      setActiveSubject(null);
+      setStartError(null);
+    },
+    [activeReportId],
+  );
+
+  // Reach for ?id= on first paint when present, so the dropdown row
+  // for a freshly-loaded URL shows up highlighted. We don't need a
+  // separate effect because `activeReportId` is already seeded from
+  // reportIdFromUrl above; this is just a no-op safety guard.
+
+  // Register the chat-header so the global TopBar renders the v3
+  // history dropdown + "New chat" button. The renderPopover slot
+  // plugs the v3-specific runs list in; TopBar stays generic.
+  const { register, clear } = useChatHeaderRegistry();
+  useEffect(() => {
+    register({
+      departmentId: "equity_research_v3",
+      activeSessionId: activeReportId,
+      chatTitle: activeSubject ?? "New chat",
+      onSelect: handleSelectRun,
+      onCreate: handleNewRun,
+      renderPopover: (props) => (
+        <V3RunsPopover
+          activeSessionId={props.activeSessionId}
+          onSelect={props.onSelect}
+          onActiveDeleted={props.onActiveDeleted}
+          onClose={props.onClose}
+        />
+      ),
+    });
+    return () => clear();
+  }, [
+    activeReportId,
+    activeSubject,
+    clear,
+    handleNewRun,
+    handleSelectRun,
+    register,
+  ]);
 
   const mode = reportTypeToMode(settings.reportType);
   const isWelcome = activeReportId === null && detail === null && !isStreaming;
@@ -243,41 +282,20 @@ export default function EquityResearchV3(): JSX.Element {
       data-testid="er-v3-page"
     >
       <div className="flex flex-1 min-h-0 flex-col">
-        <div className="flex items-center justify-between gap-2 px-4 pt-3">
-          <div className="flex items-center gap-2">
-            {!isWelcome ? (
-              <button
-                type="button"
-                onClick={handleNewRun}
-                data-testid="er-v3-new-run"
-                className="inline-flex items-center gap-[6px] rounded-sm border border-[--color-border-subtle] bg-[--color-bg-base] px-2 py-[3px] font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-secondary] hover:border-[--color-border-strong] hover:text-[--color-text-primary]"
-              >
-                New run
-              </button>
-            ) : null}
-          </div>
-          <V3ModelPicker onChange={setModel} />
-        </div>
-
         <div className="flex flex-1 min-h-0 flex-col overflow-y-auto">
           {isWelcome ? (
-            <>
-              <WelcomeStage
-                firstName={firstName(user?.display_name)}
-                mode={mode}
-                length={settings.length}
-                onModeRowClick={() => setSettingsOpen(true)}
-              />
-              <RecentRunsPanel
-                rows={recentRuns}
-                onSelect={(id) => setActiveReportId(id)}
-              />
-            </>
+            <WelcomeStage
+              firstName={firstName(user?.display_name)}
+              mode={mode}
+              length={settings.length}
+              onModeRowClick={() => setSettingsOpen(true)}
+            />
           ) : (
             <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-6 py-6">
               {activeReportId ? (
                 <StreamPanel
                   reportId={activeReportId}
+                  subject={activeSubject}
                   status={stream.status}
                   events={stream.events}
                   sectionsWritten={stream.sectionsWritten}
@@ -316,83 +334,18 @@ export default function EquityResearchV3(): JSX.Element {
         mode={mode}
         length={settings.length}
         onModeClick={() => setSettingsOpen(true)}
+        modelPicker={<V3ModelPicker onChange={setModel} />}
         disabled={model === null}
       />
 
       <V3ReportSettingsModal
         open={settingsOpen}
-        reportType={settings.reportType}
-        length={settings.length}
-        language={settings.language}
-        onReportTypeChange={(v) => persistSettings({ ...settings, reportType: v })}
-        onLengthChange={(v) => persistSettings({ ...settings, length: v })}
-        onLanguageChange={(v) => persistSettings({ ...settings, language: v })}
+        value={settings}
         onClose={() => setSettingsOpen(false)}
+        onSave={persistSettings}
       />
     </div>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Recent runs (inline panel below welcome) — replaces the old left sidebar
-// so the page chrome matches the v1/v2 surface.
-// ---------------------------------------------------------------------------
-
-function RecentRunsPanel({
-  rows,
-  onSelect,
-}: {
-  rows: V3ReportSummary[] | null;
-  onSelect: (id: string) => void;
-}): JSX.Element | null {
-  if (rows === null) {
-    return (
-      <div className="mx-auto w-full max-w-[760px] px-4 pb-4 text-[11px] text-[--color-text-tertiary]">
-        Loading recent runs…
-      </div>
-    );
-  }
-  if (rows.length === 0) return null;
-  const shown = rows.slice(0, 6);
-  return (
-    <div
-      data-testid="er-v3-recent-runs"
-      className="mx-auto w-full max-w-[760px] px-4 pb-4"
-    >
-      <h2 className="mb-[8px] font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-        Recent runs
-      </h2>
-      <ul className="flex flex-col gap-[6px]">
-        {shown.map((row) => (
-          <li key={row.report_id}>
-            <button
-              type="button"
-              onClick={() => onSelect(row.report_id)}
-              data-testid={`er-v3-recent-run-${row.report_id}`}
-              className="flex w-full items-center justify-between gap-3 rounded-md border border-[--color-border-subtle] bg-[--color-bg-elevated] px-3 py-2 text-left hover:border-[--color-border-strong]"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate text-[13px] font-medium text-[--color-text-primary]">
-                  {row.subject}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-[--color-text-tertiary]">
-                  {row.template_id} · {row.status} · {formatDate(row.created_at)}
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -401,6 +354,7 @@ function formatDate(iso: string): string {
 
 function StreamPanel({
   reportId,
+  subject,
   status,
   events,
   sectionsWritten,
@@ -410,6 +364,7 @@ function StreamPanel({
   errorMessage,
 }: {
   reportId: string;
+  subject: string | null;
   status: string;
   events: V3Event[];
   sectionsWritten: number;
@@ -426,7 +381,7 @@ function StreamPanel({
       <header className="mb-3 flex items-center justify-between">
         <div>
           <h2 className="font-mono text-[10px] uppercase tracking-[0.1em] text-[--color-text-tertiary]">
-            Live activity
+            Live activity {subject ? `· ${subject}` : ""}
           </h2>
           <p className="font-mono text-[10.5px] text-[--color-text-tertiary]">
             {reportId}
@@ -612,9 +567,7 @@ function ReportResult({ detail }: { detail: V3ReportDetail }): JSX.Element {
               .map((c) => (
                 <li key={c.source_id}>
                   <span className="font-medium">[{c.display_index}]</span>{" "}
-                  <code className="text-[--color-text-tertiary]">
-                    {c.source_id}
-                  </code>{" "}
+                  <code className="text-[--color-text-tertiary]">{c.source_id}</code>{" "}
                   {c.tool_name}
                 </li>
               ))}
