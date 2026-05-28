@@ -13,6 +13,7 @@ import { MemoryPage } from "../pages/MemoryPage";
 import { useAuth } from "../auth/AuthContext";
 import { SecretaryPage } from "../pages/SecretaryPage";
 import EquityResearch from "../pages/departments/EquityResearch";
+import EquityResearchV3 from "../pages/departments/EquityResearchV3";
 import EarningsUpdate from "../pages/departments/EarningsUpdate";
 import MorningBriefing from "../pages/departments/MorningBriefing";
 import RetailSentiment from "../pages/departments/RetailSentiment";
@@ -119,6 +120,17 @@ export const routes: RouteObject[] = [
                     element: (
                       <WithDeptBanner departmentId="equity_research">
                         <EquityResearch />
+                      </WithDeptBanner>
+                    ),
+                  },
+                  {
+                    // v3 single-model engine. Gated server-side by
+                    // REPORT_ENGINE_VERSION=v3; the page surfaces a
+                    // clear banner when the engine is disabled.
+                    path: "/equity-research-v3",
+                    element: (
+                      <WithDeptBanner departmentId="equity_research">
+                        <EquityResearchV3 />
                       </WithDeptBanner>
                     ),
                   },
