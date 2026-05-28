@@ -196,12 +196,39 @@ class CitationOut(BaseModel):
     provenance: dict[str, Any]
 
 
+class CoverMetricOut(BaseModel):
+    """One headline metric card on the report cover."""
+
+    label: str
+    value: str
+    change: str | None = None
+    tone: str | None = None
+
+
+class CoverOut(BaseModel):
+    """Cover hero content populated by the model's ``set_cover`` call.
+
+    All fields are optional — an unpopulated cover renders with the
+    bare subject + template-derived eyebrow.
+    """
+
+    subtitle: str | None = None
+    tagline: str | None = None
+    tldr: list[str] = Field(default_factory=list)
+    key_metrics: list[CoverMetricOut] = Field(default_factory=list)
+    rating: str | None = None
+    upside_pct: float | None = None
+
+
 class ReportDetailOut(BaseModel):
     report: ReportSummaryOut
     error_message: str | None
     sections: list[SectionOut]
     charts: list[ChartOut]
     citations: list[CitationOut]
+    # Cover hero content, or None when the model never called
+    # ``set_cover`` for this report (older rows + early v3 runs).
+    cover: CoverOut | None = None
 
 
 class TemplateOut(BaseModel):
@@ -306,6 +333,22 @@ def _citation_out(row: ReportV3Citation) -> CitationOut:
         display_index=row.display_index,
         provenance=json.loads(row.provenance_json),
     )
+
+
+def _cover_out(raw: str | None) -> CoverOut | None:
+    """Deserialise ``ReportV3.cover_json`` to ``CoverOut``. Returns
+    None for runs where the model never called ``set_cover`` (older
+    rows + early v3 runs); returns None on parse failure too so a
+    corrupt cover row never breaks the detail endpoint."""
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return CoverOut.model_validate(data)
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +519,7 @@ def build_equity_research_v3_router(
             sections=[_section_out(s) for s in sections],
             charts=[_chart_out(c) for c in charts],
             citations=[_citation_out(c) for c in citations],
+            cover=_cover_out(row.cover_json),
         )
 
     @router.delete("/runs/{report_id}", status_code=204)
