@@ -24,6 +24,7 @@ from openlia.llm.runtime.report_v3.rendering import (
     build_bibliography,
     render_chart_png,
     rewrite_section_markdown,
+    strip_anthropic_citation_markup,
 )
 
 # ---------------------------------------------------------------------------
@@ -118,7 +119,10 @@ class _FakeCitation:
     provenance_json: str
 
 
-def test_build_bibliography_skips_uncited_and_sorts_by_display_index():
+def test_build_bibliography_includes_all_rows_and_sorts_by_display_index():
+    """Body-linked rows keep their assigned index; rows whose marker
+    linkage misfired get sequential indices appended after the highest
+    assigned one so every ledger source is still visible to the reader."""
     rows = [
         _FakeCitation(
             source_id="web_1",
@@ -136,15 +140,77 @@ def test_build_bibliography_skips_uncited_and_sorts_by_display_index():
             source_id="web_2",
             tool_name="web_search",
             display_index=None,
-            provenance_json='{"url": "https://b.test"}',
+            provenance_json='{"url": "https://b.test", "title": "B"}',
+        ),
+        _FakeCitation(
+            source_id="web_3",
+            tool_name="web_search",
+            display_index=None,
+            provenance_json='{"url": "https://c.test", "title": "C"}',
+        ),
+    ]
+    bib = build_bibliography(rows)
+    assert [e.display_index for e in bib] == [1, 2, 3, 4]
+    assert bib[0].source_id == "eodhd_1"
+    assert bib[1].source_id == "web_1"
+    assert {bib[2].source_id, bib[3].source_id} == {"web_2", "web_3"}
+    assert "EODHD" in bib[0].label
+    assert bib[1].url == "https://a.test"
+
+
+def test_build_bibliography_handles_all_unlinked_rows():
+    rows = [
+        _FakeCitation(
+            source_id="web_1",
+            tool_name="web_search",
+            display_index=None,
+            provenance_json='{"url": "https://a.test", "title": "A"}',
+        ),
+        _FakeCitation(
+            source_id="web_2",
+            tool_name="web_search",
+            display_index=None,
+            provenance_json='{"url": "https://b.test", "title": "B"}',
         ),
     ]
     bib = build_bibliography(rows)
     assert [e.display_index for e in bib] == [1, 2]
-    assert bib[0].source_id == "eodhd_1"
-    assert bib[1].source_id == "web_1"
-    assert "EODHD" in bib[0].label
-    assert bib[1].url == "https://a.test"
+    assert [e.source_id for e in bib] == ["web_1", "web_2"]
+
+
+# ---------------------------------------------------------------------------
+# strip_anthropic_citation_markup
+# ---------------------------------------------------------------------------
+
+
+def test_strip_anthropic_unwraps_cite_tags():
+    md = 'Revenue rose. <cite index="6-1">Product revenue hit $1.33B</cite> in Q1.'
+    out = strip_anthropic_citation_markup(md)
+    assert out == "Revenue rose. Product revenue hit $1.33B in Q1."
+
+
+def test_strip_anthropic_handles_multiline_cite_tags():
+    md = '<cite index="2-3">Line one.\nLine two.</cite>'
+    out = strip_anthropic_citation_markup(md)
+    assert out == "Line one.\nLine two."
+
+
+def test_strip_anthropic_drops_hyphenated_markers():
+    md = "Beat estimates[^6-1]. Margin expanded[^10-12]."
+    out = strip_anthropic_citation_markup(md)
+    assert out == "Beat estimates. Margin expanded."
+
+
+def test_strip_anthropic_preserves_valid_source_id_markers():
+    md = "DCF assumes 9% WACC [^dcf_1] and 30% growth [^web_3]."
+    out = strip_anthropic_citation_markup(md)
+    assert out == md
+
+
+def test_strip_anthropic_handles_mixed_markup():
+    md = '<cite index="1-2">Apple beat</cite> on revenue[^1-2] and EPS [^eodhd_4].'
+    out = strip_anthropic_citation_markup(md)
+    assert out == "Apple beat on revenue and EPS [^eodhd_4]."
 
 
 # ---------------------------------------------------------------------------
@@ -193,8 +259,7 @@ def test_assemble_html_self_contained_with_chart_and_bibliography():
             section_index=0,
             title="Overview",
             markdown=(
-                "RKLB launched Neutron [^web_1].\n\n{{chart:trend}}\n\n"
-                "Margins improved [^eodhd_1]."
+                "RKLB launched Neutron [^web_1].\n\n{{chart:trend}}\n\nMargins improved [^eodhd_1]."
             ),
         ),
         _FakeSection(
@@ -247,13 +312,74 @@ def test_assemble_html_self_contained_with_chart_and_bibliography():
     assert "[^2]" in html
     assert "[^web_1]" not in html
     # Chart inlined as data URL
-    assert "src=\"data:image/png;base64," in html
+    assert 'src="data:image/png;base64,' in html
     # Bibliography appended with both entries
     assert 'class="v3-bibliography"' in html
     assert "RKLB Q2" in html
     assert "EODHD fundamentals" in html
     # Bibliography URLs are hyperlinks
     assert 'href="https://news.test/rklb"' in html
+
+
+def test_assemble_html_cleans_anthropic_markers_and_lists_unlinked_sources():
+    """Body emits Anthropic-native ``<cite>`` and ``[^X-Y]`` markup that
+    doesn't resolve to ledger source_ids. The assembler should strip
+    that markup from the body and still surface every ledger entry in
+    the bibliography (PR for "footnote numbers shown but Sources list
+    missing" bug)."""
+    report = _FakeReport(subject="SNOW", template_id="initiation", language="en")
+    sections = [
+        _FakeSection(
+            section_id="financial_profile",
+            section_index=0,
+            title="Financial Profile",
+            markdown=(
+                'Revenue was strong. <cite index="16-2">Product revenue '
+                "reached $1.33B</cite>, up 34% YoY[^6-1]. WACC at 9% [^dcf_1]."
+            ),
+        ),
+    ]
+    citations = [
+        _FakeCitation(
+            source_id="dcf_1",
+            tool_name="run_dcf",
+            display_index=1,
+            provenance_json='{"method": "dcf"}',
+        ),
+        _FakeCitation(
+            source_id="web_1",
+            tool_name="web_search",
+            display_index=None,
+            provenance_json='{"url": "https://snow.test/q1", "title": "SNOW Q1"}',
+        ),
+        _FakeCitation(
+            source_id="web_2",
+            tool_name="web_search",
+            display_index=None,
+            provenance_json='{"url": "https://snow.test/10k", "title": "SNOW 10-K"}',
+        ),
+    ]
+    assembled = assemble_html(
+        report=report,
+        sections=sections,
+        charts=[],
+        citations=citations,
+        now=datetime(2026, 5, 28, 12, 0),
+    )
+    html = assembled.html
+
+    # Anthropic markup cleaned from body
+    assert "<cite" not in html
+    assert "[^6-1]" not in html
+    assert "[^16-2]" not in html
+    # Inner text preserved
+    assert "Product revenue reached $1.33B" in html
+    # Resolvable marker still rewrites
+    assert "[^1]" in html
+    # Every ledger entry surfaces in bibliography
+    assert 'class="v3-bibliography"' in html
+    assert "SNOW Q1" in html
+    assert "SNOW 10-K" in html
 
 
 def test_assemble_html_handles_missing_chart_gracefully():

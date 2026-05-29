@@ -13,6 +13,7 @@ from .citation_rewriter import (
     RewrittenSection,
     build_bibliography,
     rewrite_section_markdown,
+    strip_anthropic_citation_markup,
 )
 from .report_assembler import AssembledReport, assemble_html
 
@@ -25,4 +26,5 @@ __all__ = [
     "build_bibliography",
     "render_chart_png",
     "rewrite_section_markdown",
+    "strip_anthropic_citation_markup",
 ]

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from openlia_server.db.models.content import RepoItem, Report
 from openlia_server.db.models.pipeline_runs import PipelineRun
 from openlia_server.db.models.report_v3 import ReportV3
+from openlia_server.services.v3_filename import build_download_filename
 
 SortKey = Literal[
     "saved_desc",
@@ -95,9 +96,7 @@ def unsave_from_repo(db: Session, *, user_id: str, report_id: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def save_v2_run_to_repo(
-    db: Session, *, user_id: str, pipeline_run_id: str
-) -> RepoItem:
+def save_v2_run_to_repo(db: Session, *, user_id: str, pipeline_run_id: str) -> RepoItem:
     """Save a v2.2 pipeline_run to the user's repo. Idempotent."""
     existing = db.execute(
         select(RepoItem).where(
@@ -133,9 +132,7 @@ def save_v2_run_to_repo(
     return item
 
 
-def unsave_v2_run_from_repo(
-    db: Session, *, user_id: str, pipeline_run_id: str
-) -> None:
+def unsave_v2_run_from_repo(db: Session, *, user_id: str, pipeline_run_id: str) -> None:
     db.query(RepoItem).filter(
         RepoItem.user_id == user_id,
         RepoItem.pipeline_run_id == pipeline_run_id,
@@ -143,9 +140,7 @@ def unsave_v2_run_from_repo(
     db.commit()
 
 
-def is_v2_run_saved(
-    db: Session, *, user_id: str, pipeline_run_id: str
-) -> bool:
+def is_v2_run_saved(db: Session, *, user_id: str, pipeline_run_id: str) -> bool:
     return (
         db.execute(
             select(RepoItem.id).where(
@@ -162,9 +157,7 @@ def is_v2_run_saved(
 # ---------------------------------------------------------------------------
 
 
-def save_v3_report_to_repo(
-    db: Session, *, user_id: str, v3_report_id: str
-) -> RepoItem:
+def save_v3_report_to_repo(db: Session, *, user_id: str, v3_report_id: str) -> RepoItem:
     """Save a v3 report to the user's repo. Idempotent."""
     existing = db.execute(
         select(RepoItem).where(
@@ -199,9 +192,7 @@ def save_v3_report_to_repo(
     return item
 
 
-def unsave_v3_report_from_repo(
-    db: Session, *, user_id: str, v3_report_id: str
-) -> None:
+def unsave_v3_report_from_repo(db: Session, *, user_id: str, v3_report_id: str) -> None:
     db.query(RepoItem).filter(
         RepoItem.user_id == user_id,
         RepoItem.v3_report_id == v3_report_id,
@@ -209,9 +200,7 @@ def unsave_v3_report_from_repo(
     db.commit()
 
 
-def is_v3_report_saved(
-    db: Session, *, user_id: str, v3_report_id: str
-) -> bool:
+def is_v3_report_saved(db: Session, *, user_id: str, v3_report_id: str) -> bool:
     return (
         db.execute(
             select(RepoItem.id).where(
@@ -394,9 +383,7 @@ def _list_v3_rows(
 
     out: list[RepoRow] = []
     for item, report in db.execute(stmt).all():
-        when = report.completed_at or report.created_at
-        date_str = when.strftime("%Y-%m-%d") if when is not None else "undated"
-        filename = f"{report.subject}_{report.template_id}_{date_str}.pdf"
+        filename = build_download_filename(row=report, ext="pdf")
         out.append(
             RepoRow(
                 id=item.id,
@@ -457,8 +444,6 @@ def facets(db: Session, *, user_id: str) -> dict:
     if v3_count:
         counts[_V3_DEPARTMENT] = counts.get(_V3_DEPARTMENT, 0) + v3_count
 
-    departments = [
-        {"slug": dep, "count": counts[dep]} for dep in sorted(counts.keys())
-    ]
+    departments = [{"slug": dep, "count": counts[dep]} for dep in sorted(counts.keys())]
     total = sum(d["count"] for d in departments)
     return {"departments": departments, "total": total}

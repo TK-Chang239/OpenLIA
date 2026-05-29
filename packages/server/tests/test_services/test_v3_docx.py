@@ -117,9 +117,7 @@ def test_render_docx_emits_valid_word_bytes(create_tables, db_session: Session):
     ]
     citations = [_citation(report.id, "web_1", 1, url="https://example.com/rklb")]
 
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=citations
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=citations)
     # PK signature on a .docx (zip container)
     assert blob[:2] == b"PK"
     paragraphs = _read_paragraphs(blob)
@@ -133,9 +131,7 @@ def test_render_docx_emits_valid_word_bytes(create_tables, db_session: Session):
     assert "https://example.com/rklb" in text
 
 
-def test_render_docx_strips_chart_placeholders_from_prose(
-    create_tables, db_session: Session
-):
+def test_render_docx_strips_chart_placeholders_from_prose(create_tables, db_session: Session):
     user = _user(db_session)
     report = _report(user.id)
     sections = [
@@ -168,17 +164,13 @@ def test_render_docx_strips_chart_placeholders_from_prose(
         )
     ]
 
-    blob = render_docx(
-        report=report, sections=sections, charts=charts, citations=[]
-    )
+    blob = render_docx(report=report, sections=sections, charts=charts, citations=[])
     text = "\n".join(_read_paragraphs(blob))
     assert "{{chart:rev_trend}}" not in text
     assert "Revenue trend" in text  # chart title rendered as a heading line
 
 
-def test_render_docx_renders_markdown_lists_with_proper_styles(
-    create_tables, db_session: Session
-):
+def test_render_docx_renders_markdown_lists_with_proper_styles(create_tables, db_session: Session):
     user = _user(db_session)
     report = _report(user.id)
     sections = [
@@ -189,14 +181,10 @@ def test_render_docx_renders_markdown_lists_with_proper_styles(
             "Key drivers:\n\n- Launch cadence\n- Neutron readiness\n- Backlog growth\n",
         )
     ]
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=[]
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=[])
     doc = DocxDocument(io.BytesIO(blob))
     # The 3 bullets should each get a List Bullet style.
-    bullet_paras = [
-        p for p in doc.paragraphs if p.style and p.style.name == "List Bullet"
-    ]
+    bullet_paras = [p for p in doc.paragraphs if p.style and p.style.name == "List Bullet"]
     assert len(bullet_paras) == 3
     assert {p.text for p in bullet_paras} == {
         "Launch cadence",
@@ -205,9 +193,7 @@ def test_render_docx_renders_markdown_lists_with_proper_styles(
     }
 
 
-def test_render_docx_bibliography_orders_by_display_index(
-    create_tables, db_session: Session
-):
+def test_render_docx_bibliography_orders_by_display_index(create_tables, db_session: Session):
     user = _user(db_session)
     report = _report(user.id)
     sections = [
@@ -224,24 +210,74 @@ def test_render_docx_bibliography_orders_by_display_index(
         _citation(report.id, "a", 2, url="https://example.com/two"),
         _citation(report.id, "b", 1, url="https://example.com/one"),
     ]
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=citations
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=citations)
     paragraphs = _read_paragraphs(blob)
     # Find paragraph text that includes a bibliography URL — the [1]
     # entry should appear before the [2] entry.
-    one_pos = next(
-        i for i, p in enumerate(paragraphs) if "https://example.com/one" in p
-    )
-    two_pos = next(
-        i for i, p in enumerate(paragraphs) if "https://example.com/two" in p
-    )
+    one_pos = next(i for i, p in enumerate(paragraphs) if "https://example.com/one" in p)
+    two_pos = next(i for i, p in enumerate(paragraphs) if "https://example.com/two" in p)
     assert one_pos < two_pos
 
 
-def test_render_docx_handles_empty_sections_gracefully(
+def test_render_docx_bibliography_includes_unlinked_ledger_entries(
     create_tables, db_session: Session
 ):
+    """Body cited [^a] (linked) but the other two ledger rows have no
+    display_index (Anthropic native-search markers can't link back).
+    All three should appear in the Sources list with sequential
+    indices appended after the highest assigned one."""
+    user = _user(db_session)
+    report = _report(user.id)
+    sections = [_section(report.id, "s1", "S1", "Body referencing [^a].")]
+    citations = [
+        _citation(report.id, "a", 1, url="https://example.com/one"),
+        _citation(report.id, "b", None, url="https://example.com/two"),
+        _citation(report.id, "c", None, url="https://example.com/three"),
+    ]
+    blob = render_docx(report=report, sections=sections, charts=[], citations=citations)
+    paragraphs = _read_paragraphs(blob)
+    text = "\n".join(paragraphs)
+    assert "https://example.com/one" in text
+    assert "https://example.com/two" in text
+    assert "https://example.com/three" in text
+    # Bibliography numbering: 1 (linked) then 2 and 3 for the unlinked
+    # rows, in ledger insertion order.
+    one_pos = next(i for i, p in enumerate(paragraphs) if "[1] " in p)
+    two_pos = next(i for i, p in enumerate(paragraphs) if "[2] " in p)
+    three_pos = next(i for i, p in enumerate(paragraphs) if "[3] " in p)
+    assert one_pos < two_pos < three_pos
+
+
+def test_render_docx_strips_anthropic_citation_markup(create_tables, db_session: Session):
+    """``<cite index="X-Y">…</cite>`` wrappers and bare ``[^X-Y]``
+    markers come from Anthropic native search and don't link to ledger
+    source_ids. The docx renderer should strip them so the body reads
+    cleanly."""
+    user = _user(db_session)
+    report = _report(user.id)
+    sections = [
+        _section(
+            report.id,
+            "fp",
+            "Financial Profile",
+            (
+                'Revenue strong. <cite index="16-2">Product revenue '
+                "reached $1.33B</cite> in Q1[^6-1]. WACC 9% [^web_1]."
+            ),
+        )
+    ]
+    citations = [_citation(report.id, "web_1", 1, url="https://snow.test/q1")]
+    blob = render_docx(report=report, sections=sections, charts=[], citations=citations)
+    text = "\n".join(_read_paragraphs(blob))
+    # Anthropic markup gone, inner text preserved
+    assert "<cite" not in text
+    assert "[^6-1]" not in text
+    assert "Product revenue reached $1.33B" in text
+    # Resolvable marker still rewrites
+    assert "[1]" in text
+
+
+def test_render_docx_handles_empty_sections_gracefully(create_tables, db_session: Session):
     user = _user(db_session)
     report = _report(user.id)
     # No sections, no charts, no citations — should still emit valid
@@ -266,9 +302,7 @@ def test_render_docx_inline_formatting_survives_round_trip(
     user = _user(db_session)
     report = _report(user.id)
     sections = [_section(report.id, "x", "X", f"Has {marker} content.")]
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=[]
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=[])
     # Just confirm rendering didn't crash and content lands in the doc.
     text = "\n".join(_read_paragraphs(blob))
     assert ("bold" in text or "italic" in text or "link" in text) == expected
@@ -299,9 +333,7 @@ def _report_with_cover(user_id: str, cover_json: str | None) -> ReportV3:
     )
 
 
-def test_render_docx_emits_cover_hero_when_cover_json_present(
-    create_tables, db_session: Session
-):
+def test_render_docx_emits_cover_hero_when_cover_json_present(create_tables, db_session: Session):
     user = _user(db_session)
     cover = json.dumps(
         {
@@ -327,9 +359,7 @@ def test_render_docx_emits_cover_hero_when_cover_json_present(
     )
     report = _report_with_cover(user.id, cover)
     sections = [_section(report.id, "overview", "Overview", "Body text.")]
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=[]
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=[])
     paragraphs = _read_paragraphs(blob)
     text = "\n".join(paragraphs)
     assert "Q1 2026 initiation" in text  # subtitle
@@ -351,35 +381,27 @@ def test_render_docx_emits_cover_hero_when_cover_json_present(
     assert "$1.2B" in cell_text
 
 
-def test_render_docx_omits_cover_hero_when_cover_json_is_null(
-    create_tables, db_session: Session
-):
+def test_render_docx_omits_cover_hero_when_cover_json_is_null(create_tables, db_session: Session):
     """The bare-cover path must keep its original shape (title +
     eyebrow + spacer + sections) so older reports never regress."""
     user = _user(db_session)
     report = _report_with_cover(user.id, None)
     sections = [_section(report.id, "overview", "Overview", "Body text.")]
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=[]
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=[])
     text = "\n".join(_read_paragraphs(blob))
     assert "RKLB.US" in text
     assert "Highlights" not in text
     assert "upside" not in text
 
 
-def test_render_docx_handles_partial_cover_gracefully(
-    create_tables, db_session: Session
-):
+def test_render_docx_handles_partial_cover_gracefully(create_tables, db_session: Session):
     """Empty fields on a populated CoverSpec skip their rendering
     rather than emit blank paragraphs / empty tables."""
     user = _user(db_session)
     cover = json.dumps({"tagline": "Best-in-class operator"})
     report = _report_with_cover(user.id, cover)
     sections = [_section(report.id, "overview", "Overview", "Body text.")]
-    blob = render_docx(
-        report=report, sections=sections, charts=[], citations=[]
-    )
+    blob = render_docx(report=report, sections=sections, charts=[], citations=[])
     text = "\n".join(_read_paragraphs(blob))
     assert "Best-in-class operator" in text
     assert "Highlights" not in text  # tldr was empty
@@ -402,9 +424,7 @@ def test_render_docx_negative_upside_renders_without_sign_collision(
     assert "-12.4% upside" in text
 
 
-def test_render_docx_ignores_malformed_cover_json(
-    create_tables, db_session: Session
-):
+def test_render_docx_ignores_malformed_cover_json(create_tables, db_session: Session):
     """A corrupt cover_json must not crash the export — degrades to
     the bare cover."""
     user = _user(db_session)

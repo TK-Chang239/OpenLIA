@@ -265,6 +265,21 @@ def test_v3_rows_carry_engine_and_target_id(db_session, seeded_with_v3):
         assert r.filename.endswith(".pdf")
 
 
+def test_v3_row_filename_uses_subject_template_date_convention(db_session, seeded_with_v3):
+    """Saved-to-repo entries share the same filename shape as direct
+    downloads — ``Subject_Template_Date.pdf`` — so users see a
+    consistent name whether they open a saved row or download a
+    fresh run."""
+    rows = svc.list_items_filtered(db_session, user_id=seeded_with_v3["user"].id)
+    by_subject = {r.title: r for r in rows if r.engine == "v3"}
+    # RKLB.US used the initiation template
+    assert by_subject["RKLB.US"].filename.startswith("RKLB.US_Initiation_")
+    assert by_subject["RKLB.US"].filename.endswith(".pdf")
+    # NVDA.US used the update template
+    assert by_subject["NVDA.US"].filename.startswith("NVDA.US_Update_")
+    assert by_subject["NVDA.US"].filename.endswith(".pdf")
+
+
 def test_default_sort_interleaves_v1_and_v3_by_saved_desc(db_session, seeded_with_v3):
     rows = svc.list_items_filtered(db_session, user_id=seeded_with_v3["user"].id)
     titles = [r.title for r in rows]
@@ -274,9 +289,7 @@ def test_default_sort_interleaves_v1_and_v3_by_saved_desc(db_session, seeded_wit
     assert titles[1] == "RKLB.US"
 
 
-def test_filter_department_equity_research_excludes_unrelated_v1_rows(
-    db_session, seeded_with_v3
-):
+def test_filter_department_equity_research_excludes_unrelated_v1_rows(db_session, seeded_with_v3):
     rows = svc.list_items_filtered(
         db_session,
         user_id=seeded_with_v3["user"].id,
@@ -298,9 +311,7 @@ def test_filter_department_secretary_skips_v3_fanout(db_session, seeded_with_v3)
 
 
 def test_q_search_matches_v3_subject(db_session, seeded_with_v3):
-    rows = svc.list_items_filtered(
-        db_session, user_id=seeded_with_v3["user"].id, q="rklb"
-    )
+    rows = svc.list_items_filtered(db_session, user_id=seeded_with_v3["user"].id, q="rklb")
     titles = [r.title for r in rows]
     assert titles == ["RKLB.US"]
     assert rows[0].engine == "v3"
