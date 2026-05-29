@@ -5,72 +5,58 @@ the model can invoke. The catalog binds tools to the per-run
 ``CitationLedger`` and ``RunWorkspace`` so the runner doesn't need to
 plumb those through every tool call.
 
-Two tiers:
+EU v2 has no tool discovery and no extended/valuation tools — the
+catalog is a fixed set gated by the user's connector toggles. Output
+tools (``write_section``, ``set_cover``, ``emit_chart``, ``finalize``)
+are always present; data tools, the earnings-calendar tool, and native
+web search are each included only when their connector is enabled.
 
-  - **Core** tools (data + valuation + output + web_search + find_tools)
-    are always in the model's request. Small set -> sharp tool selection.
-  - **Extended** tools (the long-tail helper catalog) are NOT in the
-    request up front. The model calls ``find_tools`` to discover them;
-    the runner then injects the discovered schemas into subsequent turns
-    via ``active_schemas`` / ``active_tools_by_name``.
-
-Data tool transports (EODHD callables) are passed in by the wiring
-layer — same dependency-injection shape v2.3 uses, so the core layer
-stays free of EODHD SDK imports.
+Data tool transports (EODHD callables) arrive via the ``EuDataTransports``
+bundle passed in by the wiring layer — same dependency-injection shape
+v2.3 uses, so the core layer stays free of EODHD SDK imports.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from ....types import ToolSchema
 from ...report_v2_3.research import ResearchTool
-from ...report_v2_3.research.registry import (
-    FundamentalsTransport,
-    NewsTransport,
-    PricesTransport,
-)
-from ..ledger import CitationLedger
-from ..workspace import RunWorkspace
-from .data_tools import build_data_tools
-from .extended_tools import CATEGORY_INDEX, ExtendedTool, build_extended_tools
-from .find_tools import ToolDiscoveryState, build_find_tools_tool
+from ..schemas import EnabledConnectors
+from .data_tools import build_data_tools, build_earnings_calendar_tool
 from .output_tools import build_output_tools
-from .valuation_tools import build_valuation_tools
 from .web_search import WEB_SEARCH_TOOL_NAME, build_web_search_descriptor
+
+if TYPE_CHECKING:
+    from .. import EuDataTransports
+    from ..ledger import CitationLedger
+    from ..workspace import RunWorkspace
 
 
 @dataclass(frozen=True)
 class ToolCatalog:
     """The per-run tool catalog the runner dispatches against.
 
-    ``core_tools`` are the function tools always present in the request
-    (data, valuation, output, find_tools). ``native_tools`` is the tuple
-    fed into ``LLMRequest.native_tools`` for the adapter to wire up
-    provider-side (currently just ``("web_search",)``). ``descriptors``
-    is the core set the system prompt enumerates — core dispatched +
-    native, in registration order.
-
-    ``discovery`` holds the extended (discoverable) registry plus the
-    set the model has activated this run via ``find_tools``. The runner
-    asks for ``active_schemas`` / ``active_tools_by_name`` each turn so
-    discovered tools join the request and become dispatchable.
-
-    ``category_index`` is the Layer-1 capability map the prompt renders.
+    ``core_tools`` are the function tools present in the request this
+    run (output tools always; data + earnings-calendar tools when their
+    connector is on). ``native_tools`` is the tuple fed into
+    ``LLMRequest.native_tools`` for the adapter to wire up provider-side
+    (``("web_search",)`` when web search is enabled, else empty).
+    ``descriptors`` is the set the system prompt enumerates — core
+    dispatched plus the native web-search descriptor when present.
     """
 
     core_tools: list[ResearchTool]
     native_tools: tuple[str, ...]
-    discovery: ToolDiscoveryState
-    category_index: dict[str, str]
-    descriptors: list = field(default=None)  # type: ignore[assignment]
+    descriptors: list = field(default_factory=list)
 
     def by_name(self) -> dict[str, ResearchTool]:
         """Core tools keyed by name."""
         return {tool.descriptor.name: tool for tool in self.core_tools}
 
     def core_schemas(self) -> list[ToolSchema]:
-        """Request schemas for the always-on core tools.
+        """Request schemas for the dispatched core tools.
 
         ``web_search`` is omitted — the adapter wires it via native_tools.
         """
@@ -84,55 +70,48 @@ class ToolCatalog:
             )
         return schemas
 
-    def active_schemas(self) -> list[ToolSchema]:
-        """Core schemas plus any extended tools the model has discovered."""
-        schemas = self.core_schemas()
-        for entry in self.discovery.active_tools():
-            d = entry.tool.descriptor
-            schemas.append(
-                ToolSchema(name=d.name, description=d.description, parameters=d.parameters)
-            )
-        return schemas
-
-    def active_tools_by_name(self) -> dict[str, ResearchTool]:
-        """Dispatchable tools: core plus discovered extended tools."""
-        merged = self.by_name()
-        for entry in self.discovery.active_tools():
-            merged[entry.name] = entry.tool
-        return merged
-
 
 def build_catalog(
     *,
     ledger: CitationLedger,
     workspace: RunWorkspace,
-    fundamentals: FundamentalsTransport,
-    prices: PricesTransport,
-    news: NewsTransport,
+    transports: EuDataTransports,
+    enabled_connectors: EnabledConnectors,
 ) -> ToolCatalog:
-    """Assemble the full v3 catalog for a single run."""
-    data = build_data_tools(
-        ledger=ledger,
-        fundamentals=fundamentals,
-        prices=prices,
-        news=news,
-    )
-    valuation = build_valuation_tools(ledger=ledger)
+    """Assemble the EU v2 catalog from the user's connector toggles.
+
+    Output tools (write_section, set_cover, emit_chart, finalize) are
+    always present. Data tools, the earnings-calendar tool, and native
+    web search are each gated by ``enabled_connectors``.
+    """
     output = build_output_tools(workspace=workspace)
+    core: list[ResearchTool] = [*output]
 
-    extended: dict[str, ExtendedTool] = build_extended_tools(ledger=ledger)
-    discovery = ToolDiscoveryState(extended=extended)
-    find_tools = build_find_tools_tool(discovery)
+    if enabled_connectors.financial:
+        core.extend(
+            build_data_tools(
+                ledger=ledger,
+                fundamentals=transports.fundamentals,
+                prices=transports.prices,
+                news=transports.news,
+            )
+        )
+    if enabled_connectors.earnings_calendar:
+        core.append(
+            build_earnings_calendar_tool(
+                ledger=ledger,
+                earnings_calendar=transports.earnings_calendar,
+            )
+        )
 
-    core = [*data, *valuation, *output, find_tools]
+    native: tuple[str, ...] = (WEB_SEARCH_TOOL_NAME,) if enabled_connectors.web_search else ()
 
     descriptors = [tool.descriptor for tool in core]
-    descriptors.append(build_web_search_descriptor())
+    if enabled_connectors.web_search:
+        descriptors.append(build_web_search_descriptor())
 
     return ToolCatalog(
         core_tools=core,
-        native_tools=(WEB_SEARCH_TOOL_NAME,),
-        discovery=discovery,
-        category_index=dict(CATEGORY_INDEX),
+        native_tools=native,
         descriptors=descriptors,
     )
