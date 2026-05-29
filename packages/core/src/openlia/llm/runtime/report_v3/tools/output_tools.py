@@ -74,10 +74,16 @@ def _build_write_section_tool(workspace: RunWorkspace) -> ResearchTool:
             raise ToolExecutionError("write_section requires `section_id`.")
         # In revise mode, the user-locked design allows the engine to
         # add sections beyond the template (the template is a
-        # starting point). In original-run mode, section_id must be
-        # one of the template's ids — straying outside is rejected so
-        # the run can't render an incoherent shape.
-        if not workspace.revision_mode and section_id not in template_section_titles:
+        # starting point). In freeform mode (no template sections) the
+        # model designs its own sections, so any id is allowed. In
+        # ordinary templated runs, section_id must be one of the
+        # template's ids — straying outside is rejected so the run
+        # can't render an incoherent shape.
+        if (
+            not workspace.revision_mode
+            and template_section_titles
+            and section_id not in template_section_titles
+        ):
             raise ToolExecutionError(
                 f"Unknown section_id {section_id!r}. "
                 f"Valid ids: {sorted(template_section_titles)}."
@@ -397,6 +403,23 @@ def _build_finalize_tool(workspace: RunWorkspace) -> ResearchTool:
                 },
                 provenance=ComputedSource(method="finalize", derived_from=["(workspace)"]),
                 summary=f"finalize blocked: {len(missing)} missing sections.",
+            )
+
+        # Freeform mode (no template sections): nothing is "required",
+        # but a report with zero sections is meaningless — require at
+        # least one written section before finalizing.
+        if not workspace.required_section_ids() and not workspace.sections:
+            return ToolResult(
+                payload={
+                    "ok": False,
+                    "message": (
+                        "No sections written yet. Design the report's "
+                        "sections and call write_section for each before "
+                        "calling finalize() again."
+                    ),
+                },
+                provenance=ComputedSource(method="finalize", derived_from=["(workspace)"]),
+                summary="finalize blocked: no sections written.",
             )
 
         # Revise mode: at least one section must have been touched

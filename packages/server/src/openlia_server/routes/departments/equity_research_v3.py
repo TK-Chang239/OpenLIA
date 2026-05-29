@@ -31,7 +31,17 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from openlia.llm.runtime.report_v2_3.schemas import ReportType
 from openlia.llm.runtime.report_v2_3.templates.builtins import get_builtin
@@ -60,17 +70,47 @@ from openlia_server.db.models.report_v3 import (
     ReportV3Section,
 )
 from openlia_server.middleware.auth import build_require_auth
+from openlia_server.services import v3_instructions_service as instructions_svc
 from openlia_server.services import v3_render_service as render_svc
 from openlia_server.services import v3_revision_service as revision_svc
 from openlia_server.services import v3_run_service as svc
 from openlia_server.services import v3_template_service as templates_svc
-from openlia_server.services.attachments import FileUpload, validate_uploads
+from openlia_server.services.attachments import FileUpload, extract_text, validate_uploads
 from openlia_server.services.v3_attachments import prepare_v3_attachments
 from openlia_server.services.v3_filename import build_download_filename
 from openlia_server.services.v3_wiring import build_v3_transports
 
 _ENV_FLAG = "REPORT_ENGINE_VERSION"
 _ENABLED_VALUE = "v3"
+
+# Sentinel ``template_id`` the frontend sends for "No template
+# (instructions only)". Resolves to a freeform TemplateSpec (empty
+# sections) instead of a DB lookup; the run is shaped entirely by the
+# selected instruction profile.
+FREEFORM_TEMPLATE_ID = "freeform"
+
+
+def _freeform_template_spec() -> TemplateSpec:
+    """A sections-less template for instructions-only runs.
+
+    ``TemplateSpec.sections`` is declared ``min_length=1`` (the shared
+    v2.3 schema predates freeform), so we ``model_construct`` to bypass
+    that one constraint rather than weaken the cross-engine contract.
+    Safe here: the spec is never round-tripped through validation —
+    only ``template_id`` is persisted, and the runner reads ``name`` /
+    ``shape_description`` / the empty ``sections`` directly.
+    """
+    return TemplateSpec.model_construct(
+        template_id=FREEFORM_TEMPLATE_ID,
+        name="Freeform",
+        shape_description=(
+            "No fixed template — the report's structure is guided by the "
+            "analyst instructions and the subject."
+        ),
+        ticker_anchored=False,
+        default_length=None,
+        sections=[],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +129,11 @@ class StartV3Payload(BaseModel):
     # green.
     template_id: str | None = None
     report_type: ReportType = ReportType.INITIATION
+    # Optional saved instruction profile resolved against
+    # ``report_v3_instructions``. Its body_text is injected verbatim
+    # into the system prompt. Pairs with ``template_id == "freeform"``
+    # for instructions-only runs.
+    instructions_id: str | None = None
     provider_kind: str = Field(..., min_length=1)
     model: str = Field(..., min_length=1)
     # Extended-thinking knob. ``None`` (or omitted) = off; "medium" /
@@ -103,6 +148,7 @@ _START_FORM_FIELDS = (
     "length",
     "template_id",
     "report_type",
+    "instructions_id",
     "provider_kind",
     "model",
     "reasoning_effort",
@@ -241,6 +287,21 @@ class TemplateOut(BaseModel):
     Holds metadata only; the spec body is not returned to the client
     (it's only needed at run dispatch time, where the route loads it
     via ``resolve_template`` directly).
+    """
+
+    id: str
+    name: str
+    is_builtin: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class InstructionsOut(BaseModel):
+    """Listing/return shape for a v3 instruction profile.
+
+    Metadata only — the ``body_text`` is not returned to the client
+    (it's only needed server-side at run dispatch, where the route
+    resolves it via ``resolve_instructions``).
     """
 
     id: str
@@ -462,6 +523,42 @@ def build_equity_research_v3_router(
                 raise HTTPException(status_code=404, detail=str(exc)) from exc
         return get_builtin(payload.report_type)
 
+    def _resolve_run_shape(
+        *, db: DBSession, user_id: str, payload: StartV3Payload
+    ) -> tuple[TemplateSpec, str | None]:
+        """Resolve the (template, instructions_text) pair a run runs with.
+
+        - ``template_id == "freeform"`` -> sections-less freeform spec.
+        - Any other ``template_id`` (or the report_type fallback) -> a
+          real template.
+        - ``instructions_id`` (optional) -> the profile's body_text.
+
+        Enforces the one cross-cutting rule: a freeform run MUST carry
+        an instruction profile (otherwise it has no shape at all).
+        """
+        instructions_text: str | None = None
+        if payload.instructions_id:
+            try:
+                instructions_text = instructions_svc.resolve_instructions(
+                    db=db, user_id=user_id, instructions_id=payload.instructions_id
+                )
+            except instructions_svc.InstructionsNotFoundError as exc:
+                raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        if payload.template_id == FREEFORM_TEMPLATE_ID:
+            if not instructions_text:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "A run with no template requires an instruction "
+                        "profile to define the report."
+                    ),
+                )
+            return _freeform_template_spec(), instructions_text
+
+        template = _resolve_template_for_run(db=db, user_id=user_id, payload=payload)
+        return template, instructions_text
+
     @router.post("/runs", response_model=StartV3Response)
     async def start_run(
         payload: StartV3Payload,
@@ -471,7 +568,7 @@ def build_equity_research_v3_router(
         if not _engine_enabled():
             raise _engine_disabled()
 
-        template: TemplateSpec = _resolve_template_for_run(db=db, user_id=user.id, payload=payload)
+        template, instructions = _resolve_run_shape(db=db, user_id=user.id, payload=payload)
         run_request = RunRequest(
             subject=payload.subject,
             template=template,
@@ -480,6 +577,7 @@ def build_equity_research_v3_router(
             provider_kind=payload.provider_kind,
             model=payload.model,
             reasoning_effort=payload.reasoning_effort,
+            instructions=instructions,
         )
         try:
             outcome = await svc.start_run(
@@ -583,7 +681,7 @@ def build_equity_research_v3_router(
                 )
             attachments = prepare_v3_attachments(uploads)
 
-        template: TemplateSpec = _resolve_template_for_run(db=db, user_id=user.id, payload=payload)
+        template, instructions = _resolve_run_shape(db=db, user_id=user.id, payload=payload)
         run_request = RunRequest(
             subject=payload.subject,
             template=template,
@@ -593,6 +691,7 @@ def build_equity_research_v3_router(
             model=payload.model,
             reasoning_effort=payload.reasoning_effort,
             attachments=attachments,
+            instructions=instructions,
         )
         try:
             handle = svc.start_run_async(
@@ -850,6 +949,101 @@ def build_equity_research_v3_router(
         try:
             templates_svc.soft_delete_template(db=db, user_id=user.id, template_id=template_id)
         except templates_svc.TemplateNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    # ------------------------------------------------------------------
+    # Instruction profiles
+    #
+    # Free-form analyst methodology fed verbatim into the system prompt.
+    # Upload is multipart (any supported document); the server extracts
+    # plain text via the shared ``attachments.extract_text`` — no
+    # structural parsing. Owner-scoped + soft-deleted, like templates.
+    # ------------------------------------------------------------------
+
+    @router.get("/instructions", response_model=list[InstructionsOut])
+    def list_instructions(
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> list[InstructionsOut]:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        rows = instructions_svc.list_instructions(db=db, user_id=user.id)
+        return [
+            InstructionsOut(
+                id=r.id,
+                name=r.name,
+                is_builtin=r.is_builtin,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+            )
+            for r in rows
+        ]
+
+    @router.post(
+        "/instructions",
+        response_model=InstructionsOut,
+        status_code=status.HTTP_201_CREATED,
+    )
+    async def upload_instructions(
+        name: str = Form(..., min_length=1, max_length=256),
+        file: UploadFile = File(...),
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> InstructionsOut:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        content = await file.read()
+        upload = FileUpload(
+            filename=file.filename or "unnamed",
+            mime_type=file.content_type or "application/octet-stream",
+            content=content,
+        )
+        errors = validate_uploads([upload])
+        if errors:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "errors": [
+                        {"filename": e.filename, "reason": e.reason} for e in errors
+                    ]
+                },
+            )
+        try:
+            row = instructions_svc.create_instructions_from_upload(
+                db=db,
+                user_id=user.id,
+                name=name,
+                body_text=extract_text(upload) or "",
+                source_doc_blob=content,
+                source_doc_mime=upload.mime_type,
+            )
+        except instructions_svc.InstructionsValidationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return InstructionsOut(
+            id=row.id,
+            name=row.name,
+            is_builtin=row.is_builtin,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+        )
+
+    @router.delete(
+        "/instructions/{instructions_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+    )
+    def delete_instructions(
+        instructions_id: str,
+        db: DBSession = Depends(session_dep),
+        user: User = require_auth,
+    ) -> Response:
+        if not _engine_enabled():
+            raise _engine_disabled()
+        try:
+            instructions_svc.soft_delete_instructions(
+                db=db, user_id=user.id, instructions_id=instructions_id
+            )
+        except instructions_svc.InstructionsNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
