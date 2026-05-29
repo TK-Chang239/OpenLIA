@@ -6,10 +6,6 @@ capability gate (web search is opt-in), no revision flow, and a fixed
 connector-gated tool catalog (no discovery).
 """
 
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any
-
 from .events import (
     BrokerEmitter,
     CancelToken,
@@ -40,23 +36,8 @@ from .schemas import (
     TriggerContext,
 )
 from .session import CapabilityError, CredentialError, LLMSession
+from .transports import EuDataTransports
 from .workspace import RunWorkspace, WrittenSection
-
-
-@dataclass(frozen=True)
-class EuDataTransports:
-    """Callables the EU v2 data tools dispatch against.
-
-    Supplied by the server wiring layer so the core package stays free
-    of the EODHD SDK. ``earnings_calendar`` returns the upcoming-events
-    list for a ticker.
-    """
-
-    fundamentals: Callable[[str], dict[str, Any]]
-    prices: Callable[[str, str, str], list[dict[str, Any]]]
-    news: Callable[[str, int], list[dict[str, Any]]]
-    earnings_calendar: Callable[[str], list[dict[str, Any]]]
-
 
 __all__ = [
     "BrokerEmitter",

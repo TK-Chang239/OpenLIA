@@ -84,7 +84,7 @@ class FakeLLMProvider(LLMProvider):
         return response
 
     async def stream(self, request: LLMRequest) -> AsyncIterator[LLMChunk]:
-        # v3 doesn't stream in Phase 1; satisfy the ABC.
+        # EU v2 engine does not stream; satisfy the ABC.
         raise NotImplementedError("FakeLLMProvider.stream is not used by v3.")
 
     async def test_connection(self, model: str) -> TestResult:

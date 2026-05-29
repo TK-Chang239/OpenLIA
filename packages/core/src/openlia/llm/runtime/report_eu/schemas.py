@@ -52,8 +52,7 @@ __all__ = [
 # the model can act on.
 ChartType = Literal["line", "bar", "column", "area", "pie", "scatter", "table"]
 
-# Status of a v3 run. Phase 0 only exercises ``placeholder``; later
-# phases add the real lifecycle states.
+# Status of an EU v2 run.
 RunStatus = Literal["placeholder", "running", "completed", "failed"]
 
 
@@ -219,11 +218,10 @@ class CoverSpec(BaseModel):
 
 
 class RunResult(BaseModel):
-    """Output of a v3 run.
+    """Output of an EU v2 run.
 
-    Phase 0 returns a placeholder; subsequent phases populate
-    ``sections``, ``charts``, and ``citations`` from the ledger.
-    ``cover`` is populated when the model called ``set_cover`` during
+    Populates ``sections``, ``charts``, and ``citations`` from the
+    ledger. ``cover`` is populated when the model called ``set_cover`` during
     the run; otherwise it stays None and the cover renders bare.
     """
 

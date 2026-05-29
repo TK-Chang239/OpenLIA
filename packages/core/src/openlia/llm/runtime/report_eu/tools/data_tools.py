@@ -1,8 +1,8 @@
-"""EODHD data tools — wraps v2.3 transports for the v3 tool catalog.
+"""EODHD data tools — wraps v2.3 transports for the EU v2 tool catalog.
 
-v3 reuses v2.3's ``research/registry.build_eodhd_tools`` to construct
+EU v2 reuses v2.3's ``research/registry.build_eodhd_tools`` to construct
 the underlying ``ResearchTool`` objects (same transports, same
-provenance attachment). The wrapper here adds two things v3 needs:
+provenance attachment). The wrapper here adds two things EU v2 needs:
 
 1. Ledger integration — every successful tool call appends one entry
    to the run's ``CitationLedger``, and the returned payload is
@@ -52,7 +52,7 @@ def build_data_tools(
     """Return the 3 EODHD tools, each ledger-aware.
 
     Wraps the v2.3 factories so every successful call lands an entry
-    in the v3 ledger and the model receives the ``source_id`` in the
+    in the EU v2 ledger and the model receives the ``source_id`` in the
     tool result payload.
     """
     base_tools = build_eodhd_tools(
@@ -64,7 +64,7 @@ def build_data_tools(
 
 
 def _wrap(tool: ResearchTool, ledger: CitationLedger) -> ResearchTool:
-    """Wrap a v2.3 ResearchTool so its result lands in the v3 ledger."""
+    """Wrap a v2.3 ResearchTool so its result lands in the EU v2 ledger."""
     inner_execute = tool.execute
 
     def _execute(args: dict[str, Any]) -> ToolResult:
