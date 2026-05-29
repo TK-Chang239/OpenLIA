@@ -26,11 +26,33 @@ from openlia_server.db.models import (
     config,
     content,
     infrastructure,
+    report_eu,
+)
+from openlia_server.db.models.report_eu import (
+    EuV2EarningsSchedule,
+    EuV2Settings,
+    EuV2WatchlistEntry,
+    ReportEu,
+    ReportEuChart,
+    ReportEuCitation,
+    ReportEuSection,
+    ReportEuTemplate,
+    ReportEuToolCallLog,
 )
 
 __all__ = [
+    "EuV2EarningsSchedule",
+    "EuV2Settings",
+    "EuV2WatchlistEntry",
+    "ReportEu",
+    "ReportEuChart",
+    "ReportEuCitation",
+    "ReportEuSection",
+    "ReportEuTemplate",
+    "ReportEuToolCallLog",
     "auth",
     "config",
     "content",
     "infrastructure",
+    "report_eu",
 ]
